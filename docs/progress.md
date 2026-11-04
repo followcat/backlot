@@ -146,3 +146,6 @@
   real-core tests opt-in). The 29 native tests cover ABI layout and
   screen/color/input behavior, including live defaults/palette changes.
   Windows key translation is out of v1 scope.
+  CI installs Zig 0.16.0 from the SHA-256-verified official archive with
+  bounded retries and a version/checksum cache key; the old setup action
+  used an obsolete archive filename.
