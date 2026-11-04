@@ -1,15 +1,24 @@
-//! Wire formats for speaking to `hc`, the herdr-core daemon.
+//! Protocol types and wire codecs for speaking to `hc`, the herdr-core daemon.
 //!
 //! The API is a preview at protocol generation 1 (schema version 0.x), defined
 //! by `schema/hc.openrpc.json` in the herdr-core source. A connection starts
 //! in plain mode — one JSON-RPC 2.0 message per line — and `hello` with
 //! `framed: true` switches it to binary frames for attach streams and events.
-//! This crate covers the envelopes and both codecs; the typed API methods,
-//! transport, endpoint discovery and reconnect live one layer up.
+//! This crate covers the envelopes, the typed methods hc-tui uses, and both
+//! codecs. Transport, endpoint discovery and reconnect live one layer up.
 
 pub mod codec;
+pub mod doc;
+pub mod events;
 pub mod frame;
+pub mod hello;
 pub mod jsonrpc;
+pub mod machine;
+pub mod terminal;
+
+/// The `rpc.discover` result: the whole API as an OpenRPC document. Kept
+/// opaque — its shape is the schema's own, not this crate's types.
+pub type OpenRpcDocument = serde_json::Value;
 
 /// The wire protocol generation this client speaks.
 ///
@@ -23,6 +32,32 @@ pub const PROTOCOL_GENERATION: u32 = 1;
 /// speak. Only [`PROTOCOL_GENERATION`] is supported.
 pub fn is_supported_generation(generation: u32) -> bool {
     generation == PROTOCOL_GENERATION
+}
+
+/// JSON-RPC method names hc-tui relies on.
+pub mod method {
+    /// Handshake: generation, identity, method and feature lists, framed mode.
+    pub const HELLO: &str = "hello";
+    /// The whole API as an OpenRPC document.
+    pub const RPC_DISCOVER: &str = "rpc.discover";
+    /// Live terminals, optionally filtered by labels.
+    pub const TERMINAL_LIST: &str = "terminal.list";
+    /// One terminal's facts.
+    pub const TERMINAL_GET: &str = "terminal.get";
+    /// Start a program in a new terminal.
+    pub const TERMINAL_RUN: &str = "terminal.run";
+    /// The screen plus history lines as text.
+    pub const TERMINAL_READ: &str = "terminal.read";
+    /// End a terminal's program.
+    pub const TERMINAL_KILL: &str = "terminal.kill";
+    /// Open a raw stream to a live terminal (framed connections only).
+    pub const TERMINAL_ATTACH: &str = "terminal.attach";
+    /// Snapshot of matching terminals, then change notifications.
+    pub const EVENTS_SUBSCRIBE: &str = "events.subscribe";
+    /// The machines this core has added.
+    pub const MACHINE_LIST: &str = "machine.list";
+    /// Read an opaque JSON document and its version.
+    pub const DOC_GET: &str = "doc.get";
 }
 
 #[cfg(test)]

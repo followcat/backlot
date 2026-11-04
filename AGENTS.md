@@ -5,6 +5,7 @@ Read `docs/requirements.md` and `docs/plan.md` first. Work on one milestone task
 - **English** everywhere: code, comments, commit messages, docs.
 - **Small commits** with Conventional Commit subjects (`feat(sidebar): …`, `fix(proto): …`), each
   with its tests.
+- **Commit messages:** omit Devin generation notices and Devin `Co-Authored-By` trailers.
 - **Before every commit**, all three must pass:
   - `cargo fmt --check`
   - `cargo clippy --all-targets -- -D warnings`
