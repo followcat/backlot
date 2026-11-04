@@ -9,12 +9,14 @@
 
 pub mod codec;
 pub mod doc;
+pub mod endpoint;
 pub mod events;
 pub mod frame;
 pub mod hello;
 pub mod jsonrpc;
 pub mod machine;
 pub mod terminal;
+pub mod transport;
 
 /// The `rpc.discover` result: the whole API as an OpenRPC document. Kept
 /// opaque — its shape is the schema's own, not this crate's types.
