@@ -59,3 +59,16 @@
   before its hello reply, so immediate cancellation can still verify reaping.
   Shared script initialization also prevents concurrent forks from inheriting
   open script writers, which caused an intermittent `ETXTBSY` spawn failure.
+  GitHub CI passed for the fixture fix in `4756efd`.
+- Task 4 (attach streams): `Attach` gives each terminal its own framed
+  connection, preserving reply/paint read-ahead and ordered DATA/RESIZE.
+  It exposes authoritative terminal facts, observer restrictions, focus/resize/
+  display controls and source-tagged automatic replies with negotiated fallback.
+  Byte/count bounds and explicit consumed-byte credit keep a stalled stream
+  independent of RPC; CLOSE wakes blocked producers and receivers. Opening,
+  detach and drop own cancellation-safe cleanup without killing the terminal;
+  detach shares one deadline across CLOSE enqueue and acknowledgement.
+  Validation: independent formatting, Clippy and 157 tests passed, plus ten
+  repetitions of all five attach suites (330 tests). Tests include a genuinely
+  stalled peer, event floods and SSH child reaping after stage-synchronized
+  cancellation. Subscription recovery and real-core integration remain open.

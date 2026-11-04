@@ -2,6 +2,7 @@
 //! not every target uses every helper.
 #![allow(dead_code)]
 
+pub mod attach;
 pub mod fakecore;
 pub mod faults;
 

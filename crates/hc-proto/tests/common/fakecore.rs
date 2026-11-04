@@ -21,19 +21,41 @@ pub const ALL_METHODS: &[&str] = &[
     "terminal.run",
     "terminal.read",
     "terminal.kill",
+    "terminal.attach",
     "machine.list",
     "doc.get",
 ];
 
 /// A `hello` result for generation 1, framed, with the given method list.
 pub fn hello_result(methods: &[&str]) -> Value {
+    hello_result_features(methods, &[])
+}
+
+/// A `hello` result that also advertises `features` (e.g. `automatic_input`).
+pub fn hello_result_features(methods: &[&str], features: &[&str]) -> Value {
     json!({
         "generation": 1,
         "version": "fake-core 0.0",
         "framed": true,
         "core": {"id": "core-fake-1", "name": "fake-core"},
         "methods": methods,
-        "features": [],
+        "features": features,
+    })
+}
+
+/// A `terminal.attach` result: stream channel, terminal record, and the
+/// negotiated capability flags.
+pub fn attach_result(
+    channel: u32,
+    terminal: Value,
+    resize_notifications: bool,
+    automatic_input: bool,
+) -> Value {
+    json!({
+        "channel": channel,
+        "terminal": terminal,
+        "resize_notifications": resize_notifications,
+        "automatic_input": automatic_input,
     })
 }
 
@@ -70,21 +92,66 @@ pub fn pair(capacity: usize) -> (DuplexCore, ReadHalf, WriteHalf) {
 impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
     /// Writes raw bytes in one call — the way a real packet arrives.
     pub async fn send(&mut self, bytes: &[u8]) {
-        self.out.write_all(bytes).await.unwrap();
+        bounded(self.out.write_all(bytes)).await.unwrap();
     }
 
     /// Reads the hello request line and returns it parsed.
     pub async fn read_hello(&mut self) -> Value {
-        let line = self.reader.read_line().await.unwrap().unwrap();
+        let line = bounded(self.reader.read_line()).await.unwrap().unwrap();
         serde_json::from_slice(&line).unwrap()
     }
 
     /// `read_hello` + `answer_hello`: the common handshake.
     pub async fn serve_hello(&mut self, methods: &[&str]) {
+        self.serve_hello_features(methods, &[]).await;
+    }
+
+    /// `serve_hello` advertising `features` (e.g. `automatic_input`).
+    pub async fn serve_hello_features(&mut self, methods: &[&str], features: &[&str]) {
         let request = self.read_hello().await;
         assert_eq!(request["method"], "hello");
         assert_eq!(request["params"]["framed"], true);
-        self.answer_hello(hello_result(methods)).await;
+        self.answer_hello(hello_result_features(methods, features))
+            .await;
+    }
+
+    /// `serve_hello` + the `terminal.attach` request + its reply; returns
+    /// the request so the test can assert the encoded params.
+    pub async fn serve_attach(
+        &mut self,
+        methods: &[&str],
+        features: &[&str],
+        result: Value,
+    ) -> Value {
+        self.serve_hello_features(methods, features).await;
+        let request = self.read_request().await;
+        assert_eq!(request["method"], "terminal.attach");
+        self.reply(&request["id"], result).await;
+        request
+    }
+
+    /// Any frame from the client — stream assertions read CREDIT, CLOSE,
+    /// DATA input and control frames with this.
+    pub async fn read_frame(&mut self) -> Frame {
+        bounded(self.reader.read_frame()).await.unwrap().unwrap()
+    }
+
+    /// Like `read_frame` but tolerates EOF — for drain-side assertions.
+    pub async fn try_read_frame(&mut self) -> Option<Frame> {
+        bounded(self.reader.read_frame()).await.unwrap()
+    }
+
+    /// A frame on a stream channel, sent raw (any kind byte, payload).
+    pub async fn send_stream(&mut self, channel: u32, kind_byte: u8, payload: &[u8]) {
+        self.send(&Frame::new(channel, Kind::from_u8(kind_byte), payload.to_vec()).encode())
+            .await;
+    }
+
+    /// Like `send_stream` but `false` once the client hung up — a flood
+    /// script survives the client failing the wire mid-send.
+    pub async fn try_send_stream(&mut self, channel: u32, kind_byte: u8, payload: &[u8]) -> bool {
+        let frame = Frame::new(channel, Kind::from_u8(kind_byte), payload.to_vec()).encode();
+        bounded(self.out.write_all(&frame)).await.is_ok()
     }
 
     /// Writes a plain-mode hello result line.
@@ -112,7 +179,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
     /// Reads one channel-0 DATA request; other frames are skipped.
     pub async fn read_request(&mut self) -> Value {
         loop {
-            let frame = self.reader.read_frame().await.unwrap().unwrap();
+            let frame = self.read_frame().await;
             if frame.channel == 0 && frame.kind == Kind::Data {
                 return serde_json::from_slice(&frame.payload).unwrap();
             }
@@ -142,7 +209,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
 
     /// Asserts the client's write side ended the stream cleanly.
     pub async fn expect_eof(&mut self) {
-        assert_eq!(self.reader.read_frame().await.unwrap(), None);
+        assert_eq!(bounded(self.reader.read_frame()).await.unwrap(), None);
     }
 
     /// Reads until the client's write side ends; returns how many complete
@@ -150,7 +217,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
     /// mid-flight) also ends the loop.
     pub async fn drain_until_eof(&mut self) -> usize {
         let mut n = 0;
-        while let Ok(Some(_)) = self.reader.read_frame().await {
+        while let Ok(Some(_)) = bounded(self.reader.read_frame()).await {
             n += 1;
         }
         n
@@ -171,6 +238,13 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
         assert_eq!(req["method"], "rpc.discover");
         self.reply(&req["id"], discover_doc(methods)).await;
     }
+}
+
+/// A broken fake script must fail under a deadline rather than hang CI.
+async fn bounded<F: std::future::Future>(future: F) -> F::Output {
+    tokio::time::timeout(std::time::Duration::from_secs(15), future)
+        .await
+        .expect("fake-core I/O deadline exceeded")
 }
 
 /// A valid OpenRPC-shaped discovery document declaring `methods`.

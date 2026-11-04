@@ -12,11 +12,13 @@
 //! replayed automatically.
 
 mod api;
+mod attach;
 mod call;
 mod error;
 mod pump;
 mod wire;
 
+pub use attach::{Attach, AttachError, CloseReason, Ended, Output};
 pub use error::{CallError, Error};
 
 use crate::OpenRpcDocument;

@@ -96,7 +96,7 @@ pub(super) async fn write_loop(
 /// contract failures, not per-call shape errors. Valid notifications and
 /// requests have no consumer yet and are ignored; replies to unknown or
 /// cancelled ids are dropped.
-fn dispatch(frame: Frame, pending: &Pending) -> Result<(), String> {
+pub(super) fn dispatch(frame: Frame, pending: &Pending) -> Result<(), String> {
     if frame.channel != CONTROL_CHANNEL || frame.kind != Kind::Data {
         return Ok(());
     }
