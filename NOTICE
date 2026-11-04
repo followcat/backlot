@@ -1,0 +1,10 @@
+hc-tui
+Copyright 2026 followcat
+
+This product may include software derived from the following projects, both licensed under the
+Apache License, Version 2.0:
+
+- herdr (https://github.com/herdrdev/herdr)
+- herdr-core (https://github.com/herdrdev/herdr-core)
+
+Files containing derived code name their source in a header comment.
