@@ -13,24 +13,36 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::sync::{mpsc::Receiver, oneshot};
+use tokio::sync::{mpsc::Receiver, oneshot, watch};
 
 type Senders = HashMap<Id, oneshot::Sender<Result<Value, CallError>>>;
 
 /// Replies in flight: one oneshot per unanswered call id. The dead flag is
 /// stored under the same lock as the map so registration and the final
 /// fail-all are atomic — a call can never register after the sweep.
-#[derive(Default)]
 struct PendingInner {
     map: Mutex<Senders>,
     /// Wire-dead: set inside `fail` while the map is locked.
     dead: AtomicBool,
+    /// The same death as an awaitable latch: `fail` publishes `true` once;
+    /// subscribers past or future all see it (`watch` keeps the value).
+    dead_tx: watch::Sender<bool>,
 }
 
 /// Shared handle to the pending table (`Arc` keeps it cheap for every
 /// task/guard to hold).
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub(super) struct Pending(Arc<PendingInner>);
+
+impl Default for Pending {
+    fn default() -> Pending {
+        Pending(Arc::new(PendingInner {
+            map: Mutex::new(Senders::default()),
+            dead: AtomicBool::new(false),
+            dead_tx: watch::channel(false).0,
+        }))
+    }
+}
 
 impl Pending {
     /// Locks the pending map, recovering from a poisoned lock like
@@ -43,6 +55,13 @@ impl Pending {
     /// Whether the wire is known dead.
     pub(super) fn is_dead(&self) -> bool {
         self.0.dead.load(Ordering::SeqCst)
+    }
+
+    /// An awaitable wire-death latch: completes immediately when the wire
+    /// already died, otherwise on the next `fail`. Dropping the table —
+    /// the wire's owner gone — counts as dead too.
+    pub(super) fn dead_rx(&self) -> watch::Receiver<bool> {
+        self.0.dead_tx.subscribe()
     }
 
     /// Calls currently waiting for a reply.
@@ -130,6 +149,7 @@ pub(super) fn fail(pending: &Pending, reason: Option<String>) {
     let senders = {
         let mut map = pending.map();
         pending.0.dead.store(true, Ordering::SeqCst);
+        pending.0.dead_tx.send_replace(true);
         std::mem::take(&mut *map)
     };
     for (_, sender) in senders {

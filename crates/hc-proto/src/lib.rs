@@ -21,6 +21,7 @@ pub mod machine;
 pub mod subscribe;
 pub mod terminal;
 pub mod transport;
+pub mod watch;
 
 /// The `rpc.discover` result: the whole API as an OpenRPC document. Kept
 /// opaque — its shape is the schema's own, not this crate's types.

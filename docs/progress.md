@@ -84,3 +84,22 @@
   Validation: independent formatting, Clippy and 201 tests passed, plus twenty
   four-thread SSH suite repetitions (80 tests) with separate PID/reaping proofs.
   Document/machine refresh, reconnect and real-core integration remain open.
+  GitHub CI passed for `1db13c4`.
+- Task 6 (recovery watcher): `watch::Watcher` composes `Subscription` and
+  `Inventory` into a published `View` (inventory, machines, documents, link
+  states, notes) through an actor that owns both connections. Reconnect uses
+  per-facility backoff; a lost subscription keeps the offline inventory and a
+  dead RPC invalidates its epoch while the subscription epoch survives.
+  Document reads stay bounded (`doc_concurrency` globally, one in flight per
+  source) and staleness is tagged by rpc epoch plus persistent per-document
+  generation, so results from dead conns, superseded requests and
+  removed-then-returned machine aliases can never install. Feature flags
+  re-probe once per fresh hello and `events.subscribe` falls back to
+  `terminal.list` statically. `changed_since` cursors lose no publish;
+  `close`/`stop`/`Drop` abort openers, fetches and owned children —
+  including a `close` future cancelled mid-flight.
+  Validation: independent formatting, Clippy and 221 tests passed; 20 watcher tests cover
+  snapshot, events, heartbeat, missed, ordering, staleness, fairness,
+  capability recovery, held/cancelled opens and static mode over duplex
+  fakes, plus twenty four-thread repetitions (400 tests). Real-core integration
+  remains the next task.

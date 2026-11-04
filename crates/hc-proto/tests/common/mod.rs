@@ -7,6 +7,7 @@ pub mod fakecore;
 pub mod faults;
 pub mod inventory;
 pub mod subscribe;
+pub mod watcher;
 
 use serde_json::json;
 

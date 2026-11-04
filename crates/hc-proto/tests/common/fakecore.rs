@@ -235,6 +235,17 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
         bounded(self.out.write_all(&line)).await.is_ok()
     }
 
+    /// Like `read_request` but `None` once the client hung up — a serve
+    /// loop ends instead of panicking on the killed conn.
+    pub async fn try_read_request(&mut self) -> Option<Value> {
+        loop {
+            let frame = self.try_read_frame().await?;
+            if frame.channel == 0 && frame.kind == Kind::Data {
+                return Some(serde_json::from_slice(&frame.payload).unwrap());
+            }
+        }
+    }
+
     /// Reads one channel-0 DATA request; other frames are skipped.
     pub async fn read_request(&mut self) -> Value {
         loop {

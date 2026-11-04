@@ -83,7 +83,7 @@ impl Effect {
 /// A pure terminal inventory: keyed by address, replaced by snapshots,
 /// advanced by events. Query it freely; mutation goes only through
 /// `replace`/`apply`/`heartbeat`/`missed`.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Inventory {
     pub(super) terminals: BTreeMap<String, Terminal>,
     /// Highest applied `seq` in this epoch.

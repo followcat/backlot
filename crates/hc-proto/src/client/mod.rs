@@ -290,6 +290,15 @@ impl Client {
         self.shared.wire.pending.is_dead()
     }
 
+    /// Resolves when the wire dies — EOF, a wire failure, a protocol
+    /// violation or the last drop — for event-driven recovery instead of
+    /// `is_closed` polling. Latched: an already-dead wire resolves
+    /// immediately, and a `closed` subscribed before the end still fires.
+    pub async fn closed(&self) {
+        let mut dead = self.shared.wire.pending.dead_rx();
+        let _ = dead.wait_for(|dead| *dead).await;
+    }
+
     /// Orderly shutdown: pending calls fail, the backend guard is taken into
     /// owned cleanup *before* the first await (a cancelled close can never
     /// leak a half-live task — aborted tasks die when their handles drop,
