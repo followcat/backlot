@@ -49,6 +49,28 @@ pub mod event_kind {
     pub const FOREGROUND: &str = "foreground";
     /// A document changed: `{name, version}`; refetch it with `doc.get`.
     pub const DOC: &str = "doc";
+
+    /// The kinds generation 1 documents. Every one must carry a `data`
+    /// member — `null` still counts (`foreground` uses it); only omission
+    /// is malformed. A kind not listed may omit `data` entirely.
+    pub fn requires_data(kind: &str) -> bool {
+        matches!(
+            kind,
+            CREATED
+                | LOST
+                | RESTARTED
+                | KEEP
+                | FINISHED
+                | REMOVED
+                | STATUS
+                | TURN
+                | TITLE
+                | LABELS
+                | SIZE
+                | FOREGROUND
+                | DOC
+        )
+    }
 }
 
 /// Params for `events.subscribe`. All absent: every terminal on every added
@@ -99,7 +121,9 @@ pub struct EventParams {
     #[serde(default)]
     pub machine: Option<String>,
     /// The change itself; the shape depends on `kind` and stays opaque so
-    /// newer kinds and fields pass through.
+    /// newer kinds and fields pass through. Documented kinds must carry
+    /// the member — `null` still counts (`foreground` uses it) — and
+    /// [`ServerNotification::from_notification`] rejects its absence.
     #[serde(default)]
     pub data: Value,
 }
@@ -117,8 +141,8 @@ pub struct HeartbeatParams {
 pub struct MissedParams {
     /// The snapshot's sequence.
     pub seq: u64,
-    /// The new terminal set.
-    #[serde(default)]
+    /// The new terminal set. Required: a `missed` without it is malformed,
+    /// never an empty inventory.
     pub terminals: Vec<Terminal>,
     /// Set when the core reports a remote stream's `missed` locally.
     #[serde(default)]
@@ -146,7 +170,20 @@ impl ServerNotification {
         let params = || notification.params.clone().unwrap_or(Value::Null);
         match notification.method.as_str() {
             notification::EVENT => {
-                serde_json::from_value(params()).map(|p| Some(ServerNotification::Event(p)))
+                let params = params();
+                // A documented kind must carry `data` — present-but-null
+                // is a real payload (`foreground`), while a missing member
+                // is malformed wire data, not an empty one. Unknown kinds
+                // may omit `data` and stay tolerated.
+                if let Some(kind) = params.get("type").and_then(Value::as_str)
+                    && event_kind::requires_data(kind)
+                    && params.get("data").is_none()
+                {
+                    return Err(<serde_json::Error as serde::de::Error>::custom(format!(
+                        "`{kind}` event without its `data` member"
+                    )));
+                }
+                serde_json::from_value(params).map(|p| Some(ServerNotification::Event(p)))
             }
             notification::HEARTBEAT => {
                 serde_json::from_value(params()).map(|p| Some(ServerNotification::Heartbeat(p)))

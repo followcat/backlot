@@ -5,6 +5,8 @@
 pub mod attach;
 pub mod fakecore;
 pub mod faults;
+pub mod inventory;
+pub mod subscribe;
 
 use serde_json::json;
 

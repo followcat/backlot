@@ -15,8 +15,10 @@ pub mod endpoint;
 pub mod events;
 pub mod frame;
 pub mod hello;
+pub mod inventory;
 pub mod jsonrpc;
 pub mod machine;
+pub mod subscribe;
 pub mod terminal;
 pub mod transport;
 

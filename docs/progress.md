@@ -72,3 +72,15 @@
   repetitions of all five attach suites (330 tests). Tests include a genuinely
   stalled peer, event floods and SSH child reaping after stage-synchronized
   cancellation. Subscription recovery and real-core integration remain open.
+  GitHub CI passed for `cc8bdfa`.
+- Task 5 (subscription and inventory): a dedicated plain subscription keeps
+  snapshot/notification read-ahead, validates generation/methods and rejects
+  pre-reply or malformed traffic. Terminal errors close the owned transport;
+  cancelling a healthy partial read preserves its buffered bytes.
+  The pure inventory reducer applies known events atomically, retains unknown
+  kinds, detects unfiltered sequence gaps, replaces same-sequence missed
+  snapshots and preserves offline inventory. Document-refetch effects are
+  exposed without interpreting documents or inferring status.
+  Validation: independent formatting, Clippy and 201 tests passed, plus twenty
+  four-thread SSH suite repetitions (80 tests) with separate PID/reaping proofs.
+  Document/machine refresh, reconnect and real-core integration remain open.

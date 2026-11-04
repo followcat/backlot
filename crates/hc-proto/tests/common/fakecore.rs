@@ -22,6 +22,7 @@ pub const ALL_METHODS: &[&str] = &[
     "terminal.read",
     "terminal.kill",
     "terminal.attach",
+    "events.subscribe",
     "machine.list",
     "doc.get",
 ];
@@ -33,10 +34,16 @@ pub fn hello_result(methods: &[&str]) -> Value {
 
 /// A `hello` result that also advertises `features` (e.g. `automatic_input`).
 pub fn hello_result_features(methods: &[&str], features: &[&str]) -> Value {
+    hello_result_framed(methods, features, true)
+}
+
+/// A `hello` result choosing framed or plain mode explicitly. Plain-mode
+/// connections (a dedicated `events.subscribe`) need `framed: false`.
+pub fn hello_result_framed(methods: &[&str], features: &[&str], framed: bool) -> Value {
     json!({
         "generation": 1,
         "version": "fake-core 0.0",
-        "framed": true,
+        "framed": framed,
         "core": {"id": "core-fake-1", "name": "fake-core"},
         "methods": methods,
         "features": features,
@@ -115,6 +122,50 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
             .await;
     }
 
+    /// Plain-mode handshake for the dedicated `events.subscribe` wire:
+    /// asserts the client did *not* ask for framed mode and answers
+    /// `framed: false`.
+    pub async fn serve_plain_hello(&mut self, methods: &[&str]) {
+        let request = self.read_hello().await;
+        assert_eq!(request["method"], "hello");
+        assert_ne!(request["params"]["framed"], true);
+        self.answer_hello(hello_result_framed(methods, &[], false))
+            .await;
+    }
+
+    /// Reads one plain-mode JSON message (a request line on the
+    /// subscription wire).
+    pub async fn read_message(&mut self) -> Value {
+        let line = bounded(self.reader.read_line()).await.unwrap().unwrap();
+        serde_json::from_slice(&line).unwrap()
+    }
+
+    /// Writes `id`/`result` as a plain-mode reply line.
+    pub async fn reply_line(&mut self, id: &Value, result: Value) {
+        self.send_line(&json!({"jsonrpc": "2.0", "id": id, "result": result}))
+            .await;
+    }
+
+    /// Writes `id`/`error` as a plain-mode reply line.
+    pub async fn reply_line_error(&mut self, id: &Value, kind: &str, hint: &str) {
+        self.send_line(&json!({
+            "jsonrpc": "2.0", "id": id,
+            "error": {"code": -32000, "message": kind, "data": {"kind": kind, "hint": hint}},
+        }))
+        .await;
+    }
+
+    /// One server notification as a plain-mode line.
+    pub async fn notify(&mut self, method: &str, params: Value) {
+        self.send_line(&json!({"jsonrpc": "2.0", "method": method, "params": params}))
+            .await;
+    }
+
+    /// Asserts the client's plain-mode write side ended (no more lines).
+    pub async fn expect_eof_line(&mut self) {
+        assert_eq!(bounded(self.reader.read_line()).await.unwrap(), None);
+    }
+
     /// `serve_hello` + the `terminal.attach` request + its reply; returns
     /// the request so the test can assert the encoded params.
     pub async fn serve_attach(
@@ -174,6 +225,14 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
         let mut line = serde_json::to_vec(message).unwrap();
         line.push(b'\n');
         self.send(&line).await;
+    }
+
+    /// Like `send_line` but `false` once the client hung up — a flood
+    /// script survives the client failing the wire mid-send.
+    pub async fn try_send_line(&mut self, message: &Value) -> bool {
+        let mut line = serde_json::to_vec(message).unwrap();
+        line.push(b'\n');
+        bounded(self.out.write_all(&line)).await.is_ok()
     }
 
     /// Reads one channel-0 DATA request; other frames are skipped.
