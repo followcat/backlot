@@ -10,5 +10,15 @@ like the herdr 0.9 TUI:
 **Status:** early development, not usable yet. See [requirements](docs/requirements.md) and
 [plan](docs/plan.md).
 
+## Build and test
+
+Requires a stable Rust toolchain (edition 2024):
+
+```sh
+cargo build
+cargo test
+cargo run -p hc-tui -- --help
+```
+
 Unofficial project, not affiliated with or endorsed by the Herdr project. Licensed under the
 [Apache License 2.0](LICENSE).
