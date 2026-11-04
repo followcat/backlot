@@ -17,3 +17,18 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: target/test-core
+          key: test-core-${{ hashFiles('tools/build-test-core.sh') }}
+      - run: tools/build-test-core.sh
+      - run: >
+          HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core
+          cargo test -p hc-proto --test integration --
+          --ignored --test-threads=1

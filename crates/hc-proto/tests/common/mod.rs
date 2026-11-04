@@ -37,3 +37,4 @@ pub fn minimal_terminal() -> serde_json::Value {
         "rows": 24,
     })
 }
+pub mod scratch;

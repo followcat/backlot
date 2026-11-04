@@ -103,3 +103,29 @@
   capability recovery, held/cancelled opens and static mode over duplex
   fakes, plus twenty four-thread repetitions (400 tests). Real-core integration
   remains the next task.
+  GitHub CI passed for `8c340a0`.
+- Task 7 (real-core integration): `tests/integration.rs` is an opt-in
+  suite gated on `HC_TUI_TEST_CORE` — missing binary fails the explicit
+  run, ordinary `cargo test` never touches a real `hc`. Each test owns a
+  `ScratchCore`: random `hctui-test-*` session, cleared inherited `HC_*`,
+  temporary XDG/HOME roots, pre-seeded `host-a`, foreground `serve`, and
+  `server stop` verified by `stopped:true` — unclean exits are recovered
+  by an adopting replacement serve before bounded reaping; the root is
+  kept on verified teardown failure. Coverage: hello/discovery,
+  subscribe-before-run, run/read/attach paint+input/kill events, watcher
+  reconnect with a new epoch and a doc refetch proven by an on-disk
+  v1→v2 swap, plus a pid-disappears teardown regression for detached
+  holders. `fixture.finish()` lets a successful test fail explicitly on
+  teardown failure while panic paths preserve evidence without panicking.
+  `tools/build-test-core.sh` fetches the pinned core ec8adcdf, Ghostty
+  1e5cdb86 and Zig 0.16.0 (sha256-verified) into `target/` with pin-stamped
+  caches, `--locked` and bounded curl retries; `docs/integration.md`
+  documents pins and isolation; CI runs the suite.
+  Validation: independent fmt/Clippy and 221 tests passed; the real suite
+  passed against the preserved ec8adcdf and 3ed2e917 binaries, the
+  helper-built binary, and with no `HC_TUI_TEST_CORE` fails loudly.
+  Validation: independent formatting, Clippy and 221 default tests passed
+  (four real tests explicitly ignored). Real integration passed against the
+  pinned build and a separately preserved compatibility build, including
+  forty repeated checks; the clean helper build passed all four real tests.
+  Explicit missing-binary runs failed as required. M1 awaits green CI.
