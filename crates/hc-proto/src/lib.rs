@@ -4,9 +4,11 @@
 //! by `schema/hc.openrpc.json` in the herdr-core source. A connection starts
 //! in plain mode — one JSON-RPC 2.0 message per line — and `hello` with
 //! `framed: true` switches it to binary frames for attach streams and events.
-//! This crate covers the envelopes, the typed methods hc-tui uses, and both
-//! codecs. Transport, endpoint discovery and reconnect live one layer up.
+//! This crate covers the envelopes, the typed methods hc-tui uses, both
+//! codecs, endpoint discovery, transport and the concurrent RPC client.
+//! Subscription recovery and reconnect live one layer up.
 
+pub mod client;
 pub mod codec;
 pub mod doc;
 pub mod endpoint;

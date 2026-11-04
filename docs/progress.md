@@ -32,3 +32,26 @@
   dispatch, attach streams and subscription recovery are still open tasks.
   Validation: supervisor formatting, Clippy and 82 tests passed; ten repeated
   parallel transport runs passed after fixing the test-helper exec race.
+- Task 3 (concurrent RPC client): hc-proto's `Client` negotiates `hello`
+  over the line codec and switches to framed mode without losing bytes the
+  peer coalesced into the same read. Channel-0 calls run concurrently over
+  one writer queue, correlated by id — a held call cannot stall others, and
+  out-of-order replies still find their waiter. One deadline covers both
+  enqueue and reply; a cancelled call removes its pending entry itself
+  (no peer activity or later call needed), registration is atomic with the
+  final fail-all, and the bounds are 256 in flight and 64 queued frames.
+  Either half's death runs one shutdown: pending calls fail, the sibling
+  task is aborted and the backend child gets a bounded graceful close;
+  malformed control-channel JSON-RPC payloads and null-id replies fail as `Protocol`
+  errors while valid notifications and late replies are ignored.
+  `hello` capabilities gate each typed call; `rpc.discover` is bounded at
+  5s, refines method availability, never blocks calls, and reports honest
+  notes for every unusable outcome. `close` takes ownership of the backend
+  before its first await so a cancelled close still kills and reaps an ssh
+  child; `hello` failures drop the codec halves first (the child sees
+  stdin EOF) and keep its exit status and stderr tail without masking a
+  genuine protocol answer. Attach streams and subscription recovery
+  remain open. Validation: the three checks pass locally with 123 tests
+  over scripted fake cores, fault-injected halves, fake-ssh children and
+  a scratch Unix socket. Independent supervisor review and all three gates
+  passed; ten parallel SSH-client suite repetitions also passed (50 tests).
