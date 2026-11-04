@@ -55,3 +55,7 @@
   over scripted fake cores, fault-injected halves, fake-ssh children and
   a scratch Unix socket. Independent supervisor review and all three gates
   passed; ten parallel SSH-client suite repetitions also passed (50 tests).
+  CI then exposed a fake-SSH readiness race: the child now publishes its PID
+  before its hello reply, so immediate cancellation can still verify reaping.
+  Shared script initialization also prevents concurrent forks from inheriting
+  open script writers, which caused an intermittent `ETXTBSY` spawn failure.
