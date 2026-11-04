@@ -3,6 +3,8 @@
 //! Milestone M0 is a bootstrap build: it prints status information only and
 //! never opens a connection to `hc`.
 
+pub mod sidebar;
+
 /// Version line printed for `--version`.
 pub fn version_text() -> String {
     format!("hc-tui {}", env!("CARGO_PKG_VERSION"))

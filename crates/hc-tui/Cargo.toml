@@ -7,3 +7,7 @@ license.workspace = true
 
 [dependencies]
 hc-proto.workspace = true
+ratatui = { version = "0.30.2", default-features = false, features = ["std", "macros"] }
+serde_json.workspace = true
+unicode-segmentation = "1.12.0"
+unicode-width = "0.2.2"
