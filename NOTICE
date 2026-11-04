@@ -8,3 +8,10 @@ Apache License, Version 2.0:
 - herdr-core (https://github.com/herdrdev/herdr-core)
 
 Files containing derived code name their source in a header comment.
+
+It also builds and links libghostty-vt from the Ghostty project
+(https://github.com/ghostty-org/ghostty), pinned at revision
+1e5cdb865807abc990181efb8ebfa9122955cce2 via the vendor/ghostty git
+submodule. Ghostty is licensed under the MIT License (Mitchell
+Hashimoto and contributors); its license text ships inside the
+submodule (vendor/ghostty/LICENSE).

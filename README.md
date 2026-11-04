@@ -12,13 +12,18 @@ like the herdr 0.9 TUI:
 
 ## Build and test
 
-Requires a stable Rust toolchain (edition 2024):
+Requires a stable Rust toolchain (edition 2024) and Zig **0.16.0** on `PATH` (or via `ZIG=`):
+the `hc-vt` crate builds `libghostty-vt` from the pinned `vendor/ghostty` submodule. Fetch the
+submodule on first checkout:
 
 ```sh
+git submodule update --init --depth 1   # or clone with --recursive
 cargo build
 cargo test
 cargo run -p hc-tui -- --help
 ```
+
+The pinned revisions live in `.gitmodules` and `NOTICE`.
 
 Unofficial project, not affiliated with or endorsed by the Herdr project. Licensed under the
 [Apache License 2.0](LICENSE).

@@ -1,0 +1,7 @@
+[package]
+name = "hc-vt"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Safe VT adapter over pinned libghostty-vt (vendor/ghostty)"
+links = "ghostty-vt"

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/hc-proto", "crates/hc-tui"]
+members = ["crates/hc-proto", "crates/hc-tui", "crates/hc-vt"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,6 +9,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 hc-proto = { path = "crates/hc-proto" }
+hc-vt = { path = "crates/hc-vt" }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

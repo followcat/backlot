@@ -121,11 +121,28 @@
   1e5cdb86 and Zig 0.16.0 (sha256-verified) into `target/` with pin-stamped
   caches, `--locked` and bounded curl retries; `docs/integration.md`
   documents pins and isolation; CI runs the suite.
-  Validation: independent fmt/Clippy and 221 tests passed; the real suite
-  passed against the preserved ec8adcdf and 3ed2e917 binaries, the
-  helper-built binary, and with no `HC_TUI_TEST_CORE` fails loudly.
   Validation: independent formatting, Clippy and 221 default tests passed
   (four real tests explicitly ignored). Real integration passed against the
   pinned build and a separately preserved compatibility build, including
   forty repeated checks; the clean helper build passed all four real tests.
-  Explicit missing-binary runs failed as required. M1 awaits green CI.
+  Explicit missing-binary runs failed as required.
+  GitHub checks and real-core integration CI passed for `a77fe51`; M1 complete.
+
+## M2: Native VT adapter (in progress)
+
+- Task 1 (hc-vt crate): `crates/hc-vt` is a narrow safe adapter over
+  libghostty-vt built from the pinned `vendor/ghostty` submodule
+  (1e5cdb86) by the pinned Zig 0.16.0 — `ZIG=` override, baseline CPU,
+  `-Dtarget` for cross builds, no runtime downloads. `Vt` owns the
+  terminal, render state and iterators (`Send`, not `Sync`); callbacks
+  only fill a bounded automatic-reply buffer that latches an overflow
+  error rather than splicing partial sequences. `frame(history)` returns
+  owned `Frame` snapshots: full grapheme clusters sized by the library,
+  wide/spacer cells, resolved + source-tagged colors including packed
+  erase fills, attributes, cursor and the live palette. `key`/`paste`
+  encode against live terminal modes (application cursor, kitty flags,
+  modifyOtherKeys) with unshifted-codepoint mapping for shifted ASCII.
+  Validation: independent formatting, Clippy and 250 tests passed (four
+  real-core tests opt-in). The 29 native tests cover ABI layout and
+  screen/color/input behavior, including live defaults/palette changes.
+  Windows key translation is out of v1 scope.
