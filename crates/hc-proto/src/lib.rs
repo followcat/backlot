@@ -1,7 +1,15 @@
-//! Protocol constants and types for speaking to `hc`, the herdr-core daemon.
+//! Wire formats for speaking to `hc`, the herdr-core daemon.
 //!
-//! Milestone M0 fixes only the protocol generation this client speaks.
-//! Request/response types, transport and reconnect arrive with milestone M1.
+//! The API is a preview at protocol generation 1 (schema version 0.x), defined
+//! by `schema/hc.openrpc.json` in the herdr-core source. A connection starts
+//! in plain mode — one JSON-RPC 2.0 message per line — and `hello` with
+//! `framed: true` switches it to binary frames for attach streams and events.
+//! This crate covers the envelopes and both codecs; the typed API methods,
+//! transport, endpoint discovery and reconnect live one layer up.
+
+pub mod codec;
+pub mod frame;
+pub mod jsonrpc;
 
 /// The wire protocol generation this client speaks.
 ///
