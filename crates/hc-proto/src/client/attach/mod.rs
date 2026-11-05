@@ -113,6 +113,20 @@ impl Attach {
         self.shared.stream.ended() || self.shared.wire.pending.is_dead()
     }
 
+    /// Write-completion fence: resolves once every DATA frame queued so
+    /// far has actually been written to the transport — the ordered
+    /// local boundary a graceful close must cross, since `send_input`
+    /// only enqueues and a CLOSE on the control queue would overtake
+    /// unwritten input. `Err` when the writer is gone; the close still
+    /// proceeds — the input was undeliverable either way.
+    pub async fn drain_data(&self) -> Result<(), AttachError> {
+        self.shared
+            .data
+            .wait_drained()
+            .await
+            .map_err(|()| AttachError::Closed)
+    }
+
     /// Human input — DATA chunks of at most [`INPUT_CHUNK`] bytes. Empty
     /// input sends nothing. An observer is refused with
     /// [`AttachError::Observe`], an ended stream with [`AttachError::Closed`].
