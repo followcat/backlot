@@ -19,6 +19,7 @@ python3 scripts/parity/run.py \
   --out /path/outside/repository/screen-run
 python3 scripts/parity/vectors.py \
   --hc /path/to/pinned/hc \
+  --decoder target/debug/examples/parity_cells \
   --hc-tui target/debug/hc-tui \
   --config /path/to/herdr/config.toml \
   --reference-manifest /path/to/reference-build.json \
@@ -27,7 +28,8 @@ python3 scripts/parity/vectors.py \
 
 Requires Linux, Python 3.11+, and the Rust/Zig build dependencies. No Python
 packages are needed. `--size` selects one of the three required dimensions;
-without it the screen runner uses 80x24, 120x40 and 200x50. `--smoke` checks
+without it the screen runner uses 80x24, 120x40, 200x50, 65x24,
+64x24 and 40x24. `--smoke` checks
 only the baseline and is not an acceptance run. `vectors.py --fixture`
 selects an immutable reference capture; the default runs every capture.
 
@@ -88,3 +90,22 @@ The decoder additionally records modes9/1000/1002/1005/1015 and outer
 ModifyOtherKeys0/1/2; teardown requires the emulated host default Block/steady
 cursor as well as visibility. Decoder tests exercise each added mode and a
 live Bar/blink→default restore, including control-string-safe MOK tracking.
+
+
+The 65/64 boundary and 40-column runs use the narrow script, with mobile
+switcher status/highlight and normal-mode readiness plus menu-to-Help input.
+`--host-program wezterm` adds a host ModifyOtherKeys1 profile; capture and
+teardown must prove it is enabled and then reset.
+
+Use `--scenario repository` for the desktop Git fixture (default120x40).
+It creates only owned local Git data: ↑2 ↓1 versus a local upstream branch,
+a linked worktree, and an unlabelled terminal in a subdirectory. Source
+facts must visibly arrive before capture. On the pinned pre-C3 core it
+returns exit2 and `pending-core-fact`, with `passed:false`, every raw diff
+and exact expected missing facts retained. It is not a successful parity run.
+C3 is developed separately; no core facts are adopted by this M2.1 harness.
+
+Initial fixture readiness also decodes the complete native screen: ANSI
+cursor/style writes can split a visible string, so raw substring matching
+is not an adequate readiness condition. The input runner requires the same
+`--decoder` as the screen runner.

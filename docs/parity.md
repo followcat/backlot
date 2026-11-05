@@ -6,11 +6,12 @@ terminal size, programs and states, matching surfaces must produce the same
 cells, glyphs, colors and attributes, and react the same way to keys and
 mouse input.
 
-**Validation status:** M2 provides the read-only shell surfaces below. The
-owned-session harness checks native cells, cursor, host modes, window titles
-and actual child input against the pinned executable. Final results and
-remaining review questions are recorded in the M2 progress entry and private
-joint review. This does not declare the later milestones implemented.
+**Validation status:** the joint M2 review did **not** accept the shell as
+indistinguishable. M2.1 tightens the harness and covers the default 64-column
+mobile boundary. Ordinary Git sidebar rows and first-paint program appearance
+remain acceptance blockers until the separately reviewed core C3 facts are
+adopted in M2.2. A fixture with missing facts is `pending-core-fact`, never a
+pass. Earlier passes establish only their explicit captured fixtures.
 
 ## Source and configuration
 
@@ -72,9 +73,10 @@ difference.
 | Manual, reported and OSC titles | All are available: `herdr.title`, status `title`, terminal `title`. Keep separate source fields. The optional core terminal `name` supplies the source name field. Title loss or swapping is a bug. |
 | Shared completion acknowledgement | Core has advisory `herdr.seen` labels but no equivalent native shared per-status acknowledgement state. M2 applies source transitions in a local presentation cache, scoped to turn/incarnation, without label writes. Acknowledgement is not synchronized or persisted across hc-tui clients. |
 | Global state-change ordinal | `status_ms`, terminal `turn` and observed publishes are available; the source's complete pre-connection global history is not. Use timestamps and local observed transitions, with deterministic ties. Comparing turn magnitudes between terminals is not a replacement for chronology. |
-| Workspace branch | No documented equivalent in the tested core terminal inventory. Leave the source optional branch field absent; do not probe local repositories for remote facts. |
-| Git ahead/behind counts | No documented equivalent. Leave the source optional counts absent. |
-| Worktree identity and label | No documented equivalent to the source workspace worktree object. Leave it absent. |
+| Workspace branch | `pending-core-fact`: absent in the tested core inventory, but visible in the default source sidebar. This is a known mismatch awaiting C3, not an accepted visual omission. |
+| Git ahead/behind counts | `pending-core-fact`: default source rows show nonzero counts against local upstream refs. C3 supplies machine-side Git facts; hc-tui never probes local repositories for remote facts. |
+| Worktree identity and label | `pending-core-fact`: the linked checkout fixture shares a common Git directory and exposes a separate branch. Identity/grouping requires C3; read-only display is required even though worktree creation is out of scope. |
+| Repository-root fallback label | `pending-core-fact`: an unlabelled terminal in `acme-shop/src` currently shows `src`; source discovers the repository root and shows `acme-shop`. |
 | Workspace/agent tokens | No documented mapping for the source configurable token/context-usage values. Leave token collections empty. Unknown protocol extensions are retained without guessing their meaning. |
 | Agent state labels | No documented equivalent for the source server's state-label collection. Leave it empty; core parent addresses or record sources are not state labels. |
 | Worker relationship | Core `parent` is available and remains verbatim. The reference sidebar has no parent-note field; a worker uses an ordinary agent row with its own identity. Unknown parents do not hide it. |
@@ -125,6 +127,10 @@ A scratch program requested each of: no cursor style, `CSI 2 SP q`,
 paint contained no DECSCUSR sequence in any case. The blinking-bar request
 only added `CSI ? 12 h`, which preserves blinking but cannot identify the
 visual shape or distinguish an explicit request from the user default.
+
+A client switching away and back can recreate its VT, just like attaching
+or reconnecting. This gap therefore affects routine workspace switching,
+not only recovery, and blocks exact pane acceptance until C3.
 
 A client attaching or reconnecting after such a request cannot recover
 that earlier visual shape from this paint. Until a live request arrives,
@@ -291,3 +297,50 @@ Detach must restore raw mode, cursor visibility, line wrap, keyboard flags,
 alternate screen, paste, focus, mouse and scheme reporting. The tested
 reference retains its last window title on exit, so hc-tui follows that
 measured behavior rather than inventing a title reset.
+
+
+## M2.1 harness and action coverage
+
+The default plain-directory run includes 80x24, 120x40, 200x50, 65x24,
+64x24 and 40x24. Source switches to mobile layout at **64** columns. Both
+mobile widths exercise keyboard and mouse switching, every fixture status,
+the full switcher menu and its Help action. Requested status glyph/color,
+selection highlight and return to terminal mode are explicit readiness
+conditions. Menu Help preserves Navigate/report-all while the switcher is
+suspended, matching source, then resumes the appropriate mode on close.
+
+Resize requires a unique child-generated marker, emitted only after its
+actual PTY grid matches the expected allocation. Decoder dimensions alone
+cannot satisfy it. Host checks include legacy mouse modes9/1000/1002/1005/
+1015 and ModifyOtherKeys0/1/2. Teardown restores the simulated host's default
+Block/steady cursor, not just visibility. Only fixture-listed synthesized
+release segments permit unordered drain; their byte positions relative to
+focus and every other event remain fixed. Late ordinary input fails before
+detach; bounded quiescence is not proof about arbitrarily delayed traffic.
+
+`--scenario repository` creates an owned local Git repository, a locally
+tracked upstream branch with two commits ahead and one behind, a linked
+worktree and an unlabelled terminal in `src`. No network fetch occurs.
+The default desktop checkpoint requires source to show `fixture-main`,
+`↑2 ↓1`, `fixture-linked` and `acme-shop`; candidate currently lacks these
+facts and derives `src`. Every raw cell/title difference is retained and the
+scenario exits2 with `passed:false` and `pending-core-fact`. This includes
+subsequent row shifts; they are not masked or automatically waived. The
+fixture currently covers desktop repository presentation. C3 adoption and
+repository mobile/grouping acceptance belong to M2.2 after Claude approval.
+
+| Displayed binding/menu group | Current behavior and scope |
+|---|---|
+| Detach, Help, toggle sidebar, workspace picker | The four implemented M2 actions. Navigation inside the picker and mobile Help/Detach menu targets work. |
+| User Alt+F popup/custom command | Parsed but direct commands are silently consumed, with no execution or notice. M4 command/popup scope; not a missing core fact. Fixture scripts never send Alt+F or execute its command. |
+| Help entries for indexed workspace/tab/agent selection, previous/next, pane focus/cycle/swap, zoom/resize and lock | The source help/bindings are displayed/parsed, but the complete action set and shared structure are M3. A listed binding is not an implementation claim. |
+| Settings and reload config menu/help entries | Visible source presentation; their actions are not implemented in this read-only slice. Part of the remaining configuration/binding work in M3. |
+| New/rename/close workspace, tab or pane, splits, scrollback editing/clear, notifications/navigation actions | Listed source actions remain unimplemented; creation/mutation and notifications are M4, with structure dependencies in M3. Mobile new-workspace/new-tab rows are also inert. |
+| Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
+| Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
+
+The joint review accepted documented deferral of dead-wire held releases,
+resize acknowledgement ambiguity, remote clock/timezone and currently unused
+token metadata. It requests C3 hostname, first-paint cursor/color overrides,
+Git facts and quiet human release; completion/chronology/state labels gate
+M3 acceptance. M2.1 does not adopt C3 or begin M3.

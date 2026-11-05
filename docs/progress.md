@@ -128,7 +128,7 @@
   Explicit missing-binary runs failed as required.
   GitHub checks and real-core integration CI passed for `a77fe51`; M1 complete.
 
-## M2: Read-only terminal UI (joint review pending)
+## M2: Read-only terminal UI (exact parity not accepted)
 
 - Replaced the earlier provisional sidebar with directly attributed ports
   of herdr 0.9.5-followcat `d00953e0` thin-client chrome, sidebar, config,
@@ -169,8 +169,37 @@
   useful paint at p50 91 ms / p95 143 ms, all below 200 ms. Default idle
   samples used 0–0.3% client CPU over ten seconds; these are local fixtures,
   not a promise about remote network latency or a release build.
-- M2 stops for the joint review. See [parity](parity.md) for exact tested-core
+- Joint review did not accept indistinguishable parity: ordinary Git rows,
+  routine switch-time first-paint appearance and narrow native evidence
+  required follow-up. See [parity](parity.md) for exact tested-core
   limitations and the [runtime](runtime.md) and
   [harness](../scripts/parity/README.md) for usage.
   M3 layout/shared documents/full bindings and M4/M5 actions/copy features
   remain outside this implementation. No release is published.
+
+
+## M2.1: Joint-review remediation
+
+- `ee8346e` tightens intended-state readiness and native host mode/cursor
+  restoration, and restricts unordered detach releases to source-derived,
+  position-preserving fixture segments. Ordinary input expectations are
+  unchanged. Strict120x40 and390paired input cases pass.
+- `4d1b124` adds source mobile menu presentation and suspended-Help lifecycle,
+  including inventory-removal focus recovery.
+  Native results:52/52 checks at65/64/40 columns,96/96 at the three desktop
+  sizes, plus32/32 in a host ModifyOtherKeys1 profile. Requested statuses,
+  highlight and mode transitions match; native host/cursor restoration passes.
+- The local-only Git fixture verifies real ↑2 ↓1 divergence, linked common
+  Git directory and an unlabelled src terminal. Source-visible branch/counts
+  and repo-root label are required before capture. The pinned core scenario
+  records66 raw differences, passed:false, exit2 and pending-core-fact.
+  No expected differences are promoted to passes or hidden by region masks.
+  M2.2 adopts C3 only after Claude approval; this does not accept M2 as exact.
+- Final native candidate passes180checkpoints,390paired input cases and14
+  position-preserving detach-tail checks. Each slice has an independent
+  read-only review; addressed findings cover stale resize/selection/readiness,
+  suspended Help and stale focus after inventory removal. Full gates pass479
+  default Rust tests (four integration tests opt-in), two native decoder tests
+  and nine harness checks. Expected input bytes were not regenerated.
+- M2.1 stops for review after normal push/green CI. M2.2 requires Claude's C3
+  approval; M3 remains gated. No core extension was accessed or adopted here.

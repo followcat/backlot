@@ -8,8 +8,9 @@ interaction, layout and UI must match **herdr 0.9.5-followcat at `d00953e0`**:
 - herdr's bindings and configuration;
 - local use, or remote use over plain SSH.
 
-**Status:** M0 and M1 are complete. The M2 read-only terminal runtime is awaiting
-joint review; tabs/splits and the remaining actions belong to later milestones.
+**Status:** M0 and M1 are complete. The read-only runtime is in M2.1 joint-review remediation. Exact parity is
+not accepted yet; required core facts are deferred to reviewed M2.2 adoption.
+Tabs/splits and the remaining actions belong to later milestones.
 There is no release yet. See [requirements](docs/requirements.md), [plan](docs/plan.md),
 [progress](docs/progress.md) and [parity](docs/parity.md).
 
