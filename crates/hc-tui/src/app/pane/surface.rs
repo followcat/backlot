@@ -255,7 +255,8 @@ impl Pane {
     }
 
     pub(crate) fn has_fresh_paint(&self) -> bool {
-        matches!(&self.state, State::Live(live) if !live.await_paint) && self.vt.is_some()
+        matches!(&self.state, State::Live(live) if !live.await_paint && live.repaint.is_none())
+            && self.vt.is_some()
     }
 
     pub fn vt(&mut self) -> Option<&mut Vt> {

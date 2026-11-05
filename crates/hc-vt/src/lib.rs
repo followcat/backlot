@@ -35,4 +35,6 @@ pub use key::{Action, Key, KeyInput, Mods, VtKeyEvent};
 pub use mouse::{MouseAction, MouseButton, MouseInput, MousePosition};
 pub use vt::{Error, Vt};
 
+mod appearance;
 mod title;
+pub use appearance::Appearance;

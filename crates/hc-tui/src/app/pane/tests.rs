@@ -88,7 +88,7 @@ async fn paint(
     bytes: &[u8],
 ) {
     let mut payload = bytes.to_vec();
-    if matches!(&pane.state, State::Live(live) if live.await_paint) {
+    if matches!(&pane.state, State::Live(live) if live.await_paint || live.repaint.is_some()) {
         payload.extend_from_slice(b"\x1b[?9001l");
     }
     raw_paint(pane, rx, core, &payload).await;

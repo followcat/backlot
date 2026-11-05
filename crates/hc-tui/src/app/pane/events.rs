@@ -154,7 +154,18 @@ impl Pane {
                 let Some(vt) = &mut self.vt else {
                     return;
                 };
-                vt.feed(&bytes);
+                if let Some(repaint) = &mut live.repaint {
+                    match repaint.feed(vt, &bytes) {
+                        Ok(true) => live.repaint = None,
+                        Ok(false) => {}
+                        Err(error) => {
+                            live.repaint = None;
+                            live.vt_broken = Some(format!("appearance restore: {error}"));
+                        }
+                    }
+                } else {
+                    vt.feed(&bytes);
+                }
                 if live.await_paint {
                     // Both supported core pins serialize this mode after all
                     // keyboard/paste state (viewers.rs::paint_state). DATA
@@ -202,6 +213,21 @@ impl Pane {
                 // Core grid news ahead of replacement paint — apply it
                 // before the bytes arrive.
                 let grid = (cols.max(1), rows.max(1));
+                if live.spec.role == Role::Observe
+                    && !live.await_paint
+                    && let Some(vt) = &mut self.vt
+                {
+                    if let Some(repaint) = &mut live.repaint {
+                        repaint.flush_tail(vt);
+                    } else {
+                        match repaint::Repaint::new(vt) {
+                            Ok(repaint) => live.repaint = Some(repaint),
+                            Err(error) => {
+                                live.vt_broken = Some(format!("appearance snapshot: {error}"))
+                            }
+                        }
+                    }
+                }
                 live.core_grid = grid;
                 self.vt_grid = grid;
                 if let Some(vt) = &mut self.vt

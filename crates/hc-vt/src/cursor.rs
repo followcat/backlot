@@ -3,6 +3,7 @@
 pub(crate) struct DecscusrTracker {
     state: DecscusrParseState,
     cursor_shape_overridden: bool,
+    revision: u64,
 }
 
 #[derive(Debug, Default)]
@@ -71,6 +72,7 @@ impl DecscusrTracker {
                         let param = first_param.unwrap_or(0);
                         if param <= 6 {
                             self.cursor_shape_overridden = param != 0;
+                            self.revision = self.revision.wrapping_add(1);
                         }
                     }
                     self.state = DecscusrParseState::Ground;
@@ -83,5 +85,8 @@ impl DecscusrTracker {
 
     pub(crate) fn cursor_shape_overridden(&self) -> bool {
         self.cursor_shape_overridden
+    }
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
     }
 }

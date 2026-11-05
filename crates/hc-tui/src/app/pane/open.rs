@@ -56,6 +56,7 @@ impl Pane {
             await_paint: true,
             paint_started: false,
             paint_tail: Vec::new(),
+            repaint: None,
             sent_size: None,
             desired_size: None,
             desired_focus: if observe {

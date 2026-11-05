@@ -26,6 +26,7 @@ mod notices;
 mod open;
 mod pending_lifecycle;
 mod pending_queue;
+mod repaint;
 mod tasks;
 
 pub use tasks::attach_task;
@@ -86,6 +87,7 @@ struct Live {
     await_paint: bool,
     paint_started: bool,
     paint_tail: Vec<u8>,
+    repaint: Option<repaint::Repaint>,
     /// The size we last successfully asked the core for.
     sent_size: Option<(u16, u16)>,
     /// Latest allocated size awaiting a send (coalesced on Full).

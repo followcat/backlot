@@ -36,6 +36,8 @@ pub const OPT_MODE_DEFAULT: i32 = 33;
 pub const DATA_COLS: i32 = 1;
 pub const DATA_ROWS: i32 = 2;
 pub const DATA_ACTIVE_SCREEN: i32 = 6;
+pub const DATA_COLOR_PALETTE: i32 = 21;
+pub const DATA_COLOR_PALETTE_DEFAULT: i32 = 25;
 pub const DATA_SCROLLBAR: i32 = 9;
 pub const DATA_KITTY_KEYBOARD_FLAGS: i32 = 8;
 pub const DATA_MOUSE_TRACKING: i32 = 11;
@@ -235,6 +237,7 @@ pub type WritePtyFn = unsafe extern "C" fn(Terminal, *mut c_void, *const u8, usi
 pub type SizeFn = unsafe extern "C" fn(Terminal, *mut c_void, *mut SizeReport) -> bool;
 
 unsafe extern "C" {
+    pub fn ghostty_color_palette_default(out: *mut Rgb);
     pub fn ghostty_terminal_new(
         alloc: *const c_void,
         out: *mut Terminal,
