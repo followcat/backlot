@@ -12,7 +12,13 @@ Navigation uses the configured movement keys, Enter to select and Escape
 to cancel. Herdr's configuration supplies the prefix, bindings, theme,
 sidebar, tab bar and pane chrome. M3a adds layout/tab navigation, new tabs,
 splits, close, rename, resize mode and Ctrl+G lock. Custom commands,
-notifications and the remaining mutation actions belong to M4.
+notifications and the remaining mutation actions belong to M4. Ctrl+B then
+Shift+R, or the mobile reload-config menu, rereads this client's herdr config.
+Bindings, theme, chrome and allocated geometry update immediately. Invalid
+sections keep their current values; valid siblings still reload. A malformed
+or unreadable file keeps the current configuration and shows its diagnostic.
+Manual sidebar width and agent ordering survive reload. Settings currently
+shows a transient unavailable notice; its overlay belongs to M4.
 
 The focused terminal has the human-input connection. Persistent observers
 retain the current tab and 32 most recent off-tab panes. An observer never sends
@@ -65,8 +71,10 @@ A pane that leaves the visible layout loses its size holder. Zoom-hidden panes
 retain pinned current-tab observers; off-tab observers enter the bounded LRU,
 strictly observe-only. Resize requests follow layout
 changes, without repeatedly fighting another viewer for ownership. A recovered
-visible size holder reacquires its size lease; it cannot become active through
-human input or focus. If allocation changes during attach, the requested size
+size holder uses passive `resumed`; recovery alone cannot take size from an
+active phone viewer. When that viewer detaches, the remaining desktop viewers
+restore their size automatically. Real tab entry, focus or allocation changes
+can take sizing back. If allocation changes during attach, the requested size
 is synchronized before focus even when another viewer already has that grid.
 
 The default layout controls follow herdr: Ctrl+B then `c` creates a tab,

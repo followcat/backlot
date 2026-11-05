@@ -205,7 +205,7 @@
   approval; M3 remains gated. No core extension was accessed or adopted here.
 
 
-## M3a: Shared structure and layout — ready for review
+## M3a: Shared structure and layout — accepted with M3a.1 follow-up
 
 - Added the read-only herdr-app reader with label/cwd fallback, attributed
   pinned BSP layout, and shared schema-1 hc-tui documents. Versioned writes
@@ -249,3 +249,45 @@
   documented older-stream stall race. Settings/reload actions and remaining
   M3 work are not completed by this slice. Custom commands, notifications
   and other M4 actions remain deferred. No M4 work or release is started.
+
+
+## M3a.1: Configuration and passive size recovery — ready for review
+
+- M3a is accepted. Added live reload through Ctrl+B then Shift+R and the
+  mobile menu: bindings, theme and allocated geometry update together.
+  Malformed sections keep their current values while valid siblings apply;
+  read/parse failures retain the configuration and show a source diagnostic.
+  Manual sidebar width and agent sorting survive reload.
+- Settings now shows the transient notice “Settings isn't available in
+  hc-tui yet” from its binding and mobile menu. The overlay remains M4;
+  its native differences are retained as pending-feature, never parity passes.
+- Size-holder recovery now uses passive resumed attaches. An owned proxy
+  cuts desktop transports while a separate phone-size viewer stays active.
+  Successful concurrent live replies and fresh observer output are required:
+  the phone retains size, detaching restores the passive desktop size, and
+  an actual desktop allocation change can reclaim it. Fresh tab entry and
+  focus remain real activity. No mismatch-driven reclaim loop is introduced.
+- Native layout/reload checks pass 250/250 default and 274/274 configured
+  checkpoints across 80x24, 120x40, 200x50, 65x24, 64x24 and 40x24, plus
+  44/44 for a previous-move-only profile. Both reload rounds apply new prefixes,
+  Help bindings, themes and width on both clients; mobile reload is exercised
+  at 64/40 columns. All 17 Settings notice checks preserve their pending-feature
+  classification. M2 regression passes 180/180; paired immutable input cases
+  pass 390/390 and positioned detach tails pass 14/14.
+- The native decoder additionally compares emitted host cursor-color overrides
+  and tests OSC12/set/reset. Cached-switch captures have no such override on
+  either side; retained program OSC12 remains unit-only evidence. Position,
+  visibility, shape, blink, cells and indexed palette checks remain native.
+- Documented hc's latest-activity policy versus herdr's direct-attach lock.
+  Canonical terminal IDs are not recycled within preserved core state; names
+  can be reassigned. A move after validation can still race kill. Displayed
+  membership authorizes explicit close; no adoption gate was added.
+- Independent reviews addressed successful-versus-attempted recovery evidence,
+  manual agent sort, valid TOML formatting and DEL escaping in the scratch
+  rewrite. Exact local gates pass 581 Rust tests, four explicit real-core tests,
+  three decoder tests and 21 harness safety tests. Owned cleanup, host/termios
+  restoration, original-config hashes and leak scans pass. Expected input bytes
+  are unchanged. Commits: 53ba001 and 86378fa; their CI runs are green.
+- M3a.1 stops for review. Settings overlay and other M4 actions remain deferred;
+  no M2.2/C3 adoption, M4 implementation or release was started. First-attach,
+  reconnect/eviction appearance and acknowledgement-fence limitations remain.

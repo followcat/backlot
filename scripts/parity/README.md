@@ -129,3 +129,24 @@ OSC 12 state directly. This covers cached switching; first attach, reconnect
 and eviction remain the documented limitations. The scenario runs at the
 same desktop and mobile sizes; desktop-only tab dragging has no mobile tab
 bar counterpart. Captures and configuration copies remain outside the repo.
+
+
+M3a.1 extends `--scenario layout` with two live config reload rounds. Both owned
+copies are edited identically, preserving sound/update guards and inert command
+bindings. The source must visibly change theme; new prefixes/Help bindings and
+pane allocation must match. At64/40 columns the second reload uses the actual
+mobile menu. Settings is exercised from its binding and mobile menu: the
+candidate notice is required and expires, while every source-overlay difference
+is retained as `pending-feature`, outside matching-checkpoint totals.
+
+The native decoder also records any emitted host cursor-color override. Pinned
+cached-switch captures report no override on either side; retained program OSC12
+is still unit-only evidence, not established by that absence match.
+
+`ownership.py` accepts the same hc/hc-tui/config/decoder/out arguments. It creates
+one scratch core, an owned Unix proxy for the desktop and a separate40x20
+non-observe hc attach as the phone. It cuts only proxy transports, requires
+successful live resumed reattachments and fresh observer output, checks the
+phone keeps size, then checks automatic desktop fallback and real allocation
+reclamation. It never discovers or kills an existing session. Its result is a
+cross-viewer policy test, not a claim of herdr direct-attach-lock parity.

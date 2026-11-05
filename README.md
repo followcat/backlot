@@ -8,8 +8,9 @@ interaction, layout and UI must match **herdr 0.9.5-followcat at `d00953e0`**:
 - herdr's bindings and configuration;
 - local use, or remote use over plain SSH.
 
-**Status:** M2.1 is accepted for its available-fact fixtures. M3a adds shared
-structure, tabs/splits, layout bindings and lock. Exact M2 parity still awaits
+**Status:** M2.1 is accepted for its available-fact fixtures. M3a is accepted for shared
+structure, tabs/splits, layout bindings and lock. M3a.1 adds config reload,
+a Settings unavailable notice and passive size-holder recovery. Exact M2 parity still awaits
 reviewed C3 facts in M2.2; first-attach appearance remains a client limitation.
 Custom commands, notifications and remaining actions are deferred.
 There is no release yet. See [requirements](docs/requirements.md), [plan](docs/plan.md),

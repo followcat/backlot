@@ -40,8 +40,9 @@ never automatically replayed on a replacement connection.
 Current-tab VTs stay attached; 32 off-tab VTs form an LRU. Every geometrically
 visible pane also holds a silent size lease. Hidden zoom panes and off-tab LRU
 panes retain only their observe connection. Observers and silent size holders
-never send human input or focus. Visible size holders reacquire their permitted
-lease after a transport recovery; recovered active input connections retain
-the protocol's passive `resumed` behavior. Already forwarded held-key releases
-can still drain on their original parked input wire. See [parity](parity.md) for appearance limitations and
-the client-local acknowledgement/older-stream stall race.
+never send human input or focus. Size holders and active input connections both
+recover with passive `resumed` attaches. Real local allocation changes, tab
+entry or focus can reclaim size; transport recovery alone cannot displace
+another viewer. Already forwarded held-key releases can still drain on their
+original parked input wire. See [parity](parity.md) for appearance limitations
+and the client-local acknowledgement/older-stream stall race.

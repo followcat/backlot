@@ -142,8 +142,8 @@ pane, so focus switches have no gap without a visible size owner. These
 controllers send size and measured display facts, consume credit, allocate no
 VT and send neither human input, focus nor automatic replies. Leaving the tab
 closes the controller; off-tab LRU connections remain strictly observe-only.
-A visible controller reacquires its permitted size lease on transport recovery;
-it never claims focus or sends input.
+A visible controller recovers with passive `resumed`; it never claims focus
+or sends input. Transport recovery alone does not reclaim another viewer's size.
 This user-approved rule supersedes the earlier blanket observe-only rule for
 visible split panes. One displayed geometry supplies rendering and both size
 requests, including observer-loading and alternate-screen transitions.
@@ -355,7 +355,8 @@ repository mobile/grouping acceptance belong to M2.2 after Claude approval.
 | Detach, Help, toggle sidebar, workspace picker | The four implemented M2 actions. Navigation inside the picker and mobile Help/Detach menu targets work. |
 | User Alt+F popup/custom command | Parsed but direct commands are silently consumed, with no execution or notice. M4 command/popup scope; not a missing core fact. Fixture scripts never send Alt+F or execute its command. |
 | Layout/tab navigation and lock | M3a implements indexed workspace/tab/agent selection, previous/next, directional pane focus/swap, cycle/last pane, zoom/resize and Ctrl+G lock with default/configured bindings. |
-| Settings and reload config menu/help entries | Visible source presentation; their actions are not implemented in M3a. Part of the remaining configuration/binding work in M3. |
+| Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
+| Settings binding/menu | `pending-feature`: the M4 overlay is deferred. M3a.1 shows the transient notice `Settings isn't available in hc-tui yet`. Menu presentation remains identical; the notice/overlay difference is retained, never counted as matching Settings UI. |
 | Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. Workspace/machine actions, custom commands, notifications, scrollback editing/clear and remaining actions stay in M4 or M5. Mobile new-tab is active; new-workspace remains deferred. |
 | Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
@@ -370,3 +371,57 @@ There is no cross-connection completion/output fence yet: new inventory can
 arrive while stream output is stalled, so a paint can be older than its status.
 That stall race remains a documented limitation, not a proven acknowledgement
 match. Reporter state labels remain deferred.
+
+
+## Cross-viewer sizing and passive recovery
+
+The tested core chooses the most recently active non-observe viewer. A phone
+attaching to a pane visible on the desktop therefore takes size; desktop
+observers follow the authoritative grid. A size holder and the input wire
+reconnect with `resumed: true`, without focus or human-input activity. Merely
+recovering the desktop transport does not displace the phone. When the phone
+detaches, the remaining passive desktop viewers restore the desktop allocation.
+
+Entering or revisiting a tab creates fresh size holders. Moving focus opens
+that pane's active input wire, and a real allocation change sends a resize.
+Those local activities, input and explicit take-control may reclaim sizing;
+unchanged allocation or a mismatching core grid does not trigger a reclaim loop.
+Alternating genuine activity can legitimately cause repeated reflows.
+
+This differs from pinned herdr's direct-attach resize lock, which protects the
+direct viewer from TUI layout resizes until detach. hc-tui follows hc's current
+latest-activity policy and cannot promise that lock. A phone initially wins;
+a desktop user returning can take size back. Exact lock parity would require
+an explicit core ownership contract, not observer-side guessing. M3a.1's owned
+proxy regression cuts only desktop transports, confirms live passive attach
+replies plus fresh observer output, verifies phone size retention, automatic
+fallback on phone detach and real desktop-allocation reclamation.
+
+## Close identities and the remaining race
+
+In the pinned pre-C3 core, canonical `t...` addresses are not recycled for a
+new terminal within preserved core state. The serialized registry retains a
+monotonic `next_id`; allocation refuses exhaustion instead of wrapping.
+Names may be reassigned, but hc-tui closes canonical addresses. Thus normal
+allocation cannot replace a closed record with a different terminal at the
+same address between validation and kill. State replacement/reset and remote
+origin redirection are outside that per-core identity guarantee.
+See the [pinned terminal registry](https://github.com/herdrdev/herdr-core/blob/ec8adcdf0da38e539e8702f7c37801647da035f3/crates/herdr-core/src/terminals.rs#L211).
+
+Displayed herdr-app membership authorizes an explicit user close; adopting the
+terminal into an owned layout is not required. The foreign document remains
+read-only. A concurrent move after the final membership reread can still race
+`terminal.kill`, which has no conditional incarnation/membership guard. Kill
+and layout writes are not atomic and group closes may partially succeed. An
+absolute conditional-close guarantee remains a core follow-up.
+
+## Cursor-color evidence
+
+Native captures compare cursor position, visibility, shape and blink. M3a.1
+also exports and compares any emitted host cursor-color override; the decoder
+has an OSC12/set/reset regression. The pinned thin-client cached-switch capture
+emits no host cursor-color override on either side (`null` in both captures).
+That absence match is not native proof that the program's earlier OSC12 value
+survived. Retained program OSC12 state is unit-tested only. Native indexed-cell
+colors and OSC4 palette comparisons remain separate evidence. First attach,
+reconnect and eviction appearance limitations remain unchanged.
