@@ -54,8 +54,8 @@ The decoder feeds the complete pre-detach byte stream through the same
 pinned native VT, replaying resize offsets in order. It compares every cell's
 grapheme, wide metadata, source/resolved colors (including underline),
 attributes, cursor, host modes and window title. Checkpoints wait for their
-expected content and a quiet interval. The default hostname title has only
-the exact documented core-name adaptation; custom titles compare exactly. An
+expected content and a quiet interval. Every title compares exactly, including
+the OS hostname; there is no core-name adaptation. An
 unwritten narrow blank is canonicalized to an ASCII space on both sides;
 styles and wide tails are retained. There are no region masks or byte
 stripping. Teardown output is captured separately and decoded to verify
@@ -97,13 +97,24 @@ switcher status/highlight and normal-mode readiness plus menu-to-Help input.
 `--host-program wezterm` adds a host ModifyOtherKeys1 profile; capture and
 teardown must prove it is enabled and then reset.
 
-Use `--scenario repository` for the desktop Git fixture (default120x40).
-It creates only owned local Git data: ↑2 ↓1 versus a local upstream branch,
-a linked worktree, and an unlabelled terminal in a subdirectory. Source
-facts must visibly arrive before capture. On the pinned pre-C3 core it
-returns exit2 and `pending-core-fact`, with `passed:false`, every raw diff
-and exact expected missing facts retained. It is not a successful parity run.
-C3 is developed separately; no core facts are adopted by this M2.1 harness.
+Use `--scenario repository` with the pinned C3 `.8` binary for the Git fixture
+(default120x40, with explicit `--size` also supporting65/64/40). The standard
+case creates ↑2 ↓1 versus a local upstream, a linked worktree and an unlabelled
+subdirectory terminal. Core facts must settle and pass field assertions before
+its frontend starts. `--repository-case` also accepts `missing-git`,
+`nonexecutable-git`, `detached`, `promisor`, `promisor-false` and `promisor-empty`.
+Only owned repositories and environments change; no fetch occurs.
+
+Promisor counts remain absent by core policy. Full raw differences still fail;
+a policy annotation never excuses an unrelated screen/cursor/mode/title error.
+An exact surface with a semantic policy annotation returns exit3 and
+`passed:false`, never a parity pass. Complete post-detach frames are required
+checkpoints. Any exception or cleanup failure clears `passed`.
+
+The ownership runner captures the exact negotiated kind7 payload during the
+human release interval, requires matching child bytes, and verifies the phone
+keeps its allocation. Missing capability confirmation uses DATA in protocol
+fake-core tests. Native `.8` results remain pending until its release is pinned.
 
 Initial fixture readiness also decodes the complete native screen: ANSI
 cursor/style writes can split a visible string, so raw substring matching

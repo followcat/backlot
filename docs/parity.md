@@ -8,8 +8,10 @@ mouse input.
 
 **Validation status:** the joint M2 review did **not** accept the shell as
 indistinguishable. M2.1 tightens the harness and covers the default 64-column
-mobile boundary. Ordinary Git rows await the separately reviewed C3 facts
-in M2.2. C3 will not supply first-paint program appearance: M3a retains VTs
+mobile boundary. M2.2 adopts the reviewed C3 facts; native acceptance awaits
+the pinned `hc 0.1.17-followcat.8` release artifact and fresh matrices.
+Protocol/fake-core checks do not establish native parity. C3 will not supply
+first-paint program appearance: M3a retains VTs
 for cached switching and documents first attach, reconnect and eviction as
 known limitations. A fixture with missing core facts is `pending-core-fact`,
 never a pass. Earlier passes establish only their explicit captured fixtures.
@@ -72,18 +74,18 @@ difference.
 | Workspace/tab/layout identities | M2 uses raw `herdr.space`/`herdr.tab` labels and endpoint/cwd fallback, with distinct unlabelled tabs. M3 reads the herdr-app document and shares hc-tui layout. Display clipping never changes identity. |
 | Agent runtime state | Use the authoritative root/named status record and the vocabulary above. Core supplies status; hc-tui does not add screen detection. |
 | Manual, reported and OSC titles | All are available: `herdr.title`, status `title`, terminal `title`. Keep separate source fields. The optional core terminal `name` supplies the source name field. Title loss or swapping is a bug. |
-| Shared completion acknowledgement | Core has advisory `herdr.seen` labels but no equivalent native shared per-status acknowledgement state. M2 applies source transitions in a local presentation cache, scoped to turn/incarnation, without label writes. Acknowledgement is not synchronized or persisted across hc-tui clients. |
-| Global state-change ordinal | `status_ms`, terminal `turn` and observed publishes are available; the source's complete pre-connection global history is not. Use timestamps and local observed transitions, with deterministic ties. Comparing turn magnitudes between terminals is not a replacement for chronology. |
-| Workspace branch | `pending-core-fact`: absent in the tested core inventory, but visible in the default source sidebar. This is a known mismatch awaiting C3, not an accepted visual omission. |
-| Git ahead/behind counts | `pending-core-fact`: default source rows show nonzero counts against local upstream refs. C3 supplies machine-side Git facts; hc-tui never probes local repositories for remote facts. |
-| Worktree identity and label | `pending-core-fact`: the linked checkout fixture shares a common Git directory and exposes a separate branch. Identity/grouping requires C3; read-only display is required even though worktree creation is out of scope. |
-| Repository-root fallback label | `pending-core-fact`: an unlabelled terminal in `acme-shop/src` currently shows `src`; source discovers the repository root and shows `acme-shop`. |
+| Shared completion acknowledgement | C3 still supplies no shared acknowledgement or output-consumption fence. Local acknowledgement resets/baselines on activity `(core_id, epoch, scope)` changes; `revision` alone does not reset it or advance recency. It is not synchronized or persisted across clients. |
+| Global state-change ordinal | Optional C3 `activity.records[""].state_ordinal` and `completion_ordinal` are retained with `core_id`, `epoch`, `scope`, `revision` and named records. Counters are origin-local, never a global order across machines. Chronology/completion inference and attention ordering remain M3b; M2.2 does not sort by these counters. |
+| Workspace branch | C3 `repository.branch`, displayed only for `state == "ready"`. Pending/stale/unavailable and future states retain their full facts but hide Git presentation; absence means unsupported. No viewer Git probe. Native validation pending. |
+| Git ahead/behind counts | Nullable C3 `repository.ahead_behind`, with checked u64-to-usize conversion. Unknown stays absent, distinct from observed `(0,0)`. Promisor configuration, including false/empty values, deliberately suppresses counts. Source policy differences are recorded separately, never passes. Native validation pending. |
+| Worktree identity and label | C3 groups by `(repository.core_id, checkout.repository_key)` and distinguishes `checkout_key`; all keys/paths remain opaque. Ready facts supply `repo_name`, `checkout_name`, `is_linked_worktree` and `is_bare`. Cached checkout identity remains stable while nonready worktree presentation is hidden. Native validation pending. |
+| Repository-root fallback label | C3 `checkout.repo_root` and `repository.auto_label` replace launch-cwd inference; explicit herdr-app/space/tab membership retains precedence. A plain-directory observation is distinct from an unsupported absent repository object. Native validation pending. |
 | Workspace/agent tokens | No documented mapping for the source configurable token/context-usage values. Leave token collections empty. Unknown protocol extensions are retained without guessing their meaning. |
 | Agent state labels | No documented equivalent for the source server's state-label collection. Leave it empty; core parent addresses or record sources are not state labels. |
 | Worker relationship | Core `parent` is available and remains verbatim. The reference sidebar has no parent-note field; a worker uses an ordinary agent row with its own identity. Unknown parents do not hide it. |
 | Endpoint state | Local connection/subscription state and remote `machine.list` states drive the reference endpoint enum. Offline snapshots remain listed. RPC-only loss retains streaming terminal reports and marks stale machine information; subscription loss makes the retained inventory stale. Use the source stale/dimming presentation. |
 | Size-owner identity | Active/observe role, size and focus facts are available, but the tested protocol does not name another size owner. Preserve role and authoritative sizes, and omit an invented owner name. Visible ownership notices and explicit take-control behavior still require validation. |
-| Hostname | Core inventory exposes the configurable `core.name`, not a separate OS hostname. Use that name for hostname status/title tokens; do not run extra local or remote commands to discover it. |
+| Hostname | Use optional `hello.core.hostname` only with `os_hostname`, and connected/fresh `MachineView.hostname` for remote endpoints. Both title and tab status use the fact; missing/unconfirmed/offline facts produce no hostname text. Never substitute configured `core.name` or a relay alias, or run discovery commands. Native validation pending. |
 | Server clock and timezone | Core exposes no remote clock/timezone fact. Datetime tab status uses the client local clock with the source formatter and sanitization. Remote clock/timezone parity requires a protocol fact. |
 | Earlier cursor-style request | The tested cores omit earlier DECSCUSR visual shape/explicitness from initial attach paint. Follow the precise limitation below. |
 | Earlier program default-color/palette overrides | The same cores omit prior OSC 10/11/4 state from first paint. Use the measured host defaults/palette until live program updates arrive, as described below. |
@@ -250,18 +252,21 @@ unobserved history or synchronize acknowledgement between clients.
 
 ## Release activity and size ownership
 
-In both tested core revisions, a human key-release DATA frame counts as
-activity and can reclaim size, unlike the source's quiet release handling.
-Two owned viewers demonstrated the exact case: a later viewer held 88x22;
-the original 66x16 viewer sent a real key release and core returned to 66x16.
-`resumed` suppresses recovery-attach activity, not subsequent DATA activity.
+Pre-C3 cores treat human release DATA as activity, which can reclaim size.
+M2.2 opts in to `quiet_human_release` and sends frame kind 7 only when the
+hello feature, attach request and affirmative attach reply all confirm it.
+Keys and mouse releases are tagged before encoding; bytes are never inspected
+to classify a release. The human input gate, FIFO, chunking and drain fence
+remain shared with ordinary input. Observe and silent size-holder paths
+cannot send human releases. Missing/false confirmation uses DATA, never
+AUTOMATIC_INPUT, retaining the older core's activity policy.
 
-M2 sends the actual release to its original wire. It does not relabel human
-releases as AUTOMATIC_INPUT, fake focus or resize the other viewer to hide
-this core behavior. The available generation-1 controls have no quiet-human-
-release flag. This exception is limited to the resulting activity/ownership
-change; encoded bytes, original-target routing and ordinary focus/resize
-behavior must remain correct.
+Parked releases stay on their original negotiated wire; graceful synthetic
+releases drain before CLOSE. Dead-wire releases are not synthesized/replayed.
+The owned phone/desktop harness now checks exact kind 7 payloads during the
+release interval, delivery to the child and retention of the phone's size.
+Those new native checks await the pinned `.8` artifact; fake-core negotiation,
+original-wire routing and drain tests pass independently.
 
 
 ## First paint, input ordering and recovery
@@ -308,11 +313,11 @@ healthy switched routes and graceful detach are not covered by this gap.
 ## Title and teardown comparisons
 
 The native decoder includes outer title and host modes as well as every
-cell's resolved underline color. The default title fixture permits exactly
-one data adaptation: when the template is `{hostname}: {workspace}`, the
-reference's OS-hostname prefix may differ from the fixture core's `host-a`
-prefix, with an identical workspace suffix. It records this difference
-explicitly. Other title templates compare exactly; no cells are masked.
+cell's resolved underline color. All title templates compare exactly,
+including the default `{hostname}: {workspace}`. M2.2 removes the old
+core-name/OS-hostname exemption. No cells are masked. Complete restored
+frames, including cells, cursor, modes and retained title, are also compared
+before a run can report success.
 
 Detach must restore raw mode, cursor visibility, line wrap, keyboard flags,
 alternate screen, paste, focus, mouse and scheme reporting. The tested
@@ -342,13 +347,20 @@ detach; bounded quiescence is not proof about arbitrarily delayed traffic.
 `--scenario repository` creates an owned local Git repository, a locally
 tracked upstream branch with two commits ahead and one behind, a linked
 worktree and an unlabelled terminal in `src`. No network fetch occurs.
-The default desktop checkpoint requires source to show `fixture-main`,
-`↑2 ↓1`, `fixture-linked` and `acme-shop`; candidate currently lacks these
-facts and derives `src`. Every raw cell/title difference is retained and the
-scenario exits2 with `passed:false` and `pending-core-fact`. This includes
-subsequent row shifts; they are not masked or automatically waived. The
-fixture currently covers desktop repository presentation. C3 adoption and
-repository mobile/grouping acceptance belong to M2.2 after Claude approval.
+The default desktop checkpoint requires both clients to show `fixture-main`,
+`↑2 ↓1`, `fixture-linked` and `acme-shop`. Core repository/activity observations
+must settle and pass independent field assertions before starting its UI.
+Additional cases remove Git from the owned PATH, supply a nonexecutable Git,
+detach HEAD, and set promisor configuration to true, false or empty. There
+is no network fetch or viewer repository probing. At65/64/40 columns the
+fixture compares the workspace picker and return with the same keys.
+
+All raw differences fail, even with a core-policy annotation; policy annotations
+never waive unrelated rendering, cursor, mode or title differences. An exact
+surface match with an explicit semantic policy difference remains
+`core-policy-difference` (`passed:false`, exit3), never a parity pass.
+The pre-C3 66-difference/exit2 evidence is historical; `.8` native runs are
+pending, so this updated harness does not yet establish exact M2 acceptance.
 
 | Displayed binding/menu group | Current behavior and scope |
 |---|---|
@@ -363,9 +375,9 @@ repository mobile/grouping acceptance belong to M2.2 after Claude approval.
 
 The joint review accepted documented deferral of dead-wire held releases,
 resize acknowledgement ambiguity, remote clock/timezone and currently unused
-token metadata. C3 hostname, Git facts and quiet human release remain pending. C3 does not
-supply first-paint appearance; the client cache handles routine switching.
-Completion chronology still awaits C3. Acknowledgement stays client-local and
+token metadata. C3 hostname, Git facts and quiet human release are implemented
+with native validation pending. C3 does not supply first-paint appearance; the client cache handles routine switching.
+Completion chronology remains M3b; C3 counters are retained for that slice. Acknowledgement stays client-local and
 only follows a composed, completed visible paint while the client is focused.
 There is no cross-connection completion/output fence yet: new inventory can
 arrive while stream output is stalled, so a paint can be older than its status.

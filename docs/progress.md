@@ -291,3 +291,30 @@
 - M3a.1 stops for review. Settings overlay and other M4 actions remain deferred;
   no M2.2/C3 adoption, M4 implementation or release was started. First-attach,
   reconnect/eviction appearance and acknowledgement-fence limitations remain.
+
+
+## M2.2: C3 facts — implementation complete, native validation pending
+
+- M3a.1 is accepted. Adopted optional repository/activity snapshots, atomic
+  status/activity replacements, full repository events and explicit nullable
+  resets. Malformed complete replacements leave records and sequence unchanged.
+  Origin clocks retain core/epoch/scope/revision; lifetime resets baseline local
+  acknowledgement without advancing recency. Chronology remains M3b.
+- Title and tab status use the optional OS hostname fact, qualified by feature
+  support and connection freshness. Git projection uses authoritative labels,
+  roots, opaque repository/checkout keys and nullable checked counts. Nonready
+  metadata is hidden while cached identity stays stable. No viewer Git probes.
+- Source-tagged human releases negotiate request/hello/reply before kind7;
+  unconfirmed paths use DATA. Fake-core tests cover negotiation, observer
+  rejection, chunking, parked original-wire releases and graceful FIFO drains.
+- The harness removes title adaptations, adds seven owned repository cases and
+  narrow repository picker checks, compares whole restored frames, and binds
+  ownership evidence to this release's exact kind7 payload. Policy annotations
+  never excuse raw differences or count as passes. Input byte fixtures are unchanged.
+- Code commits 3f29424, 3e7a453 and 09b72e2 passed exact-tree fmt/clippy/test,
+  independent read-only reviews and leak scans; all three CI runs are green.
+  Pure harness safety checks pass 24 tests. Native `.8` matrices, input/tail replay
+  and phone ownership checks have not run: the required release record/archive
+  is not available yet. Earlier native results are not claimed for the new core.
+- M2.2 is not accepted as exact parity yet. Await the pinned release artifact;
+  no core build, M3b, M4 or completed M2.2 review pause is claimed.
