@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+"""Run both clients through owned scratch PTYs and compare native cells."""
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import time
+import tomllib
+
+from checks import ready, title_difference, verify_restored
+
+from fixtures import prepare_core, prepare_reference, wait_program
+from sessions import Core, Reference, digest
+from pty_host import Pty
+
+REFERENCE = 'd00953e081389eb5f8ea006896fbf4a17b2f9dfc'
+REPO = Path(__file__).resolve().parents[2]
+
+
+def checkpoint(owner, name, size, decoder):
+    owner.ui.read(.25)
+    quiet_deadline = time.monotonic() + .75
+    while True:
+        activity = owner.ui.read(.05)
+        owner.capture_quiet = not activity
+        if owner.capture_quiet or time.monotonic() >= quiet_deadline:
+            break
+    capture = owner.out / (owner.kind + '-' + name + '.raw')
+    capture.write_bytes(owner.ui.output)  # Complete stream BEFORE detach.
+    timeline = capture.with_suffix('.resize.json')
+    timeline.write_text(json.dumps(getattr(owner, 'resizes', [])))
+    initial = getattr(owner, 'initial_size', size)
+    result = subprocess.run([str(decoder), str(initial[0]), str(initial[1]), str(capture), str(timeline)],
+                            capture_output=True, check=True, timeout=15)
+    path = capture.with_suffix('.json')
+    path.write_bytes(result.stdout)
+    return json.loads(result.stdout)
+
+
+def differences(reference, candidate, default_title=False):
+    differences = []
+    for row_a, row_b in zip(reference['cells'], candidate['cells'], strict=True):
+        for column, (a, b) in enumerate(zip(row_a['cells'], row_b['cells'], strict=True)):
+            if a != b:
+                differences.append({'row': row_a['y'], 'column': column, 'reference': a, 'candidate': b})
+    if reference['cursor'] != candidate['cursor']:
+        differences.append({'cursor_reference': reference['cursor'], 'cursor_candidate': candidate['cursor']})
+    if reference['host_modes'] != candidate['host_modes']:
+        differences.append({'reference_modes':reference['host_modes'], 'candidate_modes':candidate['host_modes']})
+    title = title_difference(reference['title'],candidate['title'],default_title)
+    if title:
+        differences.append(title)
+    return differences
+
+
+def detach(owner, decoder=None):
+    owner.ui.send(b'\x02q')
+    deadline = time.monotonic() + 5
+    while owner.ui.child.poll() is None and time.monotonic() < deadline:
+        owner.ui.read(.03)
+    assert owner.ui.child.poll() == 0, 'owned UI detach did not exit successfully'
+    assert owner.ui.terminal_restored(), 'owned outer terminal mode restoration failed'
+    (owner.out / (owner.kind + '-teardown.raw')).write_bytes(owner.ui.output)
+    if decoder:
+        restored = checkpoint(owner, 'restored', owner.initial_size, decoder)
+        verify_restored(restored)
+        return restored
+
+
+def one_size(args, size, binary):
+    out = args.out / f'{size[0]}x{size[1]}'
+    out.mkdir(parents=True, exist_ok=False)
+    core = reference = None
+    result = {'geometry': size, 'checkpoints': [], 'cleanup': {}}
+    try:
+        core = Core(args.hc, args.config, out)
+        core.start()
+        candidate_programs = prepare_core(core)
+        reference = Reference(binary, args.config, out)
+        reference.ui = Pty([str(binary), '--session', reference.session], reference.env,
+                           reference.cwd, *size, cell_px=(10, 20))
+        reference.ui.keyboard_flags_reply = 7
+        reference.ui.sgr_pixel_mouse_reply = 2
+        reference.ready()
+        reference_programs = prepare_reference(reference)
+        core.ui = Pty([str(args.hc_tui), '--session', core.session], core.env,
+                      core.cwd, *size, cell_px=(10, 20))
+        core.ui.keyboard_flags_reply = 7
+        core.ui.sgr_pixel_mouse_reply = 2
+
+        core.ui.until(lambda data: b'fixture alpha' in data)
+        for owner in [reference, core]:
+            owner.initial_size = size
+            owner.resizes = []
+
+        previous = {}
+        def capture_ready(owner, name, program):
+            deadline = time.monotonic() + 5
+            while True:
+                frame = checkpoint(owner, name, size, args.decoder)
+                if ready(frame, name, previous.get(owner.kind), program.received()):
+                    # Demand a quiet output interval rather than taking a stale
+                    # pair merely because both clients are equally late.
+                    if owner.capture_quiet:
+                        previous[owner.kind] = frame
+                        return frame
+                assert time.monotonic() < deadline, f'{owner.kind} {name} did not reach a settled expected checkpoint'
+
+        def compare(name):
+            a = capture_ready(reference, name, reference_programs[1])
+            b = capture_ready(core, name, candidate_programs[1])
+            diff = differences(a, b, args.default_title)
+            (out / (name + '-diff.json')).write_text(json.dumps(diff, ensure_ascii=False, indent=2) + '\n')
+            bugs = [entry for entry in diff if 'adaptation' not in entry]
+            result['checkpoints'].append({'name':name, 'different_cells':len(bugs),
+                'data_adaptations':[entry for entry in diff if 'adaptation' in entry]})
+            print(json.dumps({'geometry':size,'checkpoint':name,'differences':len(bugs),
+                'adaptations':len(diff)-len(bugs)}),flush=True)
+
+        compare('baseline')
+        result['usable_frame_seconds'] = core.ui.first_seen(b'fixture alpha')
+        if not args.smoke:
+            help_keys = b'\x02\x18' if args.scenario == 'prefix-conflict' else b'\x02?'
+            sidebar_keys = b'\x18' if args.scenario == 'prefix-conflict' else b'\x02b'
+            for name, keys in [
+                ('prefix', b'\x02'), ('prefix-cancel', b'\x1b[27u'),
+                ('help', help_keys), ('help-filter', b'/pane'),
+                ('help-back', b'\x1b[27u'), ('help-page', b'\x1b[6~'),
+                ('help-close', b'\x1b[27u'), ('navigate', b'\x02w'),
+                ('navigate-next', b'\x1b[1;1B\x1b[1;1:3B'), ('switch', b'\r'),
+                ('sidebar-drag', b'\x1b[<0;26;9M\x1b[<32;32;9M\x1b[<0;32;9m'),
+                ('sidebar-collapse', sidebar_keys), ('sidebar-expand', sidebar_keys),
+            ]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name)
+
+            for programs, owner in [(reference_programs, reference), (candidate_programs, core)]:
+                for program in programs:
+                    program.send(b'\x1b[5 q\x1b[?1003;1006h')
+                    wait_program(owner, program, program.serial)
+            compare('live-cursor-and-mouse-mode')
+            for name, keys in [
+                ('mouse', b'\x1b[<35;38;5M\x1b[<0;38;5M\x1b[<32;42;7M\x1b[<0;42;7m'),
+                ('tracked-wheel', b'\x1b[<64;38;5M\x1b[<65;38;5M'),
+            ]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name)
+            for index in range(2):
+                assert reference_programs[index].received() == candidate_programs[index].received(), 'program input differs'
+
+            # A font/geometry change can keep the same character grid. Pixel
+            # hit tests and the child's geometry must refresh together.
+            for owner, programs in [(reference, reference_programs), (core, candidate_programs)]:
+                owner.ui.cell_px = (20, 40)
+                owner.ui.resize(*size)
+                programs[1].send(b'\x1b[?1016h\x1b[16;2HPHASE pitch\x1b[K\x1b[18;8H')
+                wait_program(owner, programs[1], programs[1].serial)
+            compare('changed-pixel-pitch')
+            raw_mouse = b'\x1b[<35;757;193M\x1b[<0;757;193M\x1b[<0;757;193m'
+            for owner in [reference, core]:
+                owner.ui.send(raw_mouse)
+            compare('changed-pitch-mouse')
+            assert reference_programs[1].received() == candidate_programs[1].received(), 'changed-pitch input differs'
+            for owner, programs in [(reference, reference_programs), (core, candidate_programs)]:
+                programs[1].send(b'\x1b[?1016l\x1b[16;2HPHASE restored\x1b[K\x1b[18;8H')
+                wait_program(owner, programs[1], programs[1].serial)
+                owner.ui.cell_px = (10, 20)
+                owner.ui.resize(*size)
+            compare('restored-pixel-pitch')
+
+            # The reference owns status detection; core receives the matching
+            # authoritative OSC report. No status is inferred from screen text.
+            for index, state in [(0, 'working'), (1, 'working'), (0, 'blocked'),
+                                 (0, 'idle'), (1, 'idle')]:
+                program = reference_programs[index]
+                if not getattr(program, 'metadata_set', False):
+                    reference.cli('pane', 'report-metadata', program.terminal,
+                        '--source', 'fixture-meta', '--agent', 'fixture',
+                        '--applies-to-source', 'fixture', '--title', 'task-' + program.name,
+                        '--seq', '1')
+                    program.metadata_set = True
+                reference.cli('pane', 'report-agent', program.terminal,
+                    '--source', 'fixture', '--agent', 'fixture', '--state', state,
+                    '--seq', str(100 + len(result['checkpoints'])))
+                candidate_programs[index].status(state)
+                wait_program(core, candidate_programs[index], candidate_programs[index].serial)
+                compare('status-' + str(index) + '-' + state)
+
+            # Disable tracking before exercising the source's local history
+            # viewport and typing-to-bottom behavior on the selected beta pane.
+            scroll = (b'\x1b[?1003;1006l\x1b[0m\x1b[2J\x1b[3J\x1b[H' +
+                      b''.join(f'line {n:03d} 中 é\r\n'.encode() for n in range(100)))
+            for owner, programs in [(reference, reference_programs), (core, candidate_programs)]:
+                programs[1].send(scroll)
+                wait_program(owner, programs[1], programs[1].serial)
+            compare('history-bottom')
+            for name, keys in [('history-wheel', b'\x1b[<64;40;5M' * 5),
+                               ('history-typing-reset', b'z')]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name)
+
+            # Decode each full output stream using the actual resize offsets;
+            # feeding old bytes into only the final dimensions is not valid.
+            for new_size in [(120, 40), (80, 24), (200, 50), size]:
+                for owner in [reference, core]:
+                    owner.ui.read(.1)
+                    owner.resizes.append((len(owner.ui.output), *new_size))
+                    owner.ui.resize(*new_size)
+                compare('resize-' + str(len(reference.resizes)))
+            result['idle'] = core.ui.idle_measurement(10)
+
+
+        result['passed'] = all(stage['different_cells'] == 0 for stage in result['checkpoints'])
+        result['first_candidate_byte_seconds'] = core.ui.first_byte_seconds
+        restored_candidate = detach(core, args.decoder)
+        restored_reference = detach(reference, args.decoder)
+        title = title_difference(restored_reference['title'],restored_candidate['title'],args.default_title)
+        assert title is None or 'adaptation' in title, 'post-detach title differs'
+        result['restored_title_adaptation'] = title
+        result['termios_restored'] = True
+    except BaseException as error:
+        result['error'] = repr(error)
+        raise
+    finally:
+        failures = []
+        for owner in [core, reference]:
+            if owner is None:
+                continue
+            try:
+                owner.close()
+                result['cleanup'][owner.kind] = 'pass'
+            except BaseException as error:
+                owner.recovery()
+                result['cleanup'][owner.kind] = repr(error)
+                failures.append(error)
+        (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+        if failures:
+            raise RuntimeError('owned scratch cleanup failed; recovery records retained') from failures[0]
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--hc', type=Path, required=True)
+    parser.add_argument('--hc-tui', type=Path, required=True)
+    parser.add_argument('--reference-manifest', type=Path, required=True)
+    parser.add_argument('--config', type=Path, required=True)
+    parser.add_argument('--decoder', type=Path, required=True)
+    parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--size', choices=['80x24', '120x40', '200x50'], action='append')
+    parser.add_argument('--scenario', choices=['default', 'prefix-conflict'], default='default')
+    parser.add_argument('--smoke', action='store_true', help='baseline only; not an acceptance run')
+    args = parser.parse_args()
+    for field in ['hc', 'hc_tui', 'config', 'decoder', 'reference_manifest']:
+        setattr(args, field, getattr(args, field).resolve(strict=True))
+    parsed_config = tomllib.loads(args.config.read_text())
+    args.default_title = parsed_config.get("ui",{}).get("window_title", "{hostname}: {workspace}") == "{hostname}: {workspace}"
+    if args.scenario == 'prefix-conflict':
+        keys = parsed_config.get('keys',{})
+        assert keys.get('help') == 'prefix+ctrl+x' and keys.get('toggle_sidebar') == 'ctrl+x', 'prefix-conflict requires its recorded bindings' 
+    args.out = args.out.resolve()
+    if args.out.is_relative_to(REPO):
+        raise ValueError('captures must be outside the public repository')
+    args.out.mkdir(parents=True, exist_ok=False)
+    info = json.loads(args.reference_manifest.read_text())
+    assert info['source_revision'] == REFERENCE
+    binary = Path(info['binary']).resolve(strict=True)
+    assert digest(binary) == info['sha256'], 'reference binary provenance mismatch'
+    metadata = {'reference_revision': REFERENCE, 'reference_sha256': digest(binary),
+                'candidate_sha256': digest(args.hc_tui), 'core_sha256': digest(args.hc),
+                'config_sha256': digest(args.config), 'decoder_sha256': digest(args.decoder),
+                'smoke': args.smoke, 'scenario': args.scenario,
+                'harness_sha256': {path.name:digest(path) for path in Path(__file__).parent.glob('*.py')},
+                'fixture_overrides': {'sound_enabled':False,'disable_sound_env':True,'update_checks':False}}
+    (args.out / 'provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')
+    sizes = [tuple(map(int, size.split('x'))) for size in (args.size or ['80x24', '120x40', '200x50'])]
+    results = [one_size(args, size, binary) for size in sizes]
+    raise SystemExit(any(not result['passed'] for result in results))
+
+
+if __name__ == '__main__':
+    main()
