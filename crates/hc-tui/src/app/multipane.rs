@@ -1,4 +1,5 @@
-//! Each visible background pane is a silent observer. The focused pane keeps
+//! Persistent observers retain appearance; visible panes also hold silent size leases.
+//! The focused pane keeps
 //! its existing original-wire input leases, including across focus changes.
 use super::*;
 
@@ -9,7 +10,10 @@ pub(super) const RECENT_PANES: usize = 32;
 impl App {
     pub(super) async fn shutdown_panes(&mut self) {
         let mut closing = tokio::task::JoinSet::new();
-        for mut pane in std::mem::take(&mut self.observers).into_values() {
+        for mut pane in std::mem::take(&mut self.observers)
+            .into_values()
+            .chain(std::mem::take(&mut self.size_leases).into_values())
+        {
             closing.spawn(async move {
                 pane.shutdown().await;
                 pane.close_failure().map(str::to_owned)
@@ -124,7 +128,12 @@ impl App {
         let route = event.route();
         if self.pane.owns_route(route) {
             self.pane.on_event(event, now);
-        } else if let Some(pane) = self.observers.values_mut().find(|p| p.owns_route(route)) {
+        } else if let Some(pane) = self
+            .observers
+            .values_mut()
+            .chain(self.size_leases.values_mut())
+            .find(|p| p.owns_route(route))
+        {
             pane.on_event(event, now);
         }
     }
@@ -133,13 +142,22 @@ impl App {
         self.pane
             .next_wake()
             .into_iter()
-            .chain(self.observers.values().filter_map(|p| p.next_wake()))
+            .chain(
+                self.observers
+                    .values()
+                    .chain(self.size_leases.values())
+                    .filter_map(|p| p.next_wake()),
+            )
             .min()
     }
 
     pub(super) fn pane_retry(&mut self, now: Instant) {
         self.pane.fire_retry(now);
-        for pane in self.observers.values_mut() {
+        for pane in self
+            .observers
+            .values_mut()
+            .chain(self.size_leases.values_mut())
+        {
             pane.fire_retry(now);
         }
     }

@@ -181,3 +181,36 @@ async fn cached_observer_shutdown_shares_one_deadline() {
     );
     assert!(app.observers.is_empty());
 }
+
+#[tokio::test]
+async fn visible_size_leases_survive_focus_and_leave_only_observers_off_tab() {
+    let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work"), ("t3", "other")]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    let now = Instant::now();
+    let mut draw = |app: &mut App, focus: &str, tick: u64| {
+        app.focused = Some(focus.into());
+        app.refresh_projection();
+        app.sync_observers();
+        let now = now + std::time::Duration::from_secs(tick);
+        app.sched.mark_dirty(now);
+        app.maybe_draw(&mut term, now).unwrap();
+    };
+    draw(&mut app, "t1", 0);
+    assert_eq!(app.size_leases.len(), 2);
+    let first = app.size_leases["t1"].generation();
+    let second = app.size_leases["t2"].generation();
+    draw(&mut app, "t2", 1);
+    assert_eq!(app.size_leases["t1"].generation(), first);
+    assert_eq!(app.size_leases["t2"].generation(), second);
+    draw(&mut app, "t3", 2);
+    assert_eq!(
+        app.size_leases
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["t3"]
+    );
+    assert_eq!(app.observers.len(), 3);
+}

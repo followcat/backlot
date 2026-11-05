@@ -8,7 +8,7 @@ impl Pane {
     pub fn set_host_facts(&mut self, host: HostFacts) {
         self.host = host;
         if let State::Live(live) = &mut self.state
-            && live.spec.role == Role::Active
+            && live.spec.role != Role::Observe
             && let Some(display) = self.host.display()
             && live.sent_facts.as_ref() != Some(&display)
         {

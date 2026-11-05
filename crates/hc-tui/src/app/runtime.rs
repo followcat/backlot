@@ -17,8 +17,6 @@ impl App {
         // inner rect — no clipped last column, row or cursor.
         let size = term.size()?;
         self.area = (size.width, size.height);
-        let inner = draw::pane_inner(self, size.width, size.height);
-        self.pane.allocated(inner.width.max(1), inner.height.max(1));
         let layout = self.shell.layout_config().layout(
             size.width,
             size.height,
@@ -26,11 +24,32 @@ impl App {
             pane_geometry::focused_tab_count(self),
             self.sidebar_width,
         );
-        for info in pane_geometry::pane_infos(self, layout.pane_surface) {
+        let infos = pane_geometry::pane_infos(self, layout.pane_surface);
+        self.size_leases
+            .retain(|id, _| infos.iter().any(|info| &info.id == id));
+        for info in infos {
+            let inner = self
+                .displayed_pane(&info.id)
+                .map(|pane| pane_geometry::inner_for(pane, &info, self.shell.pane_scrollbars).0)
+                .unwrap_or_else(|| crate::chrome::panes::pane_inner_rect(info.rect, info.borders));
+            if info.is_focused {
+                self.pane.allocated(inner.width.max(1), inner.height.max(1));
+            }
             if let Some(pane) = self.observers.get_mut(&info.id) {
-                let inner = pane_geometry::inner_for(pane, &info, self.shell.pane_scrollbars).0;
                 pane.allocated(inner.width.max(1), inner.height.max(1));
             }
+            let lease = self.size_leases.entry(info.id.clone()).or_insert_with(|| {
+                let mut lease = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
+                lease.set_host_facts(self.host_facts.clone());
+                lease.allocated(inner.width.max(1), inner.height.max(1));
+                lease.want(Some(Spec {
+                    terminal: info.id,
+                    role: Role::SizeLease,
+                }));
+                lease
+            });
+            lease.allocated(inner.width.max(1), inner.height.max(1));
+            lease.on_view(&self.view);
         }
         term.draw(|frame| draw::draw(self, frame, now))?;
         self.apply_cursor();

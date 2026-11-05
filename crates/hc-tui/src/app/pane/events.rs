@@ -145,6 +145,14 @@ impl Pane {
         };
         match out {
             Output::Data(bytes) => {
+                // A size holder needs neither an emulator nor query replies.
+                // Credit still flows so it cannot block the program.
+                if live.spec.role == Role::SizeLease {
+                    if let Err(error) = live.attach.consume(bytes.len()) {
+                        live.vt_broken = Some(format!("credit: {error}"));
+                    }
+                    return;
+                }
                 if !live.paint_started {
                     live.paint_started = true;
                     let mut vt = Vt::new(live.core_grid.0, live.core_grid.1, SCROLLBACK);

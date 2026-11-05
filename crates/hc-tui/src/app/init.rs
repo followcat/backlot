@@ -28,6 +28,7 @@ impl App {
             pane_tx,
             open_attach: open,
             observers: Default::default(),
+            size_leases: Default::default(),
             observer_mru: Default::default(),
             layout_seen: None,
             prefix: input::Prefix::default(),

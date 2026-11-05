@@ -90,6 +90,12 @@ impl Pane {
             }
             State::Live(mut live) => {
                 let mut pending = VecDeque::new();
+                if live.spec.role == Role::SizeLease {
+                    pending.extend(self.pending.drain(..).filter_map(|item| match item {
+                        Pending::Control(out) => Some(out),
+                        _ => None,
+                    }));
+                }
                 if !live.await_paint
                     && let Some(vt) = self.vt.as_ref()
                 {

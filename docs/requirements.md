@@ -88,12 +88,14 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
 - **Narrow terminals:** follow herdr's collapse/toggle behavior and retain access to selection.
 
 ### R5 Panes
-- Each visible pane is one `terminal.attach` stream in framed mode.
+- Each visible pane retains an observe `terminal.attach` stream in framed mode,
+  plus a silent size holder. The focused pane also has its input connection.
   - It has VT emulation. Prefer the `ghostty-vt` crate that herdr-core and herdr use.
   - It renders into a ratatui buffer.
 - **Size ownership follows hc's rules:**
   - the focused pane attaches as the active viewer;
-  - background and peek panes use `observe`;
+  - visible background panes hold size leases, with no human input or focus claims;
+  - off-tab recent panes and peek panes stay strictly `observe`;
   - when another client owns the size, show a banner and offer "take control";
   - respond to RESIZE, FOCUS and FACTS.
 - **Scrollback:** history from the first paint, plus local history. A copy mode with keyboard and

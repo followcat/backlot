@@ -129,6 +129,7 @@ pub struct App {
     pane_tx: mpsc::Sender<PaneEv>,
     open_attach: OpenAttach,
     observers: std::collections::BTreeMap<String, pane::Pane>,
+    size_leases: std::collections::BTreeMap<String, pane::Pane>,
     observer_mru: std::collections::VecDeque<String>,
     layout_seen: Option<(String, u64)>,
     prefix: input::Prefix,

@@ -32,7 +32,7 @@ impl Pane {
             history: HISTORY,
             cols,
             rows,
-            display: if spec.role == Role::Active {
+            display: if spec.role != Role::Observe {
                 self.host.display()
             } else {
                 None
@@ -278,7 +278,7 @@ impl Pane {
         let State::Live(live) = &mut self.state else {
             return; // the spec change lands in the next attach's params
         };
-        if live.spec.role != Role::Active {
+        if live.spec.role == Role::Observe {
             return;
         }
         live.desired_size = Some((cols, rows));
@@ -336,7 +336,7 @@ impl Pane {
         // Previously held controls are older than this new input event.
         self.push_controls();
         if matches!(self.state, State::Gone { .. })
-            || self.spec().is_none_or(|spec| spec.role == Role::Observe)
+            || self.spec().is_none_or(|spec| spec.role != Role::Active)
         {
             self.dropped_input += 1;
             self.input_rejection = Some("Terminal input is unavailable in this view".into());

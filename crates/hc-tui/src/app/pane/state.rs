@@ -7,6 +7,8 @@ use super::*;
 pub enum Role {
     /// The focused terminal: types, resizes, reports focus.
     Active,
+    /// A visible pane size holder: never sends human input or focus.
+    SizeLease,
     /// A preview while browsing the selector: never types or resizes.
     Observe,
 }

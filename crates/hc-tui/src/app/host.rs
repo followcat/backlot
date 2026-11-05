@@ -34,7 +34,11 @@ impl App {
         }
         self.host_facts = facts.clone();
         self.pane.set_host_facts(facts.clone());
-        for pane in self.observers.values_mut() {
+        for pane in self
+            .observers
+            .values_mut()
+            .chain(self.size_leases.values_mut())
+        {
             pane.set_host_facts(facts.clone());
         }
     }

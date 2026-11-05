@@ -209,3 +209,6 @@ mod recovery_tests;
 
 #[path = "generation_tests.rs"]
 mod generation_tests;
+
+#[path = "size_tests.rs"]
+mod size_tests;

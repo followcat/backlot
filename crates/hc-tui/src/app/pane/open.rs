@@ -32,7 +32,7 @@ impl Pane {
         self.vt_grid = core_grid;
         let negotiated = attach.resize_notifications();
         let mismatched = spec.role == Role::Active && core_grid != self.allocated;
-        let desired_facts = if spec.role == Role::Active {
+        let desired_facts = if spec.role != Role::Observe {
             self.host.display()
         } else {
             None
@@ -43,7 +43,7 @@ impl Pane {
             self.ev.clone(),
             generation,
         ));
-        let observe = spec.role == Role::Observe;
+        let silent = spec.role != Role::Active;
         self.state = State::Live(Box::new(Live {
             held: held::Held::default(),
             spec,
@@ -59,7 +59,7 @@ impl Pane {
             repaint: None,
             sent_size: None,
             desired_size: None,
-            desired_focus: if observe {
+            desired_focus: if silent {
                 None
             } else if resumed {
                 self.outer_focus
@@ -78,7 +78,7 @@ impl Pane {
         // activity on a resumed wire.
         if (!resumed || self.allocation_changed_disconnected)
             && let State::Live(live) = &mut self.state
-            && live.spec.role == Role::Active
+            && live.spec.role != Role::Observe
             && live.core_grid != self.allocated
         {
             live.desired_size = Some(self.allocated);
