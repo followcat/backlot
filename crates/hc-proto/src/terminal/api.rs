@@ -159,6 +159,9 @@ pub struct AttachParams {
     /// Observer understands core-to-viewer RESIZE before replacement paints.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub resize_notifications: bool,
+    /// Opt in to quiet human releases when the whole attach path supports it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub quiet_human_release: bool,
     /// Scrollback lines to show first (main screen only).
     #[serde(default)]
     pub history: u64,
@@ -192,4 +195,7 @@ pub struct AttachResult {
     /// The entire attach path accepts AUTOMATIC_INPUT (kind 6).
     #[serde(default)]
     pub automatic_input: bool,
+    /// The entire attach path accepts QUIET_HUMAN_RELEASE (kind 7).
+    #[serde(default)]
+    pub quiet_human_release: bool,
 }

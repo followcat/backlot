@@ -35,6 +35,8 @@ pub enum Kind {
     Facts,
     /// Terminal-generated reply bytes, not human activity, viewer to core.
     AutomaticInput,
+    /// A semantically tagged human release, accepted only after negotiation.
+    QuietHumanRelease,
     /// A kind this protocol version does not define; payload passes through.
     Unknown(u8),
 }
@@ -50,6 +52,7 @@ impl Kind {
             4 => Kind::Focus,
             5 => Kind::Facts,
             6 => Kind::AutomaticInput,
+            7 => Kind::QuietHumanRelease,
             other => Kind::Unknown(other),
         }
     }
@@ -64,6 +67,7 @@ impl Kind {
             Kind::Focus => 4,
             Kind::Facts => 5,
             Kind::AutomaticInput => 6,
+            Kind::QuietHumanRelease => 7,
             Kind::Unknown(b) => b,
         }
     }
@@ -195,6 +199,8 @@ pub enum Control<'a> {
     Facts(&'a [u8]),
     /// Terminal-generated reply bytes, not human activity.
     AutomaticInput(&'a [u8]),
+    /// Source-tagged human release bytes, gated by attach negotiation.
+    QuietHumanRelease(&'a [u8]),
     /// A kind this protocol version does not define.
     Unknown {
         /// The kind byte.
@@ -305,6 +311,7 @@ impl Frame {
             }
             Kind::Facts => Ok(Control::Facts(&self.payload)),
             Kind::AutomaticInput => Ok(Control::AutomaticInput(&self.payload)),
+            Kind::QuietHumanRelease => Ok(Control::QuietHumanRelease(&self.payload)),
             Kind::Unknown(kind) => Ok(Control::Unknown {
                 kind,
                 payload: &self.payload,

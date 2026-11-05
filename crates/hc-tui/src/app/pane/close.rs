@@ -108,7 +108,9 @@ impl Pane {
                         held::Held::forget_parked(&mut self.parked, &item, self.generation);
                         live.held.track(&item);
                         match input::encode_pending(vt, &item) {
-                            Ok(bytes) if !bytes.is_empty() => pending.push_back(Out::Input(bytes)),
+                            Ok(bytes) if !bytes.is_empty() => {
+                                pending.push_back(Out::human(&item, bytes))
+                            }
                             Ok(_) => {}
                             Err(error) => self.close_error = Some(error),
                         }

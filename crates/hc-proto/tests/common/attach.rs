@@ -15,6 +15,7 @@ pub fn params() -> AttachParams {
         terminal: "t7".into(),
         observe: false,
         resize_notifications: false,
+        quiet_human_release: false,
         history: 0,
         cols: 80,
         rows: 24,
@@ -29,6 +30,7 @@ pub fn observer() -> AttachParams {
     AttachParams {
         observe: true,
         resize_notifications: true,
+        quiet_human_release: false,
         ..params()
     }
 }

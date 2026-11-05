@@ -137,7 +137,7 @@ impl Pane {
                             held::Held::forget_parked(&mut self.parked, &item, self.generation);
                             live.held.track(&item);
                         }
-                        Ok(bytes) => match live.out.try_send(Out::Input(bytes)) {
+                        Ok(bytes) => match live.out.try_send(Out::human(&item, bytes)) {
                             Ok(()) => {
                                 held::Held::forget_parked(&mut self.parked, &item, self.generation);
                                 live.held.track(&item);
@@ -146,12 +146,16 @@ impl Pane {
                                 }
                             }
                             Err(error) => {
-                                if let Out::Input(bytes) = error.into_inner() {
+                                if let Out::Input(bytes) | Out::Release(bytes) = error.into_inner()
+                                {
                                     let frozen = match item {
                                         Pending::Key(key) | Pending::Prepared(_, key) => {
                                             Pending::Prepared(bytes, key)
                                         }
-                                        other => Pending::Encoded(bytes, dispatch_id(&other)),
+                                        other => {
+                                            let quiet = Out::is_release(&other);
+                                            Pending::Encoded(bytes, dispatch_id(&other), quiet)
+                                        }
                                     };
                                     self.pending_bytes += charge(&frozen);
                                     self.pending.push_front(frozen);

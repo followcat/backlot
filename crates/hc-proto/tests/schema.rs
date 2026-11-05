@@ -185,6 +185,7 @@ fn typed_params_match_schema() {
             terminal: "t7".into(),
             observe: true,
             resize_notifications: true,
+            quiet_human_release: false,
             history: 10,
             cols: 80,
             rows: 24,

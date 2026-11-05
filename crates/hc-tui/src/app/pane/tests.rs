@@ -213,3 +213,6 @@ mod generation_tests;
 
 #[path = "size_tests.rs"]
 mod size_tests;
+
+#[path = "quiet_tests.rs"]
+mod quiet_tests;

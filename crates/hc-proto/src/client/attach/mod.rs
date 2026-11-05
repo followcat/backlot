@@ -58,6 +58,8 @@ pub(super) struct Shared {
     resize_notifications: bool,
     /// `true` only when both `hello` and the reply accept AUTOMATIC_INPUT.
     automatic_input: bool,
+    /// Request, hello and attach reply all confirmed quiet human releases.
+    quiet_human_release: bool,
     /// Control queue + pending table for channel-0 calls.
     wire: Arc<call::Wire>,
     /// Inbound routing, backlog and credit.
@@ -103,6 +105,11 @@ impl Attach {
         self.shared.automatic_input
     }
 
+    /// Whether this path confirmed quiet human releases end to end.
+    pub fn quiet_human_release(&self) -> bool {
+        self.shared.quiet_human_release
+    }
+
     /// DATA bytes received but not yet consumed.
     pub fn unconsumed(&self) -> usize {
         self.shared.stream.unconsumed()
@@ -133,6 +140,19 @@ impl Attach {
     pub async fn send_input(&self, bytes: &[u8]) -> Result<(), AttachError> {
         self.live()?;
         self.send_stream(Kind::Data, bytes).await
+    }
+
+    /// A human release tagged by the input source, never inferred from bytes.
+    /// Unconfirmed paths use DATA, never AUTOMATIC_INPUT. This shares human
+    /// input gating, chunking, ordering and drain fences with ordinary input.
+    pub async fn send_release(&self, bytes: &[u8]) -> Result<(), AttachError> {
+        self.live()?;
+        let kind = if self.shared.quiet_human_release {
+            Kind::QuietHumanRelease
+        } else {
+            Kind::Data
+        };
+        self.send_stream(kind, bytes).await
     }
 
     /// An automatic reply to the program's query — AUTOMATIC_INPUT only

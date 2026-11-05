@@ -31,7 +31,7 @@ impl Pane {
             Pending::Key(pending) | Pending::Prepared(_, pending) => {
                 pending.identity() != key.identity()
             }
-            Pending::Encoded(_, id) => *id != Some(key.dispatch_id),
+            Pending::Encoded(_, id, _) => *id != Some(key.dispatch_id),
             Pending::Paste(_) | Pending::Mouse(_, _) | Pending::Control(_) => true,
         });
         let removed = before - self.pending.len();

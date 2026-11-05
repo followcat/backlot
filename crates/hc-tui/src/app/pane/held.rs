@@ -54,7 +54,7 @@ impl Held {
         for (_, key) in self.0.drain() {
             let release = Pending::Key(key.with_action(Action::Release));
             match input::encode_pending(vt, &release) {
-                Ok(bytes) if !bytes.is_empty() => pending.push_back(Out::Input(bytes)),
+                Ok(bytes) if !bytes.is_empty() => pending.push_back(Out::Release(bytes)),
                 Ok(_) => {}
                 Err(why) => *error = Some(why),
             }
@@ -110,7 +110,7 @@ mod tests {
         let bytes: Vec<_> = output
             .into_iter()
             .filter_map(|out| match out {
-                Out::Input(bytes) => Some(bytes),
+                Out::Release(bytes) => Some(bytes),
                 _ => None,
             })
             .collect();

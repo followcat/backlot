@@ -16,6 +16,8 @@ use super::{OpenAttach, PaneEv};
 pub(crate) enum Out {
     /// Human input bytes (encoded keys/paste).
     Input(Vec<u8>),
+    /// Human release tagged before encoding; quiet only when negotiated.
+    Release(Vec<u8>),
     /// VT-generated replies (AUTOMATIC_INPUT when negotiated).
     Reply(Vec<u8>),
     /// Active-viewer grid change.
@@ -24,6 +26,28 @@ pub(crate) enum Out {
     Focus(bool),
     /// Host defaults/cell pitch, never human input or ownership activity.
     Facts(hc_proto::terminal::Display),
+}
+
+impl Out {
+    pub(super) fn is_release(item: &super::Pending) -> bool {
+        use super::Pending;
+        match item {
+            Pending::Key(key) | Pending::Prepared(_, key) => {
+                key.input.action == hc_vt::Action::Release
+            }
+            Pending::Mouse(_, mouse) => mouse.action == hc_vt::MouseAction::Release,
+            Pending::Encoded(_, _, quiet) => *quiet,
+            _ => false,
+        }
+    }
+
+    pub(super) fn human(item: &super::Pending, bytes: Vec<u8>) -> Self {
+        if Self::is_release(item) {
+            Self::Release(bytes)
+        } else {
+            Self::Input(bytes)
+        }
+    }
 }
 
 /// Drains `Out` commands to the attach in order. Parked `send_input`
@@ -49,6 +73,7 @@ pub(crate) async fn writer_task(
         let result = match (fence, out) {
             (Err(error), _) => Err(error),
             (Ok(()), Out::Input(bytes)) => attach.send_input(&bytes).await,
+            (Ok(()), Out::Release(bytes)) => attach.send_release(&bytes).await,
             (Ok(()), Out::Reply(bytes)) => attach.reply(&bytes).await,
             (Ok(()), Out::Resize(c, r)) => attach.resize(c, r).await,
             (Ok(()), Out::Focus(f)) => attach.focus(f).await,

@@ -29,6 +29,7 @@ impl Pane {
             terminal: spec.terminal.clone(),
             observe: spec.role == Role::Observe,
             resize_notifications: true,
+            quiet_human_release: spec.role == Role::Active,
             history: HISTORY,
             cols,
             rows,
@@ -112,7 +113,9 @@ impl Pane {
                 held::Held::forget_parked(&mut self.parked, &item, self.generation);
                 live.held.track(&item);
                 match input::encode_pending(&vt, &item) {
-                    Ok(bytes) if !bytes.is_empty() => pending_input.push_back(Out::Input(bytes)),
+                    Ok(bytes) if !bytes.is_empty() => {
+                        pending_input.push_back(Out::human(&item, bytes))
+                    }
                     Ok(_) => {}
                     Err(error) => self.close_error = Some(error),
                 }
@@ -177,7 +180,7 @@ impl Pane {
         let parked = &mut self.parked[index];
         parked.held.track(&item);
         if !bytes.is_empty() {
-            parked.pending_input.push_back(Out::Input(bytes));
+            parked.pending_input.push_back(Out::human(&item, bytes));
             events::flush_parked_out(parked);
         }
         true
@@ -314,7 +317,7 @@ impl Pane {
     /// Mouse motion does not reset local history; other mouse events do so
     /// at the caller, exactly like Source server/pane_input.rs.
     pub(crate) fn mouse_input(&mut self, bytes: Vec<u8>) {
-        self.push_pending(Pending::Encoded(bytes, None));
+        self.push_pending(Pending::Encoded(bytes, None, false));
     }
 
     pub(crate) fn mouse(&mut self, input: hc_vt::MouseInput) -> bool {
@@ -377,7 +380,7 @@ pub(super) fn dispatch_id(item: &Pending) -> Option<u64> {
         Pending::Key(key) if key.input.action == hc_vt::Action::Press && key.dispatch_id != 0 => {
             Some(key.dispatch_id)
         }
-        Pending::Encoded(_, id) => *id,
+        Pending::Encoded(_, id, _) => *id,
         Pending::Prepared(_, key) => dispatch_id(&Pending::Key(key.clone())),
         _ => None,
     }

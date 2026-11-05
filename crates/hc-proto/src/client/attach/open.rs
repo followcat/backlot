@@ -182,6 +182,11 @@ impl Attach {
         }
         let automatic_input = caps.has_feature(feature::AUTOMATIC_INPUT);
         let observe = params.observe;
+        let quiet_human_release = params.quiet_human_release
+            && !observe
+            && caps.has_feature(feature::QUIET_HUMAN_RELEASE);
+        let mut params = params.clone();
+        params.quiet_human_release = quiet_human_release;
         // Tasks spawn before the call so early frames — including a first
         // paint in the same read — are held by channel until install.
         let cells = Attach::spawn(reader, writer, guard);
@@ -227,6 +232,7 @@ impl Attach {
                 observe,
                 resize_notifications: result.resize_notifications,
                 automatic_input: automatic_input && result.automatic_input,
+                quiet_human_release: quiet_human_release && result.quiet_human_release,
                 wire: Arc::clone(&cells.wire),
                 stream: Arc::clone(&cells.stream),
                 data: Arc::clone(&cells.data),

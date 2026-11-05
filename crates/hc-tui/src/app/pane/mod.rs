@@ -63,7 +63,7 @@ enum Pending {
     Mouse(u64, hc_vt::MouseInput),
     /// Already-encoded input bytes (a writer queue retry) — bound to
     /// the attach generation that encoded them; never replayed.
-    Encoded(Vec<u8>, Option<u64>),
+    Encoded(Vec<u8>, Option<u64>, bool),
     /// Frozen key encoding retains semantic teardown tracking on writer retry.
     Prepared(Vec<u8>, crate::app::input::TerminalKey),
 }
@@ -280,7 +280,7 @@ fn charge(item: &Pending) -> usize {
         Pending::Control(_) => 0,
         Pending::Mouse(_, _) => 32,
         Pending::Key(k) => 32 + k.text_commit.as_deref().map_or(0, str::len) + k.vt_bytes.len(),
-        Pending::Paste(t) | Pending::Encoded(t, _) => t.len(),
+        Pending::Paste(t) | Pending::Encoded(t, ..) => t.len(),
         Pending::Prepared(bytes, key) => bytes.len() + charge(&Pending::Key(key.clone())),
     }
 }

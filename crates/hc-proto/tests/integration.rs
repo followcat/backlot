@@ -194,6 +194,7 @@ async fn subscribe_then_run_read_attach_kill() {
             terminal: address.clone(),
             observe: false,
             resize_notifications: true,
+            quiet_human_release: false,
             history: 100,
             cols: 80,
             rows: 24,
