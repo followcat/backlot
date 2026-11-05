@@ -42,3 +42,5 @@ attempted. Milestone M1 adds the protocol client; see docs/plan.md.",
         hc_proto::PROTOCOL_GENERATION,
     )
 }
+
+pub mod config;
