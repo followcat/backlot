@@ -91,10 +91,14 @@ pub struct Cursor {
     pub password_input: bool,
     pub shape: CursorShape,
     pub wide_tail: bool,
+    /// Source policy: DECSCUSR 0 until an explicit shape is observed.
+    pub shape_overridden: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorShape {
+    /// DECSCUSR 0: retain the host terminal's own preference.
+    Default,
     Bar,
     Block,
     Underline,
@@ -120,6 +124,16 @@ pub enum Dirty {
 impl From<ffi::Rgb> for Rgb {
     fn from(c: ffi::Rgb) -> Rgb {
         Rgb {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+        }
+    }
+}
+
+impl From<Rgb> for ffi::Rgb {
+    fn from(c: Rgb) -> ffi::Rgb {
+        ffi::Rgb {
             r: c.r,
             g: c.g,
             b: c.b,

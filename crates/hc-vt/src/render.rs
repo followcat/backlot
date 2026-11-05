@@ -69,10 +69,12 @@ impl Vt {
             out.push(self.read_row()?);
         }
 
+        let mut cursor: Cursor = cursor.into();
+        cursor.shape_overridden = self.cursor_tracker.cursor_shape_overridden();
         Ok(Frame {
             cols,
             rows: out,
-            cursor: cursor.into(),
+            cursor,
             colors: Colors {
                 background: colors.background.into(),
                 foreground: colors.foreground.into(),
@@ -258,6 +260,7 @@ impl From<ffi::RenderStateCursor> for Cursor {
             blinking: c.blinking,
             password_input: c.password_input,
             wide_tail: c.wide_tail,
+            shape_overridden: false,
             shape: match c.visual_style {
                 ffi::CURSOR_BAR => CursorShape::Bar,
                 ffi::CURSOR_UNDERLINE => CursorShape::Underline,

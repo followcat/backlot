@@ -82,6 +82,29 @@ fn osc10_11_change_the_default_colors() {
 }
 
 #[test]
+fn either_default_color_can_change_without_setting_the_other() {
+    for (bytes, foreground, background) in [
+        (
+            &b"\x1b]11;rgb:12/34/56\x07x"[..],
+            rgb(255, 255, 255),
+            rgb(0x12, 0x34, 0x56),
+        ),
+        (
+            &b"\x1b]10;rgb:12/34/56\x07x"[..],
+            rgb(0x12, 0x34, 0x56),
+            rgb(0, 0, 0),
+        ),
+    ] {
+        let mut terminal = vt();
+        let _initial = terminal.frame(0).unwrap();
+        terminal.feed(bytes);
+        let frame = terminal.frame(0).unwrap();
+        assert_eq!(frame.colors.foreground, foreground);
+        assert_eq!(frame.colors.background, background);
+    }
+}
+
+#[test]
 fn default_and_cursor_colors_are_reported() {
     let mut t = vt();
     t.feed(b"\x1b]12;rgb:ff/00/00\x07x");
@@ -140,4 +163,34 @@ fn underline_color_is_default_unless_explicit() {
         "unset underline color must stay Default"
     );
     assert_eq!(b.underline_color, CellColor::Rgb(rgb(200, 100, 50)));
+}
+
+#[test]
+fn late_host_defaults_preserve_program_overrides_and_update_reset_targets() {
+    let mut t = vt();
+    let mut palette = t.frame(0).unwrap().colors.palette;
+    palette[1] = rgb(0x34, 0x35, 0x36);
+    t.set_default_colors(
+        Some(rgb(0x11, 0x11, 0x11)),
+        Some(rgb(0x22, 0x22, 0x22)),
+        Some(&palette),
+    )
+    .unwrap();
+    t.feed(b"\x1b]10;#abc123\x1b\\\x1b]11;#cba321\x1b\\\x1b]4;1;#123456\x1b\\X");
+
+    palette[1] = rgb(0xab, 0xcd, 0xef);
+    let host_fg = rgb(0xfe, 0xee, 0xee);
+    let host_bg = rgb(0x55, 0x56, 0x57);
+    t.set_default_colors(Some(host_fg), Some(host_bg), Some(&palette))
+        .unwrap();
+    let overridden = t.frame(0).unwrap().colors;
+    assert_eq!(overridden.foreground, rgb(0xab, 0xc1, 0x23));
+    assert_eq!(overridden.background, rgb(0xcb, 0xa3, 0x21));
+    assert_eq!(overridden.palette[1], rgb(0x12, 0x34, 0x56));
+
+    t.feed(b"\x1b]110\x1b\\\x1b]111\x1b\\\x1b]104;1\x1b\\");
+    let reset = t.frame(0).unwrap().colors;
+    assert_eq!(reset.foreground, host_fg);
+    assert_eq!(reset.background, host_bg);
+    assert_eq!(reset.palette[1], palette[1]);
 }

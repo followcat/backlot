@@ -20,14 +20,17 @@
 //! Not here: sidebar state, status detection (the core API is the only
 //! source), selection/copy UX, and win32 input translation.
 
+mod cursor;
 mod data;
 mod ffi;
 mod key;
+mod mouse;
 mod render;
 mod vt;
 
 pub use data::{
     Cell, CellColor, Colors, Cursor, CursorShape, Dirty, Frame, Rgb, Row, Underline, Wide,
 };
-pub use key::{Action, Key, KeyInput, Mods};
+pub use key::{Action, Key, KeyInput, Mods, VtKeyEvent};
+pub use mouse::{MouseAction, MouseButton, MouseInput, MousePosition};
 pub use vt::{Error, Vt};

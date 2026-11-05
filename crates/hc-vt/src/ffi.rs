@@ -2,8 +2,11 @@
 //! ABI declarations for libghostty-vt at the pinned submodule revision
 //! (vendor/ghostty @ 1e5cdb865807abc990181efb8ebfa9122955cce2). Field order,
 //! enum ordinals and sized-struct rules come from
-//! `vendor/ghostty/include/ghostty/vt/*.h`; this file is the only unsafe
-//! boundary in the crate.
+//! `vendor/ghostty/include/ghostty/vt/*.h`. Safe ownership wrappers in
+//! the other modules are responsible for valid handles and buffers.
+
+mod mouse;
+pub use mouse::*;
 
 use std::ffi::c_void;
 
@@ -22,6 +25,10 @@ pub const OUT_OF_SPACE: i32 = -3;
 pub const OPT_USERDATA: i32 = 0;
 pub const OPT_WRITE_PTY: i32 = 1;
 pub const OPT_SIZE: i32 = 6;
+// GHOSTTY_TERMINAL_OPT_COLOR_* — vendor/ghostty/include/ghostty/vt/terminal.h.
+pub const OPT_COLOR_FOREGROUND: i32 = 11;
+pub const OPT_COLOR_BACKGROUND: i32 = 12;
+pub const OPT_COLOR_PALETTE: i32 = 14;
 pub const OPT_SCROLLBACK_MAX_BYTES: i32 = 27;
 pub const OPT_MODE_DEFAULT: i32 = 33;
 
@@ -29,7 +36,43 @@ pub const OPT_MODE_DEFAULT: i32 = 33;
 pub const DATA_COLS: i32 = 1;
 pub const DATA_ROWS: i32 = 2;
 pub const DATA_ACTIVE_SCREEN: i32 = 6;
+pub const DATA_SCROLLBAR: i32 = 9;
+pub const DATA_KITTY_KEYBOARD_FLAGS: i32 = 8;
+pub const DATA_MOUSE_TRACKING: i32 = 11;
 pub const DATA_MODE: i32 = 37;
+
+/// `GHOSTTY_SCROLL_VIEWPORT_*` tags.
+pub const SCROLL_DELTA: i32 = 2;
+pub const SCROLL_ROW: i32 = 3;
+
+/// `GhosttyTerminalScrollbar` — the viewport's position in scrollback.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Scrollbar {
+    /// Total scrollable rows (scrollback + viewport).
+    pub total: u64,
+    /// Viewport's row offset into `total`.
+    pub offset: u64,
+    /// Visible rows.
+    pub len: u64,
+}
+
+/// `GhosttyTerminalScrollViewport` tagged union.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ScrollViewport {
+    pub tag: i32,
+    pub value: ScrollViewportValue,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union ScrollViewportValue {
+    pub delta: isize,
+    pub row: usize,
+    pub delta_prompt: isize,
+    pub _padding: [u64; 2],
+}
 
 // Render-state data (GhosttyRenderStateData).
 pub const RS_DIRTY: i32 = 3;
@@ -195,6 +238,7 @@ unsafe extern "C" {
     pub fn ghostty_terminal_set(t: Terminal, opt: i32, value: *const c_void) -> i32;
     pub fn ghostty_terminal_get(t: Terminal, data: i32, out: *mut c_void) -> i32;
     pub fn ghostty_terminal_vt_write(t: Terminal, data: *const u8, len: usize);
+    pub fn ghostty_terminal_scroll_viewport(t: Terminal, behavior: ScrollViewport);
     pub fn ghostty_terminal_resize(
         t: Terminal,
         cols: u16,
@@ -244,6 +288,8 @@ unsafe extern "C" {
     pub fn ghostty_key_event_set_mods(ev: KeyEvent, mods: u16);
     pub fn ghostty_key_event_set_utf8(ev: KeyEvent, utf8: *const u8, len: usize);
     pub fn ghostty_key_event_set_unshifted_codepoint(ev: KeyEvent, cp: u32);
+    pub fn ghostty_key_event_set_consumed_mods(ev: KeyEvent, mods: u16);
+    pub fn ghostty_key_event_set_composing(ev: KeyEvent, composing: bool);
 
     pub fn ghostty_paste_encode(
         data: *mut u8,

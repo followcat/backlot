@@ -145,3 +145,46 @@ fn alt_arrow_uses_modifiers() {
     let out = key(&t, Key::ArrowLeft, Mods::ALT.union(Mods::SHIFT));
     assert_eq!(out, b"\x1b[1;4D", "alt+shift left: {out:?}");
 }
+
+#[test]
+fn negotiated_nothing_tracks_native_keyboard_modes() {
+    // The reference `keyboard_negotiated_nothing` reads the live
+    // terminal flags: Kitty keyboard OR modifyOtherKeys2 both mean a
+    // protocol is active. The probe must follow native state through
+    // set, clear, soft and hard resets, and mid-sequence splits —
+    // the same feeds that flip the flags.
+    let mut t = vt();
+    assert!(t.keyboard_negotiated_nothing());
+
+    // CSI > 4 ; 2 m selects modifyOtherKeys2 natively.
+    t.feed(b"\x1b[>4;2m");
+    assert!(!t.keyboard_negotiated_nothing());
+
+    // CSI > 4 ; 0 m clears it again.
+    t.feed(b"\x1b[>4;0m");
+    assert!(t.keyboard_negotiated_nothing());
+
+    // Level 1 alone does not set the native flag — only the
+    // numeric/level-2 form flips `modify_other_keys_2` upstream.
+    t.feed(b"\x1b[>4;1m");
+    assert!(t.keyboard_negotiated_nothing());
+
+    // A sequence split across feeds must not be missed.
+    t.feed(b"\x1b[>4;");
+    t.feed(b"2m");
+    assert!(!t.keyboard_negotiated_nothing());
+
+    // DECSTR (CSI ! p) soft-resets the flag back to legacy.
+    t.feed(b"\x1b[!p");
+    assert!(t.keyboard_negotiated_nothing());
+
+    // RIS clears it too, including mid-burst.
+    t.feed(b"plain text \x1b[>4;2m more \x1bc");
+    assert!(t.keyboard_negotiated_nothing());
+
+    // Kitty flags alone end "nothing" without modifyOtherKeys.
+    t.feed(b"\x1b[>1u");
+    assert!(!t.keyboard_negotiated_nothing());
+    t.feed(b"\x1b[<u");
+    assert!(t.keyboard_negotiated_nothing());
+}

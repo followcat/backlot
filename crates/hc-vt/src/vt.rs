@@ -6,7 +6,9 @@ use std::ffi::c_void;
 use std::fmt;
 use std::ptr;
 
+use crate::Rgb;
 use crate::ffi;
+use crate::key::{Key, Mods, VtKeyEvent};
 
 /// Bytes the terminal writes to the pty side (query answers, mode
 /// reports) are capped: a hostile stream could otherwise grow this
@@ -101,6 +103,7 @@ extern "C" fn on_size(t: ffi::Terminal, ud: *mut c_void, out: *mut ffi::SizeRepo
 /// `!Sync` by construction (raw pointers): one owner mutates it.
 pub struct Vt {
     pub(crate) raw: ffi::Terminal,
+    pub(crate) cursor_tracker: crate::cursor::DecscusrTracker,
     pub(crate) render: ffi::RenderState,
     pub(crate) rows: ffi::RowIterator,
     pub(crate) cells: ffi::RowCells,
@@ -142,6 +145,7 @@ impl Vt {
 
         let vt = Vt {
             raw,
+            cursor_tracker: crate::cursor::DecscusrTracker::default(),
             render,
             rows: row_iter,
             cells,
@@ -162,6 +166,17 @@ impl Vt {
                     "ghostty_terminal_set({opt}) failed ({rc})"
                 );
             };
+            // Ghostty render.zig requires both defaults to be configured
+            // before it reports either effective color. Match its renderer
+            // fallback values internally; these are not observed host facts.
+            let foreground = ffi::Rgb {
+                r: 255,
+                g: 255,
+                b: 255,
+            };
+            let background = ffi::Rgb { r: 0, g: 0, b: 0 };
+            set(ffi::OPT_COLOR_FOREGROUND, (&raw const foreground).cast());
+            set(ffi::OPT_COLOR_BACKGROUND, (&raw const background).cast());
             set(
                 ffi::OPT_SCROLLBACK_MAX_BYTES,
                 (&raw const scrollback).cast(),
@@ -185,7 +200,27 @@ impl Vt {
     /// Feed arbitrary bytes; fragments and mid-sequence splits are fine.
     /// `ghostty_terminal_vt_write` cannot fail.
     pub fn feed(&mut self, bytes: &[u8]) {
+        self.cursor_tracker.observe(bytes);
         unsafe { ffi::ghostty_terminal_vt_write(self.raw, bytes.as_ptr(), bytes.len()) };
+    }
+
+    /// `keyboard_negotiated_nothing` from herdr src/pane/input.rs
+    /// (Apache-2.0): no Kitty keyboard flags and no modifyOtherKeys2.
+    /// The library exposes no flag getter, so the check is a
+    /// side-effect-free Ctrl+A encode probe — `key_event` builds its
+    /// encoder options from the real terminal flags, and legacy Ctrl+A
+    /// is the only configuration that produces the raw `\x01` byte.
+    pub fn keyboard_negotiated_nothing(&self) -> bool {
+        if self.kitty_flags().unwrap_or(0) != 0 {
+            return false;
+        }
+        let probe = VtKeyEvent {
+            key: Key::Char('a'),
+            mods: Mods::CTRL,
+            utf8: Some("a".to_owned()),
+            ..VtKeyEvent::default()
+        };
+        self.key_event(&probe).map(|b| b == b"\x01").unwrap_or(true)
     }
 
     /// Resize the grid; reports the existing cell geometry. Fails only on
@@ -240,6 +275,115 @@ impl Vt {
         };
         ok(rc)?;
         Ok(screen == 1)
+    }
+
+    /// True while the program has any mouse tracking mode enabled —
+    /// wheel/button input should be reported to it as SGR sequences
+    /// instead of moving the viewport.
+    pub fn mouse_tracking(&self) -> bool {
+        let mut tracking = false;
+        let rc = unsafe {
+            ffi::ghostty_terminal_get(
+                self.raw,
+                ffi::DATA_MOUSE_TRACKING,
+                (&raw mut tracking).cast(),
+            )
+        };
+        rc == ffi::SUCCESS && tracking
+    }
+
+    /// The viewport's scrollbar state `{total, offset, len}` — `offset`
+    /// counts rows from the top of the scrollable area, so "scrolled
+    /// back lines" is `total - offset - len`.
+    pub fn scrollbar(&self) -> Option<ffi::Scrollbar> {
+        let mut bar = ffi::Scrollbar::default();
+        let rc = unsafe {
+            ffi::ghostty_terminal_get(self.raw, ffi::DATA_SCROLLBAR, (&raw mut bar).cast())
+        };
+        (rc == ffi::SUCCESS).then_some(bar)
+    }
+
+    /// Scrolls the viewport by `delta` rows — negative up (toward
+    /// scrollback), positive down. The VT clamps to its scrollable
+    /// area; alt-screen programs report no scrollback so this no-ops.
+    pub fn scroll_delta(&mut self, delta: isize) {
+        unsafe {
+            ffi::ghostty_terminal_scroll_viewport(
+                self.raw,
+                ffi::ScrollViewport {
+                    tag: ffi::SCROLL_DELTA,
+                    value: ffi::ScrollViewportValue { delta },
+                },
+            );
+        }
+    }
+
+    /// Scrolls the viewport to an absolute row offset (`scrollbar`'s
+    /// row space) — scrollbar drag/jump target.
+    pub fn scroll_to_row(&mut self, row: usize) {
+        unsafe {
+            ffi::ghostty_terminal_scroll_viewport(
+                self.raw,
+                ffi::ScrollViewport {
+                    tag: ffi::SCROLL_ROW,
+                    value: ffi::ScrollViewportValue { row },
+                },
+            );
+        }
+    }
+
+    /// Seed the terminal's default colors with the host terminal's
+    /// answers (`OSC 10`/`OSC 11`/`OSC 4` replies): `CellColor::Default`
+    /// then resolves against the host palette instead of the built-in
+    /// defaults, so unchanged defaults stay transparent over the host's
+    /// own background. `None` parts keep the built-in defaults; a `None`
+    /// palette leaves the built-in 256 entries. Any palette entries the
+    /// program later overrides via `OSC 4` still take precedence over
+    /// the seeded defaults.
+    pub fn set_default_colors(
+        &mut self,
+        foreground: Option<Rgb>,
+        background: Option<Rgb>,
+        palette: Option<&[Rgb; 256]>,
+    ) -> Result<(), Error> {
+        unsafe {
+            if let Some(fg) = foreground {
+                let c = ffi::Rgb::from(fg);
+                ok(ffi::ghostty_terminal_set(
+                    self.raw,
+                    ffi::OPT_COLOR_FOREGROUND,
+                    (&raw const c).cast(),
+                ))?;
+            }
+            if let Some(bg) = background {
+                let c = ffi::Rgb::from(bg);
+                ok(ffi::ghostty_terminal_set(
+                    self.raw,
+                    ffi::OPT_COLOR_BACKGROUND,
+                    (&raw const c).cast(),
+                ))?;
+            }
+            if let Some(palette) = palette {
+                let raw: [ffi::Rgb; 256] = palette.map(ffi::Rgb::from);
+                ok(ffi::ghostty_terminal_set(
+                    self.raw,
+                    ffi::OPT_COLOR_PALETTE,
+                    (&raw const raw).cast(),
+                ))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The pixel cell pitch reported for XTWINOPS cell-size queries —
+    /// the host's truthful pitch, or the fallback when unknown.
+    pub fn set_cell_px(&mut self, width: u32, height: u32) {
+        self.hooks.cell = (width.max(1), height.max(1));
+    }
+
+    /// Current pixel pitch, measured by the host or the VT fallback.
+    pub fn cell_px(&self) -> (u32, u32) {
+        self.hooks.cell
     }
 
     /// Bytes the terminal generated for the pty side — query replies and
