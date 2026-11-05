@@ -82,7 +82,7 @@ async fn allocation_changed_while_opening_is_sent_before_focus_even_when_reply_m
 }
 
 #[tokio::test]
-async fn a_visible_size_holder_reacquires_its_lease_on_recovery() {
+async fn visible_size_holder_recovery_is_passive_until_a_real_allocation_change() {
     let (mut pane, mut rx, mut accept) = rig();
     pane.want(Some(spec(Role::SizeLease)));
     let _first = serve(&mut accept, true).await;
@@ -94,10 +94,33 @@ async fn a_visible_size_holder_reacquires_its_lease_on_recovery() {
         Instant::now(),
     );
     pane.fire_retry(Instant::now() + std::time::Duration::from_secs(1));
-    let (_next, params) = timeout(T, accept.recv()).await.unwrap().unwrap();
+    let (mut next, params) = timeout(T, accept.recv()).await.unwrap().unwrap();
     assert!(!params.observe);
-    assert!(!params.resumed);
+    assert!(params.resumed);
     assert_eq!(pane.spec().unwrap().role, Role::SizeLease);
+    let mut terminal = testcore::minimal_terminal();
+    terminal["cols"] = json!(40);
+    terminal["rows"] = json!(20);
+    next.serve_attach(testcore::attach_result(CH, terminal, true))
+        .await;
+    step_until_live(&mut pane, &mut rx).await;
+    no_kind(
+        &mut next,
+        CH,
+        &[Kind::Resize, Kind::Focus, Kind::Data, Kind::AutomaticInput],
+        30,
+    )
+    .await;
+    pane.allocated(100, 30); // Real allocation change may reclaim the size.
+    assert_eq!(
+        resize_only(&mut next).await.payload.as_slice(),
+        &[100, 0, 30, 0]
+    );
+    pane.want(None);
+    pane.want(Some(spec(Role::SizeLease))); // Revisiting the tab is new activity.
+    let (_entered, params) = timeout(T, accept.recv()).await.unwrap().unwrap();
+    assert!(!params.resumed);
+    assert_eq!((params.cols, params.rows), (100, 30));
 }
 
 #[tokio::test]

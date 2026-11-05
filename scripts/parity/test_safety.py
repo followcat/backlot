@@ -26,6 +26,50 @@ class ConfigSafety(unittest.TestCase):
 
 
 
+class AttachRequestCapture(unittest.TestCase):
+    def test_fragmented_framed_request_records_passive_recovery(self):
+        import json, struct
+        from transport_proxy import Requests
+        seen=[];parser=Requests(seen.append)
+        params={'terminal':'t1','resumed':True,'observe':False}
+        data=json.dumps({'method':'hello','params':{'framed':True}}).encode()+b'\n'
+        payload=json.dumps({'id':2,'method':'terminal.attach','params':params}).encode()
+        data+=struct.pack('<IBI',0,0,len(payload))+payload
+        for byte in data:parser.feed(bytes([byte]))
+        self.assertEqual(seen,[params])
+        parser.feed(b'not another request')
+        self.assertEqual(seen,[params])
+
+    def test_request_attempt_is_not_success_until_matching_attach_reply(self):
+        import json, struct
+        from transport_proxy import Responses
+        from types import SimpleNamespace
+        seen=[];parser=Responses(SimpleNamespace(attach_id=2),lambda *event: seen.append(event))
+        parser.feed(b'{"result":{"framed":true}}\n')
+        def reply(value):
+            payload=json.dumps(value).encode()
+            return struct.pack('<IBI',0,0,len(payload))+payload
+        parser.feed(reply({'id':1,'result':{'channel':3}}))
+        parser.feed(reply({'id':2,'error':{'code':'unavailable'}}))
+        self.assertEqual(seen,[])
+        parser.feed(reply({'id':2,'result':{'channel':7}}))
+        self.assertEqual(seen,[('attached',7)])
+
+    def test_plain_watcher_requests_are_forwarded_without_frame_parsing(self):
+        from transport_proxy import Requests
+        seen=[];parser=Requests(seen.append)
+        parser.feed(b'{"method":"hello"}\n{"method":"terminal.list"}\n')
+        self.assertTrue(parser.done)
+        self.assertEqual(seen,[])
+
+    def test_oversized_request_is_rejected_before_buffering_payload(self):
+        import struct
+        from transport_proxy import Requests
+        parser=Requests(lambda _: self.fail('unexpected request'))
+        with self.assertRaises(AssertionError):
+            parser.feed(b'{"method":"hello","params":{"framed":true}}\n'+struct.pack('<IBI',0,0,(16<<20)+1))
+
+
 class SoundSafety(unittest.TestCase):
     def test_sound_is_disabled_and_tmpdir_is_owned(self):
         import tomllib

@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Verify passive desktop transport recovery against an owned phone-size viewer."""
+import argparse
+import json
+from pathlib import Path
+import time
+import tomllib
+
+from checks import text
+from fixtures import Program, wait_program
+from layout import binding
+from pty_host import Pty
+from run import checkpoint, detach, REPO
+from sessions import Core, digest
+from transport_proxy import Proxy
+
+
+def run(args):
+    args.out.mkdir(parents=True, exist_ok=False)
+    core = Core(args.hc, args.config, args.out)
+    proxy = phone = None
+    result = {'passed': False, 'checks': [], 'cleanup': {},
+              'candidate_sha256': digest(args.hc_tui), 'core_sha256': digest(args.hc),
+              'config_sha256': digest(args.config), 'decoder_sha256': digest(args.decoder)}
+    try:
+        core.start()
+        program = Program(core, 'alpha')
+        program.terminal = core.rpc('terminal.run', {'argv': program.argv,
+            'cwd': str(core.cwd), 'labels': {'herdr.space': 'work', 'herdr.tab': 'main'},
+            'no_parent': True, 'no_notify': True})['address']
+        wait_program(core, program)
+        path = core.root / 'r/client-proxy.sock'
+        proxy = Proxy(path, core.endpoint)
+        env = dict(core.env, HC_SOCKET=str(path))
+        core.ui = Pty([str(args.hc_tui), '--session', core.session], env,
+                      core.cwd, 120, 40, cell_px=(10, 20))
+        core.ui.keyboard_flags_reply = 7
+        core.ui.sgr_pixel_mouse_reply = 2
+        core.initial_size = (120, 40)
+        core.resizes = []
+        deadline = time.monotonic() + 8
+        while 'fixture alpha' not in text(checkpoint(core, 'desktop', (120, 40), args.decoder)):
+            assert time.monotonic() < deadline, 'desktop readiness'
+
+        def grid():
+            terminal = core.rpc('terminal.get', {'terminal': program.terminal})
+            return [terminal['cols'], terminal['rows']]
+
+        def wait_grid(expected):
+            deadline = time.monotonic() + 8
+            while True:
+                core.ui.read(.02)
+                if phone:
+                    phone.read(.02)
+                actual = json.loads(Path(str(program.log) + '.grid').read_text())
+                if grid() == expected and actual == expected:
+                    return
+                assert time.monotonic() < deadline, f'expected owned PTY grid {expected}'
+
+        desktop = grid()
+        assert desktop != [40, 20]
+        phone = Pty([str(args.hc), 'attach', program.terminal], core.env,
+                    core.cwd, 40, 20, cell_px=(10, 20))
+        wait_grid([40, 20])
+        result['checks'].append('phone attach owns 40x20')
+        initial = [r for r in proxy.snapshot() if not r['params'].get('observe', False)]
+        assert len(initial) >= 2 and all(not r['params'].get('resumed', False) for r in initial)
+        result['cut_connections'] = proxy.cut()
+        assert result['cut_connections'] >= 3
+        deadline = time.monotonic() + 10
+        while True:
+            core.ui.read(.03)
+            phone.read(.03)
+            recovered = [r for r in proxy.snapshot() if r['epoch'] == 1 and r['success'] and r['live']]
+            active = [r for r in recovered if not r['params'].get('observe', False)]
+            if len(active) >= 2 and any(r['params'].get('observe', False) for r in recovered):
+                break
+            assert time.monotonic() < deadline, 'desktop attach streams did not recover'
+        assert all(r['params'].get('resumed', False) for r in active)
+        program.send(b'\x1b[8;2HRECOVERED STREAM\x1b[K')
+        wait_program(core, program, program.serial)
+        deadline = time.monotonic() + 8
+        while True:
+            frame = checkpoint(core, 'recovered', (120, 40), args.decoder)
+            observers = [r for r in proxy.snapshot() if r['epoch'] == 1 and r['success']
+                         and r['live'] and r['params'].get('observe', False)]
+            if observers and all(r['fresh_marker'] for r in observers) and 'RECOVERED STREAM' in text(frame):
+                break
+            assert time.monotonic() < deadline, 'fresh recovered observer output missing'
+        confirmed = [r for r in proxy.snapshot() if r['epoch'] == 1 and r['success'] and r['live']]
+        assert len([r for r in confirmed if not r['params'].get('observe', False)]) >= 2
+        result['recovered_attach_confirmations'] = confirmed
+        until = time.monotonic() + 2
+        while time.monotonic() < until:
+            core.ui.read(.02)
+            phone.read(.02)
+            assert grid() == [40, 20], 'transport recovery stole the phone size'
+        result['checks'].append('recovered desktop streams stay passive; phone keeps 40x20')
+        phone.send(b'\x1c')  # hc attach's documented Ctrl+backslash detach.
+        deadline = time.monotonic() + 5
+        while phone.child.poll() is None:
+            phone.read(.02)
+            assert time.monotonic() < deadline
+        assert phone.child.returncode == 0 and phone.terminal_restored()
+        phone.close()
+        phone = None
+        wait_grid(desktop)
+        result['checks'].append('phone detach restores passive desktop size automatically')
+        phone = Pty([str(args.hc), 'attach', program.terminal], core.env,
+                    core.cwd, 40, 20, cell_px=(10, 20))
+        wait_grid([40, 20])
+        core.resizes.append((len(core.ui.output), 121, 40))
+        core.ui.resize(121, 40)
+        wait_grid([desktop[0] + 1, desktop[1]])
+        result['checks'].append('real desktop allocation change reclaims size')
+        phone.send(b'\x1c')
+        deadline = time.monotonic() + 5
+        while phone.child.poll() is None:
+            phone.read(.02)
+            assert time.monotonic() < deadline
+        assert phone.child.returncode == 0 and phone.terminal_restored()
+        phone.close()
+        phone = None
+        assert program.received() == b'', 'UI/phone controls leaked into program input'
+        detach(core, args.decoder, binding(tomllib.loads(args.config.read_text()), 'detach'))
+        result['termios_restored'] = True
+        result['attach_requests'] = proxy.snapshot()
+        result['passed'] = True
+    except BaseException as error:
+        result['error'] = repr(error)
+        raise
+    finally:
+        if phone:
+            phone.close()
+        try:
+            core.close()
+            result['cleanup']['core'] = 'pass'
+        finally:
+            try:
+                if proxy:
+                    proxy.close()
+                result['cleanup']['proxy'] = 'pass'
+            finally:
+                (args.out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+    print(json.dumps(result), flush=True)
+
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser(description=__doc__)
+    for name in ['hc', 'hc-tui', 'config', 'decoder', 'out']:
+        p.add_argument('--' + name, type=Path, required=True)
+    args = p.parse_args()
+    for name in ['hc', 'hc_tui', 'config', 'decoder']:
+        setattr(args, name, getattr(args, name).resolve(strict=True))
+    args.out = args.out.resolve()
+    assert not args.out.is_relative_to(REPO), 'captures must be outside the repository'
+    run(args)

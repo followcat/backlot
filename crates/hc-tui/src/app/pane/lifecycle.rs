@@ -10,9 +10,6 @@ impl Pane {
     /// dead wire are never replayed; `Key`/`Paste` items re-encode
     /// under the fresh post-paint VT.
     pub(super) fn spawn(&mut self, spec: Spec, resumed: bool, attempts: u32) {
-        // A visible size holder cannot become active through human input or
-        // focus. Reacquire its permitted size lease on recovery as on entry.
-        let resumed = resumed && spec.role != Role::SizeLease;
         // All visible panes share an event channel. A wire identity is unique
         // across panes and reincarnations, including retired observer events.
         static NEXT_ROUTE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
