@@ -10,7 +10,7 @@ use super::call::{self, DiscoveryCells};
 use super::error::CallError;
 use super::{Client, lock};
 use crate::OpenRpcDocument;
-use crate::doc::{DocGetParams, DocGetResult};
+use crate::doc::{DocGetParams, DocGetResult, DocSetParams, DocSetResult};
 use crate::machine::MachineListResult;
 use crate::method;
 use crate::terminal::{
@@ -128,6 +128,11 @@ impl Client {
     /// `doc.get`: an opaque JSON document and its version.
     pub async fn doc_get(&self, params: DocGetParams) -> Result<DocGetResult, CallError> {
         self.call_typed(method::DOC_GET, &params).await
+    }
+
+    /// `doc.set`: opaque, versioned compare-and-set; no automatic replay.
+    pub async fn doc_set(&self, params: DocSetParams) -> Result<DocSetResult, CallError> {
+        self.call_typed(method::DOC_SET, &params).await
     }
 
     /// `rpc.discover`: the whole API as an OpenRPC document, kept opaque.

@@ -65,6 +65,8 @@ pub mod method {
     pub const MACHINE_LIST: &str = "machine.list";
     /// Read an opaque JSON document and its version.
     pub const DOC_GET: &str = "doc.get";
+    /// Compare-and-set an opaque document at its current version.
+    pub const DOC_SET: &str = "doc.set";
 }
 
 #[cfg(test)]

@@ -25,6 +25,7 @@ pub const ALL_METHODS: &[&str] = &[
     "events.subscribe",
     "machine.list",
     "doc.get",
+    "doc.set",
 ];
 
 /// A `hello` result for generation 1, framed, with the given method list.

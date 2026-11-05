@@ -5,6 +5,7 @@ This product may include software derived from the following projects, both lice
 Apache License, Version 2.0:
 
 - herdr (https://github.com/herdrdev/herdr)
+- herdr-app (https://github.com/herdrdev/herdr-app)
 - herdr-core (https://github.com/herdrdev/herdr-core)
 
 Files containing derived code name their source in a header comment.

@@ -4,7 +4,7 @@
 //! `fixtures/README.md`). They catch renamed/removed fields and methods the
 //! schema does not declare, in both directions where feasible.
 
-use hc_proto::doc::{DocGetParams, DocGetResult};
+use hc_proto::doc::{DocGetParams, DocGetResult, DocSetParams, DocSetResult};
 use hc_proto::events::{SubscribeParams, SubscribeResult};
 use hc_proto::hello::{CoreInfo, HelloParams, HelloResult};
 use hc_proto::machine::MachineListResult;
@@ -208,6 +208,16 @@ fn typed_params_match_schema() {
         },
     );
 
+    check_params(
+        method::DOC_SET,
+        &DocSetParams {
+            name: "hc-tui".into(),
+            on: None,
+            value: serde_json::json!({"schema":1}),
+            version: 0,
+        },
+    );
+
     // Methods we call without a params struct must not require any.
     for method in [method::MACHINE_LIST, method::RPC_DISCOVER] {
         let schema = schema();
@@ -306,4 +316,5 @@ fn minimal_results_deserialize_into_our_types() {
     let _: SubscribeResult = decodes(method::EVENTS_SUBSCRIBE);
     let _: MachineListResult = decodes(method::MACHINE_LIST);
     let _: DocGetResult = decodes(method::DOC_GET);
+    let _: DocSetResult = decodes(method::DOC_SET);
 }

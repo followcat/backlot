@@ -30,3 +30,7 @@ mod mouse_geometry;
 mod ansi;
 
 mod keybind_help;
+
+pub mod layout;
+
+pub mod structure;

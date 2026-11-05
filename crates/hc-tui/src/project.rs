@@ -48,7 +48,7 @@ fn machine_of(address: &str) -> Option<&str> {
 }
 
 /// Terminal number for ordering: `t7` → 7; anything else sorts last.
-fn term_num(address: &str) -> u64 {
+pub(crate) fn term_num(address: &str) -> u64 {
     let local = address.rsplit('/').next().unwrap_or(address);
     local
         .strip_prefix('t')
@@ -99,7 +99,7 @@ fn attention_priority(term: &Terminal) -> u8 {
 /// The space a terminal belongs to: `herdr.space`, else its cwd. The key
 /// keeps the full cwd so basenames colliding stay distinct; the label is
 /// what the workspace row displays.
-fn space_of(term: &Terminal) -> (String, String) {
+pub(crate) fn space_of(term: &Terminal) -> (String, String) {
     if let Some(space) = term.labels.get("herdr.space") {
         // Length-prefixed raw key: `space:a/tab:b` + tab `c` can never
         // collide with space `a` + tab `b/tab:c`.
@@ -119,7 +119,7 @@ fn space_of(term: &Terminal) -> (String, String) {
 /// workspace's single default tab. The key is length-prefixed raw text —
 /// injective across delimiter-bearing labels — and the unlabelled default
 /// gets a disjoint marker so an explicit `default` label never merges.
-fn tab_key_of(term: &Terminal) -> String {
+pub(crate) fn tab_key_of(term: &Terminal) -> String {
     match term.labels.get("herdr.tab") {
         Some(tab) => format!("tab:{}:{}", tab.len(), tab),
         None => "tab:!default".to_string(),

@@ -6,7 +6,7 @@ mod common;
 
 use common::{discovery_settled, fakecore};
 use hc_proto::client::{CallError, Client, Error};
-use hc_proto::doc::DocGetParams;
+use hc_proto::doc::{DocGetParams, DocSetParams};
 use hc_proto::jsonrpc::error_kind;
 use hc_proto::terminal::{ListParams, ReadParams, TerminalParams};
 use serde_json::json;
@@ -279,8 +279,8 @@ async fn typed_calls_cover_the_whole_surface() {
     let (mut core, read, write) = fakecore::pair(64 * 1024);
     let server = tokio::spawn(async move {
         core.serve_hello(fakecore::ALL_METHODS).await;
-        // rpc.discover can interleave with the five typed calls.
-        for _ in 0..6 {
+        // rpc.discover can interleave with the six typed calls.
+        for _ in 0..7 {
             let req = core.read_request().await;
             let result = match req["method"].as_str().unwrap() {
                 "rpc.discover" => fakecore::discover_doc(fakecore::ALL_METHODS),
@@ -294,6 +294,13 @@ async fn typed_calls_cover_the_whole_surface() {
                     json!({"text": "screen text", "complete": true, "how": "screen"})
                 }
                 "doc.get" => json!({"value": {"key": 1}, "version": 7}),
+                "doc.set" => {
+                    assert_eq!(
+                        req["params"],
+                        json!({"name":"hc-tui","on":"host-a","value":{"focus":"t1"},"version":7})
+                    );
+                    json!({"version":8})
+                }
                 other => panic!("unexpected method {other}"),
             };
             core.reply(&req["id"], result).await;
@@ -337,5 +344,14 @@ async fn typed_calls_cover_the_whole_surface() {
     .unwrap();
     assert_eq!(doc.version, 7);
     assert_eq!(doc.value["key"], 1);
+    let written = timeout(client.doc_set(DocSetParams {
+        name: "hc-tui".into(),
+        on: Some("host-a".into()),
+        value: json!({"focus":"t1"}),
+        version: doc.version,
+    }))
+    .await
+    .unwrap();
+    assert_eq!(written.version, 8);
     timeout(server).await.unwrap();
 }
