@@ -1,6 +1,7 @@
 //! Read-only application tests and shared fixtures.
 mod cases_1;
 mod cases_2;
+mod narrow;
 mod review_regressions;
 
 use super::*;

@@ -6,7 +6,8 @@ from pathlib import Path
 
 from fixtures import prepare_core, prepare_reference, wait_program
 from pty_host import Pty
-from run import REFERENCE, REPO, detach
+from run import REFERENCE, REPO, detach, checkpoint
+from checks import text
 from sessions import Core, Reference, digest
 from tails import teardown_equivalent
 
@@ -63,8 +64,17 @@ def replay(args, fixture, reference=False):
                           core.cwd, 120, 40, cell_px=expected.get('host_cell_px', (10, 20)))
         core.ui.keyboard_flags_reply = expected.get('host_keyboard_flags_reply', 0)
         core.ui.sgr_pixel_mouse_reply = expected.get('host_sgr_pixel_mouse_reply', 0)
-        core.ui.until(lambda data: b'fixture alpha' in data)
-        core.ui.read(.3)
+        # ANSI cursor/style writes may split a visible string across chunks;
+        # a raw-byte substring can time out on a fully painted source frame.
+        import time
+        core.initial_size = (120, 40)
+        core.resizes = []
+        deadline = time.monotonic() + 10
+        while True:
+            frame = checkpoint(core, 'input-ready', (120, 40), args.decoder)
+            if 'fixture alpha' in text(frame) and core.capture_quiet:
+                break
+            assert time.monotonic() < deadline, 'initial native fixture frame not ready'
         offsets = [len(program.received()) for program in programs]
 
         def case(case, mouse=False):
@@ -75,15 +85,25 @@ def replay(args, fixture, reference=False):
                     program.send(bytes.fromhex(action['sequence_hex']))
                     wait_program(core, program, program.serial)
                 core.ui.read(.25)
-            core.ui.send(bytes.fromhex(case['outer_hex']))
-            core.ui.read(.3)
-            data = [program.received() for program in programs]
-            actual = [data[i][offsets[i]:].hex() for i in range(2)]
-            offsets[:] = [len(value) for value in data]
             if 'pane_a_hex' in case:
                 wanted = [case['pane_a_hex'], case['pane_b_hex']]
             else:
                 wanted = [case['program_hex' if mouse else 'received_hex'], '']
+            core.ui.send(bytes.fromhex(case['outer_hex']))
+            # An expected nonempty packet may arrive after a fixed300ms read
+            # under load. Never advance offsets or send the next case until
+            # the exact expected program bytes arrive (or the bound expires).
+            import time
+            minimum = time.monotonic() + .3
+            deadline = time.monotonic() + 5
+            while True:
+                core.ui.read(.05)
+                data = [program.received() for program in programs]
+                actual = [data[i][offsets[i]:].hex() for i in range(2)]
+                now = time.monotonic()
+                if (actual == wanted and now >= minimum) or now >= deadline:
+                    break
+            offsets[:] = [len(value) for value in data]
             result['cases'].append({'name': case['name'], 'actual': actual,
                                     'expected': wanted, 'match': actual == wanted})
 
@@ -139,12 +159,12 @@ def replay(args, fixture, reference=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ['hc', 'hc-tui', 'config', 'out']:
+    for name in ['hc', 'hc-tui', 'config', 'decoder', 'out']:
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--reference-manifest', type=Path)
     parser.add_argument('--fixture', choices=[p.name for p in FIXTURES.glob('reference-*.json')], action='append')
     args = parser.parse_args()
-    for name in ['hc', 'hc_tui', 'config']:
+    for name in ['hc', 'hc_tui', 'config', 'decoder']:
         setattr(args, name, getattr(args, name).resolve(strict=True))
     args.reference_binary = None
     if args.reference_manifest:
@@ -158,6 +178,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=False)
     (args.out / 'provenance.json').write_text(json.dumps({
         'candidate_sha256': digest(args.hc_tui), 'core_sha256': digest(args.hc),
+        'decoder_sha256': digest(args.decoder),
         'config_sha256': digest(args.config), 'reference_revision': REFERENCE,
     }, indent=2) + '\n')
     selected = args.fixture or sorted(p.name for p in FIXTURES.glob('reference-*.json'))

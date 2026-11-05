@@ -34,6 +34,7 @@ pub(crate) enum ClientMobileTarget {
         endpoint_id: ClientEndpointId,
         pane_id: String,
     },
+    Menu(usize),
 }
 
 #[derive(Clone)]

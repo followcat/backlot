@@ -228,6 +228,21 @@ impl App {
     /// exits Navigate back to Terminal.
     pub(super) fn on_mobile_target(&mut self, target: &crate::chrome::render::ClientMobileTarget) {
         use crate::chrome::render::ClientMobileTarget as T;
+        if let T::Menu(index) = target {
+            use crate::input::KeybindAction as A;
+            if let Some(action) = [A::Settings, A::Help, A::ReloadConfig, A::Detach].get(*index) {
+                // Source mobile.rs suspends Navigate while help overlays it.
+                // Retaining that mode also retains report-all keyboard flags.
+                if *action == A::Help {
+                    self.mobile_switcher_suspended = true;
+                } else {
+                    self.mode = Mode::Normal;
+                    self.navigate_target = None;
+                }
+                self.on_action(*action, self.area.0);
+            }
+            return;
+        }
         let pane = match target {
             T::Machine(endpoint_id) => self
                 .projection
@@ -261,7 +276,7 @@ impl App {
                 .and_then(|s| s.panes.iter().find(|p| &p.tab_id == tab_id))
                 .map(|p| p.pane_id.clone()),
             T::Agent { pane_id, .. } => Some(pane_id.clone()),
-            T::NewWorkspace | T::NewTab => None,
+            T::NewWorkspace | T::NewTab | T::Menu(_) => None,
         };
         if let Some(pane_id) = pane {
             self.focused = Some(pane_id);
@@ -271,6 +286,19 @@ impl App {
             self.navigate_target = None;
             self.mode = Mode::Normal;
             self.sync_target();
+        }
+    }
+
+    /// Derived from herdr src/client/shell/state.rs (Apache-2.0).
+    pub(super) fn resume_mobile_switcher_if_ready(&mut self) {
+        if self.mobile_switcher_suspended && !self.help {
+            self.mobile_switcher_suspended = false;
+            if self.projection.snapshot.focused_workspace_id.is_some() {
+                self.mode = Mode::Normal;
+                self.navigate_target = None;
+            } else {
+                self.mode = Mode::Navigate;
+            }
         }
     }
 }

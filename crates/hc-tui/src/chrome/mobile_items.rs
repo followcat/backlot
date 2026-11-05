@@ -1,4 +1,5 @@
-// Derived from herdr src/client/shell/mobile.rs::mobile_items (Apache-2.0).
+// Derived from herdr src/client/shell/mobile.rs::mobile_items and
+// src/client/shell/global_menu.rs (Apache-2.0).
 
 use std::collections::HashSet;
 
@@ -365,6 +366,20 @@ pub(crate) fn mobile_items(
                 }),
             });
         }
+    }
+    items.push(MobileItem::section("menu", palette));
+    for (index, label) in ["settings", "keybinds", "reload config", "detach"]
+        .into_iter()
+        .enumerate()
+    {
+        items.push(MobileItem {
+            lines: vec![Line::from(Span::styled(
+                format!("  {label}"),
+                Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+            ))],
+            background: palette.panel_bg,
+            target: Some(ClientMobileTarget::Menu(index)),
+        });
     }
     items
 }

@@ -181,7 +181,10 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     }
     // The mobile switcher IS the Navigate surface under the threshold —
     // `composition.rs` renders it over the whole frame.
-    if layout.mobile_header.height > 0 && app.mode == Mode::Navigate {
+    if layout.mobile_header.height > 0
+        && app.mode == Mode::Navigate
+        && !app.mobile_switcher_suspended
+    {
         crate::chrome::mobile_switcher::render_mobile_switcher(
             buf,
             area,

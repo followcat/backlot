@@ -89,19 +89,19 @@ def wait_program(owner, program, serial='initial'):
             time.sleep(.02)
 
 
-def prepare_core(owner):
+def prepare_core(owner, paths=None, labelled=True):
     programs = []
     for name in ('alpha', 'beta'):
         program = Program(owner, name)
-        result = owner.rpc('terminal.run', {'argv': program.argv, 'cwd': str(owner.cwd),
-            'labels': {'herdr.space': name}, 'no_notify': True, 'no_parent': True})
+        result = owner.rpc('terminal.run', {'argv': program.argv, 'cwd': str(paths[name] if paths else owner.cwd),
+            'labels': {'herdr.space': name} if labelled else {}, 'no_notify': True, 'no_parent': True})
         program.terminal = result['address']
         wait_program(owner, program)
         programs.append(program)
     return programs
 
 
-def prepare_reference(owner):
+def prepare_reference(owner, paths=None, labelled=True):
     import shlex
     workspaces = owner.cli('workspace', 'list')['workspaces']
     assert len(workspaces) == 1, 'new owned reference must have one initial workspace'
@@ -112,11 +112,15 @@ def prepare_reference(owner):
     for name in ('alpha', 'beta'):
         program = Program(owner, name)
         if name == 'alpha':
-            owner.cli('workspace', 'rename', initial, name)
+            if labelled:
+                owner.cli('workspace', 'rename', initial, name)
             program.workspace = initial
             program.terminal = panes[0]['pane_id']
         else:
-            result = owner.cli('workspace', 'create', '--cwd', str(owner.cwd), '--label', name, '--no-focus')
+            arguments = ['workspace', 'create', '--cwd', str(paths[name] if paths else owner.cwd), '--no-focus']
+            if labelled:
+                arguments.extend(['--label', name])
+            result = owner.cli(*arguments)
             program.workspace = result['workspace']['workspace_id']
             program.terminal = result['root_pane']['pane_id']
         owner.cli('pane', 'run', program.terminal, 'exec ' + shlex.join(program.argv))

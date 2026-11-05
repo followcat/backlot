@@ -110,5 +110,40 @@ class Readiness(unittest.TestCase):
             with self.assertRaises(AssertionError): verify_restored(dirty)
 
 
+class NarrowReadiness(unittest.TestCase):
+    def test_highlight_and_terminal_mode_cannot_pass_from_the_old_picker(self):
+        from checks import ready
+        rows = [[{'text': ch, 'resolved_bg': [49, 50, 68]} for ch in 'alpha'],
+                [{'text': ch, 'resolved_bg': [30, 30, 46]} for ch in 'beta'],
+                [{'text': ch, 'resolved_bg': [40, 44, 52]} for ch in 'fixture beta NAVIGATE']]
+        frame = {'cols': 65, 'cells': [{'cells': row} for row in rows], 'host_modes': {'kitty': 31}}
+        self.assertFalse(ready(frame, 'narrow-next', None, b'', {'highlight': 'beta'}))
+        self.assertFalse(ready(frame, 'narrow-beta', None, b'', {'terminal': 'fixture beta'}))
+        for cell in rows[1]: cell['resolved_bg'] = [49, 50, 68]
+        self.assertTrue(ready(frame, 'narrow-next', None, b'', {'highlight': 'beta'}))
+
+
+class RepositoryFixture(unittest.TestCase):
+    def test_local_divergence_worktree_and_subdirectory_are_real(self):
+        import subprocess
+        from types import SimpleNamespace
+        from repository import prepare
+        from sessions import scratch_environment
+        with tempfile.TemporaryDirectory(prefix='hctui-parity-git-') as directory:
+            root = Path(directory)
+            cwd = root / 'acme-shop'; cwd.mkdir()
+            owner = SimpleNamespace(root=root, cwd=cwd, env=scratch_environment(root))
+            paths = prepare(owner)
+            def git(path, *args):
+                return subprocess.check_output(['/usr/bin/git', '-C', str(path), *args],
+                                               env=owner.env, text=True).strip()
+            self.assertEqual(git(paths['alpha'], 'rev-list', '--left-right', '--count',
+                                 'HEAD...@{upstream}').split(), ['2', '1'])
+            self.assertEqual(Path(git(paths['alpha'], 'rev-parse', '--show-toplevel')), cwd)
+            self.assertEqual(git(paths['beta'], 'branch', '--show-current'), 'fixture-linked')
+            self.assertEqual(git(cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'),
+                             git(paths['beta'], 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+
+
 if __name__ == '__main__':
     unittest.main()

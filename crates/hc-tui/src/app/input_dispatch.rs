@@ -60,6 +60,7 @@ impl App {
             UiEvent::Unsupported => {}
             UiEvent::InputRejected(reason) => self.reject_input(reason),
         }
+        self.resume_mobile_switcher_if_ready();
     }
 
     /// Derived from herdr src/client/shell/input.rs `host_text_commit`

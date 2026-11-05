@@ -74,21 +74,30 @@ def one_size(args, size, binary):
     result = {'geometry': size, 'checkpoints': [], 'cleanup': {}}
     try:
         core = Core(args.hc, args.config, out)
+        if args.host_program:
+            core.env['TERM_PROGRAM'] = args.host_program
+        repository_scenario = args.scenario == 'repository'
+        if repository_scenario:
+            from repository import prepare as prepare_repository
+        candidate_paths = prepare_repository(core) if repository_scenario else None
         core.start()
-        candidate_programs = prepare_core(core)
+        candidate_programs = prepare_core(core, candidate_paths, labelled=not repository_scenario)
         reference = Reference(binary, args.config, out)
+        if args.host_program:
+            reference.env['TERM_PROGRAM'] = args.host_program
+        reference_paths = prepare_repository(reference) if repository_scenario else None
         reference.ui = Pty([str(binary), '--session', reference.session], reference.env,
-                           reference.cwd, *size, cell_px=(10, 20))
+                           reference_paths['alpha'] if reference_paths else reference.cwd,
+                           *size, cell_px=(10, 20))
         reference.ui.keyboard_flags_reply = 7
         reference.ui.sgr_pixel_mouse_reply = 2
         reference.ready()
-        reference_programs = prepare_reference(reference)
+        reference_programs = prepare_reference(reference, reference_paths, labelled=not repository_scenario)
         core.ui = Pty([str(args.hc_tui), '--session', core.session], core.env,
                       core.cwd, *size, cell_px=(10, 20))
         core.ui.keyboard_flags_reply = 7
         core.ui.sgr_pixel_mouse_reply = 2
 
-        core.ui.until(lambda data: b'fixture alpha' in data)
         for owner in [reference, core]:
             owner.initial_size = size
             owner.resizes = []
@@ -98,7 +107,9 @@ def one_size(args, size, binary):
             deadline = time.monotonic() + 5
             while True:
                 frame = checkpoint(owner, name, size, args.decoder)
-                if ready(frame, name, previous.get(owner.kind), program.received(), expected):
+                requirements = dict(expected)
+                requirements.update(expected.get(owner.kind, {}))
+                if ready(frame, name, previous.get(owner.kind), program.received(), requirements):
                     # Demand a quiet output interval rather than taking a stale
                     # pair merely because both clients are equally late.
                     if owner.capture_quiet:
@@ -113,13 +124,25 @@ def one_size(args, size, binary):
             (out / (name + '-diff.json')).write_text(json.dumps(diff, ensure_ascii=False, indent=2) + '\n')
             bugs = [entry for entry in diff if 'adaptation' not in entry]
             result['checkpoints'].append({'name':name, 'different_cells':len(bugs),
-                'data_adaptations':[entry for entry in diff if 'adaptation' in entry]})
+                'data_adaptations':[entry for entry in diff if 'adaptation' in entry],
+                'status': 'pending-core-fact' if expected.get('pending_core_facts') else ('pass' if not bugs else 'fail'),
+                'pending_core_facts': expected.get('pending_core_facts', [])})
             print(json.dumps({'geometry':size,'checkpoint':name,'differences':len(bugs),
-                'adaptations':len(diff)-len(bugs)}),flush=True)
+                'adaptations':len(diff)-len(bugs),
+                'status':'pending-core-fact' if expected.get('pending_core_facts') else ('pass' if not bugs else 'fail')}),flush=True)
 
-        compare('baseline')
+        if repository_scenario:
+            from repository import run as run_repository
+            run_repository(compare)
+        else:
+            compare('baseline')
         result['usable_frame_seconds'] = core.ui.first_seen(b'fixture alpha')
-        if not args.smoke:
+        if repository_scenario:
+            result['status'] = 'pending-core-fact'
+        elif not args.smoke and size[0] <= 65:
+            from narrow import run as run_narrow
+            run_narrow((reference, core), (reference_programs, candidate_programs), compare, size)
+        elif not args.smoke:
             help_keys = b'\x02\x18' if args.scenario == 'prefix-conflict' else b'\x02?'
             sidebar_keys = b'\x18' if args.scenario == 'prefix-conflict' else b'\x02b'
             for name, keys in [
@@ -222,12 +245,18 @@ def one_size(args, size, binary):
             result['idle'] = core.ui.idle_measurement(10)
 
 
-        result['passed'] = all(stage['different_cells'] == 0 for stage in result['checkpoints'])
+        result['passed'] = (not repository_scenario and
+                            all(stage['different_cells'] == 0 for stage in result['checkpoints']))
         result['first_candidate_byte_seconds'] = core.ui.first_byte_seconds
         restored_candidate = detach(core, args.decoder)
         restored_reference = detach(reference, args.decoder)
         title = title_difference(restored_reference['title'],restored_candidate['title'],args.default_title)
-        assert title is None or 'adaptation' in title, 'post-detach title differs'
+        if repository_scenario:
+            from repository import verify_title
+            verify_title(restored_reference['title'], restored_candidate['title'])
+            result['restored_title_pending_core_facts'] = ['repo-root-label', 'hostname']
+        else:
+            assert title is None or 'adaptation' in title, 'post-detach title differs'
         result['restored_title_adaptation'] = title
         result['termios_restored'] = True
     except BaseException as error:
@@ -259,8 +288,9 @@ def main():
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--decoder', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--size', choices=['80x24', '120x40', '200x50'], action='append')
-    parser.add_argument('--scenario', choices=['default', 'prefix-conflict'], default='default')
+    parser.add_argument('--size', choices=['80x24', '120x40', '200x50', '65x24', '64x24', '40x24'], action='append')
+    parser.add_argument('--scenario', choices=['default', 'prefix-conflict', 'repository'], default='default')
+    parser.add_argument('--host-program', choices=['wezterm', 'alacritty'])
     parser.add_argument('--smoke', action='store_true', help='baseline only; not an acceptance run')
     args = parser.parse_args()
     for field in ['hc', 'hc_tui', 'config', 'decoder', 'reference_manifest']:
@@ -271,6 +301,8 @@ def main():
     if parsed_config.get('ui', {}).get('status_indicators', 'dots') != 'dots':
         raise ValueError('status readiness requires the pinned dots oracle')
     args.default_title = parsed_config.get("ui",{}).get("window_title", "{hostname}: {workspace}") == "{hostname}: {workspace}"
+    if args.scenario == 'repository' and not args.default_title:
+        raise ValueError('repository fixture requires the default title template')
     if args.scenario == 'prefix-conflict':
         keys = parsed_config.get('keys',{})
         assert keys.get('help') == 'prefix+ctrl+x' and keys.get('toggle_sidebar') == 'ctrl+x', 'prefix-conflict requires its recorded bindings' 
@@ -285,13 +317,16 @@ def main():
     metadata = {'reference_revision': REFERENCE, 'reference_sha256': digest(binary),
                 'candidate_sha256': digest(args.hc_tui), 'core_sha256': digest(args.hc),
                 'config_sha256': digest(args.config), 'decoder_sha256': digest(args.decoder),
-                'smoke': args.smoke, 'scenario': args.scenario,
+                'smoke': args.smoke, 'scenario': args.scenario, 'host_program': args.host_program,
                 'harness_sha256': {path.name:digest(path) for path in Path(__file__).parent.glob('*.py')},
                 'fixture_overrides': {'sound_enabled':False,'disable_sound_env':True,'update_checks':False}}
     (args.out / 'provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')
-    sizes = [tuple(map(int, size.split('x'))) for size in (args.size or ['80x24', '120x40', '200x50'])]
+    default_sizes = ['120x40'] if args.scenario == 'repository' else ['80x24', '120x40', '200x50', '65x24', '64x24', '40x24']
+    sizes = [tuple(map(int, size.split('x'))) for size in (args.size or default_sizes)]
+    if args.scenario == 'repository' and any(size[0] <= 65 for size in sizes):
+        raise ValueError('repository fixture currently requires desktop dimensions')
     results = [one_size(args, size, binary) for size in sizes]
-    raise SystemExit(any(not result['passed'] for result in results))
+    raise SystemExit(2 if args.scenario == 'repository' else any(not result['passed'] for result in results))
 
 
 if __name__ == '__main__':
