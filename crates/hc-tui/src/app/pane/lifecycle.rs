@@ -10,14 +10,18 @@ impl Pane {
     /// dead wire are never replayed; `Key`/`Paste` items re-encode
     /// under the fresh post-paint VT.
     pub(super) fn spawn(&mut self, spec: Spec, resumed: bool, attempts: u32) {
-        self.generation += 1;
+        // All visible panes share an event channel. A wire identity is unique
+        // across panes and reincarnations, including retired observer events.
+        static NEXT_ROUTE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        self.generation = NEXT_ROUTE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.attaches += 1;
         // A disconnected batch must never lose a prefix but replay its tail.
-        if self
-            .pending
-            .iter()
-            .any(|item| matches!(item, Pending::Encoded(..) | Pending::Prepared(..)))
-        {
+        if self.pending.iter().any(|item| {
+            matches!(
+                item,
+                Pending::Encoded(..) | Pending::Prepared(..) | Pending::Mouse(..)
+            )
+        }) {
             self.discard_pending_incarnation();
         }
         let (cols, rows) = self.allocated;
@@ -28,7 +32,11 @@ impl Pane {
             history: HISTORY,
             cols,
             rows,
-            display: self.host.display(),
+            display: if spec.role == Role::Active {
+                self.host.display()
+            } else {
+                None
+            },
             resumed,
             caller: None,
         };
@@ -306,6 +314,13 @@ impl Pane {
     /// at the caller, exactly like Source server/pane_input.rs.
     pub(crate) fn mouse_input(&mut self, bytes: Vec<u8>) {
         self.push_pending(Pending::Encoded(bytes, None));
+    }
+
+    pub(crate) fn mouse(&mut self, input: hc_vt::MouseInput) -> bool {
+        if !matches!(self.state, State::Opening { .. } | State::Live(_)) {
+            return false;
+        }
+        self.push_pending(Pending::Mouse(self.generation, input))
     }
 
     pub(crate) fn reset_scroll(&mut self) {

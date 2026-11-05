@@ -42,6 +42,7 @@ impl App {
                         self.help_state.scroll = 0;
                     }
                 } else if self.mode == Mode::Normal && !self.prefix.armed() {
+                    self.reset_displayed_scroll();
                     self.pane.paste(&text);
                 }
             }
@@ -53,6 +54,7 @@ impl App {
                         self.help_state.scroll = 0;
                     }
                 } else if self.mode == Mode::Normal && !self.prefix.armed() {
+                    self.reset_displayed_scroll();
                     self.pane.input_encoded(text.into_bytes());
                 }
             }

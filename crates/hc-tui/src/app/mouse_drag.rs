@@ -5,7 +5,7 @@ impl App {
     /// `LeftDrag`: continue the grab. Workspace/tab presses only record
     /// intent in M2 — reordering is deferred, so no drag promotion.
     pub(in crate::app) fn mouse_drag(&mut self, point: (u16, u16)) {
-        match self.chrome_drag {
+        match self.chrome_drag.clone() {
             Some(ChromeDrag::SidebarWidth) => self.set_sidebar_width_from_column(point.0),
             Some(ChromeDrag::SidebarSection) => self.set_sidebar_section_from_row(point.1),
             Some(ChromeDrag::WorkspaceScrollbar { grab_row_offset }) => {
@@ -32,16 +32,19 @@ impl App {
                     self.shell_state.agent_scroll = next;
                 }
             }
-            Some(ChromeDrag::PaneScrollbar { grab_row_offset }) => {
+            Some(ChromeDrag::PaneScrollbar {
+                pane_id,
+                grab_row_offset,
+            }) => {
                 if let Some(hit) = self
                     .hit_map
                     .panes
                     .iter()
-                    .find(|h| h.scrollbar_rect.is_some())
+                    .find(|h| h.pane_id == pane_id && h.scrollbar_rect.is_some())
                 {
                     let offset = pane_scrollbar_offset(hit, point.1, grab_row_offset);
                     if let Some(offset) = offset {
-                        self.pane_scroll_to_offset(offset);
+                        self.pane_scroll_to_offset(&pane_id, offset);
                     }
                 }
             }
@@ -137,11 +140,17 @@ impl App {
     pub(in crate::app) fn focus_tab(&mut self, tab_id: &str) {
         let target = self
             .projection
-            .snapshot
-            .panes
-            .iter()
-            .find(|p| p.tab_id == tab_id)
-            .map(|p| p.pane_id.clone());
+            .layouts
+            .get(tab_id)
+            .and_then(|tab| tab.focused.clone())
+            .or_else(|| {
+                self.projection
+                    .snapshot
+                    .panes
+                    .iter()
+                    .find(|p| p.tab_id == tab_id)
+                    .map(|p| p.pane_id.clone())
+            });
         if let Some(pane_id) = target {
             self.focus_pane(pane_id);
         }
@@ -178,8 +187,8 @@ impl App {
     }
 
     /// Pane scrollbar drag/click → the VT viewport offset.
-    pub(in crate::app) fn pane_scroll_to_offset(&mut self, offset: usize) {
-        if let Some(vt) = self.pane.vt()
+    pub(in crate::app) fn pane_scroll_to_offset(&mut self, pane_id: &str, offset: usize) {
+        if let Some(vt) = self.displayed_pane_mut(pane_id).and_then(|p| p.vt())
             && let Some(state) = vt.scrollbar()
         {
             let maximum = state.total.saturating_sub(state.len) as usize;

@@ -39,6 +39,7 @@ pub(crate) struct Projection {
     /// The active endpoint's snapshot (always present — an empty view still
     /// projects an empty snapshot so the shell renders an idle layout).
     pub snapshot: ClientShellSnapshot,
+    pub layouts: BTreeMap<String, crate::structure::TabLayout>,
 }
 
 /// The machine part of an address: `host-b` of `host-b/t7`, `None` for a
@@ -126,11 +127,6 @@ pub(crate) fn tab_key_of(term: &Terminal) -> String {
     }
 }
 
-/// The raw `herdr.tab` label text when present.
-fn tab_of(term: &Terminal) -> Option<&str> {
-    term.labels.get("herdr.tab").map(String::as_str)
-}
-
 /// A terminal counts as an agent the same way the old sidebar counted:
 /// core says it reported (or carries status records) and it is live.
 fn is_agent(term: &Terminal) -> bool {
@@ -211,7 +207,16 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
     let local_terms = by_machine.remove("").unwrap_or_default();
     // A remote selection can never match a local bare `tN`, so focus ids
     // land only where the selected terminal actually lives.
-    let local_snapshot = endpoint_snapshot(&local_terms, selected, view.generation, view.version);
+    let own = layout_document(view).unwrap_or_default();
+    let (local_snapshot, mut layouts) = structured_snapshot(
+        &local_terms,
+        selected,
+        view.generation,
+        view.version,
+        &app_document(view, None),
+        &own,
+        None,
+    );
     let active_snapshot = local_snapshot.clone();
     let local_recency = recency_of(&local_snapshot);
     endpoints.push(ClientShellEndpoint {
@@ -252,7 +257,18 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
             remote_status(state)
         };
         let selected_here = selected.filter(|address| terms.iter().any(|t| t.address == *address));
-        let snapshot = endpoint_snapshot(&terms, selected_here, view.generation, view.version);
+        let (snapshot, remote_layouts) = structured_snapshot(
+            &terms,
+            selected_here,
+            view.generation,
+            view.version,
+            &app_document(view, Some(&name)),
+            &own,
+            Some(&name),
+        );
+        if selected_machine.as_deref() == Some(&name) {
+            layouts = remote_layouts;
+        }
         let recency = recency_of(&snapshot);
         endpoints.push(ClientShellEndpoint {
             endpoint_id: ClientEndpointId::Remote(name.clone()),
@@ -279,9 +295,45 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
         endpoints,
         active_endpoint_id,
         snapshot,
+        layouts,
     }
 }
 
 #[path = "project_snapshot.rs"]
 mod snapshot_builder;
+#[cfg(test)]
 use snapshot_builder::endpoint_snapshot;
+use snapshot_builder::structured_snapshot;
+
+pub(crate) fn layout_key(machine: Option<&str>, id: &str) -> String {
+    let machine = machine.unwrap_or_default();
+    format!("{}:{machine}/{id}", machine.len())
+}
+
+pub(crate) fn layout_document(view: &View) -> Result<crate::structure::Document, String> {
+    let key = hc_proto::watch::DocKey {
+        machine: None,
+        name: "hc-tui".into(),
+    };
+    crate::structure::Document::decode(
+        view.documents
+            .get(&key)
+            .map(|d| d.value.clone())
+            .unwrap_or_default(),
+    )
+}
+
+fn app_document(view: &View, machine: Option<&str>) -> serde_json::Value {
+    let key = hc_proto::watch::DocKey {
+        machine: machine.map(str::to_owned),
+        name: "herdr-app".into(),
+    };
+    view.documents
+        .get(&key)
+        .map(|d| d.value.clone())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+#[path = "project_structure_tests.rs"]
+mod structure_tests;

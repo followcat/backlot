@@ -1,0 +1,92 @@
+use super::*;
+
+impl App {
+    /// An app over `watcher` (already watching) and `open` for attaches.
+    pub fn new(
+        watcher: Watcher,
+        open: OpenAttach,
+        live: crate::config::LiveKeybindConfig,
+        shell: ClientShellConfig,
+        probe: Arc<Probe>,
+        cursor_sink: CursorSink,
+    ) -> App {
+        let (pane_tx, pane_rx) = mpsc::channel(64);
+        let view = View::default();
+        let projection = crate::project::project(&view, None);
+        let sidebar_collapsed = shell.sidebar_start_collapsed;
+        let sidebar_width = shell.sidebar_width;
+        let mouse_capture = shell.mouse_capture;
+        App {
+            notice: None,
+            background_failure: None,
+            next_tab_status: None,
+            last_window_title: None,
+            take_control_hit: ratatui::layout::Rect::default(),
+            watcher,
+            pane: pane::Pane::new(pane_tx.clone(), open.clone()),
+            pane_rx,
+            pane_tx,
+            open_attach: open,
+            observers: Default::default(),
+            observer_mru: Default::default(),
+            layout_seen: None,
+            prefix: input::Prefix::default(),
+            mode: Mode::Normal,
+            help: false,
+            mobile_switcher_suspended: false,
+            help_state: crate::chrome::help::HelpState::default(),
+            help_hits: crate::chrome::help::HelpRender::default(),
+            help_scroll_grab: None,
+            sched: sched::Scheduler::default(),
+            focused: None,
+            before_navigate: None,
+            live,
+            shell,
+            projection,
+            navigate_target: None,
+            shell_state: ShellState {
+                sidebar_collapsed,
+                sidebar_section_split: 0.5,
+                ..ShellState::default()
+            },
+            sidebar_width,
+            chrome_drag: None,
+            pane_mouse_gesture: None,
+            workspace_press: None,
+            tab_press: None,
+            last_divider_click: None,
+            hit_map: ShellHitMap::default(),
+            host_reports_all_keys: false,
+            host_reports_key_releases: false,
+            host_erase_is_ctrl_h: false,
+            probe_keyboard_flags: None,
+            probe_device_attributes: false,
+            host_sgr_pixel_mouse: None,
+            host_pixel_mouse_active: false,
+            host_mouse_capture_active: mouse_capture,
+            host_mouse_pixels: None,
+            host_appearance: None,
+            host_appearance_explicit: false,
+            host_control: Box::new(|_| Ok(())),
+            pane_leases: KeyLeases::default(),
+            next_dispatch_id: 1,
+            view,
+            seen: 0,
+            area: (80, 24),
+            want_cursor: draw::CursorWish {
+                pos: None,
+                anchor: None,
+                shape: hc_vt::CursorShape::Default,
+                blinking: true,
+            },
+            applied_cursor: (hc_vt::CursorShape::Default, true),
+            last_visible_cursor: None,
+            cursor_sink,
+            quitting: false,
+            host_facts: crate::host::HostFacts::default(),
+            presentation: presentation::Presentation::default(),
+            outer_focused: None,
+            probe,
+        }
+    }
+}

@@ -44,6 +44,7 @@ impl Pane {
         }
         let route = drain.route;
         let writer_abort = drain.writer.abort_handle();
+        let reader_abort = drain.reader.abort_handle();
         let abort_on_failure = writer_abort.clone();
         let ev = self.ev.clone();
         let done = tokio::spawn(async move {
@@ -65,6 +66,7 @@ impl Pane {
             route,
             done,
             writer_abort,
+            reader_abort,
         });
     }
 
@@ -148,8 +150,8 @@ impl Pane {
             self.begin_close(parked);
         }
         // All drains already started, so parallel stalls share one time bound.
-        for closing in self.closing.drain(..) {
-            match closing.done.await {
+        for mut closing in self.closing.drain(..) {
+            match (&mut closing.done).await {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => self.close_error = Some(error),
                 Err(error) => {

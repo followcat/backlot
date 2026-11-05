@@ -111,7 +111,24 @@ impl App {
         else {
             return false;
         };
-        let reporting = self.pane.vt().is_some_and(|vt| vt.mouse_tracking());
+        if self.focused.as_deref() != Some(&hit.pane_id) {
+            if matches!(
+                mouse.kind,
+                MouseEventKind::Down(MouseButton::Left)
+                    | MouseEventKind::ScrollUp
+                    | MouseEventKind::ScrollDown
+                    | MouseEventKind::ScrollLeft
+                    | MouseEventKind::ScrollRight
+            ) {
+                self.focus_pane(hit.pane_id.clone());
+            } else {
+                return true;
+            }
+        }
+        let reporting = self
+            .displayed_pane(&hit.pane_id)
+            .and_then(|p| p.vt_ref())
+            .is_some_and(|vt| vt.mouse_tracking());
         match mouse.kind {
             MouseEventKind::Down(button) if reporting => {
                 let stripped = if button == MouseButton::Right {
@@ -150,9 +167,13 @@ impl App {
             | MouseEventKind::ScrollRight => {
                 if reporting {
                     self.send_pane_mouse(&hit, mouse);
-                } else if self.pane.vt().is_some_and(|vt| {
-                    vt.alt_screen().unwrap_or(false) && vt.mode(1007).unwrap_or(false)
-                }) {
+                } else if self
+                    .displayed_pane(&hit.pane_id)
+                    .and_then(|p| p.vt_ref())
+                    .is_some_and(|vt| {
+                        vt.alt_screen().unwrap_or(false) && vt.mode(1007).unwrap_or(false)
+                    })
+                {
                     let key = match mouse.kind {
                         MouseEventKind::ScrollUp => Some(hc_vt::Key::ArrowUp),
                         MouseEventKind::ScrollDown => Some(hc_vt::Key::ArrowDown),
@@ -166,13 +187,15 @@ impl App {
                                 action: hc_vt::Action::Press,
                             }));
                     }
-                } else if let Some(vt) = self.pane.vt() {
+                } else {
                     let delta = match mouse.kind {
                         MouseEventKind::ScrollUp => -(self.shell.mouse_scroll_lines as isize),
                         MouseEventKind::ScrollDown => self.shell.mouse_scroll_lines as isize,
                         _ => 0,
                     };
-                    vt.scroll_delta(delta);
+                    if let Some(vt) = self.displayed_pane_mut(&hit.pane_id).and_then(|p| p.vt()) {
+                        vt.scroll_delta(delta);
+                    }
                 }
                 true
             }
@@ -190,29 +213,27 @@ impl App {
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
             && mouse.mods.contains(Mods::CTRL);
         let pixels = self.host_mouse_pixels.filter(|_| !fallback_click);
-        let bytes = self.pane.vt().and_then(|vt| {
-            let mut input = native_input(hit, mouse);
-            if vt.mode(1016).unwrap_or(false) {
-                let (cw, ch) = vt.cell_px();
-                if let Some(crate::mouse_geometry::Position::Pixels { x, y }) =
-                    pixels.and_then(|p| {
-                        p.pane_position(
-                            hit.inner_rect,
-                            u32::from(hit.inner_rect.width) * cw,
-                            u32::from(hit.inner_rect.height) * ch,
-                        )
-                    })
-                {
-                    input.position = MousePosition::Pixels { x, y };
-                }
+        let mut input = native_input(hit, mouse);
+        if let Some(vt) = self.displayed_pane(&hit.pane_id).and_then(|p| p.vt_ref())
+            && vt.mode(1016).unwrap_or(false)
+        {
+            let (cw, ch) = vt.cell_px();
+            if let Some(crate::mouse_geometry::Position::Pixels { x, y }) = pixels.and_then(|p| {
+                p.pane_position(
+                    hit.inner_rect,
+                    u32::from(hit.inner_rect.width) * cw,
+                    u32::from(hit.inner_rect.height) * ch,
+                )
+            }) {
+                input.position = MousePosition::Pixels { x, y };
             }
-            vt.mouse(input).ok()
-        });
-        if let Some(bytes) = bytes.filter(|bytes| !bytes.is_empty()) {
+        }
+        if self.pane.target() == Some(hit.pane_id.as_str()) {
             if mouse.kind != MouseEventKind::Moved {
+                self.reset_displayed_scroll();
                 self.pane.reset_scroll();
             }
-            self.pane.mouse_input(bytes);
+            self.pane.mouse(input);
         }
     }
 

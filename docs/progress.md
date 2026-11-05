@@ -203,3 +203,26 @@
   and nine harness checks. Expected input bytes were not regenerated.
 - M2.1 stops for review after normal push/green CI. M2.2 requires Claude's C3
   approval; M3 remains gated. No core extension was accessed or adopted here.
+
+
+## M3a: Structure and retained pane presentation (in progress)
+
+- The user approved layout/tab operations (new, split, close, rename) and
+  matching bindings for M3a. Custom commands, notifications and other M4
+  actions remain deferred. Core chronology and repository facts still wait
+  for C3 approval; acknowledgement remains client-local.
+- `c3f2520` adds the read-only herdr-app reader, label/cwd fallback, attributed
+  pinned BSP geometry and typed versioned doc.set. Three independent review
+  rounds addressed identity allocation, generated tree depth, unknown owned
+  node fields, extreme weights and nonfinite ratios. Full local gates and
+  CI 42030790020 passed both jobs.
+- Projection now reads herdr-app structure and hc-tui layout overrides,
+  retaining newly discovered members and pruning stale/cross-tab leaves.
+  Background VTs are observe-only. Current-tab panes stay attached plus a
+  32-entry LRU of off-tab panes; the focused input connection is separate.
+  Fake-wire tests cover shared focus/zoom, original observer routes, eviction,
+  one-shot bar cursor and OSC 12/4 state across switching, and observer silence.
+  Native M3a parity, mutation actions and milestone acceptance are still pending.
+- C3 no longer provides first-paint appearance. First attach, reconnect and
+  LRU eviction remain known hc-tui limitations; routine cached switching is
+  handled in the client. No M4 implementation or core checkout access.

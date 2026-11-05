@@ -32,7 +32,7 @@ impl Pane {
                 pending.identity() != key.identity()
             }
             Pending::Encoded(_, id) => *id != Some(key.dispatch_id),
-            Pending::Paste(_) | Pending::Control(_) => true,
+            Pending::Paste(_) | Pending::Mouse(_, _) | Pending::Control(_) => true,
         });
         let removed = before - self.pending.len();
         self.pending_bytes = self.pending.iter().map(charge).sum();

@@ -58,6 +58,8 @@ enum Pending {
     Key(crate::app::input::TerminalKey),
     /// Paste text needing the VT's bracketed-paste mode.
     Paste(Vec<u8>),
+    /// Mouse event encoded only after the selected wire's fresh paint lands.
+    Mouse(u64, hc_vt::MouseInput),
     /// Already-encoded input bytes (a writer queue retry) — bound to
     /// the attach generation that encoded them; never replayed.
     Encoded(Vec<u8>, Option<u64>),
@@ -190,6 +192,15 @@ struct Closing {
     route: u64,
     done: JoinHandle<Result<(), String>>,
     writer_abort: tokio::task::AbortHandle,
+    reader_abort: tokio::task::AbortHandle,
+}
+
+impl Drop for Closing {
+    fn drop(&mut self) {
+        self.writer_abort.abort();
+        self.reader_abort.abort();
+        self.done.abort();
+    }
 }
 
 /// The displayed terminal's whole state. `vt` lives outside the state:
@@ -226,6 +237,7 @@ pub struct Pane {
     focus_changed_disconnected: bool,
     allocation_changed_disconnected: bool,
     incarnation: Option<(u64, Option<u32>)>,
+    inventory_incarnation: Option<(u64, Option<u32>)>,
     /// Human input held while attaching / behind a full writer queue.
     /// Bound to this attach generation: a new incarnation drains any
     /// already-encoded leftovers (they belong to the dead wire).
@@ -266,6 +278,7 @@ pub struct Paint {
 fn charge(item: &Pending) -> usize {
     match item {
         Pending::Control(_) => 0,
+        Pending::Mouse(_, _) => 32,
         Pending::Key(k) => 32 + k.text_commit.as_deref().map_or(0, str::len) + k.vt_bytes.len(),
         Pending::Paste(t) | Pending::Encoded(t, _) => t.len(),
         Pending::Prepared(bytes, key) => bytes.len() + charge(&Pending::Key(key.clone())),
@@ -291,6 +304,7 @@ impl Pane {
             focus_changed_disconnected: false,
             allocation_changed_disconnected: false,
             incarnation: None,
+            inventory_incarnation: None,
             pending: VecDeque::new(),
             pending_bytes: 0,
             dropped_input: 0,

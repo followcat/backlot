@@ -273,16 +273,19 @@ async fn writer_progress_survives_a_full_event_channel() {
     // Fill the app event channel so a try_send progress report would
     // be lost; the writer's next send must still wake the pane.
     while ev_tx
-        .try_send(PaneEv::WriterProgress { generation: 999 })
+        .try_send(PaneEv::WriterProgress {
+            generation: u64::MAX,
+        })
         .is_ok()
     {}
     pane.key(&key('z'));
     core.read_stream(CH).await; // the input frame itself lands
-    // Draining reveals the queued WriterProgress for generation 1 —
+    let route = pane.generation();
+    // Draining reveals the queued WriterProgress for this wire —
     // try_send would have dropped it and parked nothing else.
     let mut saw = false;
     while let Ok(ev) = timeout(std::time::Duration::from_secs(2), ev_rx.recv()).await {
-        if let Some(PaneEv::WriterProgress { generation: 1 }) = ev {
+        if matches!(&ev,Some(PaneEv::WriterProgress {generation}) if *generation == route) {
             saw = true;
             break;
         }

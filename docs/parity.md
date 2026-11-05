@@ -8,10 +8,11 @@ mouse input.
 
 **Validation status:** the joint M2 review did **not** accept the shell as
 indistinguishable. M2.1 tightens the harness and covers the default 64-column
-mobile boundary. Ordinary Git sidebar rows and first-paint program appearance
-remain acceptance blockers until the separately reviewed core C3 facts are
-adopted in M2.2. A fixture with missing facts is `pending-core-fact`, never a
-pass. Earlier passes establish only their explicit captured fixtures.
+mobile boundary. Ordinary Git rows await the separately reviewed C3 facts
+in M2.2. C3 will not supply first-paint program appearance: M3a retains VTs
+for cached switching and documents first attach, reconnect and eviction as
+known limitations. A fixture with missing core facts is `pending-core-fact`,
+never a pass. Earlier passes establish only their explicit captured fixtures.
 
 ## Source and configuration
 
@@ -128,9 +129,18 @@ paint contained no DECSCUSR sequence in any case. The blinking-bar request
 only added `CSI ? 12 h`, which preserves blinking but cannot identify the
 visual shape or distinguish an explicit request from the user default.
 
-A client switching away and back can recreate its VT, just like attaching
-or reconnecting. This gap therefore affects routine workspace switching,
-not only recovery, and blocks exact pane acceptance until C3.
+M3a retains observe-only VTs for every pane in the current tab, plus an LRU
+of 32 off-tab panes. The focused terminal has a separate active input wire.
+Rendering prefers the persistent observer's completed paint, so routine cached
+switching preserves live cursor style, OSC 12 and OSC 4 state without allowing
+background input, resize, focus or display-fact claims. Each VT keeps bounded
+256 KiB scrollback; the off-tab cache has a fixed entry budget. Current-tab
+panes are pinned, so memory also scales with the explicitly displayed layout.
+
+First attach, reconnect and LRU eviction remain known limitations: the earlier
+appearance is absent from the tested core paint. C3 will not add this fact.
+These cases cannot be counted as exact parity before a fresh live program
+request supplies the state. Native cached-switch parity is a separate M3a gate.
 
 A client attaching or reconnecting after such a request cannot recover
 that earlier visual shape from this paint. Until a live request arrives,
@@ -341,6 +351,11 @@ repository mobile/grouping acceptance belong to M2.2 after Claude approval.
 
 The joint review accepted documented deferral of dead-wire held releases,
 resize acknowledgement ambiguity, remote clock/timezone and currently unused
-token metadata. It requests C3 hostname, first-paint cursor/color overrides,
-Git facts and quiet human release; completion/chronology/state labels gate
-M3 acceptance. M2.1 does not adopt C3 or begin M3.
+token metadata. C3 hostname, Git facts and quiet human release remain pending. C3 does not
+supply first-paint appearance; the client cache handles routine switching.
+Completion chronology still awaits C3. Acknowledgement stays client-local and
+only follows a composed, completed visible paint while the client is focused.
+There is no cross-connection completion/output fence yet: new inventory can
+arrive while stream output is stalled, so a paint can be older than its status.
+That stall race remains a documented limitation, not a proven acknowledgement
+match. Reporter state labels remain deferred.

@@ -19,6 +19,19 @@ impl App {
         self.area = (size.width, size.height);
         let inner = draw::pane_inner(self, size.width, size.height);
         self.pane.allocated(inner.width.max(1), inner.height.max(1));
+        let layout = self.shell.layout_config().layout(
+            size.width,
+            size.height,
+            self.shell_state.sidebar_collapsed,
+            pane_geometry::focused_tab_count(self),
+            self.sidebar_width,
+        );
+        for info in pane_geometry::pane_infos(self, layout.pane_surface) {
+            if let Some(pane) = self.observers.get_mut(&info.id) {
+                let inner = pane_geometry::inner_for(pane, &info, self.shell.pane_scrollbars).0;
+                pane.allocated(inner.width.max(1), inner.height.max(1));
+            }
+        }
         term.draw(|frame| draw::draw(self, frame, now))?;
         self.apply_cursor();
         self.sched.drew(now);
@@ -87,7 +100,7 @@ impl App {
         let mut replies_open = true;
         while !self.quitting {
             let wake = {
-                let pane_wake = self.pane.next_wake();
+                let pane_wake = self.pane_wake();
                 let draw_due = self.sched.deadline();
                 let due = match (pane_wake, draw_due) {
                     (Some(a), Some(b)) => Some(a.min(b)),
@@ -121,11 +134,11 @@ impl App {
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
-                            self.pane.on_event(ev, Instant::now());
+                            self.pane_event(ev, Instant::now());
                         }
                     },
                     _ = tokio::time::sleep_until(deadline.into()) => {
-                        self.pane.fire_retry(Instant::now());
+                        self.pane_retry(Instant::now());
                     }
                 }
             } else {
@@ -144,7 +157,7 @@ impl App {
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
-                            self.pane.on_event(ev, Instant::now());
+                            self.pane_event(ev, Instant::now());
                         }
                     },
                 }
@@ -163,6 +176,7 @@ impl App {
             self.sched.mark_dirty(now);
             self.maybe_draw(term, now)?;
             self.sync_target();
+            self.sync_observers();
             self.sync_keyboard_report_all();
             self.sync_pixel_mouse();
             if self.pane.attaches > 0 {
@@ -177,7 +191,7 @@ impl App {
         // of client leases subsequently consumed by UI bindings.
         self.release_pane_mouse();
         self.pane_rx.close();
-        self.pane.shutdown().await;
+        self.shutdown_panes().await;
         Ok(())
     }
 }

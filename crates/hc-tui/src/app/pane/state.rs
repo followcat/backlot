@@ -49,6 +49,28 @@ pub enum PaneEv {
     RouteClosed { route: u64, error: Option<String> },
 }
 
+impl PaneEv {
+    pub(crate) fn route(&self) -> u64 {
+        match self {
+            Self::Opened { generation, .. }
+            | Self::Out { generation, .. }
+            | Self::Failed { generation, .. }
+            | Self::Ended { generation }
+            | Self::WriterProgress { generation }
+            | Self::WriterFailed { generation, .. } => *generation,
+            Self::RouteClosed { route, .. } => *route,
+        }
+    }
+}
+
+impl Pane {
+    pub(crate) fn owns_route(&self, route: u64) -> bool {
+        route == self.generation
+            || self.parked_has(route)
+            || self.closing.iter().any(|c| c.route == route)
+    }
+}
+
 /// How an attach connection is opened — `Attach::connect` in production,
 /// `Attach::open` over injected wires in tests.
 pub type OpenAttach =

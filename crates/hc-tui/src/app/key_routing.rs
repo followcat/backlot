@@ -23,6 +23,7 @@ impl App {
 
     pub(super) fn on_key(&mut self, key: TerminalKey, width: u16) {
         if let Some(text) = self.host_text_commit(&key) {
+            self.reset_displayed_scroll();
             self.pane.input_encoded(text.into_bytes());
             return;
         }
@@ -47,6 +48,9 @@ impl App {
             Action::Press => {
                 let initial = self.key_context();
                 let mut target = self.route_key_press(&key, width);
+                if target.is_some() {
+                    self.reset_displayed_scroll();
+                }
                 if target.is_some() && !self.pane.key(&key) {
                     target = None;
                 }
@@ -160,6 +164,7 @@ impl App {
                     .map(|lease| self.lease_route(lease))
                     .unwrap_or(target);
                 if self.pane.accepts_route(route) {
+                    self.reset_displayed_scroll();
                     self.pane.key(&key);
                 }
             }
@@ -180,6 +185,7 @@ impl App {
                     }
                     let repeated = key.clone().with_action(Action::Repeat);
                     if self.route_key_press(&repeated, width).is_some() {
+                        self.reset_displayed_scroll();
                         self.pane.key(&repeated);
                     }
                 }

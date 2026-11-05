@@ -150,17 +150,18 @@ impl App {
             self.focus_pane(pane_id.clone());
             return;
         }
-        if let Some(hit) = hits.panes.iter().find(|h| contains(h.rect, point)) {
+        if let Some(hit) = hits.panes.iter().find(|h| contains(h.rect, point)).cloned() {
             if let (Some(track), Some(metrics)) = (hit.scrollbar_rect, hit.scroll)
                 && contains(track, point)
             {
                 let grab = scroll::scrollbar_thumb_grab_offset(metrics, track, point.1);
                 self.chrome_drag = Some(ChromeDrag::PaneScrollbar {
+                    pane_id: hit.pane_id.clone(),
                     grab_row_offset: grab,
                 });
                 if grab.is_none() {
                     let offset = scroll::scrollbar_offset_from_row(metrics, track, point.1);
-                    self.pane_scroll_to_offset(offset);
+                    self.pane_scroll_to_offset(&hit.pane_id, offset);
                 }
                 return;
             }

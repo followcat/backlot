@@ -179,6 +179,7 @@ pub(super) fn encode_pending(vt: &hc_vt::Vt, item: &super::Pending) -> Result<Ve
             }
         }
         Pending::Paste(t) => vt.paste(t).map_err(|e| e.to_string()),
+        Pending::Mouse(_, mouse) => vt.mouse(*mouse).map_err(|e| e.to_string()),
         Pending::Encoded(b, _) | Pending::Prepared(b, _) => Ok(b.clone()),
     }
 }

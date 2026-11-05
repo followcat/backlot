@@ -19,6 +19,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Paragraph, Widget};
 
 use super::pane::Paint;
+pub(crate) use super::pane_geometry::pane_inner;
+use super::pane_geometry::{focused_tab_count, inner_for, pane_infos, split_borders};
 use super::{App, Mode};
 
 #[cfg(test)]
@@ -51,9 +53,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     let buf = frame.buffer_mut();
     // Source acknowledges a current visible surface during composition, so an
     // already viewed completion does not flash Done before its Idle frame.
-    if app.pane.has_fresh_paint()
-        && let Some(pane_id) = app.pane.target().map(str::to_string)
-    {
+    let painted = app
+        .visible_panes()
+        .into_iter()
+        .filter(|id| app.displayed_pane(id).is_some_and(|p| p.has_fresh_paint()))
+        .collect::<Vec<_>>();
+    for pane_id in painted {
         app.presentation
             .acknowledge(&mut app.projection, &pane_id, app.outer_focused);
     }
@@ -93,15 +98,13 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         state,
     );
 
-    // The pane surface: `apply_pane_chrome` decides the single pane's
-    // borders/inner rect; the VT grid paints into the terminal inner.
     let pane_infos = pane_infos(app, layout.pane_surface);
     crate::chrome::panes_draw::render_pane_borders(
         buf,
         app.shell.pane_borders,
         app.shell.pane_gaps,
         &pane_infos,
-        &[],
+        &split_borders(app, layout.pane_surface),
         &|id| {
             app.projection
                 .snapshot
@@ -113,37 +116,42 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         &app.shell.palette,
     );
     let inner = pane_inner(app, area.width, area.height);
-    let scroll = app.pane.vt().and_then(|vt| vt.scrollbar()).map(|state| {
-        let maximum = state.total.saturating_sub(state.len) as usize;
-        crate::chrome::scroll::ScrollMetrics {
-            offset_from_bottom: maximum.saturating_sub(state.offset as usize),
-            max_offset_from_bottom: maximum,
-            viewport_rows: state.len as usize,
+    let mut cursor = CursorWish {
+        pos: None,
+        anchor: None,
+        shape: CursorShape::Default,
+        blinking: true,
+    };
+    let hide_cursor =
+        app.help || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
+    let scrollbars = app.shell.pane_scrollbars;
+    for info in &pane_infos {
+        let Some(pane) = app.displayed_pane_mut(&info.id) else {
+            continue;
+        };
+        let (content, track, scroll) = inner_for(pane, info, scrollbars);
+        let suppressed = !info.is_focused || hide_cursor;
+        let wish = draw_terminal(pane, content, buf, _now, suppressed);
+        if info.is_focused {
+            cursor = wish;
         }
-    });
-    let alternate = app
-        .pane
-        .vt()
-        .and_then(|vt| vt.alt_screen().ok())
-        .unwrap_or(false);
-    let content = crate::chrome::panes::pane_inner_rect(pane_infos[0].rect, pane_infos[0].borders);
-    let (_, track) = crate::chrome::panes::stable_scrollbar_gutter(
-        content,
-        app.shell.pane_scrollbars,
-        alternate,
-        scroll,
-    );
-    if !pane_infos[0].id.is_empty() {
-        app.hit_map.panes.push(crate::chrome::render::PaneHit {
-            rect: pane_infos[0].rect,
-            inner_rect: inner,
-            scrollbar_rect: track,
+        if !info.id.is_empty() {
+            app.hit_map.panes.push(crate::chrome::render::PaneHit {
+                rect: info.rect,
+                inner_rect: content,
+                scrollbar_rect: track,
+                scroll,
+                pane_id: info.id.clone(),
+            });
+        }
+        crate::chrome::panes_draw::render_pane_scrollbar(
+            buf,
             scroll,
-            pane_id: pane_infos[0].id.clone(),
-        });
+            track,
+            &app.shell.palette,
+            info.is_focused,
+        );
     }
-    crate::chrome::panes_draw::render_pane_scrollbar(buf, scroll, track, &app.shell.palette, true);
-    let cursor = draw_pane(app, inner, buf, _now);
     let mode_bar_area = if layout.mobile_header.is_empty()
         && app.shell.tab_bar_position == crate::config::TabBarPositionConfig::Bottom
         && !layout.tab_bar.is_empty()
@@ -198,7 +206,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &mut app.hit_map,
         );
     }
-    app.help_hits = if app.app_help() {
+    app.help_hits = if app.help {
         // Source overlays reconstruct the wire frame as ratatui cells first
         // (wire.rs u16_to_modifier drops extended underline bits), then dim
         // the whole background before the panel removes DIM in its own area.
@@ -245,74 +253,13 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     }
 }
 
-/// The terminal-cell inner rect `cols x rows` maps to — the same rect
-/// `draw` paints the grid into, so the attach allocation and the
-/// paintable area are identical by construction. Mirrors the `draw`
-/// path: shell layout → `apply_pane_chrome` → `pane_inner_rect` →
-/// `stable_scrollbar_gutter`.
-pub(crate) fn pane_inner(app: &mut App, cols: u16, rows: u16) -> Rect {
-    let collapsed = app.shell_state.sidebar_collapsed;
-    let layout = app.shell.layout_config().layout(
-        cols,
-        rows,
-        collapsed,
-        focused_tab_count(app),
-        app.sidebar_width,
-    );
-    let infos = pane_infos(app, layout.pane_surface);
-    let inner = crate::chrome::panes::pane_inner_rect(infos[0].rect, infos[0].borders);
-    let alt = app
-        .pane
-        .vt()
-        .and_then(|vt| vt.alt_screen().ok())
-        .unwrap_or(false);
-    crate::chrome::panes::stable_scrollbar_gutter(inner, app.shell.pane_scrollbars, alt, None).0
-}
-
-/// The focused workspace's tab count — what
-/// `hide_tab_bar_when_single_tab` measures.
-fn focused_tab_count(app: &App) -> usize {
-    app.projection
-        .snapshot
-        .focused_workspace_id
-        .as_deref()
-        .map(|ws| {
-            app.projection
-                .snapshot
-                .tabs
-                .iter()
-                .filter(|t| t.workspace_id == ws)
-                .count()
-        })
-        .unwrap_or(0)
-}
-
-/// The single focused `PaneInfo` `apply_pane_chrome` resolves —
-/// hc-tui attaches one terminal across `pane_surface`.
-fn pane_infos(app: &App, surface: Rect) -> Vec<crate::chrome::panes::PaneInfo> {
-    crate::chrome::panes::apply_pane_chrome(
-        vec![crate::chrome::panes::PaneInfo {
-            id: app
-                .projection
-                .snapshot
-                .focused_pane_id
-                .clone()
-                .unwrap_or_default(),
-            rect: surface,
-            borders: ratatui::widgets::Borders::NONE,
-            is_focused: true,
-        }],
-        app.shell.pane_borders,
-        app.shell.pane_gaps,
-        app.shell.pane_outer_borders,
-    )
-}
-
-/// Paints the retained VT grid into `inner` — observer grids clip/pad
-/// to it without a resize. Returns the outer cursor wish; selector or
-/// help overlays suppress it. A pane with no live VT shows the attach
-/// status line instead of an empty grid.
-fn draw_pane(app: &mut App, inner: Rect, buf: &mut Buffer, now: Instant) -> CursorWish {
+fn draw_terminal(
+    pane: &mut super::pane::Pane,
+    inner: Rect,
+    buf: &mut Buffer,
+    now: Instant,
+    suppressed: bool,
+) -> CursorWish {
     let no_cursor = CursorWish {
         pos: None,
         anchor: None,
@@ -322,12 +269,12 @@ fn draw_pane(app: &mut App, inner: Rect, buf: &mut Buffer, now: Instant) -> Curs
     if inner.is_empty() {
         return no_cursor;
     }
-    let paint = app.app_pane().paint();
-    let Some(vt) = app.app_pane().vt() else {
+    let paint = pane.paint();
+    let Some(vt) = pane.vt() else {
         // No live VT: the attach is opening/down/gone — say so instead
         // of leaving a black hole. Queued input counts ride along.
-        let (pending, dropped) = app.app_pane().input_backlog();
-        let mut label = app.app_pane().status_label(now);
+        let (pending, dropped) = pane.input_backlog();
+        let mut label = pane.status_label(now);
         if pending > 0 || dropped > 0 {
             label.push_str(&format!(" · {pending} queued, {dropped} dropped"));
         }
@@ -374,11 +321,6 @@ fn draw_pane(app: &mut App, inner: Rect, buf: &mut Buffer, now: Instant) -> Curs
             );
         }
     }
-    // Real cursor: position + shape, only when the program shows one
-    // and no overlay is up. Navigate-mode previews suppress it — the
-    // observed screen's cursor is not ours.
-    let suppressed = app.app_help()
-        || (*app.app_mode() == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let pos = if !suppressed && frame.cursor.visible {
         frame
             .cursor

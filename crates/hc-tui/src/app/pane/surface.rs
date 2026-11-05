@@ -75,6 +75,8 @@ impl Pane {
         // paint until fresh bytes land.
         if spec.as_ref().map(|s| &s.terminal) != current.as_ref().map(|s| &s.terminal) {
             self.vt = None;
+            self.incarnation = None;
+            self.inventory_incarnation = None;
             self.pending.clear();
             self.pending_bytes = 0;
         }
@@ -118,6 +120,22 @@ impl Pane {
             return;
         };
         let term = view.inventory.get(&spec.terminal);
+        let next = term.map(|term| (term.created_ms, term.pid));
+        let changed = self.inventory_incarnation.is_some() && self.inventory_incarnation != next;
+        self.inventory_incarnation = next;
+        if !view.inventory.is_offline()
+            && changed
+            && next.is_some()
+            && self.incarnation != next
+            && matches!(self.state, State::Live(_) | State::Opening { .. })
+        {
+            self.teardown(false);
+            self.vt = None;
+            self.initial = None;
+            self.discard_pending_incarnation();
+            self.spawn(spec, true, 0);
+            return;
+        }
         // The inventory's grid is the authoritative size record when
         // the attach path negotiated no ordered RESIZE: active and
         // legacy-observer viewers track core size events here. A
@@ -242,6 +260,10 @@ impl Pane {
 
     pub fn vt(&mut self) -> Option<&mut Vt> {
         self.vt.as_mut()
+    }
+
+    pub(crate) fn vt_ref(&self) -> Option<&Vt> {
+        self.vt.as_ref()
     }
 
     /// Pending human input items + dropped count, for the status line.

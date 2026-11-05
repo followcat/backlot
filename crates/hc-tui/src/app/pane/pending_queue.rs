@@ -125,6 +125,10 @@ impl Pane {
                     }
                 },
                 item => {
+                    if matches!(&item,Pending::Mouse(route,_) if *route != self.generation) {
+                        self.pending_bytes = self.pending_bytes.saturating_sub(cost);
+                        continue;
+                    }
                     let vt = self.vt.as_ref().expect("fresh VT required above");
                     let encoded = input::encode_pending(vt, &item);
                     self.pending_bytes = self.pending_bytes.saturating_sub(cost);

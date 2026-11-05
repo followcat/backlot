@@ -30,13 +30,20 @@ fn contains(rect: Rect, point: (u16, u16)) -> bool {
 
 /// What a left-press grabbed — the reference's `ClientChromeDrag`
 /// subset hc-tui implements.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum ChromeDrag {
     SidebarWidth,
     SidebarSection,
-    WorkspaceScrollbar { grab_row_offset: u16 },
-    AgentScrollbar { grab_row_offset: u16 },
-    PaneScrollbar { grab_row_offset: Option<u16> },
+    WorkspaceScrollbar {
+        grab_row_offset: u16,
+    },
+    AgentScrollbar {
+        grab_row_offset: u16,
+    },
+    PaneScrollbar {
+        pane_id: String,
+        grab_row_offset: Option<u16>,
+    },
 }
 
 /// A workspace row press pending release-or-drag — the reference
@@ -79,6 +86,22 @@ impl App {
         if self.pane_mouse_gesture.is_some() && self.route_pane_mouse(mouse) {
             self.sched.mark_dirty(Instant::now());
             return;
+        }
+        // A chrome grab owns drag and release even when the pointer moves
+        // into a different pane's content or outside its original track.
+        if self.chrome_drag.is_some() {
+            match mouse.kind {
+                MouseEventKind::Drag(MouseButton::Left) => self.mouse_drag((mouse.col, mouse.row)),
+                MouseEventKind::Up(MouseButton::Left) => self.mouse_release((mouse.col, mouse.row)),
+                _ => {}
+            }
+            if matches!(
+                mouse.kind,
+                MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
+            ) {
+                self.sched.mark_dirty(Instant::now());
+                return;
+            }
         }
         if self.help {
             self.handle_help_mouse(mouse);

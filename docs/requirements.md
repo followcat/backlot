@@ -32,7 +32,7 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
 - Adapt core data to herdr's presentation. Document each unavailable/different core fact,
   its reason and exact replacement in `docs/parity.md`. Do not invent hc-tui display formats.
 - Missing required core facts remain explicit `pending-core-fact` results, never passes.
-  M2.2 adopts the reviewed core extensions after M2.1; M3 remains gated.
+  M2.2 adopts reviewed C3 facts after M2.1. M3a may implement structure, layout/tab operations, bindings and lock independently; chronology remains gated.
 - A committed neutral parity harness runs both clients in owned scratch sessions at
   80x24, 120x40, 200x50, and the 65/64/40-column boundary/mobile layouts, replays matching key/mouse scripts, and diffs screen cells and
   attributes. Every difference is a bug unless explicitly documented in `docs/parity.md`.

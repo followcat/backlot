@@ -206,3 +206,6 @@ mod cases_2;
 
 #[path = "recovery_tests.rs"]
 mod recovery_tests;
+
+#[path = "generation_tests.rs"]
+mod generation_tests;

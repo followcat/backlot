@@ -1,6 +1,8 @@
 //! Read-only application tests and shared fixtures.
 mod cases_1;
 mod cases_2;
+mod layout;
+mod layout_regressions;
 mod narrow;
 mod review_regressions;
 

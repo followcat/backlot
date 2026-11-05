@@ -12,14 +12,17 @@ mod agent_presentation;
 mod draw;
 mod help;
 mod host;
+mod init;
 pub(crate) mod input;
 mod input_dispatch;
 mod key_leases;
 mod key_routing;
 mod mouse;
+mod multipane;
 mod navigation;
 mod notices;
 mod pane;
+mod pane_geometry;
 mod pane_mouse;
 mod presentation;
 mod routing;
@@ -116,12 +119,18 @@ type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
 /// The whole application.
 pub struct App {
     notice: Option<notices::Notice>,
+    background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,
     take_control_hit: ratatui::layout::Rect,
     watcher: Watcher,
     pane: pane::Pane,
     pane_rx: mpsc::Receiver<PaneEv>,
+    pane_tx: mpsc::Sender<PaneEv>,
+    open_attach: OpenAttach,
+    observers: std::collections::BTreeMap<String, pane::Pane>,
+    observer_mru: std::collections::VecDeque<String>,
+    layout_seen: Option<(String, u64)>,
     prefix: input::Prefix,
     mode: Mode,
     help: bool,
@@ -233,92 +242,11 @@ pub struct App {
 }
 
 impl App {
-    /// An app over `watcher` (already watching) and `open` for attaches.
-    pub fn new(
-        watcher: Watcher,
-        open: OpenAttach,
-        live: crate::config::LiveKeybindConfig,
-        shell: ClientShellConfig,
-        probe: Arc<Probe>,
-        cursor_sink: CursorSink,
-    ) -> App {
-        let (pane_tx, pane_rx) = mpsc::channel(64);
-        let view = View::default();
-        let projection = crate::project::project(&view, None);
-        let sidebar_collapsed = shell.sidebar_start_collapsed;
-        let sidebar_width = shell.sidebar_width;
-        let mouse_capture = shell.mouse_capture;
-        App {
-            notice: None,
-            next_tab_status: None,
-            last_window_title: None,
-            take_control_hit: ratatui::layout::Rect::default(),
-            watcher,
-            pane: pane::Pane::new(pane_tx, open),
-            pane_rx,
-            prefix: input::Prefix::default(),
-            mode: Mode::Normal,
-            help: false,
-            mobile_switcher_suspended: false,
-            help_state: crate::chrome::help::HelpState::default(),
-            help_hits: crate::chrome::help::HelpRender::default(),
-            help_scroll_grab: None,
-            sched: sched::Scheduler::default(),
-            focused: None,
-            before_navigate: None,
-            live,
-            shell,
-            projection,
-            navigate_target: None,
-            shell_state: ShellState {
-                sidebar_collapsed,
-                sidebar_section_split: 0.5,
-                ..ShellState::default()
-            },
-            sidebar_width,
-            chrome_drag: None,
-            pane_mouse_gesture: None,
-            workspace_press: None,
-            tab_press: None,
-            last_divider_click: None,
-            hit_map: ShellHitMap::default(),
-            host_reports_all_keys: false,
-            host_reports_key_releases: false,
-            host_erase_is_ctrl_h: false,
-            probe_keyboard_flags: None,
-            probe_device_attributes: false,
-            host_sgr_pixel_mouse: None,
-            host_pixel_mouse_active: false,
-            host_mouse_capture_active: mouse_capture,
-            host_mouse_pixels: None,
-            host_appearance: None,
-            host_appearance_explicit: false,
-            host_control: Box::new(|_| Ok(())),
-            pane_leases: KeyLeases::default(),
-            next_dispatch_id: 1,
-            view,
-            seen: 0,
-            area: (80, 24),
-            want_cursor: draw::CursorWish {
-                pos: None,
-                anchor: None,
-                shape: hc_vt::CursorShape::Default,
-                blinking: true,
-            },
-            applied_cursor: (hc_vt::CursorShape::Default, true),
-            last_visible_cursor: None,
-            cursor_sink,
-            quitting: false,
-            host_facts: crate::host::HostFacts::default(),
-            presentation: presentation::Presentation::default(),
-            outer_focused: None,
-            probe,
-        }
-    }
-
     /// An input drain failure is reported after terminal restoration on exit.
     pub fn failure(&self) -> Option<&str> {
-        self.pane.close_failure()
+        self.pane
+            .close_failure()
+            .or(self.background_failure.as_deref())
     }
 
     /// Recompute the projection for the current focus — finding 12:
@@ -348,6 +276,7 @@ impl App {
     /// Everything `on_view` does after the view lands — split out so
     /// tests can publish a synthetic `self.view` through the same path.
     fn reconcile_published_view(&mut self) {
+        self.follow_shared_focus();
         self.refresh_projection();
         // If the focused terminal fell out of the inventory entirely,
         // the projection's first pane is the deterministic fallback.
@@ -374,22 +303,7 @@ impl App {
         self.refresh_projection();
         self.sync_target();
         self.pane.on_view(&self.view);
-    }
-}
-
-/// Draw surface for `draw.rs` — the app fields it needs, read-only
-/// where possible.
-impl App {
-    pub(crate) fn app_pane(&mut self) -> &mut pane::Pane {
-        &mut self.pane
-    }
-
-    pub(crate) fn app_mode(&self) -> &Mode {
-        &self.mode
-    }
-
-    pub(crate) fn app_help(&self) -> bool {
-        self.help
+        self.sync_observers();
     }
 }
 
