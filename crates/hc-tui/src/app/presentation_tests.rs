@@ -2,6 +2,65 @@ use super::*;
 use crate::sidebar::fixture::term;
 use hc_proto::terminal::{Status, Terminal};
 
+fn activity(epoch: &str, scope: u64, revision: u64) -> hc_proto::terminal::Activity {
+    serde_json::from_value(serde_json::json!({
+        "core_id":"origin-a", "epoch":epoch, "scope":scope, "revision":revision,
+        "records":{"":{"state_ordinal":revision,"completion_ordinal":revision}}
+    }))
+    .unwrap()
+}
+
+#[test]
+fn origin_epoch_and_scope_changes_baseline_existing_completions() {
+    for new_epoch in [false, true] {
+        let mut p = Presentation::default();
+        let mut t = terminal("t1", "working");
+        t.activity = Some(activity("boot-a", 1, 10));
+        update(&mut p, vec![t.clone()], 1);
+        t.status.as_mut().unwrap().state = "done".into();
+        t.turn += 1;
+        t.activity = Some(if new_epoch {
+            activity("boot-b", 1, 100)
+        } else {
+            activity("boot-a", 2, 100)
+        });
+        assert_eq!(
+            state(&update(&mut p, vec![t.clone()], 2), "t1"),
+            AgentStatus::Idle
+        );
+        t.status.as_mut().unwrap().state = "working".into();
+        update(&mut p, vec![t.clone()], 3);
+        t.status.as_mut().unwrap().state = "idle".into();
+        t.turn += 1;
+        assert_eq!(state(&update(&mut p, vec![t], 4), "t1"), AgentStatus::Done);
+    }
+}
+
+#[test]
+fn origin_revision_updates_do_not_reset_acknowledgement_or_change_order() {
+    let mut p = Presentation::default();
+    let mut t = terminal("t1", "working");
+    t.activity = Some(activity("boot-a", 1, 10));
+    update(&mut p, vec![t.clone()], 1);
+    t.status.as_mut().unwrap().state = "idle".into();
+    t.turn += 1;
+    let mut projection = update(&mut p, vec![t.clone()], 2);
+    assert_eq!(state(&projection, "t1"), AgentStatus::Done);
+    p.acknowledge(&mut projection, "t1", Some(true));
+    let sequence = projection.snapshot.agents[0].state_change_seq;
+    t.activity = Some(activity("boot-a", 1, u64::MAX));
+    let projection = update(&mut p, vec![t.clone()], 3);
+    assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
+    assert_eq!(projection.snapshot.agents[0].state_change_seq, sequence);
+    t.activity = Some(activity("boot-b", 2, 1));
+    let projection = update(&mut p, vec![t.clone()], 4);
+    assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
+    assert_eq!(projection.snapshot.agents[0].state_change_seq, sequence);
+    // Capability loss/replacement must clear the previous origin lifetime.
+    t.activity = None;
+    assert_eq!(state(&update(&mut p, vec![t], 4), "t1"), AgentStatus::Idle);
+}
+
 fn terminal(address: &str, state: &str) -> Terminal {
     let mut t = term(address);
     t.reported = true;

@@ -5,12 +5,9 @@ use crate::config::TabBarRightEntryConfig;
 impl App {
     pub(super) fn update_tab_status(&mut self, now: Instant) {
         let mut timed = false;
-        let hostname = self
-            .view
-            .core
-            .as_ref()
-            .map(|core| core.name.as_str())
-            .unwrap_or("");
+        let hostname =
+            super::hostname::for_endpoint(&self.view, &self.projection.active_endpoint_id)
+                .unwrap_or("");
         let segments = self
             .shell
             .tab_bar_right

@@ -191,7 +191,28 @@ pub(super) fn structured_snapshot(
             });
         }
         let first_tab = tab_ids.first().cloned().unwrap_or_default();
-        let cwd = clean(&space.folder);
+        let members = space
+            .tabs
+            .iter()
+            .flat_map(|tab| tab.root.terminals())
+            .collect::<Vec<_>>();
+        let facts = selected
+            .filter(|id| members.iter().any(|member| member == id))
+            .and_then(|id| term_by_id.get(id))
+            .and_then(|term| term.repository.as_ref())
+            .or_else(|| {
+                members
+                    .iter()
+                    .filter_map(|id| term_by_id.get(id.as_str()))
+                    .find_map(|term| term.repository.as_ref())
+            });
+        let cwd = clean(
+            facts
+                .and_then(|facts| facts.checkout.as_ref())
+                .map_or(space.folder.as_str(), |checkout| {
+                    checkout.repo_root.as_str()
+                }),
+        );
         let adopted = own
             .adoptions
             .values()
@@ -217,12 +238,23 @@ pub(super) fn structured_snapshot(
                 .unwrap_or(first_tab),
             new_workspace_cwd: cwd,
             number,
-            label: clean(adopted.map(|a| a.name.as_str()).unwrap_or(&space.name)),
+            label: clean(adopted.map(|a| a.name.as_str()).unwrap_or_else(|| {
+                if space.custom_name {
+                    &space.name
+                } else {
+                    facts
+                        .and_then(|facts| facts.auto_label.as_deref())
+                        .unwrap_or(&space.name)
+                }
+            })),
             custom_label: adopted.map_or(space.custom_name, |a| a.custom_label),
-            branch: None,
-            git_ahead_behind: None,
+            branch: facts
+                .filter(|facts| facts.state == "ready")
+                .and_then(|facts| facts.branch.as_deref())
+                .map(clean),
+            git_ahead_behind: facts.and_then(repository::counts),
             tokens: Vec::new(),
-            worktree: None,
+            worktree: facts.and_then(repository::worktree),
             focused: panes
                 .iter()
                 .any(|p| p.workspace_id == *workspace_id && p.focused),

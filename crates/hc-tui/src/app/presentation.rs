@@ -11,6 +11,7 @@ use crate::project::Projection;
 
 struct Observed {
     created_ms: u64,
+    lifetime: Option<(String, String, u64)>,
     state: AgentStatus,
     turn: u64,
     sequence: u64,
@@ -61,27 +62,33 @@ impl Presentation {
                 let Some(term) = view.inventory.get(&agent.pane_id) else {
                     continue;
                 };
+                let lifetime = term.activity.as_ref().map(|activity| {
+                    (
+                        activity.core_id.clone(),
+                        activity.epoch.clone(),
+                        activity.scope,
+                    )
+                });
+                let reset = self.observed.get(&agent.pane_id).is_some_and(|old| {
+                    old.created_ms != term.created_ms || old.lifetime != lifetime
+                });
                 let changed = self.observed.get(&agent.pane_id).is_none_or(|old| {
                     old.created_ms != term.created_ms
                         || old.state != agent.agent_status
                         || old.turn != term.turn
                 });
+                if reset {
+                    presentation.forget(&agent.pane_id);
+                }
                 if changed {
                     let completed =
                         matches!(agent.agent_status, AgentStatus::Idle | AgentStatus::Done)
                             && self.observed.get(&agent.pane_id).is_some_and(|old| {
-                                old.created_ms == term.created_ms
+                                !reset
                                     && (term.turn > old.turn
                                         || (agent.agent_status == AgentStatus::Done
                                             && old.state != AgentStatus::Done))
                             });
-                    if self
-                        .observed
-                        .get(&agent.pane_id)
-                        .is_some_and(|old| old.created_ms != term.created_ms)
-                    {
-                        presentation.forget(&agent.pane_id);
-                    }
                     self.sequence += 1;
                     if completed {
                         presentation.complete(&agent.pane_id, self.sequence);
@@ -90,13 +97,24 @@ impl Presentation {
                         agent.pane_id.clone(),
                         Observed {
                             created_ms: term.created_ms,
+                            lifetime: lifetime.clone(),
                             state: agent.agent_status,
                             turn: term.turn,
                             sequence: self.sequence,
                         },
                     );
                 }
-                agent.state_change_seq = self.observed[&agent.pane_id].sequence;
+                let observed = self
+                    .observed
+                    .get_mut(&agent.pane_id)
+                    .expect("observed agent");
+                observed.lifetime = lifetime;
+                if reset {
+                    // Lifetime-only resets baseline acknowledgement without
+                    // advancing chronology or recency (which remain M3b).
+                    presentation.baseline(&agent.pane_id, observed.sequence);
+                }
+                agent.state_change_seq = observed.sequence;
             }
             presentation.project_snapshot_for_generation(snapshot);
             endpoint.agent_recency = snapshot

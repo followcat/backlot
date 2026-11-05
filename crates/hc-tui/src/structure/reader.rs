@@ -195,7 +195,7 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
                 id: key.clone(),
                 name: label,
                 custom_name: terminal.labels.contains_key("herdr.space"),
-                folder: terminal.cwd.clone(),
+                folder: crate::project::repository::folder(terminal).to_owned(),
                 tabs: Vec::new(),
             });
             spaces.len() - 1

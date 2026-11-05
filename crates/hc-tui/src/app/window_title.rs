@@ -21,12 +21,9 @@ impl App {
             .focused
             .as_deref()
             .and_then(|id| self.view.inventory.terminals().get(id));
-        let hostname = self
-            .view
-            .core
-            .as_ref()
-            .map(|core| core.name.as_str())
-            .unwrap_or("");
+        let hostname =
+            super::hostname::for_endpoint(&self.view, &self.projection.active_endpoint_id)
+                .unwrap_or("");
         let pane_label = terminal
             .and_then(|term| term.labels.get("herdr.title"))
             .map(String::as_str)

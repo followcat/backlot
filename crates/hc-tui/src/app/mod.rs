@@ -361,3 +361,5 @@ impl App {
 #[cfg(test)]
 #[path = "mod_tests/mod.rs"]
 mod tests;
+
+mod hostname;

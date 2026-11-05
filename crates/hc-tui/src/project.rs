@@ -106,7 +106,10 @@ pub(crate) fn space_of(term: &Terminal) -> (String, String) {
         // collide with space `a` + tab `b/tab:c`.
         return (format!("space:{}:{}", space.len(), space), clean(space));
     }
-    let cwd = term.cwd.as_str();
+    if let Some(identity) = repository::space_identity(term) {
+        return identity;
+    }
+    let cwd = repository::folder(term);
     let base = cwd
         .trim_end_matches('/')
         .rsplit('/')
@@ -115,6 +118,9 @@ pub(crate) fn space_of(term: &Terminal) -> (String, String) {
         .unwrap_or(cwd);
     (format!("cwd:{}:{}", cwd.len(), cwd), clean(base))
 }
+
+#[path = "project_repository.rs"]
+pub(crate) mod repository;
 
 /// The tab a terminal belongs to inside its space: `herdr.tab`, else the
 /// workspace's single default tab. The key is length-prefixed raw text —

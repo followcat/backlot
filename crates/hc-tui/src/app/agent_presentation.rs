@@ -77,6 +77,10 @@ impl EndpointAgentPresentation {
         self.working.remove(pane_id);
     }
 
+    pub(super) fn baseline(&mut self, pane_id: &str, sequence: u64) {
+        self.acknowledged.insert(pane_id.to_string(), sequence);
+    }
+
     pub(super) fn acknowledge_pane(
         &mut self,
         snapshot: &mut ClientShellSnapshot,
