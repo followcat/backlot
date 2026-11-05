@@ -14,7 +14,7 @@
 
 use super::{Effect, Inventory};
 use crate::events::{EventParams, event_kind};
-use crate::terminal::{Foreground, Status, Terminal};
+use crate::terminal::{Activity, Foreground, RepositoryFacts, Status, Terminal};
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -41,6 +41,8 @@ pub(super) struct StatusData {
     status: Option<Status>,
     records: BTreeMap<String, Status>,
     reported: bool,
+    #[serde(default)]
+    activity: Option<Activity>,
 }
 
 fn malformed(what: &'static str) -> Result<(), &'static str> {
@@ -111,6 +113,26 @@ pub(super) fn check(event: &EventParams) -> Result<(), &'static str> {
             }
             if serde_json::from_value::<StatusData>(data.clone()).is_err() {
                 return malformed("malformed status data");
+            }
+            Ok(())
+        }
+        event_kind::REPOSITORY => {
+            if !terminal()
+                || data.get("repository").is_none_or(|value| {
+                    serde_json::from_value::<Option<RepositoryFacts>>(value.clone()).is_err()
+                })
+            {
+                return malformed("repository event without a terminal or valid replacement");
+            }
+            Ok(())
+        }
+        event_kind::ACTIVITY => {
+            if !terminal()
+                || data.get("activity").is_none_or(|value| {
+                    serde_json::from_value::<Option<Activity>>(value.clone()).is_err()
+                })
+            {
+                return malformed("activity event without a terminal or valid replacement");
             }
             Ok(())
         }
@@ -292,6 +314,20 @@ fn apply_partial(record: &mut Terminal, kind: &str, data: &Value) -> bool {
             record.status = status.status;
             record.records = status.records;
             record.reported = status.reported;
+            // Old relays omit activity; match core's mirror semantics.
+            // A present null explicitly clears it.
+            if data.get("activity").is_some() {
+                record.activity = status.activity;
+            }
+            true
+        }
+        event_kind::REPOSITORY => {
+            record.repository =
+                serde_json::from_value(data["repository"].clone()).expect("checked");
+            true
+        }
+        event_kind::ACTIVITY => {
+            record.activity = serde_json::from_value(data["activity"].clone()).expect("checked");
             true
         }
         event_kind::TURN => {

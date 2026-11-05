@@ -7,8 +7,10 @@
 //! a patched core's extensions survive a round trip.
 
 mod api;
+mod facts;
 
 pub use api::*;
+pub use facts::{Activity, AheadBehind, Checkout, RecordClock, RepositoryFacts};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -174,6 +176,12 @@ pub struct Terminal {
     /// What runs in it right now and where (null once finished).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub foreground: Option<Foreground>,
+    /// Origin repository observation, absent on unsupported paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<RepositoryFacts>,
+    /// Origin record clocks. No cross-origin total order is implied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<Activity>,
     /// Fields beyond the schema, retained verbatim.
     #[serde(flatten)]
     pub extra: Map<String, Value>,

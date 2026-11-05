@@ -52,6 +52,7 @@ pub(crate) struct Actor {
     pub(super) link: Link,
     pub(super) rpc_link: Link,
     pub(super) core: Option<CoreInfo>,
+    pub(super) features: Vec<String>,
     pub(super) machines: Option<Vec<MachineView>>,
     pub(super) docs: BTreeMap<DocKey, DocSlot>,
     pub(super) notes: BTreeMap<String, String>,
@@ -107,6 +108,7 @@ impl Actor {
             link: Link::Connecting { attempt: 0 },
             rpc_link: Link::Connecting { attempt: 0 },
             core: None,
+            features: vec![],
             machines: None,
             docs: BTreeMap::new(),
             notes: BTreeMap::new(),
@@ -297,6 +299,7 @@ impl Actor {
             link: self.link.clone(),
             rpc: self.rpc_link.clone(),
             core: self.core.clone(),
+            features: self.features.clone(),
             inventory: self.inventory.clone(),
             machines: self.machines.clone(),
             documents: self

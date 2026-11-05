@@ -169,6 +169,7 @@ fn view_with(
         core: Some(hc_proto::hello::CoreInfo {
             id: "id-host-a".into(),
             name: "host-a".into(),
+            hostname: None,
         }),
         machines: Some(vec![]),
         ..Default::default()

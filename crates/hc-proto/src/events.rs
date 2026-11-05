@@ -37,6 +37,10 @@ pub mod event_kind {
     pub const REMOVED: &str = "removed";
     /// The 7501 status changed: `{status, records, reported}`.
     pub const STATUS: &str = "status";
+    /// Complete origin repository replacement: `{repository}` (nullable).
+    pub const REPOSITORY: &str = "repository";
+    /// Complete origin clock replacement: `{activity}` (nullable).
+    pub const ACTIVITY: &str = "activity";
     /// A turn ended: `{turn, state}`.
     pub const TURN: &str = "turn";
     /// The title changed: `{title}`.
@@ -63,6 +67,8 @@ pub mod event_kind {
                 | FINISHED
                 | REMOVED
                 | STATUS
+                | REPOSITORY
+                | ACTIVITY
                 | TURN
                 | TITLE
                 | LABELS

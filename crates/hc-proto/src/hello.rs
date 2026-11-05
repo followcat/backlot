@@ -9,6 +9,14 @@ use serde::{Deserialize, Serialize};
 /// Feature strings a core advertises in `hello` replies (and confirms in
 /// `terminal.attach` results where the whole path must support them).
 pub mod feature {
+    /// Origin repository observations, including nullable Git facts.
+    pub const REPOSITORY_FACTS: &str = "repository_facts";
+    /// Origin record clocks, scoped by core id, process epoch and lifetime.
+    pub const RECORD_ACTIVITY: &str = "record_activity";
+    /// OS hostname, distinct from the configured core display name.
+    pub const OS_HOSTNAME: &str = "os_hostname";
+    /// Human releases avoid claiming activity when attach also confirms it.
+    pub const QUIET_HUMAN_RELEASE: &str = "quiet_human_release";
     /// The path accepts AUTOMATIC_INPUT (kind 6) frames end to end; without
     /// it, automatic query replies go as ordinary DATA.
     pub const AUTOMATIC_INPUT: &str = "automatic_input";
@@ -24,6 +32,9 @@ pub struct CoreInfo {
     pub id: String,
     /// Display name, the hostname by default.
     pub name: String,
+    /// OS hostname observed at handshake, absent on older cores.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
 }
 
 /// Params for `hello`. A plain client sends `generation` and, when it wants

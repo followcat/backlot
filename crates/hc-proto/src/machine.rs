@@ -14,7 +14,7 @@ pub struct Machine {
     pub target: String,
     /// The other core's permanent id.
     pub id: String,
-    /// What that core calls itself (its hostname).
+    /// That core's configured display name.
     pub host: String,
     /// Its `hc` version when last seen.
     pub version: String,
@@ -38,8 +38,11 @@ pub struct MachineView {
     pub target: String,
     /// The other core's permanent id.
     pub id: String,
-    /// What that core calls itself (its hostname).
+    /// That core's configured display name.
     pub host: String,
+    /// OS hostname from the last handshake, qualified by connection state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
     /// Its `hc` version when last seen.
     pub version: String,
     /// `connecting`, `connected`, `needs_login` or `unreachable`; kept as a

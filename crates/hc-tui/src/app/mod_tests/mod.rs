@@ -99,6 +99,7 @@ fn app_with_spaces(spaced: &[(&str, &str)]) -> App {
         core: Some(hc_proto::hello::CoreInfo {
             id: "id-host-a".into(),
             name: "host-a".into(),
+            hostname: None,
         }),
         machines: Some(vec![]),
         ..Default::default()
@@ -151,6 +152,7 @@ fn app_with_terms(terms: Vec<hc_proto::terminal::Terminal>) -> App {
         core: Some(hc_proto::hello::CoreInfo {
             id: "id-host-a".into(),
             name: "host-a".into(),
+            hostname: None,
         }),
         machines: Some(vec![]),
         ..Default::default()

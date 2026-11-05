@@ -115,6 +115,7 @@ fn typed_params_match_schema() {
             core: Some(CoreInfo {
                 id: "c".into(),
                 name: "n".into(),
+                hostname: None,
             }),
             calls_you: Some("host-b".into()),
             features: vec!["f".into()],

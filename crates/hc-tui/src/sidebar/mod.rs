@@ -61,6 +61,8 @@ pub(crate) mod fixture {
             stop: None,
             paste_gap_ms: None,
             foreground: None,
+            repository: None,
+            activity: None,
             extra: Default::default(),
         }
     }
@@ -88,6 +90,7 @@ pub(crate) mod fixture {
             target: format!("{name}-ssh"),
             id: format!("id-{name}"),
             host: name.into(),
+            hostname: None,
             version: "0.1.0".into(),
             state: state.into(),
             session: None,
@@ -106,6 +109,7 @@ pub(crate) mod fixture {
             core: Some(CoreInfo {
                 id: "id-host-a".into(),
                 name: "host-a".into(),
+                hostname: None,
             }),
             machines: Some(machines),
             ..Default::default()

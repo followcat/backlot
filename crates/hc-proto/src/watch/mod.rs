@@ -85,6 +85,8 @@ pub struct View {
     pub rpc: Link,
     /// The connected core's identity (`hello`), when known.
     pub core: Option<CoreInfo>,
+    /// Features advertised by the most recently installed handshake.
+    pub features: Vec<String>,
     /// The authoritative terminal inventory.
     pub inventory: Inventory,
     /// `machine.list` as last seen. `None` while never fetched or the

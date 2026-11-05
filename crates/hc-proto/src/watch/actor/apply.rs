@@ -120,6 +120,7 @@ impl Actor {
                 self.generation += 1;
                 self.inventory = sub.inventory();
                 self.core = Some(sub.hello().core.clone());
+                self.features = sub.hello().features.clone();
                 self.sub_conn = Some(*sub);
                 self.link = Link::Online;
                 self.sub_backoff.reset();
@@ -172,6 +173,7 @@ impl Actor {
         match result {
             Ok(Ok(client)) => {
                 self.core = Some(client.core().clone());
+                self.features = client.hello().features.clone();
                 self.client = Some(client);
                 // A new epoch: results still flying on the dead conn are
                 // stale by tag, and everything it owned gets a fresh read.
