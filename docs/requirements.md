@@ -1,8 +1,10 @@
 # hc-tui requirements
 
 hc-tui is a terminal UI client for [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`).
-It aims to feel like the herdr 0.9 TUI: a sidebar of spaces and agents with live status, tabs,
-split panes, and herdr-style keys. It works on the local machine and over plain SSH.
+Its keys, interaction, layout and UI must match herdr **0.9.5-followcat** at
+`d00953e0`. This is a hard requirement: with the same terminal size, configuration,
+terminals and states, matching surfaces must be identical cell by cell, including
+glyphs, colors and attributes. It works on the local machine and over plain SSH.
 
 It answers the gap described in herdrdev/herdr-core#25. hc itself draws nothing, the herdr 0.9 TUI
 runs its own separate runtime, and herdr-app is a desktop window that cannot run over SSH.
@@ -17,6 +19,21 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
 3. **Narrow terminals:** phone SSH clients, and split terminal windows of 40 columns or more.
 
 ## Functional requirements
+
+### R0 Herdr parity
+- Port the reference herdr UI, configuration and input code directly, retaining source-file
+  attribution and Apache-2.0 licensing. Keep its structure where practical for future ports.
+- Match sidebar width, sections, order, tokens, dimming, truncation, selection, tab bar,
+  pane borders/titles, status line, popups, confirmations, scrollbars and copy-mode visuals.
+- The same key and mouse sequences must have the same effects, including modes, focus,
+  sidebar clicks, dragging, scrolling, and prompt text.
+- Read the herdr configuration by default with herdr's parsing and defaults; an hc-tui
+  configuration may override it. No import step is required for existing customizations.
+- Adapt core data to herdr's presentation. Document each unavailable/different core fact,
+  its reason and exact replacement in `docs/parity.md`. Do not invent hc-tui display formats.
+- A committed neutral parity harness runs both clients in owned scratch sessions at
+  80x24, 120x40 and 200x50, replays matching key/mouse scripts, and diffs screen cells and
+  attributes. Every difference is a bug unless explicitly documented in `docs/parity.md`.
 
 ### R1 Connection
 - **Local:** connect to hc's Unix socket. Resolve it the way hc does: `HC_SOCKET` if set, else
@@ -57,11 +74,16 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   them in the right place.
 
 ### R4 Sidebar
-- **Spaces view:** spaces grouped by machine. Each space shows its most urgent state, in the order
-  blocked > working > done > idle.
-- **Agents view:** every agent across all machines, "your turn" (blocked) first.
-- **Counters** for your turn, working and ready. Offline machines stay listed.
-- **Collapsing:** below about 80 columns the sidebar collapses to a toggle.
+- Presentation and interaction follow the pinned herdr sidebar exactly, including configured
+  width, sections, ordering, glyphs/colors, truncation and highlight rules.
+- **Spaces view:** spaces grouped by machine, using the reference's aggregate status,
+  layout and configured token rules over mapped core facts.
+- **Agents view:** every agent across all machines, using the reference layout and ordering.
+- **Ordering and counters:** use the reference configuration and definitions, adapting
+  core-reported state/seen facts as documented in `docs/parity.md`. The reference default
+  agent ordering is by space; configured alternatives must retain their herdr behavior.
+  Offline machines stay listed.
+- **Narrow terminals:** follow herdr's collapse/toggle behavior and retain access to selection.
 
 ### R5 Panes
 - Each visible pane is one `terminal.attach` stream in framed mode.
@@ -79,9 +101,9 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   it, otherwise as DATA.
 
 ### R6 Keys
-- A herdr-like prefix-key model with herdr 0.9's default bindings. Bindings are configurable in a
-  TOML file whose action names match herdr's `config.toml` where possible, and an import command
-  reads a herdr config.
+- Use the pinned herdr's prefix model, defaults, action names and the user's configured
+  bindings. Read the herdr config by default (normally `~/.config/herdr/config.toml`),
+  preserving its parsing/default behavior; hc-tui config only overrides it.
 - `Ctrl+G` toggles **lock**: every key passes to the terminal until it is pressed again.
 
 ### R7 Actions

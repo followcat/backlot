@@ -13,7 +13,7 @@
 - Open: protocol transport and scratch-core integration arrive in M1. Startup
   performance and live UI behavior have not been measured.
 
-## M1: Protocol client (in progress)
+## M1: Protocol client (complete)
 
 - Task 1 (types and wire codecs): hc-proto now carries the typed params and
   results for the methods hc-tui uses, strict JSON-RPC 2.0 envelopes with
@@ -128,55 +128,49 @@
   Explicit missing-binary runs failed as required.
   GitHub checks and real-core integration CI passed for `a77fe51`; M1 complete.
 
-## M2: Terminal UI (in progress)
+## M2: Read-only terminal UI (joint review pending)
 
-- Task 1 (hc-vt crate): `crates/hc-vt` is a narrow safe adapter over
-  libghostty-vt built from the pinned `vendor/ghostty` submodule
-  (1e5cdb86) by the pinned Zig 0.16.0 — `ZIG=` override, baseline CPU,
-  `-Dtarget` for cross builds, no runtime downloads. `Vt` owns the
-  terminal, render state and iterators (`Send`, not `Sync`); callbacks
-  only fill a bounded automatic-reply buffer that latches an overflow
-  error rather than splicing partial sequences. `frame(history)` returns
-  owned `Frame` snapshots: full grapheme clusters sized by the library,
-  wide/spacer cells, resolved + source-tagged colors including packed
-  erase fills, attributes, cursor and the live palette. `key`/`paste`
-  encode against live terminal modes (application cursor, kitty flags,
-  modifyOtherKeys) with unshifted-codepoint mapping for shifted ASCII.
-  Validation: independent formatting, Clippy and 250 tests passed (four
-  real-core tests opt-in). The 29 native tests cover ABI layout and
-  screen/color/input behavior, including live defaults/palette changes.
-  Windows key translation is out of v1 scope.
-  CI installs Zig 0.16.0 from the SHA-256-verified official archive with
-  bounded retries and a version/checksum cache key; the old setup action
-  used an obsolete archive filename.
-  GitHub checks and real-core integration CI passed for `3da2753`.
-- Task 2 (sidebar model and rendering): `hc_tui::sidebar` is a pure
-  model plus pure ratatui renderer over `watch::View` — no runtime,
-  event loop, attach ownership or core sessions yet. `Sidebar::update`
-  rebuilds rows/counters per snapshot; selection tracks stable row
-  identities (machine name, `(machine, space)` key, localized terminal
-  address) across reorders and falls back deterministically on removal.
-  Status comes only from core `status`/`records`: the effective word is
-  the most urgent of root plus named records (ties prefer root), unknown
-  words and patched `source` extensions show verbatim, and lifecycle is
-  `finished`/lost(`live`+no pid+reason)/pending(`spawn_pending` or no
-  reason)/live — newer lifecycle words stay verbatim too. Only *live*
-  agents count toward your-turn/working/ready. Spaces group by
-  `herdr.space` label else cwd; `machine.list` entries always list,
-  empty included. Subscription loss dims and `·stale`-marks remote rows;
-  rpc loss alone marks only the machine-state word. Parent addresses are
-  matched verbatim (a remote worker may name a bare local `tN`), unknown
-  parents stay visible. Every API string is control-sanitized and fit by
-  grapheme width; identity and badge share a bounded row budget — the
-  left text keeps up to 12 cells and an over-long qualified address is
-  head-elided to `…/tN`, while the badge leads with the reported word so
-  clipping only loses trailing record/source detail — and machine
-  prefixes are omitted where the heading already carries them.
-  Below 80 columns the sidebar collapses to a compact status line unless
-  toggled; expanded reserves a pane area at a quarter width (24–40).
-  Validation: independent formatting, Clippy and 287 workspace tests passed
-  (four real-core tests opt-in). The 41 hc-tui tests cover 16 model tests,
-  11 TestBackend snapshots over
-  120/80/79/40 and tiny areas, 10 unit tests and 4 CLI tests. Semantics
-  are written down in `docs/sidebar.md`. Runtime wiring
-  and interactive behavior are M2.3.
+- Replaced the earlier provisional sidebar with directly attributed ports
+  of herdr 0.9.5-followcat `d00953e0` thin-client chrome, sidebar, config,
+  navigation, key leases and input parsing. The old word/source badge
+  presentation is removed. Herdr configuration is read without migration.
+- Added the event-driven UI, one active attached VT, searchable help,
+  workspace switching, sidebar mouse interaction, history scrolling,
+  host capabilities/cursor policy, titles, tab status, resize and explicit
+  size control. Source status presentation is adapted from authoritative
+  core records, with local acknowledgement/chronology caches.
+- Input waits for complete initial mode restoration, retains FIFO order
+  with viewer controls, and stays bound to terminal incarnation and attach
+  generation. Healthy switched routes retain real key releases; graceful
+  detach drains delivered keys, then focus, DATA fence and CLOSE. Ambiguous
+  disconnected batches are rejected visibly as a whole.
+- Added the owned-session native PTY parity harness and immutable neutral
+  reference input captures. Full default-config coverage has 32 checkpoints
+  at each of 80x24, 120x40 and 200x50; five additional configuration profiles
+  cover drawn cursors, literal tab status, conflicting direct/prefix keys,
+  datetime sanitization and custom window titles. Input coverage includes
+  390 actual child-byte cases plus post-detach releases/focus.
+- Independent Claude and separate read-only Codex reviews identified
+  correctness, parity and fixture-safety issues. Fixes include fragmented
+  paint/input gating, incarnation checks, control/input ordering, global
+  forwarded-key replacement, native functional-key classification and
+  disabling sound/automatic commands in scratch fixtures.
+- Implementation: `f96a7f1`; owned-session harness: `b68ff0a`.
+  Validation: formatting, all-target Clippy with denied warnings, 477
+  default Rust tests (four real-core tests opt-in), four explicit real-core
+  integration tests and six harness safety checks pass. Native parity is
+  96/96 default-config checkpoints and 160/160 configuration checkpoints,
+  with zero cell/mode differences; only the precise default-title hostname
+  adaptation is recorded. All 390 paired input cases and 14 detach-tail
+  comparisons pass. Raw mode and host modes restore; owned fixtures clean up.
+- Real local and loopback SSH checks pass shell input, switching, core
+  crash/restart, visible offline state, retained paint, recovered input and
+  detach without killing programs. Ten warm debug-client starts reached
+  useful paint at p50 91 ms / p95 143 ms, all below 200 ms. Default idle
+  samples used 0–0.3% client CPU over ten seconds; these are local fixtures,
+  not a promise about remote network latency or a release build.
+- M2 stops for the joint review. See [parity](parity.md) for exact tested-core
+  limitations and the [runtime](runtime.md) and
+  [harness](../scripts/parity/README.md) for usage.
+  M3 layout/shared documents/full bindings and M4/M5 actions/copy features
+  remain outside this implementation. No release is published.

@@ -3,15 +3,22 @@
 Each milestone ends with green CI and a short entry in `docs/progress.md` (done, measured, open).
 Commits stay small and reviewable, with each change under about 400 lines when possible.
 
+Herdr parity is a hard acceptance requirement. The reference is herdr
+0.9.5-followcat at `d00953e0`, with the user's herdr config read by default.
+Port its UI/config/input code directly with attribution; adapt core data rather
+than inventing presentation. Record every data mismatch and exact replacement
+in `docs/parity.md`. Same-size/config/fixture screens must match cells and
+attributes, and the same key/mouse scripts must have the same effects.
+
 | | Milestone | Acceptance |
 |---|---|---|
 | M0 | Bootstrap: Cargo workspace (`hc-tui` binary, `hc-proto` crate), CI, AGENTS.md, NOTICE | `cargo test` passes in CI; `hc-tui --version` |
 | M1 | Protocol client: typed JSON-RPC over the Unix socket and over `ssh … hc connect`; `hello`/`rpc.discover` checks; `events.subscribe` with `missed` handling; framed-mode channel for attach; reconnect | Unit tests against a scripted fake core; integration test against a source-built `hc` in a scratch session (list, subscribe, run, read, kill) |
-| M2 | Read-only UI: sidebar (spaces and agents views, counters, machines) from live events; one focused pane attached and rendered (VT emulation); detach and switch; resize; observe for unfocused panes | Over SSH to a box running hc: see every terminal with live status, attach, type in a shell, survive a reconnect. Snapshot tests of the sidebar |
+| M2 | Read-only UI with herdr's exact sidebar/pane presentation, switching keys and resize behavior; live counters/machines; one attached VT pane; detach/switch and observe; baseline herdr config; committed scratch parity harness | Over SSH: live terminal status, shell input and reconnect. Sidebar snapshots plus PTY parity at 80x24, 120x40 and 200x50, with key/mouse replay and cell/attribute diffs; M2 parity table in pause review |
 | — | **Pause for review** (Claude + Codex + the user) | Review notes addressed |
-| M3 | Structure: herdr-app document reader with label and cwd fallback; the `hc-tui` layout document (splits, focus, zoom); tabs bar; herdr-like default keys; `Ctrl+G` lock; key config file and herdr config import | Same spaces and tabs as herdr-app on the same core; two hc-tui clients share a layout; keys match herdr 0.9 defaults |
+| M3 | Structure: herdr-app reader with label/cwd fallback; shared `hc-tui` splits/focus/zoom/tabs; herdr's complete default/configured bindings, layout, tabs and lock | Same spaces/tabs as herdr-app; two clients share layout; pinned herdr behavior, default and user-configured bindings pass the parity harness |
 | M4 | Actions: new terminal or agent with labels, split, close, rename, seen, keep, send, interrupt, worker peek, machines add/connect/rename/remove; notifications | Each action covered by a fake-core test; manual run on a real core |
-| M5 | Copy mode and selection (OSC 52), popup terminal with selection, clipboard image paste through `terminal.put` | Copy and paste work locally and over SSH in kitty and one other terminal |
+| M5 | Copy mode and selection ported from herdr (OSC 52), popup selection, clipboard image paste through `terminal.put` | Copy/paste work locally and over SSH in kitty and one other terminal; copy-mode visuals/input pass parity harness |
 | M6 | Release: musl builds, checksummed install script, docs (install, keys, remote, troubleshooting) | Tagged release with binaries; install script verifies the sha256 |
 
 ## Testing rules
@@ -21,3 +28,8 @@ Commits stay small and reviewable, with each change under about 400 lines when p
   - stopped and cleaned up at the end.
 - They never connect to a user's default or named sessions.
 - Fixtures contain neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
+- Parity runs also use an explicitly owned herdr scratch session, temporary HOME/XDG
+  directories and a private copy of the user's config; never modify the original config
+  or connect to existing herdr sessions. Commit only neutral harness/scripts/fixtures.
+- Keep private captures outside the repository. Include M2 surface parity results,
+  documented differences, measurements and remaining questions in the M2 pause review.
