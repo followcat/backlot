@@ -11,6 +11,7 @@ from checks import ready, title_difference, verify_restored
 
 from fixtures import prepare_core, prepare_reference, wait_program
 from sessions import Core, Reference, digest
+from repository import CASES as REPOSITORY_CASES
 from pty_host import Pty
 
 REFERENCE = 'd00953e081389eb5f8ea006896fbf4a17b2f9dfc'
@@ -37,7 +38,7 @@ def checkpoint(owner, name, size, decoder):
     return json.loads(result.stdout)
 
 
-def differences(reference, candidate, default_title=False):
+def differences(reference, candidate):
     differences = []
     for row_a, row_b in zip(reference['cells'], candidate['cells'], strict=True):
         for column, (a, b) in enumerate(zip(row_a['cells'], row_b['cells'], strict=True)):
@@ -47,7 +48,7 @@ def differences(reference, candidate, default_title=False):
         differences.append({'cursor_reference': reference['cursor'], 'cursor_candidate': candidate['cursor']})
     if reference['host_modes'] != candidate['host_modes']:
         differences.append({'reference_modes':reference['host_modes'], 'candidate_modes':candidate['host_modes']})
-    title = title_difference(reference['title'],candidate['title'],default_title)
+    title = title_difference(reference['title'],candidate['title'])
     if title:
         differences.append(title)
     return differences
@@ -82,13 +83,16 @@ def one_size(args, size, binary):
         repository_scenario = args.scenario == 'repository'
         if repository_scenario:
             from repository import prepare as prepare_repository
-        candidate_paths = prepare_repository(core) if repository_scenario else None
+        candidate_paths = prepare_repository(core, args.repository_case) if repository_scenario else None
         core.start()
         candidate_programs = prepare_core(core, candidate_paths, labelled=not repository_scenario)
+        if repository_scenario:
+            from repository import verify_facts
+            verify_facts(core, candidate_programs, args.repository_case)
         reference = Reference(binary, args.config, out)
         if args.host_program:
             reference.env['TERM_PROGRAM'] = args.host_program
-        reference_paths = prepare_repository(reference) if repository_scenario else None
+        reference_paths = prepare_repository(reference, args.repository_case) if repository_scenario else None
         reference.ui = Pty([str(binary), '--session', reference.session], reference.env,
                            reference_paths['alpha'] if reference_paths else reference.cwd,
                            *size, cell_px=(10, 20))
@@ -123,25 +127,26 @@ def one_size(args, size, binary):
         def compare(name, **expected):
             a = capture_ready(reference, name, reference_programs[1], expected)
             b = capture_ready(core, name, candidate_programs[1], expected)
-            diff = differences(a, b, args.default_title)
+            diff = differences(a, b)
             (out / (name + '-diff.json')).write_text(json.dumps(diff, ensure_ascii=False, indent=2) + '\n')
-            bugs = [entry for entry in diff if 'adaptation' not in entry]
+            bugs = diff
             result['checkpoints'].append({'name':name, 'different_cells':len(bugs),
-                'data_adaptations':[entry for entry in diff if 'adaptation' in entry],
-                'status': 'pending-core-fact' if expected.get('pending_core_facts') else ('pass' if not bugs else 'fail'),
-                'pending_core_facts': expected.get('pending_core_facts', [])})
+
+                'status': 'fail' if bugs else ('core-policy-difference' if expected.get('core_policy_differences') else 'pass'),
+                'core_policy_differences': expected.get('core_policy_differences', [])})
             print(json.dumps({'geometry':size,'checkpoint':name,'differences':len(bugs),
-                'adaptations':len(diff)-len(bugs),
-                'status':'pending-core-fact' if expected.get('pending_core_facts') else ('pass' if not bugs else 'fail')}),flush=True)
+
+                'status':'fail' if bugs else ('core-policy-difference' if expected.get('core_policy_differences') else 'pass')}),flush=True)
 
         if repository_scenario:
             from repository import run as run_repository
-            run_repository(compare)
+            run_repository(compare, args.repository_case, (reference, core), size,
+                           tomllib.loads(args.config.read_text()))
         else:
             compare('baseline')
         result['usable_frame_seconds'] = core.ui.first_seen(b'fixture alpha')
         if repository_scenario:
-            result['status'] = 'pending-core-fact'
+            result['repository_case'] = args.repository_case
         elif not args.smoke and size[0] <= 65:
             from narrow import run as run_narrow
             run_narrow((reference, core), (reference_programs, candidate_programs), compare, size)
@@ -248,21 +253,23 @@ def one_size(args, size, binary):
             result['idle'] = core.ui.idle_measurement(10)
 
 
-        result['passed'] = (not repository_scenario and
-                            all(stage['different_cells'] == 0 for stage in result['checkpoints']))
         result['first_candidate_byte_seconds'] = core.ui.first_byte_seconds
         restored_candidate = detach(core, args.decoder)
         restored_reference = detach(reference, args.decoder)
-        title = title_difference(restored_reference['title'],restored_candidate['title'],args.default_title)
-        if repository_scenario:
-            from repository import verify_title
-            verify_title(restored_reference['title'], restored_candidate['title'])
-            result['restored_title_pending_core_facts'] = ['repo-root-label', 'hostname']
-        else:
-            assert title is None or 'adaptation' in title, 'post-detach title differs'
-        result['restored_title_adaptation'] = title
+        title = title_difference(restored_reference['title'],restored_candidate['title'])
+        diff = differences(restored_reference, restored_candidate)
+        (out / 'restored-diff.json').write_text(json.dumps(diff, indent=2) + '\n')
+        result['checkpoints'].append({'name':'restored', 'different_cells':len(diff),
+                                      'status':'fail' if diff else 'pass'})
+        result['restored_title_difference'] = title
         result['termios_restored'] = True
+        result['passed'] = all(stage['status'] == 'pass' and stage['different_cells'] == 0
+                               for stage in result['checkpoints'])
+        result['status'] = 'pass' if result['passed'] else ('core-policy-difference'
+            if all(stage['status'] in ('pass','core-policy-difference') for stage in result['checkpoints']) else 'fail')
     except BaseException as error:
+        result['passed'] = False
+        result['status'] = 'fail'
         result['error'] = repr(error)
         raise
     finally:
@@ -277,6 +284,8 @@ def one_size(args, size, binary):
                 owner.recovery()
                 result['cleanup'][owner.kind] = repr(error)
                 failures.append(error)
+        if failures:
+            result.update(passed=False, status='fail')
         (out / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
         if failures:
             raise RuntimeError('owned scratch cleanup failed; recovery records retained') from failures[0]
@@ -292,6 +301,7 @@ def main():
     parser.add_argument('--decoder', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--size', choices=['80x24', '120x40', '200x50', '65x24', '64x24', '40x24'], action='append')
+    parser.add_argument('--repository-case', choices=REPOSITORY_CASES, default='standard')
     parser.add_argument('--scenario', choices=['default', 'prefix-conflict', 'repository', 'layout'], default='default')
     parser.add_argument('--host-program', choices=['wezterm', 'alacritty'])
     parser.add_argument('--smoke', action='store_true', help='baseline only; not an acceptance run')
@@ -308,7 +318,7 @@ def main():
         raise ValueError('repository fixture requires the default title template')
     if args.scenario == 'prefix-conflict':
         keys = parsed_config.get('keys',{})
-        assert keys.get('help') == 'prefix+ctrl+x' and keys.get('toggle_sidebar') == 'ctrl+x', 'prefix-conflict requires its recorded bindings' 
+        assert keys.get('help') == 'prefix+ctrl+x' and keys.get('toggle_sidebar') == 'ctrl+x', 'prefix-conflict requires its recorded bindings'
     args.out = args.out.resolve()
     if args.out.is_relative_to(REPO):
         raise ValueError('captures must be outside the public repository')
@@ -326,10 +336,9 @@ def main():
     (args.out / 'provenance.json').write_text(json.dumps(metadata, indent=2) + '\n')
     default_sizes = ['120x40'] if args.scenario == 'repository' else ['80x24', '120x40', '200x50', '65x24', '64x24', '40x24']
     sizes = [tuple(map(int, size.split('x'))) for size in (args.size or default_sizes)]
-    if args.scenario == 'repository' and any(size[0] <= 65 for size in sizes):
-        raise ValueError('repository fixture currently requires desktop dimensions')
     results = [one_size(args, size, binary) for size in sizes]
-    raise SystemExit(2 if args.scenario == 'repository' else any(not result['passed'] for result in results))
+    raise SystemExit(3 if all(result.get('status') == 'core-policy-difference' for result in results)
+                     else any(not result['passed'] for result in results))
 
 
 if __name__ == '__main__':

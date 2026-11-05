@@ -1,8 +1,15 @@
 """Local-only Git fixture. Never fetches or inspects a user repository."""
+import json
 import subprocess
+import time
 
 
-def prepare(owner):
+CASES = ("standard", "missing-git", "nonexecutable-git", "detached",
+         "promisor", "promisor-false", "promisor-empty")
+
+
+def prepare(owner, case="standard"):
+    assert case in CASES
     root = owner.cwd
     if not root.is_relative_to(owner.root) or any(root.iterdir()):
         raise ValueError('Git fixture requires the empty owned scratch cwd')
@@ -35,26 +42,78 @@ def prepare(owner):
     git('worktree', 'add', '-b', 'fixture-linked', str(linked), 'fixture-main')
     assert git('rev-list', '--left-right', '--count', 'HEAD...@{upstream}').split() == ['2', '1']
     assert git('status', '--porcelain') == ''
+    if case == 'detached':
+        git('checkout', '--detach')
+    elif case.startswith('promisor'):
+        value = {'promisor': 'true', 'promisor-false': 'false', 'promisor-empty': ''}[case]
+        git('config', 'remote.fixture.promisor', value)
+    elif case in ('missing-git', 'nonexecutable-git'):
+        # Restrict only the owned server environment; setup still used absolute Git.
+        owner.env['PATH'] = str(owner.root / 'bin')
+        if case == 'nonexecutable-git':
+            executable = owner.root / 'bin/git'
+            executable.write_text('#!/bin/sh\nexit 1\n')
+            executable.chmod(0o600)
     return {'alpha': root / 'src', 'beta': linked}
 
 
-PENDING = [
-    {'fact': 'repository-branch', 'source': 'fixture-main / fixture-linked', 'candidate': 'absent'},
-    {'fact': 'ahead-behind', 'source': '↑2 ↓1 against local fixture-upstream', 'candidate': 'absent'},
-    {'fact': 'repo-root-label', 'source': 'acme-shop for unlabelled src terminal', 'candidate': 'src'},
-    {'fact': 'worktree-identity', 'source': 'linked checkout shares the common Git directory', 'candidate': 'unavailable'},
-]
+def verify_facts(owner, programs, case):
+    deadline = time.monotonic() + 15
+    while True:
+        records = [owner.rpc('terminal.get', {'terminal': p.terminal}) for p in programs]
+        if all(t.get('repository', {}).get('state') == 'ready' for t in records):
+            break
+        assert time.monotonic() < deadline, 'C3 repository observations did not settle'
+        time.sleep(.03)
+    facts = [record['repository'] for record in records]
+    root, linked = [fact['checkout'] for fact in facts]
+    assert root['repo_root'] == str(owner.cwd)
+    assert linked['repo_root'] == str(owner.root / 'linked-checkout')
+    assert root['repository_key'] == linked['repository_key']
+    assert root['checkout_key'] != linked['checkout_key']
+    assert facts[0]['core_id'] == facts[1]['core_id']
+    assert not root['is_linked_worktree'] and linked['is_linked_worktree']
+    assert not root['is_bare'] and not linked['is_bare']
+    assert facts[0]['auto_label'] == 'acme-shop'
+    assert facts[1]['auto_label'] == 'linked-checkout'
+    assert facts[0]['branch'] == (None if case == 'detached' else 'fixture-main')
+    assert facts[1]['branch'] == 'fixture-linked'
+    assert facts[0]['ahead_behind'] == ({'ahead': 2, 'behind': 1} if case == 'standard' else None)
+    assert facts[1]['ahead_behind'] is None
+    for record in records:
+        activity = record['activity']
+        assert activity['core_id'] == record['repository']['core_id']
+        assert activity['epoch'] and isinstance(activity['scope'], int)
+        assert '' in activity['records']
+    (owner.out / 'repository-facts.json').write_text(json.dumps(records, indent=2) + '\n')
 
 
-def run(compare):
-    # These are requirements on the independently running source, not masks.
-    # Every diff is retained. Pending fact scenarios are NEVER counted as passes.
-    compare('repository-root',
-            reference={'text_contains': ['acme-shop', 'fixture-main', '↑2', '↓1', 'fixture-linked']},
-            core={'text_contains': ['src', 'linked-checkout']}, pending_core_facts=PENDING)
-
-
-def verify_title(reference, candidate):
-    import socket
-    assert reference == socket.gethostname() + ': acme-shop'
-    assert candidate == 'host-a: src'
+def run(compare, case, owners, size, config):
+    policy = ([{'fact': 'ahead-behind', 'core': None,
+                'reason': 'Core omits counts whenever promisor configuration is present.'}]
+              if case.startswith('promisor') else [])
+    if size[0] <= 65:
+        from layout import binding
+        compare('repository-baseline', text_contains=['fixture alpha'])
+        for owner in owners:
+            owner.ui.send(binding(config, 'workspace_picker'))
+        compare('repository-picker', picker=True, highlight='acme-shop',
+                text_contains=['acme-shop', 'linked-checkout'], core_policy_differences=policy)
+        for owner in owners:
+            owner.ui.send(b'\r')
+        compare('repository-return', terminal='fixture alpha')
+        return
+    required = ['acme-shop', 'linked-checkout']
+    if case != 'detached':
+        required += ['fixture-main', 'fixture-linked']
+    else:
+        required += ['fixture-linked']
+    reference = required.copy()
+    candidate = required.copy()
+    if case == 'standard':
+        reference += ['↑2', '↓1']
+        candidate += ['↑2', '↓1']
+    elif case.startswith('promisor'):
+        reference += ['↑2', '↓1']
+    compare('repository-root', reference={'text_contains': reference},
+            core={'text_contains': candidate}, core_policy_differences=policy)

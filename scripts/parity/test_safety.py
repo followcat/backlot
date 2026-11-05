@@ -6,6 +6,13 @@ from sessions import copy_config
 
 
 class ConfigSafety(unittest.TestCase):
+    def test_hostname_title_differences_are_never_exempted(self):
+        from checks import title_difference
+        self.assertIsNone(title_difference('host-a: alpha', 'host-a: alpha'))
+        difference = title_difference('host-b: alpha', 'host-a: alpha')
+        self.assertIsNotNone(difference)
+        self.assertNotIn('adaptation', difference)
+
     def check_rejected(self, contents):
         with tempfile.TemporaryDirectory(prefix='hctui-config-safety-') as directory:
             root = Path(directory)
@@ -30,15 +37,16 @@ class AttachRequestCapture(unittest.TestCase):
     def test_fragmented_framed_request_records_passive_recovery(self):
         import json, struct
         from transport_proxy import Requests
-        seen=[];parser=Requests(seen.append)
+        seen=[];frames=[];parser=Requests(seen.append, lambda *frame: frames.append(frame))
         params={'terminal':'t1','resumed':True,'observe':False}
         data=json.dumps({'method':'hello','params':{'framed':True}}).encode()+b'\n'
         payload=json.dumps({'id':2,'method':'terminal.attach','params':params}).encode()
         data+=struct.pack('<IBI',0,0,len(payload))+payload
         for byte in data:parser.feed(bytes([byte]))
         self.assertEqual(seen,[params])
-        parser.feed(b'not another request')
+        parser.feed(struct.pack('<IBI', 7, 7, 1) + b'x')
         self.assertEqual(seen,[params])
+        self.assertEqual(frames, [(7, 7, b'x')])
 
     def test_request_attempt_is_not_success_until_matching_attach_reply(self):
         import json, struct
@@ -53,7 +61,7 @@ class AttachRequestCapture(unittest.TestCase):
         parser.feed(reply({'id':2,'error':{'code':'unavailable'}}))
         self.assertEqual(seen,[])
         parser.feed(reply({'id':2,'result':{'channel':7}}))
-        self.assertEqual(seen,[('attached',7)])
+        self.assertEqual(seen,[('attached',{'channel':7, 'hello_features':[]})])
 
     def test_plain_watcher_requests_are_forwarded_without_frame_parsing(self):
         from transport_proxy import Requests
@@ -198,6 +206,43 @@ class NarrowReadiness(unittest.TestCase):
 
 
 class RepositoryFixture(unittest.TestCase):
+    def test_narrow_repository_picker_uses_the_configured_prefix(self):
+        from types import SimpleNamespace
+        from repository import run
+        sent = [[], []]
+        owners = [SimpleNamespace(ui=SimpleNamespace(send=events.append)) for events in sent]
+        checkpoints = []
+        run(lambda name, **_: checkpoints.append(name), 'standard', owners, (40, 24),
+            {'keys': {'prefix': 'ctrl+a'}})
+        self.assertEqual(sent, [[b'\x01w', b'\r'], [b'\x01w', b'\r']])
+        self.assertEqual(checkpoints, ['repository-baseline', 'repository-picker', 'repository-return'])
+
+    def test_policy_cases_change_only_the_owned_repository_and_environment(self):
+        import shutil
+        import subprocess
+        from types import SimpleNamespace
+        from repository import prepare
+        from sessions import scratch_environment
+        for case in ('missing-git', 'nonexecutable-git', 'detached',
+                     'promisor', 'promisor-false', 'promisor-empty'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory(prefix='hctui-parity-git-') as directory:
+                root = Path(directory)
+                cwd = root / 'acme-shop'; cwd.mkdir()
+                owner = SimpleNamespace(root=root, cwd=cwd, env=scratch_environment(root))
+                prepare(owner, case)
+                if case in ('missing-git', 'nonexecutable-git'):
+                    self.assertEqual(owner.env['PATH'], str(root / 'bin'))
+                    self.assertIsNone(shutil.which('git', path=owner.env['PATH']))
+                elif case == 'detached':
+                    result = subprocess.run(['/usr/bin/git', '-C', str(cwd), 'symbolic-ref', '-q', 'HEAD'],
+                                            env=owner.env, capture_output=True)
+                    self.assertEqual(result.returncode, 1)
+                else:
+                    result = subprocess.check_output(['/usr/bin/git', '-C', str(cwd), 'config',
+                                                      '--get', 'remote.fixture.promisor'], env=owner.env, text=True)
+                    self.assertEqual(result.rstrip('\n'),
+                                     {'promisor':'true', 'promisor-false':'false', 'promisor-empty':''}[case])
+
     def test_local_divergence_worktree_and_subdirectory_are_real(self):
         import subprocess
         from types import SimpleNamespace

@@ -172,10 +172,10 @@ def run(args,size,binary):
             if geometry:
                 after_a=grids(reference,current['reference']);after_b=grids(core,current['core'])
                 assert after_a==a and after_b==b, 'PTY geometry changed during capture; checkpoint is invalid'
-            diff=differences(*frames,args.default_title)
+            diff=differences(*frames)
             (out/(name+'-diff.json')).write_text(json.dumps(diff,ensure_ascii=False,indent=2)+'\n')
-            bugs=[entry for entry in diff if 'adaptation' not in entry]
-            result['checkpoints'].append({'name':name,'different_cells':len(bugs),'status':'fail' if bugs else 'pass','data_adaptations':[d for d in diff if 'adaptation' in d]})
+            bugs=diff
+            result['checkpoints'].append({'name':name,'different_cells':len(bugs),'status':'fail' if bugs else 'pass'})
             print(json.dumps({'geometry':size,'checkpoint':name,'differences':len(bugs)}),flush=True)
             return frames
 
@@ -307,11 +307,17 @@ def run(args,size,binary):
         from configuration import run as config_round
         config_round(owners, config, compare, size, args.decoder, out, result)
         assert core.rpc('doc.get',{'name':'herdr-app'})['value']==foreign, 'client wrote the foreign document'
+        restored=[]
         for owner in owners:
-            restored=detach(owner,args.decoder,binding(config,'detach'));verify_restored(restored)
+            frame=detach(owner,args.decoder,binding(config,'detach'));verify_restored(frame)
+            restored.append(frame)
+        diff=differences(*restored)
+        (out/'restored-diff.json').write_text(json.dumps(diff,indent=2)+'\n')
+        result['checkpoints'].append({'name':'restored','different_cells':len(diff),'status':'fail' if diff else 'pass'})
         result['termios_restored']=True
         result['passed']=all(c['status']=='pass' for c in result['checkpoints'])
     except BaseException as error:
+        result['passed']=False
         result['error']=repr(error)
         for owner in (reference,core):
             if owner is None or owner.ui is None:continue
@@ -329,6 +335,7 @@ def run(args,size,binary):
             if owner is None:continue
             try:owner.close();result['cleanup'][owner.kind]='pass'
             except BaseException as error:owner.recovery();result['cleanup'][owner.kind]=repr(error);errors.append(error)
+        if errors:result['passed']=False
         (out/'result.json').write_text(json.dumps(result,indent=2)+'\n')
         if errors:raise RuntimeError('owned cleanup failed; retain recovery records') from errors[0]
     return result

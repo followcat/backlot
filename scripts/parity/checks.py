@@ -1,5 +1,4 @@
-"""Checkpoint readiness and the one explicit core hostname adaptation."""
-import socket
+"""Checkpoint readiness and exact title comparison."""
 
 
 def text(frame):
@@ -72,14 +71,9 @@ def ready(frame, name, previous, program_input, expected=None):
     return True
 
 
-def title_difference(reference, candidate, default_template):
+def title_difference(reference, candidate):
     if reference == candidate:
         return None
-    a, b = socket.gethostname() + ': ', 'host-a: '
-    if (default_template and reference.startswith(a) and candidate.startswith(b)
-            and reference[len(a):] == candidate[len(b):]):
-        return {'adaptation': 'core-name-instead-of-hostname',
-                'reference_title': reference, 'candidate_title': candidate}
     return {'reference_title': reference, 'candidate_title': candidate}
 
 

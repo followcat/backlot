@@ -7,8 +7,9 @@ import threading
 
 
 class Requests:
-    def __init__(self, record):
+    def __init__(self, record, input_frame=lambda *_: None):
         self.record = record
+        self.input_frame = input_frame
         self.buffer = bytearray()
         self.plain = True
         self.done = False
@@ -43,9 +44,8 @@ class Requests:
                 if request.get('method') == 'terminal.attach':
                     self.attach_id = request['id']
                     self.record(request['params'])
-                    self.done = True
-                    self.buffer.clear()
-                    return
+            elif channel and self.attach_id is not None:
+                self.input_frame(channel, kind, payload)
 
 
 class Responses:
@@ -55,6 +55,7 @@ class Responses:
         self.buffer = bytearray()
         self.plain = True
         self.done = False
+        self.features = []
 
     def feed(self, data):
         if self.done:
@@ -65,10 +66,12 @@ class Responses:
                 assert len(self.buffer) <= 65536
                 return
             line, rest = self.buffer.split(b'\n', 1)
-            if not json.loads(line).get('result', {}).get('framed', False):
+            hello = json.loads(line).get('result', {})
+            if not hello.get('framed', False):
                 self.done = True
                 self.buffer.clear()
                 return
+            self.features = hello.get('features', [])
             self.plain = False
             self.buffer = bytearray(rest)
         while len(self.buffer) >= 9:
@@ -81,7 +84,7 @@ class Responses:
             if channel == 0 and kind == 0:
                 response = json.loads(payload)
                 if response.get('id') == self.request.attach_id and 'result' in response:
-                    self.update('attached', response['result'].get('channel'))
+                    self.update('attached', dict(response['result'], hello_features=self.features))
             elif channel:
                 self.update('stream', (channel, kind, payload))
 
@@ -120,18 +123,25 @@ class Proxy:
         upstream = socket.socket(socket.AF_UNIX)
         pair = (client, upstream)
         state = {'epoch': epoch, 'success': False, 'live': False,
-                 'output_bytes': 0, 'fresh_marker': False}
+                 'output_bytes': 0, 'fresh_marker': False, 'quiet_release_frames': 0,
+                 'quiet_release_hex': ''}
         tail = b''
         def record(params):
             with self.lock:
                 state['params'] = params
+                state['index'] = len(self.requests)
                 self.requests.append(state)
         def update(event, value):
             nonlocal tail
             with self.lock:
                 if event == 'attached':
-                    assert isinstance(value, int) and value > 0
-                    state.update(success=True, live=True, channel=value)
+                    channel = value['channel']
+                    assert isinstance(channel, int) and channel > 0
+                    quiet = ('quiet_human_release' in value['hello_features']
+                             and state['params'].get('quiet_human_release') is True
+                             and value.get('quiet_human_release') is True)
+                    state.update(success=True, live=True, channel=channel,
+                                 quiet_human_release=quiet)
                 elif value[0] == state.get('channel'):
                     _, kind, payload = value
                     if kind == 2:
@@ -141,7 +151,15 @@ class Proxy:
                         tail += payload
                         state['fresh_marker'] |= b'RECOVERED STREAM' in tail
                         tail = tail[-64:]
-        parser = Requests(record)
+        def input_frame(channel, kind, payload):
+            with self.lock:
+                if channel == state.get('channel') and kind == 7:
+                    assert state.get('quiet_human_release'), 'unconfirmed quiet release'
+                    assert not state['params'].get('observe', False)
+                    state['quiet_release_frames'] += 1
+                    assert len(state['quiet_release_hex']) + 2 * len(payload) <= 131072
+                    state['quiet_release_hex'] += payload.hex()
+        parser = Requests(record, input_frame)
         replies = Responses(parser, update)
         try:
             upstream.connect(str(self.target))
