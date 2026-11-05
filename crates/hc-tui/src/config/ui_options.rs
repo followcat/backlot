@@ -63,8 +63,7 @@ pub struct UiConfig {
     /// Tab row placement. Default: top.
     pub tab_bar_position: TabBarPositionConfig,
     /// Ordered entries shown at the right edge of the tab row. Empty by default.
-    /// TODO(parity): port TabBarRightEntryConfig with the tab bar surface.
-    pub tab_bar_right: Vec<toml::Value>,
+    pub tab_bar_right: Vec<TabBarRightEntryConfig>,
     /// Text inserted between visible right-side tab bar entries. Default: one space.
     pub tab_bar_right_separator: String,
     /// Format for the outer terminal window title.

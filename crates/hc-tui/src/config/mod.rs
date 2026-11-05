@@ -10,6 +10,9 @@ mod theme_names;
 pub use theme_names::THEME_NAMES;
 pub(crate) use theme_names::canonical_theme_name;
 
+pub mod tab_bar;
+pub use tab_bar::TabBarRightEntryConfig;
+
 mod io;
 mod keybinds;
 mod registry;
@@ -106,6 +109,7 @@ impl Config {
             .chain(keybind_diags)
             .chain(self.remote_image_paste_key().err())
             .chain(self.theme.diagnostics())
+            .chain(tab_bar::tab_bar_right_diagnostics(&self.ui.tab_bar_right))
             .chain(self.invalid_sidebar_bounds_diagnostic())
             .collect()
     }
