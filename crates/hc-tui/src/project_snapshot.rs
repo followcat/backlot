@@ -22,7 +22,7 @@ pub(super) fn endpoint_snapshot(
             .1
             .push(term);
     }
-    for (_, (_, members)) in spaces.iter_mut() {
+    for (_, members) in spaces.values_mut() {
         members.sort_by_key(|t| (t.created_ms, term_num(&t.address), t.address.as_str()));
     }
     // Creation order first; a simultaneous creation falls to the terminal

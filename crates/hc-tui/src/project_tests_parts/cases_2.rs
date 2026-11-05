@@ -232,9 +232,9 @@ fn every_rendered_string_is_sanitized() {
             check(&tab.label);
         }
         for p in &snapshot.panes {
-            p.label.as_deref().map(&check);
-            p.cwd.as_deref().map(&check);
-            p.foreground_cwd.as_deref().map(&check);
+            p.label.as_deref().map(check);
+            p.cwd.as_deref().map(check);
+            p.foreground_cwd.as_deref().map(check);
         }
         for a in &snapshot.agents {
             for f in [

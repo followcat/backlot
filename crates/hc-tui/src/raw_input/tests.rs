@@ -215,7 +215,7 @@ fn sgr_pixel_mouse_decrpm_maps_reference_statuses() {
         Decoded::Reply(HostReply::SgrPixelMouse(true))
     ));
     // 1/3 (still set after our reset) and 0/4 map to false.
-    for status in [b'0', b'1', b'3', b'4'] {
+    for status in *b"0134" {
         let mut g = RawInputByteFramer::for_host_input();
         let out = feed(
             &mut g,

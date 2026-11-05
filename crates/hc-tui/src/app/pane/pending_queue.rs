@@ -97,10 +97,7 @@ impl Pane {
         if live.spec.role == Role::Observe {
             return;
         }
-        loop {
-            let Some(front) = self.pending.front() else {
-                break;
-            };
+        while let Some(front) = self.pending.front() {
             if !matches!(front, Pending::Control(_)) && (live.await_paint || self.vt.is_none()) {
                 break;
             }
