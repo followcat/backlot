@@ -1,0 +1,51 @@
+{
+  "source_revision": "d00953e081389eb5f8ea006896fbf4a17b2f9dfc",
+  "host_keyboard_flags_reply": 7,
+  "inner_kitty_flags": 31,
+  "cases": [
+    {
+      "name": "press-a",
+      "outer_hex": "1b5b39373b3175",
+      "pane_a_hex": "1b5b39373b3b393775",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "enter-navigate",
+      "outer_hex": "1b5b39383b35751b5b39383b313a33751b5b3131393b31751b5b3131393b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "highlight-next",
+      "outer_hex": "1b5b313b31421b5b313b313a3342",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "accept",
+      "outer_hex": "1b5b31333b31751b5b31333b313a3375",
+      "pane_a_hex": "1b5b4f",
+      "pane_b_hex": "1b5b49"
+    },
+    {
+      "name": "repeat-a-after-switch",
+      "outer_hex": "1b5b39373b313a3275",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "physical-release-a",
+      "outer_hex": "1b5b39373b313a3375",
+      "pane_a_hex": "1b5b39373b313a3375",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "confirm-new-pane-x",
+      "outer_hex": "1b5b3132303b31751b5b3132303b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": "1b5b3132303b3b313230751b5b3132303b313a3375"
+    }
+  ],
+  "inner_focus_reporting": true,
+  "provenance": "Captured from the pinned reference in an owned scratch PTY with DECSET 1004; initial focus excluded before scripted phases."
+}

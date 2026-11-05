@@ -32,6 +32,8 @@ pub struct UiConfig {
     pub mobile_width_threshold: u16,
     /// Capture mouse input for the mouse UI. Default: true.
     pub mouse_capture: bool,
+    /// Retained for the notifications milestone; M2 does not play audio.
+    pub sound: toml::Value,
     /// Copy text selected with the mouse. Default: true.
     pub copy_on_select: bool,
     /// Host cursor policy. Default: auto.
@@ -88,6 +90,7 @@ impl Default for UiConfig {
             sidebar_collapsed_mode: SidebarCollapsedModeConfig::Compact,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
+            sound: toml::Value::Table(Default::default()),
             copy_on_select: true,
             host_cursor: HostCursorModeConfig::Auto,
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
@@ -105,7 +108,7 @@ impl Default for UiConfig {
             tab_bar_position: TabBarPositionConfig::Top,
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),
-            window_title: "{hostname}: {workspace}".into(),
+            window_title: super::window_title::default_window_title(),
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             status_indicators: StatusIndicatorStyle::Dots,
             sidebar: SidebarConfig::default(),

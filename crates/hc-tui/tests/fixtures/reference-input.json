@@ -1,0 +1,135 @@
+{
+  "source_revision": "d00953e081389eb5f8ea006896fbf4a17b2f9dfc",
+  "inner_bracketed_paste": true,
+  "inner_kitty": false,
+  "cases": [
+    {
+      "name": "ascii",
+      "outer_hex": "616263",
+      "received_hex": "616263"
+    },
+    {
+      "name": "uppercase",
+      "outer_hex": "4c",
+      "received_hex": "4c"
+    },
+    {
+      "name": "unicode",
+      "outer_hex": "e7958c65cc81",
+      "received_hex": "e7958c65cc81"
+    },
+    {
+      "name": "carriage-return",
+      "outer_hex": "0d",
+      "received_hex": "0d"
+    },
+    {
+      "name": "line-feed",
+      "outer_hex": "0a",
+      "received_hex": "0a"
+    },
+    {
+      "name": "control-c",
+      "outer_hex": "03",
+      "received_hex": "03"
+    },
+    {
+      "name": "alt-x",
+      "outer_hex": "1b78",
+      "received_hex": "1b78"
+    },
+    {
+      "name": "kitty-press",
+      "outer_hex": "1b5b39373b3175",
+      "received_hex": "61"
+    },
+    {
+      "name": "kitty-repeat",
+      "outer_hex": "1b5b39373b313a3275",
+      "received_hex": "61"
+    },
+    {
+      "name": "kitty-release",
+      "outer_hex": "1b5b39373b313a3375",
+      "received_hex": ""
+    },
+    {
+      "name": "associated-text",
+      "outer_hex": "1b5b33323b3b32303332303a323239303975",
+      "received_hex": "e4bda0e5a5bd"
+    },
+    {
+      "name": "non-latin-control-c",
+      "outer_hex": "1b5b313038393a3a39393b3575",
+      "received_hex": "03"
+    },
+    {
+      "name": "literal-prefix",
+      "outer_hex": "0202",
+      "received_hex": "02"
+    },
+    {
+      "name": "paste-literal-prefix",
+      "outer_hex": "1b5b3230307e4102715a1b5b3230317e",
+      "received_hex": "1b5b3230307e4102715a1b5b3230317e"
+    },
+    {
+      "name": "shift-enter",
+      "outer_hex": "1b5b31333b3275",
+      "received_hex": "0d"
+    },
+    {
+      "name": "control-i",
+      "outer_hex": "1b5b3130353b3575",
+      "received_hex": "09"
+    },
+    {
+      "name": "control-m",
+      "outer_hex": "1b5b3130393b3575",
+      "received_hex": "0d"
+    },
+    {
+      "name": "control-left-bracket",
+      "outer_hex": "1b5b39313b3575",
+      "received_hex": "1b"
+    },
+    {
+      "name": "control-shift-c",
+      "outer_hex": "1b5b39393b3675",
+      "received_hex": "03"
+    },
+    {
+      "name": "super-c",
+      "outer_hex": "1b5b39393b3975",
+      "received_hex": ""
+    },
+    {
+      "name": "hyper-c",
+      "outer_hex": "1b5b39393b313775",
+      "received_hex": ""
+    },
+    {
+      "name": "meta-c",
+      "outer_hex": "1b5b39393b333375",
+      "received_hex": ""
+    },
+    {
+      "name": "alt-shift-layout-o",
+      "outer_hex": "1b5b3234363a3231343b3475",
+      "received_hex": "1bc396"
+    },
+    {
+      "name": "shifted-alternate-a",
+      "outer_hex": "1b5b39373a36353b3275",
+      "received_hex": "41"
+    },
+    {
+      "name": "generated-shifted-slash",
+      "outer_hex": "1b5b35353b323b343775",
+      "received_hex": "2f"
+    }
+  ],
+  "provenance": "Captured from herdr 0.9.5-followcat in an owned scratch PTY; neutral raw input fixture including legacy shell key exceptions.",
+  "host_keyboard_flags_reply": 0,
+  "host_reports_key_releases": false
+}

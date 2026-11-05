@@ -1,0 +1,20 @@
+{
+  "source_revision": "d00953e081389eb5f8ea006896fbf4a17b2f9dfc",
+  "host_keyboard_flags_reply": 7,
+  "inner_kitty_flags": 31,
+  "cases": [
+    {
+      "name": "orphan-f9-release",
+      "outer_hex": "1b5b32303b313a337e",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "confirm-original-pane-x",
+      "outer_hex": "1b5b3132303b31751b5b3132303b313a3375",
+      "pane_a_hex": "1b5b3132303b3b313230751b5b3132303b313a3375",
+      "pane_b_hex": ""
+    }
+  ],
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; a release without any matching forwarded or consumed press is ignored."
+}

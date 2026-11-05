@@ -1,0 +1,218 @@
+{
+  "source_revision": "d00953e081389eb5f8ea006896fbf4a17b2f9dfc",
+  "host_keyboard_flags_reply": 7,
+  "inner_kitty_flags": 31,
+  "cases": [
+    {
+      "name": "functional-57358",
+      "outer_hex": "1b5b35373335383b31751b5b35373335383b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57359",
+      "outer_hex": "1b5b35373335393b31751b5b35373335393b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57360",
+      "outer_hex": "1b5b35373336303b31751b5b35373336303b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57361",
+      "outer_hex": "1b5b35373336313b31751b5b35373336313b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57362",
+      "outer_hex": "1b5b35373336323b31751b5b35373336323b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57363",
+      "outer_hex": "1b5b35373336333b31751b5b35373336333b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57427",
+      "outer_hex": "1b5b35373432373b31751b5b35373432373b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57428",
+      "outer_hex": "1b5b35373432383b31751b5b35373432383b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57429",
+      "outer_hex": "1b5b35373432393b31751b5b35373432393b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57430",
+      "outer_hex": "1b5b35373433303b31751b5b35373433303b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57431",
+      "outer_hex": "1b5b35373433313b31751b5b35373433313b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57432",
+      "outer_hex": "1b5b35373433323b31751b5b35373433323b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57433",
+      "outer_hex": "1b5b35373433333b31751b5b35373433333b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57434",
+      "outer_hex": "1b5b35373433343b31751b5b35373433343b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57435",
+      "outer_hex": "1b5b35373433353b31751b5b35373433353b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57436",
+      "outer_hex": "1b5b35373433363b31751b5b35373433363b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57437",
+      "outer_hex": "1b5b35373433373b31751b5b35373433373b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57438",
+      "outer_hex": "1b5b35373433383b31751b5b35373433383b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57439",
+      "outer_hex": "1b5b35373433393b31751b5b35373433393b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57440",
+      "outer_hex": "1b5b35373434303b31751b5b35373434303b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57441",
+      "outer_hex": "1b5b35373434313b31751b5b35373434313b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57442",
+      "outer_hex": "1b5b35373434323b31751b5b35373434323b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57443",
+      "outer_hex": "1b5b35373434333b31751b5b35373434333b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57444",
+      "outer_hex": "1b5b35373434343b31751b5b35373434343b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57445",
+      "outer_hex": "1b5b35373434353b31751b5b35373434353b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57446",
+      "outer_hex": "1b5b35373434363b31751b5b35373434363b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57447",
+      "outer_hex": "1b5b35373434373b31751b5b35373434373b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57448",
+      "outer_hex": "1b5b35373434383b31751b5b35373434383b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57449",
+      "outer_hex": "1b5b35373434393b31751b5b35373434393b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57450",
+      "outer_hex": "1b5b35373435303b31751b5b35373435303b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57451",
+      "outer_hex": "1b5b35373435313b31751b5b35373435313b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57452",
+      "outer_hex": "1b5b35373435323b31751b5b35373435323b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57453",
+      "outer_hex": "1b5b35373435333b31751b5b35373435333b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "functional-57454",
+      "outer_hex": "1b5b35373435343b31751b5b35373435343b313a3375",
+      "pane_a_hex": "",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "confirm-normal-key",
+      "outer_hex": "1b5b3132303b31751b5b3132303b313a3375",
+      "pane_a_hex": "1b5b3132303b3b313230751b5b3132303b313a3375",
+      "pane_b_hex": ""
+    }
+  ],
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; lock, keypad, media and modifier reports plus a normal-key positive control."
+}

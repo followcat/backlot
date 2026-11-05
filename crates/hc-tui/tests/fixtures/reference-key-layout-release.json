@@ -1,0 +1,20 @@
+{
+  "source_revision": "d00953e081389eb5f8ea006896fbf4a17b2f9dfc",
+  "host_keyboard_flags_reply": 7,
+  "inner_kitty_flags": 31,
+  "cases": [
+    {
+      "name": "non-latin-control-press",
+      "outer_hex": "1b5b313038393a3a39393b3575",
+      "pane_a_hex": "1b5b39393b3575",
+      "pane_b_hex": ""
+    },
+    {
+      "name": "control-released-before-layout-key",
+      "outer_hex": "1b5b313038393a3a39393b313a3375",
+      "pane_a_hex": "1b5b39393b313a3375",
+      "pane_b_hex": ""
+    }
+  ],
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; a non-Latin Ctrl chord releases as the pressed logical key with the incoming release modifiers."
+}

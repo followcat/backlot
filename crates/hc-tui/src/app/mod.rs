@@ -1,0 +1,396 @@
+//! The interactive read-only client: owns the inventory watcher, the
+//! sidebar, the displayed pane and the draw scheduler. One owner for all
+//! UI/VT state; the loop awaits input, protocol notifications and
+//! bounded actor results, and redraws only when dirty under the ~60 Hz
+//! cap — there is no idle poll timer.
+//!
+//! M2 uses the reference prefix: `q` detaches, `w` opens workspace
+//! navigation, `b` toggles the sidebar and `?` opens keybind help.
+//! Unimplemented layout/actions remain assigned to later milestones.
+
+mod agent_presentation;
+mod draw;
+mod help;
+mod host;
+pub(crate) mod input;
+mod input_dispatch;
+mod key_leases;
+mod key_routing;
+mod mouse;
+mod navigation;
+mod notices;
+mod pane;
+mod pane_mouse;
+mod presentation;
+mod routing;
+mod runtime;
+mod sched;
+mod tab_status;
+mod window_title;
+
+pub use input::UiEvent;
+pub use pane::{OpenAttach, PaneEv, Role, Spec};
+
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Instant;
+
+use hc_proto::watch::{View, Watcher};
+use ratatui::Terminal;
+use ratatui::backend::Backend;
+use tokio::sync::mpsc;
+
+use crate::chrome::ClientShellConfig;
+use crate::chrome::navigate::WorkspaceNavigationTarget;
+use crate::chrome::render::ShellHitMap;
+use crate::chrome::snapshot::ClientEndpointId;
+
+/// A boxed future for the injected attach opener.
+pub type BoxFut<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
+/// What the app is doing with input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Keys go to the focused terminal.
+    Normal,
+    /// Navigate mode — the workspace picker the reference enters on
+    /// `WorkspacePicker`; the pane previews the highlight via `observe`.
+    Navigate,
+}
+
+/// Instrumentation counters a test can hold across `run`.
+#[derive(Debug, Default)]
+pub struct Probe {
+    /// Redraws performed.
+    pub draws: std::sync::atomic::AtomicU64,
+    /// Attach attempts made.
+    pub attaches: std::sync::atomic::AtomicU64,
+    /// Times the select loop woke for any reason.
+    pub wakeups: std::sync::atomic::AtomicU64,
+    /// Times a deadline sleep was armed.
+    pub timers: std::sync::atomic::AtomicU64,
+}
+
+/// Where program cursor-shape wishes go: the outer terminal's cursor
+/// style in production, a test recorder otherwise. A plain boxed
+/// `FnMut` keeps the app free of crossterm/global-IO calls.
+pub type HostControlSink = Box<dyn FnMut(&[u8]) -> std::io::Result<()>>;
+
+pub type CursorSink = Box<dyn FnMut(hc_vt::CursorShape, bool) + Send>;
+
+/// The mutable chrome state `ShellRenderState` borrows each frame —
+/// scroll offsets, collapse sets, reveal flags and the sidebar split.
+#[derive(Default)]
+pub(crate) struct ShellState {
+    pub collapsed_endpoints: std::collections::HashSet<ClientEndpointId>,
+    pub collapsed_groups: std::collections::HashSet<String>,
+    pub remote_collapsed_groups:
+        std::collections::HashMap<ClientEndpointId, std::collections::HashSet<String>>,
+    pub workspace_scroll: usize,
+    pub agent_scroll: usize,
+    pub tab_scroll: usize,
+    pub reveal_focused_workspace: bool,
+    pub reveal_focused_tab: bool,
+    pub sidebar_collapsed: bool,
+    /// Expanded sidebar's spaces:agents split, `0.0..=1.0`.
+    pub sidebar_section_split: f32,
+    pub reveal_navigation_workspace: bool,
+    /// Mobile switcher viewport scroll (Navigate mode under
+    /// `mobile_width_threshold` — the switcher is the mobile picker).
+    pub mobile_switcher_scroll: usize,
+    /// Scrolls the switcher to the pending workspace highlight on move.
+    pub reveal_mobile_workspace: bool,
+    pub machine_diagnostics: crate::chrome::render::MachineDiagnostics,
+}
+
+/// A forwarded press and the wire it went out on. `route` binds the
+/// attach generation — a reincarnated terminal is a different route,
+/// so a release can never land on a replacement wire for the same
+/// address. Repeats route only while the lease's wire is still the
+/// active attach — releases for a pane the client no longer views
+/// still pass, but its repeats do not.
+type PaneLease = key_leases::ForwardedInputLease<u64>;
+type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
+
+/// The whole application.
+pub struct App {
+    notice: Option<notices::Notice>,
+    next_tab_status: Option<Instant>,
+    last_window_title: Option<String>,
+    take_control_hit: ratatui::layout::Rect,
+    watcher: Watcher,
+    pane: pane::Pane,
+    pane_rx: mpsc::Receiver<PaneEv>,
+    prefix: input::Prefix,
+    mode: Mode,
+    help: bool,
+    help_state: crate::chrome::help::HelpState,
+    help_hits: crate::chrome::help::HelpRender,
+    help_scroll_grab: Option<u16>,
+    sched: sched::Scheduler,
+    /// The focused terminal address (Normal-mode spec).
+    focused: Option<String>,
+    /// The terminal to restore on navigate cancel.
+    before_navigate: Option<String>,
+    /// The resolved prefix + keybind config driving the prefix machine.
+    live: crate::config::LiveKeybindConfig,
+    /// The immutable reference chrome config: palette, layout bounds,
+    /// sidebar composition, pane chrome and keybinds — resolved once.
+    shell: ClientShellConfig,
+    /// The projected snapshot the chrome renders; recomputed on
+    /// `on_view` once the focus settles so `focused_*` ids resolve.
+    projection: crate::project::Projection,
+    /// The pending workspace highlight Navigate moves — highlight-only
+    /// until Enter; the pane keeps its active attach meanwhile.
+    navigate_target: Option<WorkspaceNavigationTarget>,
+    /// Sidebar/tab/agent scroll + collapse state the chrome mutates
+    /// through `ShellRenderState` borrows each frame.
+    pub(crate) shell_state: ShellState,
+    /// Live sidebar width — initialized from config, dragged by the
+    /// divider; the reference's `sidebar_width` runtime field.
+    sidebar_width: u16,
+    /// Active chrome drag grab (`ChromeDrag`).
+    chrome_drag: Option<mouse::ChromeDrag>,
+    pane_mouse_gesture: Option<pane_mouse::Gesture>,
+    /// Pressed-but-unreleased workspace/tab rows.
+    workspace_press: Option<mouse::WorkspacePress>,
+    tab_press: Option<mouse::TabPress>,
+    /// For the divider's double-click reset.
+    last_divider_click: Option<Instant>,
+    /// Last frame's clickable rects.
+    pub(crate) hit_map: ShellHitMap,
+    /// The host was told to report every key as an escape code —
+    /// the reference's `keyboard_report_all_active`, upgraded while
+    /// the pane negotiates report-all or a binding mode is active so
+    /// IME/text commits stay distinguishable from typed keys.
+    host_reports_all_keys: bool,
+    /// The host reports key releases (the startup keyboard push
+    /// succeeded) — `host_reports_key_releases`.
+    host_reports_key_releases: bool,
+    /// The host's cooked VERASE is `^H` — a raw 0x08 is its Backspace
+    /// key (`host_erase_is_ctrl_h`, #3244).
+    host_erase_is_ctrl_h: bool,
+    /// Capability-probe state — the reference's
+    /// `HostKeyboardProbeResponses`: flags are only accepted until
+    /// primary DA proves the query pipeline works.
+    probe_keyboard_flags: Option<u16>,
+    probe_device_attributes: bool,
+    /// DECRPM `?1016$p` answer — the reference's `sgr_pixel_mouse`:
+    /// `Some(true)` only when the host reports the mode recognized and
+    /// reset; `None` when it never answered (keep pixel mouse off).
+    /// `?1016h` itself stays off until inner-negotiated cell geometry
+    /// exists to translate pixel coordinates (the FACTS surface).
+    host_sgr_pixel_mouse: Option<bool>,
+    host_pixel_mouse_active: bool,
+    host_mouse_capture_active: bool,
+    host_mouse_pixels: Option<crate::mouse_geometry::HostPixels>,
+    host_appearance: Option<crate::chrome::palette::HostAppearance>,
+    host_appearance_explicit: bool,
+    /// Host-mode control writes (keyboard pop/push). Injected by cli —
+    /// headless tests get the no-op default so they never touch the
+    /// real terminal's modes.
+    host_control: HostControlSink,
+    /// Pane-bound forwarded presses — the reference's `InputLeaseTable`
+    /// scoped to one local source and one attach. A press routed to
+    /// the terminal keeps a lease: repeats keep routing while it
+    /// lives, releases close it, and a detach/target move synthesizes
+    /// the release the program would otherwise never see.
+    /// Forwarded pane presses, bound to the terminal they went out on:
+    /// a held key's release returns to that wire even after the pane
+    /// switches away and parks the attach for drain.
+    pane_leases: KeyLeases,
+    next_dispatch_id: u64,
+    /// Last watcher view.
+    view: View,
+    /// View version cursor for `changed_since`.
+    seen: u64,
+    /// The area the pane was last allocated (for spec sizing).
+    area: (u16, u16),
+    /// The cursor the last frame asked for (position set during draw;
+    /// shape applied to the backend on change).
+    pub(crate) want_cursor: draw::CursorWish,
+    /// The (shape, blinking) last applied to the outer cursor.
+    applied_cursor: (hc_vt::CursorShape, bool),
+    last_visible_cursor: Option<(u16, u16)>,
+    /// Where cursor-shape changes go — the real outer terminal in
+    /// production (`term::cursor_sink`), a recorder in tests. Drawing
+    /// never writes to global stdout itself.
+    cursor_sink: CursorSink,
+    /// Set by Detach or when the input source ends.
+    quitting: bool,
+    /// Probed host-terminal facts (colors, cell pitch) — late replies
+    /// update it and re-seed panes.
+    host_facts: crate::host::HostFacts,
+    /// Panes the focused workspace's active tab marked seen — the
+    /// reference's `mark_active_tab_seen`/`apply_pane_state_change`:
+    /// an idle agent reports `Done` only while unseen; focusing its
+    /// workspace marks every active-tab pane seen at once.
+    presentation: presentation::Presentation,
+    outer_focused: Option<bool>,
+    probe: Arc<Probe>,
+}
+
+impl App {
+    /// An app over `watcher` (already watching) and `open` for attaches.
+    pub fn new(
+        watcher: Watcher,
+        open: OpenAttach,
+        live: crate::config::LiveKeybindConfig,
+        shell: ClientShellConfig,
+        probe: Arc<Probe>,
+        cursor_sink: CursorSink,
+    ) -> App {
+        let (pane_tx, pane_rx) = mpsc::channel(64);
+        let view = View::default();
+        let projection = crate::project::project(&view, None);
+        let sidebar_collapsed = shell.sidebar_start_collapsed;
+        let sidebar_width = shell.sidebar_width;
+        let mouse_capture = shell.mouse_capture;
+        App {
+            notice: None,
+            next_tab_status: None,
+            last_window_title: None,
+            take_control_hit: ratatui::layout::Rect::default(),
+            watcher,
+            pane: pane::Pane::new(pane_tx, open),
+            pane_rx,
+            prefix: input::Prefix::default(),
+            mode: Mode::Normal,
+            help: false,
+            help_state: crate::chrome::help::HelpState::default(),
+            help_hits: crate::chrome::help::HelpRender::default(),
+            help_scroll_grab: None,
+            sched: sched::Scheduler::default(),
+            focused: None,
+            before_navigate: None,
+            live,
+            shell,
+            projection,
+            navigate_target: None,
+            shell_state: ShellState {
+                sidebar_collapsed,
+                sidebar_section_split: 0.5,
+                ..ShellState::default()
+            },
+            sidebar_width,
+            chrome_drag: None,
+            pane_mouse_gesture: None,
+            workspace_press: None,
+            tab_press: None,
+            last_divider_click: None,
+            hit_map: ShellHitMap::default(),
+            host_reports_all_keys: false,
+            host_reports_key_releases: false,
+            host_erase_is_ctrl_h: false,
+            probe_keyboard_flags: None,
+            probe_device_attributes: false,
+            host_sgr_pixel_mouse: None,
+            host_pixel_mouse_active: false,
+            host_mouse_capture_active: mouse_capture,
+            host_mouse_pixels: None,
+            host_appearance: None,
+            host_appearance_explicit: false,
+            host_control: Box::new(|_| Ok(())),
+            pane_leases: KeyLeases::default(),
+            next_dispatch_id: 1,
+            view,
+            seen: 0,
+            area: (80, 24),
+            want_cursor: draw::CursorWish {
+                pos: None,
+                anchor: None,
+                shape: hc_vt::CursorShape::Default,
+                blinking: true,
+            },
+            applied_cursor: (hc_vt::CursorShape::Default, true),
+            last_visible_cursor: None,
+            cursor_sink,
+            quitting: false,
+            host_facts: crate::host::HostFacts::default(),
+            presentation: presentation::Presentation::default(),
+            outer_focused: None,
+            probe,
+        }
+    }
+
+    /// An input drain failure is reported after terminal restoration on exit.
+    pub fn failure(&self) -> Option<&str> {
+        self.pane.close_failure()
+    }
+
+    /// Recompute the projection for the current focus — finding 12:
+    /// `focused_*` snapshot ids must track the focus without waiting
+    /// for the next watcher publish.
+    fn refresh_projection(&mut self) {
+        self.projection = crate::project::project(&self.view, self.focused.as_deref());
+        self.presentation.project(&self.view, &mut self.projection);
+        self.update_tab_status(Instant::now());
+        self.update_window_title();
+    }
+
+    /// Request a surface draw; Source acknowledges only displayed output.
+    fn mark_active_seen(&mut self) {
+        // A focus request alone cannot acknowledge unseen output. Source only
+        // acknowledges a matching surface after it has actually been drawn.
+        self.sched.mark_dirty(Instant::now());
+    }
+
+    /// A watcher publish: refresh the projection + pane target policy.
+    fn on_view(&mut self) {
+        self.view = self.watcher.view();
+        self.seen = self.view.version;
+        self.reconcile_published_view();
+    }
+
+    /// Everything `on_view` does after the view lands — split out so
+    /// tests can publish a synthetic `self.view` through the same path.
+    fn reconcile_published_view(&mut self) {
+        self.refresh_projection();
+        // If the focused terminal fell out of the inventory entirely,
+        // the projection's first pane is the deterministic fallback.
+        if self.mode == Mode::Normal
+            && self
+                .focused
+                .as_ref()
+                .is_none_or(|f| self.view.inventory.get(f).is_none())
+        {
+            let fallback = self
+                .projection
+                .snapshot
+                .panes
+                .first()
+                .map(|p| p.pane_id.clone());
+            if fallback != self.focused {
+                self.focused = fallback;
+                self.refresh_projection();
+            }
+        }
+        // Focusing marks the active tab's panes seen — an idle agent
+        // reports `Done` only while its workspace stayed background.
+        self.mark_active_seen();
+        self.refresh_projection();
+        self.sync_target();
+        self.pane.on_view(&self.view);
+    }
+}
+
+/// Draw surface for `draw.rs` — the app fields it needs, read-only
+/// where possible.
+impl App {
+    pub(crate) fn app_pane(&mut self) -> &mut pane::Pane {
+        &mut self.pane
+    }
+
+    pub(crate) fn app_mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    pub(crate) fn app_help(&self) -> bool {
+        self.help
+    }
+}
+
+#[cfg(test)]
+#[path = "mod_tests/mod.rs"]
+mod tests;

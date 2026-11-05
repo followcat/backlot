@@ -10,6 +10,9 @@ mod theme_names;
 pub use theme_names::THEME_NAMES;
 pub(crate) use theme_names::canonical_theme_name;
 
+pub mod window_title;
+pub use window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken};
+
 pub mod tab_bar;
 pub use tab_bar::TabBarRightEntryConfig;
 
@@ -111,6 +114,9 @@ impl Config {
             .chain(self.theme.diagnostics())
             .chain(tab_bar::tab_bar_right_diagnostics(&self.ui.tab_bar_right))
             .chain(self.invalid_sidebar_bounds_diagnostic())
+            .chain(window_title::window_title_diagnostics(
+                &self.ui.window_title,
+            ))
             .collect()
     }
 

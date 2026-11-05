@@ -1,0 +1,426 @@
+{
+  "source_revision": "d00953e081389eb5f8ea006896fbf4a17b2f9dfc",
+  "geometry": [
+    120,
+    40
+  ],
+  "host_cell_px": [
+    10,
+    20
+  ],
+  "host_keyboard_flags_reply": 7,
+  "host_sgr_pixel_mouse_reply": 0,
+  "config_override": {
+    "ui": {
+      "right_click_passthrough_modifier": "ctrl",
+      "mouse_scroll_lines": 3
+    }
+  },
+  "groups": [
+    {
+      "name": "legacy",
+      "setup_sequence_hex": "1b5b3f393b313030303b313030323b313030333b313030353b313030363b313031353b313031366c1b5b3f31303033681b5d323b4d4f5553452d4d4f44452d301b5c",
+      "cases": [
+        {
+          "name": "move",
+          "outer_hex": "1b5b3c33353b33323b354d",
+          "program_hex": "1b5b4d432624"
+        },
+        {
+          "name": "left-down",
+          "outer_hex": "1b5b3c303b33323b354d",
+          "program_hex": "1b5b4d202624"
+        },
+        {
+          "name": "left-drag",
+          "outer_hex": "1b5b3c33323b33353b374d",
+          "program_hex": "1b5b4d402926"
+        },
+        {
+          "name": "left-drag-outside-pane",
+          "outer_hex": "1b5b3c33323b32313b374d",
+          "program_hex": "1b5b4d402126"
+        },
+        {
+          "name": "left-up-outside-pane",
+          "outer_hex": "1b5b3c303b32313b376d",
+          "program_hex": "1b5b4d232126"
+        },
+        {
+          "name": "middle-down",
+          "outer_hex": "1b5b3c313b33323b354d",
+          "program_hex": "1b5b4d212624"
+        },
+        {
+          "name": "middle-up",
+          "outer_hex": "1b5b3c313b33323b356d",
+          "program_hex": "1b5b4d232624"
+        },
+        {
+          "name": "control-right-down",
+          "outer_hex": "1b5b3c31383b33323b354d",
+          "program_hex": "1b5b4d222624"
+        },
+        {
+          "name": "control-right-up",
+          "outer_hex": "1b5b3c31383b33323b356d",
+          "program_hex": "1b5b4d232624"
+        },
+        {
+          "name": "control-left-down",
+          "outer_hex": "1b5b3c31363b33323b354d",
+          "program_hex": "1b5b4d302624"
+        },
+        {
+          "name": "control-left-up",
+          "outer_hex": "1b5b3c31363b33323b356d",
+          "program_hex": "1b5b4d332624"
+        },
+        {
+          "name": "wheel-up",
+          "outer_hex": "1b5b3c36343b33323b354d",
+          "program_hex": "1b5b4d602624"
+        },
+        {
+          "name": "wheel-down",
+          "outer_hex": "1b5b3c36353b33323b354d",
+          "program_hex": "1b5b4d612624"
+        },
+        {
+          "name": "wheel-left",
+          "outer_hex": "1b5b3c36363b33323b354d",
+          "program_hex": "1b5b4d622624"
+        },
+        {
+          "name": "wheel-right",
+          "outer_hex": "1b5b3c36373b33323b354d",
+          "program_hex": "1b5b4d632624"
+        }
+      ]
+    },
+    {
+      "name": "utf8",
+      "setup_sequence_hex": "1b5b3f393b313030303b313030323b313030333b313030353b313030363b313031353b313031366c1b5b3f31303033681b5b3f31303035681b5d323b4d4f5553452d4d4f44452d311b5c",
+      "cases": [
+        {
+          "name": "move",
+          "outer_hex": "1b5b3c33353b33323b354d",
+          "program_hex": "1b5b4d432624"
+        },
+        {
+          "name": "left-down",
+          "outer_hex": "1b5b3c303b33323b354d",
+          "program_hex": "1b5b4d202624"
+        },
+        {
+          "name": "left-drag",
+          "outer_hex": "1b5b3c33323b33353b374d",
+          "program_hex": "1b5b4d402926"
+        },
+        {
+          "name": "left-drag-outside-pane",
+          "outer_hex": "1b5b3c33323b32313b374d",
+          "program_hex": "1b5b4d402126"
+        },
+        {
+          "name": "left-up-outside-pane",
+          "outer_hex": "1b5b3c303b32313b376d",
+          "program_hex": "1b5b4d232126"
+        },
+        {
+          "name": "middle-down",
+          "outer_hex": "1b5b3c313b33323b354d",
+          "program_hex": "1b5b4d212624"
+        },
+        {
+          "name": "middle-up",
+          "outer_hex": "1b5b3c313b33323b356d",
+          "program_hex": "1b5b4d232624"
+        },
+        {
+          "name": "control-right-down",
+          "outer_hex": "1b5b3c31383b33323b354d",
+          "program_hex": "1b5b4d222624"
+        },
+        {
+          "name": "control-right-up",
+          "outer_hex": "1b5b3c31383b33323b356d",
+          "program_hex": "1b5b4d232624"
+        },
+        {
+          "name": "control-left-down",
+          "outer_hex": "1b5b3c31363b33323b354d",
+          "program_hex": "1b5b4d302624"
+        },
+        {
+          "name": "control-left-up",
+          "outer_hex": "1b5b3c31363b33323b356d",
+          "program_hex": "1b5b4d332624"
+        },
+        {
+          "name": "wheel-up",
+          "outer_hex": "1b5b3c36343b33323b354d",
+          "program_hex": "1b5b4d602624"
+        },
+        {
+          "name": "wheel-down",
+          "outer_hex": "1b5b3c36353b33323b354d",
+          "program_hex": "1b5b4d612624"
+        },
+        {
+          "name": "wheel-left",
+          "outer_hex": "1b5b3c36363b33323b354d",
+          "program_hex": "1b5b4d622624"
+        },
+        {
+          "name": "wheel-right",
+          "outer_hex": "1b5b3c36373b33323b354d",
+          "program_hex": "1b5b4d632624"
+        }
+      ]
+    },
+    {
+      "name": "sgr",
+      "setup_sequence_hex": "1b5b3f393b313030303b313030323b313030333b313030353b313030363b313031353b313031366c1b5b3f31303033681b5b3f31303036681b5d323b4d4f5553452d4d4f44452d321b5c",
+      "cases": [
+        {
+          "name": "move",
+          "outer_hex": "1b5b3c33353b33323b354d",
+          "program_hex": "1b5b3c33353b363b344d"
+        },
+        {
+          "name": "left-down",
+          "outer_hex": "1b5b3c303b33323b354d",
+          "program_hex": "1b5b3c303b363b344d"
+        },
+        {
+          "name": "left-drag",
+          "outer_hex": "1b5b3c33323b33353b374d",
+          "program_hex": "1b5b3c33323b393b364d"
+        },
+        {
+          "name": "left-drag-outside-pane",
+          "outer_hex": "1b5b3c33323b32313b374d",
+          "program_hex": "1b5b3c33323b313b364d"
+        },
+        {
+          "name": "left-up-outside-pane",
+          "outer_hex": "1b5b3c303b32313b376d",
+          "program_hex": "1b5b3c303b313b366d"
+        },
+        {
+          "name": "middle-down",
+          "outer_hex": "1b5b3c313b33323b354d",
+          "program_hex": "1b5b3c313b363b344d"
+        },
+        {
+          "name": "middle-up",
+          "outer_hex": "1b5b3c313b33323b356d",
+          "program_hex": "1b5b3c313b363b346d"
+        },
+        {
+          "name": "control-right-down",
+          "outer_hex": "1b5b3c31383b33323b354d",
+          "program_hex": "1b5b3c323b363b344d"
+        },
+        {
+          "name": "control-right-up",
+          "outer_hex": "1b5b3c31383b33323b356d",
+          "program_hex": "1b5b3c323b363b346d"
+        },
+        {
+          "name": "control-left-down",
+          "outer_hex": "1b5b3c31363b33323b354d",
+          "program_hex": "1b5b3c31363b363b344d"
+        },
+        {
+          "name": "control-left-up",
+          "outer_hex": "1b5b3c31363b33323b356d",
+          "program_hex": "1b5b3c31363b363b346d"
+        },
+        {
+          "name": "wheel-up",
+          "outer_hex": "1b5b3c36343b33323b354d",
+          "program_hex": "1b5b3c36343b363b344d"
+        },
+        {
+          "name": "wheel-down",
+          "outer_hex": "1b5b3c36353b33323b354d",
+          "program_hex": "1b5b3c36353b363b344d"
+        },
+        {
+          "name": "wheel-left",
+          "outer_hex": "1b5b3c36363b33323b354d",
+          "program_hex": "1b5b3c36363b363b344d"
+        },
+        {
+          "name": "wheel-right",
+          "outer_hex": "1b5b3c36373b33323b354d",
+          "program_hex": "1b5b3c36373b363b344d"
+        }
+      ]
+    },
+    {
+      "name": "urxvt",
+      "setup_sequence_hex": "1b5b3f393b313030303b313030323b313030333b313030353b313030363b313031353b313031366c1b5b3f31303033681b5b3f31303135681b5d323b4d4f5553452d4d4f44452d331b5c",
+      "cases": [
+        {
+          "name": "move",
+          "outer_hex": "1b5b3c33353b33323b354d",
+          "program_hex": "1b5b36373b363b344d"
+        },
+        {
+          "name": "left-down",
+          "outer_hex": "1b5b3c303b33323b354d",
+          "program_hex": "1b5b33323b363b344d"
+        },
+        {
+          "name": "left-drag",
+          "outer_hex": "1b5b3c33323b33353b374d",
+          "program_hex": "1b5b36343b393b364d"
+        },
+        {
+          "name": "left-drag-outside-pane",
+          "outer_hex": "1b5b3c33323b32313b374d",
+          "program_hex": "1b5b36343b313b364d"
+        },
+        {
+          "name": "left-up-outside-pane",
+          "outer_hex": "1b5b3c303b32313b376d",
+          "program_hex": "1b5b33353b313b364d"
+        },
+        {
+          "name": "middle-down",
+          "outer_hex": "1b5b3c313b33323b354d",
+          "program_hex": "1b5b33333b363b344d"
+        },
+        {
+          "name": "middle-up",
+          "outer_hex": "1b5b3c313b33323b356d",
+          "program_hex": "1b5b33353b363b344d"
+        },
+        {
+          "name": "control-right-down",
+          "outer_hex": "1b5b3c31383b33323b354d",
+          "program_hex": "1b5b33343b363b344d"
+        },
+        {
+          "name": "control-right-up",
+          "outer_hex": "1b5b3c31383b33323b356d",
+          "program_hex": "1b5b33353b363b344d"
+        },
+        {
+          "name": "control-left-down",
+          "outer_hex": "1b5b3c31363b33323b354d",
+          "program_hex": "1b5b34383b363b344d"
+        },
+        {
+          "name": "control-left-up",
+          "outer_hex": "1b5b3c31363b33323b356d",
+          "program_hex": "1b5b35313b363b344d"
+        },
+        {
+          "name": "wheel-up",
+          "outer_hex": "1b5b3c36343b33323b354d",
+          "program_hex": "1b5b39363b363b344d"
+        },
+        {
+          "name": "wheel-down",
+          "outer_hex": "1b5b3c36353b33323b354d",
+          "program_hex": "1b5b39373b363b344d"
+        },
+        {
+          "name": "wheel-left",
+          "outer_hex": "1b5b3c36363b33323b354d",
+          "program_hex": "1b5b39383b363b344d"
+        },
+        {
+          "name": "wheel-right",
+          "outer_hex": "1b5b3c36373b33323b354d",
+          "program_hex": "1b5b39393b363b344d"
+        }
+      ]
+    },
+    {
+      "name": "sgr-pixels",
+      "setup_sequence_hex": "1b5b3f393b313030303b313030323b313030333b313030353b313030363b313031353b313031366c1b5b3f31303033681b5b3f31303136681b5d323b4d4f5553452d4d4f44452d341b5c",
+      "cases": [
+        {
+          "name": "move",
+          "outer_hex": "1b5b3c33353b33323b354d",
+          "program_hex": "1b5b3c33353b35353b37304d"
+        },
+        {
+          "name": "left-down",
+          "outer_hex": "1b5b3c303b33323b354d",
+          "program_hex": "1b5b3c303b35353b37304d"
+        },
+        {
+          "name": "left-drag",
+          "outer_hex": "1b5b3c33323b33353b374d",
+          "program_hex": "1b5b3c33323b38353b3131304d"
+        },
+        {
+          "name": "left-drag-outside-pane",
+          "outer_hex": "1b5b3c33323b32313b374d",
+          "program_hex": "1b5b3c33323b353b3131304d"
+        },
+        {
+          "name": "left-up-outside-pane",
+          "outer_hex": "1b5b3c303b32313b376d",
+          "program_hex": "1b5b3c303b353b3131306d"
+        },
+        {
+          "name": "middle-down",
+          "outer_hex": "1b5b3c313b33323b354d",
+          "program_hex": "1b5b3c313b35353b37304d"
+        },
+        {
+          "name": "middle-up",
+          "outer_hex": "1b5b3c313b33323b356d",
+          "program_hex": "1b5b3c313b35353b37306d"
+        },
+        {
+          "name": "control-right-down",
+          "outer_hex": "1b5b3c31383b33323b354d",
+          "program_hex": "1b5b3c323b35353b37304d"
+        },
+        {
+          "name": "control-right-up",
+          "outer_hex": "1b5b3c31383b33323b356d",
+          "program_hex": "1b5b3c323b35353b37306d"
+        },
+        {
+          "name": "control-left-down",
+          "outer_hex": "1b5b3c31363b33323b354d",
+          "program_hex": "1b5b3c31363b35353b37304d"
+        },
+        {
+          "name": "control-left-up",
+          "outer_hex": "1b5b3c31363b33323b356d",
+          "program_hex": "1b5b3c31363b35353b37306d"
+        },
+        {
+          "name": "wheel-up",
+          "outer_hex": "1b5b3c36343b33323b354d",
+          "program_hex": "1b5b3c36343b35353b37304d"
+        },
+        {
+          "name": "wheel-down",
+          "outer_hex": "1b5b3c36353b33323b354d",
+          "program_hex": "1b5b3c36353b35353b37304d"
+        },
+        {
+          "name": "wheel-left",
+          "outer_hex": "1b5b3c36363b33323b354d",
+          "program_hex": "1b5b3c36363b35353b37304d"
+        },
+        {
+          "name": "wheel-right",
+          "outer_hex": "1b5b3c36373b33323b354d",
+          "program_hex": "1b5b3c36373b35353b37304d"
+        }
+      ]
+    }
+  ]
+}
