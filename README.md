@@ -8,9 +8,10 @@ interaction, layout and UI must match **herdr 0.9.5-followcat at `d00953e0`**:
 - herdr's bindings and configuration;
 - local use, or remote use over plain SSH.
 
-**Status:** M0 and M1 are complete. The read-only runtime is in M2.1 joint-review remediation. Exact parity is
-not accepted yet; required core facts are deferred to reviewed M2.2 adoption.
-Tabs/splits and the remaining actions belong to later milestones.
+**Status:** M2.1 is accepted for its available-fact fixtures. M3a adds shared
+structure, tabs/splits, layout bindings and lock. Exact M2 parity still awaits
+reviewed C3 facts in M2.2; first-attach appearance remains a client limitation.
+Custom commands, notifications and remaining actions are deferred.
 There is no release yet. See [requirements](docs/requirements.md), [plan](docs/plan.md),
 [progress](docs/progress.md) and [parity](docs/parity.md).
 
@@ -28,7 +29,7 @@ cargo run -p hc-tui -- --help
 ```
 
 Run `hc-tui --session <name>` locally, or
-`hc-tui --remote <ssh-target> --session <name>` over SSH. The M2 default
+`hc-tui --remote <ssh-target> --session <name>` over SSH. The default
 prefix is Ctrl+B: `q` detaches, `w` opens workspace navigation, `b` toggles
 the sidebar and `?` opens searchable help. Existing herdr configuration is
 read directly. See [runtime behavior](docs/runtime.md) and the

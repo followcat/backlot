@@ -205,24 +205,47 @@
   approval; M3 remains gated. No core extension was accessed or adopted here.
 
 
-## M3a: Structure and retained pane presentation (in progress)
+## M3a: Shared structure and layout — ready for review
 
-- The user approved layout/tab operations (new, split, close, rename) and
-  matching bindings for M3a. Custom commands, notifications and other M4
-  actions remain deferred. Core chronology and repository facts still wait
-  for C3 approval; acknowledgement remains client-local.
-- `c3f2520` adds the read-only herdr-app reader, label/cwd fallback, attributed
-  pinned BSP geometry and typed versioned doc.set. Three independent review
-  rounds addressed identity allocation, generated tree depth, unknown owned
-  node fields, extreme weights and nonfinite ratios. Full local gates and
-  CI 42030790020 passed both jobs.
-- Projection now reads herdr-app structure and hc-tui layout overrides,
-  retaining newly discovered members and pruning stale/cross-tab leaves.
-  Background VTs are observe-only. Current-tab panes stay attached plus a
-  32-entry LRU of off-tab panes; the focused input connection is separate.
-  Fake-wire tests cover shared focus/zoom, original observer routes, eviction,
-  one-shot bar cursor and OSC 12/4 state across switching, and observer silence.
-  Native M3a parity, mutation actions and milestone acceptance are still pending.
-- C3 no longer provides first-paint appearance. First attach, reconnect and
-  LRU eviction remain known hc-tui limitations; routine cached switching is
-  handled in the client. No M4 implementation or core checkout access.
+- Added the read-only herdr-app reader with label/cwd fallback, attributed
+  pinned BSP layout, and shared schema-1 hc-tui documents. Versioned writes
+  preserve opaque fields, merge explicit CAS conflicts, fence stale topology
+  and core identity, and coordinate concurrent fallback-group adoption.
+- Implemented layout/tab navigation, focus/swap/cycle/last pane, zoom/resize,
+  tab/seam dragging, Ctrl+G lock and the matching default/configured bindings.
+  M3a includes new tab, both split axes, close and rename with source dialogs.
+  Creation labels support herdr-app adoption; close rechecks incarnation and
+  membership before kill. Kill/write remain separate calls; ambiguous or
+  partial failures are visible and mutations are not blindly replayed.
+- Current-tab VTs remain attached plus 32 off-tab LRU VTs. As explicitly
+  corrected by the user, geometrically visible panes hold silent size leases;
+  they send no human input, focus or automatic replies. Off-tab LRU entries
+  stay strictly observe-only. Retained VTs preserve live appearance through
+  switching and resize paint. New targets open at their actual allocation;
+  viewer size requests are not coalesced against another viewer's grid.
+- Native M3a evidence: 196/196 default and 220/220 configured checkpoints at
+  80x24, 120x40, 200x50, 65x24, 64x24 and 40x24, plus 36/36 with only the
+  previous-tab move binding configured. All available-fact cells/styles,
+  cursor and host modes match. Actual PTY grids and exact input gates pass.
+  Two real clients commit both concurrent rename intentions and converge;
+  fake-core tests force CAS conflicts. Idle one-shot cursor/palette return
+  passes without fresh program output; unit tests also inspect OSC 12.
+- Final-candidate M2 regression passes 148 six-size checkpoints plus 32 in
+  the host ModifyOtherKeys1 profile. All 390 paired immutable input cases
+  and 14 positioned detach tails pass. Host modes/termios restore, owned
+  scratch fixtures clean up, and the original config remains unchanged.
+  The default hostname adaptation remains explicit. The repository fixture
+  still records 66 raw differences, exit 2 and pending-core-fact, never a pass.
+- Every code slice had an independent read-only review and full gates.
+  Final local validation passes 575 default Rust tests, four explicit real-core
+  tests, two decoder tests and 14 harness safety tests; four integration tests
+  and one manual BSP profile remain opt-in in the default suite. Commits:
+  c3f2520, 05c52c1, ed04aaf, d7d0b87, 6171b7a, 74d1ac8 and 607c4c3.
+  CI 42085503012 is green for the final code commit 607c4c3.
+- M3a stops for joint review. Exact M2 is still not accepted: hostname,
+  Git/worktree facts, quiet release and chronology await reviewed C3 facts.
+  C3 will not supply first-paint appearance; first attach, reconnect and
+  eviction remain limitations. Acknowledgement is client-local with the
+  documented older-stream stall race. Settings/reload actions and remaining
+  M3 work are not completed by this slice. Custom commands, notifications
+  and other M4 actions remain deferred. No M4 work or release is started.

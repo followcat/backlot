@@ -132,10 +132,21 @@ visual shape or distinguish an explicit request from the user default.
 M3a retains observe-only VTs for every pane in the current tab, plus an LRU
 of 32 off-tab panes. The focused terminal has a separate active input wire.
 Rendering prefers the persistent observer's completed paint, so routine cached
-switching preserves live cursor style, OSC 12 and OSC 4 state without allowing
-background input, resize, focus or display-fact claims. Each VT keeps bounded
+switching preserves live cursor style, OSC 12 and OSC 4 state. The observer
+connections send no input, resize, focus or display-fact claims. Each VT keeps bounded
 256 KiB scrollback; the off-tab cache has a fixed entry budget. Current-tab
 panes are pinned, so memory also scales with the explicitly displayed layout.
+
+Visible current-tab panes also hold silent size leases, including the focused
+pane, so focus switches have no gap without a visible size owner. These
+controllers send size and measured display facts, consume credit, allocate no
+VT and send neither human input, focus nor automatic replies. Leaving the tab
+closes the controller; off-tab LRU connections remain strictly observe-only.
+A visible controller reacquires its permitted size lease on transport recovery;
+it never claims focus or sends input.
+This user-approved rule supersedes the earlier blanket observe-only rule for
+visible split panes. One displayed geometry supplies rendering and both size
+requests, including observer-loading and alternate-screen transitions.
 
 First attach, reconnect and LRU eviction remain known limitations: the earlier
 appearance is absent from the tested core paint. C3 will not add this fact.
@@ -343,9 +354,9 @@ repository mobile/grouping acceptance belong to M2.2 after Claude approval.
 |---|---|
 | Detach, Help, toggle sidebar, workspace picker | The four implemented M2 actions. Navigation inside the picker and mobile Help/Detach menu targets work. |
 | User Alt+F popup/custom command | Parsed but direct commands are silently consumed, with no execution or notice. M4 command/popup scope; not a missing core fact. Fixture scripts never send Alt+F or execute its command. |
-| Help entries for indexed workspace/tab/agent selection, previous/next, pane focus/cycle/swap, zoom/resize and lock | The source help/bindings are displayed/parsed, but the complete action set and shared structure are M3. A listed binding is not an implementation claim. |
-| Settings and reload config menu/help entries | Visible source presentation; their actions are not implemented in this read-only slice. Part of the remaining configuration/binding work in M3. |
-| New/rename/close workspace, tab or pane, splits, scrollback editing/clear, notifications/navigation actions | Listed source actions remain unimplemented; creation/mutation and notifications are M4, with structure dependencies in M3. Mobile new-workspace/new-tab rows are also inert. |
+| Layout/tab navigation and lock | M3a implements indexed workspace/tab/agent selection, previous/next, directional pane focus/swap, cycle/last pane, zoom/resize and Ctrl+G lock with default/configured bindings. |
+| Settings and reload config menu/help entries | Visible source presentation; their actions are not implemented in M3a. Part of the remaining configuration/binding work in M3. |
+| Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. Workspace/machine actions, custom commands, notifications, scrollback editing/clear and remaining actions stay in M4 or M5. Mobile new-tab is active; new-workspace remains deferred. |
 | Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
 

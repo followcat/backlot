@@ -109,3 +109,23 @@ Initial fixture readiness also decodes the complete native screen: ANSI
 cursor/style writes can split a visible string, so raw substring matching
 is not an adequate readiness condition. The input runner requires the same
 `--decoder` as the screen runner.
+
+
+`--scenario layout` exercises M3a against the same owned-session and binary
+provenance checks. It reads an immutable foreign structure fixture, splits
+right/down, focuses/swaps/resizes/zooms panes, opens rename/new-tab/close dialogs,
+drags tabs and split seams, checks lock passthrough, and runs two hc-tui
+processes against one scratch core. The two real clients must commit both
+concurrent rename intentions and reach identical cells. Fake-core tests force
+the CAS conflict interleaving deterministically.
+
+Child programs report actual PTY sizes. Mutation readiness requires a newer
+hc-tui document and changed reference layout/tab state; sizes are checked
+before and after screen capture. Every UI-only step checks exact unchanged
+program input, while the locked prefix step expects exactly its sent bytes.
+A program sets a bar cursor, OSC 12 and OSC 4 once, then a cached return is
+captured without repainting the program. Unit tests also inspect retained
+OSC 12 state directly. This covers cached switching; first attach, reconnect
+and eviction remain the documented limitations. The scenario runs at the
+same desktop and mobile sizes; desktop-only tab dragging has no mobile tab
+bar counterpart. Captures and configuration copies remain outside the repo.

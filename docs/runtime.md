@@ -1,4 +1,4 @@
-# Read-only runtime
+# Runtime
 
 Start a local client with `hc-tui --session <name>`, or use
 `hc-tui --remote <ssh-target> --session <name>`. The remote machine needs
@@ -6,14 +6,16 @@ Start a local client with `hc-tui --session <name>`, or use
 normal SSH configuration; hc-tui does not store credentials. ControlMaster
 can reduce the cost of the separate RPC, subscription and attach connections.
 
-The M2 default prefix is Ctrl+B. `q` detaches, `w` opens workspace
+The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.
 Navigation uses the configured movement keys, Enter to select and Escape
 to cancel. Herdr's configuration supplies the prefix, bindings, theme,
-sidebar, tab bar and pane chrome. M3 implements layout and the remaining
-mode bindings; M4 implements actions and custom command execution.
+sidebar, tab bar and pane chrome. M3a adds layout/tab navigation, new tabs,
+splits, close, rename, resize mode and Ctrl+G lock. Custom commands,
+notifications and the remaining mutation actions belong to M4.
 
-Only the focused terminal has an active attach. An observer never sends
+The focused terminal has the human-input connection. Persistent observers
+retain the current tab and 32 most recent off-tab panes. An observer never sends
 human input, automatic replies, size claims or host facts. A role change
 opens a new attach. A recovered active attach uses `resumed` to avoid
 claiming fresh activity merely because the transport recovered.
@@ -59,6 +61,26 @@ Visible panes keep silent size-holder connections, including the focused pane,
 so a focus switch cannot leave a visible terminal without a size lease. These
 connections send geometry and measured display facts, consume output credit,
 and allocate no VT. They never send human input, focus or automatic replies.
-Closing or zooming a pane closes its size holder; the appearance observer can
-remain in the off-tab LRU, strictly observe-only. Resize requests follow layout
-changes, without repeatedly fighting another viewer for ownership.
+A pane that leaves the visible layout loses its size holder. Zoom-hidden panes
+retain pinned current-tab observers; off-tab observers enter the bounded LRU,
+strictly observe-only. Resize requests follow layout
+changes, without repeatedly fighting another viewer for ownership. A recovered
+visible size holder reacquires its size lease; it cannot become active through
+human input or focus. If allocation changes during attach, the requested size
+is synchronized before focus even when another viewer already has that grid.
+
+The default layout controls follow herdr: Ctrl+B then `c` creates a tab,
+`v` splits right, `-` splits down, `h/j/k/l` focuses a neighbour, and
+`H/J/K/L` swaps panes. `p/n` changes tabs, `1`–`9` selects a tab, `Tab`
+cycles panes, `z` toggles zoom and `r` enters resize mode. In resize mode,
+`h/j/k/l` or arrows adjust the split; Escape or Enter returns to normal.
+`T` renames the tab, `P` renames the pane, `x` closes the pane and `X`
+closes the tab. Closing the workspace's last tab asks for confirmation when
+configured. Ctrl+G locks or unlocks keyboard passthrough. User bindings
+replace defaults through the same herdr binding registry.
+
+[Shared structure](layout.md) describes document ownership, CAS and adoption.
+Live layout actions require an online inventory subscription. Missing core
+methods or unknown owned document schemas produce a visible reason before
+creation or close. Actions run on a bounded worker; only explicit CAS
+conflicts retry. An ambiguous creation/write is never automatically replayed.
