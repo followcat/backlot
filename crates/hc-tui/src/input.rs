@@ -25,9 +25,8 @@ pub enum KeybindMatch {
     Command(CustomCommandKeybind),
 }
 
-/// One herdr action a resolved binding names. Read-only hc-tui executes the
-/// navigation/selection subset; the rest resolve faithfully and the caller
-/// decides they are inert (documented in docs/parity.md).
+/// One herdr action a resolved binding names. The app executes supported
+/// milestone actions; deferred bindings remain listed in docs/parity.md.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeybindAction {
     NewWorkspace,

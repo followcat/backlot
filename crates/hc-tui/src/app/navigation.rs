@@ -2,9 +2,8 @@
 use super::*;
 
 impl App {
-    /// One resolved keybinding action. Read-only hc-tui executes the
-    /// navigation/selection subset; the rest resolve faithfully but are
-    /// inert until their milestone (documented in docs/parity.md).
+    /// Dispatch navigation and M3a layout/tab operations. Deferred actions
+    /// keep their reference bindings (documented in docs/parity.md).
     pub(super) fn on_action(&mut self, action: crate::input::KeybindAction, _width: u16) {
         use crate::input::KeybindAction as A;
         match action {
@@ -17,7 +16,7 @@ impl App {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
             }
             A::WorkspacePicker => self.enter_workspace_picker(),
-            _ => {}
+            _ => self.layout_action(action),
         }
         self.sync_target();
     }
@@ -67,6 +66,29 @@ impl App {
             .workspaces
             .iter()
             .find(|w| w.workspace_id == target.workspace_id)?;
+        let machine = match &target.endpoint_id {
+            ClientEndpointId::Local => None,
+            ClientEndpointId::Remote(machine) => Some(machine.as_str()),
+        };
+        let preferred = self
+            .view
+            .documents
+            .get(&shared::key())
+            .and_then(|d| crate::structure::Document::decode(d.value.clone()).ok())
+            .and_then(|d| {
+                d.tabs
+                    .get(&crate::project::layout_key(machine, &ws.active_tab_id))
+                    .and_then(|t| t.focused.clone())
+            });
+        if let Some(id) = preferred.filter(|id| {
+            snap.panes.iter().any(|p| {
+                &p.pane_id == id
+                    && p.tab_id == ws.active_tab_id
+                    && p.workspace_id == ws.workspace_id
+            })
+        }) {
+            return Some(id);
+        }
         snap.panes
             .iter()
             .find(|p| p.workspace_id == ws.workspace_id && p.tab_id == ws.active_tab_id)
@@ -222,9 +244,10 @@ impl App {
     }
 
     /// A mobile-switcher row press — the reference's
-    /// `ClientMobileTarget` dispatch. Read-only subset: Machine picks
+    /// `ClientMobileTarget` dispatch. Supported dispatch: Machine picks
     /// the endpoint's first pane; Workspace/Tab pick their panes;
-    /// Agent picks its pane; New* are M3 and inert. A successful focus
+    /// Agent picks its pane; NewTab opens its dialog, NewWorkspace is deferred.
+    /// A successful focus
     /// exits Navigate back to Terminal.
     pub(super) fn on_mobile_target(&mut self, target: &crate::chrome::render::ClientMobileTarget) {
         use crate::chrome::render::ClientMobileTarget as T;
@@ -276,7 +299,13 @@ impl App {
                 .and_then(|s| s.panes.iter().find(|p| &p.tab_id == tab_id))
                 .map(|p| p.pane_id.clone()),
             T::Agent { pane_id, .. } => Some(pane_id.clone()),
-            T::NewWorkspace | T::NewTab | T::Menu(_) => None,
+            T::NewTab => {
+                self.mode = Mode::Normal;
+                self.navigate_target = None;
+                self.new_tab();
+                None
+            }
+            T::NewWorkspace | T::Menu(_) => None,
         };
         if let Some(pane_id) = pane {
             self.focused = Some(pane_id);

@@ -133,6 +133,7 @@ async fn unknown_layout_schema_blocks_close_before_terminal_kill() {
     store
         .submit(request(Action::Close {
             terminals: vec![("t1".into(), 1)],
+            memberships: BTreeMap::new(),
             fallback: BTreeMap::new(),
             next: None,
         }))

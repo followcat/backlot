@@ -155,6 +155,7 @@ pub(super) async fn run(
         }
         Action::Close {
             terminals,
+            memberships,
             fallback,
             next,
         } => {
@@ -171,6 +172,26 @@ pub(super) async fn run(
                     .map_err(|e| e.to_string())?;
                 if current.created_ms != created_ms {
                     return Err("Close target was replaced; reopen the confirmation".into());
+                }
+                let expected = memberships
+                    .get(&terminal)
+                    .ok_or("Missing close membership")?;
+                let machine = terminal.split_once('/').map(|(m, _)| m);
+                let foreign = client
+                    .doc_get(DocGetParams {
+                        name: "herdr-app".into(),
+                        on: machine.map(str::to_owned),
+                    })
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let spaces = crate::structure::read(&[&current], &foreign.value, machine);
+                if !spaces.iter().any(|space| {
+                    space.id == expected.0
+                        && space.tabs.iter().any(|tab| {
+                            tab.id == expected.1 && tab.root.terminals().contains(&terminal)
+                        })
+                }) {
+                    return Err("Close target moved; reopen the confirmation".into());
                 }
                 match client
                     .terminal_kill(TerminalParams {

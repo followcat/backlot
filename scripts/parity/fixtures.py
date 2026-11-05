@@ -3,11 +3,31 @@ import base64
 import json
 
 
+GEOMETRY = r'''
+class Geometry:
+ def __init__(self,path):
+  self.path=path
+  self.published=None
+ def sample(self):
+  grid=tuple(os.get_terminal_size(0))
+  if grid!=self.published:
+   with open(self.path+'.next','w') as f:json.dump(list(grid),f)
+   os.replace(self.path+'.next',self.path)
+   self.published=grid
+  return grid
+ def ready(self,expected):
+  actual=tuple(os.get_terminal_size(0))
+  return actual==self.published and (expected is None or tuple(expected)==self.published)
+'''
+
 PROGRAM = r'''
 import json,os,sys,threading,time,tty
 tty.setraw(0)
 name,request,ready,log=sys.argv[1:]
 received=os.open(log,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
+''' + GEOMETRY + r'''
+geometry=Geometry(log+'.grid')
+geometry.sample()
 initial=("\x1b[2J\x1b[3J\x1b[Hfixture "+name+"\r\n"
  "\x1b[31;4mred-under\x1b[0m\r\n"
  "\x1b[38;2;12;34;56;58;2;65;43;21;4:3mcurly\x1b[0m \x1b[4:2mdouble\x1b[0m "
@@ -22,12 +42,13 @@ open(ready,'w').write('initial')
 def control():
  last=-1
  while True:
+  geometry.sample()
   try:
    with open(request) as f:data=json.load(f)
   except (FileNotFoundError,json.JSONDecodeError):
    time.sleep(.01);continue
   if data['id']!=last:
-   if 'grid' in data and tuple(os.get_terminal_size(0)) != tuple(data['grid']):
+   if not geometry.ready(data.get('grid')):
     time.sleep(.01);continue
    os.write(1,bytes.fromhex(data['hex']))
    last=data['id']
@@ -47,7 +68,7 @@ while True:
 
 class Program:
     def __init__(self, owner, name):
-        assert name in ('alpha', 'beta')
+        assert name in ('alpha', 'beta', 'gamma')
         self.owner = owner
         self.name = name
         self.request = owner.root / (name + '-request.json')

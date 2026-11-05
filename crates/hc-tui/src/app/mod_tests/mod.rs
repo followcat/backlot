@@ -3,6 +3,8 @@ mod cases_1;
 mod cases_2;
 mod layout;
 mod layout_regressions;
+mod m3a;
+mod m3a_review;
 mod narrow;
 mod review_regressions;
 

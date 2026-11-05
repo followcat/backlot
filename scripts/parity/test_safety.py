@@ -145,5 +145,94 @@ class RepositoryFixture(unittest.TestCase):
                              git(paths['beta'], 'rev-parse', '--path-format=absolute', '--git-common-dir'))
 
 
+class LayoutBindingSafety(unittest.TestCase):
+    def test_layout_bindings_use_user_prefix_and_reject_command_chord(self):
+        from layout import binding, chord
+        self.assertEqual(binding({'keys':{'prefix':'ctrl+a'}},'split_vertical'),b'\x01v')
+        self.assertEqual(binding({'keys':{'new_tab':'alt+c'}},'new_tab'),b'\x1bc')
+        self.assertEqual(binding({},'rename_tab'),b'\x02T')
+        self.assertEqual(binding({},'cycle_pane_previous'),b'\x02\x1b[Z')
+        with self.assertRaises(AssertionError): chord('alt+f')
+        with self.assertRaises(AssertionError): chord('super+c')
+
+
+class FixtureIncarnationSafety(unittest.TestCase):
+    def test_reinstall_resets_control_but_preserves_input_evidence(self):
+        from types import SimpleNamespace
+        from layout import install
+        with tempfile.TemporaryDirectory(prefix='hctui-fixture-safety-') as directory:
+            root=Path(directory)
+            request=root/'gamma-request.json';ready=root/'gamma-ready';log=root/'gamma-input.bin'
+            request.write_text('old request');ready.write_text('old ready');log.write_bytes(b'earlier input')
+            def rpc(method,params):
+                self.assertEqual(method,'terminal.send')
+                self.assertFalse(request.exists());self.assertFalse(ready.exists())
+                self.assertEqual(log.read_bytes(),b'earlier input')
+                ready.write_text('initial')
+            install(SimpleNamespace(root=root,kind='core',rpc=rpc,ui=None),'gamma','t4')
+            self.assertEqual(log.read_bytes(),b'earlier input')
+
+
+class FixtureResizeSafety(unittest.TestCase):
+    def test_rapid_resize_keeps_control_thread_and_latest_grid_alive(self):
+        import json,time
+        from types import SimpleNamespace
+        from fixtures import Program,wait_program
+        from pty_host import Pty
+        from sessions import scratch_environment
+        with tempfile.TemporaryDirectory(prefix='hctui-resize-safety-') as directory:
+            root=Path(directory);owner=SimpleNamespace(root=root,kind='fixture',ui=None)
+            program=Program(owner,'alpha')
+            owner.ui=Pty(program.argv,scratch_environment(root),root,80,24)
+            try:
+                wait_program(owner,program)
+                for index in range(400):owner.ui.resize(40+index%30,20+index%7)
+                owner.ui.resize(65,24)
+                program.send(b'fixture resize alive',grid=(65,24))
+                wait_program(owner,program,program.serial)
+                self.assertIsNone(owner.ui.child.poll())
+                self.assertEqual(json.loads(Path(str(program.log)+'.grid').read_text()),[65,24])
+            finally:owner.ui.close()
+
+
+class GeometryPublicationSafety(unittest.TestCase):
+    def test_one_snapshot_is_published_for_aba_and_ack_waits_for_publication(self):
+        import json,os
+        from types import SimpleNamespace
+        from fixtures import GEOMETRY
+        with tempfile.TemporaryDirectory(prefix='hctui-grid-safety-') as directory:
+            samples=iter([(80,24),(40,20),(80,24),(40,20),(40,20),(40,20)])
+            namespace={'json':json,'os':SimpleNamespace(get_terminal_size=lambda _:next(samples),replace=os.replace)}
+            exec(GEOMETRY,namespace)
+            path=Path(directory)/'grid.json';geometry=namespace['Geometry'](str(path))
+            for expected in [(80,24),(40,20),(80,24)]:
+                self.assertEqual(geometry.sample(),expected)
+                self.assertEqual(geometry.published,expected)
+                self.assertEqual(json.loads(path.read_text()),list(expected))
+            self.assertFalse(geometry.ready([40,20]))
+            geometry.sample();self.assertTrue(geometry.ready([40,20]))
+
+
+class ReferenceReadinessSafety(unittest.TestCase):
+    def test_bound_socket_is_retried_until_listening_and_peer_is_verified(self):
+        import os,struct
+        from types import SimpleNamespace
+        from unittest.mock import Mock,patch
+        from sessions import Reference
+        calls=[]
+        class Socket:
+            def __enter__(self):return self
+            def __exit__(self,*_):pass
+            def connect(self,path):
+                calls.append(path)
+                if len(calls)==1:raise ConnectionRefusedError(111,'fixture not listening yet')
+            def getsockopt(self,*_):return struct.pack('3i',123,os.getuid(),0)
+        owner=SimpleNamespace(recovery=Mock(),endpoint=Path('/tmp/owned-fixture.sock'),binary=Path('/usr/bin/herdr-fixture'),ui=SimpleNamespace(child=SimpleNamespace(poll=lambda:None),read=Mock()))
+        with patch('sessions.socket.socket',return_value=Socket()),patch('sessions.Path.read_bytes',return_value=b'/usr/bin/herdr-fixture'):
+            Reference.ready(owner)
+        self.assertEqual(len(calls),2);self.assertEqual(owner.peer_pid,123)
+        owner.ui.read.assert_called_once_with(.03)
+
+
 if __name__ == '__main__':
     unittest.main()

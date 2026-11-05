@@ -74,7 +74,7 @@ pub fn help_text() -> String {
     format!(
         "\
 hc-tui {}
-Terminal UI for herdr-core (hc) — read-only milestone build.
+Terminal UI for herdr-core (hc) — shared layout and terminal client.
 
 Usage: hc-tui [OPTIONS]
 
@@ -86,9 +86,10 @@ Options:
 
 Default keys: Ctrl+B prefix — q detach · w workspace navigation ·
 b sidebar · ? keybinds · Ctrl+B Ctrl+B literal ^B.
-Herdr configuration supplies the prefix and bindings. Layout/action commands
-are not available in this read-only build. Click the terminal-size notice to
-take control when another viewer may own the grid.
+Herdr configuration supplies the prefix and bindings. Layout keys include
+c new tab · v/- split · h/j/k/l focus · z zoom · r resize · x close.
+Ctrl+G toggles keyboard lock. Custom commands and remaining actions are deferred.
+Click the terminal-size notice to take control when another viewer may own the grid.
 Everything else types into the focused terminal.",
         env!("CARGO_PKG_VERSION"),
     )
@@ -146,6 +147,11 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
             hc_proto::client::Attach::connect(&endpoint, ssh.as_deref(), &params).await
         })
     });
+    let operation_endpoint = endpoint.clone();
+    let operations: hc_proto::watch::OpenRpc = Arc::new(move || {
+        let endpoint = operation_endpoint.clone();
+        Box::pin(async move { hc_proto::client::Client::connect(&endpoint, None).await })
+    });
     let mouse_capture = shell.mouse_capture;
     let mut app = App::new(
         watcher,
@@ -155,6 +161,8 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         Arc::new(Probe::default()),
         crate::term::cursor_sink(),
     );
+
+    app.set_operations(operations);
 
     // Guard declared before the terminal: the terminal drops first,
     // the guard restores raw mode/modes/cursor last — on success,

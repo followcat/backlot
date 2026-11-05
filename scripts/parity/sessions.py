@@ -1,5 +1,6 @@
 """Explicit, owned scratch sessions. No discovery of existing user sessions."""
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path
@@ -197,14 +198,19 @@ class Reference(Owned):
     def ready(self):
         self.recovery()
         deadline = time.monotonic() + 15
-        while not self.endpoint.exists():
+        while True:
             assert time.monotonic() < deadline, 'owned reference socket readiness'
             assert self.ui.child.poll() is None, 'owned reference UI exited'
-            self.ui.read(.03)
-        with socket.socket(socket.AF_UNIX) as stream:
-            stream.connect(str(self.endpoint))
-            self.peer_pid, uid, _ = struct.unpack('3i', stream.getsockopt(
-                socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))
+            try:
+                with socket.socket(socket.AF_UNIX) as stream:
+                    stream.connect(str(self.endpoint))
+                    self.peer_pid, uid, _ = struct.unpack('3i', stream.getsockopt(
+                        socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))
+                break
+            except OSError as error:
+                if error.errno not in (errno.ENOENT, errno.ECONNREFUSED):
+                    raise
+                self.ui.read(.03)
         assert uid == os.getuid()
         assert str(self.binary).encode() in Path(f'/proc/{self.peer_pid}/cmdline').read_bytes()
         self.recovery()

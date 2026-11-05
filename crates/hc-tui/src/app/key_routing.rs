@@ -10,6 +10,8 @@ pub(super) struct Context {
     mode: Mode,
     prefix: bool,
     help: bool,
+    locked: bool,
+    dialog: bool,
 }
 
 impl App {
@@ -18,6 +20,8 @@ impl App {
             mode: self.mode.clone(),
             prefix: self.prefix.armed(),
             help: self.help,
+            locked: self.keyboard_locked,
+            dialog: self.dialog.is_some(),
         }
     }
 
@@ -92,6 +96,29 @@ impl App {
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);
+        if key.input.key == Key::Char('g')
+            && key.input.mods == hc_vt::Mods::CTRL
+            && (self.keyboard_locked || (!self.help && self.dialog.is_none()))
+        {
+            if key.input.action == Action::Press {
+                self.keyboard_locked = !self.keyboard_locked;
+                self.prefix.reset();
+                self.mode = Mode::Normal;
+                self.navigate_target = None;
+            }
+            return None;
+        }
+        if self.keyboard_locked {
+            return self.pane.target().map(|_| self.pane.generation());
+        }
+        if self.dialog.is_some() {
+            self.dialog_key(&press);
+            return None;
+        }
+        if self.mode == Mode::Resize {
+            self.resize_key(&press, width);
+            return None;
+        }
         if self.help {
             self.handle_help_key(&press);
             return None;
@@ -123,7 +150,7 @@ impl App {
                 }
                 Decision::Command(command) => {
                     // M4 owns command execution; retain the resolved description
-                    // without running any configured shell in this read-only UI.
+                    // without executing the deferred custom-command action.
                     self.reject_input(
                         command
                             .description
@@ -227,5 +254,31 @@ impl App {
             }
         }
         self.pane_leases.remove_sole_text_press(0)
+    }
+}
+
+impl App {
+    fn resize_key(&mut self, key: &TerminalKey, width: u16) {
+        use crossterm::event::KeyCode;
+        let combo = crate::input::terminal_key_of(key);
+        let binding = &self.live.keybinds.resize_mode;
+        if matches!(combo.code, KeyCode::Esc | KeyCode::Enter)
+            || binding.matches_prefix_key(&combo)
+            || binding.matches_direct_key(&combo)
+        {
+            self.mode = Mode::Normal;
+            return;
+        }
+        use crate::input::KeybindAction as A;
+        let action = match combo.code {
+            KeyCode::Left | KeyCode::Char('h') => Some(A::ResizePaneLeft),
+            KeyCode::Down | KeyCode::Char('j') => Some(A::ResizePaneDown),
+            KeyCode::Up | KeyCode::Char('k') => Some(A::ResizePaneUp),
+            KeyCode::Right | KeyCode::Char('l') => Some(A::ResizePaneRight),
+            _ => None,
+        };
+        if let Some(action) = action {
+            self.on_action(action, width);
+        }
     }
 }

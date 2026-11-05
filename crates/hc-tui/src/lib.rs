@@ -1,9 +1,9 @@
-//! `hc-tui`: a read-only terminal client for `herdr-core` (`hc`).
+//! `hc-tui`: a terminal client with shared layout for `herdr-core` (`hc`).
 //!
 //! The binary parses `--session`/`--remote`, resolves the endpoint and
 //! runs the current-thread application: a reconnecting watcher feeds
-//! the sidebar, one attach at a time paints the displayed terminal
-//! through `hc-vt`, and the Ctrl+B prefix drives navigation. Input,
+//! the sidebar and shared layout, persistent VTs paint every visible pane
+//! through `hc-vt`, and configured bindings drive navigation. Input,
 //! geometry and lifecycle code is separated from I/O for tests.
 
 pub mod app;

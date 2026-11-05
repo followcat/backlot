@@ -4,6 +4,7 @@
 
 pub mod agents;
 pub mod detect;
+pub(crate) mod dialogs;
 pub mod endpoint_agents;
 pub mod endpoint_sidebar;
 pub mod endpoint_sidebar_expanded;
@@ -67,6 +68,8 @@ pub struct ClientShellConfig {
     pub tab_bar_right_separator: String,
     pub mouse_scroll_lines: usize,
     pub right_click_passthrough_modifiers: Option<hc_vt::Mods>,
+    pub prompt_new_tab_name: bool,
+    pub confirm_close: bool,
     pub pane_borders: PaneBordersConfig,
     pub pane_gaps: bool,
     pub pane_outer_borders: bool,
@@ -143,6 +146,8 @@ impl ClientShellConfig {
                 }
                 value
             }),
+            prompt_new_tab_name: ui.prompt_new_tab_name,
+            confirm_close: ui.confirm_close,
             pane_borders: ui.pane_borders,
             pane_gaps: ui.pane_gaps,
             pane_outer_borders: ui.pane_outer_borders,

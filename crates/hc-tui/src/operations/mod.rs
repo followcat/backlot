@@ -38,6 +38,7 @@ pub enum Action {
     Create(Box<Creation>),
     Close {
         terminals: Vec<(String, u64)>,
+        memberships: BTreeMap<String, (String, String)>,
         fallback: BTreeMap<String, crate::structure::TabLayout>,
         next: Option<String>,
     },

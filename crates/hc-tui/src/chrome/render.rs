@@ -72,6 +72,7 @@ pub(crate) struct ShellHitMap {
     pub workspace_max_scroll: usize,
     pub tabs: Vec<(Rect, String)>,
     pub panes: Vec<PaneHit>,
+    pub pane_splits: Vec<crate::app::layout_mouse::SplitHit>,
     pub agents: Vec<(Rect, String)>,
     pub endpoint_agents: Vec<(Rect, ClientEndpointId, String)>,
     pub agent_body: Rect,

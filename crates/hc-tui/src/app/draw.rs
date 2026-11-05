@@ -84,7 +84,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_focused_tab: &mut app.shell_state.reveal_focused_tab,
         sidebar_collapsed: collapsed,
         sidebar_section_split: app.shell_state.sidebar_section_split,
-        tab_drag_insert_index: None,
+        tab_drag_insert_index: app.tab_drag_index,
         selected_workspace_id: app.navigate_target.as_ref(),
         reveal_navigation_workspace: &mut app.shell_state.reveal_navigation_workspace,
         dragged_workspace_id: None,
@@ -105,16 +105,40 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         app.shell.pane_gaps,
         &pane_infos,
         &split_borders(app, layout.pane_surface),
-        &|id| {
-            app.projection
-                .snapshot
-                .panes
-                .iter()
-                .find(|p| p.pane_id == id)
-                .and_then(|p| p.label.clone())
-        },
+        &|id| super::pane_geometry::border_label(app, id),
         &app.shell.palette,
     );
+    if app.shell.mouse_capture
+        && let Some(tab) = app.projection.snapshot.focused_tab_id.as_ref()
+        && let Some(root) = app
+            .projection
+            .layouts
+            .get(tab)
+            .filter(|t| t.zoomed.is_none())
+            .and_then(|t| t.root.as_ref())
+    {
+        let frames = pane_infos.iter().map(|p| p.rect).collect::<Vec<_>>();
+        app.hit_map.pane_splits = root
+            .layout(app.focused.as_deref())
+            .0
+            .splits(layout.pane_surface)
+            .into_iter()
+            .filter_map(|split| {
+                let rect = super::layout_mouse::split_hit_rect(
+                    &split,
+                    app.shell.pane_borders.draws_borders(),
+                    app.shell.pane_gaps,
+                    &frames,
+                )?;
+                Some(super::layout_mouse::SplitHit {
+                    rect,
+                    split,
+                    root: root.clone(),
+                    tab: tab.clone(),
+                })
+            })
+            .collect();
+    }
     let inner = pane_inner(app, area.width, area.height);
     let mut cursor = CursorWish {
         pos: None,
@@ -122,8 +146,9 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         shape: CursorShape::Default,
         blinking: true,
     };
-    let hide_cursor =
-        app.help || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
+    let hide_cursor = app.help
+        || app.dialog.is_some()
+        || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
     for info in &pane_infos {
         let Some(pane) = app.displayed_pane_mut(&info.id) else {
@@ -161,7 +186,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         layout.pane_surface
     };
     let mobile_navigate = !layout.mobile_header.is_empty() && app.mode == Mode::Navigate;
-    let mode_bar = if app.help || mobile_navigate {
+    let mode_bar = if app.help || app.dialog.is_some() || mobile_navigate {
         None
     } else {
         crate::chrome::modebar::render_mode_bar(
@@ -173,8 +198,9 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 }
                 Mode::Normal => crate::chrome::modebar::ClientShellMode::Terminal,
                 Mode::Navigate => crate::chrome::modebar::ClientShellMode::Navigate,
+                Mode::Resize => crate::chrome::modebar::ClientShellMode::Resize,
             },
-            false,
+            app.keyboard_locked,
             None,
             false,
             &app.live,
@@ -243,6 +269,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             blinking: true,
         };
     }
+    app.render_dialog(buf);
     // Derived from herdr protocol/render_ansi.rs::frame_with_drawn_cursor.
     if app.shell.draw_host_cursor
         && let Some(position) = app.want_cursor.pos.take()

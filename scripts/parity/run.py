@@ -53,8 +53,8 @@ def differences(reference, candidate, default_title=False):
     return differences
 
 
-def detach(owner, decoder=None):
-    owner.ui.send(b'\x02q')
+def detach(owner, decoder=None, keys=b'\x02q'):
+    owner.ui.send(keys)
     deadline = time.monotonic() + 5
     while owner.ui.child.poll() is None and time.monotonic() < deadline:
         owner.ui.read(.03)
@@ -68,6 +68,9 @@ def detach(owner, decoder=None):
 
 
 def one_size(args, size, binary):
+    if args.scenario == "layout":
+        from layout import run as run_layout
+        return run_layout(args,size,binary)
     out = args.out / f'{size[0]}x{size[1]}'
     out.mkdir(parents=True, exist_ok=False)
     core = reference = None
@@ -289,7 +292,7 @@ def main():
     parser.add_argument('--decoder', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--size', choices=['80x24', '120x40', '200x50', '65x24', '64x24', '40x24'], action='append')
-    parser.add_argument('--scenario', choices=['default', 'prefix-conflict', 'repository'], default='default')
+    parser.add_argument('--scenario', choices=['default', 'prefix-conflict', 'repository', 'layout'], default='default')
     parser.add_argument('--host-program', choices=['wezterm', 'alacritty'])
     parser.add_argument('--smoke', action='store_true', help='baseline only; not an acceptance run')
     args = parser.parse_args()

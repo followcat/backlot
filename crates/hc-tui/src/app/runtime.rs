@@ -25,8 +25,11 @@ impl App {
             self.sidebar_width,
         );
         let infos = pane_geometry::pane_infos(self, layout.pane_surface);
-        self.size_leases
-            .retain(|id, _| infos.iter().any(|info| &info.id == id));
+        self.size_leases.retain(|id, _| {
+            !id.is_empty()
+                && self.view.inventory.get(id).is_some()
+                && infos.iter().any(|info| &info.id == id)
+        });
         for info in infos {
             let inner = self
                 .displayed_pane(&info.id)
@@ -37,6 +40,9 @@ impl App {
             }
             if let Some(pane) = self.observers.get_mut(&info.id) {
                 pane.allocated(inner.width.max(1), inner.height.max(1));
+            }
+            if info.id.is_empty() || self.view.inventory.get(&info.id).is_none() {
+                continue;
             }
             let lease = self.size_leases.entry(info.id.clone()).or_insert_with(|| {
                 let mut lease = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
@@ -151,6 +157,7 @@ impl App {
                         }
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
+                    result = Self::operation_result(&mut self.operations) => self.on_operation(result),
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
                             self.pane_event(ev, Instant::now());
@@ -174,6 +181,7 @@ impl App {
                         }
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
+                    result = Self::operation_result(&mut self.operations) => self.on_operation(result),
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
                             self.pane_event(ev, Instant::now());

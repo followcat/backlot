@@ -1,7 +1,7 @@
 // Derived in part from herdr src/input/model.rs and
 // src/client/shell/input.rs (Apache-2.0).
 //! Input handling: a neutral `UiEvent` stream (outer keys, paste, resize,
-//! focus), the documented M2 Ctrl+B prefix subset, and the crossterm
+//! focus), the configurable reference prefix model, and the crossterm
 //! translation layer. Deciding code (`Prefix`, `selector_key`) is pure and
 //! unit-tested; crossterm only adapts bytes at the edge.
 
@@ -166,7 +166,7 @@ pub enum MouseButton {
 pub enum Decision {
     /// A resolved keybinding action (see `KeybindAction`).
     Action(crate::input::KeybindAction),
-    /// A configured custom command — read-only hc-tui does not spawn
+    /// A configured custom command — M3a does not spawn
     /// shell/popup/plugin commands, so it resolves but stays inert.
     Command(crate::config::CustomCommandKeybind),
     /// Forward to the inner terminal — the full semantic key (generated

@@ -58,7 +58,7 @@ fn line_cell_symbol(line: LineCell) -> &'static str {
 }
 
 /// `render_pane_borders` + `render_pane_border_titles` combined. `titles` maps
-/// pane id → already-computed border title text (`pane_border_title`).
+/// pane id → raw border label, formatted with the reference title helper.
 pub(crate) fn render_pane_borders(
     buffer: &mut Buffer,
     pane_borders: PaneBordersConfig,
@@ -108,7 +108,10 @@ pub(crate) fn render_pane_borders(
         if !info.borders.contains(Borders::TOP) || info.rect.width <= 4 {
             continue;
         }
-        let Some(title) = titles(&info.id) else {
+        let Some(label) = titles(&info.id) else {
+            continue;
+        };
+        let Some(title) = pane_border_title(&label, info.rect.width) else {
             continue;
         };
         let y = info.rect.y;
@@ -156,4 +159,29 @@ pub(crate) fn render_pane_scrollbar(
         return;
     };
     render_pane_scrollbar_buffer(buffer, metrics, track, palette, focused);
+}
+
+fn pane_border_title(label: &str, pane_width: u16) -> Option<String> {
+    let label = label.trim();
+    if label.is_empty() || pane_width <= 4 {
+        return None;
+    }
+    Some(format!(
+        " {} ",
+        super::text::truncate_end(label, pane_width.saturating_sub(4) as usize)
+    ))
+}
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+    #[test]
+    fn reference_border_labels_have_padding_and_display_width_truncation() {
+        assert_eq!(
+            pane_border_title(" pane-b ", 20).as_deref(),
+            Some(" pane-b ")
+        );
+        assert_eq!(pane_border_title("abcdef", 8).as_deref(), Some(" abc… "));
+        assert_eq!(pane_border_title("模块组织", 8).as_deref(), Some(" 模… "));
+        assert_eq!(pane_border_title("x", 4), None);
+    }
 }

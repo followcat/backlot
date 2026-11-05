@@ -4,6 +4,7 @@ use super::*;
 impl App {
     /// One neutral input event.
     pub(super) fn on_input(&mut self, ev: UiEvent, width: u16) {
+        let before = self.focused.clone();
         match ev {
             UiEvent::Resize { cols, rows } => {
                 self.area = (cols, rows);
@@ -32,7 +33,8 @@ impl App {
             }
             UiEvent::Paste(text) => {
                 // Paste is never parsed as UI keys.
-                if self.help {
+                if self.insert_dialog_text(&String::from_utf8_lossy(&text)) {
+                } else if self.help {
                     if self.help_state.search_focused
                         && self
                             .help_state
@@ -49,7 +51,8 @@ impl App {
             UiEvent::Key(key) => self.on_key(key, width),
             UiEvent::Text(text) => {
                 // IME/commit text: bytes only, never a UI binding.
-                if self.help {
+                if self.insert_dialog_text(&text) {
+                } else if self.help {
                     if self.help_state.search_focused && self.help_state.query.insert(&text) {
                         self.help_state.scroll = 0;
                     }
@@ -63,6 +66,10 @@ impl App {
             UiEvent::InputRejected(reason) => self.reject_input(reason),
         }
         self.resume_mobile_switcher_if_ready();
+        if self.focused != before && self.mode != Mode::Navigate {
+            self.previous_pane = before;
+            self.persist_focus();
+        }
     }
 
     /// Derived from herdr src/client/shell/input.rs `host_text_commit`
@@ -75,6 +82,7 @@ impl App {
             || key.input.action != hc_vt::Action::Press
             || self.mode != Mode::Normal
             || self.help
+            || self.dialog.is_some()
         {
             return None;
         }

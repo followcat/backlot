@@ -9,7 +9,7 @@ pub enum Role {
     Active,
     /// A visible pane size holder: never sends human input or focus.
     SizeLease,
-    /// A preview while browsing the selector: never types or resizes.
+    /// Persistent presentation or preview: never types or claims size.
     Observe,
 }
 

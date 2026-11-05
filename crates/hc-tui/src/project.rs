@@ -62,7 +62,7 @@ pub(crate) fn term_num(address: &str) -> u64 {
 /// root, then record name). The winning record's `app`/`title` fields feed
 /// the agent display — a named blocked/working report still presents when
 /// the root record is absent or idle.
-fn effective_status(term: &Terminal) -> Option<&Status> {
+pub(crate) fn effective_status(term: &Terminal) -> Option<&Status> {
     let effective = crate::sidebar::effective(term)?;
     match &effective.record {
         Some(name) => term.records.get(name.as_str()),

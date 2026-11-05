@@ -1,5 +1,5 @@
 // Derived in part from herdr src/pane/terminal.rs (Apache-2.0).
-//! The one displayed terminal: attach lifecycle, role (active/observer),
+//! One pane connection: attach lifecycle, role (input/observe/size holder),
 //! VT state, credit, input backpressure and reattach policy — all owned
 //! here so the app loop only sees `PaneEv` events and drawing state.
 //!

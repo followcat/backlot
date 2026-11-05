@@ -265,7 +265,7 @@ impl Pane {
     }
 
     /// The pane's allocated inner area changed (window resize, sidebar
-    /// toggle). Only an active attach may ask the core to match, and a
+    /// toggle). Active input and silent size holders may ask the core to match; a
     /// dropped send stays pending — never marked, never applied locally.
     pub fn allocated(&mut self, cols: u16, rows: u16) {
         if self.allocated == (cols, rows) {

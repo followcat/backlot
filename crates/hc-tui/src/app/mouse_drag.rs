@@ -2,10 +2,18 @@
 use super::*;
 
 impl App {
-    /// `LeftDrag`: continue the grab. Workspace/tab presses only record
-    /// intent in M2 — reordering is deferred, so no drag promotion.
+    /// `LeftDrag`: continue the grab; one cell promotes a tab press.
     pub(in crate::app) fn mouse_drag(&mut self, point: (u16, u16)) {
+        if let Some(press) = &self.tab_press
+            && (self.tab_dragged
+                || point.0.abs_diff(press.start_column) >= 1
+                || point.1.abs_diff(press.start_row) >= 1)
+        {
+            self.tab_drag_index = self.tab_drop_index(point);
+            self.tab_dragged |= self.tab_drag_index.is_some();
+        }
         match self.chrome_drag.clone() {
+            Some(ChromeDrag::PaneSplit { .. }) => self.drag_split(point, false),
             Some(ChromeDrag::SidebarWidth) => self.set_sidebar_width_from_column(point.0),
             Some(ChromeDrag::SidebarSection) => self.set_sidebar_section_from_row(point.1),
             Some(ChromeDrag::WorkspaceScrollbar { grab_row_offset }) => {
@@ -55,6 +63,9 @@ impl App {
     /// `LeftUp`: a press that never became a drag is a click —
     /// workspace/tab presses focus their target.
     pub(in crate::app) fn mouse_release(&mut self, point: (u16, u16)) {
+        if matches!(self.chrome_drag, Some(ChromeDrag::PaneSplit { .. })) {
+            self.drag_split(point, true);
+        }
         self.chrome_drag = None;
         if let Some(press) = self.workspace_press.take() {
             let moved = point.0.abs_diff(press.start_column) > DRAG_THRESHOLD
@@ -64,10 +75,32 @@ impl App {
             }
         }
         if let Some(press) = self.tab_press.take() {
-            let moved = point.0.abs_diff(press.start_column) > DRAG_THRESHOLD
-                || point.1.abs_diff(press.start_row) > DRAG_THRESHOLD;
-            if !moved {
+            let promoted = std::mem::take(&mut self.tab_dragged);
+            self.tab_drag_index = None;
+            if !promoted {
                 self.focus_tab(&press.tab_id);
+            } else if let Some(insert) = self.tab_drop_index(point) {
+                let tabs = self
+                    .projection
+                    .snapshot
+                    .tabs
+                    .iter()
+                    .filter(|t| {
+                        Some(&t.workspace_id)
+                            == self.projection.snapshot.focused_workspace_id.as_ref()
+                    })
+                    .map(|t| t.tab_id.clone())
+                    .collect::<Vec<_>>();
+                if let Some(source) = tabs.iter().position(|id| id == &press.tab_id) {
+                    let destination = insert
+                        .saturating_sub(usize::from(source < insert))
+                        .min(tabs.len().saturating_sub(1));
+                    self.edit_layout(crate::operations::Change::MoveTab {
+                        tab_id: press.tab_id,
+                        direction: destination as isize - source as isize,
+                        fallback: tabs,
+                    });
+                }
             }
         }
     }
@@ -111,28 +144,14 @@ impl App {
         _endpoint_id: &crate::chrome::snapshot::ClientEndpointId,
         workspace_id: &str,
     ) {
-        let snapshot = &self.projection.snapshot;
-        let Some(workspace) = snapshot
-            .workspaces
-            .iter()
-            .find(|w| w.workspace_id == workspace_id)
-        else {
-            return;
+        let target = crate::chrome::navigate::WorkspaceNavigationTarget {
+            endpoint_id: _endpoint_id.clone(),
+            workspace_id: workspace_id.to_owned(),
+            boot_id: String::new(),
+            generation: None,
         };
-        let active = workspace.active_tab_id.clone();
-        let target = snapshot
-            .panes
-            .iter()
-            .find(|p| p.workspace_id == workspace_id && p.tab_id == active)
-            .or_else(|| {
-                snapshot
-                    .panes
-                    .iter()
-                    .find(|p| p.workspace_id == workspace_id)
-            })
-            .map(|p| p.pane_id.clone());
-        if let Some(pane_id) = target {
-            self.focus_pane(pane_id);
+        if let Some(id) = self.workspace_terminal(&target) {
+            self.focus_pane(id);
         }
     }
 

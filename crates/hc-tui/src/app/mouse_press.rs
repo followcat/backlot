@@ -8,6 +8,8 @@ impl App {
         self.chrome_drag = None;
         self.workspace_press = None;
         self.tab_press = None;
+        self.tab_drag_index = None;
+        self.tab_dragged = false;
         // Mobile: the header's switch chip opens the Navigate switcher.
         if self.mobile() && contains(hits.mobile_switch, point) {
             self.enter_workspace_picker();
@@ -108,6 +110,10 @@ impl App {
         }
         if contains(hits.tab_scroll_right, point) {
             self.shell_state.tab_scroll = self.shell_state.tab_scroll.saturating_add(1);
+            return;
+        }
+        if contains(hits.new_tab, point) {
+            self.new_tab();
             return;
         }
         let group_toggle = hits.workspaces.iter().find_map(|hit| {

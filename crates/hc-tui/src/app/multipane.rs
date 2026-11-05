@@ -38,6 +38,9 @@ impl App {
         }
     }
     pub(super) fn follow_shared_focus(&mut self) {
+        if self.pending_actions > 0 {
+            return;
+        }
         let key = hc_proto::watch::DocKey {
             machine: None,
             name: "hc-tui".into(),

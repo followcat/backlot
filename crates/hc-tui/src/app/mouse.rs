@@ -7,7 +7,7 @@
 //! reference scrolls by 1 regardless of the setting for the lists; the
 //! config lines only apply to pane scroll.
 //!
-//! hc-tui is single-attach: a "focus" resolves to the attached
+//! Input has one focused connection: a "focus" resolves to the attached
 //! terminal behind a workspace/tab/agent hit, and pane wheel scroll is
 //! the VT's own viewport scroll (`scroll_delta`) — or SGR bytes to the
 //! program when it enabled mouse tracking.
@@ -30,8 +30,15 @@ fn contains(rect: Rect, point: (u16, u16)) -> bool {
 
 /// What a left-press grabbed — the reference's `ClientChromeDrag`
 /// subset hc-tui implements.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) enum ChromeDrag {
+    PaneSplit {
+        hit: Box<super::layout_mouse::SplitHit>,
+        edit: Box<crate::operations::Edit>,
+        grab: i32,
+        last: Option<Instant>,
+        core: String,
+    },
     SidebarWidth,
     SidebarSection,
     WorkspaceScrollbar {
@@ -103,6 +110,10 @@ impl App {
                 return;
             }
         }
+        if self.dialog.is_some() {
+            self.dialog_mouse(mouse);
+            return;
+        }
         if self.help {
             self.handle_help_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
@@ -120,6 +131,24 @@ impl App {
         if self.mobile() && self.mode == Mode::Navigate {
             self.mobile_navigate_mouse(mouse);
             self.sched.mark_dirty(std::time::Instant::now());
+            return;
+        }
+        if self.tab_press.is_some()
+            && matches!(
+                mouse.kind,
+                MouseEventKind::Drag(MouseButton::Left) | MouseEventKind::Up(MouseButton::Left)
+            )
+        {
+            match mouse.kind {
+                MouseEventKind::Drag(_) => self.mouse_drag((mouse.col, mouse.row)),
+                _ => self.mouse_release((mouse.col, mouse.row)),
+            }
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+            && self.grab_split((mouse.col, mouse.row))
+        {
             return;
         }
         if self.route_pane_mouse(mouse) {
@@ -216,7 +245,7 @@ impl App {
             return;
         }
         // Tab row + its buttons: wheel advances tabs like the reference's
-        // NextTab binding (read-only: focus the adjacent tab's pane).
+        // NextTab binding (focus the adjacent tab's remembered pane).
         if hits.tabs.iter().any(|(rect, _)| contains(*rect, point))
             || contains(hits.tab_scroll_left, point)
             || contains(hits.tab_scroll_right, point)

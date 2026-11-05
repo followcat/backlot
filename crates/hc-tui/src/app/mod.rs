@@ -1,14 +1,16 @@
-//! The interactive read-only client: owns the inventory watcher, the
-//! sidebar, the displayed pane and the draw scheduler. One owner for all
+//! The interactive client: owns inventory, shared layout, pane connections
+//! and the draw scheduler. One owner for all
 //! UI/VT state; the loop awaits input, protocol notifications and
 //! bounded actor results, and redraws only when dirty under the ~60 Hz
 //! cap — there is no idle poll timer.
 //!
-//! M2 uses the reference prefix: `q` detaches, `w` opens workspace
-//! navigation, `b` toggles the sidebar and `?` opens keybind help.
-//! Unimplemented layout/actions remain assigned to later milestones.
+//! M3a implements structure, layout/tab operations and bindings plus lock.
+//! Custom commands, notifications and remaining actions belong to M4.
 
 mod agent_presentation;
+mod closing;
+mod creation;
+mod dialogs;
 mod draw;
 mod help;
 mod host;
@@ -17,6 +19,8 @@ pub(crate) mod input;
 mod input_dispatch;
 mod key_leases;
 mod key_routing;
+mod layout_actions;
+pub(crate) mod layout_mouse;
 mod mouse;
 mod multipane;
 mod navigation;
@@ -28,6 +32,7 @@ mod presentation;
 mod routing;
 mod runtime;
 mod sched;
+mod shared;
 mod tab_status;
 mod window_title;
 
@@ -60,6 +65,7 @@ pub(crate) enum Mode {
     /// Navigate mode — the workspace picker the reference enters on
     /// `WorkspacePicker`; the pane previews the highlight via `observe`.
     Navigate,
+    Resize,
 }
 
 /// Instrumentation counters a test can hold across `run`.
@@ -132,8 +138,16 @@ pub struct App {
     size_leases: std::collections::BTreeMap<String, pane::Pane>,
     observer_mru: std::collections::VecDeque<String>,
     layout_seen: Option<(String, u64)>,
+    operations: Option<crate::operations::Store>,
+    pending_actions: usize,
+    layout_confirmed: Option<(String, hc_proto::watch::Document)>,
     prefix: input::Prefix,
     mode: Mode,
+    keyboard_locked: bool,
+    previous_pane: Option<String>,
+    last_focus: Option<String>,
+    dialog: Option<dialogs::Dialog>,
+    dialog_hits: crate::chrome::dialogs::DialogRender,
     help: bool,
     mobile_switcher_suspended: bool,
     help_state: crate::chrome::help::HelpState,
@@ -167,6 +181,9 @@ pub struct App {
     /// Pressed-but-unreleased workspace/tab rows.
     workspace_press: Option<mouse::WorkspacePress>,
     tab_press: Option<mouse::TabPress>,
+    tab_drag_index: Option<usize>,
+    tab_dragged: bool,
+    interaction_core: Option<String>,
     /// For the divider's double-click reset.
     last_divider_click: Option<Instant>,
     /// Last frame's clickable rects.
@@ -254,7 +271,32 @@ impl App {
     /// `focused_*` snapshot ids must track the focus without waiting
     /// for the next watcher publish.
     fn refresh_projection(&mut self) {
+        if self.focused != self.last_focus {
+            self.previous_pane = self.last_focus.clone();
+            self.last_focus = self.focused.clone();
+        }
+        let old_tab = self.projection.snapshot.focused_tab_id.clone();
+        let old_order = self
+            .projection
+            .snapshot
+            .tabs
+            .iter()
+            .map(|t| t.tab_id.clone())
+            .collect::<Vec<_>>();
         self.projection = crate::project::project(&self.view, self.focused.as_deref());
+        if old_tab != self.projection.snapshot.focused_tab_id
+            || old_order
+                != self
+                    .projection
+                    .snapshot
+                    .tabs
+                    .iter()
+                    .map(|t| t.tab_id.clone())
+                    .collect::<Vec<_>>()
+        {
+            self.shell_state.reveal_focused_tab = true;
+        }
+
         self.presentation.project(&self.view, &mut self.projection);
         self.update_tab_status(Instant::now());
         self.update_window_title();
@@ -271,21 +313,26 @@ impl App {
     fn on_view(&mut self) {
         self.view = self.watcher.view();
         self.seen = self.view.version;
+        self.retain_confirmed_layout();
         self.reconcile_published_view();
     }
 
     /// Everything `on_view` does after the view lands — split out so
     /// tests can publish a synthetic `self.view` through the same path.
     fn reconcile_published_view(&mut self) {
+        self.fence_chrome_core();
         self.follow_shared_focus();
         self.refresh_projection();
         // If the focused terminal fell out of the inventory entirely,
         // the projection's first pane is the deterministic fallback.
         if self.mode == Mode::Normal
-            && self
-                .focused
-                .as_ref()
-                .is_none_or(|f| self.view.inventory.get(f).is_none())
+            && self.focused.as_ref().is_none_or(|f| {
+                self.projection
+                    .snapshot
+                    .panes
+                    .iter()
+                    .all(|p| &p.pane_id != f)
+            })
         {
             let fallback = self
                 .projection

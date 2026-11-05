@@ -26,14 +26,24 @@ pub(super) fn pane_infos(app: &App, surface: Rect) -> Vec<PaneInfo> {
         .focused_tab_id
         .as_ref()
         .and_then(|id| app.projection.layouts.get(id));
-    let infos = if let Some(zoomed) = tab.and_then(|t| t.zoomed.as_ref()) {
-        vec![PaneInfo {
+    if let Some(zoomed) = tab.and_then(|t| t.zoomed.as_ref()) {
+        let multiple = tab
+            .and_then(|t| t.root.as_ref())
+            .is_some_and(|r| r.terminals().len() > 1);
+        return vec![PaneInfo {
             id: zoomed.clone(),
             rect: surface,
-            borders: Default::default(),
+            borders: if app.shell.pane_borders.shows_borders(multiple)
+                && app.shell.pane_outer_borders
+            {
+                ratatui::widgets::Borders::ALL
+            } else {
+                ratatui::widgets::Borders::NONE
+            },
             is_focused: true,
-        }]
-    } else if let Some(root) = tab.and_then(|t| t.root.as_ref()) {
+        }];
+    }
+    let infos = if let Some(root) = tab.and_then(|t| t.root.as_ref()) {
         let (layout, ids) = root.layout(app.focused.as_deref());
         layout
             .panes(surface)
@@ -128,4 +138,34 @@ pub(crate) fn pane_inner(app: &mut App, cols: u16, rows: u16) -> Rect {
     let info = infos.iter().find(|p| p.is_focused).unwrap_or(&infos[0]);
     let pane = app.displayed_pane(&info.id).unwrap_or(&app.pane);
     inner_for(pane, info, app.shell.pane_scrollbars).0
+}
+
+// Derived from herdr src/terminal/state.rs::border_label (Apache-2.0).
+pub(super) fn border_label(app: &App, id: &str) -> Option<String> {
+    let agent = app
+        .projection
+        .snapshot
+        .agents
+        .iter()
+        .find(|a| a.pane_id == id);
+    app.view
+        .inventory
+        .get(id)
+        .and_then(crate::project::effective_status)
+        .map(|s| crate::sidebar::clean(&s.title))
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            app.projection
+                .snapshot
+                .panes
+                .iter()
+                .find(|p| p.pane_id == id)
+                .and_then(|p| p.label.clone())
+        })
+        .or_else(|| {
+            app.shell
+                .show_agent_labels_on_pane_borders
+                .then(|| agent.and_then(|a| a.display_agent.clone().or_else(|| a.agent.clone())))
+                .flatten()
+        })
 }

@@ -168,6 +168,7 @@ async fn replaced_close_target_is_checked_before_kill() {
     store
         .submit(request(Action::Close {
             terminals: vec![("t1".into(), 1)],
+            memberships: BTreeMap::new(),
             fallback: BTreeMap::new(),
             next: None,
         }))
@@ -179,5 +180,51 @@ async fn replaced_close_target_is_checked_before_kill() {
         .err()
         .unwrap();
     assert!(error.contains("replaced"));
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn close_rechecks_foreign_membership_before_terminal_kill() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(
+            &mut core,
+            &["doc.get", "doc.set", "terminal.get", "terminal.kill"],
+        )
+        .await;
+        let read = next(&mut core, "doc.get").await;
+        core.reply(&read["id"], json!({"value":null,"version":0}))
+            .await;
+        let get = next(&mut core, "terminal.get").await;
+        let mut terminal = testcore::minimal_terminal();
+        terminal["address"] = json!("t1");
+        terminal["created_ms"] = json!(1);
+        terminal["labels"] = json!({"herdr.space":"other","herdr.tab":"tab"});
+        core.reply(&get["id"], terminal).await;
+        let foreign = core.read_request().await;
+        assert_eq!(foreign["method"], "doc.get");
+        assert_eq!(foreign["params"]["name"], "herdr-app");
+        core.reply(&foreign["id"], json!({"value":null,"version":0}))
+            .await;
+        assert!(core.try_read_frame().await.is_none());
+    });
+    store
+        .submit(request(Action::Close {
+            terminals: vec![("t1".into(), 1)],
+            memberships: BTreeMap::from([(
+                "t1".into(),
+                ("space:4:work".into(), "space:4:work/tab:3:tab".into()),
+            )]),
+            fallback: BTreeMap::new(),
+            next: None,
+        }))
+        .unwrap();
+    let error = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .err()
+        .unwrap();
+    assert!(error.contains("moved"));
     server.await.unwrap();
 }
