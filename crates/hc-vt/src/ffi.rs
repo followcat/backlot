@@ -39,6 +39,13 @@ pub const DATA_ACTIVE_SCREEN: i32 = 6;
 pub const DATA_SCROLLBAR: i32 = 9;
 pub const DATA_KITTY_KEYBOARD_FLAGS: i32 = 8;
 pub const DATA_MOUSE_TRACKING: i32 = 11;
+pub const DATA_TITLE: i32 = 12;
+
+#[repr(C)]
+pub struct StringView {
+    pub ptr: *const u8,
+    pub len: usize,
+}
 pub const DATA_MODE: i32 = 37;
 
 /// `GHOSTTY_SCROLL_VIEWPORT_*` tags.

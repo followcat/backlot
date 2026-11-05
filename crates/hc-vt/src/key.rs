@@ -45,6 +45,8 @@ pub enum Key {
     ArrowRight,
     /// F1..=F25.
     F(u8),
+    /// Named non-text Kitty key, mapped through the pinned native key table.
+    Functional(u32),
 }
 
 /// Modifier bits (GhosttyMods values for SHIFT/CTRL/ALT/SUPER; HYPER and
@@ -228,6 +230,25 @@ fn ghostty_key(key: Key) -> i32 {
         Key::ArrowLeft => ARROW_LEFT,
         Key::ArrowRight => ARROW_RIGHT,
         Key::F(n) => F1 + i32::from(n.clamp(1, 25)) - 1,
+        // Derived from herdr src/pane/input.rs (Apache-2.0), ordinals
+        // verified against pinned include/ghostty/vt/key/event.h.
+        Key::Functional(code) => match code {
+            57358 => 54,
+            57359 => 149,
+            57360 => 79,
+            57361 => 148,
+            57362 => 150,
+            57363 => 55,
+            57427 => 113,
+            57430 => 162,
+            57432 => 164,
+            57435 => 165,
+            57436 => 166,
+            57438 => 169,
+            57439 => 171,
+            57440 => 170,
+            _ => UNIDENTIFIED,
+        },
     }
 }
 
