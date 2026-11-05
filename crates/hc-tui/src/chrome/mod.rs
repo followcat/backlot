@@ -3,6 +3,7 @@
 //! presentation without inventing hc-tui-specific output.
 
 pub mod agents;
+pub(crate) mod config_diagnostic;
 pub mod detect;
 pub(crate) mod dialogs;
 pub mod endpoint_agents;

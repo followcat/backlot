@@ -59,6 +59,8 @@ impl App {
                 ..ShellState::default()
             },
             sidebar_width,
+            sidebar_width_manual: false,
+            agent_panel_sort_manual: false,
             chrome_drag: None,
             pane_mouse_gesture: None,
             workspace_press: None,

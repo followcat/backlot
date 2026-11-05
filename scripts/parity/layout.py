@@ -11,6 +11,8 @@ from pty_host import Pty
 from sessions import Core, Reference
 
 DEFAULT = {'split_vertical':'prefix+v', 'split_horizontal':'prefix+minus',
+           'reload_config':'prefix+shift+r', 'settings':'prefix+s', 'help':'prefix+?',
+           'workspace_picker':'prefix+w',
            'focus_pane_left':'prefix+h', 'focus_pane_right':'prefix+l',
            'swap_pane_left':'prefix+shift+h', 'zoom':'prefix+z',
            'resize_mode':'prefix+r', 'new_tab':'prefix+c', 'rename_tab':'prefix+shift+t',
@@ -302,6 +304,8 @@ def run(args,size,binary):
         send(b'\x1b[27u')
         compare('close-cancel-navigate',('alpha',),required=(('NAVIGATE' if size[0]>64 else 'switch'),),paint=False,geometry=False)
         send(b'\x1b[27u');compare('close-cancel-return',('alpha',))
+        from configuration import run as config_round
+        config_round(owners, config, compare, size, args.decoder, out, result)
         assert core.rpc('doc.get',{'name':'herdr-app'})['value']==foreign, 'client wrote the foreign document'
         for owner in owners:
             restored=detach(owner,args.decoder,binding(config,'detach'));verify_restored(restored)

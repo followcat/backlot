@@ -27,6 +27,7 @@ impl App {
             self.last_divider_click = Some(now);
             if double {
                 self.sidebar_width = self.shell.sidebar_width;
+                self.sidebar_width_manual = false;
             } else {
                 self.chrome_drag = Some(ChromeDrag::SidebarWidth);
                 self.set_sidebar_width_from_column(point.0);

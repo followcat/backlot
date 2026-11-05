@@ -9,6 +9,9 @@ use std::path::Path;
 
 use super::Config;
 
+mod live;
+pub use live::load_live;
+
 #[cfg(test)]
 #[path = "io_tests.rs"]
 mod tests;

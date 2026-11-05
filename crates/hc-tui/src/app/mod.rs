@@ -29,6 +29,7 @@ mod pane;
 mod pane_geometry;
 mod pane_mouse;
 mod presentation;
+mod reload;
 mod routing;
 mod runtime;
 mod sched;
@@ -175,6 +176,8 @@ pub struct App {
     /// Live sidebar width — initialized from config, dragged by the
     /// divider; the reference's `sidebar_width` runtime field.
     sidebar_width: u16,
+    sidebar_width_manual: bool,
+    agent_panel_sort_manual: bool,
     /// Active chrome drag grab (`ChromeDrag`).
     chrome_drag: Option<mouse::ChromeDrag>,
     pane_mouse_gesture: Option<pane_mouse::Gesture>,

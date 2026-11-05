@@ -22,7 +22,7 @@ mod registry;
 mod sidebar;
 mod theme;
 
-pub use io::{LoadedConfig, config_diagnostic_summary, load};
+pub use io::{LoadedConfig, config_diagnostic_summary, load, load_live};
 
 pub use keybinds::{
     ActionKeybinds, BindingConfig, BindingTrigger, CustomCommandAction, CustomCommandKeybind,
@@ -144,6 +144,18 @@ impl Config {
     pub fn live_keybinds(&self) -> LiveKeybindConfig {
         let (_, prefix, _, keybinds) = self.validated_keybinds();
         LiveKeybindConfig { prefix, keybinds }
+    }
+
+    // Derived from herdr src/config.rs (Apache-2.0).
+    pub(crate) fn live_keybinds_with_diagnostics(
+        &self,
+    ) -> Result<(LiveKeybindConfig, Vec<String>), Vec<String>> {
+        let (prefix_diag, prefix, diagnostics, keybinds) = self.validated_keybinds();
+        if let Some(prefix_diag) = prefix_diag {
+            Err(std::iter::once(prefix_diag).chain(diagnostics).collect())
+        } else {
+            Ok((LiveKeybindConfig { prefix, keybinds }, diagnostics))
+        }
     }
 }
 

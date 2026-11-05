@@ -70,6 +70,36 @@ class AttachRequestCapture(unittest.TestCase):
             parser.feed(b'{"method":"hello","params":{"framed":true}}\n'+struct.pack('<IBI',0,0,(16<<20)+1))
 
 
+class ReloadSafety(unittest.TestCase):
+    def test_edits_preserve_sound_update_and_inert_command_guards(self):
+        import tomllib
+        from configuration import update
+        original = '[keys]\nprefix="ctrl+b"\n[[keys.command]]\nkey="alt+f"\ncommand="fixture"\n[ui.sound]\nenabled=false\n[update]\nversion_check=false\nmanifest_check=false\n'
+        edited = update(original, {'keys': {'prefix': 'ctrl+t', 'help': 'prefix+shift+k'},
+                                   'theme': {'name': 'nord', 'auto_switch': False}})
+        self.assertEqual(tomllib.loads(edited)['keys']['command'], tomllib.loads(original)['keys']['command'])
+        self.assertEqual(tomllib.loads(edited)['keys']['prefix'], 'ctrl+t')
+
+    def test_commented_headers_and_multiline_prefix_arrays_remain_valid(self):
+        import tomllib
+        from configuration import update
+        original = '[keys] # shortcuts\nprefix=[\n"ctrl+b",\n"ctrl+a"\n]\n[[keys.command]]\nkey="alt+f"\ncommand="fixture 中"\n[ui.sound]\nenabled=false\n[update]\nversion_check=false\nmanifest_check=false\n'
+        edited = update(original, {'keys': {'prefix': 'ctrl+t'}})
+        result = tomllib.loads(edited)
+        self.assertEqual(result['keys']['prefix'], 'ctrl+t')
+        self.assertEqual(result['keys']['command'], tomllib.loads(original)['keys']['command'])
+
+    def test_del_in_values_and_quoted_keys_is_escaped_for_toml(self):
+        import tomllib
+        from configuration import update
+        original = '[keys]\n"field\\u007f"="guard"\n[[keys.command]]\nkey="alt+f"\ncommand="fixture\\u007f"\n[ui.sound]\nenabled=false\n[update]\nversion_check=false\nmanifest_check=false\n'
+        edited = update(original, {'keys': {'prefix': 'ctrl+t'}})
+        result = tomllib.loads(edited)
+        self.assertNotIn(chr(127), edited)
+        self.assertEqual(result['keys']['field'+chr(127)], 'guard')
+        self.assertEqual(result['keys']['command'], tomllib.loads(original)['keys']['command'])
+
+
 class SoundSafety(unittest.TestCase):
     def test_sound_is_disabled_and_tmpdir_is_owned(self):
         import tomllib

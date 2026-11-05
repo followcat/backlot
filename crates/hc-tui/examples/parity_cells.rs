@@ -87,6 +87,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     },"cols":cols,"rows":rows,"cells":lines,"cursor":{
         "position":frame.cursor.position,"visible":frame.cursor.visible,
         "shape":format!("{:?}",frame.cursor.shape),"blink":frame.cursor.blinking,
+        "color":frame.colors.cursor.map(|color| [color.r,color.g,color.b]),
     }});
     serde_json::to_writer(std::io::stdout().lock(), &result)?;
     Ok(())
@@ -112,5 +113,22 @@ mod tests {
         let cursor = vt.frame(0).unwrap().cursor;
         assert_eq!(cursor.shape, hc_vt::CursorShape::Block);
         assert!(!cursor.blinking);
+    }
+
+    #[test]
+    fn native_cursor_color_override_and_reset_are_observable() {
+        let mut vt = Vt::new(40, 24, 0);
+        assert!(vt.frame(0).unwrap().colors.cursor.is_none());
+        vt.feed(b"\x1b]12;#123456\x07");
+        assert_eq!(
+            vt.frame(0).unwrap().colors.cursor,
+            Some(Rgb {
+                r: 0x12,
+                g: 0x34,
+                b: 0x56
+            })
+        );
+        vt.feed(b"\x1b]112\x07");
+        assert!(vt.frame(0).unwrap().colors.cursor.is_none());
     }
 }

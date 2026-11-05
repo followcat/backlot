@@ -114,6 +114,7 @@ impl App {
         )
         .unwrap_or((18, 36));
         self.sidebar_width = column.saturating_add(1).clamp(min, max);
+        self.sidebar_width_manual = true;
     }
 
     /// `set_sidebar_section_from_row`: split ratio over the divider
@@ -218,6 +219,7 @@ impl App {
     /// Agent-panel sort toggle: flips the runtime sort between the
     /// two reference orders.
     pub(in crate::app) fn flip_agent_sort(&mut self) {
+        self.agent_panel_sort_manual = true;
         use crate::config::AgentPanelSortConfig as S;
         self.shell.agent_panel_sort = match self.shell.agent_panel_sort {
             S::Spaces => S::Priority,

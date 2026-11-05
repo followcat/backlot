@@ -250,6 +250,21 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     } else {
         crate::chrome::help::HelpRender::default()
     };
+    let mut config_covered = Vec::new();
+    if let Some(diagnostic) = app.shell.startup_config_diagnostic.as_deref() {
+        let diagnostic_area = if layout.mobile_header.is_empty() {
+            area
+        } else {
+            layout.pane_surface
+        };
+        crate::chrome::config_diagnostic::render(
+            buf,
+            diagnostic_area,
+            diagnostic,
+            &app.shell.palette,
+            |rect| config_covered.push(rect),
+        );
+    }
     super::notices::render(app, buf, area);
     app.want_cursor = CursorWish {
         pos: cursor.pos.map(|(x, y)| (inner.x + x, inner.y + y)),
@@ -260,6 +275,13 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         app.want_cursor.pos = None;
         app.want_cursor.anchor = None;
         app.want_cursor.shape = CursorShape::Default;
+    }
+    if app.want_cursor.pos.is_some_and(|(x, y)| {
+        config_covered
+            .iter()
+            .any(|rect| rect.contains(ratatui::layout::Position::new(x, y)))
+    }) {
+        app.want_cursor.pos = None;
     }
     if let Some(cursor) = app.help_hits.cursor.as_ref() {
         app.want_cursor = CursorWish {
