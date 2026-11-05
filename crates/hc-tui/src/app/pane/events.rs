@@ -244,10 +244,6 @@ impl Pane {
                 {
                     live.vt_broken = Some(format!("resize: {e}"));
                 }
-                if live.spec.role == Role::Active {
-                    live.mismatched_grid =
-                        live.core_grid != live.sent_size.unwrap_or(self.allocated);
-                }
             }
             Output::Closed(reason) => {
                 // The core ended this stream (detach, exit, holder

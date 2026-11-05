@@ -214,3 +214,32 @@ async fn visible_size_leases_survive_focus_and_leave_only_observers_off_tab() {
     );
     assert_eq!(app.observers.len(), 3);
 }
+
+#[tokio::test]
+async fn new_input_target_opens_at_its_current_geometry_before_any_draw() {
+    let mut app = app_with(&["t1", "t2"]);
+    let (tx, mut rx) = mpsc::channel(4);
+    app.open_attach = Arc::new(move |params| {
+        let tx = tx.clone();
+        Box::pin(async move {
+            tx.send(params).await.unwrap();
+            std::future::pending().await
+        })
+    });
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    for (id, area) in [("t1", (65, 24)), ("t2", (120, 40))] {
+        app.area = area;
+        app.focused = Some(id.into());
+        app.refresh_projection();
+        let inner = pane_geometry::pane_inner(&mut app, area.0, area.1);
+        app.sync_target();
+        let params = tokio::time::timeout(crate::testcore::DEADLINE, rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(params.terminal, id);
+        assert!(!params.observe);
+        assert_eq!((params.cols, params.rows), (inner.width, inner.height));
+        assert_ne!((params.cols, params.rows), (80, 24));
+    }
+}

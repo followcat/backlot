@@ -154,10 +154,6 @@ impl Pane {
                 {
                     live.vt_broken = Some(format!("resize: {e}"));
                 }
-                if live.spec.role == Role::Active {
-                    live.mismatched_grid =
-                        live.core_grid != live.sent_size.unwrap_or(self.allocated);
-                }
             }
         }
         let gone_reason: Option<String> = match term {
@@ -289,7 +285,7 @@ impl Pane {
                 } else {
                     live.spec.terminal.clone()
                 };
-                if live.mismatched_grid {
+                if self.has_size_mismatch() {
                     s.push_str(" · size may be owned by another viewer — click the size notice to take control");
                 }
                 if let Some(why) = &live.vt_broken {

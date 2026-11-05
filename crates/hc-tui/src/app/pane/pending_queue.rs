@@ -45,7 +45,7 @@ impl Pane {
         let size = live.desired_size.take();
         let focus = live.desired_focus.take();
         let sent_facts = live.sent_facts.clone();
-        let sent_size = live.sent_size.unwrap_or(live.core_grid);
+        let sent_size = live.sent_size;
         if let Some(facts) = facts {
             let previous = self
                 .pending
@@ -72,8 +72,8 @@ impl Pane {
                     Pending::Control(Out::Resize(cols, rows)) => Some((*cols, *rows)),
                     _ => None,
                 })
-                .unwrap_or(sent_size);
-            if previous != size
+                .or(sent_size);
+            if previous != Some(size)
                 && let Err(Out::Resize(cols, rows)) =
                     self.queue_control(Out::Resize(size.0, size.1))
                 && let State::Live(live) = &mut self.state

@@ -99,9 +99,6 @@ struct Live {
     sent_facts: Option<hc_proto::terminal::Display>,
     /// Automatic replies the writer queue couldn't take yet.
     pending_reply: VecDeque<Vec<u8>>,
-    /// A core-grid report disagreed with our request — another client's
-    /// activity may own the size (the wire can't name an owner).
-    mismatched_grid: bool,
     /// A VT failure worth surfacing (never fatal).
     vt_broken: Option<String>,
 }
@@ -122,6 +119,7 @@ enum State {
         out_rx: mpsc::Receiver<Out>,
         attempts: u32,
         resumed: bool,
+        requested_grid: (u16, u16),
     },
     /// Attached.
     Live(Box<Live>),

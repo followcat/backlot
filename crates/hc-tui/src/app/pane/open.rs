@@ -17,6 +17,7 @@ impl Pane {
             out,
             out_rx,
             resumed,
+            requested_grid,
             ..
         } = std::mem::replace(&mut self.state, State::Idle)
         else {
@@ -31,7 +32,6 @@ impl Pane {
         let core_grid = (term.cols.max(1), term.rows.max(1));
         self.vt_grid = core_grid;
         let negotiated = attach.resize_notifications();
-        let mismatched = spec.role == Role::Active && core_grid != self.allocated;
         let desired_facts = if spec.role != Role::Observe {
             self.host.display()
         } else {
@@ -57,7 +57,10 @@ impl Pane {
             paint_started: false,
             paint_tail: Vec::new(),
             repaint: None,
-            sent_size: None,
+            // A reply can report another viewer's current grid. If our
+            // allocation changed while opening, that does not update the
+            // size registered by this attach's original request.
+            sent_size: (requested_grid != self.allocated).then_some(requested_grid),
             desired_size: None,
             desired_focus: if silent {
                 None
@@ -70,7 +73,6 @@ impl Pane {
             desired_facts,
             sent_facts: None,
             pending_reply: VecDeque::new(),
-            mismatched_grid: mismatched,
             vt_broken: None,
         }));
         // Only a user-initiated attach claims our allocation when the
@@ -79,7 +81,7 @@ impl Pane {
         if (!resumed || self.allocation_changed_disconnected)
             && let State::Live(live) = &mut self.state
             && live.spec.role != Role::Observe
-            && live.core_grid != self.allocated
+            && (live.core_grid != self.allocated || requested_grid != self.allocated)
         {
             live.desired_size = Some(self.allocated);
         }

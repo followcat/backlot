@@ -61,6 +61,15 @@ impl App {
                     self.pane_leases.remove(&key);
                 }
             }
+            // Retire the old target before applying the new target's geometry:
+            // opening at the previous pane's size can resize its program and
+            // race a concurrent visible size holder before the first draw.
+            self.pane.want(None);
+            if desired.is_some() {
+                let (cols, rows) = self.area;
+                let inner = pane_geometry::pane_inner(self, cols, rows);
+                self.pane.allocated(inner.width.max(1), inner.height.max(1));
+            }
         }
         self.pane.want(desired);
     }

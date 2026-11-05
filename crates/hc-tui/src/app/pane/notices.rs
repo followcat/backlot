@@ -8,6 +8,14 @@ pub(crate) struct PaneNotice {
 }
 
 impl Pane {
+    // Derive this from the latest request and report. A cached flag can stay
+    // stale when another viewer reaches our new allocation before we send it.
+    pub(super) fn has_size_mismatch(&self) -> bool {
+        matches!(&self.state, State::Live(live)
+            if live.spec.role == Role::Active
+                && live.core_grid != live.sent_size.unwrap_or(self.allocated))
+    }
+
     pub(crate) fn notice(&self) -> Option<PaneNotice> {
         let (title, body, take_control) = if let Some(error) = &self.close_error {
             ("Input drain failed", error.clone(), false)
@@ -23,7 +31,7 @@ impl Pane {
                     live.vt_broken.clone().unwrap_or_default(),
                     false,
                 ),
-                State::Live(live) if live.mismatched_grid => (
+                State::Live(_) if self.has_size_mismatch() => (
                     "Terminal size",
                     "Another viewer may own the size. Click to take control.".into(),
                     true,

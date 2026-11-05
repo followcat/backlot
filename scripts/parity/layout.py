@@ -149,7 +149,7 @@ def run(args,size,binary):
                 deadline=time.monotonic()+8
                 while a!=b:
                     a=grids(reference,current['reference']);b=grids(core,current['core'])
-                    assert time.monotonic()<deadline, f'PTY geometry mismatch: reference {a}, candidate {b}' 
+                    assert time.monotonic()<deadline, f'PTY geometry mismatch: reference {a}, candidate {b}'
                 result.setdefault('pty_grids',[]).append({'name':name,'reference':a,'candidate':b})
             if paint:
                 for owner in owners:
