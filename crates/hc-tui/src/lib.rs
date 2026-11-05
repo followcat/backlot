@@ -33,4 +33,5 @@ mod keybind_help;
 
 pub mod layout;
 
+pub mod operations;
 pub mod structure;

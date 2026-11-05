@@ -192,17 +192,33 @@ pub(super) fn structured_snapshot(
         }
         let first_tab = tab_ids.first().cloned().unwrap_or_default();
         let cwd = clean(&space.folder);
+        let adopted = own
+            .adoptions
+            .values()
+            .find(|a| {
+                a.machine.as_deref() == machine
+                    && format!("space:{}:{}", a.space.len(), a.space) == *workspace_id
+            })
+            .filter(|_| !space.from_app);
         workspaces.push(ClientShellWorkspace {
             workspace_id: workspace_id.clone(),
             active_tab_id: tabs
                 .iter()
                 .find(|t| t.focused && t.workspace_id == *workspace_id)
                 .map(|t| t.tab_id.clone())
+                .or_else(|| {
+                    own.active
+                        .get(&layout_key(machine, workspace_id))
+                        .and_then(|saved| {
+                            tab_ids.iter().find(|id| layout_key(machine, id) == *saved)
+                        })
+                        .cloned()
+                })
                 .unwrap_or(first_tab),
             new_workspace_cwd: cwd,
             number,
-            label: clean(&space.name),
-            custom_label: space.custom_name,
+            label: clean(adopted.map(|a| a.name.as_str()).unwrap_or(&space.name)),
+            custom_label: adopted.map_or(space.custom_name, |a| a.custom_label),
             branch: None,
             git_ahead_behind: None,
             tokens: Vec::new(),

@@ -66,7 +66,7 @@ impl Client {
 
     /// Why `method` cannot run, or `None` when it can: `hello`'s list first,
     /// then — once discovery has landed — the core's own declaration.
-    fn explain_unavailable(&self, method: &str) -> Option<String> {
+    pub fn explain_unavailable(&self, method: &str) -> Option<String> {
         if let Some(reason) = self.capabilities().explain_unavailable(method) {
             return Some(reason);
         }

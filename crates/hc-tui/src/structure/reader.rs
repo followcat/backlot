@@ -16,7 +16,7 @@ fn qualify(terminal: &str, machine: Option<&str>) -> String {
     machine.map_or_else(|| terminal.to_owned(), |m| format!("{m}/{terminal}"))
 }
 
-fn app_node(
+fn tiled_node(
     value: &Value,
     machine: Option<&str>,
     allowed: &BTreeSet<&str>,
@@ -75,6 +75,42 @@ fn app_node(
     }
 }
 
+fn app_node(
+    value: &Value,
+    machine: Option<&str>,
+    allowed: &BTreeSet<&str>,
+    used: &mut BTreeSet<String>,
+    depth: usize,
+) -> Option<Tree> {
+    if depth > 64 {
+        return None;
+    }
+    let tiled = tiled_node(value, machine, allowed, used, depth);
+    let mut roots = tiled.into_iter().collect::<Vec<_>>();
+    // Desktop floating terminals retain their space/tab membership. The TUI
+    // tiles them alongside the node; mod-only floats remain ignored.
+    if let Some(floats) = value["floating"].as_array() {
+        for float in floats.iter().take(4096) {
+            if let Some(raw) = float["content"]["terminal"].as_str() {
+                let terminal = qualify(raw, machine);
+                if allowed.contains(terminal.as_str()) && used.insert(terminal.clone()) {
+                    roots.push(Tree::pane(terminal));
+                }
+            }
+        }
+    }
+    let mut roots = roots.into_iter();
+    let mut root = roots.next()?;
+    for next in roots {
+        root = Tree::split(root, next, false, 0.5);
+    }
+    if root.valid() {
+        Some(root)
+    } else {
+        Tree::balanced(&root.terminals(), false)
+    }
+}
+
 /// Foreign document versions and malformed individual entries are tolerated.
 /// Only terminal membership matters: never execute mod data or rewrite it.
 pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec<Space> {
@@ -117,6 +153,7 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
                     name.clone()
                 };
                 spaces.push(Space {
+                    from_app: true,
                     id: identity("space", &id),
                     name: label,
                     custom_name: !name.is_empty(),
@@ -154,6 +191,7 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
         let (key, label) = crate::project::space_of(terminal);
         let at = *positions.entry(key.clone()).or_insert_with(|| {
             spaces.push(Space {
+                from_app: false,
                 id: key.clone(),
                 name: label,
                 custom_name: terminal.labels.contains_key("herdr.space"),

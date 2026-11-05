@@ -171,3 +171,13 @@ fn more_than_4096_fallback_terminals_and_underflow_weights_remain_valid() {
     assert!(panes[0].rect.width <= 1);
     assert!(panes[2].rect.width >= 499);
 }
+
+#[test]
+fn floating_terminals_keep_their_foreign_tab_membership() {
+    let one = crate::sidebar::fixture::term("t1");
+    let two = crate::sidebar::fixture::term("t2");
+    let document = serde_json::json!({"spaces":[{"id":"work","tabs":[{"id":"main","root":{"type":"block","content":{"terminal":"t1"},"floating":[{"id":"float","content":{"terminal":"t2"}}]}}]}]});
+    let spaces = read(&[&one, &two], &document, None);
+    assert_eq!(spaces.len(), 1);
+    assert_eq!(spaces[0].tabs[0].root.terminals(), ["t1", "t2"]);
+}

@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Space {
+    pub from_app: bool,
     pub id: String,
     pub name: String,
     pub custom_name: bool,
@@ -39,6 +40,12 @@ pub struct Document {
     pub tabs: BTreeMap<String, TabLayout>,
     #[serde(default)]
     pub order: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub active: BTreeMap<String, String>,
+    #[serde(default)]
+    pub closed: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub adoptions: BTreeMap<String, Adoption>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
@@ -50,6 +57,9 @@ impl Default for Document {
             focus: None,
             tabs: BTreeMap::new(),
             order: BTreeMap::new(),
+            active: BTreeMap::new(),
+            closed: BTreeMap::new(),
+            adoptions: BTreeMap::new(),
             extra: BTreeMap::new(),
         }
     }
@@ -73,6 +83,13 @@ impl Document {
         {
             return Err("Invalid hc-tui layout tree".into());
         }
+        if document
+            .adoptions
+            .values()
+            .any(|a| a.space.is_empty() || a.tabs.values().any(|id| id.is_empty()))
+        {
+            return Err("Invalid adoption identity".into());
+        }
         Ok(document)
     }
 }
@@ -84,9 +101,23 @@ pub struct TabLayout {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub focused: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zoomed: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+/// Stable labels allocated by a CAS before promoting a cwd-only group.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Adoption {
+    pub machine: Option<String>,
+    pub space: String,
+    pub tabs: BTreeMap<String, String>,
+    pub name: String,
+    pub custom_label: bool,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }

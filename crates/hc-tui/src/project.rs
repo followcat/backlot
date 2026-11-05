@@ -181,8 +181,12 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
     // snapshots and terminals stay live.
     let rpc_offline = matches!(view.rpc, Link::Offline { .. } | Link::Stopped);
 
+    let own = layout_document(view).unwrap_or_default();
     let mut by_machine: BTreeMap<String, Vec<&Terminal>> = BTreeMap::new();
     for term in view.inventory.terminals().values() {
+        if own.closed.get(&term.address) == Some(&term.created_ms) {
+            continue;
+        }
         let key = machine_of(&term.address).unwrap_or("").to_string();
         by_machine.entry(key).or_default().push(term);
     }
@@ -207,7 +211,6 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
     let local_terms = by_machine.remove("").unwrap_or_default();
     // A remote selection can never match a local bare `tN`, so focus ids
     // land only where the selected terminal actually lives.
-    let own = layout_document(view).unwrap_or_default();
     let (local_snapshot, mut layouts) = structured_snapshot(
         &local_terms,
         selected,
