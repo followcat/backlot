@@ -6,7 +6,8 @@ def text(frame):
     return '\n'.join(''.join(cell['text'] for cell in row['cells']) for row in frame['cells'])
 
 
-def ready(frame, name, previous, program_input):
+def ready(frame, name, previous, program_input, expected=None):
+    expected = expected or {}
     rendered = text(frame)
     if name == 'baseline':
         return 'fixture alpha' in rendered
@@ -16,6 +17,22 @@ def ready(frame, name, previous, program_input):
         return 'PREFIX' not in rendered
     if name in ('help', 'help-filter', 'help-back', 'help-page'):
         if 'keybinds' not in rendered.lower():
+            return False
+    if name == 'help-page':
+        if previous is None or frame['cells'] == previous['cells'] or 'session navigator' not in rendered:
+            return False
+    if name == 'live-cursor-and-mouse-mode':
+        if frame['cursor']['shape'] != 'Bar' or not frame['cursor']['blink']:
+            return False
+        if not frame['host_modes']['all_mouse'] or not frame['host_modes']['sgr_mouse']:
+            return False
+    if name.startswith('resize-'):
+        if (frame['cols'], frame['rows']) != tuple(expected['geometry']):
+            return False
+        if expected['grid_marker'] not in rendered:
+            return False
+    if name.startswith('status-'):
+        if not status_ready(frame, expected['status']):
             return False
     if name == 'switch' and 'fixture beta' not in rendered:
         return False
@@ -50,5 +67,37 @@ def verify_restored(frame):
     modes = frame['host_modes']
     assert not any(modes[name] for name in ['alternate', 'paste', 'focus', 'all_mouse',
                                           'sgr_mouse', 'pixel_mouse', 'scheme'])
+    assert not any(modes[name] for name in ['x10_mouse', 'normal_mouse', 'button_mouse',
+                                          'utf8_mouse', 'urxvt_mouse', 'modify_other_keys'])
     assert modes['kitty'] == 0 and modes['line_wrap']
     assert frame['cursor']['visible']
+    assert frame['cursor']['shape'] == 'Block' and frame['cursor']['blink'] is False
+
+
+# Derived from herdr src/app/state.rs and src/client/shell.rs (Apache-2.0).
+# Independent pinned-source default-dark fixture oracle. Unknown configured
+# palettes must supply new source evidence, never candidate-generated colors.
+STATUS = {
+    'working': ('●', [249, 226, 175]),
+    'blocked': ('●', [243, 139, 168]),
+    'done': ('●', [148, 226, 213]),
+    'idle': ('○', [166, 227, 161]),
+    'unknown': ('·', [108, 112, 134]),
+}
+
+
+def status_ready(frame, states):
+    for label, state in states.items():
+        symbol, color = STATUS[state]
+        found = False
+        for row in frame['cells']:
+            cells = row['cells']
+            line = ''.join(cell['text'] for cell in cells)
+            # Default desktop workspace rows and mobile workspace headings use
+            # the same source status symbol/color; labels identify the target.
+            if label in line and any(cell['text'] == symbol and cell['resolved_fg'] == color
+                                     for cell in cells[:max(3, line.find(label))]):
+                found = True
+        if not found:
+            return False
+    return True

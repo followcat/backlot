@@ -47,5 +47,14 @@
     }
   ],
   "inner_focus_reporting": true,
-  "provenance": "Captured from the pinned reference in an owned scratch PTY with DECSET 1004; initial focus excluded before scripted phases."
+  "provenance": "Captured from the pinned reference in an owned scratch PTY with DECSET 1004; initial focus excluded before scripted phases.",
+  "detach_tail": [
+    [],
+    [
+      {
+        "bytes_hex": "1b5b4f"
+      }
+    ]
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

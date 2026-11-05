@@ -52,5 +52,10 @@
     "flags": 0,
     "sequence_hex": "1b5b3d3075"
   },
-  "provenance": "Captured from pinned herdr in an owned scratch PTY; after switching away, both fixture programs disable Kitty reporting before the held key repeats/releases. The old target encodes its release under the live updated mode."
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; after switching away, both fixture programs disable Kitty reporting before the held key repeats/releases. The old target encodes its release under the live updated mode.",
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

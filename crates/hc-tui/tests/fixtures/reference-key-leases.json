@@ -46,5 +46,10 @@
       "pane_b_hex": "1b5b3132303b3b313230751b5b3132303b313a3375"
     }
   ],
-  "provenance": "Captured from pinned herdr in an owned scratch PTY; after a workspace switch, held-key repeats are suppressed and the physical release returns to the original pane."
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; after a workspace switch, held-key repeats are suppressed and the physical release returns to the original pane.",
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

@@ -57,15 +57,57 @@ class HostProbeOrder(unittest.TestCase):
 
 
 class TeardownTails(unittest.TestCase):
-    def test_only_synthesized_release_order_can_differ(self):
-        from vectors import teardown_equivalent
-        a, b = b'\x1b[97;1:3u', b'\x1b[98;5:3u'
-        same = lambda x, y: teardown_equivalent([x.hex()], [y.hex()])
-        self.assertTrue(same(a + b, b + a))
-        self.assertFalse(same(a + a, a))
-        self.assertFalse(same(a, b))
-        self.assertFalse(same(a + b'\x1b[O', a))
-        self.assertFalse(same(b'a', b'b'))
+    def test_only_named_synthesized_drain_can_be_unordered(self):
+        from tails import teardown_equivalent
+        a, b, focus = b'\x1b[97;1:3u', b'\x1b[98;5:3u', b'\x1b[O'
+        spec = [[{'synthesized_releases_hex': [a.hex(), b.hex()]}, {'bytes_hex': focus.hex()}]]
+        same = lambda x, y: teardown_equivalent([x.hex()], [y.hex()], spec)
+        self.assertTrue(same(a + b + focus, b + a + focus))
+        self.assertFalse(same(a + b + focus, focus + a + b))
+        self.assertFalse(same(a + b + focus, a + focus + b))
+        self.assertFalse(same(a + b + focus, a + a + focus))
+        self.assertFalse(teardown_equivalent([(a+b).hex()], [(b+a).hex()]))
+        self.assertFalse(same(a + b + focus, a + b + focus + a))
+
+
+class Readiness(unittest.TestCase):
+    def test_named_checkpoints_reject_stale_or_wrong_state(self):
+        from checks import ready, verify_restored, STATUS
+        import copy
+        cells = [{'text': t, 'resolved_fg': [0, 0, 0]} for t in ' ● alpha']
+        cells[1]['resolved_fg'] = STATUS['working'][1]
+        frame = {'cells': [{'cells': cells}], 'cols': 80, 'rows': 24,
+                 'cursor': {'shape': 'Bar', 'blink': True, 'visible': True},
+                 'host_modes': {'all_mouse': True, 'sgr_mouse': True}}
+        self.assertTrue(ready(frame, 'status-0-working', None, b'', {'status': {'alpha': 'working'}}))
+        self.assertFalse(ready(frame, 'status-0-blocked', None, b'', {'status': {'alpha': 'blocked'}}))
+        self.assertFalse(ready(frame, 'help-page', frame, b''))
+        self.assertTrue(ready(frame, 'live-cursor-and-mouse-mode', None, b''))
+        wrong = copy.deepcopy(frame); wrong['cursor']['blink'] = False
+        self.assertFalse(ready(wrong, 'live-cursor-and-mouse-mode', None, b''))
+        self.assertFalse(ready(frame, 'resize-1', None, b'', {'geometry': (120, 40), 'grid_marker': 'GRID 87x39 1'}))
+        expected = {'geometry': (80, 24), 'grid_marker': 'GRID 47x23 1'}
+        self.assertFalse(ready(frame, 'resize-1', None, b'', expected))
+        painted = copy.deepcopy(frame)
+        painted['cells'] = [{'cells': [{'text': ch} for ch in 'GRID 47x23 0']}]
+        self.assertFalse(ready(painted, 'resize-1', None, b'', expected))
+        painted['cells'] = [{'cells': [{'text': ch} for ch in 'GRID 47x23 1']}]
+        self.assertTrue(ready(painted, 'resize-1', None, b'', expected))
+        # Every omitted legacy mouse mode and MOK must fail restoration.
+        names = ['alternate', 'paste', 'focus', 'all_mouse', 'sgr_mouse', 'pixel_mouse',
+                 'scheme', 'x10_mouse', 'normal_mouse', 'button_mouse', 'utf8_mouse',
+                 'urxvt_mouse', 'modify_other_keys', 'kitty']
+        clean = {'host_modes': dict.fromkeys(names, False),
+                 'cursor': {'visible': True, 'shape': 'Block', 'blink': False}}
+        clean['host_modes']['line_wrap'] = True
+        verify_restored(clean)
+        for name in ['x10_mouse', 'normal_mouse', 'button_mouse', 'utf8_mouse',
+                     'urxvt_mouse', 'modify_other_keys']:
+            dirty = copy.deepcopy(clean); dirty['host_modes'][name] = True
+            with self.assertRaises(AssertionError): verify_restored(dirty)
+        for key, value in [('shape', 'Bar'), ('blink', True)]:
+            dirty = copy.deepcopy(clean); dirty['cursor'][key] = value
+            with self.assertRaises(AssertionError): verify_restored(dirty)
 
 
 if __name__ == '__main__':

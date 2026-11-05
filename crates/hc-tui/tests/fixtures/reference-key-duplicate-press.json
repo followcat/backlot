@@ -34,5 +34,10 @@
       "pane_b_hex": ""
     }
   ],
-  "provenance": "Captured from pinned herdr in an owned scratch PTY; duplicate Ctrl+B CSI-u presses produce a literal prefix. VT reports do not imply native physical-key identity."
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; duplicate Ctrl+B CSI-u presses produce a literal prefix. VT reports do not imply native physical-key identity.",
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

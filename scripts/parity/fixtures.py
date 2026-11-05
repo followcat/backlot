@@ -27,6 +27,8 @@ def control():
   except (FileNotFoundError,json.JSONDecodeError):
    time.sleep(.01);continue
   if data['id']!=last:
+   if 'grid' in data and tuple(os.get_terminal_size(0)) != tuple(data['grid']):
+    time.sleep(.01);continue
    os.write(1,bytes.fromhex(data['hex']))
    last=data['id']
    with open(ready,'w') as f:f.write(str(last))
@@ -57,10 +59,13 @@ class Program:
         self.terminal = None
         self.workspace = None
 
-    def send(self, sequence):
+    def send(self, sequence, grid=None):
         self.serial += 1
         temporary = self.request.with_suffix('.next')
-        temporary.write_text(json.dumps({'id': self.serial, 'hex': sequence.hex()}))
+        message = {'id': self.serial, 'hex': sequence.hex()}
+        if grid is not None:
+            message['grid'] = grid
+        temporary.write_text(json.dumps(message))
         temporary.replace(self.request)
 
     def received(self):

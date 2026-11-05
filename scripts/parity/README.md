@@ -64,9 +64,11 @@ bytes captured from the reference: 100 basic keys, 23 held/layout/live-mode/
 orphan cases, seven focus cases, 35 functional-key cases and 225 mouse cases
 (cell, pixel and unknown pitch): 390 cases. Supplying the reference manifest
 replays them through both executables and checks their detach tails too.
-Only synthesized CSI-u release order in those tails is unordered, because
-the source drains a HashMap; duplicates, exact releases and all other bytes
-remain significant. Ordinary cases compare exact byte order. It must never
+Only explicit source-derived `detach_tail` drain segments permit unordered
+CSI-u releases, because the source drains a HashMap. Their exact contents,
+duplicates and positions relative to focus/other bytes remain significant.
+Late ordinary input before detach fails separately; absent drain metadata
+means exact comparison. Ordinary cases compare exact byte order. It must never
 regenerate expected bytes from the candidate.
 
 Each result records binary/config hashes, checkpoint diffs, terminal-mode
@@ -75,3 +77,14 @@ recovery record and scratch root instead of claiming success. Do not commit
 captures, logs, config copies, credentials or recovery files. A passing run
 covers its explicit fixtures; broader configuration and unavailable core
 facts remain subject to [the parity contract](../../docs/parity.md).
+
+
+M2.1 tightens readiness: help paging must change visible content, requested
+status glyph/color must reach its named row, live cursor/mouse modes must be
+active, and resize must reach the actual decoded grid. Status readiness uses
+the pinned source default-dark Catppuccin/dots oracle; other configured
+palettes are rejected until an independent source oracle is supplied.
+The decoder additionally records modes9/1000/1002/1005/1015 and outer
+ModifyOtherKeys0/1/2; teardown requires the emulated host default Block/steady
+cursor as well as visibility. Decoder tests exercise each added mode and a
+live Bar/blink→default restore, including control-string-safe MOK tracking.

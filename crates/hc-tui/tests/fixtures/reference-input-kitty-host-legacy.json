@@ -132,5 +132,10 @@
   ],
   "host_keyboard_flags_reply": 7,
   "host_reports_key_releases": true,
-  "provenance": "Captured from pinned herdr 0.9.5-followcat in an owned scratch PTY reporting host Kitty flags 7; plain text under report-all is a text commit."
+  "provenance": "Captured from pinned herdr 0.9.5-followcat in an owned scratch PTY reporting host Kitty flags 7; plain text under report-all is a text commit.",
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

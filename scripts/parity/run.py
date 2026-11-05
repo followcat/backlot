@@ -94,11 +94,11 @@ def one_size(args, size, binary):
             owner.resizes = []
 
         previous = {}
-        def capture_ready(owner, name, program):
+        def capture_ready(owner, name, program, expected):
             deadline = time.monotonic() + 5
             while True:
                 frame = checkpoint(owner, name, size, args.decoder)
-                if ready(frame, name, previous.get(owner.kind), program.received()):
+                if ready(frame, name, previous.get(owner.kind), program.received(), expected):
                     # Demand a quiet output interval rather than taking a stale
                     # pair merely because both clients are equally late.
                     if owner.capture_quiet:
@@ -106,9 +106,9 @@ def one_size(args, size, binary):
                         return frame
                 assert time.monotonic() < deadline, f'{owner.kind} {name} did not reach a settled expected checkpoint'
 
-        def compare(name):
-            a = capture_ready(reference, name, reference_programs[1])
-            b = capture_ready(core, name, candidate_programs[1])
+        def compare(name, **expected):
+            a = capture_ready(reference, name, reference_programs[1], expected)
+            b = capture_ready(core, name, candidate_programs[1], expected)
             diff = differences(a, b, args.default_title)
             (out / (name + '-diff.json')).write_text(json.dumps(diff, ensure_ascii=False, indent=2) + '\n')
             bugs = [entry for entry in diff if 'adaptation' not in entry]
@@ -186,7 +186,8 @@ def one_size(args, size, binary):
                     '--seq', str(100 + len(result['checkpoints'])))
                 candidate_programs[index].status(state)
                 wait_program(core, candidate_programs[index], candidate_programs[index].serial)
-                compare('status-' + str(index) + '-' + state)
+                compare('status-' + str(index) + '-' + state,
+                        status={('alpha', 'beta')[index]: 'done' if state == 'idle' and index == 0 else state})
 
             # Disable tracking before exercising the source's local history
             # viewport and typing-to-bottom behavior on the selected beta pane.
@@ -209,7 +210,15 @@ def one_size(args, size, binary):
                     owner.ui.read(.1)
                     owner.resizes.append((len(owner.ui.output), *new_size))
                     owner.ui.resize(*new_size)
-                compare('resize-' + str(len(reference.resizes)))
+                # The child acknowledges its ACTUAL PTY allocation before
+                # painting a unique marker. Decoder.resize alone cannot prove
+                # that either client handled the host's resize event.
+                grid = (new_size[0] - 33, new_size[1] - 1)
+                marker = f'GRID {grid[0]}x{grid[1]} {len(reference.resizes)}'
+                for owner, programs in [(reference, reference_programs), (core, candidate_programs)]:
+                    programs[1].send(('\x1b[2;2H' + marker + '\x1b[K\x1b[18;8H').encode(), grid=grid)
+                    wait_program(owner, programs[1], programs[1].serial)
+                compare('resize-' + str(len(reference.resizes)), geometry=new_size, grid_marker=marker)
             result['idle'] = core.ui.idle_measurement(10)
 
 
@@ -257,6 +266,10 @@ def main():
     for field in ['hc', 'hc_tui', 'config', 'decoder', 'reference_manifest']:
         setattr(args, field, getattr(args, field).resolve(strict=True))
     parsed_config = tomllib.loads(args.config.read_text())
+    if parsed_config.get('theme'):
+        raise ValueError('status readiness requires the pinned source default-dark palette oracle')
+    if parsed_config.get('ui', {}).get('status_indicators', 'dots') != 'dots':
+        raise ValueError('status readiness requires the pinned dots oracle')
     args.default_title = parsed_config.get("ui",{}).get("window_title", "{hostname}: {workspace}") == "{hostname}: {workspace}"
     if args.scenario == 'prefix-conflict':
         keys = parsed_config.get('keys',{})

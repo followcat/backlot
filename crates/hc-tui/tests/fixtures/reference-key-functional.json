@@ -214,5 +214,10 @@
       "pane_b_hex": ""
     }
   ],
-  "provenance": "Captured from pinned herdr in an owned scratch PTY; lock, keypad, media and modifier reports plus a normal-key positive control."
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; lock, keypad, media and modifier reports plus a normal-key positive control.",
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

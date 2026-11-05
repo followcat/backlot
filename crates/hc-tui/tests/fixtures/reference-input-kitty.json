@@ -132,5 +132,24 @@
   ],
   "provenance": "Captured from herdr 0.9.5-followcat in an owned scratch PTY; neutral raw input fixture with inner Kitty flags 31.",
   "host_keyboard_flags_reply": 0,
-  "host_reports_key_releases": false
+  "host_reports_key_releases": false,
+  "detach_tail": [
+    [
+      {
+        "synthesized_releases_hex": [
+          "1b5b3130353b353a3375",
+          "1b5b3130363b353a3375",
+          "1b5b3130393b353a3375",
+          "1b5b3132303b333a3375",
+          "1b5b31333b323a3375",
+          "1b5b3234363a3231343b343a3375",
+          "1b5b39313b353a3375",
+          "1b5b39373a36353b323a3375",
+          "1b5b39383b353a3375"
+        ]
+      }
+    ],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

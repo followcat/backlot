@@ -131,5 +131,10 @@
   ],
   "provenance": "Captured from herdr 0.9.5-followcat in an owned scratch PTY; neutral raw input fixture including legacy shell key exceptions.",
   "host_keyboard_flags_reply": 0,
-  "host_reports_key_releases": false
+  "host_reports_key_releases": false,
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

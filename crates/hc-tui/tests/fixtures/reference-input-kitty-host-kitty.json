@@ -132,5 +132,26 @@
   ],
   "host_keyboard_flags_reply": 7,
   "host_reports_key_releases": true,
-  "provenance": "Captured from pinned herdr 0.9.5-followcat in an owned scratch PTY reporting host Kitty flags 7; plain text under report-all is a text commit."
+  "provenance": "Captured from pinned herdr 0.9.5-followcat in an owned scratch PTY reporting host Kitty flags 7; plain text under report-all is a text commit.",
+  "detach_tail": [
+    [
+      {
+        "synthesized_releases_hex": [
+          "1b5b3130353b353a3375",
+          "1b5b3130363b353a3375",
+          "1b5b3130393b353a3375",
+          "1b5b3132303b333a3375",
+          "1b5b31333b323a3375",
+          "1b5b3234363a3231343b343a3375",
+          "1b5b33323b313a3375",
+          "1b5b35353b323a3375",
+          "1b5b39313b353a3375",
+          "1b5b39373a36353b323a3375",
+          "1b5b39383b353a3375"
+        ]
+      }
+    ],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

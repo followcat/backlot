@@ -16,5 +16,10 @@
       "pane_b_hex": ""
     }
   ],
-  "provenance": "Captured from pinned herdr in an owned scratch PTY; a non-Latin Ctrl chord releases as the pressed logical key with the incoming release modifiers."
+  "provenance": "Captured from pinned herdr in an owned scratch PTY; a non-Latin Ctrl chord releases as the pressed logical key with the incoming release modifiers.",
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }

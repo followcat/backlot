@@ -8,23 +8,9 @@ from fixtures import prepare_core, prepare_reference, wait_program
 from pty_host import Pty
 from run import REFERENCE, REPO, detach
 from sessions import Core, Reference, digest
+from tails import teardown_equivalent
 
 FIXTURES = REPO / 'crates/hc-tui/tests/fixtures'
-
-
-def teardown_equivalent(source, candidate):
-    """Only synthesized CSI-u release order is unordered in the source.
-
-    Its server drains a HashMap. Keep duplicates, exact release contents and
-    every other byte (including focus) significant; ordinary cases stay exact.
-    """
-    import re
-    from collections import Counter
-    release = re.compile(rb'\x1b\[[0-9:;]*:3u')
-    def parts(value):
-        data = bytes.fromhex(value)
-        return Counter(release.findall(data)), release.sub(b'', data)
-    return len(source) == len(candidate) and all(parts(a) == parts(b) for a, b in zip(source, candidate))
 
 
 def mouse_config(core):
@@ -125,6 +111,12 @@ def replay(args, fixture, reference=False):
         else:
             for item in expected['cases']:
                 case(item)
+        # Every ordinary expected case has already been read. Late ordinary
+        # input is a failure, never part of the synthesized drain exception.
+        core.ui.read(.5)
+        result['ordinary_tail_hex'] = [program.received()[offsets[i]:].hex()
+                                       for i, program in enumerate(programs)]
+        assert result['ordinary_tail_hex'] == ['', ''], 'unexpected ordinary tail before detach'
         detach(core)
         core.ui.read(.1)
         result['tail_hex'] = [program.received()[offsets[i]:].hex() for i, program in enumerate(programs)]
@@ -176,7 +168,8 @@ def main():
         failures += sum(not case['match'] for case in candidate['cases'])
         if source:
             failures += sum(not case['match'] for case in source['cases'])
-            tail_match = teardown_equivalent(source['tail_hex'], candidate['tail_hex'])
+            tail_match = teardown_equivalent(source['tail_hex'], candidate['tail_hex'],
+                                               json.loads((FIXTURES/name).read_text())['detach_tail'])
             failures += not tail_match
             (args.out/name.replace('.json','')/'tail-comparison.json').write_text(json.dumps({
                 'reference':source['tail_hex'],'candidate':candidate['tail_hex'],'match':tail_match},indent=2)+'\n')

@@ -424,5 +424,10 @@
       ],
       "host_pixel_mode": false
     }
-  ]
+  ],
+  "detach_tail": [
+    [],
+    []
+  ],
+  "detach_provenance": "Pinned source executable post-detach capture; only named synthesized-drain segments are unordered. Ordinary cases and pre-detach tails remain exact."
 }
