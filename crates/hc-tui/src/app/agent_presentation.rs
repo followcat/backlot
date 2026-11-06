@@ -5,11 +5,23 @@ use crate::chrome::status::AgentStatus;
 use hc_proto::terminal::Terminal;
 use std::collections::{BTreeMap, HashMap};
 
+/// Whether the record backing a baseline/completion id is present: the
+/// root id tracks `status`, named ids track `records` membership —
+/// matching the ingestion-time `completions_at` contract.
+fn baseline_source(term: &Terminal, id: &str) -> bool {
+    if id.is_empty() {
+        term.status.is_some()
+    } else {
+        term.records.contains_key(id)
+    }
+}
+
 #[derive(Default)]
 pub(super) struct AgentPresentation {
     initialized: bool,
     lifetime: Option<(String, String, u64)>,
     created_ms: u64,
+    epoch_token: Option<u64>,
     acknowledged: HashMap<String, u64>,
     completions: BTreeMap<String, u64>,
     raw: Option<AgentStatus>,
@@ -20,14 +32,21 @@ impl AgentPresentation {
         &mut self,
         term: &Terminal,
         raw: AgentStatus,
-        baseline: bool,
+        epoch_token: Option<u64>,
+        epoch_completions: Option<&BTreeMap<String, u64>>,
     ) -> AgentStatus {
         let lifetime = term
             .activity
             .as_ref()
             .map(|a| (a.core_id.clone(), a.epoch.clone(), a.scope));
-        let reset =
-            self.initialized && (self.lifetime != lifetime || self.created_ms != term.created_ms);
+        // A lifetime (re)establishes on first presentation, a domain or
+        // incarnation change, or a new ingestion boundary token — the last
+        // also catches Some(A) -> None -> Some(A) where the consumed
+        // lifetime looks identical.
+        let established = !self.initialized
+            || self.lifetime != lifetime
+            || self.created_ms != term.created_ms
+            || self.epoch_token != epoch_token;
         self.completions = term
             .activity
             .as_ref()
@@ -43,15 +62,23 @@ impl AgentPresentation {
                     .then_some((id.clone(), clock.completion_ordinal?))
             })
             .collect();
-        self.acknowledged
-            .retain(|id, _| id.is_empty() || term.records.contains_key(id));
-        if reset || baseline {
+        self.acknowledged.retain(|id, _| baseline_source(term, id));
+        if established {
             self.acknowledged.clear();
-            self.acknowledged.extend(self.completions.clone());
+            // Seed only from the ingestion-time baseline: `None` means the
+            // arrival was not baseline-eligible — never the current facts.
+            if let Some(seen) = epoch_completions {
+                self.acknowledged.extend(
+                    seen.iter()
+                        .filter(|(id, _)| baseline_source(term, id))
+                        .map(|(id, ordinal)| (id.clone(), *ordinal)),
+                );
+            }
         }
         self.initialized = true;
         self.lifetime = lifetime;
         self.created_ms = term.created_ms;
+        self.epoch_token = epoch_token;
         self.raw = Some(raw);
         self.status()
     }

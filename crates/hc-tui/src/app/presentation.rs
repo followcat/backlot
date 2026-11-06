@@ -8,7 +8,6 @@ use std::collections::{HashMap, HashSet};
 #[derive(Default)]
 pub(super) struct Presentation {
     core_id: Option<String>,
-    epochs: HashSet<(String, String)>,
     agents: HashMap<String, AgentPresentation>,
 }
 
@@ -25,18 +24,6 @@ impl Presentation {
                 ..Self::default()
             };
         }
-        let epochs = view
-            .inventory
-            .terminals()
-            .values()
-            .filter_map(|t| t.activity.as_ref())
-            .map(|a| (a.core_id.clone(), a.epoch.clone()))
-            .collect::<HashSet<_>>();
-        let new_epochs = epochs
-            .difference(&self.epochs)
-            .cloned()
-            .collect::<HashSet<_>>();
-        self.epochs.extend(epochs);
         let mut present = HashSet::new();
         for endpoint in &mut projection.endpoints {
             let Some(snapshot) = endpoint.snapshot.as_mut() else {
@@ -46,15 +33,16 @@ impl Presentation {
                 let Some(term) = view.inventory.get(&agent.pane_id) else {
                     continue;
                 };
-                let baseline = term
-                    .activity
-                    .as_ref()
-                    .is_some_and(|a| new_epochs.contains(&(a.core_id.clone(), a.epoch.clone())));
                 agent.agent_status = self
                     .agents
                     .entry(agent.pane_id.clone())
                     .or_default()
-                    .update(term, agent.agent_status, baseline);
+                    .update(
+                        term,
+                        agent.agent_status,
+                        view.activity_receipts.epoch_token(&agent.pane_id),
+                        view.activity_receipts.epoch_completions(&agent.pane_id),
+                    );
                 present.insert(agent.pane_id.clone());
             }
             project_aggregate_status(snapshot);
@@ -116,6 +104,10 @@ impl Presentation {
 #[cfg(test)]
 #[path = "presentation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "presentation_epoch_tests.rs"]
+mod epoch_tests;
 
 #[cfg(test)]
 #[path = "presentation_reporter_tests.rs"]
