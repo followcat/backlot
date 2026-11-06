@@ -41,6 +41,23 @@ pub(crate) struct Projection {
     pub layouts: BTreeMap<String, crate::structure::TabLayout>,
 }
 
+/// The resolved agent draw order for ingestion-time receipt allocation:
+/// the same `project` traversal the shell draws — hc-tui layout overrides,
+/// then the `herdr-app` structure order, then label/repository/cwd
+/// fallback — flattened in endpoint order.
+pub(crate) fn agent_traversal(view: &View) -> Vec<String> {
+    project(view, None)
+        .endpoints
+        .iter()
+        .flat_map(|endpoint| {
+            endpoint
+                .snapshot
+                .iter()
+                .flat_map(|snapshot| snapshot.agent_order.iter().cloned())
+        })
+        .collect()
+}
+
 /// The machine part of an address: `host-b` of `host-b/t7`, `None` for a
 /// bare local `t7`.
 fn machine_of(address: &str) -> Option<&str> {

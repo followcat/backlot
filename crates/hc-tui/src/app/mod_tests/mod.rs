@@ -59,7 +59,14 @@ impl Backend for FailBackend {
 fn app() -> App {
     let (accepted, _rx) = mpsc::channel(1);
     let (rpc, sub) = crate::testcore::openers(accepted);
-    let watcher = Watcher::with_openers(rpc, sub, hc_proto::watch::WatchParams::default());
+    let watcher = Watcher::with_openers(
+        rpc,
+        sub,
+        hc_proto::watch::WatchParams {
+            traversal: Some(crate::project::agent_traversal),
+            ..hc_proto::watch::WatchParams::default()
+        },
+    );
     let open: OpenAttach = Arc::new(|_| unreachable!("no attach in this test"));
     let config = crate::config::Config::default();
     let live = config.live_keybinds();

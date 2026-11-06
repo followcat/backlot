@@ -92,7 +92,14 @@ mod tests {
             std::path::PathBuf::new(),
         );
         App::new(
-            Watcher::with_openers(rpc, sub, WatchParams::default()),
+            Watcher::with_openers(
+                rpc,
+                sub,
+                WatchParams {
+                    traversal: Some(crate::project::agent_traversal),
+                    ..WatchParams::default()
+                },
+            ),
             Arc::new(|_| Box::pin(std::future::pending())),
             config.live_keybinds(),
             shell,

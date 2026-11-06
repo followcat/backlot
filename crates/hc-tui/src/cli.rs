@@ -130,7 +130,11 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         crate::config::config_diagnostic_summary(&loaded.diagnostics),
         config_path,
     );
-    let watcher = Watcher::connect(endpoint, None, WatchParams::default());
+    let params = WatchParams {
+        traversal: Some(crate::project::agent_traversal),
+        ..WatchParams::default()
+    };
+    let watcher = Watcher::connect(endpoint, None, params);
     let ssh: Option<OsString> = None;
     let caller = self_caller(env, endpoint);
     let attach_endpoint = endpoint.clone();
