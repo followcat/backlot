@@ -74,7 +74,7 @@ fn simultaneous_creation_uses_terminal_number_before_label_order() {
     assert_eq!(screen.tabs[0].label, "zulu");
 }
 #[test]
-fn priority_order_uses_status_recency_instead_of_per_terminal_turn_count() {
+fn pure_projection_does_not_infer_recency_from_time_or_turn() {
     let mut older = term("t1");
     older.reported = true;
     older.status = Some(Status {
@@ -92,7 +92,8 @@ fn priority_order_uses_status_recency_instead_of_per_terminal_turn_count() {
         &screen,
         crate::config::AgentPanelSortConfig::Priority,
     );
-    assert_eq!(ordered, ["t2", "t1"]);
+    assert_eq!(ordered, ["t1", "t2"]);
+    assert!(screen.agents.iter().all(|a| a.state_change_seq == 0));
 }
 #[test]
 fn aggregate_priority_retains_the_endpoint_recency_map() {
@@ -223,8 +224,8 @@ fn each_live_agent_appears_once_and_shells_never_do() {
 fn agents_order_blocked_first_with_deterministic_ties() {
     // The reference priority is Blocked > Done > Working > Idle —
     // Raw idle stays idle; client completion policy is tested separately.
-    // Ties break on observed
-    // status-change recency (`status_ms`), then creation order.
+    // Pure projection has no activity ranks; ties use creation order.
+    // The presentation tests cover authoritative clocks and local receipts.
     let mut t1 = agent("t1", "idle");
     let mut t2 = agent("t2", "blocked");
     let mut t3 = agent("t3", "done");
@@ -251,8 +252,8 @@ fn agents_order_blocked_first_with_deterministic_ties() {
     let order: Vec<&str> = ordered.iter().map(|r| r.agent.pane_id.as_str()).collect();
     assert_eq!(
         order,
-        ["host-b/t4", "t2", "t3", "t5", "t1"],
-        "blocked by recency, then done, working; shells excluded"
+        ["t2", "host-b/t4", "t3", "t5", "t1"],
+        "blocked by creation order, then done, working; shells excluded"
     );
 }
 #[test]

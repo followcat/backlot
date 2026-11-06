@@ -363,3 +363,5 @@ impl App {
 mod tests;
 
 mod hostname;
+
+mod activity_order;

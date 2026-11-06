@@ -161,11 +161,9 @@ pub(super) fn structured_snapshot(
                             &crate::sidebar::clean(&term.title),
                         ),
                         agent_status: status,
-                        // Recency follows the observed status-change
-                        // chronology (`status_ms`), not the per-terminal
-                        // turn counter — a quiet terminal with many past
-                        // turns does not outrank a fresh report.
-                        state_change_seq: term.status_ms.unwrap_or(0),
+                        // Presentation supplies a rank from origin clocks;
+                        // timestamps and turns are not chronology facts.
+                        state_change_seq: 0,
                         state_labels: Vec::new(),
                         tokens: Vec::new(),
                         focused,
