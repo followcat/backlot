@@ -162,3 +162,22 @@ successful live resumed reattachments and fresh observer output, checks the
 phone keeps size, then checks automatic desktop fallback and real allocation
 reclamation. It never discovers or kills an existing session. Its result is a
 cross-viewer policy test, not a claim of herdr direct-attach-lock parity.
+
+
+`--scenario chronology` covers M3b with three named tabs and neutral agents.
+Private config copies select priority order. Initial idle is readiness; two
+agents finish in known authoritative ordinal order while another tab is
+visible. The script checks Done order, repeated-word stability, acknowledgement
+on visit, another-tab attention and later completion. All six sizes use full
+cell/attribute/cursor/mode/title comparisons; mobile captures also assert the
+agent section's order and status glyph colors.
+
+The candidate client stays running through an actual owned `.8` registry
+restart and must baseline the new epoch. The reference has no equivalent
+server handover API, so a fresh reference client baselines the retained owned
+server's existing completion facts. This is a client-baseline comparison,
+not a claim of identical server restart support. Each subsequent terminal
+capture requires fresh program output; transient notices must expire, with
+all captured cells still compared. No stalled-stream consumption fence or
+first-reconnect appearance is claimed. Original config, foreign structure,
+child-input isolation and final outer-screen restoration are checked.

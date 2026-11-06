@@ -34,7 +34,7 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       - run: cargo test -p hc-tui --example parity_cells
-      - run: python3 scripts/parity/test_safety.py
+      - run: python3 -m unittest discover -s scripts/parity -p 'test_*.py'
 
   integration:
     runs-on: ubuntu-latest

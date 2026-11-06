@@ -69,6 +69,9 @@ def detach(owner, decoder=None, keys=b'\x02q'):
 
 
 def one_size(args, size, binary):
+    if args.scenario == "chronology":
+        from chronology import run as run_chronology
+        return run_chronology(args,size,binary)
     if args.scenario == "layout":
         from layout import run as run_layout
         return run_layout(args,size,binary)
@@ -302,7 +305,7 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--size', choices=['80x24', '120x40', '200x50', '65x24', '64x24', '40x24'], action='append')
     parser.add_argument('--repository-case', choices=REPOSITORY_CASES, default='standard')
-    parser.add_argument('--scenario', choices=['default', 'prefix-conflict', 'repository', 'layout'], default='default')
+    parser.add_argument('--scenario', choices=['default', 'prefix-conflict', 'repository', 'layout', 'chronology'], default='default')
     parser.add_argument('--host-program', choices=['wezterm', 'alacritty'])
     parser.add_argument('--smoke', action='store_true', help='baseline only; not an acceptance run')
     args = parser.parse_args()

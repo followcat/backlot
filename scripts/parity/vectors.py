@@ -138,8 +138,7 @@ def replay(args, fixture, reference=False):
                                        for i, program in enumerate(programs)]
         assert result['ordinary_tail_hex'] == ['', ''], 'unexpected ordinary tail before detach'
         detach(core)
-        core.ui.read(.1)
-        result['tail_hex'] = [program.received()[offsets[i]:].hex() for i, program in enumerate(programs)]
+        result['tail_hex'] = wait_tail(core, programs, offsets, expected['detach_tail'])
         result['termios_restored'] = True
     except BaseException as error:
         result['error'] = repr(error)
@@ -155,6 +154,27 @@ def replay(args, fixture, reference=False):
     failed = sum(not case['match'] for case in result['cases'])
     print(json.dumps({'fixture': fixture.name, 'reference':reference, 'total':len(result['cases']), 'failed':failed}), flush=True)
     return result
+
+
+
+def wait_tail(owner, programs, offsets, expected, timeout=5):
+    """Wait for the immutable positioned tail, never bless partial drains."""
+    import time
+    deadline = time.monotonic() + timeout
+    previous = None
+    stable_since = time.monotonic()
+    while True:
+        owner.ui.read(.03)
+        actual = [p.received()[offsets[i]:].hex() for i, p in enumerate(programs)]
+        now = time.monotonic()
+        if actual != previous:
+            previous, stable_since = actual, now
+        if teardown_equivalent(actual, actual, expected) and now - stable_since >= .1:
+            return actual
+        assert now < deadline, 'immutable detach tail did not arrive completely'
+        # An exited outer PTY may return EIO immediately; owned server/child
+        # delivery still runs asynchronously after the client exit.
+        time.sleep(.01)
 
 
 def main():
