@@ -122,10 +122,10 @@ def run(owners, config, compare, size, decoder, out, result):
                     captured[owner.kind] = frame
                     break
                 assert time.monotonic() < deadline, 'settings action did not surface'
-        diff = differences(captured['reference'], captured['core'], True)
+        diff = differences(captured['reference'], captured['core'])
         (out / ('settings-' + entry + '-diff.json')).write_text(json.dumps(diff, indent=2) + '\n')
         result.setdefault('settings', []).append({'entry': entry, 'notice_verified': True,
-            'status': 'pending-feature', 'different_cells': len([d for d in diff if 'adaptation' not in d])})
+            'status': 'pending-feature', 'different_cells': len(diff)})
         reference.ui.send(b'\x1b[27u')  # Close the real source Settings overlay only.
         source = checkpoint(reference, 'settings-source-close', size, decoder)
         if 'fixture alpha' not in text(source):
