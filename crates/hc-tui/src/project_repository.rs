@@ -4,7 +4,7 @@
 
 use hc_proto::terminal::{RepositoryFacts, Terminal};
 
-use crate::chrome::snapshot::ClientShellWorktree;
+use crate::chrome::snapshot::ClientShellCheckout;
 use crate::sidebar::clean;
 
 fn key(parts: &[&str]) -> String {
@@ -55,15 +55,19 @@ pub(super) fn counts(facts: &RepositoryFacts) -> Option<(usize, usize)> {
     ))
 }
 
-pub(super) fn worktree(facts: &RepositoryFacts) -> Option<ClientShellWorktree> {
+pub(super) fn checkout(facts: &RepositoryFacts) -> Option<ClientShellCheckout> {
     if facts.state != "ready" {
         return None;
     }
     let checkout = facts.checkout.as_ref()?;
-    Some(ClientShellWorktree {
-        key: key(&[&facts.core_id, &checkout.repository_key]),
-        label: clean(&checkout.repo_name),
+    Some(ClientShellCheckout {
+        repository_key: key(&[&facts.core_id, &checkout.repository_key]),
+        checkout_key: checkout.checkout_key.clone(),
+        repo_name: clean(&checkout.repo_name),
+        checkout_name: clean(&checkout.checkout_name),
+        repo_root: checkout.repo_root.clone(),
         is_linked_worktree: checkout.is_linked_worktree,
+        is_bare: checkout.is_bare,
     })
 }
 

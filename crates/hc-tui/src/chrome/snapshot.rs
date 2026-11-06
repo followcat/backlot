@@ -68,6 +68,8 @@ pub struct ClientShellWorkspace {
     pub branch: Option<String>,
     pub git_ahead_behind: Option<(usize, usize)>,
     pub tokens: Vec<(String, String)>,
+    /// Git checkout identity does not imply Herdr-managed group membership.
+    pub checkout: Option<ClientShellCheckout>,
     pub worktree: Option<ClientShellWorktree>,
     pub focused: bool,
     pub agent_status: AgentStatus,
@@ -78,6 +80,17 @@ pub struct ClientShellWorktree {
     pub key: String,
     pub label: String,
     pub is_linked_worktree: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientShellCheckout {
+    pub repository_key: String,
+    pub checkout_key: String,
+    pub repo_name: String,
+    pub checkout_name: String,
+    pub repo_root: String,
+    pub is_linked_worktree: bool,
+    pub is_bare: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

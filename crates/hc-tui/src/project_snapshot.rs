@@ -254,7 +254,10 @@ pub(super) fn structured_snapshot(
                 .map(clean),
             git_ahead_behind: facts.and_then(repository::counts),
             tokens: Vec::new(),
-            worktree: facts.and_then(repository::worktree),
+            checkout: facts.and_then(repository::checkout),
+            // Herdr only groups explicit worktree_space memberships. Ordinary
+            // Git linked checkouts remain independent workspaces (creation.rs).
+            worktree: None,
             focused: panes
                 .iter()
                 .any(|p| p.workspace_id == *workspace_id && p.focused),

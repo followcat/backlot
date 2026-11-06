@@ -55,8 +55,12 @@ fn origin_keys_group_subdirectories_and_linked_checkouts_without_aliases() {
         crate::project::space_of(&linked).0
     );
     assert_eq!(
-        worktree(a.repository.as_ref().unwrap()).unwrap().key,
-        worktree(linked.repository.as_ref().unwrap()).unwrap().key
+        checkout(a.repository.as_ref().unwrap())
+            .unwrap()
+            .repository_key,
+        checkout(linked.repository.as_ref().unwrap())
+            .unwrap()
+            .repository_key
     );
     same.repository.as_mut().unwrap().core_id = "origin-b".into();
     assert_ne!(
@@ -64,8 +68,12 @@ fn origin_keys_group_subdirectories_and_linked_checkouts_without_aliases() {
         crate::project::space_of(&same).0
     );
     assert_ne!(
-        worktree(a.repository.as_ref().unwrap()).unwrap().key,
-        worktree(same.repository.as_ref().unwrap()).unwrap().key
+        checkout(a.repository.as_ref().unwrap())
+            .unwrap()
+            .repository_key,
+        checkout(same.repository.as_ref().unwrap())
+            .unwrap()
+            .repository_key
     );
 }
 
@@ -86,7 +94,8 @@ fn projection_uses_authoritative_root_label_branch_and_nullable_counts() {
     let s = crate::project::endpoint_snapshot(&[&a], Some("t1"), 1, 1);
     assert_eq!(s.workspaces[0].git_ahead_behind, None);
     assert_eq!(s.workspaces[0].branch, None);
-    assert!(s.workspaces[0].worktree.is_some());
+    assert!(s.workspaces[0].checkout.is_some());
+    assert!(s.workspaces[0].worktree.is_none());
     a.labels.insert("herdr.space".into(), "custom".into());
     assert_eq!(
         crate::project::space_of(&a),
@@ -139,5 +148,28 @@ fn cached_identity_survives_staleness_but_nonready_git_metadata_is_hidden() {
         assert_eq!(s.workspaces[0].branch, None);
         assert_eq!(s.workspaces[0].git_ahead_behind, None);
         assert_eq!(s.workspaces[0].worktree, None);
+        assert_eq!(s.workspaces[0].checkout, None);
     }
+}
+
+#[test]
+fn ordinary_linked_checkouts_keep_herdr_independent_workspace_presentation() {
+    let mut root = term("t1");
+    root.repository = Some(facts("origin-a", "main-checkout", false));
+    let mut linked = term("t2");
+    linked.repository = Some(facts("origin-a", "linked-checkout", true));
+    let s = crate::project::endpoint_snapshot(&[&root, &linked], Some("t1"), 1, 1);
+    assert_eq!(s.workspaces.len(), 2);
+    assert!(
+        s.workspaces
+            .iter()
+            .all(|workspace| workspace.worktree.is_none())
+    );
+    assert_eq!(s.workspaces[1].label, "linked-checkout");
+    assert_eq!(s.workspaces[1].branch.as_deref(), Some("topic"));
+    let first = s.workspaces[0].checkout.as_ref().unwrap();
+    let second = s.workspaces[1].checkout.as_ref().unwrap();
+    assert_eq!(first.repository_key, second.repository_key);
+    assert_ne!(first.checkout_key, second.checkout_key);
+    assert!(second.is_linked_worktree);
 }
