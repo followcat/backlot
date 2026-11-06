@@ -80,18 +80,38 @@ labels.
 Herdr's display priority is `Blocked > Done > Working > Idle > Unknown`.
 Workspace and tab aggregates use that priority. The default agent sort is
 herdr's configured default (space order); an explicit priority sort uses
-status-change recency and deterministic creation ties.
+the activity chronology and deterministic receipt rule below.
 
-Completion acknowledgement follows the reference transitions: an initial
-idle agent is seen, background work that finishes becomes done, and focusing
-its active tab acknowledges the completion without requiring a new report.
-A new turn or program incarnation must not inherit a stale acknowledgement.
-M2 keeps this presentation state locally and does not write core labels.
-The missing shared, persistent acknowledgement is a documented data gap.
+Completion comes only from a present root or named record's non-null
+`activity.records[record].completion_ordinal`. Idle/done without a new marker
+is readiness. Unseen markers show Done when the aggregate raw state is
+idle/done; a current Working, Blocked or Unknown state retains its priority.
+Turns, timestamps, repeated words and locally observed transitions never
+manufacture completions. Missing Activity means unknown completion history.
 
-Per-terminal `turn` values are not a global chronology. Use available status
-timestamps and observed transitions for recency; unknown pre-connection
-history is documented in [parity](parity.md#core-facts-and-replacements).
+Acknowledgement is client-local, per terminal and record. A composed, fresh,
+visible paint acknowledges its current markers only when the outer terminal
+is not known unfocused. An unseen completion on another tab stays Done until
+visited. Ordinary transport reconnect retains acknowledgement. A change of
+`core_id`, activity `epoch` or `scope`, or terminal incarnation baselines the
+current markers. First observation of an epoch also baselines existing facts;
+previously seen epochs survive an empty inventory. Named-record removal drops
+its acknowledgement. No labels or shared seen state are written.
+
+Priority recency uses the maximum present record `state_ordinal` or
+`completion_ordinal`, comparing only within `(core_id, epoch, scope)`.
+Metadata, revision, turns, timestamps and acknowledgement do not advance it.
+For incomparable domains, follow the reference's local receipt approach:
+allocate a receipt for a newly observed agent or a changed clock in the same
+domain, preserving its receipt on an activity-domain baseline. Coalesced arrivals use
+lexical full-domain/ordinal/terminal ties. Merge domain queues by the oldest
+eligible local receipt; this preserves each domain's core order without a
+non-transitive pairwise comparator. Unknown history uses independent receipt
+slots. These ranks are UI order, never global core ordinals or wall time.
+
+Inventory and output arrive on different connections. Fresh paint does not
+prove that the viewer consumed output corresponding to a completion; the
+stalled-stream race remains a limitation, never a parity pass.
 
 ## Machines, selection and geometry
 

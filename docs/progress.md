@@ -329,3 +329,25 @@
   by C3 and is not guessed; that presentation remains unproven. Appearance on
   first attach/reconnect/eviction and the acknowledgement consumption-fence race
   remain documented. M3b, Settings overlay and other M4 work are not started.
+
+## M3b: Authoritative completion and attention (2026-11-06)
+
+- C3 per-record completion markers now drive Done; initial idle/done is
+  readiness. Client-local acknowledgement retains the focused fresh-paint
+  gate and baselines origin/epoch/scope or incarnation changes. Turns,
+  timestamps and observed transitions cannot manufacture completions.
+- Priority recency preserves state/completion ordinal order within each
+  activity domain. Incomparable domains merge local receipt order with
+  deterministic ties; raw counters are never global across machines.
+- `quiet_human_release: null` now uses DATA fallback. Managed worktree
+  groups are explicitly `pending-feature` for M4 with shared membership.
+- Native chronology matches all six sizes (114 checkpoints) plus a WezTerm
+  profile (19), including another-tab attention, acknowledgement on visit,
+  actual core epoch restart with retained markers and subsequent completion.
+  M2/M2.2/M3a regressions, 390 paired input cases, 14 positioned tails,
+  four `.8` integrations and full local gates pass. Promisor policy differences
+  and Settings remain explicit exclusions; no expected bytes are changed.
+- Independent reviews, leak scans and CI gate the changes. The stalled-output
+  fence gap, first attach/reconnect/eviction appearance, native program OSC12,
+  reporter labels and remaining M4 actions stay deferred. Pause for review;
+  M4 is not started.

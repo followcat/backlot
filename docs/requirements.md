@@ -32,7 +32,7 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
 - Adapt core data to herdr's presentation. Document each unavailable/different core fact,
   its reason and exact replacement in `docs/parity.md`. Do not invent hc-tui display formats.
 - Missing required core facts remain explicit `pending-core-fact` results, never passes.
-  M2.2 adopts reviewed C3 facts after M2.1. M3a may implement structure, layout/tab operations, bindings and lock independently; chronology remains gated.
+  M2.2 adopts reviewed C3 facts after M2.1. M3a may implement structure, layout/tab operations, bindings and lock independently; M3b uses reviewed C3 per-record activity for chronology.
 - A committed neutral parity harness runs both clients in owned scratch sessions at
   80x24, 120x40, 200x50, and the 65/64/40-column boundary/mobile layouts, replays matching key/mouse scripts, and diffs screen cells and
   attributes. Every difference is a bug unless explicitly documented in `docs/parity.md`.
@@ -121,6 +121,18 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   (`terminal.keys`).
 - **Workers:** peek at a worker in a popup.
 - **Machines:** list, add (`machine.add`; SSH must already work), connect, rename, remove.
+
+### R7a Completion and attention
+
+- Completion comes only from authoritative per-record `completion_ordinal`;
+  initial idle/done is readiness, with no turn/time/transition inference.
+- Keep acknowledgement client-local with the focused, composed fresh-paint
+  gate; baseline activity origin/epoch/scope and incarnation changes.
+- Compare state/completion ordinals only within their origin/epoch/scope.
+  Across domains use deterministic local receipt order, preserving core order
+  within each domain. Do not compare raw counters across machines.
+- The stalled-output acknowledgement race remains a documented limitation
+  until an ordered output-consumption fence exists.
 
 ### R8 Notifications
 - Ring the bell or send OSC 9/777 when a terminal becomes blocked or finishes, following

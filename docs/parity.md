@@ -54,7 +54,8 @@ adapt its word to the reference presentation:
 | `working` | Working |
 | `blocked` | Blocked |
 | `idle` | Idle when acknowledged; Done after an unacknowledged completion |
-| `done`, `ready`, `finished` | Completion presentation, with the source acknowledgement behavior |
+| `done` | Idle without an unseen authoritative completion marker; Done with one |
+| `ready`, `finished` | Legacy display aliases do not establish completion without a core marker |
 | `error` or an unfamiliar word | Unknown; the reference has no separate error/unfamiliar-word status |
 | No report | No agent status inferred from terminal contents |
 
@@ -76,7 +77,7 @@ difference.
 | Agent runtime state | Use the authoritative root/named status record and the vocabulary above. Core supplies status; hc-tui does not add screen detection. |
 | Manual, reported and OSC titles | All are available: `herdr.title`, status `title`, terminal `title`. Keep separate source fields. The optional core terminal `name` supplies the source name field. Title loss or swapping is a bug. |
 | Shared completion acknowledgement | C3 still supplies no shared acknowledgement or output-consumption fence. Local acknowledgement resets/baselines on activity `(core_id, epoch, scope)` changes; `revision` alone does not reset it or advance recency. It is not synchronized or persisted across clients. |
-| Global state-change ordinal | Optional C3 `activity.records[""].state_ordinal` and `completion_ordinal` are retained with `core_id`, `epoch`, `scope`, `revision` and named records. Counters are origin-local, never a global order across machines. Chronology/completion inference and attention ordering remain M3b; M2.2 does not sort by these counters. |
+| Global state-change ordinal | Optional C3 `activity.records[""].state_ordinal` and `completion_ordinal` are retained with `core_id`, `epoch`, `scope`, `revision` and named records. M3b uses the maximum present root/named state or completion ordinal for within-domain recency. Compare only within `(core_id, epoch, scope)`; across domains merge local receipt order with deterministic ties. No timestamp/turn inference or global raw-counter comparison. See [chronology](#completion-identity-and-chronology). |
 | Workspace branch | C3 `repository.branch`, displayed only for `state == "ready"`. Pending/stale/unavailable and future states retain their full facts but hide Git presentation; absence means unsupported. No viewer Git probe. Validated against the pinned `.8` fixtures. |
 | Git ahead/behind counts | Nullable C3 `repository.ahead_behind`, with checked u64-to-usize conversion. Unknown stays absent, distinct from observed `(0,0)`. Promisor configuration, including false/empty values, deliberately suppresses counts. Source policy differences are recorded separately, never passes. Validated against the pinned `.8` fixtures. |
 | Worktree identity and label | Logical C3 identity groups by `(repository.core_id, checkout.repository_key)` and distinguishes `checkout_key`; all keys/paths stay opaque. Ready facts retain names, root, linked and bare flags in neutral checkout metadata. Ordinary linked Git checkouts remain independent workspace/branch rows, matching herdr. Herdr visual groups require explicit `worktree_space` membership, which C3 does not supply; `pending-feature` (M4): managed groups require explicit shared `hc-tui` document membership tied to origin, repository, checkout and parent/child role; tree glyphs, collapse, aggregated attention and branch labels follow that membership. Git linkage alone never creates it. |
@@ -238,18 +239,25 @@ limitations and remaining joint-review questions.
 
 ## Completion identity and chronology
 
-The source's server process boot identity and per-status completion/seen
-map do not exist in the tested core inventory. Core `id` is persistent
-across a transport reconnect, so reconnect alone must not reset the local
-acknowledgement cache. M2 keys that cache by core identity, terminal address
-and `created_ms`, then follows observed work/completion transitions and turn
-changes. Initial idle reports use the source's acknowledged baseline.
+M3b consumes the C3 `.8` per-record activity contract. Completion is a
+non-null `completion_ordinal` on a present root/named idle/done record, not
+an observed Working transition or a turn change. Initial idle/done is
+readiness. Baseline existing markers on first epoch observation and lifetime
+changes; ordinary reconnect retains client-local acknowledgement. Only the
+existing focused, composed, fresh visible-pane render gate acknowledges.
 
-Root `status_ms` seeds initial ordering. Named records have no equivalent
-complete global change ordinal. After connection, local observed changes
-supply a monotonic chronology; metadata-only updates do not advance it.
-Simultaneous changes use deterministic ties. This does not reconstruct
-unobserved history or synchronize acknowledgement between clients.
+Within the full `(core_id, epoch, scope)` domain, state/completion ordinals
+constrain recency. Across domains, use local receipt order like the pinned
+reference; deterministic queue merging preserves each domain's order without
+comparing raw counters across machines. Revision, metadata, wall time, turns
+and acknowledgement do not advance recency. Activity-domain baselines preserve the
+previous receipt. See [the precise ordering rule](sidebar.md#attention-seen-state-and-order).
+
+There is no shared acknowledgement or ordered output-consumption fence.
+Inventory can precede stalled stream output, so that race remains an explicit
+limitation. Native chronology captures require fresh fixture output and stable
+post-reconnect frames; they do not claim stall-race, initial/reconnect appearance
+or cross-client Done parity.
 
 ## Release activity and size ownership
 
@@ -388,7 +396,7 @@ The joint review accepted documented deferral of dead-wire held releases,
 resize acknowledgement ambiguity, remote clock/timezone and currently unused
 token metadata. C3 hostname, Git facts and quiet human release are implemented
 and verified in the stated native fixtures. C3 does not supply first-paint appearance; the client cache handles routine switching.
-Completion chronology remains M3b; C3 counters are retained for that slice. Acknowledgement stays client-local and
+M3b derives completion and recency from authoritative C3 counters. Acknowledgement stays client-local and
 only follows a composed, completed visible paint while the client is focused.
 There is no cross-connection completion/output fence yet: new inventory can
 arrive while stream output is stalled, so a paint can be older than its status.
@@ -482,7 +490,44 @@ Native validation corrected an automatic worktree grouping assumption: Git
 checkout identity and Herdr-managed membership are different facts. It also fixed
 one stale three-argument Settings comparison call after the title exemption was
 removed. Earlier failed captures are retained outside the repository; they are
-not acceptance passes. Chronology/attention and completion inference remain M3b;
+not acceptance passes. M3b chronology evidence is recorded separately below;
 remote hostname qualification is unit-tested, while this native hostname profile
 covers the local endpoint. Appearance, consumption-fence and deferred-action
 limits above remain in force.
+
+## M3b chronology evidence
+
+The pinned `.8` archive and `d00953e0` reference remain unchanged. Three
+agents in named tabs acquire idle readiness, work, then finish in known core
+completion order while another tab is visible. Native captures verify Done
+priority, repeated-word stability, visit acknowledgement, another-tab attention
+and mobile switcher ordering at all six sizes: 114 exact checkpoints. A
+WezTerm host profile adds 19 exact checkpoints and proves ModifyOtherKeys1.
+
+The same candidate client survives an actual owned core process handover;
+the epoch changes and genuine old completion markers remain. Their display
+baselines to Idle, then later work completes and becomes Done again. The
+reference has no preserving server restart API: a fresh reference client
+baselines its retained owned server's markers. This proves the stated client
+baseline behavior, not identical server restart mechanisms. Captures require
+fresh program output and expired transient notices. First reconnect appearance
+and the stalled-output consumption-fence race remain unproven.
+
+M2/M2.2/M3a regressions retain their explicit coverage: 154 default, 33 host
+MOK, 18 repository, 33 hostname/status and 581 layout checkpoints, plus six
+exact Git fallback/detached checkpoints. All 13 layout runs retain shared
+layout convergence and both reload rounds. Settings' 17 unavailable notices
+remain `pending-feature`; managed worktree groups remain `pending-feature`
+(M4). Three promisor variants each retain five raw count-cell differences,
+`passed: false` and nonzero exit; their full known/unknown control surfaces
+explain core policy without masks. They are excluded from matching totals.
+
+All 390 immutable paired input cases and 14 positioned detach tails match;
+four opt-in `.8` protocol integrations pass. A fixed100ms tail sample once
+captured only nine of eleven reference release packets. The harness now waits
+up to five seconds for the unchanged positioned fixture and a stable interval;
+missing, extra or malformed bytes still fail. Failed pilots remain excluded.
+No expected bytes, original config or foreign structure is rewritten. Owned
+sessions clean up and disk stays above the 12 GiB floor. Cross-machine counter
+isolation and deterministic merge behavior have model tests, without a native
+multi-machine chronology claim.
