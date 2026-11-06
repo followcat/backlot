@@ -12,15 +12,21 @@ use serde_json::json;
 #[tokio::test]
 async fn quiet_release_requires_request_hello_and_affirmative_reply() {
     for feature in [false, true] {
-        for confirmation in [None, Some(false), Some(true)] {
+        for confirmation in [
+            None,
+            Some(json!(null)),
+            Some(json!(false)),
+            Some(json!(true)),
+        ] {
             for request in [false, true] {
                 let (mut core, read, write) = pair(64 * 1024);
                 let (seen, received) = tokio::sync::oneshot::channel();
-                let expected = request && feature && confirmation == Some(true);
+                let expected = request && feature && confirmation == Some(json!(true));
+                let confirmation = confirmation.clone();
                 let server = tokio::spawn(async move {
                     let mut result = attach_result(1, minimal_terminal(), false, true);
                     if let Some(flag) = confirmation {
-                        result["quiet_human_release"] = json!(flag);
+                        result["quiet_human_release"] = flag;
                     }
                     let features: &[&str] = if feature {
                         &["quiet_human_release", "automatic_input"]

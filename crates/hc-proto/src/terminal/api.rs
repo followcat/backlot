@@ -196,6 +196,13 @@ pub struct AttachResult {
     #[serde(default)]
     pub automatic_input: bool,
     /// The entire attach path accepts QUIET_HUMAN_RELEASE (kind 7).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unconfirmed_null")]
     pub quiet_human_release: bool,
+}
+
+fn unconfirmed_null<'de, D>(de: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(de)?.unwrap_or(false))
 }
