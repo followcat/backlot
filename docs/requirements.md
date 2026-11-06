@@ -128,9 +128,12 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   initial idle/done is readiness, with no turn/time/transition inference.
 - Keep acknowledgement client-local with the focused, composed fresh-paint
   gate; baseline activity origin/epoch/scope and incarnation changes.
-- Compare state/completion ordinals only within their origin/epoch/scope.
-  Across domains use deterministic local receipt order, preserving core order
-  within each domain. Do not compare raw counters across machines.
+- Compare state/completion ordinals only within their origin/epoch/scope
+  when ordering a newly ingested batch. Allocate display receipts before
+  watcher coalescing; retain unchanged ranks and prune absent agents.
+  Across domains retain ingestion order without comparing foreign counters.
+  A delayed A10 arriving after A20 and B displays A10 > B > A20; historical
+  within-domain ordinal order does not override reference receipt behavior.
 - The stalled-output acknowledgement race remains a documented limitation
   until an ordered output-consumption fence exists.
 

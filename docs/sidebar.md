@@ -98,16 +98,22 @@ current markers. First observation of an epoch also baselines existing facts;
 previously seen epochs survive an empty inventory. Named-record removal drops
 its acknowledgement. No labels or shared seen state are written.
 
-Priority recency uses the maximum present record `state_ordinal` or
-`completion_ordinal`, comparing only within `(core_id, epoch, scope)`.
-Metadata, revision, turns, timestamps and acknowledgement do not advance it.
-For incomparable domains, follow the reference's local receipt approach:
-allocate a receipt for a newly observed agent or a changed clock in the same
-domain, preserving its receipt on an activity-domain baseline. Coalesced arrivals use
-lexical full-domain/ordinal/terminal ties. Merge domain queues by the oldest
-eligible local receipt; this preserves each domain's core order without a
-non-transitive pairwise comparator. Unknown history uses independent receipt
-slots. These ranks are UI order, never global core ordinals or wall time.
+Priority recency follows reference ingestion receipts. Before watcher views
+coalesce, new agents and changed clocks allocate from the maximum receipt in
+the current cache; unchanged agents retain theirs and absent agents are pruned
+after allocation. The maximum present record `state_ordinal` or
+`completion_ordinal` orders comparable members of a new batch only, within
+`(core_id, epoch, scope)`. Snapshot input slots retain incomparable-domain and
+unknown-history order; foreign counters and domain names never order receipts.
+Saturation preserves equal ranks and stable presentation traversal.
+
+Thus A20, then B, then a newly discovered A10 displays A10 > B > A20.
+There are no permanent per-domain queues or lifetime high-water counter.
+Metadata, revision, readiness aliases with unchanged clocks, turns, timestamps
+and acknowledgement do not advance receipts. These are local UI ranks, not
+core ordinals. The existing activity-domain baseline retains its receipt until
+a fresh clock change; reference-compatible epoch display rebuilding remains
+pending, including genuinely new post-epoch work coalesced before a draw.
 
 Inventory and output arrive on different connections. Fresh paint does not
 prove that the viewer consumed output corresponding to a completion; the

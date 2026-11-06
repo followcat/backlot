@@ -1,6 +1,5 @@
 // Derived from herdr src/client/shell/endpoint_agent_state.rs and endpoints.rs (Apache-2.0).
-//! Authoritative record completions, lifetime baselines and constrained receipt order.
-use super::activity_order::{ActivityOrder, Clock};
+//! Authoritative completions and ingestion-time receipt presentation.
 use super::agent_presentation::{AgentPresentation, project_aggregate_status};
 use crate::project::Projection;
 use hc_proto::watch::View;
@@ -11,7 +10,6 @@ pub(super) struct Presentation {
     core_id: Option<String>,
     epochs: HashSet<(String, String)>,
     agents: HashMap<String, AgentPresentation>,
-    order: ActivityOrder,
 }
 
 impl Presentation {
@@ -39,7 +37,6 @@ impl Presentation {
             .cloned()
             .collect::<HashSet<_>>();
         self.epochs.extend(epochs);
-        let mut clocks = Vec::new();
         let mut present = HashSet::new();
         for endpoint in &mut projection.endpoints {
             let Some(snapshot) = endpoint.snapshot.as_mut() else {
@@ -58,19 +55,17 @@ impl Presentation {
                     .entry(agent.pane_id.clone())
                     .or_default()
                     .update(term, agent.agent_status, baseline);
-                clocks.push((agent.pane_id.clone(), Clock::of(term)));
                 present.insert(agent.pane_id.clone());
             }
             project_aggregate_status(snapshot);
         }
         self.agents.retain(|id, _| present.contains(id));
-        let ranks = self.order.ranks(clocks);
         for endpoint in &mut projection.endpoints {
             let Some(snapshot) = endpoint.snapshot.as_mut() else {
                 continue;
             };
             for agent in &mut snapshot.agents {
-                agent.state_change_seq = ranks[&agent.pane_id];
+                agent.state_change_seq = view.activity_receipts.rank(&agent.pane_id);
             }
             endpoint.agent_recency = snapshot
                 .agents

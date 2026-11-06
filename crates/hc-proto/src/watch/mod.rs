@@ -27,7 +27,10 @@
 //!   `terminal.list`. Nothing state-changing is ever replayed.
 
 mod actor;
+mod receipts;
 mod refresh;
+
+pub use receipts::ActivityReceipts;
 
 use crate::client::{CallError, Client};
 use crate::doc::DocGetResult;
@@ -89,6 +92,8 @@ pub struct View {
     pub features: Vec<String>,
     /// The authoritative terminal inventory.
     pub inventory: Inventory,
+    /// Display-only receipt ranks captured before publication coalesces views.
+    pub activity_receipts: ActivityReceipts,
     /// `machine.list` as last seen. `None` while never fetched or the
     /// method is missing — `notes["machine.list"]` says which.
     pub machines: Option<Vec<MachineView>>,

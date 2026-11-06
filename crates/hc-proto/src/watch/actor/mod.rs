@@ -6,7 +6,10 @@
 //! stop latch or a backoff deadline; nothing polls while idle.
 
 use super::refresh::{self, Backoff, DocSlot};
-use super::{Command, DocDone, DocKey, Link, OpenRpc, OpenSub, SubAttempt, View, WatchParams};
+use super::{
+    ActivityReceipts, Command, DocDone, DocKey, Link, OpenRpc, OpenSub, SubAttempt, View,
+    WatchParams,
+};
 use crate::client::{CallError, Client};
 use crate::hello::CoreInfo;
 use crate::inventory::Inventory;
@@ -44,6 +47,7 @@ pub(crate) struct Actor {
     pub(super) sub_open: Option<JoinHandle<SubAttempt>>,
     // Authoritative state.
     pub(super) inventory: Inventory,
+    activity_receipts: ActivityReceipts,
     /// Subscription epoch: bumps when a fresh snapshot (subscription or
     /// static list) replaces the inventory.
     pub(super) generation: u64,
@@ -103,6 +107,7 @@ impl Actor {
             rpc_open: None,
             sub_open: None,
             inventory: Inventory::default(),
+            activity_receipts: ActivityReceipts::default(),
             generation: 0,
             rpc_epoch: 0,
             link: Link::Connecting { attempt: 0 },
@@ -292,6 +297,7 @@ impl Actor {
     /// Rebuilds the published `View` and bumps its version. A slow
     /// reader only ever sees complete states — publish is the coalesce.
     fn publish(&mut self) {
+        self.activity_receipts.ingest(&self.inventory);
         self.version += 1;
         *self.view.lock().unwrap_or_else(|p| p.into_inner()) = View {
             version: self.version,
@@ -301,6 +307,7 @@ impl Actor {
             core: self.core.clone(),
             features: self.features.clone(),
             inventory: self.inventory.clone(),
+            activity_receipts: self.activity_receipts.clone(),
             machines: self.machines.clone(),
             documents: self
                 .docs
@@ -357,3 +364,6 @@ impl Drop for Actor {
         self.abort_pending();
     }
 }
+
+#[cfg(test)]
+mod receipt_tests;

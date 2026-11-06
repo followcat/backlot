@@ -20,13 +20,31 @@ fn terminal(id: &str, word: &str, ordinal: u64, completion: Option<u64>) -> Term
     t.activity = Some(activity("boot-a", 1, Some(ordinal), completion));
     t
 }
-fn update(p: &mut Presentation, terminals: Vec<Terminal>, generation: u64) -> Projection {
+#[derive(Default)]
+struct Fixture {
+    presentation: Presentation,
+    receipts: hc_proto::watch::ActivityReceipts,
+}
+impl std::ops::Deref for Fixture {
+    type Target = Presentation;
+    fn deref(&self) -> &Self::Target {
+        &self.presentation
+    }
+}
+impl std::ops::DerefMut for Fixture {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.presentation
+    }
+}
+fn update(p: &mut Fixture, terminals: Vec<Terminal>, generation: u64) -> Projection {
     let mut view = View {
         generation,
         version: generation,
         ..View::default()
     };
     view.inventory.replace(generation, terminals);
+    p.receipts.ingest(&view.inventory);
+    view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
     p.project(&view, &mut projection);
     projection
@@ -58,7 +76,7 @@ fn first_epoch_baselines_existing_completions_and_initial_idle_done_are_readines
         ("idle", Some(10)),
         ("done", Some(10)),
     ] {
-        let mut p = Presentation::default();
+        let mut p = Fixture::default();
         assert_eq!(
             state(
                 &update(&mut p, vec![terminal("t1", word, 10, completion)], 1),
@@ -71,7 +89,7 @@ fn first_epoch_baselines_existing_completions_and_initial_idle_done_are_readines
 
 #[test]
 fn core_completion_survives_coalesced_work_without_a_turn_or_word_change() {
-    let mut p = Presentation::default();
+    let mut p = Fixture::default();
     let mut t = terminal("t1", "idle", 1, None);
     update(&mut p, vec![t.clone()], 1);
     t.activity = Some(activity("boot-a", 1, Some(20), Some(20)));
@@ -92,7 +110,7 @@ fn core_completion_survives_coalesced_work_without_a_turn_or_word_change() {
 #[test]
 fn observed_work_turns_timestamps_and_done_words_cannot_manufacture_completion() {
     for predecessor in ["working", "blocked", "error"] {
-        let mut p = Presentation::default();
+        let mut p = Fixture::default();
         let mut t = terminal("t1", predecessor, 1, None);
         update(&mut p, vec![t.clone()], 1);
         t.status.as_mut().unwrap().state = "done".into();
@@ -105,7 +123,7 @@ fn observed_work_turns_timestamps_and_done_words_cannot_manufacture_completion()
 
 #[test]
 fn blocked_error_and_clear_honor_the_core_marker_instead_of_a_local_work_guard() {
-    let mut p = Presentation::default();
+    let mut p = Fixture::default();
     let mut t = terminal("t1", "working", 1, None);
     update(&mut p, vec![t.clone()], 1);
     t.status.as_mut().unwrap().state = "error".into();
@@ -136,7 +154,7 @@ fn blocked_error_and_clear_honor_the_core_marker_instead_of_a_local_work_guard()
 #[test]
 fn epoch_scope_origin_and_incarnation_changes_baseline_without_comparing_old_ack() {
     for change in 0..4 {
-        let mut p = Presentation::default();
+        let mut p = Fixture::default();
         let mut t = terminal("t1", "idle", 1, None);
         update(&mut p, vec![t.clone()], 1);
         t.activity = Some(activity("boot-a", 1, Some(20), Some(20)));
@@ -163,7 +181,7 @@ fn epoch_scope_origin_and_incarnation_changes_baseline_without_comparing_old_ack
 
 #[test]
 fn transport_reconnect_keeps_ack_but_revision_and_metadata_do_not_advance_order() {
-    let mut p = Presentation::default();
+    let mut p = Fixture::default();
     let mut a = terminal("t1", "idle", 1, None);
     let b = terminal("t2", "working", 10, None);
     let first = update(&mut p, vec![a.clone(), b.clone()], 1);
@@ -185,7 +203,7 @@ fn transport_reconnect_keeps_ack_but_revision_and_metadata_do_not_advance_order(
 
 #[test]
 fn named_record_completions_are_independent_and_removal_clears_their_markers() {
-    let mut p = Presentation::default();
+    let mut p = Fixture::default();
     let mut t = terminal("t1", "idle", 1, None);
     update(&mut p, vec![t.clone()], 1);
     t.records.insert(
@@ -231,7 +249,7 @@ fn named_record_completions_are_independent_and_removal_clears_their_markers() {
 #[test]
 fn unseen_completion_does_not_override_a_current_blocker_or_working_record() {
     for word in ["working", "blocked"] {
-        let mut p = Presentation::default();
+        let mut p = Fixture::default();
         let mut t = terminal("t1", "idle", 1, None);
         update(&mut p, vec![t.clone()], 1);
         t.activity = Some(activity("boot-a", 1, Some(2), Some(2)));
@@ -260,7 +278,7 @@ fn unseen_completion_does_not_override_a_current_blocker_or_working_record() {
 
 #[test]
 fn new_agent_completion_in_an_already_observed_epoch_is_not_lost() {
-    let mut p = Presentation::default();
+    let mut p = Fixture::default();
     let a = terminal("t1", "idle", 1, None);
     update(&mut p, vec![a.clone()], 1);
     update(&mut p, vec![], 2);
@@ -273,8 +291,8 @@ fn new_agent_completion_in_an_already_observed_epoch_is_not_lost() {
 
 #[test]
 fn acknowledgement_is_local_and_only_covers_the_rendered_pane() {
-    let mut p = Presentation::default();
-    let mut other = Presentation::default();
+    let mut p = Fixture::default();
+    let mut other = Fixture::default();
     let a = terminal("t1", "working", 1, None);
     let b = terminal("t2", "working", 2, None);
     update(&mut p, vec![a.clone(), b.clone()], 1);
@@ -291,11 +309,44 @@ fn acknowledgement_is_local_and_only_covers_the_rendered_pane() {
 
 #[test]
 fn absent_activity_never_uses_legacy_transition_inference() {
-    let mut p = Presentation::default();
+    let mut p = Fixture::default();
     let mut t = terminal("t1", "working", 1, None);
     t.activity = None;
     update(&mut p, vec![t.clone()], 1);
     t.status.as_mut().unwrap().state = "done".into();
     t.turn += 1;
     assert_eq!(state(&update(&mut p, vec![t], 2), "t1"), AgentStatus::Idle);
+}
+
+#[test]
+fn presentation_consumes_precoalesced_receipts_without_reallocating_at_draw() {
+    let mut p = Fixture::default();
+    let mut a20 = terminal("a20", "idle", 20, None);
+    let mut b = terminal("b", "idle", 1, None);
+    b.activity.as_mut().unwrap().core_id = "origin-b".into();
+    update(&mut p, vec![a20.clone()], 1);
+    let mut view = View {
+        generation: 2,
+        version: 2,
+        ..View::default()
+    };
+    view.inventory.replace(2, vec![a20.clone(), b.clone()]);
+    p.receipts.ingest(&view.inventory);
+    let a10 = terminal("a10", "idle", 10, None);
+    view.inventory.replace(3, vec![a20.clone(), b, a10]);
+    p.receipts.ingest(&view.inventory);
+    view.activity_receipts = p.receipts.clone();
+    let mut projection = crate::project::project(&view, Some("a20"));
+    p.project(&view, &mut projection);
+    assert_eq!(
+        (
+            rank(&projection, "a20"),
+            rank(&projection, "b"),
+            rank(&projection, "a10")
+        ),
+        (1, 2, 3)
+    );
+    a20.created_ms += 1;
+    let next = update(&mut p, vec![a20], 4);
+    assert_eq!(state(&next, "a20"), AgentStatus::Idle);
 }

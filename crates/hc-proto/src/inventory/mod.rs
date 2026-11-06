@@ -86,6 +86,8 @@ impl Effect {
 #[derive(Debug, Default, Clone)]
 pub struct Inventory {
     pub(super) terminals: BTreeMap<String, Terminal>,
+    /// Current snapshot order, then newly created addresses in arrival order.
+    order: Vec<String>,
     /// Highest applied `seq` in this epoch.
     seq: u64,
     /// The subscription filtered: `seq` gaps are expected, not resyncs.
@@ -122,6 +124,13 @@ impl Inventory {
     /// Every record by address.
     pub fn terminals(&self) -> &BTreeMap<String, Terminal> {
         &self.terminals
+    }
+
+    /// Incoming order without comparing addresses or foreign activity counters.
+    pub fn ordered_terminals(&self) -> impl Iterator<Item = &Terminal> {
+        self.order
+            .iter()
+            .filter_map(|address| self.terminals.get(address))
     }
 
     /// One record by address, e.g. `t7` or `host-b/t7`.
@@ -162,6 +171,12 @@ impl Inventory {
     /// The `snapshot` flag means documents must be refetched: snapshots
     /// never carry them.
     pub fn replace(&mut self, seq: u64, terminals: Vec<Terminal>) -> Effect {
+        let mut seen = std::collections::BTreeSet::new();
+        self.order = terminals
+            .iter()
+            .filter(|term| seen.insert(term.address.clone()))
+            .map(|term| term.address.clone())
+            .collect();
         let fresh: BTreeMap<String, Terminal> = terminals
             .into_iter()
             .map(|t| (t.address.clone(), t))
@@ -212,6 +227,13 @@ impl Inventory {
         }
         self.seq = event.seq;
         self.apply_event(event, &mut effect);
+        self.order
+            .retain(|address| self.terminals.contains_key(address));
+        for address in effect.created.iter().chain(&effect.restarted) {
+            if self.terminals.contains_key(address) && !self.order.contains(address) {
+                self.order.push(address.clone());
+            }
+        }
         effect
     }
 

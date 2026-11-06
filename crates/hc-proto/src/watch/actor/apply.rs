@@ -326,6 +326,7 @@ impl Actor {
             Ok(list) => {
                 self.generation += 1;
                 self.inventory.replace(0, list.terminals);
+                self.inventory.set_offline(false);
                 // `terminal.list` carries machine views too: use them
                 // when `machine.list` never produced any.
                 if self.machines.is_none() && !list.machines.is_empty() {

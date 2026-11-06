@@ -77,7 +77,7 @@ difference.
 | Agent runtime state | Use the authoritative root/named status record and the vocabulary above. Core supplies status; hc-tui does not add screen detection. |
 | Manual, reported and OSC titles | All are available: `herdr.title`, status `title`, terminal `title`. Keep separate source fields. The optional core terminal `name` supplies the source name field. Title loss or swapping is a bug. |
 | Shared completion acknowledgement | C3 still supplies no shared acknowledgement or output-consumption fence. Local acknowledgement resets/baselines on activity `(core_id, epoch, scope)` changes; `revision` alone does not reset it or advance recency. It is not synchronized or persisted across clients. |
-| Global state-change ordinal | Optional C3 `activity.records[""].state_ordinal` and `completion_ordinal` are retained with `core_id`, `epoch`, `scope`, `revision` and named records. M3b uses the maximum present root/named state or completion ordinal for within-domain recency. Compare only within `(core_id, epoch, scope)`; across domains merge local receipt order with deterministic ties. No timestamp/turn inference or global raw-counter comparison. See [chronology](#completion-identity-and-chronology). |
+| Global state-change ordinal | Optional C3 `activity.records[""].state_ordinal` and `completion_ordinal` are retained with `core_id`, `epoch`, `scope`, `revision` and named records. The maximum present clock orders comparable members of each incoming batch only; display receipts are allocated before watcher coalescing. Changed/new agents allocate from max current cache, unchanged retain, absent prune; foreign counters are never compared. Delayed A10 after A20/B displays A10 > B > A20. No timestamp/turn inference or permanent domain queues. See [chronology](#completion-identity-and-chronology). |
 | Workspace branch | C3 `repository.branch`, displayed only for `state == "ready"`. Pending/stale/unavailable and future states retain their full facts but hide Git presentation; absence means unsupported. No viewer Git probe. Validated against the pinned `.8` fixtures. |
 | Git ahead/behind counts | Nullable C3 `repository.ahead_behind`, with checked u64-to-usize conversion. Unknown stays absent, distinct from observed `(0,0)`. Promisor configuration, including false/empty values, deliberately suppresses counts. Source policy differences are recorded separately, never passes. Validated against the pinned `.8` fixtures. |
 | Worktree identity and label | Logical C3 identity groups by `(repository.core_id, checkout.repository_key)` and distinguishes `checkout_key`; all keys/paths stay opaque. Ready facts retain names, root, linked and bare flags in neutral checkout metadata. Ordinary linked Git checkouts remain independent workspace/branch rows, matching herdr. Herdr visual groups require explicit `worktree_space` membership, which C3 does not supply; `pending-feature` (M4): managed groups require explicit shared `hc-tui` document membership tied to origin, repository, checkout and parent/child role; tree glyphs, collapse, aggregated attention and branch labels follow that membership. Git linkage alone never creates it. |
@@ -246,12 +246,16 @@ readiness. Baseline existing markers on first epoch observation and lifetime
 changes; ordinary reconnect retains client-local acknowledgement. Only the
 existing focused, composed, fresh visible-pane render gate acknowledges.
 
-Within the full `(core_id, epoch, scope)` domain, state/completion ordinals
-constrain recency. Across domains, use local receipt order like the pinned
-reference; deterministic queue merging preserves each domain's order without
-comparing raw counters across machines. Revision, metadata, wall time, turns
-and acknowledgement do not advance recency. Activity-domain baselines preserve the
-previous receipt. See [the precise ordering rule](sidebar.md#attention-seen-state-and-order).
+Within `(core_id, epoch, scope)`, state/completion ordinals order comparable
+members of a new ingestion batch. They do not constrain historical display
+rank: late A10 after A20/B receives the newest receipt. Bounded watcher metadata
+preserves receipts before a slow reader coalesces views. Reconnect, metadata,
+revision, turns, timestamps and acknowledgement do not advance unchanged facts;
+absent agents are pruned and allocation uses max current cache. Saturated ranks
+tie stably. No foreign counters or permanent domain queues order agents.
+Existing activity-domain baselines retain their receipt; reference-compatible
+epoch display rebuilding remains pending as a separate patch, including new
+post-epoch work arriving before a draw. See [the precise ordering rule](sidebar.md#attention-seen-state-and-order).
 
 There is no shared acknowledgement or ordered output-consumption fence.
 Inventory can precede stalled stream output, so that race remains an explicit
@@ -497,6 +501,10 @@ limits above remain in force.
 
 ## M3b chronology evidence
 
+The results below are historical coverage, not acceptance of the correction
+round. M3b remains unaccepted. The receipt patch has model/watcher tests;
+corrected alias, handoff and full native matrices still require later gates.
+
 The pinned `.8` archive and `d00953e0` reference remain unchanged. Three
 agents in named tabs acquire idle readiness, work, then finish in known core
 completion order while another tab is visible. Native captures verify Done
@@ -504,14 +512,23 @@ priority, repeated-word stability, visit acknowledgement, another-tab attention
 and mobile switcher ordering at all six sizes: 114 exact checkpoints. A
 WezTerm host profile adds 19 exact checkpoints and proves ModifyOtherKeys1.
 
-The same candidate client survives an actual owned core process handover;
-the epoch changes and genuine old completion markers remain. Their display
-baselines to Idle, then later work completes and becomes Done again. The
-reference has no preserving server restart API: a fresh reference client
-baselines its retained owned server's markers. This proves the stated client
-baseline behavior, not identical server restart mechanisms. Captures require
-fresh program output and expired transient notices. First reconnect appearance
-and the stalled-output consumption-fence race remain unproven.
+The historical restart capture retained the candidate UI across an owned core
+restart but relaunched the reference client; it did not prove same-live-reference
+UI recovery. The earlier assertion that the reference has no preserving restart
+API was incorrect: pinned `server.live_handoff` preserves pane/program processes.
+The actual later owned default-local probe replaced the server, then the reference
+UI restored the terminal and printed the live-update shutdown error. Its individual
+exit status was not saved, and no fresh post-handoff paired frame passed.
+
+Pinned default-local source exits 1 for that shutdown. Candidate R1 still requires
+same-live-UI reconnect; this necessary lifecycle distinction does not relax
+steady-state local R0 surfaces. Saved-endpoint federation has a separate supported
+reconnect path, with a genuinely healthy owned peer and matched topology required
+for any paired frames. Its fixture/runtime gate, full-lifecycle reporter retention,
+individual exit/liveness evidence and candidate recovery are still pending.
+Protocol stdio-adapter evidence cannot establish native SSH acceptance. No client
+relaunch is same-live-UI proof. Old captures/classifications remain unchanged.
+First reconnect appearance and the stalled-output fence remain unproven.
 
 M2/M2.2/M3a regressions retain their explicit coverage: 154 default, 33 host
 MOK, 18 repository, 33 hostname/status and 581 layout checkpoints, plus six

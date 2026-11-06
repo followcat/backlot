@@ -21,7 +21,6 @@ use crate::chrome::snapshot::{
 };
 use crate::chrome::status::{AgentStatus, agent_status_from_word, status_priority};
 use crate::sidebar::clean;
-use crate::sidebar::{Life, classify};
 
 #[cfg(test)]
 #[path = "project_tests.rs"]
@@ -136,8 +135,7 @@ pub(crate) fn tab_key_of(term: &Terminal) -> String {
 /// A terminal counts as an agent the same way the old sidebar counted:
 /// core says it reported (or carries status records) and it is live.
 fn is_agent(term: &Terminal) -> bool {
-    classify(term) == Life::Live
-        && (term.reported || effective_status(term).is_some() || !term.records.is_empty())
+    term.is_live_reporter()
 }
 
 /// Local endpoint status from the subscription link; remotes keep

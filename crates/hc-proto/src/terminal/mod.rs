@@ -216,6 +216,15 @@ pub struct WaitResult {
     pub from: Option<String>,
 }
 
+impl Terminal {
+    /// A live process carrying core-reported status, without status inference.
+    pub fn is_live_reporter(&self) -> bool {
+        self.state == "live"
+            && self.pid.is_some()
+            && (self.reported || self.status.is_some() || !self.records.is_empty())
+    }
+}
+
 /// A size in cells.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InitialSize {
