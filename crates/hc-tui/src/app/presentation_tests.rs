@@ -43,7 +43,7 @@ fn update(p: &mut Fixture, terminals: Vec<Terminal>, generation: u64) -> Project
         ..View::default()
     };
     view.inventory.replace(generation, terminals);
-    p.receipts.ingest(&view.inventory);
+    p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
     p.project(&view, &mut projection);
@@ -331,10 +331,10 @@ fn presentation_consumes_precoalesced_receipts_without_reallocating_at_draw() {
         ..View::default()
     };
     view.inventory.replace(2, vec![a20.clone(), b.clone()]);
-    p.receipts.ingest(&view.inventory);
+    p.receipts.ingest(&view.inventory, &[]);
     let a10 = terminal("a10", "idle", 10, None);
     view.inventory.replace(3, vec![a20.clone(), b, a10]);
-    p.receipts.ingest(&view.inventory);
+    p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("a20"));
     p.project(&view, &mut projection);

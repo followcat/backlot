@@ -297,9 +297,8 @@ impl Actor {
     /// Rebuilds the published `View` and bumps its version. A slow
     /// reader only ever sees complete states — publish is the coalesce.
     fn publish(&mut self) {
-        self.activity_receipts.ingest(&self.inventory);
         self.version += 1;
-        *self.view.lock().unwrap_or_else(|p| p.into_inner()) = View {
+        let mut view = View {
             version: self.version,
             generation: self.generation,
             link: self.link.clone(),
@@ -316,6 +315,19 @@ impl Actor {
                 .collect(),
             notes: self.notes.clone(),
         };
+        // Receipts ingest on the authoritative candidate: the resolved
+        // traversal orders boundary reallocation; machine lifecycle
+        // retires origin slots before the new ingest extends them.
+        let traversal = self
+            .params
+            .traversal
+            .map(|resolve| resolve(&view))
+            .unwrap_or_default();
+        self.activity_receipts
+            .sync_machines(self.machines.as_deref());
+        self.activity_receipts.ingest(&self.inventory, &traversal);
+        view.activity_receipts = self.activity_receipts.clone();
+        *self.view.lock().unwrap_or_else(|p| p.into_inner()) = view;
         // `send_replace` stores unconditionally — `send` would drop the
         // value when no receiver exists, and a `changed_since` created
         // afterwards could never observe the publish it missed.
@@ -365,5 +377,7 @@ impl Drop for Actor {
     }
 }
 
+#[cfg(test)]
+mod epoch_tests;
 #[cfg(test)]
 mod receipt_tests;

@@ -15,7 +15,18 @@ fn term(id: &str, origin: &str, n: u64) -> Terminal {
 fn ingest(receipts: &mut ActivityReceipts, terms: Vec<Terminal>) {
     let mut inventory = Inventory::default();
     inventory.replace(1, terms);
-    receipts.ingest(&inventory);
+    receipts.ingest(&inventory, &[]);
+}
+
+fn ingest_with_traversal(
+    receipts: &mut ActivityReceipts,
+    terms: Vec<Terminal>,
+    traversal: &[&str],
+) {
+    let mut inventory = Inventory::default();
+    inventory.replace(1, terms);
+    let traversal: Vec<String> = traversal.iter().map(|a| (*a).to_string()).collect();
+    receipts.ingest(&inventory, &traversal);
 }
 
 fn term_named(id: &str) -> Terminal {
@@ -81,6 +92,34 @@ fn activity_loss_and_regain_are_boundaries_too() {
 }
 
 #[test]
+fn simultaneous_boundaries_sort_only_comparable_new_domain_slots() {
+    let mut receipts = ActivityReceipts::default();
+    let a = term("a", "a", 50);
+    let b = term("b", "b", 1);
+    let c = term("c", "a", 10);
+    ingest(&mut receipts, vec![a.clone(), b.clone(), c.clone()]);
+    // First sight already sorts the comparable pair into their own slots.
+    assert_eq!(
+        (receipts.rank("a"), receipts.rank("b"), receipts.rank("c")),
+        (3, 2, 1)
+    );
+    let mut a = a;
+    let mut b = b;
+    let mut c = c;
+    a.activity.as_mut().unwrap().epoch = "boot-2".into();
+    b.activity.as_mut().unwrap().epoch = "boot-2".into();
+    c.activity.as_mut().unwrap().epoch = "boot-2".into();
+    ingest(&mut receipts, vec![a, b, c]);
+    // Every boundary reallocates above the current maximum. b is a foreign
+    // domain and keeps its incoming slot; the two new-domain members sort
+    // within their own slots by the new domain's ordinals (10 before 50).
+    assert_eq!(
+        (receipts.rank("a"), receipts.rank("b"), receipts.rank("c")),
+        (6, 5, 4)
+    );
+}
+
+#[test]
 fn a_first_sight_into_an_already_ingested_domain_has_no_boundary_baseline() {
     let mut receipts = ActivityReceipts::default();
     let a = term("a", "a", 1);
@@ -142,6 +181,55 @@ fn a_same_domain_loss_and_regain_still_changes_the_ingestion_boundary_token() {
         .state_ordinal = Some(101);
     ingest(&mut receipts, vec![a]);
     assert_eq!(receipts.epoch_token("a").unwrap(), third);
+}
+
+#[test]
+fn boundary_receipts_allocate_in_traversal_order_not_inventory_order() {
+    let mut receipts = ActivityReceipts::default();
+    let mut a = term("a", "a", 1);
+    let mut b = term("b", "b", 1);
+    // Unknown new-domain ordinals leave nothing to ordinal-sort inside a
+    // domain; only the traversal can order the replacement.
+    a.activity
+        .as_mut()
+        .unwrap()
+        .records
+        .get_mut("")
+        .unwrap()
+        .state_ordinal = None;
+    b.activity
+        .as_mut()
+        .unwrap()
+        .records
+        .get_mut("")
+        .unwrap()
+        .state_ordinal = None;
+    ingest(&mut receipts, vec![a.clone(), b.clone()]);
+    a.activity.as_mut().unwrap().epoch = "boot-2".into();
+    b.activity.as_mut().unwrap().epoch = "boot-2".into();
+    // The resolved workspace/tab/layout traversal reads [b, a], opposite of
+    // the inventory's arrival order.
+    ingest_with_traversal(&mut receipts, vec![a, b], &["b", "a"]);
+    assert!(receipts.rank("b") < receipts.rank("a"));
+}
+
+#[test]
+fn untraversed_boundaries_keep_incoming_order_after_traversed_ones() {
+    let mut receipts = ActivityReceipts::default();
+    let a = term("a", "a", 1);
+    let b = term("b", "b", 1);
+    let c = term("c", "b", 1);
+    ingest(&mut receipts, vec![a.clone(), b.clone(), c.clone()]);
+    let mut a = a;
+    let mut b = b;
+    let mut c = c;
+    a.activity.as_mut().unwrap().epoch = "n2".into();
+    b.activity.as_mut().unwrap().epoch = "n2".into();
+    c.activity.as_mut().unwrap().epoch = "n2".into();
+    // Traversal knows only b; a and c fall back to their incoming order.
+    ingest_with_traversal(&mut receipts, vec![a, b, c], &["b"]);
+    assert!(receipts.rank("b") < receipts.rank("a"));
+    assert!(receipts.rank("a") < receipts.rank("c"));
 }
 
 #[test]

@@ -181,6 +181,10 @@ pub struct WatchParams {
     pub list_timeout: Duration,
     /// Concurrent document fetches; slow machines fill only their slots.
     pub doc_concurrency: usize,
+    /// Resolve the authoritative agent traversal order on the candidate
+    /// `View` before receipts ingest, so boundary receipts allocate in the
+    /// order the UI will draw. `None` keeps incoming order.
+    pub traversal: Option<fn(&View) -> Vec<String>>,
 }
 
 impl Default for WatchParams {
@@ -193,6 +197,7 @@ impl Default for WatchParams {
             doc_timeout: Duration::from_secs(10),
             list_timeout: Duration::from_secs(10),
             doc_concurrency: 4,
+            traversal: None,
         }
     }
 }

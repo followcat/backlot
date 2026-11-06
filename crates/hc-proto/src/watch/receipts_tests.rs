@@ -15,7 +15,7 @@ pub(crate) fn term(id: &str, origin: &str, n: u64) -> Terminal {
 fn ingest(receipts: &mut ActivityReceipts, terms: Vec<Terminal>) {
     let mut inventory = Inventory::default();
     inventory.replace(1, terms);
-    receipts.ingest(&inventory);
+    receipts.ingest(&inventory, &[]);
 }
 
 #[test]

@@ -22,7 +22,7 @@ fn ingest(receipts: &mut ActivityReceipts, values: Vec<Value>) -> Inventory {
             .map(|v| serde_json::from_value(v).unwrap())
             .collect(),
     );
-    receipts.ingest(&inventory);
+    receipts.ingest(&inventory, &[]);
     inventory
 }
 

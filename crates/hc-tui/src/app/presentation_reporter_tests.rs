@@ -29,7 +29,7 @@ fn update(
             .map(|v| serde_json::from_value(v).unwrap())
             .collect(),
     );
-    r.ingest(&view.inventory);
+    r.ingest(&view.inventory, &[]);
     view.activity_receipts = r.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
     p.project(&view, &mut projection);

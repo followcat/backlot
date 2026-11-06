@@ -133,7 +133,10 @@ impl ActivityReceipts {
     }
 
     /// Ingest a complete authoritative state before consumers coalesce it.
-    pub fn ingest(&mut self, inventory: &Inventory) {
+    /// `traversal` is the resolved UI draw order: boundary-class entries
+    /// allocate by traversal index, untraversed ones fall back to incoming
+    /// order; everything else keeps the incoming-slot discipline.
+    pub fn ingest(&mut self, inventory: &Inventory, traversal: &[String]) {
         if inventory.is_stale() || inventory.is_offline() {
             return;
         }
@@ -163,6 +166,7 @@ impl ActivityReceipts {
                 continue;
             }
             let mut epoch_token = None;
+            let mut boundary = false;
             let epoch_completions = match self.observed.get(&term.address) {
                 Some(previous) if previous.created_ms == term.created_ms => {
                     if previous.clock.as_ref().map(|c| &c.domain)
@@ -178,6 +182,7 @@ impl ActivityReceipts {
                     } else {
                         // A genuine epoch boundary reallocates the display
                         // receipt and baselines the completions it arrived with.
+                        boundary = true;
                         Some(completions_at(term))
                     }
                 }
@@ -186,6 +191,7 @@ impl ActivityReceipts {
                     // first sight is eligible only into an epoch its
                     // endpoint's current origin never ingested — never just
                     // "first time drawn".
+                    boundary = previous.is_some();
                     let eligible = previous.is_some()
                         || clock.as_ref().is_none_or(|c| {
                             self.endpoint_epochs
@@ -209,7 +215,7 @@ impl ActivityReceipts {
                     .or_default()
                     .push(pending.len());
             }
-            pending.push((*term, clock, epoch_completions, epoch_token));
+            pending.push((*term, clock, epoch_completions, epoch_token, boundary));
         }
         // Comparable members sort only into their own incoming slots. Other
         // domains/unknown history keep their slot order, never a foreign sort key.
@@ -218,12 +224,37 @@ impl ActivityReceipts {
                 .iter()
                 .map(|index| pending[*index].clone())
                 .collect::<Vec<_>>();
-            batch.sort_by_key(|(_, clock, _, _)| clock.as_ref().and_then(|c| c.ordinal));
+            batch.sort_by_key(|(_, clock, _, _, _)| clock.as_ref().and_then(|c| c.ordinal));
             for (index, item) in slots.iter().zip(batch) {
                 pending[*index] = item;
             }
         }
-        for (term, clock, epoch_completions, epoch_token) in pending {
+        // Boundary-class entries order by the resolved traversal among their
+        // own positions; untraversed entries keep incoming order (stable, last).
+        if !traversal.is_empty() {
+            let order: BTreeMap<&str, usize> = traversal
+                .iter()
+                .enumerate()
+                .map(|(index, address)| (address.as_str(), index))
+                .collect();
+            let positions = (0..pending.len())
+                .filter(|index| pending[*index].4)
+                .collect::<Vec<_>>();
+            let mut batch = positions
+                .iter()
+                .map(|index| pending[*index].clone())
+                .collect::<Vec<_>>();
+            batch.sort_by_key(|entry| {
+                order
+                    .get(entry.0.address.as_str())
+                    .copied()
+                    .unwrap_or(usize::MAX)
+            });
+            for (index, entry) in positions.into_iter().zip(batch) {
+                pending[index] = entry;
+            }
+        }
+        for (term, clock, epoch_completions, epoch_token, _) in pending {
             next = next.saturating_add(1);
             self.observed.insert(
                 term.address.clone(),
