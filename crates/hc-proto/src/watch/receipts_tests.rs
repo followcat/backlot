@@ -142,7 +142,7 @@ fn pruning_reuses_current_max_and_same_batch_prunes_after_allocation() {
 }
 
 #[test]
-fn lifetime_baselines_are_not_new_activity_and_fresh_work_still_advances() {
+fn a_domain_boundary_reallocates_and_fresh_work_still_advances() {
     for boundary in 0..3 {
         let mut receipts = ActivityReceipts::default();
         let a = term("a", "a", 100);
@@ -155,7 +155,7 @@ fn lifetime_baselines_are_not_new_activity_and_fresh_work_still_advances() {
             _ => a.activity.as_mut().unwrap().core_id = "other".into(),
         }
         ingest(&mut receipts, vec![a.clone(), b.clone()]);
-        assert_eq!((receipts.rank("a"), receipts.rank("b")), (1, 2));
+        assert_eq!((receipts.rank("a"), receipts.rank("b")), (3, 2));
         a.activity
             .as_mut()
             .unwrap()
@@ -164,7 +164,7 @@ fn lifetime_baselines_are_not_new_activity_and_fresh_work_still_advances() {
             .unwrap()
             .state_ordinal = Some(101);
         ingest(&mut receipts, vec![a, b]);
-        assert_eq!(receipts.rank("a"), 3);
+        assert_eq!(receipts.rank("a"), 4);
     }
 }
 
