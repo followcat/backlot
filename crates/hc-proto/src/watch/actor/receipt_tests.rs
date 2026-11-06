@@ -203,3 +203,48 @@ fn fresh_static_fallback_after_subscription_loss_updates_and_prunes_receipts() {
     );
     assert_eq!(view.activity_receipts.rank("b"), 0);
 }
+
+#[test]
+fn current_reporter_withdrawal_is_ingested_before_a_coalesced_reacquisition() {
+    let mut actor = actor();
+    actor
+        .inventory
+        .replace(1, vec![term("a", "host-a", 1), term("b", "host-b", 1)]);
+    actor.publish();
+    let mut active = serde_json::to_value(term("a", "host-a", 2)).unwrap();
+    active["status"] = Value::Null;
+    actor.notification(Ok(event(
+        2,
+        "a",
+        "status",
+        json!({
+            "status":null,"records":{},"reported":true,"activity":active["activity"]
+        }),
+    )));
+    assert!(!actor.inventory.is_stale());
+    assert_eq!(actor.activity_receipts.rank("a"), 0);
+    let active = serde_json::to_value(term("a", "host-a", 3)).unwrap();
+    actor.notification(Ok(event(
+        3,
+        "a",
+        "status",
+        json!({
+            "status":active["status"],"records":{},"reported":true,"activity":active["activity"]
+        }),
+    )));
+    // No consumer read occurs between withdrawal and actual status reacquisition.
+    let view = actor.view.lock().unwrap().clone();
+    assert_eq!(
+        (
+            view.activity_receipts.rank("a"),
+            view.activity_receipts.rank("b")
+        ),
+        (3, 2)
+    );
+    let raw = view.inventory.get("a").unwrap();
+    assert!(raw.reported);
+    assert_eq!(
+        serde_json::to_value(raw.activity.as_ref().unwrap()).unwrap(),
+        active["activity"]
+    );
+}

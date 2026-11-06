@@ -217,11 +217,12 @@ pub struct WaitResult {
 }
 
 impl Terminal {
-    /// A live process carrying core-reported status, without status inference.
+    /// A live process with current root or named status, without status inference.
+    /// Historical `reported` provenance survives complete status withdrawal.
     pub fn is_live_reporter(&self) -> bool {
         self.state == "live"
             && self.pid.is_some()
-            && (self.reported || self.status.is_some() || !self.records.is_empty())
+            && (self.status.is_some() || !self.records.is_empty())
     }
 }
 

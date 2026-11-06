@@ -129,3 +129,7 @@ impl ActivityReceipts {
 #[cfg(test)]
 #[path = "receipts_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "current_reporter_tests.rs"]
+mod current_reporter_tests;

@@ -116,3 +116,7 @@ impl Presentation {
 #[cfg(test)]
 #[path = "presentation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "presentation_reporter_tests.rs"]
+mod current_reporter_tests;

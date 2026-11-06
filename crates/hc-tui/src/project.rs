@@ -132,8 +132,8 @@ pub(crate) fn tab_key_of(term: &Terminal) -> String {
     }
 }
 
-/// A terminal counts as an agent the same way the old sidebar counted:
-/// core says it reported (or carries status records) and it is live.
+/// Only live processes carrying current root or named status count as agents.
+/// Historical `reported` provenance alone does not establish current identity.
 fn is_agent(term: &Terminal) -> bool {
     term.is_live_reporter()
 }
