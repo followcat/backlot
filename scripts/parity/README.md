@@ -114,7 +114,8 @@ checkpoints. Any exception or cleanup failure clears `passed`.
 The ownership runner captures the exact negotiated kind7 payload during the
 human release interval, requires matching child bytes, and verifies the phone
 keeps its allocation. Missing capability confirmation uses DATA in protocol
-fake-core tests. Native `.8` results remain pending until its release is pinned.
+fake-core tests. The pinned `.8` native run verifies the release payload and
+phone-size retention. See [the results](../../docs/parity.md#m22-native-evidence).
 
 Initial fixture readiness also decodes the complete native screen: ANSI
 cursor/style writes can split a visible string, so raw substring matching

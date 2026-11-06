@@ -293,28 +293,39 @@
   reconnect/eviction appearance and acknowledgement-fence limitations remain.
 
 
-## M2.2: C3 facts — implementation complete, native validation pending
+## M2.2: C3 facts — ready for review
 
-- M3a.1 is accepted. Adopted optional repository/activity snapshots, atomic
-  status/activity replacements, full repository events and explicit nullable
-  resets. Malformed complete replacements leave records and sequence unchanged.
-  Origin clocks retain core/epoch/scope/revision; lifetime resets baseline local
-  acknowledgement without advancing recency. Chronology remains M3b.
-- Title and tab status use the optional OS hostname fact, qualified by feature
-  support and connection freshness. Git projection uses authoritative labels,
-  roots, opaque repository/checkout keys and nullable checked counts. Nonready
-  metadata is hidden while cached identity stays stable. No viewer Git probes.
-- Source-tagged human releases negotiate request/hello/reply before kind7;
-  unconfirmed paths use DATA. Fake-core tests cover negotiation, observer
-  rejection, chunking, parked original-wire releases and graceful FIFO drains.
-- The harness removes title adaptations, adds seven owned repository cases and
-  narrow repository picker checks, compares whole restored frames, and binds
-  ownership evidence to this release's exact kind7 payload. Policy annotations
-  never excuse raw differences or count as passes. Input byte fixtures are unchanged.
-- Code commits 3f29424, 3e7a453 and 09b72e2 passed exact-tree fmt/clippy/test,
-  independent read-only reviews and leak scans; all three CI runs are green.
-  Pure harness safety checks pass 24 tests. Native `.8` matrices, input/tail replay
-  and phone ownership checks have not run: the required release record/archive
-  is not available yet. Earlier native results are not claimed for the new core.
-- M2.2 is not accepted as exact parity yet. Await the pinned release artifact;
-  no core build, M3b, M4 or completed M2.2 review pause is claimed.
+- Adopted typed repository/activity snapshots, complete replacement events,
+  atomic status/activity and explicit nullable resets. Malformed complete facts
+  leave records and sequence unchanged. Origin clocks retain core/epoch/scope/
+  revision; lifetime-only resets baseline acknowledgement without advancing order.
+  Chronology and completion inference remain M3b.
+- Verified and pinned the published `hc 0.1.17-followcat.8` archive and binary;
+  no core build or source mutation. Title and tab status use qualified OS hostname
+  facts. Git projection uses authoritative roots/labels, opaque checkout identities
+  and checked nullable counts. Ordinary linked checkouts keep herdr's independent
+  rows; Git linkage does not establish Herdr-managed group membership.
+- Native six-size M2 passes 154 checkpoints, MOK 33, repository 18 and explicit
+  hostname status/title 33. Layout/reload passes 256 default, 280 configured and 45
+  previous-only checkpoints. These include complete restored frames; all 13 layout
+  runs prove two-client convergence. All 17 Settings notice checks remain
+  pending-feature, never actual Settings overlay passes.
+- Missing Git, nonexecutable Git and detached HEAD match at 120x40. Promisor true,
+  false and empty each retain five raw count-cell differences, passed:false/exit1:
+  core omits counts by policy while herdr computes 2/1. Full-frame known/unknown
+  source controls explain the difference without masks; these are not passes.
+- All 390 paired input cases and 14 positioned tails match. Four opt-in integration
+  tests pass on `.8`. Native ownership verifies exact negotiated kind7 release
+  bytes, child delivery without stealing phone 40x20, passive recovery, fresh
+  observer output, phone-detach fallback and real allocation reclamation.
+- Native findings fixed automatic visual grouping of ordinary linked checkouts
+  (b5b5c94) and the Settings capture's obsolete comparison argument (abe69c6).
+  Both have independent review, full gates, clean leak scans, normal pushes and
+  green CI. Gates pass 607 default Rust tests, 3 decoder tests and 24 Python safety
+  tests; five Rust tests remain opt-in/ignored in the default suite. Input fixtures
+  and original configuration are unchanged; all owned native resources clean up.
+  The disk guard kept measured free space above the 12 GiB floor.
+- M2.2 stops for review. Managed Herdr worktree-group membership is not supplied
+  by C3 and is not guessed; that presentation remains unproven. Appearance on
+  first attach/reconnect/eviction and the acknowledgement consumption-fence race
+  remain documented. M3b, Settings overlay and other M4 work are not started.

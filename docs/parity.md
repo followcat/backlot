@@ -8,9 +8,10 @@ mouse input.
 
 **Validation status:** the joint M2 review did **not** accept the shell as
 indistinguishable. M2.1 tightens the harness and covers the default 64-column
-mobile boundary. M2.2 adopts the reviewed C3 facts; native acceptance awaits
-the pinned `hc 0.1.17-followcat.8` release artifact and fresh matrices.
-Protocol/fake-core checks do not establish native parity. C3 will not supply
+mobile boundary. M2.2 adopts the reviewed C3 facts and validates the explicit
+fixtures against pinned `hc 0.1.17-followcat.8`. Baseline, Git, layout, reload,
+input and quiet-release results are recorded below; promisor policy differences
+are retained, never passes. This is not a claim about every source feature. C3 will not supply
 first-paint program appearance: M3a retains VTs
 for cached switching and documents first attach, reconnect and eviction as
 known limitations. A fixture with missing core facts is `pending-core-fact`,
@@ -76,16 +77,16 @@ difference.
 | Manual, reported and OSC titles | All are available: `herdr.title`, status `title`, terminal `title`. Keep separate source fields. The optional core terminal `name` supplies the source name field. Title loss or swapping is a bug. |
 | Shared completion acknowledgement | C3 still supplies no shared acknowledgement or output-consumption fence. Local acknowledgement resets/baselines on activity `(core_id, epoch, scope)` changes; `revision` alone does not reset it or advance recency. It is not synchronized or persisted across clients. |
 | Global state-change ordinal | Optional C3 `activity.records[""].state_ordinal` and `completion_ordinal` are retained with `core_id`, `epoch`, `scope`, `revision` and named records. Counters are origin-local, never a global order across machines. Chronology/completion inference and attention ordering remain M3b; M2.2 does not sort by these counters. |
-| Workspace branch | C3 `repository.branch`, displayed only for `state == "ready"`. Pending/stale/unavailable and future states retain their full facts but hide Git presentation; absence means unsupported. No viewer Git probe. Native validation pending. |
-| Git ahead/behind counts | Nullable C3 `repository.ahead_behind`, with checked u64-to-usize conversion. Unknown stays absent, distinct from observed `(0,0)`. Promisor configuration, including false/empty values, deliberately suppresses counts. Source policy differences are recorded separately, never passes. Native validation pending. |
-| Worktree identity and label | C3 groups by `(repository.core_id, checkout.repository_key)` and distinguishes `checkout_key`; all keys/paths remain opaque. Ready facts supply `repo_name`, `checkout_name`, `is_linked_worktree` and `is_bare`. Cached checkout identity remains stable while nonready worktree presentation is hidden. Native validation pending. |
-| Repository-root fallback label | C3 `checkout.repo_root` and `repository.auto_label` replace launch-cwd inference; explicit herdr-app/space/tab membership retains precedence. A plain-directory observation is distinct from an unsupported absent repository object. Native validation pending. |
+| Workspace branch | C3 `repository.branch`, displayed only for `state == "ready"`. Pending/stale/unavailable and future states retain their full facts but hide Git presentation; absence means unsupported. No viewer Git probe. Validated against the pinned `.8` fixtures. |
+| Git ahead/behind counts | Nullable C3 `repository.ahead_behind`, with checked u64-to-usize conversion. Unknown stays absent, distinct from observed `(0,0)`. Promisor configuration, including false/empty values, deliberately suppresses counts. Source policy differences are recorded separately, never passes. Validated against the pinned `.8` fixtures. |
+| Worktree identity and label | Logical C3 identity groups by `(repository.core_id, checkout.repository_key)` and distinguishes `checkout_key`; all keys/paths stay opaque. Ready facts retain names, root, linked and bare flags in neutral checkout metadata. Ordinary linked Git checkouts remain independent workspace/branch rows, matching herdr. Herdr visual groups require explicit `worktree_space` membership, which C3 does not supply; managed-group parity is unproven and is not inferred from a Git linked flag. |
+| Repository-root fallback label | C3 `checkout.repo_root` and `repository.auto_label` replace launch-cwd inference; explicit herdr-app/space/tab membership retains precedence. A plain-directory observation is distinct from an unsupported absent repository object. Validated against the pinned `.8` fixtures. |
 | Workspace/agent tokens | No documented mapping for the source configurable token/context-usage values. Leave token collections empty. Unknown protocol extensions are retained without guessing their meaning. |
 | Agent state labels | No documented equivalent for the source server's state-label collection. Leave it empty; core parent addresses or record sources are not state labels. |
 | Worker relationship | Core `parent` is available and remains verbatim. The reference sidebar has no parent-note field; a worker uses an ordinary agent row with its own identity. Unknown parents do not hide it. |
 | Endpoint state | Local connection/subscription state and remote `machine.list` states drive the reference endpoint enum. Offline snapshots remain listed. RPC-only loss retains streaming terminal reports and marks stale machine information; subscription loss makes the retained inventory stale. Use the source stale/dimming presentation. |
 | Size-owner identity | Active/observe role, size and focus facts are available, but the tested protocol does not name another size owner. Preserve role and authoritative sizes, and omit an invented owner name. Visible ownership notices and explicit take-control behavior still require validation. |
-| Hostname | Use optional `hello.core.hostname` only with `os_hostname`, and connected/fresh `MachineView.hostname` for remote endpoints. Both title and tab status use the fact; missing/unconfirmed/offline facts produce no hostname text. Never substitute configured `core.name` or a relay alias, or run discovery commands. Native validation pending. |
+| Hostname | Use optional `hello.core.hostname` only with `os_hostname`, and connected/fresh `MachineView.hostname` for remote endpoints. Both title and tab status use the fact; missing/unconfirmed/offline facts produce no hostname text. Never substitute configured `core.name` or a relay alias, or run discovery commands. Validated against the pinned `.8` fixtures. |
 | Server clock and timezone | Core exposes no remote clock/timezone fact. Datetime tab status uses the client local clock with the source formatter and sanitization. Remote clock/timezone parity requires a protocol fact. |
 | Earlier cursor-style request | The tested cores omit earlier DECSCUSR visual shape/explicitness from initial attach paint. Follow the precise limitation below. |
 | Earlier program default-color/palette overrides | The same cores omit prior OSC 10/11/4 state from first paint. Use the measured host defaults/palette until live program updates arrive, as described below. |
@@ -265,8 +266,12 @@ Parked releases stay on their original negotiated wire; graceful synthetic
 releases drain before CLOSE. Dead-wire releases are not synthesized/replayed.
 The owned phone/desktop harness now checks exact kind 7 payloads during the
 release interval, delivery to the child and retention of the phone's size.
-Those new native checks await the pinned `.8` artifact; fake-core negotiation,
-original-wire routing and drain tests pass independently.
+The `.8` native ownership run confirms all three negotiation signals, the
+exact kind 7 release payload during its own interval, child delivery and
+retention of the phone's 40x20 allocation. It also proves passive recovery
+of five cut desktop connections, fresh observer output, automatic fallback
+after phone detach and reclamation on real allocation change. Fake-core
+request/hello/reply combinations retain the unconfirmed DATA fallback.
 
 
 ## First paint, input ordering and recovery
@@ -359,8 +364,14 @@ All raw differences fail, even with a core-policy annotation; policy annotations
 never waive unrelated rendering, cursor, mode or title differences. An exact
 surface match with an explicit semantic policy difference remains
 `core-policy-difference` (`passed:false`, exit3), never a parity pass.
-The pre-C3 66-difference/exit2 evidence is historical; `.8` native runs are
-pending, so this updated harness does not yet establish exact M2 acceptance.
+The pre-C3 66-difference/exit2 evidence is historical. The `.8` standard
+repository fixture now matches exactly at all six sizes, including complete
+post-detach frames. Missing Git, nonexecutable Git and detached HEAD also
+match exactly at 120x40. All three promisor variants retain five raw cell
+differences on the count segment, `passed:false`, exit1. Their complete source
+frames equal the standard known-count source control; their complete candidate
+frames equal herdr's missing-Git unknown-count control. No cells, cursor, modes
+or title are masked. These are documented core-policy differences, not passes.
 
 | Displayed binding/menu group | Current behavior and scope |
 |---|---|
@@ -376,7 +387,7 @@ pending, so this updated harness does not yet establish exact M2 acceptance.
 The joint review accepted documented deferral of dead-wire held releases,
 resize acknowledgement ambiguity, remote clock/timezone and currently unused
 token metadata. C3 hostname, Git facts and quiet human release are implemented
-with native validation pending. C3 does not supply first-paint appearance; the client cache handles routine switching.
+and verified in the stated native fixtures. C3 does not supply first-paint appearance; the client cache handles routine switching.
 Completion chronology remains M3b; C3 counters are retained for that slice. Acknowledgement stays client-local and
 only follows a composed, completed visible paint while the client is focused.
 There is no cross-connection completion/output fence yet: new inventory can
@@ -437,3 +448,41 @@ That absence match is not native proof that the program's earlier OSC12 value
 survived. Retained program OSC12 state is unit-tested only. Native indexed-cell
 colors and OSC4 palette comparisons remain separate evidence. First attach,
 reconnect and eviction appearance limitations remain unchanged.
+
+
+## M2.2 native evidence
+
+Core archive SHA256: `f2ec0f45b87a05dfaf63222f7c80db76231e09f8f68654526d397478ff5512a4`.
+Extracted `.8` binary SHA256: `5f6cd86e61fdb90b703fb63a1398cf868c29acb107b0717de47a90c847da4b90`.
+The archive was copied, verified and extracted without building or modifying core.
+All runs used owned scratch sessions, temporary HOME/XDG roots and read-only
+original configuration. Complete cells, attributes, cursor, host modes and titles
+are compared; restored frames add one required checkpoint per run.
+
+| Native profile | Matching checkpoints |
+|---|---:|
+| M2, six sizes | 154 |
+| M2 host ModifyOtherKeys profile | 33 |
+| Standard repository, six sizes | 18 |
+| Explicit hostname tab status and title, 120x40 | 33 |
+| Default layout/reload, six sizes | 256 |
+| Configured layout/reload, six sizes | 280 |
+| Previous-move-only layout | 45 |
+
+Missing/nonexecutable Git and detached HEAD each add two matching checkpoints.
+Three promisor cases are excluded from matching totals. All 390 paired immutable
+input cases and 14 positioned detach tails match; four opt-in protocol integration
+tests pass against `.8`. All 13 layout runs prove two-client convergence and both
+reload rounds. The 17 Settings notice checks retain `pending-feature`; actual
+Settings overlay parity is not claimed. Original config and expected input bytes
+are unchanged, owned resources clean up, and measured disk space stayed above
+the 12 GiB floor.
+
+Native validation corrected an automatic worktree grouping assumption: Git
+checkout identity and Herdr-managed membership are different facts. It also fixed
+one stale three-argument Settings comparison call after the title exemption was
+removed. Earlier failed captures are retained outside the repository; they are
+not acceptance passes. Chronology/attention and completion inference remain M3b;
+remote hostname qualification is unit-tested, while this native hostname profile
+covers the local endpoint. Appearance, consumption-fence and deferred-action
+limits above remain in force.
