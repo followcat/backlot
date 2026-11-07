@@ -66,8 +66,10 @@ def ready(frame, name, previous, program_input, expected=None):
     changed = {'help', 'help-filter', 'help-back', 'help-close', 'navigate',
                'navigate-next', 'switch', 'sidebar-drag', 'sidebar-collapse',
                'sidebar-expand', 'history-bottom', 'history-wheel', 'history-typing-reset',
-               'menu-workspace', 'menu-highlight', 'menu-workspace-rename',
-               'menu-rename-cancel', 'menu-tab', 'menu-tab-newtab',
+               'menu-workspace', 'menu-highlight', 'menu-highlight-up',
+               'menu-workspace-rename', 'menu-rename-cancel', 'menu-workspace-again',
+               'menu-close-highlight', 'menu-workspace-close', 'menu-close-cancel',
+               'menu-navigate-exit', 'menu-tab', 'menu-tab-newtab',
                'menu-newtab-cancel', 'menu-pane', 'menu-pane-escape',
                'narrow-pane-menu', 'narrow-pane-menu-close'}
     if name.startswith('status-') or name in changed:

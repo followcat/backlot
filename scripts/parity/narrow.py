@@ -45,8 +45,8 @@ def run(owners, programs, compare, size):
         send(b'\x1b[27u')
         compare('narrow-menu-help-close', terminal='fixture beta')
         # The pane context menu also opens under the mobile width; Escape
-        # dismisses it.
-        send(b'\x1b[<2;8;20M')
+        # dismisses it. (40,10) stays inside the pane at 40/64/65 columns.
+        send(b'\x1b[<2;40;10M')
         compare('narrow-pane-menu')
         send(b'\x1b[27u')
         compare('narrow-pane-menu-close', terminal='fixture beta')

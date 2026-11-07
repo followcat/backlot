@@ -164,14 +164,21 @@ def one_size(args, size, binary):
                 ('navigate-next', b'\x1b[1;1B\x1b[1;1:3B'), ('switch', b'\r'),
                 ('sidebar-drag', b'\x1b[<0;26;9M\x1b[<32;32;9M\x1b[<0;32;9m'),
                 ('sidebar-collapse', sidebar_keys), ('sidebar-expand', sidebar_keys),
-                # Context menu: right-press on the alpha workspace row, Down
-                # moves the highlight, Enter opens the rename overlay, Escape
-                # dismisses — the reference's menu key/mouse contract.
+                # Context menu: right-press on the alpha workspace row, Down/Up
+                # move the highlight, Enter activates — the reference's menu
+                # key/mouse contract. ConfirmClose Escape lands in Navigate;
+                # a second Escape cancels back to Terminal.
                 ('menu-workspace', b'\x1b[<2;5;3M'),
                 ('menu-highlight', b'\x1b[B'),
+                ('menu-highlight-up', b'\x1b[A'),
                 ('menu-workspace-rename', b'\r'),
                 ('menu-rename-cancel', b'\x1b[27u'),
-                ('menu-tab', b'\x1b[<2;30;1M'),
+                ('menu-workspace-again', b'\x1b[<2;5;3M'),
+                ('menu-close-highlight', b'\x1b[B'),
+                ('menu-workspace-close', b'\r'),
+                ('menu-close-cancel', b'\x1b[27u'),
+                ('menu-navigate-exit', b'\x1b[27u'),
+                ('menu-tab', b'\x1b[<2;37;1M'),
                 ('menu-tab-newtab', b'\r'),
                 ('menu-newtab-cancel', b'\x1b[27u'),
                 ('menu-pane', b'\x1b[<2;60;10M'),
