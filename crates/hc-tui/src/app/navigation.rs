@@ -18,6 +18,15 @@ impl App {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
             }
             A::WorkspacePicker => self.enter_workspace_picker(),
+            // Workspace-level actions don't require a focused workspace to
+            // exist (new_workspace is valid with an empty shell too).
+            A::NewWorkspace => self.new_workspace(),
+            A::RenameWorkspace => self.rename_workspace(),
+            A::CloseWorkspace => {
+                if let Some(id) = self.projection.snapshot.focused_workspace_id.clone() {
+                    self.close_workspace(&id);
+                }
+            }
             _ => self.layout_action(action),
         }
         self.sync_target();
@@ -307,7 +316,14 @@ impl App {
                 self.new_tab();
                 None
             }
-            T::NewWorkspace | T::Menu(_) => None,
+            // Reference mobile.rs suspends the switcher while the action
+            // (dialog or direct create) runs, then resumes on close.
+            T::NewWorkspace => {
+                self.mobile_switcher_suspended = true;
+                self.new_workspace();
+                None
+            }
+            T::Menu(_) => None,
         };
         if let Some(pane_id) = pane {
             self.focused = Some(pane_id);
@@ -322,7 +338,7 @@ impl App {
 
     /// Derived from herdr src/client/shell/state.rs (Apache-2.0).
     pub(super) fn resume_mobile_switcher_if_ready(&mut self) {
-        if self.mobile_switcher_suspended && !self.help {
+        if self.mobile_switcher_suspended && !self.help && self.dialog.is_none() {
             self.mobile_switcher_suspended = false;
             if self.projection.snapshot.focused_workspace_id.is_some() {
                 self.mode = Mode::Normal;
