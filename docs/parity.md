@@ -597,3 +597,13 @@ Everything else on the compared surfaces still diffs normally.
   CAS-written with opaque/concurrent fields preserved. It never writes the
   foreign `herdr-app` document, and owned adoptions override foreign labels
   for cwd-grouped workspaces too.
+- **Navigate-mode binding tail.** In the reference's `route_navigate_key`, an
+  unmatched key still resolves prefix-dispatch bindings — e.g. `z` executes
+  `prefix+z` (Zoom) and leaves Navigate. hc-tui consumes unmatched Navigate
+  keys without dispatch. Measured: while Navigate is held open, a plain `z`
+  keeps the NAVIGATE bar in hc-tui where the reference exits to Terminal.
+  Pane-focus/cycle bindings, the foreign-preview reject notice and the
+  custom-command tail of that function are equally undispatched. Pre-dates
+  M4s1 (M3a navigate surface); the M4s1 scenario exits Navigate with Escape
+  before later checkpoints, and the gap stays open here rather than fixed
+  inside this slice.
