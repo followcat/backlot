@@ -11,7 +11,7 @@
 pub mod status;
 mod text;
 
-pub(crate) use status::{Life, Word, classify, effective};
+pub(crate) use status::{Life, classify, effective};
 pub(crate) use text::clean;
 
 /// Minimal core-shaped records for tests; tweak fields as needed.

@@ -30,6 +30,10 @@ mod tests;
 #[path = "project_title_tests.rs"]
 mod title_tests;
 
+#[cfg(test)]
+#[path = "project_selection_tests.rs"]
+mod selection_tests;
+
 /// Everything the shell needs from one publish: all endpoint rows plus the
 /// active endpoint's snapshot the sidebar/tab bar/panes draw.
 pub(crate) struct Projection {
@@ -73,11 +77,7 @@ pub(crate) fn term_num(address: &str) -> u64 {
         .unwrap_or(u64::MAX)
 }
 
-/// The winning `Status` for one terminal: `sidebar::status::effective`
-/// picks the most-urgent record over the root + named maps (ties prefer
-/// root, then record name). The winning record's `app`/`title` fields feed
-/// the agent display — a named blocked/working report still presents when
-/// the root record is absent or idle.
+/// The raw terminal-status winner, including for panes without a live agent.
 pub(crate) fn effective_status(term: &Terminal) -> Option<&Status> {
     let effective = crate::sidebar::effective(term)?;
     match &effective.record {
@@ -86,31 +86,46 @@ pub(crate) fn effective_status(term: &Terminal) -> Option<&Status> {
     }
 }
 
-/// The reference's `pane_agent_status(state, seen)` over the effective
-/// record's 7501 word: `idle` + unseen is `Done`; core's `done`/`ready`/
-/// `finished` words map to `Done` directly (see docs/parity.md).
-fn pane_agent_status(term: &Terminal) -> AgentStatus {
-    let Some(effective) = crate::sidebar::effective(term) else {
-        return AgentStatus::Unknown;
-    };
-    match &effective.word {
-        crate::sidebar::Word::Idle => AgentStatus::Idle,
-        crate::sidebar::Word::Blocked { .. } => AgentStatus::Blocked,
-        crate::sidebar::Word::Working { .. } => AgentStatus::Working,
-        crate::sidebar::Word::Done => AgentStatus::Done,
-        // `error` and unfamiliar words map through the reference word
-        // table — `ready`/`finished` still present `Done`.
-        crate::sidebar::Word::Error => agent_status_from_word("error"),
-        crate::sidebar::Word::Other(word) => agent_status_from_word(word),
+#[derive(Clone, Copy)]
+struct AgentRecord<'a> {
+    id: Option<&'a str>,
+    state: AgentStatus,
+}
+
+impl AgentRecord<'_> {
+    fn status(self, term: &Terminal) -> Option<&Status> {
+        match self.id {
+            Some(id) => term.records.get(id),
+            None => term.status.as_ref(),
+        }
     }
 }
 
-/// The reference's `tab_attention_priority(state, seen)` — the workspace/
-/// tab aggregate picks the highest-priority pane status. Mapped through
-/// `pane_agent_status` so a core `done` report aggregates as `Done`, not
-/// `Unknown`.
-fn attention_priority(term: &Terminal) -> u8 {
-    status_priority(pane_agent_status(term))
+/// Select an agent record without changing raw terminal-status urgency.
+fn agent_record(term: &Terminal) -> Option<AgentRecord<'_>> {
+    let root = term.status.iter().map(|status| (None, status));
+    let named = term
+        .records
+        .iter()
+        .map(|(id, status)| (Some(id.as_str()), status));
+    let mut best = None;
+    for (id, status) in root.chain(named) {
+        let state = agent_status_from_word(&status.state);
+        // Mirror sidebar urgency within each group; only Unknown is demoted.
+        let urgency = match status.state.as_str() {
+            "blocked" => 70,
+            "error" => 60,
+            "working" => 40,
+            "done" => 20,
+            "idle" => 10,
+            _ => 30,
+        };
+        let key = (state != AgentStatus::Unknown, urgency);
+        if best.as_ref().is_none_or(|(previous, _)| key > *previous) {
+            best = Some((key, AgentRecord { id, state }));
+        }
+    }
+    best.map(|(_, record)| record)
 }
 
 /// The space a terminal belongs to: `herdr.space`, else its cwd. The key

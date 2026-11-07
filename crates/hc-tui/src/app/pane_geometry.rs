@@ -148,12 +148,17 @@ pub(super) fn border_label(app: &App, id: &str) -> Option<String> {
         .agents
         .iter()
         .find(|a| a.pane_id == id);
-    app.view
-        .inventory
-        .get(id)
-        .and_then(crate::project::effective_status)
-        .map(|s| crate::sidebar::clean(&s.title))
-        .filter(|s| !s.is_empty())
+    let reported_title = match agent {
+        Some(agent) => agent.title.clone(),
+        None => app
+            .view
+            .inventory
+            .get(id)
+            .and_then(crate::project::effective_status)
+            .map(|s| crate::sidebar::clean(&s.title))
+            .filter(|s| !s.is_empty()),
+    };
+    reported_title
         .or_else(|| {
             app.projection
                 .snapshot
@@ -169,3 +174,7 @@ pub(super) fn border_label(app: &App, id: &str) -> Option<String> {
                 .flatten()
         })
 }
+
+#[cfg(test)]
+#[path = "pane_geometry_selection_tests.rs"]
+mod selection_tests;

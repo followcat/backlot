@@ -116,10 +116,12 @@ pub(super) fn structured_snapshot(
             let mut tab_status = AgentStatus::Unknown;
             let mut tab_priority = 0u8;
             for term in &tab_members {
-                let priority = attention_priority(term);
+                let selection = agent_record(term);
+                let status = selection.map_or(AgentStatus::Unknown, |record| record.state);
+                let priority = status_priority(status);
                 if priority > tab_priority {
                     tab_priority = priority;
-                    tab_status = pane_agent_status(term);
+                    tab_status = status;
                 }
                 let focused = selected == Some(term.address.as_str());
                 panes.push(ClientShellPane {
@@ -139,8 +141,7 @@ pub(super) fn structured_snapshot(
                     right_click_passthrough: false,
                 });
                 if is_agent(term) {
-                    let status = pane_agent_status(term);
-                    let record = effective_status(term);
+                    let record = selection.and_then(|selected| selected.status(term));
                     agents.push(ClientShellAgent {
                         pane_id: term.address.clone(),
                         workspace_id: workspace_id.clone(),
