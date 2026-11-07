@@ -233,6 +233,7 @@ def run(args, size, binary):
         core.rpc('server.restart', {})
         core.child.wait(timeout=10)
         core.start()
+        restart_done = time.monotonic()
         deadline = time.monotonic() + 10
         while fact(programs['core'][0])['activity']['epoch'] == old:
             assert time.monotonic() < deadline, 'actual scratch registry epoch must change'
@@ -250,6 +251,20 @@ def run(args, size, binary):
         launch(reference, binary, size)
         reference.ready()
         select(1)
+        # Transient reconnect overlay: the retained screen stays rendered
+        # while the fresh attach opens, so a capture can land mid-Opening.
+        # Measure how long it takes to clear before the baseline checkpoint.
+        needles = ('Reconnecting', 'fresh terminal paint',
+                   'terminal state before forwarding')
+        frame = checkpoint(core, 'epoch-baseline-clear', size, args.decoder)
+        appeared = any(n in text(frame) for n in needles)
+        deadline = time.monotonic() + 12
+        while appeared and any(n in text(frame) for n in needles):
+            frame = checkpoint(core, 'epoch-baseline-clear', size, args.decoder)
+            assert time.monotonic() < deadline, 'reconnect overlay did not clear'
+        result['reconnect_overlay'] = {
+            'appeared': appeared,
+            'cleared_seconds': round(time.monotonic() - restart_done, 2)}
         inspect('epoch-baseline', 1, idle)
         report(0, 'working')
         report(0, 'idle')
