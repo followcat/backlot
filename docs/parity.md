@@ -548,3 +548,31 @@ No expected bytes, original config or foreign structure is rewritten. Owned
 sessions clean up and disk stays above the 12 GiB floor. Cross-machine counter
 isolation and deterministic merge behavior have model tests, without a native
 multi-machine chronology claim.
+
+## Known differences
+
+These are measured behavioral differences, not bugs waived by annotation.
+Everything else on the compared surfaces still diffs normally.
+
+- **Chronology after a server restart.** hc keeps its activity domain across
+  an owned restart (the epoch changes, existing markers baseline into the new
+  epoch). Herdr's `server live-handoff` replaces the server but resets
+  chronology to null. A fresh client therefore baselines retained completion
+  facts one way in hc-tui and another in herdr, and equal-priority ordering
+  after a restart can legitimately differ between the two.
+- **Receipt order across machines.** Foreign `(core_id, epoch, scope)`
+  domains are never compared with each other's counters; cross-machine agents
+  keep their local ingestion order. Two clients watching cores restart or
+  report in different sequences can show different equal-priority orders
+  without either being wrong.
+- **Stalled-output acknowledgement race.** There is no ordered
+  output-consumption fence in core: inventory can publish a status while a
+  stalled attach stream still holds older bytes, so a paint can be older
+  than its status. Client-local acknowledgement follows a composed, fresh,
+  focused visible paint; the race itself is a documented core limitation.
+- **Reconnect overlay.** After a core restart, retained-pane screens keep
+  their last paint while the fresh attach opens, so a brief "Reconnecting /
+  Waiting for a fresh terminal paint" notice can appear where the reference
+  shows nothing. It is transient — measured clearing in under one second
+  after restart in the `.9` native runs — and the chronology checkpoint now
+  waits it out and records the delay.

@@ -173,9 +173,9 @@ cell/attribute/cursor/mode/title comparisons; mobile captures also assert the
 agent section's order and status glyph colors.
 
 The candidate client stays running through an actual owned `.8` registry
-restart and must baseline the new epoch. The reference has no equivalent
-server handover API, so a fresh reference client baselines the retained owned
-server's existing completion facts. This is a client-baseline comparison,
+restart and must baseline the new epoch. Herdr's `server live-handoff`
+replaces the server but resets chronology to null, so a fresh reference
+client baselines the retained owned server's existing completion facts. This is a client-baseline comparison,
 not a claim of identical server restart support. Each subsequent terminal
 capture requires fresh program output; transient notices must expire, with
 all captured cells still compared. No stalled-stream consumption fence or

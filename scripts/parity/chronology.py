@@ -244,7 +244,7 @@ def run(args, size, binary):
             'planned core handover must retain the genuine unseen markers'
         result['restart'] = {'actual_core_epoch_changed': True,
             'retained_completion_markers': retained,
-            'reference': 'fresh client baseline on retained owned server; no server handover API',
+            'reference': 'fresh client baseline on retained owned server; herdr live-handoff resets chronology to null',
             'candidate': 'same client reconnects to actual restarted registry'}
         detach(reference, keys=binding(config, 'detach'))
         reference.ui.close()
