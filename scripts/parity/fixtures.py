@@ -94,8 +94,14 @@ class Program:
 
     def status(self, state):
         assert state in ('working', 'blocked', 'idle')
+        self.report(state)
+
+    def report(self, state, record=''):
+        """OSC 7501 word: readiness aliases (`done`) and named records."""
+        assert state in ('working', 'blocked', 'idle', 'done')
         title = base64.b64encode(('task-' + self.name).encode()).decode()
-        sequence = f'\x1b]7501;state={state}:app=fixture:title={title}\x1b\\'.encode()
+        target = f'id={record}:' if record else ''
+        sequence = f'\x1b]7501;{target}state={state}:app=fixture:title={title}\x1b\\'.encode()
         self.send(sequence)
 
 

@@ -51,6 +51,23 @@ class FailureEvidence(unittest.TestCase):
             self.assertIn('fixture failure', result['error'])
 
 
+class AliasReportWords(unittest.TestCase):
+    def test_report_sends_alias_and_named_osc_words(self):
+        import json, tempfile
+        from pathlib import Path
+        from fixtures import Program
+        with tempfile.TemporaryDirectory(prefix='hctui-alias-') as root:
+            program = Program(SimpleNamespace(root=Path(root)), 'alpha')
+            program.report('done')
+            raw = bytes.fromhex(json.loads(program.request.read_text())['hex'])
+            self.assertIn(b'state=done:', raw)
+            self.assertNotIn(b'id=', raw)
+            program.report('idle', 'build/test')
+            raw = bytes.fromhex(json.loads(program.request.read_text())['hex'])
+            self.assertIn(b'id=build/test:state=idle:', raw)
+            self.assertTrue(raw.startswith(b'\x1b]7501;') and raw.endswith(b'\x1b\\'))
+
+
 class PositionedTailReadiness(unittest.TestCase):
     def test_waits_for_complete_delayed_tail(self):
         from vectors import wait_tail

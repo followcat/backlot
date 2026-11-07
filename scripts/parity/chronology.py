@@ -131,21 +131,28 @@ def run(args, size, binary):
         def fact(p):
             return core.rpc('terminal.get', {'terminal': p.terminal})
 
-        def report(index, state):
+        def report(index, state, record=''):
             nonlocal serial
             serial += 1
             source = programs['reference'][index]
+            # `done` has no reference-side word: both idle/done spellings are
+            # the same endpoint — the pinned core keeps them as aliases.
+            ref_state = {'done': 'idle'}.get(state, state)
             reference.cli('pane', 'report-agent', source.terminal, '--source', 'fixture',
-                          '--agent', 'fixture', '--state', state, '--seq', str(serial))
+                          '--agent', 'fixture', '--state', ref_state, '--seq', str(serial))
             p = programs['core'][index]
-            p.status(state)
+            p.report(state, record)
             wait_program(core, p, p.serial)
             deadline = time.monotonic() + 8
-            while (fact(p).get('status') or {}).get('state') != state:
+            while True:
+                value = fact(p)
+                target = value.get('status') if not record else value.get('records', {}).get(record)
+                if target and target.get('state') == state:
+                    break
                 for owner in owners:
                     owner.ui.read(.03)
-                assert time.monotonic() < deadline, 'authoritative root status readiness'
-            return fact(p)['activity']
+                assert time.monotonic() < deadline, 'authoritative status readiness'
+            return value['activity']
 
         def compare(name, visible, expected, order=None, picker=False):
             nonlocal phase
@@ -250,6 +257,48 @@ def run(args, size, binary):
                 ['alpha', 'gamma', 'beta'])
         select(0)
         inspect('final-visit-acknowledgement', 0, idle, ['alpha', 'gamma', 'beta'])
+
+        # Readiness aliases (.9 core): adjacent idle/done words retain the
+        # completion ordinal — an off-tab agent keeps Done until visited,
+        # for the root record and for a named record, in both orders.
+        base = dict.fromkeys(NAMES, 'idle')
+        select(2)  # gamma tab visible; beta stays off-tab
+        report(1, 'working')
+        inspect('alias-root-working', 2, dict(base, beta='working'))
+        report(1, 'done')
+        inspect('alias-root-done', 2, dict(base, beta='done'))
+        report(1, 'idle')
+        inspect('alias-root-idle-keeps-done', 2, dict(base, beta='done'))
+        select(1)
+        inspect('alias-root-visit-ack', 1, base)
+        select(2)
+        report(1, 'working')
+        report(1, 'idle')
+        inspect('alias-root2-completion', 2, dict(base, beta='done'))
+        report(1, 'done')
+        inspect('alias-root2-done-keeps-done', 2, dict(base, beta='done'))
+        select(1)
+        inspect('alias-root2-visit-ack', 1, base)
+
+        record = 'build/test'
+        select(2)
+        report(1, 'working', record)
+        inspect('alias-named-working', 2, dict(base, beta='working'))
+        report(1, 'done', record)
+        inspect('alias-named-done', 2, dict(base, beta='done'))
+        report(1, 'idle', record)
+        inspect('alias-named-idle-keeps-done', 2, dict(base, beta='done'))
+        select(1)
+        inspect('alias-named-visit-ack', 1, base)
+        select(2)
+        report(1, 'working', record)
+        report(1, 'idle', record)
+        inspect('alias-named2-completion', 2, dict(base, beta='done'))
+        report(1, 'done', record)
+        inspect('alias-named2-done-keeps-done', 2, dict(base, beta='done'))
+        select(1)
+        inspect('alias-named2-visit-ack', 1, base)
+
         assert core.rpc('doc.get', {'name': 'herdr-app'})['value'] == foreign
         restored = [detach(owner, args.decoder, binding(config, 'detach')) for owner in owners]
         diff = differences(*restored)
