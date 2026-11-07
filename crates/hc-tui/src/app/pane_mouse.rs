@@ -3,8 +3,8 @@
 use hc_vt::{Mods, MouseAction, MousePosition};
 use ratatui::layout::Position;
 
+use super::App;
 use super::input::{MouseButton, MouseEventKind, MouseInput};
-use super::{App, Mode};
 use crate::chrome::render::PaneHit;
 
 pub(super) struct Gesture {
@@ -225,9 +225,8 @@ impl App {
     }
 
     fn send_pane_mouse(&mut self, hit: &PaneHit, mouse: MouseInput) {
-        if self.mode != Mode::Normal {
-            return;
-        }
+        // The source gates pane input on hit.mouse_reporting alone — shell
+        // modes (Navigate, Resize) only reroute keyboard input.
         // Source replays an unclaimed Ctrl-click after link activation without
         // its raw pixel metadata; the press therefore uses the cell center.
         let fallback_click = self.shell.mouse_capture
