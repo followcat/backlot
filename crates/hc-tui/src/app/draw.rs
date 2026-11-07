@@ -187,7 +187,9 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         layout.pane_surface
     };
     let mobile_navigate = !layout.mobile_header.is_empty() && app.mode == Mode::Navigate;
-    let mode_bar = if app.help || app.dialog.is_some() || mobile_navigate {
+    // Source suppresses the mode bar while any overlay is open, including
+    // the context menu — Navigate can be the mode underneath it.
+    let mode_bar = if app.help || app.dialog.is_some() || app.menu.is_some() || mobile_navigate {
         None
     } else {
         crate::chrome::modebar::render_mode_bar(
@@ -296,6 +298,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // The context menu is the topmost shell overlay; the reference
     // suppresses the host cursor while it is open.
     if let Some(menu) = &app.menu {
+        // The source composes overlays by rebuilding the wire frame as
+        // ratatui cells (wire.rs u16_to_modifier drops extended underline
+        // bits); it does not dim the background for the context menu.
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
         if let Some(rendered) =
             crate::chrome::menu::render_context_menu(buf, menu, &app.shell.palette)
         {
