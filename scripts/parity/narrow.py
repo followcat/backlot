@@ -44,3 +44,9 @@ def run(owners, programs, compare, size):
         compare('narrow-menu-help', help_overlay=True)
         send(b'\x1b[27u')
         compare('narrow-menu-help-close', terminal='fixture beta')
+        # The pane context menu also opens under the mobile width; Escape
+        # dismisses it.
+        send(b'\x1b[<2;8;20M')
+        compare('narrow-pane-menu')
+        send(b'\x1b[27u')
+        compare('narrow-pane-menu-close', terminal='fixture beta')

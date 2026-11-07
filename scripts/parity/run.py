@@ -164,6 +164,18 @@ def one_size(args, size, binary):
                 ('navigate-next', b'\x1b[1;1B\x1b[1;1:3B'), ('switch', b'\r'),
                 ('sidebar-drag', b'\x1b[<0;26;9M\x1b[<32;32;9M\x1b[<0;32;9m'),
                 ('sidebar-collapse', sidebar_keys), ('sidebar-expand', sidebar_keys),
+                # Context menu: right-press on the alpha workspace row, Down
+                # moves the highlight, Enter opens the rename overlay, Escape
+                # dismisses — the reference's menu key/mouse contract.
+                ('menu-workspace', b'\x1b[<2;5;3M'),
+                ('menu-highlight', b'\x1b[B'),
+                ('menu-workspace-rename', b'\r'),
+                ('menu-rename-cancel', b'\x1b[27u'),
+                ('menu-tab', b'\x1b[<2;30;1M'),
+                ('menu-tab-newtab', b'\r'),
+                ('menu-newtab-cancel', b'\x1b[27u'),
+                ('menu-pane', b'\x1b[<2;60;10M'),
+                ('menu-pane-escape', b'\x1b[27u'),
             ]:
                 reference.ui.send(keys)
                 core.ui.send(keys)
