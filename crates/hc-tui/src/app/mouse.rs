@@ -114,6 +114,13 @@ impl App {
             self.dialog_mouse(mouse);
             return;
         }
+        // The context menu overlays everything but a dialog; it owns move
+        // highlight and press activation until it closes.
+        if self.menu.is_some() {
+            self.menu_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         if self.help {
             self.handle_help_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
@@ -165,6 +172,9 @@ impl App {
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.mouse_press(point);
+            }
+            MouseEventKind::Down(MouseButton::Right) => {
+                self.context_menu_press(point);
             }
             MouseEventKind::ScrollUp => self.mouse_scroll(point, -1),
             MouseEventKind::ScrollDown => self.mouse_scroll(point, 1),

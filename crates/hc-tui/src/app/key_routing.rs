@@ -12,6 +12,7 @@ pub(super) struct Context {
     help: bool,
     locked: bool,
     dialog: bool,
+    menu: bool,
 }
 
 impl App {
@@ -22,6 +23,7 @@ impl App {
             help: self.help,
             locked: self.keyboard_locked,
             dialog: self.dialog.is_some(),
+            menu: self.menu.is_some(),
         }
     }
 
@@ -98,7 +100,8 @@ impl App {
         let press = key.clone().with_action(Action::Press);
         if key.input.key == Key::Char('g')
             && key.input.mods == hc_vt::Mods::CTRL
-            && (self.keyboard_locked || (!self.help && self.dialog.is_none()))
+            && (self.keyboard_locked
+                || (!self.help && self.dialog.is_none() && self.menu.is_none()))
         {
             if key.input.action == Action::Press {
                 self.keyboard_locked = !self.keyboard_locked;
@@ -113,6 +116,10 @@ impl App {
         }
         if self.dialog.is_some() {
             self.dialog_key(&press);
+            return None;
+        }
+        if self.menu.is_some() {
+            self.menu_key(&press);
             return None;
         }
         if self.mode == Mode::Resize {

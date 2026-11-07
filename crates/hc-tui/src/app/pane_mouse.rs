@@ -111,6 +111,45 @@ impl App {
         else {
             return false;
         };
+        let reporting = self
+            .displayed_pane(&hit.pane_id)
+            .and_then(|p| p.vt_ref())
+            .is_some_and(|vt| vt.mouse_tracking());
+        // Right-click: the pane owns it only while reporting AND (the pane's
+        // passthrough toggle is on with a bare click OR the click matches the
+        // configured modifier set exactly). Otherwise the context menu opens.
+        if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Right)) {
+            let pane_owns = self.right_click_panes.contains(&hit.pane_id) && mouse.mods.is_empty();
+            let configured = self
+                .shell
+                .right_click_passthrough_modifiers
+                .is_some_and(|mods| mods == mouse.mods);
+            if !(reporting && (pane_owns || configured)) {
+                return false;
+            }
+            if self.focused.as_deref() != Some(&hit.pane_id) {
+                self.focus_pane(hit.pane_id.clone());
+            }
+            let stripped = if pane_owns {
+                Mods::NONE
+            } else {
+                self.shell
+                    .right_click_passthrough_modifiers
+                    .unwrap_or(Mods::NONE)
+            };
+            let mut event = mouse;
+            event.mods = event.mods.difference(stripped);
+            self.send_pane_mouse(&hit, event);
+            self.pane_mouse_gesture = Some(Gesture {
+                hit,
+                generation: self.pane.generation(),
+                button: MouseButton::Right,
+                stripped,
+                last: mouse,
+                pixels: self.host_mouse_pixels,
+            });
+            return true;
+        }
         if self.focused.as_deref() != Some(&hit.pane_id) {
             if matches!(
                 mouse.kind,
@@ -125,33 +164,15 @@ impl App {
                 return true;
             }
         }
-        let reporting = self
-            .displayed_pane(&hit.pane_id)
-            .and_then(|p| p.vt_ref())
-            .is_some_and(|vt| vt.mouse_tracking());
         match mouse.kind {
+            // `Down(Right)` never reaches here — handled above.
             MouseEventKind::Down(button) if reporting => {
-                let stripped = if button == MouseButton::Right {
-                    // Source matches the configured modifier set exactly.
-                    let Some(mods) = self
-                        .shell
-                        .right_click_passthrough_modifiers
-                        .filter(|mods| *mods == mouse.mods)
-                    else {
-                        return true; // Context actions are M4.
-                    };
-                    mods
-                } else {
-                    Mods::NONE
-                };
-                let mut event = mouse;
-                event.mods = event.mods.difference(stripped);
-                self.send_pane_mouse(&hit, event);
+                self.send_pane_mouse(&hit, mouse);
                 self.pane_mouse_gesture = Some(Gesture {
                     hit,
                     generation: self.pane.generation(),
                     button,
-                    stripped,
+                    stripped: Mods::NONE,
                     last: mouse,
                     pixels: self.host_mouse_pixels,
                 });

@@ -25,7 +25,7 @@ pub(crate) struct Confirm {
     pub title: String,
     pub detail: String,
 }
-fn panel(
+pub(crate) fn panel(
     b: &mut Buffer,
     a: Rect,
     c: ratatui::style::Color,
@@ -110,7 +110,7 @@ fn row(i: Rect, ws: &[u16], gap: u16, off: u16) -> Vec<Rect> {
         .collect()
 }
 
-fn contrast(p: &Palette) -> ratatui::style::Color {
+pub(crate) fn contrast(p: &Palette) -> ratatui::style::Color {
     match p.panel_bg {
         ratatui::style::Color::Reset => p.surface_dim,
         c => c,

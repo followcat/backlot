@@ -92,6 +92,8 @@ pub(crate) struct ShellHitMap {
     pub mobile_targets: Vec<(Rect, ClientMobileTarget)>,
     pub mobile_max_scroll: usize,
     pub global_launcher: Rect,
+    /// Row hit areas of the open context menu, filled during draw.
+    pub context_menu_rows: Vec<(Rect, usize)>,
 }
 
 /// Diagnostics shown on endpoint rows. hc-tui has no saved-endpoint auth

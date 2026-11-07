@@ -148,6 +148,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     };
     let hide_cursor = app.help
         || app.dialog.is_some()
+        || app.menu.is_some()
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
     for info in &pane_infos {
@@ -292,6 +293,19 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         };
     }
     app.render_dialog(buf);
+    // The context menu is the topmost shell overlay; the reference
+    // suppresses the host cursor while it is open.
+    if let Some(menu) = &app.menu {
+        if let Some(rendered) =
+            crate::chrome::menu::render_context_menu(buf, menu, &app.shell.palette)
+        {
+            app.hit_map.context_menu_rows = rendered.rows;
+        }
+        app.want_cursor.pos = None;
+        app.want_cursor.anchor = None;
+    } else {
+        app.hit_map.context_menu_rows.clear();
+    }
     // Derived from herdr protocol/render_ansi.rs::frame_with_drawn_cursor.
     if app.shell.draw_host_cursor
         && let Some(position) = app.want_cursor.pos.take()

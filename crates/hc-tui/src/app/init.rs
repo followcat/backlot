@@ -41,6 +41,8 @@ impl App {
             last_focus: None,
             dialog: None,
             dialog_hits: Default::default(),
+            menu: None,
+            right_click_panes: Default::default(),
             help: false,
             mobile_switcher_suspended: false,
             help_state: crate::chrome::help::HelpState::default(),

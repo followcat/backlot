@@ -11,6 +11,7 @@ pub mod endpoint_sidebar;
 pub mod endpoint_sidebar_expanded;
 pub mod endpoints;
 pub(crate) mod help;
+pub(crate) mod menu;
 pub mod mobile;
 pub mod mobile_items;
 pub mod mobile_switcher;
@@ -70,6 +71,7 @@ pub struct ClientShellConfig {
     pub mouse_scroll_lines: usize,
     pub right_click_passthrough_modifiers: Option<hc_vt::Mods>,
     pub prompt_new_tab_name: bool,
+    pub prompt_new_workspace_name: bool,
     pub confirm_close: bool,
     pub pane_borders: PaneBordersConfig,
     pub pane_gaps: bool,
@@ -148,6 +150,7 @@ impl ClientShellConfig {
                 value
             }),
             prompt_new_tab_name: ui.prompt_new_tab_name,
+            prompt_new_workspace_name: ui.prompt_new_workspace_name,
             confirm_close: ui.confirm_close,
             pane_borders: ui.pane_borders,
             pane_gaps: ui.pane_gaps,

@@ -117,6 +117,12 @@ impl App {
             self.new_tab();
             return;
         }
+        // The `+ new workspace` sidebar row — same surface the mobile
+        // switcher exposes as `ClientMobileTarget::NewWorkspace`.
+        if contains(hits.new_workspace, point) {
+            self.new_workspace();
+            return;
+        }
         let group_toggle = hits.workspaces.iter().find_map(|hit| {
             let (rect, key) = hit.group_toggle.as_ref()?;
             contains(*rect, point).then(|| (hit.endpoint_id.clone(), key.clone()))

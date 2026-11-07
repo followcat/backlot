@@ -9,6 +9,7 @@
 
 mod agent_presentation;
 mod closing;
+mod context_menu;
 mod creation;
 mod dialogs;
 mod draw;
@@ -149,6 +150,12 @@ pub struct App {
     last_focus: Option<String>,
     dialog: Option<dialogs::Dialog>,
     dialog_hits: crate::chrome::dialogs::DialogRender,
+    /// Open right-click context menu — the reference's
+    /// `ClientShellOverlay::ContextMenu`.
+    menu: Option<crate::chrome::menu::ContextMenu>,
+    /// Panes whose bare right-click goes to the program instead of the
+    /// context menu — the per-pane `right_click_passthrough` toggle.
+    right_click_panes: std::collections::HashSet<String>,
     help: bool,
     mobile_switcher_suspended: bool,
     help_state: crate::chrome::help::HelpState,
