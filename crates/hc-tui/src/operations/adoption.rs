@@ -105,16 +105,24 @@ pub(super) async fn prepare(client: &Client, creation: &mut Creation) -> Result<
                 .iter()
                 .all(|key| current.labels.get(*key) == expected.get(*key))
         };
-        if matches(&labels) {
-            continue;
+        if !matches(&labels) {
+            if !matches(&member.labels) {
+                return Err("Space labels changed; refresh before retrying the action".into());
+            }
+            client
+                .call(
+                    "terminal.label",
+                    Some(json!({"terminal":member.terminal,"labels":labels})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
         }
-        if !matches(&member.labels) {
-            return Err("Space labels changed; refresh before retrying the action".into());
-        }
+        // Adopted members belong to a workspace: keep them after loss so the
+        // layout never silently loses a slot (reference adoption semantics).
         client
             .call(
-                "terminal.label",
-                Some(json!({"terminal":member.terminal,"labels":labels})),
+                "terminal.keep",
+                Some(json!({"terminal":member.terminal,"keep":true})),
             )
             .await
             .map_err(|e| e.to_string())?;

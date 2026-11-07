@@ -27,6 +27,7 @@ async fn creation_uses_cas_agreed_adoption_and_preserves_foreign_labels() {
                 "terminal.run",
                 "terminal.get",
                 "terminal.label",
+                "terminal.keep",
             ],
         )
         .await;
@@ -49,6 +50,10 @@ async fn creation_uses_cas_agreed_adoption_and_preserves_foreign_labels() {
             json!({"herdr.space":"agreed","herdr.tab":"tab-id"})
         );
         core.reply(&labels["id"], json!({})).await;
+        let keep = next(&mut core, "terminal.keep").await;
+        assert_eq!(keep["params"]["terminal"], "t1");
+        assert_eq!(keep["params"]["keep"], true);
+        core.reply(&keep["id"], json!({})).await;
         let read = next(&mut core, "doc.get").await;
         core.reply(&read["id"], json!({"value":adopted,"version":2}))
             .await;
@@ -84,6 +89,7 @@ async fn creation_uses_cas_agreed_adoption_and_preserves_foreign_labels() {
             terminal: String::new(),
             vertical: false,
         }),
+        space_adoption: None,
         promotion: Some(Promotion {
             key: old_space,
             proposal: crate::structure::Adoption {

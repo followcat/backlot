@@ -85,6 +85,13 @@ pub(super) async fn run(
             validate_creation(creation, &document)?;
         }
     }
+    let machine_method = match &request.action {
+        Action::Machine(MachineOp::Add { .. }) => "machine.add",
+        Action::Machine(MachineOp::Connect { .. }) => "machine.connect",
+        Action::Machine(MachineOp::Rename { .. }) => "machine.rename",
+        Action::Machine(MachineOp::Remove { .. }) => "machine.rm",
+        _ => "",
+    };
     let required: &[&str] = match &request.action {
         Action::Create(creation) if creation.promotion.is_some() => &[
             "doc.get",
@@ -92,11 +99,13 @@ pub(super) async fn run(
             "terminal.run",
             "terminal.label",
             "terminal.get",
+            "terminal.keep",
         ],
         Action::Create(_) => &["doc.get", "doc.set", "terminal.run"],
         Action::Close { .. } => &["doc.get", "doc.set", "terminal.get", "terminal.kill"],
         Action::RenamePane { .. } => &["terminal.get", "terminal.label"],
-        Action::Edit(_) => &["doc.get", "doc.set"],
+        Action::Edit(_) | Action::RenameSpace { .. } => &["doc.get", "doc.set"],
+        Action::Machine(_) => &[machine_method],
     };
     for method in required {
         if let Some(reason) = client.explain_unavailable(method) {
@@ -131,6 +140,12 @@ pub(super) async fn run(
             }
             update(client, |document| {
                 edit.apply(document)?;
+                if let Some(proposal) = &creation.space_adoption {
+                    document
+                        .adoptions
+                        .entry(edit.space.clone())
+                        .or_insert_with(|| proposal.clone());
+                }
                 if matches!(&edit.change, Change::NewTab { .. }) {
                     let order = document
                         .order
@@ -243,6 +258,33 @@ pub(super) async fn run(
                     "terminal.label",
                     Some(json!({"terminal":terminal,"labels":{"herdr.title":name}})),
                 )
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
+        }
+        Action::RenameSpace { key, proposal } => update(client, |document| {
+            let chosen = document
+                .adoptions
+                .entry(key.clone())
+                .or_insert_with(|| proposal.clone());
+            chosen.name = proposal.name.clone();
+            chosen.custom_label = proposal.custom_label;
+            Ok(())
+        })
+        .await
+        .map(Some),
+        Action::Machine(op) => {
+            let (method, params) = match op {
+                MachineOp::Add { target } => ("machine.add", json!({"target": target})),
+                MachineOp::Connect { machine } => ("machine.connect", json!({"machine": machine})),
+                MachineOp::Rename { machine, new_name } => (
+                    "machine.rename",
+                    json!({"machine": machine, "new_name": new_name}),
+                ),
+                MachineOp::Remove { machine } => ("machine.rm", json!({"machine": machine})),
+            };
+            client
+                .call(method, Some(params))
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(None)

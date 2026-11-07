@@ -16,6 +16,9 @@ pub struct Creation {
     pub params: RunParams,
     pub edit: Edit,
     pub promotion: Option<Promotion>,
+    /// Adoption written for a brand-new workspace: records its stable
+    /// identity and chosen label. `None` for creates inside existing spaces.
+    pub space_adoption: Option<crate::structure::Adoption>,
     pub order: Vec<String>,
 }
 
@@ -47,6 +50,23 @@ pub enum Action {
         created_ms: u64,
         name: String,
     },
+    /// Persist a workspace label in the owned document's adoptions. `key` is
+    /// the workspace's pre-canonical layout key; the proposal preserves the
+    /// space's stable identity and only the name fields are overwritten.
+    RenameSpace {
+        key: String,
+        proposal: crate::structure::Adoption,
+    },
+    /// Machine management RPCs — no foreign document is touched. The
+    /// reference TUI has no machine dialogs (parity.md).
+    Machine(MachineOp),
+}
+
+pub enum MachineOp {
+    Add { target: String },
+    Connect { machine: String },
+    Rename { machine: String, new_name: String },
+    Remove { machine: String },
 }
 
 pub struct Request {
@@ -111,6 +131,9 @@ impl Drop for Store {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod action_tests;
 
 #[cfg(test)]
 mod creation_tests;
