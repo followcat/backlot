@@ -137,6 +137,62 @@ impl App {
         }
     }
 
+    /// The machine that owns a workspace's panes, from whichever endpoint
+    /// publishes them. `None` means the local machine.
+    pub(super) fn workspace_machine(&self, workspace_id: &str) -> Option<String> {
+        let by_pane = self
+            .projection
+            .endpoints
+            .iter()
+            .filter_map(|e| e.snapshot.as_deref())
+            .flat_map(|s| &s.panes)
+            .find(|p| p.workspace_id == workspace_id)
+            .and_then(|p| p.pane_id.split_once('/').map(|(m, _)| m.to_owned()));
+        by_pane.or_else(|| {
+            self.projection
+                .endpoints
+                .iter()
+                .filter_map(|e| e.snapshot.as_deref().map(|s| (&e.endpoint_id, s)))
+                .find(|(_, s)| s.workspaces.iter().any(|w| w.workspace_id == workspace_id))
+                .and_then(|(id, _)| match id {
+                    crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
+                    crate::chrome::snapshot::ClientEndpointId::Local => None,
+                })
+        })
+    }
+
+    /// A layout edit on an explicit tab of an explicit workspace — the
+    /// context-menu path, which may act without focusing the target first.
+    /// Only the active endpoint publishes layout roots, so edits on remote
+    /// workspaces degrade to a no-op rather than guessing machine keys.
+    pub(super) fn layout_edit_on(
+        &self,
+        workspace_id: &str,
+        tab_id: &str,
+        change: Change,
+    ) -> Option<Edit> {
+        let machine = self.workspace_machine(workspace_id);
+        Some(Edit {
+            tab: crate::project::layout_key(machine.as_deref(), tab_id),
+            space: crate::project::layout_key(machine.as_deref(), workspace_id),
+            fallback: self.projection.layouts.get(tab_id)?.root.clone()?,
+            incarnations: self
+                .view
+                .inventory
+                .terminals()
+                .iter()
+                .map(|(id, t)| (id.clone(), t.created_ms))
+                .collect(),
+            change,
+        })
+    }
+
+    pub(super) fn edit_layout_on(&mut self, workspace_id: &str, tab_id: &str, change: Change) {
+        if let Some(edit) = self.layout_edit_on(workspace_id, tab_id, change) {
+            self.submit_action(Action::Edit(edit));
+        }
+    }
+
     pub(super) fn persist_focus(&mut self) {
         if self.operations.is_some()
             && let Some(focus) = self.focused.clone()

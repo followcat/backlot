@@ -212,14 +212,20 @@ pub(super) fn structured_snapshot(
                     checkout.repo_root.as_str()
                 }),
         );
+        // A rename stores the label under the workspace's own layout key
+        // (including cwd-grouped spaces, whose identity never maps through
+        // `space:N:`); a promotion key still matches by space identity.
+        // Adoptions now also override foreign (herdr-app) labels — that is
+        // how rename works on app-owned workspaces.
         let adopted = own
             .adoptions
-            .values()
-            .find(|a| {
-                a.machine.as_deref() == machine
-                    && format!("space:{}:{}", a.space.len(), a.space) == *workspace_id
-            })
-            .filter(|_| !space.from_app);
+            .get(&layout_key(machine, workspace_id))
+            .or_else(|| {
+                own.adoptions.values().find(|a| {
+                    a.machine.as_deref() == machine
+                        && format!("space:{}:{}", a.space.len(), a.space) == *workspace_id
+                })
+            });
         workspaces.push(ClientShellWorkspace {
             workspace_id: workspace_id.clone(),
             active_tab_id: tabs
