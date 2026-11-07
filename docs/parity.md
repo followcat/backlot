@@ -392,7 +392,7 @@ or title are masked. These are documented core-policy differences, not passes.
 | Layout/tab navigation and lock | M3a implements indexed workspace/tab/agent selection, previous/next, directional pane focus/swap, cycle/last pane, zoom/resize and Ctrl+G lock with default/configured bindings. |
 | Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
 | Settings binding/menu | `pending-feature`: the M4 overlay is deferred. M3a.1 shows the transient notice `Settings isn't available in hc-tui yet`. Menu presentation remains identical; the notice/overlay difference is retained, never counted as matching Settings UI. |
-| Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. Workspace/machine actions, custom commands, notifications, scrollback editing/clear and remaining actions stay in M4 or M5. Mobile new-tab is active; new-workspace remains deferred. |
+| Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. M4s1 adds the right-click context menu (workspace/tab/pane targets, reference items/geometry/highlight), workspace new/rename/close including the mobile `+ new workspace` row, and machine dialogs (add/connect/rename/remove). Custom commands, notifications, scrollback editing/clear and remaining actions stay in later M4 slices or M5. |
 | Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
 
@@ -576,3 +576,24 @@ Everything else on the compared surfaces still diffs normally.
   shows nothing. It is transient — measured clearing in under one second
   after restart in the `.9` native runs — and the chronology checkpoint now
   waits it out and records the delay.
+- **Machine context menu and dialogs.** The reference TUI has no machine
+  management surface: a right-click on a machine row falls through its
+  dispatch and shows nothing. hc-tui opens a machine menu — the Local row
+  offers `Add machine`; a remote row offers `Connect`, `Rename machine` and
+  `Remove machine`. Add/Rename use the shared rename-dialog surface, Remove
+  the shared confirm surface, and Connect needs no dialog. These rows and
+  dialogs are an intentional extension, exercised on the fake core only —
+  no parity checkpoint compares them and real machines are never added or
+  removed in tests.
+- **Worktree context-menu items.** Managed worktree groups stay
+  `pending-feature`: hc-tui workspace facts carry no checkout membership, so
+  `is_git`/`is_linked_worktree`/`has_worktree_children` are always false and
+  the workspace menu matches the reference's non-Git two-item form. Should a
+  Git workspace ever be presented, the worktree items answer `Unavailable`
+  rather than mutating anything.
+- **Workspace rename persistence.** The reference stores workspace labels in
+  its own client state; hc-tui persists the rename as an `adoptions` entry in
+  the owned `hc-tui` document (`machine`, `space`, `name`, `custom_label`),
+  CAS-written with opaque/concurrent fields preserved. It never writes the
+  foreign `herdr-app` document, and owned adoptions override foreign labels
+  for cwd-grouped workspaces too.
