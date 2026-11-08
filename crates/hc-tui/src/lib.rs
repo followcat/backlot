@@ -22,6 +22,7 @@ pub mod reader;
 pub mod sidebar;
 pub mod term;
 pub mod terminal_modes;
+pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
 
