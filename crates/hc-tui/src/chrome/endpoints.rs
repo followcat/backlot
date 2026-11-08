@@ -101,6 +101,38 @@ pub(crate) fn aggregate_agent_rows<'a>(
     rows
 }
 
+/// One row of `aggregate_agent_rows` usable as a navigation target:
+/// its endpoint, its pane, and its position in the rendered
+/// (unfiltered) list so reveal can scroll to the row the sidebar drew.
+#[derive(Clone)]
+pub(crate) struct AggregateAgentTarget {
+    pub endpoint_id: ClientEndpointId,
+    pub pane_id: String,
+    /// Index in `aggregate_agent_rows` — stale endpoints' rows still
+    /// render, so this is the position the sidebar scrolls to.
+    pub row_index: usize,
+}
+
+/// The agent rows previous/next/focus agent navigation may land on:
+/// `aggregate_agent_rows` reduced to endpoints whose transport is
+/// Online. Derived from `aggregate_navigation.rs::online_agent_targets`.
+pub(crate) fn online_agent_targets(
+    endpoints: &[ClientShellEndpoint],
+    active_endpoint_id: &ClientEndpointId,
+    sort: crate::config::AgentPanelSortConfig,
+) -> Vec<AggregateAgentTarget> {
+    aggregate_agent_rows(endpoints, active_endpoint_id, sort)
+        .into_iter()
+        .enumerate()
+        .filter(|(_, row)| row.endpoint.status == ClientEndpointStatus::Online)
+        .map(|(row_index, row)| AggregateAgentTarget {
+            endpoint_id: row.endpoint.endpoint_id.clone(),
+            pane_id: row.agent.pane_id.clone(),
+            row_index,
+        })
+        .collect()
+}
+
 pub(crate) fn collapsed_groups_for_endpoint<'a>(
     state: &'a ShellRenderState<'_>,
     endpoint_id: &ClientEndpointId,

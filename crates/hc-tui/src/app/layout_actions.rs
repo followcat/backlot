@@ -5,6 +5,14 @@ use crate::{input::KeybindAction as A, operations::Change};
 
 impl App {
     pub(super) fn layout_action(&mut self, action: A) {
+        // With several sidebar endpoints these actions cross machines
+        // (the reference's `handle_endpoint_navigation`); the local
+        // path below stays the single-endpoint behavior.
+        if self.endpoint_navigation(action) {
+            self.refresh_projection();
+            self.mark_active_seen();
+            return;
+        }
         let snapshot = &self.projection.snapshot;
         let focus = self.focused.clone();
         let Some(space) = snapshot.focused_workspace_id.as_ref() else {

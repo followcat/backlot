@@ -14,6 +14,7 @@ mod context_menu;
 mod creation;
 mod dialogs;
 mod draw;
+mod endpoint_navigation;
 mod help;
 mod host;
 mod init;

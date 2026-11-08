@@ -1,6 +1,7 @@
 //! Read-only application tests and shared fixtures.
 mod cases_1;
 mod cases_2;
+mod endpoint_nav;
 mod layout;
 mod layout_regressions;
 mod m3a;
