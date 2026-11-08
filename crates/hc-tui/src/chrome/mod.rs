@@ -17,6 +17,8 @@ pub mod mobile_items;
 pub mod mobile_switcher;
 pub mod modebar;
 pub mod navigate;
+pub(crate) mod navigator;
+pub(crate) mod navigator_render;
 pub(crate) mod notice_render;
 pub mod palette;
 pub mod panes;
