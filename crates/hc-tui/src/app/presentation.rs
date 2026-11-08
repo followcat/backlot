@@ -112,3 +112,7 @@ mod epoch_tests;
 #[cfg(test)]
 #[path = "presentation_reporter_tests.rs"]
 mod current_reporter_tests;
+
+#[cfg(test)]
+#[path = "presentation_official_tests.rs"]
+mod official_tests;

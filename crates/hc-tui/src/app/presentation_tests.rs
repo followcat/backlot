@@ -308,14 +308,23 @@ fn acknowledgement_is_local_and_only_covers_the_rendered_pane() {
 }
 
 #[test]
-fn absent_activity_never_uses_legacy_transition_inference() {
+fn absent_activity_reads_the_turn_and_seen_markers_never_transitions() {
+    // Without `record_activity` the completion read is `turn > herdr.seen`
+    // — never a legacy working->idle transition guess. A `done` word alone
+    // is not unread work; a covered turn is read.
     let mut p = Fixture::default();
     let mut t = terminal("t1", "working", 1, None);
     t.activity = None;
+    t.labels.insert("herdr.seen".into(), "0".into());
     update(&mut p, vec![t.clone()], 1);
     t.status.as_mut().unwrap().state = "done".into();
     t.turn += 1;
-    assert_eq!(state(&update(&mut p, vec![t], 2), "t1"), AgentStatus::Idle);
+    assert_eq!(
+        state(&update(&mut p, vec![t.clone()], 2), "t1"),
+        AgentStatus::Done
+    );
+    t.labels.insert("herdr.seen".into(), t.turn.to_string());
+    assert_eq!(state(&update(&mut p, vec![t], 3), "t1"), AgentStatus::Idle);
 }
 
 #[test]

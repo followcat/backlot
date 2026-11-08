@@ -16,6 +16,27 @@ fn baseline_source(term: &Terminal, id: &str) -> bool {
     }
 }
 
+/// Without `record_activity` the core's per-terminal `turn` is the only
+/// completion marker: it bumps when the root record leaves `working`, so
+/// an idle/done root above the seen marker is an unseen completion —
+/// the same fact herdr-app reads on these cores.
+fn turn_completion(term: &Terminal) -> BTreeMap<String, u64> {
+    let finished = term
+        .status
+        .as_ref()
+        .is_some_and(|s| matches!(s.state.as_str(), "idle" | "done"));
+    (finished && term.turn > 0)
+        .then(|| (String::new(), term.turn))
+        .into_iter()
+        .collect()
+}
+
+/// The shared seen marker (`herdr.seen` label): the highest turn every
+/// viewer acknowledges — the only seen authority without `record_activity`.
+fn seen_marker(term: &Terminal) -> Option<u64> {
+    term.labels.get("herdr.seen")?.parse().ok()
+}
+
 #[derive(Default)]
 pub(super) struct AgentPresentation {
     initialized: bool,
@@ -24,6 +45,10 @@ pub(super) struct AgentPresentation {
     epoch_token: Option<u64>,
     acknowledged: HashMap<String, u64>,
     completions: BTreeMap<String, u64>,
+    /// The `herdr.seen` value last folded into `acknowledged` — only on
+    /// cores without `record_activity`, where a raise acknowledges
+    /// further turns and a deliberate lower (mark-unread) re-arms.
+    seen_label: Option<u64>,
     raw: Option<AgentStatus>,
 }
 
@@ -47,24 +72,27 @@ impl AgentPresentation {
             || self.lifetime != lifetime
             || self.created_ms != term.created_ms
             || self.epoch_token != epoch_token;
-        self.completions = term
-            .activity
-            .as_ref()
-            .into_iter()
-            .flat_map(|a| &a.records)
-            .filter_map(|(id, clock)| {
-                let status = if id.is_empty() {
-                    term.status.as_ref()
-                } else {
-                    term.records.get(id)
-                }?;
-                matches!(status.state.as_str(), "idle" | "done")
-                    .then_some((id.clone(), clock.completion_ordinal?))
-            })
-            .collect();
+        self.completions = match &term.activity {
+            Some(activity) => activity
+                .records
+                .iter()
+                .filter_map(|(id, clock)| {
+                    let status = if id.is_empty() {
+                        term.status.as_ref()
+                    } else {
+                        term.records.get(id)
+                    }?;
+                    matches!(status.state.as_str(), "idle" | "done")
+                        .then_some((id.clone(), clock.completion_ordinal?))
+                })
+                .collect(),
+            None => turn_completion(term),
+        };
         self.acknowledged.retain(|id, _| baseline_source(term, id));
         if established {
             self.acknowledged.clear();
+            // Re-fold the shared seen marker into the fresh baseline.
+            self.seen_label = None;
             // Seed only from the ingestion-time baseline: `None` means the
             // arrival was not baseline-eligible — never the current facts.
             if let Some(seen) = epoch_completions {
@@ -73,6 +101,23 @@ impl AgentPresentation {
                         .filter(|(id, _)| baseline_source(term, id))
                         .map(|(id, ordinal)| (id.clone(), *ordinal)),
                 );
+            }
+        }
+        // `herdr.seen` is the shared seen authority without `record_activity`:
+        // fold it on every move so a raise acknowledges and a deliberate
+        // lower (mark-unread) re-arms the completion — never a sticky max.
+        if term.activity.is_none() {
+            let seen = seen_marker(term).filter(|_| term.status.is_some());
+            if seen != self.seen_label {
+                self.seen_label = seen;
+                match seen {
+                    Some(seen) => {
+                        self.acknowledged.insert(String::new(), seen);
+                    }
+                    None => {
+                        self.acknowledged.remove("");
+                    }
+                }
             }
         }
         self.initialized = true;

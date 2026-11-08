@@ -233,3 +233,42 @@ fn named_clocks_count_only_while_the_record_is_present() {
     ingest(&mut receipts, vec![a]);
     assert_eq!(receipts.rank("a"), 3);
 }
+
+#[test]
+fn terminals_without_activity_tick_on_turn_not_on_words() {
+    // Official-core shape: no `activity` facts — `turn` is the only
+    // authoritative change marker, and it must not borrow foreign
+    // counters or stall the receipt.
+    let official = |id: &str, word: &str, turn: u64| {
+        serde_json::from_value::<Terminal>(serde_json::json!({
+            "address":id,"labels":{},"argv":["fixture"],"cwd":"/home/user/acme-shop",
+            "state":"live","pid":100,"created_ms":1,"screen":"exact","cols":80,"rows":24,
+            "reported":true,"turn":turn,"status":{"state":word,"app":"fixture"}
+        }))
+        .unwrap()
+    };
+    let mut receipts = ActivityReceipts::default();
+    ingest(
+        &mut receipts,
+        vec![official("a", "idle", 1), official("b", "idle", 1)],
+    );
+    assert_eq!((receipts.rank("a"), receipts.rank("b")), (1, 2));
+    // A word change alone keeps the receipt; a turn bump takes a new one.
+    ingest(
+        &mut receipts,
+        vec![official("a", "idle", 1), official("b", "working", 1)],
+    );
+    assert_eq!((receipts.rank("a"), receipts.rank("b")), (1, 2));
+    ingest(
+        &mut receipts,
+        vec![official("a", "idle", 1), official("b", "idle", 2)],
+    );
+    assert_eq!((receipts.rank("a"), receipts.rank("b")), (1, 3));
+    // Turn counters are private per terminal: no cross-sorting ever.
+    let mut receipts = ActivityReceipts::default();
+    ingest(
+        &mut receipts,
+        vec![official("z", "idle", 50), official("a", "idle", 1)],
+    );
+    assert_eq!((receipts.rank("z"), receipts.rank("a")), (1, 2));
+}
