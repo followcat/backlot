@@ -6,7 +6,12 @@ Start a local client with `hc-tui --session <name>`, or use
 normal SSH configuration; hc-tui does not store credentials. On Unix the RPC,
 subscription and attach connections share one SSH login per target through
 hc-tui's own control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, created private),
-kept for 10 minutes after the last connection ends.
+kept for 10 minutes after the last connection ends. On top of that shared
+login, every attach on a remote endpoint is a channel on one framed
+`hc connect` — one transport, one `hello` — that opens lazily with the first
+attach, is shared by concurrent opens, is rebuilt once after a death and
+closes with its last attach. RPC and subscription streams keep their own
+connections on the same login.
 
 The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.

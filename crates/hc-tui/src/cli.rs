@@ -81,7 +81,8 @@ Usage: hc-tui [OPTIONS]
 Options:
       --session <NAME>   Use session NAME (default: $HC_SESSION or \"default\")
       --remote <TARGET>  Connect over SSH: `ssh TARGET hc connect`; one
-                         shared login per target (kept 10 minutes)
+                         shared login and one attach connection per
+                         target (login kept 10 minutes)
   -h, --help             Print this help
   -V, --version          Print the version
 
@@ -117,6 +118,23 @@ pub fn self_caller(env: &Env, endpoint: &Endpoint) -> Option<String> {
         .filter(|id| !id.is_empty())
 }
 
+/// The one framed attach connection a remote endpoint multiplexes its
+/// attaches onto — `None` for a local endpoint, whose attaches keep
+/// opening their own sockets (`Attach::connect`). Watch and RPC stay
+/// on their own connections either way.
+fn shared_attach(
+    endpoint: &Endpoint,
+    ssh: &Option<OsString>,
+) -> Option<hc_proto::client::AttachConn> {
+    match endpoint {
+        Endpoint::Remote(_) => Some(hc_proto::client::AttachConn::new(
+            endpoint.clone(),
+            ssh.clone(),
+        )),
+        Endpoint::Local(_) => None,
+    }
+}
+
 /// Builds the app over the endpoint's real connections and runs it
 /// until detach. Errors are user-facing strings — a failure leaves the
 /// terminal restored by the caller's guard.
@@ -139,9 +157,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     let ssh: Option<OsString> = None;
     let caller = self_caller(env, endpoint);
     let attach_endpoint = endpoint.clone();
+    let attach_conn = shared_attach(endpoint, &ssh);
     let open: OpenAttach = Arc::new(move |params| {
         let endpoint = attach_endpoint.clone();
-        let ssh = ssh.clone();
+        let conn = attach_conn.clone();
         let caller = caller.clone();
         Box::pin(async move {
             let mut params = params;
@@ -149,7 +168,12 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
             // refuses a terminal attaching to itself, so no nested
             // hc-tui can echo its own output back.
             params.caller = caller;
-            hc_proto::client::Attach::connect(&endpoint, ssh.as_deref(), &params).await
+            match conn {
+                // A remote attach rides the one framed connection every
+                // remote attach shares — one ssh child, one `hello`.
+                Some(conn) => conn.attach(&params).await,
+                None => hc_proto::client::Attach::connect(&endpoint, None, &params).await,
+            }
         })
     });
     let operation_endpoint = endpoint.clone();
@@ -276,6 +300,18 @@ mod tests {
             session: "scratch".into(),
         });
         assert_eq!(self_caller(&env, &remote), None);
+    }
+
+    /// Only a remote endpoint's attaches multiplex onto the shared
+    /// framed connection; a local endpoint keeps `Attach::connect`.
+    #[test]
+    fn only_a_remote_endpoint_gets_the_shared_attach_connection() {
+        let remote = Endpoint::Remote(Remote {
+            target: "host-a".into(),
+            session: "scratch".into(),
+        });
+        assert!(shared_attach(&remote, &None).is_some());
+        assert!(shared_attach(&local("/run/scratch/hc.sock"), &None).is_none());
     }
 
     /// Missing socket proof (or missing id) is not a caller.

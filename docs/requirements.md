@@ -43,11 +43,12 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   directories.
 - **Remote:** `hc-tui --remote <ssh-target> [--session <s>]` speaks the same JSON-RPC through
   `ssh <target> hc connect [--session <s>]`.
-  - Attach streams use framed mode on their own connection, so each stream gets its own
-    `hc connect`.
-  - On Unix the streams share one ssh login per target through hc-tui's own control
+  - Attach streams multiplex in framed mode on one shared `hc connect`: each attach gets its
+    own channel, so a burst of attaches costs one transport and one `hello`. RPC and
+    subscription streams keep their own connections.
+  - On Unix the connections share one ssh login per target through hc-tui's own control
     socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, kept 10 minutes past the last stream), so a
-    burst of streams costs one login instead of one each. Never ask for or store passwords.
+    burst of connections costs one login instead of one each. Never ask for or store passwords.
 - **Handshake:** check `hello` for protocol generation 1 and the methods hc-tui uses.
   - A missing method disables the feature that needs it and shows why. It never crashes.
 - **Reconnect:** reconnect with backoff. Resubscribe, then refetch documents after a reconnect or

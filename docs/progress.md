@@ -351,3 +351,26 @@
   fence gap, first attach/reconnect/eviction appearance, native program OSC12,
   reporter labels and remaining M4 actions stay deferred. Pause for review;
   M4 is not started.
+
+## Shared remote attach connection (fix branch `fix/shared-attach-conn`, unpushed)
+
+- A remote endpoint's attaches now multiplex onto one framed `hc connect`:
+  `AttachConn` is a lazy single-flight registry — the first open connects,
+  concurrent opens share one transport and one `hello`, the first open
+  after a death rebuilds once, and the last attach's end closes it. The
+  shared reader routes through a channel table (held slots for pre-install
+  frames, dead slots for late ones); the writer keeps control frames and
+  owed credit first and serves stream input fairly across channels.
+- Detach and drop close only their own channel — a synchronous CLOSE from
+  `Drop` prevents a leaked viewer on the shared connection — and a
+  cancelled open's late attach reply still gets its channel CLOSED.
+  Per-channel violations (credit overflow, malformed stream data) end
+  only that attach; a dead transport or channel-0 violation ends every
+  attach through the existing error path.
+- Local Unix sockets keep `Attach::connect`; watch and RPC streams keep
+  their own connections; every connection to a target still shares the
+  one ControlMaster login.
+- Gates: formatting, all-target Clippy and the full test suite pass,
+  including new fake-core shared-connection suites and a fake-ssh proof
+  that two opens spawn one child and one `hello`. The real-core
+  integration suite gained a two-attaches-one-connection case.
