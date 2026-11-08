@@ -374,3 +374,32 @@
   including new fake-core shared-connection suites and a fake-ssh proof
   that two opens spawn one child and one `hello`. The real-core
   integration suite gained a two-attaches-one-connection case.
+
+## M6: Release tooling and install path (2026-11-09)
+
+- Release targets: `x86_64-unknown-linux-musl` and
+  `aarch64-unknown-linux-musl` (static, Zig cross-builds libghostty-vt
+  for the Cargo target) plus `aarch64-apple-darwin` and
+  `x86_64-apple-darwin`. Portability fixes: `libc` names no
+  TIOC*WINSZ/TIOCSCTTY constants on Apple targets — the fixed Darwin
+  values are supplied where needed and the PTY smoke fixture uses
+  `openpty`/`login_tty`; the deprecated `libc::time_t` alias is an
+  explicit `i64` now.
+- CI grows a macOS job (build all targets, `cargo test`,
+  `scripts/test-install.sh` for the shasum fallback), and
+  `.github/workflows/release.yml` builds all four targets on a `v*` tag,
+  packages `hc-tui-<version>-<target>.tar.gz` (binary + LICENSE + NOTICE
+  + short README), writes `sha256sums.txt`, and opens a **draft** GitHub
+  release — publishing stays manual.
+- `scripts/install.sh` (POSIX): platform detection with a clear
+  unsupported message, latest release or `HC_TUI_VERSION`, sha256
+  verification that installs nothing on mismatch, atomic install into
+  `${HC_TUI_INSTALL_DIR:-$HOME/.local/bin}`, PATH and `hc` reminders.
+  `scripts/test-install.sh` covers it offline — file:// fixtures and
+  stubbed `uname`/`curl`; it also runs in CI on both Linux and macOS.
+- Verified locally: the musl build is `static-pie linked` (ldd agrees),
+  `--version`/`--help` run, and a packaged archive installs through the
+  real script path. Remaining targets are exercised by CI only.
+- Docs: README leads with Install; new `docs/install.md`,
+  `docs/remote.md` and `docs/troubleshooting.md`. The first tag/release
+  publication is pending — the user decides when it goes out.

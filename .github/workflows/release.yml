@@ -80,11 +80,15 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # The tag's own installer ships as an asset so the documented
+      # `curl …/latest/download/install.sh | sh` always matches it.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: dist-*
           path: dist
           merge-multiple: true
+      - run: cp scripts/install.sh dist/install.sh
       - name: Checksums
         run: |
           cd dist
@@ -99,4 +103,4 @@ jobs:
           --notes "Install: sh scripts/install.sh, or fetch an archive
           and verify it against sha256sums.txt. See
           https://github.com/followcat/hc-tui#install"
-          dist/*.tar.gz dist/sha256sums.txt
+          dist/*.tar.gz dist/install.sh dist/sha256sums.txt
