@@ -90,7 +90,7 @@ Default keys: Ctrl+B prefix — q detach · w workspace navigation ·
 b sidebar · ? keybinds · Ctrl+B Ctrl+B literal ^B.
 Herdr configuration supplies the prefix and bindings. Layout keys include
 c new tab · v/- split · h/j/k/l focus · z zoom · r resize · x close.
-Ctrl+G toggles keyboard lock. Custom commands and remaining actions are deferred.
+Ctrl+G toggles keyboard lock. Herdr configuration can also bind custom commands.
 Click the terminal-size notice to take control when another viewer may own the grid.
 Everything else types into the focused terminal.",
         env!("CARGO_PKG_VERSION"),
