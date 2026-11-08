@@ -651,3 +651,15 @@ Everything else on the compared surfaces still diffs normally.
   keep `delivery = "off"` (the reference's default) so every checkpoint is
   deterministic; the card/banner, queue, TTL, suppression and OSC paths
   are covered by the fake-core tests instead.
+- **Navigator footer identity fields.** The "Go to" overlay's selected-row
+  footer renders the reference's `detail`/`meta` strings verbatim:
+  `workspace / tab / pane_id` and the pane's `cwd`. Two fields carry
+  per-run identity that no client-side render logic can unify: hc names
+  panes `t<N>` where the reference core names them `w<W>:p<P>`, and each
+  parity owner's scratch root is a separate `mkdtemp`, so the `cwd` path
+  differs in its random segment (`/tmp/hctui-parity-<seed>/acme-shop`).
+  Those cells differ on checkpoints where a pane row (id + path, 12
+  cells) or a workspace row (path, 8 cells) is selected; every other
+  navigator checkpoint — each filter, search-without-results, movement
+  and close — is cell-identical. The row list, search, filters,
+  scrolling, mouse handling and focus acceptance are unaffected.
