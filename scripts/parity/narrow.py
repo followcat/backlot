@@ -50,3 +50,20 @@ def run(owners, programs, compare, size):
     compare('narrow-pane-menu')
     send(b'\x1b[27u')
     compare('narrow-pane-menu-close', terminal='fixture beta')
+    # The Go to navigator (prefix+g) at boundary/mobile widths: the centered
+    # popup renders over the mobile chrome; Esc backs out of search and then
+    # closes the overlay.
+    send(b'\x02g')
+    compare('navigator-open', text_contains=['Go to'])
+    send(b'i')
+    compare('navigator-idle', text_contains=['/ idle'])
+    send(b'/task')
+    compare('navigator-search', text_contains=['/ task'])
+    send(b'\x15zzz')
+    compare('navigator-search-none', text_contains=['No matching'])
+    send(b'\x1b[27ua' + b'k' * 2)
+    compare('navigator-move')
+    send(b'\x1b[F')
+    compare('navigator-end')
+    send(b'\x1b[27u')
+    compare('navigator-close')

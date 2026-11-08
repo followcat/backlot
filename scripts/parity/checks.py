@@ -71,7 +71,11 @@ def ready(frame, name, previous, program_input, expected=None):
                'menu-close-highlight', 'menu-workspace-close', 'menu-close-cancel',
                'menu-navigate-exit', 'menu-tab', 'menu-tab-newtab',
                'menu-newtab-cancel', 'menu-pane', 'menu-pane-escape',
-               'narrow-pane-menu', 'narrow-pane-menu-close'}
+               'narrow-pane-menu', 'narrow-pane-menu-close',
+               'navigator-open', 'navigator-blocked', 'navigator-working',
+               'navigator-idle', 'navigator-done', 'navigator-all',
+               'navigator-search', 'navigator-search-none', 'navigator-move',
+               'navigator-end', 'navigator-close'}
     if name.startswith('status-') or name in changed:
         return previous is None or frame != previous
     return True

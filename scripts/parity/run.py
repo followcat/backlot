@@ -242,6 +242,28 @@ def one_size(args, size, binary):
                 compare('status-' + str(index) + '-' + state,
                         status={('alpha', 'beta')[index]: 'done' if state == 'idle' and index == 0 else state})
 
+            # The Go to navigator (prefix+g): open, each status filter, a
+            # search matching the fixture titles, a search with no hits,
+            # selection movement and close. Esc leaves search with the
+            # query kept; `a` clears it before `k` moves the selection off
+            # the last row so End produces a change.
+            for name, keys, expected in [
+                ('navigator-open', b'\x02g', ['Go to']),
+                ('navigator-blocked', b'b', ['/ blocked']),
+                ('navigator-working', b'w', ['/ working']),
+                ('navigator-idle', b'i', ['/ idle']),
+                ('navigator-done', b'd', ['/ done']),
+                ('navigator-all', b'a', ['/ search']),
+                ('navigator-search', b'/task', ['/ task']),
+                ('navigator-search-none', b'\x15zzz', ['No matching']),
+                ('navigator-move', b'\x1b[27ua' + b'k' * 2, []),
+                ('navigator-end', b'\x1b[F', []),
+                ('navigator-close', b'\x1b[27u', []),
+            ]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name, text_contains=expected)
+
             # Disable tracking before exercising the source's local history
             # viewport and typing-to-bottom behavior on the selected beta pane.
             scroll = (b'\x1b[?1003;1006l\x1b[0m\x1b[2J\x1b[3J\x1b[H' +
