@@ -46,6 +46,18 @@ impl App {
             });
             return;
         }
+        // Agent rows — including the agent chips drawn inside workspace
+        // rows — open the hc-tui extension agent menu (parity.md).
+        if let Some(pane_id) = self
+            .hit_map
+            .agents
+            .iter()
+            .find(|h| contains(h.0, point))
+            .map(|h| h.1.clone())
+        {
+            self.open_agent_context_menu(&pane_id, point);
+            return;
+        }
         if !self.shell_state.sidebar_collapsed {
             let workspace_id = self
                 .hit_map
@@ -332,6 +344,7 @@ impl App {
                 }
                 _ => {}
             },
+            ContextMenuTarget::Agent { pane_id } => self.agent_menu_action(pane_id, action),
         }
     }
 }

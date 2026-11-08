@@ -106,6 +106,11 @@ pub(super) async fn run(
         Action::RenamePane { .. } => &["terminal.get", "terminal.label"],
         Action::Edit(_) | Action::RenameSpace { .. } => &["doc.get", "doc.set"],
         Action::Machine(_) => &[machine_method],
+        Action::SendLine { .. } => &["terminal.get", "terminal.send"],
+        Action::Interrupt { .. } => &["terminal.get", "terminal.interrupt"],
+        Action::Keep { .. } => &["terminal.get", "terminal.keep"],
+        Action::Park { .. } => &["terminal.get", "terminal.label", "terminal.keep"],
+        Action::Kill { .. } => &["terminal.get", "terminal.kill"],
     };
     for method in required {
         if let Some(reason) = client.explain_unavailable(method) {
@@ -289,7 +294,104 @@ pub(super) async fn run(
                 .map_err(|e| e.to_string())?;
             Ok(None)
         }
+        Action::SendLine {
+            terminal,
+            created_ms,
+            text,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Send").await?;
+            client
+                .call(
+                    "terminal.send",
+                    Some(json!({"terminal":terminal,"text":text})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
+        }
+        Action::Interrupt {
+            terminal,
+            created_ms,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Interrupt").await?;
+            client
+                .call("terminal.interrupt", Some(json!({"terminal":terminal})))
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
+        }
+        Action::Keep {
+            terminal,
+            created_ms,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Keep").await?;
+            client
+                .call(
+                    "terminal.keep",
+                    Some(json!({"terminal":terminal,"keep":true})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
+        }
+        Action::Park {
+            terminal,
+            created_ms,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Park").await?;
+            client
+                .call(
+                    "terminal.label",
+                    Some(json!({"terminal":terminal,"labels":{"herdr.space":"","herdr.tab":""}})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            client
+                .call(
+                    "terminal.keep",
+                    Some(json!({"terminal":terminal,"keep":false})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
+        }
+        Action::Kill {
+            terminal,
+            created_ms,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Kill").await?;
+            client
+                .terminal_kill(TerminalParams {
+                    terminal,
+                    caller: None,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(None)
+        }
     }
+}
+
+/// The incarnation check the reference performs for rename/close:
+/// `terminal.get` must return the same `created_ms` the menu saw, so a
+/// stale menu never acts on a replacement terminal.
+async fn verify_incarnation(
+    client: &Client,
+    terminal: &str,
+    created_ms: u64,
+    what: &str,
+) -> Result<(), String> {
+    let current = client
+        .terminal_get(TerminalParams {
+            terminal: terminal.into(),
+            caller: None,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    if current.created_ms != created_ms {
+        return Err(format!("{what} target was replaced; reopen the menu"));
+    }
+    Ok(())
 }
 
 fn validate_creation(creation: &Creation, document: &Document) -> Result<(), String> {

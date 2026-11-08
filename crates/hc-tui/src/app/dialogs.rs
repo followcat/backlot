@@ -25,6 +25,15 @@ pub(super) enum Target {
     MachineRemove {
         machine: String,
     },
+    /// Agent-menu targets — hc-tui extension (parity.md).
+    SendLine {
+        terminal: String,
+        created_ms: u64,
+    },
+    AgentKill {
+        terminal: String,
+        created_ms: u64,
+    },
     Close(Action),
 }
 pub(super) enum Body {
@@ -332,6 +341,21 @@ impl App {
             Target::MachineRemove { machine } => {
                 Some(Action::Machine(MachineOp::Remove { machine }))
             }
+            Target::SendLine {
+                terminal,
+                created_ms,
+            } => Some(Action::SendLine {
+                terminal,
+                created_ms,
+                text: name,
+            }),
+            Target::AgentKill {
+                terminal,
+                created_ms,
+            } => Some(Action::Kill {
+                terminal,
+                created_ms,
+            }),
             Target::Tab(mut edit, auto, original) => {
                 if name.is_empty() || auto && name == original {
                     None

@@ -34,6 +34,13 @@ pub(crate) enum ContextMenuAction {
     MachineConnect,
     MachineRename,
     MachineRemove,
+    SendLine,
+    Interrupt,
+    MarkRead,
+    MarkUnread,
+    Keep,
+    Park,
+    Kill,
 }
 
 #[derive(Debug)]
@@ -59,6 +66,8 @@ pub(crate) enum ContextMenuTarget {
     },
     /// `None` is the Local row; `Some(name)` a `machine.list` entry.
     Machine { name: Option<String> },
+    /// hc-tui extension: the agent row menu (parity.md).
+    Agent { pane_id: String },
 }
 
 #[derive(Debug)]
@@ -161,6 +170,16 @@ impl ContextMenu {
                 item("Connect", Action::MachineConnect),
                 item("Rename machine", Action::MachineRename),
                 item("Remove machine", Action::MachineRemove),
+            ],
+            // hc-tui extension: the reference TUI has no agent menu.
+            ContextMenuTarget::Agent { .. } => vec![
+                item("Send a line...", Action::SendLine),
+                item("Interrupt", Action::Interrupt),
+                item("Mark read", Action::MarkRead),
+                item("Mark unread", Action::MarkUnread),
+                item("Keep", Action::Keep),
+                item("Park", Action::Park),
+                item("Kill", Action::Kill),
             ],
         }
     }

@@ -60,6 +60,32 @@ pub enum Action {
     /// Machine management RPCs — no foreign document is touched. The
     /// reference TUI has no machine dialogs (parity.md).
     Machine(MachineOp),
+    /// Agent-menu operations — hc-tui extensions (parity.md). Each
+    /// verifies the terminal's incarnation (`created_ms`) before acting,
+    /// like `Close`.
+    SendLine {
+        terminal: String,
+        created_ms: u64,
+        text: String,
+    },
+    Interrupt {
+        terminal: String,
+        created_ms: u64,
+    },
+    Keep {
+        terminal: String,
+        created_ms: u64,
+    },
+    /// herdr-app's park: drop the `herdr.space`/`herdr.tab` placement
+    /// labels, then `terminal.keep keep=false`.
+    Park {
+        terminal: String,
+        created_ms: u64,
+    },
+    Kill {
+        terminal: String,
+        created_ms: u64,
+    },
 }
 
 pub enum MachineOp {
