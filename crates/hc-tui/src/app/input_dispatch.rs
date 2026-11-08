@@ -43,6 +43,15 @@ impl App {
                     {
                         self.help_state.scroll = 0;
                     }
+                } else if let Some(navigator) = self.navigator.as_mut() {
+                    // `insert_overlay_text`: the focused search takes
+                    // paste as query text; unfocused, the overlay eats it.
+                    if navigator.search_focused
+                        && navigator.query.insert(&String::from_utf8_lossy(&text))
+                    {
+                        navigator.filter = None;
+                        navigator.selected = None;
+                    }
                 } else if self.mode == Mode::Normal && !self.prefix.armed() {
                     self.reset_displayed_scroll();
                     self.pane.paste(&text);
@@ -55,6 +64,11 @@ impl App {
                 } else if self.help {
                     if self.help_state.search_focused && self.help_state.query.insert(&text) {
                         self.help_state.scroll = 0;
+                    }
+                } else if let Some(navigator) = self.navigator.as_mut() {
+                    if navigator.search_focused && navigator.query.insert(&text) {
+                        navigator.filter = None;
+                        navigator.selected = None;
                     }
                 } else if self.mode == Mode::Normal && !self.prefix.armed() {
                     self.reset_displayed_scroll();
@@ -83,6 +97,7 @@ impl App {
             || self.mode != Mode::Normal
             || self.help
             || self.dialog.is_some()
+            || self.navigator.is_some()
         {
             return None;
         }

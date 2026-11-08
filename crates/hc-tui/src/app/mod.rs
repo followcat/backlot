@@ -25,6 +25,7 @@ pub(crate) mod layout_mouse;
 mod mouse;
 mod multipane;
 mod navigation;
+mod navigator;
 mod notices;
 pub(crate) mod notifications;
 mod notifications_focus;
@@ -165,6 +166,11 @@ pub struct App {
     help_state: crate::chrome::help::HelpState,
     help_hits: crate::chrome::help::HelpRender,
     help_scroll_grab: Option<u16>,
+    /// The "Go to" overlay — the reference's
+    /// `ClientShellOverlay::Navigator`.
+    navigator: Option<crate::chrome::navigator::NavigatorState>,
+    /// Last frame's navigator hit rectangles.
+    navigator_hits: crate::chrome::navigator_render::NavigatorRender,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,

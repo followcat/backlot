@@ -51,6 +51,9 @@ pub(crate) enum ChromeDrag {
         pane_id: String,
         grab_row_offset: Option<u16>,
     },
+    NavigatorScrollbar {
+        grab_row_offset: u16,
+    },
 }
 
 /// A workspace row press pending release-or-drag — the reference
@@ -123,6 +126,14 @@ impl App {
         }
         if self.help {
             self.handle_help_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        // The navigator overlay owns every mouse event while open —
+        // `mouse.rs`'s Navigator branch routes row/search/scrollbar
+        // hits, outside dismissal and the wheel before any chrome hit.
+        if self.navigator.is_some() {
+            self.handle_navigator_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
             return;
         }

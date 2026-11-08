@@ -149,6 +149,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     let hide_cursor = app.help
         || app.dialog.is_some()
         || app.menu.is_some()
+        || app.navigator.is_some()
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
     for info in &pane_infos {
@@ -189,7 +190,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     let mobile_navigate = !layout.mobile_header.is_empty() && app.mode == Mode::Navigate;
     // Source suppresses the mode bar while any overlay is open, including
     // the context menu — Navigate can be the mode underneath it.
-    let mode_bar = if app.help || app.dialog.is_some() || app.menu.is_some() || mobile_navigate {
+    let mode_bar = if app.help
+        || app.dialog.is_some()
+        || app.menu.is_some()
+        || app.navigator.is_some()
+        || mobile_navigate
+    {
         None
     } else {
         crate::chrome::modebar::render_mode_bar(
@@ -302,6 +308,29 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         app.want_cursor.pos = None;
     }
     if let Some(cursor) = app.help_hits.cursor.as_ref() {
+        app.want_cursor = CursorWish {
+            pos: cursor.visible.then_some((cursor.x, cursor.y)),
+            anchor: Some((cursor.x, cursor.y)),
+            shape: CursorShape::Default,
+            blinking: true,
+        };
+    }
+    // `render_client_overlay` draws the overlay over the notices and
+    // the restored mode bar; the Navigator variant is the only one the
+    // reference does not dim the background for.
+    app.navigator_hits = if let Some(navigator) = app.navigator.as_ref() {
+        crate::chrome::navigator_render::render_navigator_overlay(
+            buf,
+            navigator,
+            &app.projection.endpoints,
+            &app.projection.active_endpoint_id,
+            &app.shell.palette,
+        )
+        .unwrap_or_default()
+    } else {
+        crate::chrome::navigator_render::NavigatorRender::default()
+    };
+    if let Some(cursor) = app.navigator_hits.cursor.as_ref() {
         app.want_cursor = CursorWish {
             pos: cursor.visible.then_some((cursor.x, cursor.y)),
             anchor: Some((cursor.x, cursor.y)),

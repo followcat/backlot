@@ -40,6 +40,20 @@ impl App {
                     self.shell_state.agent_scroll = next;
                 }
             }
+            Some(ChromeDrag::NavigatorScrollbar { grab_row_offset }) => {
+                if let Some(metrics) = self.navigator_hits.metrics {
+                    let offset = scroll::scrollbar_offset_from_drag_row(
+                        metrics,
+                        self.navigator_hits.scrollbar,
+                        point.1,
+                        grab_row_offset,
+                    );
+                    self.scroll_navigator_to(
+                        metrics.max_offset_from_bottom.saturating_sub(offset),
+                        metrics.viewport_rows,
+                    );
+                }
+            }
             Some(ChromeDrag::PaneScrollbar {
                 pane_id,
                 grab_row_offset,

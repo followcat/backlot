@@ -46,7 +46,7 @@ impl App {
         }
     }
 
-    fn endpoint_is_online(&self, endpoint_id: &ClientEndpointId) -> bool {
+    pub(super) fn endpoint_is_online(&self, endpoint_id: &ClientEndpointId) -> bool {
         self.projection
             .endpoints
             .iter()
@@ -56,7 +56,7 @@ impl App {
             })
     }
 
-    fn endpoint_label(&self, endpoint_id: &ClientEndpointId) -> String {
+    pub(super) fn endpoint_label(&self, endpoint_id: &ClientEndpointId) -> String {
         self.projection
             .endpoints
             .iter()

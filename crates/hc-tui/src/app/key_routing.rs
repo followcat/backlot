@@ -13,6 +13,7 @@ pub(super) struct Context {
     locked: bool,
     dialog: bool,
     menu: bool,
+    navigator: bool,
 }
 
 impl App {
@@ -24,6 +25,7 @@ impl App {
             locked: self.keyboard_locked,
             dialog: self.dialog.is_some(),
             menu: self.menu.is_some(),
+            navigator: self.navigator.is_some(),
         }
     }
 
@@ -101,7 +103,10 @@ impl App {
         if key.input.key == Key::Char('g')
             && key.input.mods == hc_vt::Mods::CTRL
             && (self.keyboard_locked
-                || (!self.help && self.dialog.is_none() && self.menu.is_none()))
+                || (!self.help
+                    && self.dialog.is_none()
+                    && self.menu.is_none()
+                    && self.navigator.is_none()))
         {
             if key.input.action == Action::Press {
                 self.keyboard_locked = !self.keyboard_locked;
@@ -128,6 +133,10 @@ impl App {
         }
         if self.help {
             self.handle_help_key(&press);
+            return None;
+        }
+        if self.navigator.is_some() {
+            self.handle_navigator_key(&press);
             return None;
         }
         if self.mode == Mode::Navigate {
