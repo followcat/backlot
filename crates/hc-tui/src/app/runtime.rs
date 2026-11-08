@@ -133,6 +133,7 @@ impl App {
                 };
                 due.into_iter()
                     .chain(self.notice.as_ref().map(|n| n.deadline))
+                    .chain(self.notification_deadline())
                     .chain(self.next_tab_status)
                     .min()
             };
@@ -158,6 +159,11 @@ impl App {
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
+                    seen = self.seen_rx.recv() => {
+                        if let Some(seen) = seen {
+                            self.on_seen_result(seen);
+                        }
+                    },
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
                             self.pane_event(ev, Instant::now());
@@ -182,6 +188,11 @@ impl App {
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
+                    seen = self.seen_rx.recv() => {
+                        if let Some(seen) = seen {
+                            self.on_seen_result(seen);
+                        }
+                    },
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
                             self.pane_event(ev, Instant::now());
@@ -196,6 +207,9 @@ impl App {
                 self.reject_input(&reason);
             }
             self.expire_notice(now);
+            self.tick_notifications(now);
+            self.drain_bells();
+            self.share_seen();
             self.update_window_title();
             if self.next_tab_status.is_some_and(|due| now >= due) {
                 self.update_tab_status(now);

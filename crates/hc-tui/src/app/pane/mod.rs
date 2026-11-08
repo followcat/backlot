@@ -253,6 +253,10 @@ pub struct Pane {
     /// layer compares against to tell "program changed the default"
     /// from "default equals the host's". `None` until the first VT.
     initial: Option<hc_vt::Colors>,
+    /// BELs the program emitted since the app last drained — counted by
+    /// the VT's bell hook; the app writes them to the outer terminal.
+    /// `pub(crate)` so the app-level byte test can seed a count.
+    pub(crate) pending_bells: u64,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -310,8 +314,17 @@ impl Pane {
             dropped_input: 0,
             host: HostFacts::default(),
             initial: None,
+            pending_bells: 0,
             attaches: 0,
         }
+    }
+
+    /// Drain the BEL count this pane's VTs observed — live, parked and
+    /// observer wires alike. The reference forwards server-counted
+    /// `TerminalBell`s; hc's core has no such message, so the client
+    /// counts at the emulator (docs/parity.md).
+    pub fn take_bells(&mut self) -> u64 {
+        std::mem::take(&mut self.pending_bells)
     }
 }
 

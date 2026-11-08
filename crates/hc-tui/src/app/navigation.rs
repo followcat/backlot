@@ -17,6 +17,7 @@ impl App {
             A::ToggleSidebar => {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
             }
+            A::OpenNotificationTarget => self.focus_visible_notification(),
             A::WorkspacePicker => self.enter_workspace_picker(),
             // Workspace-level actions don't require a focused workspace to
             // exist (new_workspace is valid with an empty shell too).

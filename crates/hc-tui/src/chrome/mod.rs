@@ -39,6 +39,7 @@ use std::path::PathBuf;
 use crate::config::{
     AgentPanelSortConfig, AgentsSidebarConfig, LiveKeybindConfig, PaneBordersConfig,
     SidebarCollapsedModeConfig, SpacesSidebarConfig, StatusIndicatorStyle, TabBarPositionConfig,
+    ToastDelivery, ToastHerdrPosition,
 };
 use palette::{Palette, ThemeRuntimeConfig};
 
@@ -73,6 +74,12 @@ pub struct ClientShellConfig {
     pub prompt_new_tab_name: bool,
     pub prompt_new_workspace_name: bool,
     pub confirm_close: bool,
+    /// The `[ui.toast]` projection the notification policy consumes.
+    pub toast_delivery: ToastDelivery,
+    pub toast_delay_seconds: u64,
+    pub toast_position: ToastHerdrPosition,
+    /// `[ui.sound]` — whether synthesized notification sounds ring the bell.
+    pub sound: crate::config::SoundConfig,
     pub pane_borders: PaneBordersConfig,
     pub pane_gaps: bool,
     pub pane_outer_borders: bool,
@@ -152,6 +159,10 @@ impl ClientShellConfig {
             prompt_new_tab_name: ui.prompt_new_tab_name,
             prompt_new_workspace_name: ui.prompt_new_workspace_name,
             confirm_close: ui.confirm_close,
+            toast_delivery: ui.toast.delivery,
+            toast_delay_seconds: ui.toast.delay_seconds,
+            toast_position: ui.toast.herdr.position,
+            sound: ui.sound.clone(),
             pane_borders: ui.pane_borders,
             pane_gaps: ui.pane_gaps,
             pane_outer_borders: ui.pane_outer_borders,

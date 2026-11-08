@@ -132,6 +132,9 @@ impl Pane {
                         self.close_error = Some(format!("Parked terminal reply failed: {error}"))
                     }
                 }
+                self.pending_bells = self
+                    .pending_bells
+                    .saturating_add(parked.vt.take_bell_count());
             }
             Output::Closed(_) | Output::Failed(_) => self.remove_parked(route),
             Output::Resize { .. } | Output::Control { .. } => {}
@@ -199,6 +202,7 @@ impl Pane {
                 if let Err(e) = live.attach.consume(bytes.len()) {
                     live.vt_broken = Some(format!("credit: {e}"));
                 }
+                let bells = vt.take_bell_count();
                 match vt.take_replies() {
                     // An observer never sends — but the reply buffer
                     // must still be drained or it overflows and marks
@@ -213,6 +217,7 @@ impl Pane {
                     // pending queries go unanswered; say so.
                     Err(e) => live.vt_broken = Some(format!("replies: {e}")),
                 }
+                self.pending_bells = self.pending_bells.saturating_add(bells);
                 // Fresh VT built: input queued for this incarnation
                 // encodes now — once, under the fresh modes.
                 self.flush_pending();

@@ -26,6 +26,7 @@ mod mouse;
 mod multipane;
 mod navigation;
 mod notices;
+pub(crate) mod notifications;
 mod pane;
 mod pane_geometry;
 mod pane_mouse;
@@ -34,7 +35,9 @@ mod reload;
 mod routing;
 mod runtime;
 mod sched;
+mod seen;
 mod shared;
+mod synthesize;
 mod tab_status;
 mod window_title;
 
@@ -265,6 +268,30 @@ pub struct App {
     /// an idle agent reports `Done` only while unseen; focusing its
     /// workspace marks every active-tab pane seen at once.
     presentation: presentation::Presentation,
+    /// Synthesized notifications — the reference client pipeline
+    /// (`pending`/`visible`/`queued`) fed from pane status words, since
+    /// hc's core emits no notification events.
+    notifications: notifications::Notifications,
+    /// The first reconcile seeds word baselines silently (herdr-app's
+    /// `listed_once`): only post-baseline transitions alert.
+    notifications_seeded: bool,
+    /// The rendered toast's rect — a click focuses its target.
+    notification_hit: ratatui::layout::Rect,
+    /// OSC 9/99 backend + tmux wrap, detected once from the env.
+    notify_backend: Option<crate::terminal_notify::TerminalNotificationBackend>,
+    in_tmux: bool,
+    /// Per-pane turn markers for `herdr.seen` — the reference's
+    /// `looked`. Only currently-visible panes keep an entry.
+    seen_looked: std::collections::HashMap<String, u64>,
+    /// Seen writes in flight — the same (pane, turn) never double-sends.
+    seen_inflight: std::collections::HashSet<(String, u64)>,
+    /// The dedicated label-write worker: fire-and-forget `terminal.label`
+    /// RPCs with failures reported back for retry, kept off the layout
+    /// store so a background write can't surface an action notice.
+    seen_tx: mpsc::Sender<seen::SeenWrite>,
+    seen_res_tx: mpsc::Sender<seen::SeenResult>,
+    seen_rx: mpsc::Receiver<seen::SeenResult>,
+    seen_req_rx: Option<mpsc::Receiver<seen::SeenWrite>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
 }
@@ -362,6 +389,8 @@ impl App {
         self.sync_target();
         self.pane.on_view(&self.view);
         self.sync_observers();
+        self.synthesize_alerts(Instant::now());
+        self.share_seen();
     }
 }
 

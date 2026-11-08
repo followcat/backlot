@@ -35,44 +35,70 @@ impl App {
 
 pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {
     app.take_control_hit = Rect::default();
+    app.notification_hit = Rect::default();
     let pane = app.pane.notice();
     let offline = match &app.view.link {
         hc_proto::watch::Link::Offline { error, .. } => Some(crate::sidebar::clean(error)),
         hc_proto::watch::Link::Stopped => Some("The inventory connection stopped".into()),
         _ => None,
     };
-    let (title, body, take_control) = if let Some(notice) = app.notice.as_ref() {
-        (notice.title.as_str(), notice.body.as_str(), false)
+    let notice = if let Some(notice) = app.notice.as_ref() {
+        Some((notice.title.as_str(), notice.body.as_str(), false))
     } else if let Some(notice) = pane.as_ref() {
-        (notice.title, notice.body.as_str(), notice.take_control)
-    } else if let Some(error) = offline.as_ref() {
-        ("Connection lost", error.as_str(), false)
+        Some((notice.title, notice.body.as_str(), notice.take_control))
     } else {
-        return;
+        offline
+            .as_ref()
+            .map(|error| ("Connection lost", error.as_str(), false))
     };
+    let mobile = area.width <= app.shell.mobile_width_threshold;
     let palette = &app.shell.palette;
-    let rect = if area.width <= app.shell.mobile_width_threshold {
-        crate::chrome::notice_render::render_mobile_notice_banner(
-            buffer,
-            area,
-            title,
-            Some(body),
-            palette.red,
-            false,
-            palette,
-        )
-    } else {
-        crate::chrome::notice_render::render_notification_card(
-            buffer,
-            area,
-            title,
-            body,
-            1,
-            palette.red,
-            palette,
-        )
-    };
-    if take_control {
-        app.take_control_hit = rect;
+    // The reference's `if notice else if notification`: the endpoint
+    // notice takes precedence; the toast shows only in its absence.
+    if let Some((title, body, take_control)) = notice {
+        let rect = if mobile {
+            crate::chrome::notice_render::render_mobile_notice_banner(
+                buffer,
+                area,
+                title,
+                Some(body),
+                palette.red,
+                false,
+                palette,
+            )
+        } else {
+            crate::chrome::notice_render::render_notification_card(
+                buffer,
+                area,
+                title,
+                body,
+                crate::config::ToastHerdrPosition::TopRight,
+                1,
+                palette.red,
+                palette,
+            )
+        };
+        if take_control {
+            app.take_control_hit = rect;
+        }
+    } else if let Some(notification) = app.notifications.visible.as_ref() {
+        app.notification_hit = if mobile {
+            crate::chrome::notice_render::render_mobile_notification_banner(
+                buffer,
+                area,
+                notification,
+                false,
+                palette,
+            )
+        } else {
+            crate::chrome::notice_render::render_visible_notification(
+                buffer,
+                area,
+                notification,
+                app.shell.toast_position,
+                0,
+                palette,
+            )
+        };
     }
 }

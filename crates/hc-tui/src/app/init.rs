@@ -11,6 +11,8 @@ impl App {
         cursor_sink: CursorSink,
     ) -> App {
         let (pane_tx, pane_rx) = mpsc::channel(64);
+        let (seen_tx, seen_req_rx) = mpsc::channel(64);
+        let (seen_res_tx, seen_rx) = mpsc::channel(64);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         let sidebar_collapsed = shell.sidebar_start_collapsed;
@@ -101,6 +103,17 @@ impl App {
             quitting: false,
             host_facts: crate::host::HostFacts::default(),
             presentation: presentation::Presentation::default(),
+            notifications: notifications::Notifications::default(),
+            notifications_seeded: false,
+            notification_hit: ratatui::layout::Rect::default(),
+            notify_backend: crate::terminal_notify::detect_backend(),
+            in_tmux: crate::terminal_notify::in_tmux(),
+            seen_looked: Default::default(),
+            seen_inflight: Default::default(),
+            seen_tx,
+            seen_res_tx,
+            seen_rx,
+            seen_req_rx: Some(seen_req_rx),
             outer_focused: None,
             probe,
         }

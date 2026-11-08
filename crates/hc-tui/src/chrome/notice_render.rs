@@ -1,7 +1,9 @@
 // Derived from herdr src/client/shell/notifications.rs (Apache-2.0).
-//! The reference mobile banner and top-right endpoint notice card.
+//! The reference mobile banner and endpoint/notification toast cards.
 
 use super::palette::Palette;
+use crate::app::notifications::{Notification, NotificationKind};
+use crate::config::ToastHerdrPosition;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -67,11 +69,13 @@ pub(crate) fn render_mobile_notice_banner(
     rect
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn render_notification_card(
     buffer: &mut Buffer,
     area: Rect,
     title: &str,
     body: &str,
+    position: ToastHerdrPosition,
     top_offset: u16,
     dot_color: Color,
     palette: &Palette,
@@ -86,9 +90,22 @@ pub(crate) fn render_notification_card(
         .unwrap_or(u16::MAX)
         .min(area.width);
     let height: u16 = if body.is_empty() { 3 } else { 4 }.min(area.height);
-    let x = area.right().saturating_sub(width);
+    let x = match position {
+        ToastHerdrPosition::TopLeft | ToastHerdrPosition::BottomLeft => area.x,
+        ToastHerdrPosition::TopRight | ToastHerdrPosition::BottomRight => {
+            area.right().saturating_sub(width)
+        }
+    };
     let max_y = area.bottom().saturating_sub(height).max(area.y);
-    let y = area.y.saturating_add(top_offset).clamp(area.y, max_y);
+    let y = match position {
+        ToastHerdrPosition::TopLeft | ToastHerdrPosition::TopRight => {
+            area.y.saturating_add(top_offset)
+        }
+        ToastHerdrPosition::BottomLeft | ToastHerdrPosition::BottomRight => area
+            .bottom()
+            .saturating_sub(height.saturating_add(top_offset)),
+    }
+    .clamp(area.y, max_y);
     let rect = Rect::new(x, y, width, height);
     Clear.render(rect, buffer);
     let block = Block::default()
@@ -124,4 +141,68 @@ pub(crate) fn render_notification_card(
         );
     }
     rect
+}
+
+/// The reference `render_visible_notification`: the toast card at the
+/// configured corner. Returns its rect for click-to-focus hits.
+pub(crate) fn render_visible_notification(
+    buffer: &mut Buffer,
+    area: Rect,
+    notification: &Notification,
+    position: ToastHerdrPosition,
+    top_offset: u16,
+    palette: &Palette,
+) -> Rect {
+    let event = &notification.event;
+    let dot_color = match event.kind {
+        NotificationKind::NeedsAttention => palette.red,
+        NotificationKind::Finished => palette.blue,
+    };
+    render_notification_card(
+        buffer,
+        area,
+        &event.title,
+        event.body.as_deref().unwrap_or_default(),
+        position,
+        top_offset,
+        dot_color,
+        palette,
+    )
+}
+
+/// The reference `render_mobile_notification_banner`: one bottom row with
+/// the short "waiting"/"done" title rewrite.
+pub(crate) fn render_mobile_notification_banner(
+    buffer: &mut Buffer,
+    area: Rect,
+    notification: &Notification,
+    offset_for_warning: bool,
+    palette: &Palette,
+) -> Rect {
+    let event = &notification.event;
+    let title = match event.kind {
+        NotificationKind::NeedsAttention => event
+            .title
+            .strip_suffix(" needs attention")
+            .map(|agent| format!("{agent} waiting"))
+            .unwrap_or_else(|| event.title.clone()),
+        NotificationKind::Finished => event
+            .title
+            .strip_suffix(" finished")
+            .map(|agent| format!("{agent} done"))
+            .unwrap_or_else(|| event.title.clone()),
+    };
+    let dot_color = match event.kind {
+        NotificationKind::NeedsAttention => palette.red,
+        NotificationKind::Finished => palette.blue,
+    };
+    render_mobile_notice_banner(
+        buffer,
+        area,
+        &title,
+        event.body.as_deref(),
+        dot_color,
+        offset_for_warning,
+        palette,
+    )
 }

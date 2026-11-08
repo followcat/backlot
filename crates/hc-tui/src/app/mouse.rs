@@ -133,6 +133,14 @@ impl App {
             }
             return;
         }
+        // The toast's `notification_toast` hit — a click is `prefix+o`.
+        if contains(self.notification_hit, (mouse.col, mouse.row)) {
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+                self.focus_visible_notification();
+                self.sched.mark_dirty(Instant::now());
+            }
+            return;
+        }
         // The mobile switcher consumes every event in Navigate mode —
         // `mobile.rs` routes scroll/close/targets and eats the rest.
         if self.mobile() && self.mode == Mode::Navigate {
