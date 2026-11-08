@@ -72,7 +72,8 @@ def run(args, size, binary):
             if args.host_program:
                 owner.env['TERM_PROGRAM'] = args.host_program
             path = Path(owner.env['XDG_CONFIG_HOME']) / 'herdr/config.toml'
-            path.write_text(update(path.read_text(), {'ui': {'agent_panel_sort': 'priority'}}))
+            path.write_text(update(path.read_text(), {'ui': {'agent_panel_sort': 'priority',
+                'toast': {'delivery': 'herdr', 'delay_seconds': 0}}}))
             config = tomllib.loads(path.read_text())
         core.start()
         programs['core'] = []
@@ -154,10 +155,16 @@ def run(args, size, binary):
                 assert time.monotonic() < deadline, 'authoritative status readiness'
             return value['activity']
 
-        def compare(name, visible, expected, order=None, picker=False):
+        def compare(name, visible, expected, order=None, picker=False, toast=None):
             nonlocal phase
             phase += 1
             marker = f'phase {phase:02d}'
+            # The toast/banner carries "fixture <word>"; narrower text alone
+            # would alias the agent summary's own "done" count.
+            toast_needle = {
+                'finished': 'fixture finished' if size[0] > 64 else 'fixture done',
+                'blocked': 'fixture needs attention' if size[0] > 64 else 'fixture waiting',
+            }.get(toast)
             if not picker:
                 a = grids(reference, [programs['reference'][visible]])
                 b = grids(core, [programs['core'][visible]])
@@ -182,7 +189,9 @@ def run(args, size, binary):
                     semantic = not picker or (len(rows) == 3 and dict(rows) == expected
                                 and (order is None or [n for n, _ in rows] == order))
                     if not picker:
-                        semantic = marker in rendered and 'fixture ' + NAMES[visible] in rendered
+                        semantic = (marker in rendered
+                                    and 'fixture ' + NAMES[visible] in rendered
+                                    and (toast_needle is None or toast_needle in rendered))
                     if semantic and 'Action failed' not in rendered and owner.capture_quiet:
                         break
                     assert time.monotonic() < deadline, f'{owner.kind} {name} readiness: {rows}'
@@ -228,6 +237,9 @@ def run(args, size, binary):
         report(2, 'working')
         report(2, 'idle')
         pending = {'alpha': 'done', 'beta': 'idle', 'gamma': 'done'}
+        # Gamma's off-tab completion shows the toast card (wide) or banner
+        # (narrow) on both clients while beta's tab stays focused.
+        compare('toast-finished', 1, pending, toast='finished')
         inspect('other-tab-attention', 1, pending, ['gamma', 'alpha', 'beta'])
         old = fact(programs['core'][0])['activity']['epoch']
         core.rpc('server.restart', {})
@@ -313,6 +325,13 @@ def run(args, size, binary):
         inspect('alias-named2-done-keeps-done', 2, dict(base, beta='done'))
         select(1)
         inspect('alias-named2-visit-ack', 1, base)
+
+        # An off-tab blocked word is a needs-attention toast; the busy exit
+        # replaces it with a finished toast on the same pane.
+        report(2, 'blocked')
+        compare('toast-attention', 1, dict(base, gamma='blocked'), toast='blocked')
+        report(2, 'idle')
+        compare('toast-after-blocked', 1, dict(base, gamma='done'), toast='finished')
 
         assert core.rpc('doc.get', {'name': 'herdr-app'})['value'] == foreign
         restored = [detach(owner, args.decoder, binding(config, 'detach')) for owner in owners]
