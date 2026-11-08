@@ -14,6 +14,7 @@ pub(super) struct Context {
     dialog: bool,
     menu: bool,
     navigator: bool,
+    settings: bool,
 }
 
 impl App {
@@ -26,6 +27,7 @@ impl App {
             dialog: self.dialog.is_some(),
             menu: self.menu.is_some(),
             navigator: self.navigator.is_some(),
+            settings: self.settings.is_some(),
         }
     }
 
@@ -137,6 +139,9 @@ impl App {
         }
         if self.navigator.is_some() {
             self.handle_navigator_key(&press);
+            return None;
+        }
+        if self.route_settings_key(&press) {
             return None;
         }
         if self.mode == Mode::Navigate {

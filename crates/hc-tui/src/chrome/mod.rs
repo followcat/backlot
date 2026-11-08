@@ -25,6 +25,8 @@ pub mod panes;
 pub mod panes_draw;
 pub mod render;
 pub mod scroll;
+pub(crate) mod settings;
+pub(crate) mod settings_render;
 pub mod sidebar_render;
 pub mod snapshot;
 pub mod spans;

@@ -13,7 +13,7 @@ impl App {
                 self.help_state = crate::chrome::help::HelpState::default();
             }
             A::ReloadConfig => self.reload_config(),
-            A::Settings => self.show_notice("Settings isn't available in hc-tui yet", ""),
+            A::Settings => self.open_settings_overlay(),
             A::ToggleSidebar => {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
             }

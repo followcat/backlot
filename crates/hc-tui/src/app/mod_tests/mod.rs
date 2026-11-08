@@ -8,6 +8,7 @@ mod m3a_review;
 mod m4s1;
 mod m4s2;
 mod m4s3;
+mod m4s4;
 mod narrow;
 mod reload;
 mod review_regressions;

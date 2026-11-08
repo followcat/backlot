@@ -23,6 +23,7 @@ mod sidebar;
 mod sound;
 mod theme;
 mod toast;
+pub(crate) mod write;
 
 pub use io::{LoadedConfig, config_diagnostic_summary, load, load_live};
 

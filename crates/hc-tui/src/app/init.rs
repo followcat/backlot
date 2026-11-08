@@ -52,6 +52,8 @@ impl App {
             help_scroll_grab: None,
             navigator: None,
             navigator_hits: crate::chrome::navigator_render::NavigatorRender::default(),
+            settings: None,
+            settings_hits: crate::chrome::settings_render::SettingsRender::default(),
             sched: sched::Scheduler::default(),
             focused: None,
             before_navigate: None,

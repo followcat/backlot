@@ -117,15 +117,17 @@ async fn reload_preserves_manual_sidebar_width_and_missing_file_restores_default
 }
 
 #[tokio::test]
-async fn settings_binding_and_mobile_menu_show_a_transient_notice() {
+async fn settings_binding_and_mobile_menu_open_the_settings_overlay() {
     let mut app = app();
     key(&mut app, 'b', hc_vt::Mods::CTRL);
     key(&mut app, 's', hc_vt::Mods::NONE);
-    assert!(rendered(&mut app, 120).contains("Settings isn't available in hc-tui yet"));
-    app.expire_notice(Instant::now() + std::time::Duration::from_secs(4));
-    assert!(!rendered(&mut app, 120).contains("Settings isn't available"));
+    assert!(app.settings.is_some());
+    assert!(rendered(&mut app, 120).contains("settings"));
+    app.cancel_settings_overlay();
+    assert!(app.settings.is_none());
     app.on_mobile_target(&crate::chrome::render::ClientMobileTarget::Menu(0));
-    assert!(rendered(&mut app, 40).contains("Settings isn't available"));
+    assert!(app.settings.is_some());
+    assert!(rendered(&mut app, 40).contains("settings"));
 }
 
 #[tokio::test]

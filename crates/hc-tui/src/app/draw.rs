@@ -150,6 +150,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         || app.dialog.is_some()
         || app.menu.is_some()
         || app.navigator.is_some()
+        || app.settings.is_some()
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
     for info in &pane_infos {
@@ -194,6 +195,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         || app.dialog.is_some()
         || app.menu.is_some()
         || app.navigator.is_some()
+        || app.settings.is_some()
         || mobile_navigate
     {
         None
@@ -344,6 +346,17 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             blinking: true,
         };
     }
+    // The Settings overlay dims its background like help/dialogs.
+    app.settings_hits = if let Some(settings) = app.settings.as_ref() {
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            cell.set_style(cell.style().add_modifier(Modifier::DIM));
+        }
+        crate::chrome::settings_render::render_settings_overlay(buf, settings, &app.shell.palette)
+            .unwrap_or_default()
+    } else {
+        crate::chrome::settings_render::SettingsRender::default()
+    };
     app.render_dialog(buf);
     // The context menu is the topmost shell overlay; the reference
     // suppresses the host cursor while it is open.

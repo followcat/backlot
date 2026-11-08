@@ -52,6 +52,8 @@ impl App {
                         navigator.filter = None;
                         navigator.selected = None;
                     }
+                } else if self.settings.is_some() {
+                    // The Settings overlay has no text field — eat it.
                 } else if self.mode == Mode::Normal && !self.prefix.armed() {
                     self.reset_displayed_scroll();
                     self.pane.paste(&text);
@@ -70,6 +72,8 @@ impl App {
                         navigator.filter = None;
                         navigator.selected = None;
                     }
+                } else if self.settings.is_some() {
+                    // The Settings overlay has no text field — eat it.
                 } else if self.mode == Mode::Normal && !self.prefix.armed() {
                     self.reset_displayed_scroll();
                     self.pane.input_encoded(text.into_bytes());
@@ -98,6 +102,7 @@ impl App {
             || self.help
             || self.dialog.is_some()
             || self.navigator.is_some()
+            || self.settings.is_some()
         {
             return None;
         }

@@ -38,6 +38,7 @@ mod routing;
 mod runtime;
 mod sched;
 mod seen;
+mod settings;
 mod shared;
 mod synthesize;
 mod tab_status;
@@ -171,6 +172,12 @@ pub struct App {
     navigator: Option<crate::chrome::navigator::NavigatorState>,
     /// Last frame's navigator hit rectangles.
     navigator_hits: crate::chrome::navigator_render::NavigatorRender,
+    /// The Settings overlay — the reference's
+    /// `ClientShellOverlay::Settings`.
+    settings: Option<crate::chrome::settings::SettingsOverlay>,
+    /// Last frame's settings hit rectangles (popup, tabs, choices,
+    /// buttons).
+    settings_hits: crate::chrome::settings_render::SettingsRender,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,

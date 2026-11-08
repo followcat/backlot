@@ -69,7 +69,7 @@ pub(crate) fn panel(
     Some(Rect::new(a.x + 1, a.y + 1, a.width - 2, a.height - 2))
 }
 
-fn popup(a: Rect, w: u16, h: u16) -> Option<Rect> {
+pub(crate) fn popup(a: Rect, w: u16, h: u16) -> Option<Rect> {
     popup_with_width_cap(a, w, h, 4)
 }
 
@@ -87,13 +87,13 @@ fn popup_with_width_cap(a: Rect, w: u16, h: u16, width_cap: u16) -> Option<Rect>
     ))
 }
 
-fn button(b: &mut Buffer, r: Rect, t: &str, s: Style) {
+pub(crate) fn button(b: &mut Buffer, r: Rect, t: &str, s: Style) {
     b.set_style(r, s);
     let w = display_width(t).min(r.width);
     put_text(b, r.x + (r.width - w) / 2, r.y, w, t, s)
 }
 
-fn row(i: Rect, ws: &[u16], gap: u16, off: u16) -> Vec<Rect> {
+pub(crate) fn row(i: Rect, ws: &[u16], gap: u16, off: u16) -> Vec<Rect> {
     let total = ws.iter().sum::<u16>() + gap * (ws.len().saturating_sub(1) as u16);
     let mut x = i.x + i.width.saturating_sub(total) / 2;
     ws.iter()

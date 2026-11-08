@@ -137,6 +137,13 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return;
         }
+        // The Settings overlay owns its popup: tab/choice/button hits,
+        // outside-press cancel — the reference's Settings mouse branch.
+        if self.settings.is_some() {
+            self.handle_settings_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         if contains(self.take_control_hit, (mouse.col, mouse.row)) {
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
                 self.pane.take_control();
