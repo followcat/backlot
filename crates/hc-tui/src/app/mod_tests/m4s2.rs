@@ -40,6 +40,18 @@ fn app_alerts() -> App {
     app
 }
 
+/// Stamp `term.activity` with a `completion_ordinal` like the core does —
+/// without one an `idle`/`done` word projects `Idle` (nothing unseen).
+fn stamp_activity(term: &mut hc_proto::terminal::Terminal, records: serde_json::Value) {
+    term.activity = Some(
+        serde_json::from_value(json!({
+            "core_id": "core-fake-1", "epoch": "boot", "scope": 1, "revision": 1,
+            "records": records,
+        }))
+        .unwrap(),
+    );
+}
+
 /// Republish `address` at `word`/`turn` and reconcile — one watcher cycle.
 fn publish_word(app: &mut App, address: &str, word: &str, turn: u64) {
     let mut terms: Vec<_> = app.view.inventory.terminals().values().cloned().collect();
@@ -49,6 +61,10 @@ fn publish_word(app: &mut App, address: &str, word: &str, turn: u64) {
         .expect("test pane");
     term.status = Some(crate::sidebar::fixture::status(word));
     term.turn = turn;
+    stamp_activity(
+        term,
+        json!({"": {"state_ordinal": turn, "completion_ordinal": turn}}),
+    );
     let seq = app.view.inventory.seq() + 1;
     app.view.inventory.replace(seq, terms);
     app.reconcile_published_view();
@@ -114,7 +130,9 @@ async fn busy_to_error_alerts_but_idle_to_done_does_not() {
     assert_eq!(visible_title(&app).as_deref(), Some("t1 needs attention"));
 
     let mut app = app_alerts();
-    publish_word(&mut app, "t1", "done", 1);
+    // `idle → done` never left `working`, so the core's turn stays put —
+    // without a bump or a busy exit there is no completion to report.
+    publish_word(&mut app, "t1", "done", 0);
     assert_eq!(notification_count(&app), 0);
 }
 
@@ -167,14 +185,71 @@ async fn a_pane_finishing_while_watched_neither_toasts_nor_rings() {
 }
 
 #[tokio::test]
-async fn one_alert_per_turn() {
+async fn one_alert_per_word_transition() {
     let mut app = app_alerts();
     publish_word(&mut app, "t1", "blocked", 2);
     assert_eq!(notification_count(&app), 1);
-    // A second transition inside the same turn must not re-alert.
+    // The word diff is the dedup: a republished identical word can't
+    // re-alert; a fresh transition in the same turn still can.
+    publish_word(&mut app, "t1", "blocked", 2);
+    assert_eq!(notification_count(&app), 1);
     publish_word(&mut app, "t1", "working", 2);
     publish_word(&mut app, "t1", "done", 2);
     assert_eq!(notification_count(&app), 1);
+    assert_eq!(visible_title(&app).as_deref(), Some("t1 finished"));
+}
+
+#[tokio::test]
+async fn blocked_to_done_drops_the_stale_completion() {
+    // The reference's event lands one snapshot early: Finished validated
+    // against a still-Blocked pane is stale, so `blocked → idle` never
+    // toasts. hc-tui mirrors that with the pre-transition word.
+    let mut app = app_alerts();
+    publish_word(&mut app, "t1", "blocked", 1);
+    assert_eq!(visible_title(&app).as_deref(), Some("t1 needs attention"));
+    publish_word(&mut app, "t1", "idle", 1);
+    assert_eq!(notification_count(&app), 0);
+}
+
+#[tokio::test]
+async fn a_completion_compressed_into_a_turn_bump_still_toasts() {
+    // A working exit inside a watcher gap leaves the word untouched but
+    // still climbs `turn` — the completion must alert anyway.
+    let mut app = app_alerts();
+    publish_word(&mut app, "t1", "done", 1);
+    assert_eq!(visible_title(&app).as_deref(), Some("t1 finished"));
+    // Without a bump the identical word stays silent — the word diff is
+    // still the dedup.
+    publish_word(&mut app, "t1", "done", 1);
+    assert_eq!(notification_count(&app), 1);
+}
+
+/// Republish `address` with a named record at `word` — like the
+/// chronology `build/test` reports.
+fn publish_record(app: &mut App, address: &str, record: &str, word: &str, turn: u64) {
+    let mut terms: Vec<_> = app.view.inventory.terminals().values().cloned().collect();
+    let term = terms
+        .iter_mut()
+        .find(|t| t.address == address)
+        .expect("test pane");
+    term.records
+        .insert(record.to_owned(), crate::sidebar::fixture::status(word));
+    term.turn = turn;
+    stamp_activity(
+        term,
+        json!({record: {"state_ordinal": turn, "completion_ordinal": turn}}),
+    );
+    let seq = app.view.inventory.seq() + 1;
+    app.view.inventory.replace(seq, terms);
+    app.reconcile_published_view();
+}
+
+#[tokio::test]
+async fn a_named_record_completion_alerts() {
+    let mut app = app_alerts();
+    publish_record(&mut app, "t1", "build/test", "working", 1);
+    publish_record(&mut app, "t1", "build/test", "done", 2);
+    assert_eq!(visible_title(&app).as_deref(), Some("t1 finished"));
 }
 
 #[tokio::test]

@@ -1,10 +1,12 @@
-// Derived from herdr src/client/shell/notifications.rs and
-// src/app/actions.rs, plus the herdr-app src/model.rs `alert` rule
-// (Apache-2.0).
-//! Alert synthesis: hc's core emits no notification events, so the
-//! client diffs every pane's effective status word per reconcile —
-//! blocked/error entries and busy-to-idle exits, panes only, at most
-//! once per turn.
+// Derived from herdr src/app/actions.rs (`record_or_deliver_agent_notification`,
+// `notification_toast_for_state_change`, `notification_sound_for_state_change`,
+// `active_tab_suppresses_notifications`) and the herdr-app src/model.rs `alert`
+// rule (Apache-2.0).
+//! Alert synthesis: hc's core emits no notification events, so the client
+//! diffs every agent pane's effective status word per reconcile — blocked/error
+//! entries and busy-to-idle exits, panes only, one alert per transition. The
+//! core's `turn` counter (bumps on every working exit) catches completions
+//! that happened inside a reconnect gap the word diff cannot see.
 
 use super::*;
 use crate::app::notifications::{
@@ -15,10 +17,9 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 impl App {
-    /// The synthesized-alert rule — herdr-app's `alert` gated by the
-    /// reference's active-tab suppression, on raw 7501 words:
-    /// `Some` needs a previous baseline (mid-session panes alert from
-    /// nothing; app-start baselines are seeded silently below).
+    /// `notification_toast_for_state_change`: blocked entries always
+    /// announce; busy exits announce a completion. `error` counts as
+    /// blocked — an hc extension the reference's AgentState lacks.
     fn alert_for(prev: Option<&str>, new: Option<&str>) -> Option<NotificationKind> {
         if is_blocked(new) && !is_blocked(prev) {
             Some(NotificationKind::NeedsAttention)
@@ -30,7 +31,8 @@ impl App {
     }
 
     /// `notification_sound_for_state_change`: Blocked always requests
-    /// attention; a completion sounds only when the tab wasn't watched.
+    /// attention — even on the active tab; a completion sounds only when
+    /// the tab wasn't watched.
     fn sound_for(
         suppress: bool,
         prev: Option<&str>,
@@ -45,30 +47,39 @@ impl App {
         }
     }
 
-    /// Diff every pane's effective status word against the last reconcile;
-    /// panes only (never sub-agents), at most one alert per turn per pane.
-    /// Ported from `apply_pane_state_change` +
-    /// `record_or_deliver_agent_notification`.
+    /// Diff every agent pane's effective status word against the last
+    /// reconcile. Sub-agent terminals report to their parent and never
+    /// alert. The word diff is the dedup — exactly one alert per change —
+    /// and a `turn` bump with a settled word means a completion was
+    /// compressed inside a reconnect gap (the core still counted it).
+    /// Ported from `apply_pane_state_change` + `record_or_deliver_agent_notification`.
     pub(super) fn synthesize_alerts(&mut self, now: Instant) {
-        let visible: HashSet<String> = if self.outer_focused == Some(false) {
-            HashSet::new()
-        } else {
-            self.visible_panes().into_iter().collect()
-        };
-        let mut panes: HashMap<String, (ClientEndpointId, String, String)> = HashMap::new();
+        // A fresh inventory replaces the whole pane set — the subscription
+        // epoch stands in for the reference's fresh attach, so retire
+        // everything tied to the previous inventory and re-seed.
+        if self.notifications.generation != Some(self.view.generation) {
+            self.notifications = crate::app::notifications::Notifications::default();
+            self.notifications.generation = Some(self.view.generation);
+            self.notifications_seeded = false;
+        }
+        let mut panes: HashMap<String, (ClientEndpointId, String, String, bool)> = HashMap::new();
         let mut endpoints = HashSet::new();
         for endpoint in &self.projection.endpoints {
             endpoints.insert(endpoint.endpoint_id.clone());
             let Some(snapshot) = endpoint.snapshot.as_deref() else {
                 continue;
             };
-            for pane in &snapshot.panes {
+            for agent in &snapshot.agents {
                 panes.insert(
-                    pane.pane_id.clone(),
+                    agent.pane_id.clone(),
                     (
                         endpoint.endpoint_id.clone(),
-                        pane.workspace_id.clone(),
-                        pane.tab_id.clone(),
+                        agent.workspace_id.clone(),
+                        agent.tab_id.clone(),
+                        snapshot
+                            .focused_tab_id
+                            .as_deref()
+                            .is_some_and(|tab| tab == agent.tab_id),
                     ),
                 );
             }
@@ -99,14 +110,14 @@ impl App {
                         created_ms: term.created_ms,
                         word: crate::project::effective_status(term)
                             .map(|status| status.state.clone()),
-                        alerted_turn: None,
+                        turn: term.turn,
                     },
                 );
             }
             self.notifications_seeded = true;
         }
         let mut events = Vec::new();
-        for (id, (endpoint_id, workspace_id, tab_id)) in &panes {
+        for (id, (endpoint_id, workspace_id, tab_id, is_active_tab)) in &panes {
             let Some(term) = self.view.inventory.get(id) else {
                 continue;
             };
@@ -121,39 +132,104 @@ impl App {
                 .or_insert_with(|| PaneAlert {
                     created_ms: term.created_ms,
                     word: None,
-                    alerted_turn: None,
+                    turn: term.turn,
                 });
             if state.created_ms != term.created_ms {
                 state.created_ms = term.created_ms;
                 state.word = None;
-                state.alerted_turn = None;
+                state.turn = term.turn;
             }
             let prev = state.word.take();
+            let prev_turn = state.turn;
             state.word = word.clone();
-            if prev == word {
+            state.turn = term.turn;
+            // `turn` only climbs on working exits; a compressed gap bumps it
+            // while the word sits still. A shrink means a fresh core — reseed.
+            let turn_bump = term.turn > prev_turn;
+            if prev == word && !turn_bump {
                 continue;
             }
-            let Some(kind) = Self::alert_for(prev.as_deref(), word.as_deref()) else {
-                continue;
-            };
-            if state.alerted_turn == Some(term.turn) {
-                continue; // once per turn
+            // `active_tab_suppresses_notifications` at event creation —
+            // toasts on the watched tab are never built, while the blocked
+            // request sound still rings.
+            let suppress = *is_active_tab && self.outer_focused != Some(false);
+            let completion = !is_busy(word.as_deref()) && (is_busy(prev.as_deref()) || turn_bump);
+            let kind = (!suppress)
+                .then(|| {
+                    Self::alert_for(prev.as_deref(), word.as_deref())
+                        .or(completion.then_some(NotificationKind::Finished))
+                })
+                .flatten();
+            let sound = Self::sound_for(suppress, prev.as_deref(), word.as_deref())
+                .or((completion && !suppress).then_some(NotificationSound::Done));
+            // The reference client validates `Finished` against a snapshot
+            // trailing the event by one update; the pre-transition word
+            // stands in for it. A compressed completion's trailing snapshot
+            // showed the working stretch the gap hid.
+            let stale = (kind == Some(NotificationKind::Finished)).then(|| {
+                match prev.as_deref().filter(|p| is_busy(Some(*p))) {
+                    Some(p) => p.to_owned(),
+                    _ => "working".to_owned(),
+                }
+            });
+            if let Some(kind) = kind {
+                let event_sound = match kind {
+                    NotificationKind::NeedsAttention => Some(NotificationSound::Request),
+                    NotificationKind::Finished => sound.filter(|_| !suppress),
+                };
+                events.push((
+                    self.notification_event(
+                        term,
+                        kind,
+                        event_sound,
+                        endpoint_id.clone(),
+                        workspace_id.clone(),
+                        tab_id.clone(),
+                    ),
+                    stale,
+                ));
+            } else if let Some(sound) = sound {
+                // Suppressed toast, audible request — the sound path is
+                // independent of the event, like `forward_agent_notification`.
+                let agent = self.known_agent(term, endpoint_id);
+                self.emit_notification_sound(sound, agent);
             }
-            state.alerted_turn = Some(term.turn);
-            let looking = visible.contains(id);
-            let sound = Self::sound_for(looking, prev.as_deref(), word.as_deref());
-            events.push(self.notification_event(
-                term,
-                kind,
-                sound,
-                endpoint_id.clone(),
-                workspace_id.clone(),
-                tab_id.clone(),
-            ));
         }
-        for event in events {
-            self.receive_notification(event, now);
+        for (event, stale) in events {
+            self.receive_notification(event, stale, now);
         }
+    }
+
+    /// `sound.allows` + the env kill-switches, then the host bell — hc-tui's
+    /// audio substitute (docs/parity.md).
+    pub(super) fn emit_notification_sound(
+        &mut self,
+        _sound: NotificationSound,
+        agent: Option<crate::config::agent::Agent>,
+    ) {
+        if self.shell.sound.allows(agent) && !super::notifications::sound_disabled_by_env() {
+            let _ = (self.host_control)(&crate::terminal_notify::terminal_bells(1));
+        }
+    }
+
+    fn known_agent(
+        &self,
+        term: &hc_proto::terminal::Terminal,
+        endpoint_id: &ClientEndpointId,
+    ) -> Option<crate::config::agent::Agent> {
+        self.projection
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.endpoint_id == *endpoint_id)
+            .and_then(|endpoint| endpoint.snapshot.as_deref())
+            .and_then(|snapshot| {
+                snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| agent.pane_id == term.address)
+            })
+            .and_then(|agent| agent.agent.as_deref())
+            .and_then(crate::config::agent::parse_agent_label)
     }
 
     /// `agent_notification_delivery`'s title/context build. The agent label
@@ -191,9 +267,6 @@ impl App {
             .or(term.name.as_deref())
             .unwrap_or(term.address.as_str())
             .to_owned();
-        let known_agent = agent
-            .and_then(|agent| agent.agent.as_deref())
-            .and_then(crate::config::agent::parse_agent_label);
         let event_text = match kind {
             NotificationKind::NeedsAttention => "needs attention",
             NotificationKind::Finished => "finished",
@@ -226,7 +299,7 @@ impl App {
             title: format!("{agent_label} {event_text}"),
             body: Some(context),
             sound,
-            agent: known_agent,
+            agent: self.known_agent(term, &endpoint_id),
             endpoint_id,
             workspace_id: Some(workspace_id),
             tab_id: Some(tab_id),

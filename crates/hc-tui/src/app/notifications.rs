@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::chrome::snapshot::ClientEndpointId;
+use crate::chrome::status::AgentStatus;
 use crate::config::{ToastDelivery, agent::Agent};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
@@ -17,7 +18,7 @@ const COMPLETION_EVIDENCE_GRACE: Duration = Duration::from_secs(1);
 const COMPLETION_RECHECK_INTERVAL: Duration = Duration::from_millis(50);
 
 /// `HERDR_DISABLE_SOUND`/`NEXTEST` — the reference playback kill-switch.
-fn sound_disabled_by_env() -> bool {
+pub(super) fn sound_disabled_by_env() -> bool {
     std::env::var_os("HERDR_DISABLE_SOUND").is_some() || std::env::var_os("NEXTEST").is_some()
 }
 
@@ -60,14 +61,20 @@ pub(super) struct PendingNotification {
     deadline: Instant,
     expires_at: Instant,
     validate_state: bool,
+    /// The projected status the reference's trailing snapshot would have
+    /// shown at send time — consulted on the first validation, then
+    /// cleared once the event survives to a later tick.
+    stale_status: Option<String>,
 }
 
-/// Per-pane synthesis baseline: the last word, the pane's incarnation (a
-/// reincarnation resets the baseline) and the last alerted turn.
+/// Per-pane synthesis baseline: the last word, the last `turn` and the
+/// pane's incarnation (a reincarnation resets both). The word diff itself
+/// is the dedup — one alert per transition — and `turn` catches
+/// completions compressed inside a reconnect gap.
 pub(super) struct PaneAlert {
     pub created_ms: u64,
     pub word: Option<String>,
-    pub alerted_turn: Option<u64>,
+    pub turn: u64,
 }
 
 /// The reference client notification state.
@@ -77,6 +84,10 @@ pub(crate) struct Notifications {
     pub(crate) visible: Option<Notification>,
     pub(super) queued: VecDeque<Notification>,
     pub(super) panes: HashMap<String, PaneAlert>,
+    /// The subscription epoch the current events and baselines belong to;
+    /// a fresh inventory (reconnect, restarted core) retires them all —
+    /// a client attaches to a new snapshot with an empty queue.
+    pub(super) generation: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,7 +136,7 @@ impl Notifications {
         self.queued.push_back(notification);
     }
 
-    fn promote_queued(&mut self, now: Instant) -> bool {
+    pub(super) fn promote_queued(&mut self, now: Instant) -> bool {
         let Some(mut notification) = self.queued.pop_front() else {
             return false;
         };
@@ -159,8 +170,15 @@ impl Notifications {
 
 impl App {
     /// `receive_notification`: same-pane dedupe across pending, queued and
-    /// visible, then the settle deadline and immediate tick.
-    pub(super) fn receive_notification(&mut self, event: NotificationEvent, now: Instant) {
+    /// visible, then the settle deadline and immediate tick. `stale` is the
+    /// status the reference's trailing snapshot would have shown at send
+    /// time — the synthesized stand-in for its out-of-order delivery.
+    pub(super) fn receive_notification(
+        &mut self,
+        event: NotificationEvent,
+        stale: Option<String>,
+        now: Instant,
+    ) {
         let delay = self.shell.toast_delay_seconds;
         let deadline = now.checked_add(Duration::from_secs(delay)).unwrap_or(now);
         let cleared_visible = event.pane_id.as_deref().is_some_and(|pane_id| {
@@ -187,6 +205,7 @@ impl App {
             deadline,
             expires_at: now.checked_add(COMPLETION_EVIDENCE_GRACE).unwrap_or(now),
             validate_state,
+            stale_status: stale,
         });
         self.tick_notifications(now);
     }
@@ -204,20 +223,25 @@ impl App {
             self.notifications.promote_queued(now);
         }
         let pending = std::mem::take(&mut self.notifications.pending);
-        for pending in pending {
+        for mut pending in pending {
             if pending.deadline > now {
+                // The settle window stands in for the reference's wire
+                // round-trip: past it, the snapshot has caught up and the
+                // trailing status no longer applies.
+                pending.stale_status = None;
                 self.notifications.pending.push(pending);
                 continue;
             }
             if pending.validate_state {
-                match self.notification_validation(&pending.event) {
+                match self.notification_validation(&pending.event, pending.stale_status.as_deref())
+                {
                     Validation::Current => {}
                     Validation::AwaitingSnapshot if now < pending.expires_at => {
-                        let mut pending = pending;
                         pending.deadline = now
                             .checked_add(COMPLETION_RECHECK_INTERVAL)
                             .unwrap_or(now)
                             .min(pending.expires_at);
+                        pending.stale_status = None;
                         self.notifications.pending.push(pending);
                         continue;
                     }
@@ -228,14 +252,11 @@ impl App {
             }
             let target_active = self.notification_target_is_active(&pending.event);
             let suppress_external = target_active && self.outer_focused != Some(false);
-            if pending.event.sound.is_some() {
+            if let Some(sound) = pending.event.sound {
                 let suppress_sound =
                     pending.event.kind == NotificationKind::Finished && suppress_external;
-                if !suppress_sound
-                    && self.shell.sound.allows(pending.event.agent)
-                    && !sound_disabled_by_env()
-                {
-                    let _ = (self.host_control)(&crate::terminal_notify::terminal_bells(1));
+                if !suppress_sound {
+                    self.emit_notification_sound(sound, pending.event.agent);
                 }
             }
             match self.shell.toast_delivery {
@@ -296,109 +317,81 @@ impl App {
         })
     }
 
-    /// `notification_validation` on the pane's current word: NeedsAttention
-    /// needs a blocked word, Finished a non-busy one; a still-working pane
-    /// or a missing agent waits for the next snapshot inside the grace.
-    fn notification_validation(&self, event: &NotificationEvent) -> Validation {
+    /// `notification_validation` against the projected `agent_status`:
+    /// NeedsAttention is current on a blocked word; Finished is current
+    /// only when the pane reads Done — a working read (or a missing agent)
+    /// waits for the next snapshot inside the grace, anything else drops.
+    /// The reference's snapshot trails the event by one update, so the
+    /// first pass consults `stale` — the pre-transition word — instead.
+    fn notification_validation(
+        &self,
+        event: &NotificationEvent,
+        stale: Option<&str>,
+    ) -> Validation {
         let Some(pane_id) = event.pane_id.as_deref() else {
-            return Validation::Stale;
+            return if event.kind == NotificationKind::Finished {
+                Validation::Stale
+            } else {
+                Validation::Current
+            };
         };
-        let Some(term) = self
-            .view
-            .inventory
-            .get(pane_id)
-            .filter(|term| crate::project::effective_status(term).is_some())
-        else {
-            return Validation::AwaitingSnapshot;
-        };
-        let word = crate::project::effective_status(term).map(|s| s.state.as_str());
         match event.kind {
-            NotificationKind::NeedsAttention if is_blocked(word) => Validation::Current,
-            NotificationKind::Finished if word.is_some() && !is_busy(word) => Validation::Current,
-            NotificationKind::Finished if word == Some("working") => Validation::AwaitingSnapshot,
-            _ => Validation::Stale,
+            NotificationKind::NeedsAttention => {
+                let Some(term) = self.view.inventory.get(pane_id) else {
+                    return Validation::AwaitingSnapshot;
+                };
+                let word = crate::project::effective_status(term).map(|s| s.state.as_str());
+                if is_blocked(word) {
+                    Validation::Current
+                } else {
+                    Validation::Stale
+                }
+            }
+            NotificationKind::Finished => {
+                // `stale` models the snapshot the reference client had when
+                // the event arrived; once cleared, the projected status —
+                // already carrying kept-done presentation — speaks.
+                let status = match stale
+                    .map(crate::chrome::status::agent_status_from_word)
+                    .unwrap_or(AgentStatus::Working)
+                {
+                    AgentStatus::Working => {
+                        self.projected_agent_status(&event.endpoint_id, pane_id)
+                    }
+                    stale_status => Some(stale_status),
+                };
+                match status {
+                    Some(AgentStatus::Done) => Validation::Current,
+                    Some(AgentStatus::Working) | None => Validation::AwaitingSnapshot,
+                    _ => Validation::Stale,
+                }
+            }
         }
+    }
+
+    /// `agent.agent_status` on the endpoint's snapshot — the projected
+    /// status the reference client reads at validation.
+    fn projected_agent_status(
+        &self,
+        endpoint_id: &ClientEndpointId,
+        pane_id: &str,
+    ) -> Option<AgentStatus> {
+        self.projection
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.endpoint_id == *endpoint_id)
+            .and_then(|endpoint| endpoint.snapshot.as_deref())
+            .and_then(|snapshot| {
+                snapshot
+                    .agents
+                    .iter()
+                    .find(|agent| agent.pane_id == pane_id)
+            })
+            .map(|agent| agent.agent_status)
     }
 
     /// The next notification deadline — folded into the runtime wake set.
     pub(super) fn notification_deadline(&self) -> Option<Instant> {
         self.notifications.next_deadline()
-    }
-
-    /// `focus_visible_notification` (`prefix+o`): dismiss, promote, then
-    /// focus the toast's pane. A non-local endpoint reports unavailable
-    /// and keeps the toast, like the reference's offline path.
-    pub(super) fn focus_visible_notification(&mut self) {
-        let Some(notification) = self.notifications.visible.as_ref() else {
-            return;
-        };
-        if notification.event.pane_id.is_some()
-            && !self.endpoint_is_online(&notification.event.endpoint_id)
-        {
-            let label = self.endpoint_label(&notification.event.endpoint_id);
-            self.show_notice("Machine unavailable", &format!("{label} is unavailable"));
-            return;
-        }
-        let notification = self
-            .notifications
-            .visible
-            .take()
-            .expect("checked visible notification");
-        self.notifications.promote_queued(Instant::now());
-        let Some(pane_id) = notification.event.pane_id else {
-            return;
-        };
-        // Local endpoints focus directly — the same path as a pane-row
-        // click; remote endpoints have no direct focus RPC.
-        if notification.event.endpoint_id == ClientEndpointId::Local
-            && self.view.inventory.get(&pane_id).is_some()
-        {
-            self.focused = Some(pane_id);
-            self.refresh_projection();
-            self.mark_active_seen();
-            self.refresh_projection();
-            self.persist_focus();
-            self.sync_target();
-        }
-    }
-
-    fn endpoint_is_online(&self, endpoint_id: &ClientEndpointId) -> bool {
-        self.projection
-            .endpoints
-            .iter()
-            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
-            .is_some_and(|endpoint| {
-                endpoint.status == crate::chrome::snapshot::ClientEndpointStatus::Online
-            })
-    }
-
-    fn endpoint_label(&self, endpoint_id: &ClientEndpointId) -> String {
-        self.projection
-            .endpoints
-            .iter()
-            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
-            .map(|endpoint| endpoint.label.clone())
-            .unwrap_or_else(|| match endpoint_id {
-                ClientEndpointId::Local => "Local".to_owned(),
-                ClientEndpointId::Remote(name) => name.clone(),
-            })
-    }
-}
-
-impl App {
-    /// `ServerMessage::TerminalBell`: pane programs' BELs reach the outer
-    /// terminal. hc's core has no bell message, so hc-vt's bell hook
-    /// counts them and the client writes them here — a documented
-    /// core/data difference (docs/parity.md).
-    pub(super) fn drain_bells(&mut self) {
-        let count = self.pane.take_bells().saturating_add(
-            self.observers
-                .values_mut()
-                .map(pane::Pane::take_bells)
-                .sum(),
-        );
-        if count > 0 {
-            let _ = (self.host_control)(&crate::terminal_notify::terminal_bells(count));
-        }
     }
 }

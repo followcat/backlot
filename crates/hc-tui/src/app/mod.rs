@@ -27,6 +27,7 @@ mod multipane;
 mod navigation;
 mod notices;
 pub(crate) mod notifications;
+mod notifications_focus;
 mod pane;
 mod pane_geometry;
 mod pane_mouse;
