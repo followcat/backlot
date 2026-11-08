@@ -204,3 +204,11 @@ fn repeated_create_drop_resize_cycles_do_not_panic() {
         drop(t);
     }
 }
+
+#[test]
+fn bells_are_counted_and_drained() {
+    let mut vt = hc_vt::Vt::new(10, 4, 0);
+    vt.feed(b"a\x07b\x07\x07");
+    assert_eq!(vt.take_bell_count(), 3);
+    assert_eq!(vt.take_bell_count(), 0);
+}

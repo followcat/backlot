@@ -57,6 +57,18 @@ struct Hooks {
     replies_overflowed: bool,
     /// Reported cell geometry in pixels.
     cell: (u32, u32),
+    /// BEL characters seen since the last `take_bell_count`.
+    bells: u64,
+}
+
+extern "C" fn on_bell(_: ffi::Terminal, ud: *mut c_void) {
+    // SAFETY: `ud` is the `Hooks` pointer installed with OPT_USERDATA,
+    // valid for the terminal's life. Saturating keeps a hostile BEL flood
+    // countable rather than wrapping.
+    unsafe {
+        let hooks = &mut *(ud as *mut Hooks);
+        hooks.bells = hooks.bells.saturating_add(1);
+    }
 }
 
 extern "C" fn on_write_pty(_: ffi::Terminal, ud: *mut c_void, data: *const u8, len: usize) {
@@ -153,6 +165,7 @@ impl Vt {
                 replies: Vec::new(),
                 replies_overflowed: false,
                 cell: CELL,
+                bells: 0,
             }),
             overscan: 0,
         };
@@ -192,6 +205,7 @@ impl Vt {
                 ffi::OPT_WRITE_PTY,
                 on_write_pty as ffi::WritePtyFn as *const c_void,
             );
+            set(ffi::OPT_BELL, on_bell as ffi::BellFn as *const c_void);
             set(ffi::OPT_SIZE, on_size as ffi::SizeFn as *const c_void);
         }
         vt
@@ -384,6 +398,12 @@ impl Vt {
     /// Current pixel pitch, measured by the host or the VT fallback.
     pub fn cell_px(&self) -> (u32, u32) {
         self.hooks.cell
+    }
+
+    /// BEL characters the terminal rang since the last drain — the
+    /// ghostty `OPT_BELL` hook the reference uses for pane bells.
+    pub fn take_bell_count(&mut self) -> u64 {
+        std::mem::take(&mut self.hooks.bells)
     }
 
     /// Bytes the terminal generated for the pty side — query replies and

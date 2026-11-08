@@ -24,6 +24,7 @@ pub const OUT_OF_SPACE: i32 = -3;
 // Terminal options (GhosttyTerminalOption).
 pub const OPT_USERDATA: i32 = 0;
 pub const OPT_WRITE_PTY: i32 = 1;
+pub const OPT_BELL: i32 = 2;
 pub const OPT_SIZE: i32 = 6;
 // GHOSTTY_TERMINAL_OPT_COLOR_* — vendor/ghostty/include/ghostty/vt/terminal.h.
 pub const OPT_COLOR_FOREGROUND: i32 = 11;
@@ -235,6 +236,8 @@ pub struct Style {
 
 pub type WritePtyFn = unsafe extern "C" fn(Terminal, *mut c_void, *const u8, usize);
 pub type SizeFn = unsafe extern "C" fn(Terminal, *mut c_void, *mut SizeReport) -> bool;
+/// `GhosttyTerminalBellFn` — BEL (0x07) notifications, no payload.
+pub type BellFn = unsafe extern "C" fn(Terminal, *mut c_void);
 
 unsafe extern "C" {
     pub fn ghostty_color_palette_default(out: *mut Rgb);
