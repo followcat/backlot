@@ -208,9 +208,17 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
                 .or_default()
                 .push(terminal.address.clone());
         } else {
+            // `herdr.tab` doubles as the tab's display name — but an
+            // adoption promotion of an unlabeled tab writes a random
+            // 128-bit hex identity (creation.rs `opaque_id`), which is
+            // a grouping key, not a name: those fall back to the tab's
+            // position number like the reference's `tab_name`.
             let name = terminal
                 .labels
                 .get("herdr.tab")
+                .filter(|label| {
+                    !(label.len() == 32 && label.bytes().all(|b| b.is_ascii_hexdigit()))
+                })
                 .cloned()
                 .unwrap_or_default();
             tabs.push(Tab {
