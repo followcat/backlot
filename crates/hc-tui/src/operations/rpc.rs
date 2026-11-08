@@ -40,6 +40,7 @@ pub(super) async fn update(
                     core: client.core().id.clone(),
                     document,
                     version: result.version,
+                    created: None,
                 });
             }
             Err(CallError::Rpc(error))
@@ -104,7 +105,9 @@ pub(super) async fn run(
         Action::Create(_) => &["doc.get", "doc.set", "terminal.run"],
         Action::Close { .. } => &["doc.get", "doc.set", "terminal.get", "terminal.kill"],
         Action::RenamePane { .. } => &["terminal.get", "terminal.label"],
-        Action::Edit(_) | Action::RenameSpace { .. } => &["doc.get", "doc.set"],
+        Action::Edit(_) | Action::RenameSpace { .. } | Action::Forget { .. } => {
+            &["doc.get", "doc.set"]
+        }
         Action::Machine(_) => &[machine_method],
         Action::SendLine { .. } => &["terminal.get", "terminal.send"],
         Action::Interrupt { .. } => &["terminal.get", "terminal.interrupt"],
@@ -129,7 +132,7 @@ pub(super) async fn run(
     match request.action {
         Action::Edit(edit) => update(client, |document| edit.apply(document))
             .await
-            .map(Outcome::Written),
+            .map(|w| Outcome::Written(Box::new(w))),
         Action::Create(mut creation) => {
             super::adoption::prepare(client, &mut creation).await?;
             let current = client
@@ -145,6 +148,7 @@ pub(super) async fn run(
                 .await
                 .map_err(|e| format!("Creation failed: {e}; the request was not replayed"))?
                 .terminal;
+            let address = terminal.address.clone();
             let mut edit = creation.edit;
             match &mut edit.change {
                 Change::Split { terminal: id, .. } | Change::NewTab { terminal: id, .. } => {
@@ -180,7 +184,24 @@ pub(super) async fn run(
                 Ok(())
             })
             .await
-            .map(Outcome::Written)
+            .map(|mut written| {
+                written.created = creation.report_created.then_some(address);
+                Outcome::Written(Box::new(written))
+            })
+        }
+        Action::Forget {
+            terminal,
+            created_ms,
+        } => {
+            // A `pane` command's overlay terminal exited: drop it from the
+            // layout — the split collapses and the saved focus returns,
+            // like the reference's `restore_overlay_after_exit`.
+            update(client, |document| {
+                edit::hide(document, &terminal, created_ms);
+                Ok(())
+            })
+            .await
+            .map(|w| Outcome::Written(Box::new(w)))
         }
         Action::Close {
             terminals,
@@ -250,7 +271,7 @@ pub(super) async fn run(
                     .await?,
                 );
             }
-            Ok(last.map_or(Outcome::Done, Outcome::Written))
+            Ok(last.map_or(Outcome::Done, |w| Outcome::Written(Box::new(w))))
         }
         Action::RenamePane {
             terminal,
@@ -286,7 +307,7 @@ pub(super) async fn run(
             Ok(())
         })
         .await
-        .map(Outcome::Written),
+        .map(|w| Outcome::Written(Box::new(w))),
         Action::Machine(op) => {
             let (method, params) = match op {
                 MachineOp::Add { target } => ("machine.add", json!({"target": target})),
@@ -367,8 +388,12 @@ pub(super) async fn run(
         Action::Kill {
             terminal,
             created_ms,
+            allow_gone,
         } => {
-            verify_incarnation(client, &terminal, created_ms, "Kill").await?;
+            match verify_incarnation(client, &terminal, created_ms, "Kill").await {
+                Err(error) if allow_gone && gone(&error) => return Ok(Outcome::Done),
+                result => result?,
+            }
             client
                 .terminal_kill(TerminalParams {
                     terminal,
@@ -435,7 +460,7 @@ pub(super) async fn run(
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(Outcome::Written(written))
+            Ok(Outcome::Written(Box::new(written)))
         }
     }
 }
@@ -460,6 +485,11 @@ async fn verify_incarnation(
         return Err(format!("{what} target was replaced; reopen the menu"));
     }
     Ok(())
+}
+
+/// The core's tombstone reply for a terminal it already removed.
+fn gone(error: &str) -> bool {
+    error.contains("not_found") || error.contains("removed")
 }
 
 fn validate_creation(creation: &Creation, document: &Document) -> Result<(), String> {

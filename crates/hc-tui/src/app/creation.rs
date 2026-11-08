@@ -142,6 +142,7 @@ impl App {
             edit,
             order: space.tabs.iter().map(|t| t.id.clone()).collect(),
             space_adoption: None,
+            report_created: false,
             promotion: promote.then(|| Promotion {
                 key: crate::project::layout_key(machine, &space.id),
                 proposal: crate::structure::Adoption {
@@ -212,6 +213,7 @@ impl App {
                 },
             },
             promotion: None,
+            report_created: false,
             space_adoption: Some(crate::structure::Adoption {
                 machine: machine.map(str::to_owned),
                 space: raw_space,

@@ -355,6 +355,7 @@ impl App {
             } => Some(Action::Kill {
                 terminal,
                 created_ms,
+                allow_gone: false,
             }),
             Target::Tab(mut edit, auto, original) => {
                 if name.is_empty() || auto && name == original {

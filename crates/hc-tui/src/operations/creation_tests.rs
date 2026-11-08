@@ -104,6 +104,7 @@ async fn creation_uses_cas_agreed_adoption_and_preserves_foreign_labels() {
                 labels: BTreeMap::new(),
             }],
         }),
+        report_created: false,
         order: vec![],
     };
     store

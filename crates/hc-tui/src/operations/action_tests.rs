@@ -227,6 +227,7 @@ async fn workspace_creation_runs_a_kept_labelled_terminal_and_records_its_adopti
                 name: "work".into(),
                 ..Default::default()
             }),
+            report_created: false,
             order: vec![],
         }))))
         .unwrap();

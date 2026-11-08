@@ -20,6 +20,9 @@ pub struct Creation {
     /// identity and chosen label. `None` for creates inside existing spaces.
     pub space_adoption: Option<crate::structure::Adoption>,
     pub order: Vec<String>,
+    /// Report the spawned terminal on `Written.created` — the `pane`
+    /// command tracks it as an overlay that restores on exit.
+    pub report_created: bool,
 }
 
 #[derive(Clone)]
@@ -85,6 +88,8 @@ pub enum Action {
     Kill {
         terminal: String,
         created_ms: u64,
+        /// Popup teardown can lose the race to the core's `rm` cleanup.
+        allow_gone: bool,
     },
     /// `machine.exec` — the `type = "shell"` custom command. Fire and
     /// report; the line runs in that machine's shell.
@@ -107,12 +112,18 @@ pub enum Action {
         labels: BTreeMap<String, String>,
         order: Vec<String>,
     },
+    /// Drop a dead terminal out of the layout: the `pane` command's
+    /// overlay restore (reference `restore_overlay_after_exit`).
+    Forget {
+        terminal: String,
+        created_ms: u64,
+    },
 }
 
 /// What a store request produced. `Written` carries the confirmed layout
 /// version like before; `Ran` reports a created terminal's address.
 pub enum Outcome {
-    Written(Written),
+    Written(Box<Written>),
     Ran(String),
     Done,
 }
@@ -122,7 +133,7 @@ impl Outcome {
     /// Test shortcut for the common `Written` expectation.
     pub(crate) fn unwrap_written(self) -> Written {
         match self {
-            Self::Written(written) => written,
+            Self::Written(written) => *written,
             _ => panic!("expected a Written outcome"),
         }
     }
@@ -144,6 +155,9 @@ pub struct Written {
     pub core: String,
     pub document: Document,
     pub version: u64,
+    /// The terminal a `Create` spawned, when the creation asked for it
+    /// (`keys.command` type="pane" tracks it as the overlay pane).
+    pub created: Option<String>,
 }
 
 pub struct Store {

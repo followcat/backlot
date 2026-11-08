@@ -62,11 +62,14 @@ async fn confirmed_write_survives_older_watcher_and_pending_focus_does_not_roll_
     let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work")]);
     pending(&mut app);
     app.pending_actions = 2;
-    app.on_operation(Some(Ok(crate::operations::Outcome::Written(Written {
-        core: "id-host-a".into(),
-        document: crate::structure::Document::decode(json!({"schema":1,"focus":"t2"})).unwrap(),
-        version: 5,
-    }))));
+    app.on_operation(Some(Ok(crate::operations::Outcome::Written(Box::new(
+        Written {
+            core: "id-host-a".into(),
+            document: crate::structure::Document::decode(json!({"schema":1,"focus":"t2"})).unwrap(),
+            version: 5,
+            created: None,
+        },
+    )))));
     assert_eq!(app.focused.as_deref(), Some("t1"));
     app.view.documents.insert(
         super::super::shared::key(),

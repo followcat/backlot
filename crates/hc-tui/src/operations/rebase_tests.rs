@@ -125,6 +125,7 @@ async fn stale_split_placement_is_rejected_before_terminal_run() {
             edit: mutation,
             promotion: None,
             space_adoption: None,
+            report_created: false,
             order: vec![],
         }))))
         .unwrap();
