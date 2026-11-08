@@ -641,3 +641,13 @@ Everything else on the compared surfaces still diffs normally.
   reference's; hc-tui performs them on a dedicated channel worker so a
   failed write retries without touching layout operation results. The wire
   writes are the same `terminal.label` calls.
+- **Toast capture timing.** Both sides anchor the same 5/8-second toast
+  TTL at delivery, but each parity checkpoint decodes the two owners at
+  different instants (the capture loops run one after the other and each
+  waits for the pane marker plus host quiet). A live toast therefore
+  straddles the pair of capture slots: one frame can hold the card while
+  the other has already expired it, or vice versa — a timing artifact, not
+  a render difference. The chronology and default profiles consequently
+  keep `delivery = "off"` (the reference's default) so every checkpoint is
+  deterministic; the card/banner, queue, TTL, suppression and OSC paths
+  are covered by the fake-core tests instead.
