@@ -19,6 +19,18 @@ impl App {
                 pane.close_failure().map(str::to_owned)
             });
         }
+        if let Some(mut popup) = self.popup.take() {
+            closing.spawn(async move {
+                popup.pane.shutdown().await;
+                popup.pane.close_failure().map(str::to_owned)
+            });
+        }
+        if let Some(mut peek) = self.peek.take() {
+            closing.spawn(async move {
+                peek.pane.shutdown().await;
+                peek.pane.close_failure().map(str::to_owned)
+            });
+        }
         self.pane.shutdown().await;
         while let Some(result) = closing.join_next().await {
             if let Ok(Some(error)) = result {
@@ -131,6 +143,17 @@ impl App {
         let route = event.route();
         if self.pane.owns_route(route) {
             self.pane.on_event(event, now);
+        } else if self
+            .popup
+            .as_mut()
+            .is_some_and(|p| p.pane.owns_route(route))
+            && let Some(popup) = self.popup.as_mut()
+        {
+            popup.pane.on_event(event, now);
+        } else if self.peek.as_mut().is_some_and(|p| p.pane.owns_route(route))
+            && let Some(peek) = self.peek.as_mut()
+        {
+            peek.pane.on_event(event, now);
         } else if let Some(pane) = self
             .observers
             .values_mut()
@@ -145,6 +168,8 @@ impl App {
         self.pane
             .next_wake()
             .into_iter()
+            .chain(self.popup.iter().filter_map(|p| p.pane.next_wake()))
+            .chain(self.peek.iter().filter_map(|p| p.pane.next_wake()))
             .chain(
                 self.observers
                     .values()
@@ -156,6 +181,12 @@ impl App {
 
     pub(super) fn pane_retry(&mut self, now: Instant) {
         self.pane.fire_retry(now);
+        if let Some(popup) = self.popup.as_mut() {
+            popup.pane.fire_retry(now);
+        }
+        if let Some(peek) = self.peek.as_mut() {
+            peek.pane.fire_retry(now);
+        }
         for pane in self
             .observers
             .values_mut()

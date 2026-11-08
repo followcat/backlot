@@ -110,6 +110,7 @@ async fn stale_split_placement_is_rejected_before_terminal_run() {
         target: "t1".into(),
         terminal: String::new(),
         vertical: false,
+        zoomed: false,
     });
     let key = mutation.tab.clone();
     let server = tokio::spawn(async move {
@@ -165,6 +166,7 @@ fn older_fallback_cannot_resurrect_a_newer_closed_incarnation() {
         target: "t2".into(),
         terminal: "t4".into(),
         vertical: false,
+        zoomed: false,
     };
     assert!(mutation.apply(&mut document).is_err());
 }

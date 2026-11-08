@@ -82,6 +82,9 @@ impl App {
                 self.execute_repeat(lease_key, key, plan, width);
             }
             Action::Release => {
+                if let Some(popup) = self.popup.as_mut() {
+                    popup.pane.key(&key);
+                }
                 self.release_pane_lease(&key);
             }
         }
@@ -102,6 +105,14 @@ impl App {
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);
+        // The floating popup eats every key while open — the reference
+        // routes raw input to it before UI bindings (`popup.rs`).
+        if self.popup_key(&press) {
+            return None;
+        }
+        if self.peek_key(&press) {
+            return None;
+        }
         if key.input.key == Key::Char('g')
             && key.input.mods == hc_vt::Mods::CTRL
             && (self.keyboard_locked
@@ -164,21 +175,17 @@ impl App {
                 self.on_action(action, width);
                 None
             }
-            Some(crate::input::KeybindMatch::Command(_)) => None,
+            Some(crate::input::KeybindMatch::Command(command)) => {
+                self.run_custom_command(&command);
+                None
+            }
             None => match self.prefix.feed(&press, &self.live) {
                 Decision::Action(action) => {
                     self.on_action(action, width);
                     None
                 }
                 Decision::Command(command) => {
-                    // M4 owns command execution; retain the resolved description
-                    // without executing the deferred custom-command action.
-                    self.reject_input(
-                        command
-                            .description
-                            .as_deref()
-                            .unwrap_or("Custom commands require the actions milestone"),
-                    );
+                    self.run_custom_command(&command);
                     None
                 }
                 Decision::Held => None,

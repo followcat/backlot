@@ -93,6 +93,14 @@ impl App {
     }
 
     pub(crate) fn on_mouse(&mut self, mouse: MouseInput) {
+        if self.popup_mouse(&mouse) {
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        if self.peek_mouse(&mouse) {
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         if self.pane_mouse_gesture.is_some() && self.route_pane_mouse(mouse) {
             self.sched.mark_dirty(Instant::now());
             return;

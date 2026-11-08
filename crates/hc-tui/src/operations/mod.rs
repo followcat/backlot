@@ -86,6 +86,46 @@ pub enum Action {
         terminal: String,
         created_ms: u64,
     },
+    /// `machine.exec` — the `type = "shell"` custom command. Fire and
+    /// report; the line runs in that machine's shell.
+    Exec {
+        line: String,
+        machine: Option<String>,
+    },
+    /// `terminal.run` for the floating popup — the terminal is labeled
+    /// `hc-tui.popup` so the projection keeps it out of the sidebar.
+    RunPopup {
+        params: RunParams,
+    },
+    /// Peek keep-as-tab: label the terminal into a fresh tab of the space,
+    /// CAS the layout, then `terminal.keep keep=true` — herdr-app's
+    /// `terminal.keep` from the peek bar (Apache-2.0 semantics).
+    PeekKeep {
+        edit: Edit,
+        terminal: String,
+        created_ms: u64,
+        labels: BTreeMap<String, String>,
+        order: Vec<String>,
+    },
+}
+
+/// What a store request produced. `Written` carries the confirmed layout
+/// version like before; `Ran` reports a created terminal's address.
+pub enum Outcome {
+    Written(Written),
+    Ran(String),
+    Done,
+}
+
+#[cfg(test)]
+impl Outcome {
+    /// Test shortcut for the common `Written` expectation.
+    pub(crate) fn unwrap_written(self) -> Written {
+        match self {
+            Self::Written(written) => written,
+            _ => panic!("expected a Written outcome"),
+        }
+    }
 }
 
 pub enum MachineOp {
@@ -108,7 +148,7 @@ pub struct Written {
 
 pub struct Store {
     send: mpsc::Sender<Request>,
-    pub results: mpsc::Receiver<Result<Option<Written>, String>>,
+    pub results: mpsc::Receiver<Result<Outcome, String>>,
     task: JoinHandle<()>,
 }
 

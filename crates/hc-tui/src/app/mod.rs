@@ -33,6 +33,7 @@ mod notifications_focus;
 mod pane;
 mod pane_geometry;
 mod pane_mouse;
+pub(crate) mod popup;
 mod presentation;
 mod reload;
 mod routing;
@@ -179,6 +180,12 @@ pub struct App {
     /// Last frame's settings hit rectangles (popup, tabs, choices,
     /// buttons).
     settings_hits: crate::chrome::settings_render::SettingsRender,
+    /// The floating popup terminal — the reference's `popup_pane`.
+    popup: Option<popup::PopupState>,
+    /// Geometry for a `terminal.run` still in flight for a popup.
+    popup_pending: Option<popup::PopupPending>,
+    /// The worker-peek overlay — herdr-app's `terminal-peek`.
+    peek: Option<popup::PeekState>,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,
@@ -403,7 +410,14 @@ impl App {
         self.refresh_projection();
         self.sync_target();
         self.pane.on_view(&self.view);
+        if let Some(popup) = self.popup.as_mut() {
+            popup.pane.on_view(&self.view);
+        }
+        if let Some(peek) = self.peek.as_mut() {
+            peek.pane.on_view(&self.view);
+        }
         self.sync_observers();
+        self.reconcile_popups();
         self.synthesize_alerts(Instant::now());
         self.share_seen();
     }

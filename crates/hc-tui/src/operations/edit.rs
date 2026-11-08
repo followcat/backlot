@@ -21,6 +21,8 @@ pub enum Change {
         target: String,
         terminal: String,
         vertical: bool,
+        /// `keys.command` type="pane" splits then zooms, like the reference.
+        zoomed: bool,
     },
     Swap {
         first: String,
@@ -131,6 +133,7 @@ impl Edit {
                 target,
                 terminal,
                 vertical,
+                zoomed,
             } => {
                 if find(terminal).is_none() {
                     let target = find(target).ok_or("Split target no longer exists")?;
@@ -148,7 +151,7 @@ impl Edit {
                     ids.insert(id, terminal.clone());
                     layout.focus_pane(id);
                 }
-                tab.zoomed = None;
+                tab.zoomed = zoomed.then(|| terminal.clone());
                 focus = Some(terminal.clone());
             }
             Change::Swap { first, second } => {

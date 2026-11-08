@@ -223,6 +223,11 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
         if own.closed.get(&term.address) == Some(&term.created_ms) {
             continue;
         }
+        // Popup-owned terminals are client chrome, not layout terminals —
+        // like the reference's client-local popup runtime.
+        if term.labels.contains_key(crate::app::popup::POPUP_LABEL) {
+            continue;
+        }
         let key = machine_of(&term.address).unwrap_or("").to_string();
         by_machine.entry(key).or_default().push(term);
     }

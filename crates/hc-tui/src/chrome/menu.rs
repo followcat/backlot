@@ -34,6 +34,7 @@ pub(crate) enum ContextMenuAction {
     MachineConnect,
     MachineRename,
     MachineRemove,
+    Peek,
     SendLine,
     Interrupt,
     MarkRead,
@@ -180,6 +181,7 @@ impl ContextMenu {
                 item("Keep", Action::Keep),
                 item("Park", Action::Park),
                 item("Kill", Action::Kill),
+                item("Peek", Action::Peek),
             ],
         }
     }

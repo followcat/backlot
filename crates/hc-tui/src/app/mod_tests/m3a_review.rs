@@ -47,7 +47,10 @@ async fn an_untracked_lock_repeat_is_consumed_after_focus_loss() {
 }
 #[tokio::test]
 async fn every_final_operation_result_reconciles_skipped_focus_without_another_publish() {
-    for result in [Ok(None), Err("fixture failure".into())] {
+    for result in [
+        Ok(crate::operations::Outcome::Done),
+        Err("fixture failure".into()),
+    ] {
         let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work")]);
         pending(&mut app);
         app.pending_actions = 1;

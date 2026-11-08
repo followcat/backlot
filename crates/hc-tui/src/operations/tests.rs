@@ -87,7 +87,7 @@ async fn cas_conflict_rereads_and_rebases_without_losing_another_clients_split()
         .unwrap()
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap_written();
     assert_eq!(written.version, 7);
     assert_eq!(written.core, "core-fake-1");
     server.await.unwrap();
@@ -179,6 +179,7 @@ fn primitive_edits_preserve_concurrent_splits_and_opaque_metadata() {
         target: "t1".into(),
         terminal: "t2".into(),
         vertical: false,
+        zoomed: false,
     })
     .apply(&mut document)
     .unwrap();
@@ -186,6 +187,7 @@ fn primitive_edits_preserve_concurrent_splits_and_opaque_metadata() {
         target: "t1".into(),
         terminal: "t3".into(),
         vertical: true,
+        zoomed: false,
     })
     .apply(&mut document)
     .unwrap();

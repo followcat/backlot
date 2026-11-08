@@ -62,7 +62,7 @@ async fn confirmed_write_survives_older_watcher_and_pending_focus_does_not_roll_
     let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work")]);
     pending(&mut app);
     app.pending_actions = 2;
-    app.on_operation(Some(Ok(Some(Written {
+    app.on_operation(Some(Ok(crate::operations::Outcome::Written(Written {
         core: "id-host-a".into(),
         document: crate::structure::Document::decode(json!({"schema":1,"focus":"t2"})).unwrap(),
         version: 5,
@@ -78,7 +78,7 @@ async fn confirmed_write_survives_older_watcher_and_pending_focus_does_not_roll_
     );
     app.retain_confirmed_layout();
     assert_eq!(app.view.documents[&super::super::shared::key()].version, 5);
-    app.on_operation(Some(Ok(None)));
+    app.on_operation(Some(Ok(crate::operations::Outcome::Done)));
     app.reconcile_published_view();
     assert_eq!(app.focused.as_deref(), Some("t2"));
     app.view.core.as_mut().unwrap().id = "replacement".into();

@@ -368,6 +368,7 @@ async fn agent_right_click_opens_the_extension_menu_in_order() {
             "Keep",
             "Park",
             "Kill",
+            "Peek",
         ]
     );
 }

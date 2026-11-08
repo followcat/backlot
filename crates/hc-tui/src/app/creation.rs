@@ -18,7 +18,11 @@ fn raw_id(id: &str, kind: &str) -> Option<String> {
 }
 
 impl App {
-    pub(super) fn creation(&self, vertical: Option<bool>) -> Result<Creation, String> {
+    pub(super) fn creation(
+        &self,
+        vertical: Option<bool>,
+        zoomed: bool,
+    ) -> Result<Creation, String> {
         let terminal = self
             .focused
             .as_ref()
@@ -101,6 +105,7 @@ impl App {
                 target: terminal.address.clone(),
                 terminal: String::new(),
                 vertical,
+                zoomed,
             },
         );
         let mut edit = self.layout_edit(change).ok_or("No active layout")?;
@@ -220,7 +225,7 @@ impl App {
         Ok((creation, suggested))
     }
     pub(super) fn split_pane(&mut self, vertical: bool) {
-        match self.creation(Some(vertical)) {
+        match self.creation(Some(vertical), false) {
             Ok(creation) => self.submit_action(Action::Create(Box::new(creation))),
             Err(error) => self.show_notice("Split unavailable", &error),
         }

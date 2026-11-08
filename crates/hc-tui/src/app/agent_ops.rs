@@ -126,6 +126,7 @@ impl App {
         use crate::chrome::menu::ContextMenuAction as A;
         let created_ms = self.view.inventory.get(pane_id).map(|t| t.created_ms);
         match action {
+            A::Peek => self.open_peek(pane_id.to_owned()),
             A::SendLine => self.send_line_for(pane_id),
             A::Interrupt => {
                 if let Some(created_ms) = created_ms {

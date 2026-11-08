@@ -62,7 +62,7 @@ impl App {
         });
     }
     pub(super) fn new_tab(&mut self) {
-        let creation = match self.creation(None) {
+        let creation = match self.creation(None, false) {
             Ok(c) => c,
             Err(e) => {
                 self.show_notice("New tab unavailable", &e);

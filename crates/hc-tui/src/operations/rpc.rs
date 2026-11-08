@@ -61,7 +61,7 @@ pub(super) async fn run(
     open: &OpenRpc,
     cached: &mut Option<Client>,
     request: Request,
-) -> Result<Option<Written>, String> {
+) -> Result<Outcome, String> {
     if cached.is_none() {
         *cached = Some(open().await.map_err(|e| e.to_string())?);
     }
@@ -111,6 +111,15 @@ pub(super) async fn run(
         Action::Keep { .. } => &["terminal.get", "terminal.keep"],
         Action::Park { .. } => &["terminal.get", "terminal.label", "terminal.keep"],
         Action::Kill { .. } => &["terminal.get", "terminal.kill"],
+        Action::Exec { .. } => &["machine.exec"],
+        Action::RunPopup { .. } => &["terminal.run"],
+        Action::PeekKeep { .. } => &[
+            "terminal.get",
+            "terminal.label",
+            "doc.get",
+            "doc.set",
+            "terminal.keep",
+        ],
     };
     for method in required {
         if let Some(reason) = client.explain_unavailable(method) {
@@ -120,7 +129,7 @@ pub(super) async fn run(
     match request.action {
         Action::Edit(edit) => update(client, |document| edit.apply(document))
             .await
-            .map(Some),
+            .map(Outcome::Written),
         Action::Create(mut creation) => {
             super::adoption::prepare(client, &mut creation).await?;
             let current = client
@@ -171,7 +180,7 @@ pub(super) async fn run(
                 Ok(())
             })
             .await
-            .map(Some)
+            .map(Outcome::Written)
         }
         Action::Close {
             terminals,
@@ -241,7 +250,7 @@ pub(super) async fn run(
                     .await?,
                 );
             }
-            Ok(last)
+            Ok(last.map_or(Outcome::Done, Outcome::Written))
         }
         Action::RenamePane {
             terminal,
@@ -265,7 +274,7 @@ pub(super) async fn run(
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
         }
         Action::RenameSpace { key, proposal } => update(client, |document| {
             let chosen = document
@@ -277,7 +286,7 @@ pub(super) async fn run(
             Ok(())
         })
         .await
-        .map(Some),
+        .map(Outcome::Written),
         Action::Machine(op) => {
             let (method, params) = match op {
                 MachineOp::Add { target } => ("machine.add", json!({"target": target})),
@@ -292,7 +301,7 @@ pub(super) async fn run(
                 .call(method, Some(params))
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
         }
         Action::SendLine {
             terminal,
@@ -307,7 +316,7 @@ pub(super) async fn run(
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
         }
         Action::Interrupt {
             terminal,
@@ -318,7 +327,7 @@ pub(super) async fn run(
                 .call("terminal.interrupt", Some(json!({"terminal":terminal})))
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
         }
         Action::Keep {
             terminal,
@@ -332,7 +341,7 @@ pub(super) async fn run(
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
         }
         Action::Park {
             terminal,
@@ -353,7 +362,7 @@ pub(super) async fn run(
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
         }
         Action::Kill {
             terminal,
@@ -367,7 +376,66 @@ pub(super) async fn run(
                 })
                 .await
                 .map_err(|e| e.to_string())?;
-            Ok(None)
+            Ok(Outcome::Done)
+        }
+        Action::Exec { line, machine } => {
+            client
+                .call("machine.exec", Some(json!({"line": line, "on": machine})))
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(Outcome::Done)
+        }
+        Action::RunPopup { params } => {
+            // `terminal.run` outcome is never replayed: like Create, a
+            // transport failure leaves an unknown number of children.
+            let terminal = client
+                .terminal_run(params)
+                .await
+                .map_err(|e| format!("Popup failed: {e}; the request was not replayed"))?
+                .terminal;
+            Ok(Outcome::Ran(terminal.address))
+        }
+        Action::PeekKeep {
+            mut edit,
+            terminal,
+            created_ms,
+            labels,
+            order,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Keep").await?;
+            client
+                .call(
+                    "terminal.label",
+                    Some(json!({"terminal":terminal,"labels":labels})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            if let Change::NewTab { terminal: id, .. } = &mut edit.change {
+                *id = terminal.clone();
+            }
+            let tab_local = edit::local_key(&edit.tab)
+                .ok_or("Invalid keep tab identity")?
+                .to_owned();
+            let written = update(client, |document| {
+                edit.apply(document)?;
+                let order = document
+                    .order
+                    .entry(edit.space.clone())
+                    .or_insert(order.clone());
+                if !order.contains(&tab_local) {
+                    order.push(tab_local.clone());
+                }
+                Ok(())
+            })
+            .await?;
+            client
+                .call(
+                    "terminal.keep",
+                    Some(json!({"terminal":terminal,"keep":true})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(Outcome::Written(written))
         }
     }
 }

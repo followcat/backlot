@@ -285,6 +285,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 .collect()
         })
         .unwrap_or_default();
+    app.draw_popups(buf, area, _now);
     super::notices::render(app, buf, area);
     if let Some(bar) = mode_bar {
         for (offset, cell) in mode_bar_cells.into_iter().enumerate() {
@@ -387,7 +388,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     }
 }
 
-fn draw_terminal(
+pub(super) fn draw_terminal(
     pane: &mut super::pane::Pane,
     inner: Rect,
     buf: &mut Buffer,

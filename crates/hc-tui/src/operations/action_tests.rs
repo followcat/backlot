@@ -17,7 +17,7 @@ async fn machine_call(method: &'static str, op: MachineOp, expected: serde_json:
         .await
         .unwrap()
         .unwrap();
-    assert!(out.unwrap().is_none());
+    assert!(matches!(out.unwrap(), Outcome::Done));
     server.await.unwrap();
 }
 
@@ -116,7 +116,7 @@ async fn rename_space_writes_the_adoption_name_through_cas() {
         .unwrap()
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap_written();
     assert_eq!(written.version, 4);
     server.await.unwrap();
 }
@@ -152,7 +152,7 @@ async fn rename_space_records_an_adoption_for_a_cwd_workspace() {
         .unwrap()
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap_written();
     server.await.unwrap();
 }
 
@@ -235,7 +235,7 @@ async fn workspace_creation_runs_a_kept_labelled_terminal_and_records_its_adopti
         .unwrap()
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap_written();
     assert_eq!(written.version, 1);
     server.await.unwrap();
 }
@@ -295,7 +295,7 @@ async fn workspace_close_kills_each_member_and_persists_after_every_kill() {
         .unwrap()
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap_written();
     assert_eq!(written.version, 2);
     assert_eq!(written.document.closed.len(), 2);
     assert_eq!(written.document.focus.as_deref(), Some("t3"));

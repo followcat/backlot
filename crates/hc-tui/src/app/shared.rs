@@ -1,6 +1,6 @@
 //! Own-document writes and confirmed-version fencing, never foreign writes.
 use super::*;
-use crate::operations::{Action, Change, Edit, Request, Store, Written};
+use crate::operations::{Action, Change, Edit, Outcome, Request, Store};
 use hc_proto::watch::{DocKey, Document, Link, OpenRpc};
 
 pub(super) fn key() -> DocKey {
@@ -47,17 +47,19 @@ impl App {
 
     pub(super) async fn operation_result(
         store: &mut Option<Store>,
-    ) -> Option<Result<Option<Written>, String>> {
+    ) -> Option<Result<Outcome, String>> {
         match store {
             Some(store) => store.results.recv().await,
             None => std::future::pending().await,
         }
     }
 
-    pub(super) fn on_operation(&mut self, result: Option<Result<Option<Written>, String>>) {
+    pub(super) fn on_operation(&mut self, result: Option<Result<Outcome, String>>) {
         self.pending_actions = self.pending_actions.saturating_sub(1);
         match result {
-            Some(Ok(Some(written)))
+            Some(Ok(Outcome::Ran(terminal))) => self.on_popup_spawned(terminal),
+            Some(Ok(Outcome::Done)) => {}
+            Some(Ok(Outcome::Written(written)))
                 if self
                     .view
                     .core

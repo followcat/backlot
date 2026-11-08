@@ -88,6 +88,7 @@ async fn creation_uses_cas_agreed_adoption_and_preserves_foreign_labels() {
             target: "t1".into(),
             terminal: String::new(),
             vertical: false,
+            zoomed: false,
         }),
         space_adoption: None,
         promotion: Some(Promotion {
@@ -113,7 +114,7 @@ async fn creation_uses_cas_agreed_adoption_and_preserves_foreign_labels() {
         .unwrap()
         .unwrap()
         .unwrap()
-        .unwrap();
+        .unwrap_written();
     assert_eq!(written.version, 3);
     server.await.unwrap();
 }
