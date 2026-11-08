@@ -268,7 +268,22 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             |rect| config_covered.push(rect),
         );
     }
+    // `composition.rs::restore_mode_bar`: the bar row is repainted over
+    // the toast — save its cells, draw notices, then put them back.
+    let mode_bar_cells: Vec<ratatui::buffer::Cell> = mode_bar
+        .map(|bar| {
+            (bar.x..bar.x + bar.width)
+                .map(|x| buf[(x, bar.y)].clone())
+                .collect()
+        })
+        .unwrap_or_default();
     super::notices::render(app, buf, area);
+    if let Some(bar) = mode_bar {
+        for (offset, cell) in mode_bar_cells.into_iter().enumerate() {
+            *buf.cell_mut((bar.x + offset as u16, bar.y))
+                .expect("bar cell") = cell;
+        }
+    }
     app.want_cursor = CursorWish {
         pos: cursor.pos.map(|(x, y)| (inner.x + x, inner.y + y)),
         anchor: cursor.anchor.map(|(x, y)| (inner.x + x, inner.y + y)),
