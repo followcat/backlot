@@ -21,7 +21,7 @@ jobs:
         id: zig-cache
         with:
           path: ${{ runner.temp }}/hc-tui-zig-0.16.0
-          key: zig-0.16.0-x86_64-linux-70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+          key: zig-0.16.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-zig.sh') }}
       - name: Install Zig 0.16.0
         if: steps.zig-cache.outputs.cache-hit != 'true'
         run: tools/install-zig.sh "${{ runner.temp }}/hc-tui-zig-0.16.0"
@@ -35,6 +35,32 @@ jobs:
       - run: cargo test
       - run: cargo test -p hc-tui --example parity_cells
       - run: python3 -m unittest discover -s scripts/parity -p 'test_*.py'
+      - run: sh scripts/test-install.sh
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        id: zig-cache
+        with:
+          path: ${{ runner.temp }}/hc-tui-zig-0.16.0
+          key: zig-0.16.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-zig.sh') }}
+      - name: Install Zig 0.16.0
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        run: tools/install-zig.sh "${{ runner.temp }}/hc-tui-zig-0.16.0"
+      - name: Add Zig to PATH
+        run: echo "${{ runner.temp }}/hc-tui-zig-0.16.0" >> "$GITHUB_PATH"
+      - name: Check Zig version
+        run: test "$(zig version)" = "0.16.0"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --all-targets
+      - run: cargo test
+      # shasum-based sha256 fallback on a host without sha256sum.
+      - run: sh scripts/test-install.sh
 
   integration:
     runs-on: ubuntu-latest
