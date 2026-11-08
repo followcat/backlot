@@ -3,8 +3,10 @@
 Start a local client with `hc-tui --session <name>`, or use
 `hc-tui --remote <ssh-target> --session <name>`. The remote machine needs
 `hc` on its SSH command path. SSH authentication and host verification use
-normal SSH configuration; hc-tui does not store credentials. ControlMaster
-can reduce the cost of the separate RPC, subscription and attach connections.
+normal SSH configuration; hc-tui does not store credentials. On Unix the RPC,
+subscription and attach connections share one SSH login per target through
+hc-tui's own control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, created private),
+kept for 10 minutes after the last connection ends.
 
 The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.

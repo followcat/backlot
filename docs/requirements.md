@@ -45,7 +45,9 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   `ssh <target> hc connect [--session <s>]`.
   - Attach streams use framed mode on their own connection, so each stream gets its own
     `hc connect`.
-  - Recommend SSH ControlMaster in the docs. Never ask for or store passwords.
+  - On Unix the streams share one ssh login per target through hc-tui's own control
+    socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, kept 10 minutes past the last stream), so a
+    burst of streams costs one login instead of one each. Never ask for or store passwords.
 - **Handshake:** check `hello` for protocol generation 1 and the methods hc-tui uses.
   - A missing method disables the feature that needs it and shows why. It never crashes.
 - **Reconnect:** reconnect with backoff. Resubscribe, then refetch documents after a reconnect or

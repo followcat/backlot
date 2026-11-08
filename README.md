@@ -30,7 +30,9 @@ cargo run -p hc-tui -- --help
 ```
 
 Run `hc-tui --session <name>` locally, or
-`hc-tui --remote <ssh-target> --session <name>` over SSH. The default
+`hc-tui --remote <ssh-target> --session <name>` over SSH. On Unix every remote
+stream shares one SSH login per target, kept for 10 minutes past the last
+stream; no SSH configuration is needed. The default
 prefix is Ctrl+B: `q` detaches, `w` opens workspace navigation, `b` toggles
 the sidebar and `?` opens searchable help. Existing herdr configuration is
 read directly. See [runtime behavior](docs/runtime.md) and the

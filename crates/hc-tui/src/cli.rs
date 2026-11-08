@@ -80,7 +80,8 @@ Usage: hc-tui [OPTIONS]
 
 Options:
       --session <NAME>   Use session NAME (default: $HC_SESSION or \"default\")
-      --remote <TARGET>  Connect over SSH: `ssh TARGET hc connect`
+      --remote <TARGET>  Connect over SSH: `ssh TARGET hc connect`; one
+                         shared login per target (kept 10 minutes)
   -h, --help             Print this help
   -V, --version          Print the version
 
