@@ -158,11 +158,27 @@ fn spawn_from(
     Ok(reader)
 }
 
+/// The `TIOC*WINSZ` ioctl requests: `libc` names them on Linux and the
+/// BSDs but not on Apple targets, where the values are the fixed Darwin
+/// ABI (`sys/ttycom.h`).
+#[cfg(target_os = "macos")]
+mod winsz {
+    pub const TIOCGWINSZ: libc::c_ulong = 0x4008_7468;
+    #[cfg(test)]
+    pub const TIOCSWINSZ: libc::c_ulong = 0x8008_7467;
+}
+#[cfg(not(target_os = "macos"))]
+mod winsz {
+    pub use libc::TIOCGWINSZ;
+    #[cfg(test)]
+    pub use libc::TIOCSWINSZ;
+}
+
 fn terminal_size(fd: std::os::fd::RawFd) -> Option<(u16, u16)> {
     let mut size = std::mem::MaybeUninit::<libc::winsize>::zeroed();
     // SAFETY: this descriptor stays owned by Arc<File>, and TIOCGWINSZ
     // writes precisely the allocated winsize.
-    if unsafe { libc::ioctl(fd, libc::TIOCGWINSZ, size.as_mut_ptr()) } != 0 {
+    if unsafe { libc::ioctl(fd, winsz::TIOCGWINSZ, size.as_mut_ptr()) } != 0 {
         return None;
     }
     // SAFETY: the successful ioctl initialized this winsize.

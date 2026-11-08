@@ -69,45 +69,34 @@ fn tui_env(scratch: &ScratchCore) -> Vec<(String, String)> {
     ]
 }
 
-/// A pty pair: nonblocking master for the pump, slave kept open so the
-/// final termios check still has a handle after the child exits.
+/// A pty pair at `cols`x`rows`: nonblocking master for the pump, slave
+/// kept open so the final termios check still has a handle after the
+/// child exits. `openpty` applies the size atomically on every Unix.
 fn openpty(cols: u16, rows: u16) -> (OwnedFd, OwnedFd) {
     unsafe {
-        let master = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY | libc::O_CLOEXEC);
-        assert!(
-            master >= 0,
-            "posix_openpt: {:?}",
-            std::io::Error::last_os_error()
-        );
-        assert_eq!(libc::grantpt(master), 0, "grantpt failed");
-        assert_eq!(libc::unlockpt(master), 0, "unlockpt failed");
         let ws = libc::winsize {
             ws_col: cols,
             ws_row: rows,
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
+        let (mut master, mut slave) = (-1, -1);
         assert_eq!(
-            libc::ioctl(master, libc::TIOCSWINSZ, &ws),
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                &ws,
+            ),
             0,
-            "TIOCSWINSZ failed"
+            "openpty: {:?}",
+            std::io::Error::last_os_error()
         );
         let flags = libc::fcntl(master, libc::F_GETFL);
         assert_eq!(
             libc::fcntl(master, libc::F_SETFL, flags | libc::O_NONBLOCK),
             0
-        );
-        let name = libc::ptsname(master);
-        assert!(!name.is_null(), "ptsname failed");
-        let path = std::ffi::CStr::from_ptr(name).to_owned();
-        let slave = libc::open(
-            path.as_ptr(),
-            libc::O_RDWR | libc::O_NOCTTY | libc::O_CLOEXEC,
-        );
-        assert!(
-            slave >= 0,
-            "open slave: {:?}",
-            std::io::Error::last_os_error()
         );
         (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave))
     }
@@ -139,10 +128,13 @@ fn spawn_tui(scratch: &ScratchCore) -> Tui {
         .stdout(dup())
         .stderr(dup());
     unsafe {
-        command.pre_exec(|| {
-            // New session + controlling tty, matching a terminal launcher.
-            libc::setsid();
-            libc::ioctl(0, libc::TIOCSCTTY as _, 0);
+        command.pre_exec(move || {
+            // New session + controlling tty, matching a terminal
+            // launcher: login_tty is setsid + TIOCSCTTY + stdio dup on
+            // every Unix (libc has no TIOCSCTTY name on Apple targets).
+            if libc::login_tty(sfd) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
             Ok(())
         });
     }

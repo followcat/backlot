@@ -184,7 +184,7 @@ async fn sigwinch_reads_the_owned_input_descriptor() {
     };
     // SAFETY: master remains open and ioctl reads the initialized winsize.
     assert_eq!(
-        unsafe { libc::ioctl(master.as_raw_fd(), libc::TIOCSWINSZ, &size) },
+        unsafe { libc::ioctl(master.as_raw_fd(), winsz::TIOCSWINSZ, &size) },
         0
     );
     signal_hook::low_level::raise(signal_hook::consts::SIGWINCH).unwrap();
