@@ -391,7 +391,7 @@ or title are masked. These are documented core-policy differences, not passes.
 | User Alt+F popup/custom command | Parsed but direct commands are silently consumed, with no execution or notice. M4 command/popup scope; not a missing core fact. Fixture scripts never send Alt+F or execute its command. |
 | Layout/tab navigation and lock | M3a implements indexed workspace/tab/agent selection, previous/next, directional pane focus/swap, cycle/last pane, zoom/resize and Ctrl+G lock with default/configured bindings. |
 | Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
-| Settings binding/menu | `pending-feature`: the M4 overlay is deferred. M3a.1 shows the transient notice `Settings isn't available in hc-tui yet`. Menu presentation remains identical; the notice/overlay difference is retained, never counted as matching Settings UI. |
+| Settings binding/menu | M4 implements the reference overlay: the five sections (theme, indicators, sound, toast, integrations), live theme preview, `write_edit` saves and the same config-reload path as the reload binding. The Integrations section has no core methods in hc, so it always renders the reference's empty state `no integration targets available` and applying it is inert — native parity holds while the reference also discovers no targets. |
 | Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. M4s1 adds the right-click context menu (workspace/tab/pane targets, reference items/geometry/highlight), workspace new/rename/close including the mobile `+ new workspace` row, and machine dialogs (add/connect/rename/remove). Custom commands, notifications, scrollback editing/clear and remaining actions stay in later M4 slices or M5. |
 | Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
@@ -485,8 +485,9 @@ Missing/nonexecutable Git and detached HEAD each add two matching checkpoints.
 Three promisor cases are excluded from matching totals. All 390 paired immutable
 input cases and 14 positioned detach tails match; four opt-in protocol integration
 tests pass against `.8`. All 13 layout runs prove two-client convergence and both
-reload rounds. The 17 Settings notice checks retain `pending-feature`; actual
-Settings overlay parity is not claimed. Original config and expected input bytes
+reload rounds. M4's Settings overlay replaces the earlier `pending-feature`
+notice path: the binding/menu entries now open the real overlay and the layout
+scenario compares its cells directly. Original config and expected input bytes
 are unchanged, owned resources clean up, and measured disk space stayed above
 the 12 GiB floor.
 
@@ -533,8 +534,9 @@ First reconnect appearance and the stalled-output fence remain unproven.
 M2/M2.2/M3a regressions retain their explicit coverage: 154 default, 33 host
 MOK, 18 repository, 33 hostname/status and 581 layout checkpoints, plus six
 exact Git fallback/detached checkpoints. All 13 layout runs retain shared
-layout convergence and both reload rounds. Settings' 17 unavailable notices
-remain `pending-feature`; managed worktree groups remain `pending-feature`
+layout convergence and both reload rounds. The Settings overlay is ported in
+M4 (the former `pending-feature` notice is gone); managed worktree groups
+remain `pending-feature`
 (M4). Three promisor variants each retain five raw count-cell differences,
 `passed: false` and nonzero exit; their full known/unknown control surfaces
 explain core policy without masks. They are excluded from matching totals.
@@ -585,6 +587,18 @@ Everything else on the compared surfaces still diffs normally.
   dialogs are an intentional extension, exercised on the fake core only —
   no parity checkpoint compares them and real machines are never added or
   removed in tests.
+- **Agent context menu.** The reference TUI has no agent-row menu: a
+  right-click on an agent row or chip falls through its dispatch. hc-tui
+  opens an extension menu in the reference's style — `Send a line...`
+  (a small text dialog → `terminal.send`), `Interrupt`
+  (`terminal.interrupt`), `Mark read`/`Mark unread` (`herdr.seen` through
+  the dedicated seen writer; unread writes `turn - 1` and is inert at turn
+  0), `Keep`/`Park` (`terminal.keep`; park first clears the `herdr.space`/
+  `herdr.tab` placement labels like herdr-app) and `Kill` behind the shared
+  confirm dialog (`terminal.kill`). Every action re-reads the terminal's
+  `created_ms` before acting, like the reference's rename/close flow.
+  Exercised on the fake core only — no parity checkpoint compares these
+  rows and no real agent is ever sent to, interrupted or killed in tests.
 - **Worktree context-menu items.** Managed worktree groups stay
   `pending-feature`: hc-tui workspace facts carry no checkout membership, so
   `is_git`/`is_linked_worktree`/`has_worktree_children` are always false and

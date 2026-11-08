@@ -1,12 +1,9 @@
-"""Reload only owned config copies; distinguish the deferred Settings surface."""
+"""Reload only owned config copies; compare the paired Settings surface."""
 import json
 from pathlib import Path
 import datetime
 import math
-import time
 import tomllib
-
-from checks import text
 
 
 def quote(value):
@@ -46,7 +43,6 @@ def update(contents, changes):
 
 def run(owners, config, compare, size, decoder, out, result):
     from layout import binding
-    from run import checkpoint, differences
     reference, core = owners
     def send(data):
         for owner in owners:
@@ -113,28 +109,31 @@ def run(owners, config, compare, size, decoder, out, result):
             click(frames, 'settings')
         else:
             send(binding(config, 'settings'))
-        captured = {}
-        for owner, required in [(core, "Settings isn't available"), (reference, 'settings')]:
-            deadline = time.monotonic() + 2
-            while True:
-                frame = checkpoint(owner, 'settings-' + entry, size, decoder)
-                if required.lower() in text(frame).lower():
-                    captured[owner.kind] = frame
-                    break
-                assert time.monotonic() < deadline, 'settings action did not surface'
-        diff = differences(captured['reference'], captured['core'])
-        (out / ('settings-' + entry + '-diff.json')).write_text(json.dumps(diff, indent=2) + '\n')
-        result.setdefault('settings', []).append({'entry': entry, 'notice_verified': True,
-            'status': 'pending-feature', 'different_cells': len(diff)})
-        reference.ui.send(b'\x1b[27u')  # Close the real source Settings overlay only.
-        source = checkpoint(reference, 'settings-source-close', size, decoder)
-        if 'fixture alpha' not in text(source):
-            assert size[0] <= 64 and 'switch' in text(source).lower()
-            reference.ui.send(b'\x1b[27u')  # Source may resume its mobile switcher.
-        deadline = time.monotonic() + 5
-        while "Settings isn't available" in text(checkpoint(core, 'settings-expired', size, decoder)):
-            assert time.monotonic() < deadline, 'settings notice did not expire'
-        compare('settings-' + entry + '-return')
+        # Theme opens first; `j` previews the next theme live without a
+        # write. The reference and hc-tui restore that preview on Esc.
+        compare('settings-' + entry + '-open', required=('settings', 'catppuccin'),
+                paint=False, geometry=False)
+        send(b'j')
+        compare('settings-' + entry + '-theme-preview', required=('catppuccin-latte',),
+                paint=False, geometry=False)
+        sections = [('indicators', 'agent status indicators'),
+                    ('sound', 'sound alerts'),
+                    ('toast', 'notification popups'),
+                    ('integrations', 'agent integrations')]
+        for name, marker in sections:
+            send(b'l')
+            compare('settings-' + entry + '-' + name, required=(marker,),
+                    paint=False, geometry=False)
+        send(b'h' * 3)  # Back to Indicators; `j` picks distinct symbols.
+        send(b'j')
+        # Enter writes `status_indicators = "symbols"` through write_edit
+        # and reloads on both clients; the overlay stays open.
+        send(b'\r')
+        compare('settings-' + entry + '-applied', required=('distinct symbols',),
+                paint=False, geometry=False)
+        send(b'\x1b[27u')
+        compare('settings-' + entry + '-close')
+        result.setdefault('settings', []).append({'entry': entry, 'status': 'native'})
     settings('binding')
     if size[0] <= 64:
         send(binding(config, 'workspace_picker'))
