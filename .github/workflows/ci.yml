@@ -58,7 +58,8 @@ jobs:
         run: test "$(zig version)" = "0.16.0"
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --all-targets
-      - run: cargo test
+      # --no-fail-fast: report every failing test binary in one run.
+      - run: cargo test --no-fail-fast
       # shasum-based sha256 fallback on a host without sha256sum.
       - run: sh scripts/test-install.sh
 
