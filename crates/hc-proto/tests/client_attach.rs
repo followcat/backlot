@@ -182,7 +182,7 @@ async fn resize_stays_before_the_paint_it_replaces() {
 }
 
 #[tokio::test]
-async fn unknown_kinds_and_foreign_channels_surface_in_order() {
+async fn unknown_kinds_surface_and_foreign_channels_stay_routed() {
     let (mut core, read, write) = pair(64 * 1024);
     let server = tokio::spawn(async move {
         core.serve_attach(
@@ -192,7 +192,7 @@ async fn unknown_kinds_and_foreign_channels_surface_in_order() {
         )
         .await;
         core.send_stream(1, 42, b"mystery").await; // unknown kind, our channel
-        core.send_stream(9, 0, b"not ours").await; // known kind, foreign channel
+        core.send_stream(9, 0, b"not ours").await; // foreign channel: held for channel 9
         core.send_stream(1, 0, b"ours").await;
         core.drain_until_eof().await;
         core
@@ -206,14 +206,8 @@ async fn unknown_kinds_and_foreign_channels_surface_in_order() {
             payload: b"mystery".to_vec()
         })
     );
-    assert_eq!(
-        attach.recv().await,
-        Some(Output::Control {
-            channel: 9,
-            kind: 0,
-            payload: b"not ours".to_vec()
-        })
-    );
+    // The channel table keeps channel 9's frame out of this stream — on a
+    // shared connection it may still belong to a channel installed later.
     assert_eq!(attach.recv().await, Some(Output::Data(b"ours".to_vec())));
     drop(attach);
     joined(server).await;
@@ -249,16 +243,8 @@ async fn held_frames_replay_in_order_at_install() {
     });
     let attach = opening(read, write, &params()).await;
     assert_eq!(attach.channel(), 4);
-    // Foreign channel 9 must not become terminal output or credit —
-    // the held DATA counts as a Control, our frames keep their order.
-    assert_eq!(
-        attach.recv().await,
-        Some(Output::Control {
-            channel: 9,
-            kind: 0,
-            payload: b"foreign".to_vec()
-        })
-    );
+    // Channel 9's frame stays held for its own channel — never terminal
+    // output or credit here — while channel 4's held frames replay in order.
     assert_eq!(
         attach.recv().await,
         Some(Output::Resize {

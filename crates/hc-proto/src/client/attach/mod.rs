@@ -1,38 +1,49 @@
 // Derived from herdr-core crates/herdr-core/src/server.rs and viewers.rs (Apache-2.0).
 
-//! A terminal attach: `terminal.attach` on its own negotiated connection,
-//! then framed stream I/O on the channel it returns.
+//! A terminal attach: `terminal.attach` on a negotiated connection, then
+//! framed stream I/O on the channel it returns.
 //!
 //! The attach rides the same ownership rules as the RPC client — one
 //! shutdown for every end reason, a backend child killed and reaped when
-//! the handle drops or a close is cancelled. The reader demultiplexes:
-//! channel 0 keeps RPC replies (the attach call itself), stream channels
-//! feed an ordered bounded backlog the consumer drains with `recv` —
-//! a stalled consumer can never hide a CLOSE because the reader never
+//! the connection ends or a close is cancelled. [`Attach::connect`] gives
+//! each attach its own connection; [`AttachConn`] carries many attaches
+//! on one shared connection — one transport, one `hello` and a channel
+//! table the reader routes through, ending only what ended. The reader
+//! demultiplexes: channel 0 keeps RPC replies (the attach calls), stream
+//! channels feed ordered bounded backlogs the consumer drains with
+//! `recv` — a stalled consumer on one channel can never hide a CLOSE or
+//! delay another channel or a channel-0 reply because the reader never
 //! waits on it. `consume` is the only credit operation and it is
 //! synchronous, so a cancelled caller can never lose or duplicate credit
 //! bookkeeping while the stream lives.
 
+mod conn;
 mod error;
+mod mux;
 mod open;
 mod output;
 mod pump;
+mod registry;
 mod stream;
+mod table;
 
 pub use error::{AttachError, Ended};
 pub use output::{CloseReason, Output};
+pub use registry::AttachConn;
+#[doc(hidden)]
+pub use registry::ConnectParts;
 
 use super::error::CallError;
 use super::{call, lock};
 use crate::frame::{Frame, Kind};
 use crate::hello::HelloResult;
 use crate::terminal::{Display, Terminal};
-use crate::transport::{self, Guard};
+use crate::transport;
+use conn::{Conn, Ticket};
 use pump::DataQueue;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use stream::Stream;
-use tokio::task::JoinHandle;
 
 /// How long `detach` waits for the core's CLOSE ack before closing anyway.
 const DETACH_TIMEOUT: Duration = Duration::from_secs(10);
@@ -41,13 +52,15 @@ const INPUT_CHUNK: usize = 16 * 1024;
 
 /// One attached terminal: events via `recv`, bytes out via `send_input`,
 /// credit via `consume`, an orderly end via `detach`. Dropping it ends the
-/// stream (no CLOSE handshake) and closes the owned connection.
+/// stream: the channel still gets its CLOSE — on a shared connection a
+/// silent drop would leak the viewer — and the connection ends only when
+/// its last attach does.
 pub struct Attach {
     shared: Arc<Shared>,
 }
 
 pub(super) struct Shared {
-    /// The validated `hello` result.
+    /// The shared connection's validated `hello` result.
     hello: Arc<HelloResult>,
     /// The attached terminal's record — the authoritative initial grid.
     terminal: Terminal,
@@ -60,15 +73,17 @@ pub(super) struct Shared {
     automatic_input: bool,
     /// Request, hello and attach reply all confirmed quiet human releases.
     quiet_human_release: bool,
-    /// Control queue + pending table for channel-0 calls.
+    /// The connection's channel-0 control queue + dead latch.
     wire: Arc<call::Wire>,
-    /// Inbound routing, backlog and credit.
+    /// Inbound routing, backlog and credit for this channel.
     stream: Arc<Stream>,
     /// Queued stream input.
     data: Arc<DataQueue>,
-    /// `Arc`s so the tasks' end-of-wire closures own cells, never `Shared`.
-    guard: Arc<Mutex<Option<Guard>>>,
-    tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    /// The connection this attach rides — its transport, tasks and table.
+    conn: Arc<Conn>,
+    /// The counted claim that shuts the connection down when the last
+    /// attach leaves; `None` once `detach`/`Drop` released it.
+    ticket: Mutex<Option<Ticket>>,
 }
 
 impl Attach {
@@ -283,24 +298,21 @@ impl Attach {
                 Err(_) => None,
             }
         };
-        // Owned cleanup before the first await after this: pending fails,
-        // the stream ends, tasks are aborted then awaited so both halves
-        // drop, and the taken guard closes the backend. A cancelled
-        // detach still kills and reaps the child.
-        super::pump::fail(&shared.wire.pending, None);
+        // Channel-scoped cleanup before the first await after this: the
+        // stream ends, its input queue closes and the channel's table
+        // slot dies — the connection outlives this attach unless this
+        // claim was the last, in which case `release` already ran the
+        // shared shutdown and the backend close is awaitable.
         shared.stream.fail(None);
         shared.data.close();
-        let guard = lock(&shared.guard).take();
-        let tasks = lock(&shared.tasks).drain(..).collect::<Vec<_>>();
-        for task in &tasks {
-            task.abort();
-        }
-        for task in tasks {
-            let _ = task.await;
-        }
-        let transport = match guard {
-            Some(guard) => guard.close().await.map_err(with_transport_diag_detach)?,
-            None => transport::Closed::default(),
+        shared.conn.end_channel(shared.channel);
+        let transport = if shared.release() {
+            match shared.conn.close_report().await {
+                Some(report) => report.map_err(with_transport_diag_detach)?,
+                None => transport::Closed::default(),
+            }
+        } else {
+            transport::Closed::default()
         };
         Ok(Ended { reason, transport })
     }
@@ -312,18 +324,31 @@ fn with_transport_diag_detach(e: transport::Error) -> AttachError {
     AttachError::Open(super::error::Error::Transport(e))
 }
 
+impl Shared {
+    /// Ends this attach's claim on the connection: `true` when it was
+    /// the last and the shared shutdown just ran.
+    fn release(&self) -> bool {
+        match lock(&self.ticket).take() {
+            Some(ticket) => ticket.leave(),
+            None => false,
+        }
+    }
+}
+
 impl Drop for Attach {
-    /// Fail pending calls, end the stream, stop the tasks and drop the
-    /// guard — which kills and reaps an ssh child. Synchronous, so
-    /// waiters wake immediately.
+    /// Ends just this channel: queue the CLOSE synchronously — a silent
+    /// drop on a shared connection would leak the viewer — fail the
+    /// stream, close its input queue and mark the channel dead. The
+    /// connection shuts down only when the released claim was the last.
+    /// Synchronous, so waiters wake immediately.
     fn drop(&mut self) {
-        super::pump::fail(&self.shared.wire.pending, None);
+        if !self.shared.stream.ended() {
+            mux::queue_close(&self.shared.wire, self.shared.channel);
+        }
         self.shared.stream.fail(None);
         self.shared.data.close();
-        for task in lock(&self.shared.tasks).drain(..) {
-            task.abort();
-        }
-        drop(lock(&self.shared.guard).take());
+        self.shared.conn.end_channel(self.shared.channel);
+        self.shared.release();
     }
 }
 

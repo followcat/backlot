@@ -12,7 +12,7 @@ use super::output::{CloseReason, Output};
 use crate::client::lock;
 use crate::frame::{Control, Frame, INITIAL_CREDIT, Kind};
 use std::collections::VecDeque;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tokio::sync::{Notify, watch};
 
 /// Consecutive DATA payloads coalesce into one event up to this size —
@@ -41,8 +41,9 @@ pub(super) struct Stream {
     inner: Mutex<Inner>,
     /// Broadcast to every `recv`/`wait_ended` waiter.
     events: watch::Sender<()>,
-    /// Wakes the one writer task to flush owed credit.
-    credit_wake: Notify,
+    /// Wakes the connection's writer task to flush owed credit — shared
+    /// across channels on a shared connection.
+    credit_wake: Arc<Notify>,
 }
 
 /// A queued event plus the backlog bytes it was charged with — `pop`
@@ -78,7 +79,9 @@ enum End {
 }
 
 impl Stream {
-    pub(super) fn new() -> Stream {
+    /// `work` is the connection writer's shared wakeup: credit owed here
+    /// wakes the one writer that flushes every channel's credit fairly.
+    pub(super) fn new(work: Arc<Notify>) -> Stream {
         let (events, _) = watch::channel(());
         Stream {
             inner: Mutex::new(Inner {
@@ -92,7 +95,7 @@ impl Stream {
                 reported: false,
             }),
             events,
-            credit_wake: Notify::new(),
+            credit_wake: work,
         }
     }
 
@@ -344,11 +347,6 @@ impl Stream {
         i.owed -= n;
         Some(Frame::credit(ch, n as u32))
     }
-
-    /// Notify registrations for the writer's park.
-    pub(super) fn wakes(&self) -> &Notify {
-        &self.credit_wake
-    }
 }
 
 /// A foreign-channel or unknown-kind frame as a `Control` event plus the
@@ -372,7 +370,7 @@ mod tests {
     /// RESIZE and zero-payload Control surfaces used to leak theirs.
     #[tokio::test]
     async fn drained_events_release_their_charged_bytes() {
-        let stream = Stream::new();
+        let stream = Stream::new(Arc::new(Notify::new()));
         stream.install(1).unwrap();
         for frame in [
             Frame::resize(1, 120, 40),

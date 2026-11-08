@@ -23,7 +23,7 @@ use std::ffi::OsStr;
 use std::time::Duration;
 
 use common::scratch::{ScratchCore, core_binary};
-use hc_proto::client::{Attach, Client, Output};
+use hc_proto::client::{Attach, AttachConn, Client, Output};
 use hc_proto::endpoint::Endpoint;
 use hc_proto::events::{ServerNotification, SubscribeParams, event_kind};
 use hc_proto::subscribe::Subscription;
@@ -251,6 +251,101 @@ async fn subscribe_then_run_read_attach_kill() {
     );
 
     sub.close().await.expect("subscription close");
+    drop(client);
+    fixture
+        .finish()
+        .unwrap_or_else(|root| panic!("teardown failed; root kept at {root:?}"));
+}
+
+/// `attach`'s DATA frames accumulate until `needle` is in them — proof
+/// this channel itself carried the terminal's output.
+async fn data_until(attach: &Attach, needle: &str) {
+    tokio::time::timeout(DEADLINE, async {
+        let mut received = Vec::new();
+        loop {
+            match attach.recv().await {
+                Some(Output::Data(bytes)) => {
+                    attach.consume(bytes.len()).expect("credit");
+                    received.extend_from_slice(&bytes);
+                    if String::from_utf8_lossy(&received).contains(needle) {
+                        return;
+                    }
+                }
+                Some(Output::Resize { .. }) | Some(Output::Control { .. }) => {}
+                other => panic!("attach ended before {needle:?}: {other:?}"),
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("no {needle:?} DATA on the attach"))
+}
+
+/// Two attaches on one shared connection against the real core: both
+/// receive the terminal's output on their own channels and one detaches
+/// cleanly while the other keeps receiving — the local twin of what a
+/// remote endpoint's multiplexed attaches do.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE pointing at the pinned herdr-core binary"]
+async fn two_attaches_on_one_shared_connection() {
+    let fixture = ScratchCore::spawn().await;
+    let client = connect(&fixture.endpoint).await;
+    let run = client
+        .terminal_run(RunParams {
+            name: Some("hctui-mux".into()),
+            argv: vec![
+                "/bin/sh".into(),
+                "-c".into(),
+                "read x; printf 'MUX-7f2e\\n'; read y; printf 'DONE-44aa\\n'".into(),
+            ],
+            cwd: Some(fixture.work.to_string_lossy().into_owned()),
+            ..Default::default()
+        })
+        .await
+        .expect("terminal.run");
+    let address = run.terminal.address.clone();
+
+    let conn = AttachConn::new(fixture.endpoint.clone(), None);
+    let attach = |observe: bool| AttachParams {
+        terminal: address.clone(),
+        observe,
+        resize_notifications: true,
+        quiet_human_release: false,
+        history: 100,
+        cols: 80,
+        rows: 24,
+        display: None,
+        resumed: false,
+        caller: None,
+    };
+    // The active and the observer of one terminal ride one connection —
+    // each gets its own channel.
+    let active_params = attach(false);
+    let observer_params = attach(true);
+    let (active, observer) =
+        tokio::join!(conn.attach(&active_params), conn.attach(&observer_params));
+    let active = active.expect("active attach");
+    let observer = observer.expect("observer attach");
+    assert_ne!(active.channel(), observer.channel(), "two channels");
+
+    active.send_input(b"go\n").await.expect("send_input");
+    data_until(&active, "MUX-7f2e").await;
+    data_until(&observer, "MUX-7f2e").await;
+
+    // Detaching the observer closes only its channel; the connection
+    // and the active attach keep working — a second marker proves it.
+    observer.detach().await.expect("observer detach");
+    active.send_input(b"quit\n").await.expect("send_input");
+    data_until(&active, "DONE-44aa").await;
+    active.detach().await.expect("active detach");
+
+    client
+        .terminal_kill(TerminalParams {
+            terminal: address.clone(),
+            caller: None,
+        })
+        .await
+        .expect("terminal.kill");
+    drop(conn);
     drop(client);
     fixture
         .finish()
