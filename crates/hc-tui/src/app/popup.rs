@@ -43,6 +43,20 @@ pub(super) struct PopupPending {
     pub height: Option<PopupSize>,
 }
 
+/// The `pane` command's zoomed overlay: when its one-shot terminal exits,
+/// the split collapses and focus/zoom return — the reference's
+/// `overlay_panes` + `restore_overlay_after_exit`.
+pub(super) struct CommandOverlay {
+    pub terminal: String,
+    /// The terminal's core `created_ms`, captured once the run lands in
+    /// the inventory — `edit::hide` needs it for the `closed` tombstone
+    /// match in `project_snapshot`.
+    pub created_ms: Option<u64>,
+    /// Same inventory-lag guard as `PopupState.seen` — the run must be
+    /// observed once before disappearance counts as "exited".
+    pub seen: bool,
+}
+
 /// A peek overlay: an observe-only attach over a running terminal plus its
 /// keep-as-tab facts (`herdr-app`'s `terminal.peek` overlay).
 pub(super) struct PeekState {
@@ -73,10 +87,15 @@ impl App {
             }
             // The reference splits horizontally then zooms the new pane
             // over the whole tab (`spawn_pane_command` + `zoomed = true`).
+            // Its command is one-shot: `rm` removes the exited terminal
+            // and the overlay reconcile collapses the split back.
             CustomCommandAction::Pane => match self.creation(Some(false), true) {
                 Ok(mut creation) => {
                     creation.params.argv = Vec::new();
                     creation.params.line = Some(command.command.clone());
+                    creation.params.keep = false;
+                    creation.params.rm = true;
+                    creation.report_created = true;
                     self.submit_action(Action::Create(Box::new(creation)));
                 }
                 Err(error) => self.show_notice("Command unavailable", &error),
@@ -152,9 +171,20 @@ impl App {
         });
     }
 
-    /// The surface rectangle the popup resolves against.
+    /// The surface rectangle the popup resolves against: the pane surface
+    /// (right of the sidebar, under the tab bar) — the reference's
+    /// `layout.pane_surface` in `composition.rs`.
     fn frame_area(&self) -> Rect {
-        Rect::new(0, 0, self.area.0, self.area.1)
+        self.shell
+            .layout_config()
+            .layout(
+                self.area.0,
+                self.area.1,
+                self.shell_state.sidebar_collapsed,
+                super::pane_geometry::focused_tab_count(self),
+                self.sidebar_width,
+            )
+            .pane_surface
     }
 
     /// Close the popup: detach and kill the owned terminal — the
@@ -165,9 +195,13 @@ impl App {
             popup.pane.want(None);
             if let Some(term) = self.view.inventory.get(&popup.terminal) {
                 let created_ms = term.created_ms;
+                // `rm` terminals are reaped on exit when the last attach
+                // detaches, so the kill can legitimately arrive after the
+                // core already removed it — `allow_gone` keeps that quiet.
                 self.submit_action(Action::Kill {
                     terminal: popup.terminal,
                     created_ms,
+                    allow_gone: true,
                 });
             }
             self.sched.mark_dirty(Instant::now());
@@ -199,21 +233,35 @@ impl App {
                 self.close_peek();
             }
         }
+        // A `keys.command` pane is one-shot (`rm`): when its program ends
+        // the split collapses and prior focus/zoom return — the
+        // reference's `restore_overlay_after_exit` in `app/api.rs`.
+        if let Some(overlay) = &mut self.command_overlay {
+            let term = self.view.inventory.get(&overlay.terminal);
+            if let Some(term) = term {
+                overlay.seen = true;
+                overlay.created_ms = Some(term.created_ms);
+            }
+            let ended = overlay.seen
+                && matches!(self.view.link, hc_proto::watch::Link::Online)
+                && term.is_none_or(|t| t.state != "live" || t.finished_ms.is_some());
+            if ended {
+                let overlay = self.command_overlay.take().expect("checked above");
+                self.submit_action(Action::Forget {
+                    terminal: overlay.terminal,
+                    created_ms: overlay.created_ms.unwrap_or_default(),
+                });
+            }
+        }
     }
 
-    /// Every key while the popup is up is program input; `Esc` (no mods)
-    /// closes — the reference routes popup keys before UI bindings.
+    /// Every key while the popup is up is program input — the reference's
+    /// `popup_input_target` forwards them all (even Escape) to the popup
+    /// terminal; the popup closes when its terminal exits or is removed.
     pub(super) fn popup_key(&mut self, key: &TerminalKey) -> bool {
         let Some(popup) = self.popup.as_mut() else {
             return false;
         };
-        if key.input.action == hc_vt::Action::Press
-            && key.input.key == hc_vt::Key::Escape
-            && key.input.mods == hc_vt::Mods::NONE
-        {
-            self.close_popup();
-            return true;
-        }
         popup.pane.key(key);
         true
     }
@@ -237,28 +285,12 @@ impl App {
         }
     }
 
-    /// A press outside the popup dismisses it; inside stays modal for now
-    /// (mouse forwarding into the popup surface is a documented gap).
-    pub(super) fn popup_mouse(&mut self, mouse: &super::input::MouseInput) -> bool {
-        let Some(popup) = &self.popup else {
-            return false;
-        };
-        let geometry = resolve_popup_geometry(popup.width, popup.height, self.frame_area());
-        let inside = geometry.is_some_and(|g| {
-            mouse.col >= g.outer.x
-                && mouse.col < g.outer.x + g.outer.width
-                && mouse.row >= g.outer.y
-                && mouse.row < g.outer.y + g.outer.height
-        });
-        if !inside
-            && matches!(
-                mouse.kind,
-                super::input::MouseEventKind::Down(super::input::MouseButton::Left)
-            )
-        {
-            self.close_popup();
-        }
-        true
+    /// The reference swallows mouse input while the popup is open: presses
+    /// inside go to the popup terminal, presses outside are ignored.
+    /// Forwarding pointer events into the surface is a documented gap —
+    /// both sides currently drop them.
+    pub(super) fn popup_mouse(&mut self, _mouse: &super::input::MouseInput) -> bool {
+        self.popup.is_some()
     }
 
     /// Peek floats like herdr-app's 0.8 dialog; a press outside closes it.
@@ -293,14 +325,18 @@ impl App {
 
     /// Draw the peek overlay, then the popup over it. The popup owns the
     /// host cursor while open; a peek never gets one (observe-only).
-    pub(super) fn draw_popups(
-        &mut self,
-        buf: &mut ratatui::buffer::Buffer,
-        area: Rect,
-        now: Instant,
-    ) {
+    pub(super) fn draw_popups(&mut self, buf: &mut ratatui::buffer::Buffer, now: Instant) {
         use ratatui::style::{Modifier, Style};
         use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
+        if self.popup.is_none() && self.peek.is_none() {
+            return;
+        }
+        // The source composes overlays by rebuilding the wire frame as
+        // ratatui cells (wire.rs u16_to_modifier drops extended underline
+        // bits); neither overlay dims the background.
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
         let palette = &self.shell.palette;
         if let Some(outer) = self.peek_outer()
             && let Some(peek) = self.peek.as_mut()
@@ -337,16 +373,18 @@ impl App {
                         .add_modifier(Modifier::BOLD),
                 )
                 .render(header, buf);
+            Clear.render(surface, buf);
             super::draw::draw_terminal(&mut peek.pane, surface, buf, now, true);
         }
         let Some(geometry) = self
             .popup
             .as_ref()
-            .and_then(|p| resolve_popup_geometry(p.width, p.height, area))
+            .and_then(|p| resolve_popup_geometry(p.width, p.height, self.frame_area()))
         else {
             return;
         };
         Clear.render(geometry.outer, buf);
+        // The reference title is the terminal's manual label or "popup".
         let title = self
             .popup
             .as_ref()
@@ -361,7 +399,7 @@ impl App {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(palette.accent).bg(palette.panel_bg))
             .style(Style::default().bg(palette.panel_bg))
-            .title(format!(" {title} "));
+            .title(title);
         let inner = block.inner(geometry.outer);
         block.render(geometry.outer, buf);
         // The attach's cells are `terminal_cols` wide — one column
@@ -373,6 +411,11 @@ impl App {
             inner.width.min(geometry.terminal_cols),
             inner.height.min(geometry.terminal_rows),
         );
+        // The block fills the interior with `panel_bg`; the reference
+        // leaves the covered cells on the terminal default background
+        // (`blit_pane_surface` only paints terminal cells), so reset
+        // exactly the surface area and keep the panel fill outside it.
+        Clear.render(surface, buf);
         let wish = super::draw::draw_terminal(&mut popup.pane, surface, buf, now, false);
         // The returned wish is surface-relative; shift into frame cells.
         self.want_cursor = super::draw::CursorWish {

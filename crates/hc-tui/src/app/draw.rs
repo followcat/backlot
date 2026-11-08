@@ -285,7 +285,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 .collect()
         })
         .unwrap_or_default();
-    app.draw_popups(buf, area, _now);
+    app.draw_popups(buf, _now);
     super::notices::render(app, buf, area);
     if let Some(bar) = mode_bar {
         for (offset, cell) in mode_bar_cells.into_iter().enumerate() {
@@ -293,11 +293,15 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 .expect("bar cell") = cell;
         }
     }
-    app.want_cursor = CursorWish {
-        pos: cursor.pos.map(|(x, y)| (inner.x + x, inner.y + y)),
-        anchor: cursor.anchor.map(|(x, y)| (inner.x + x, inner.y + y)),
-        ..cursor
-    };
+    // A popup owns the host cursor while open; `draw_popups` already
+    // stored its surface-relative wish in `app.want_cursor`.
+    if app.popup.is_none() {
+        app.want_cursor = CursorWish {
+            pos: cursor.pos.map(|(x, y)| (inner.x + x, inner.y + y)),
+            anchor: cursor.anchor.map(|(x, y)| (inner.x + x, inner.y + y)),
+            ..cursor
+        };
+    }
     if mode_bar.is_some_and(|bar| app.want_cursor.pos.is_some_and(|(_, y)| y == bar.y)) {
         app.want_cursor.pos = None;
         app.want_cursor.anchor = None;

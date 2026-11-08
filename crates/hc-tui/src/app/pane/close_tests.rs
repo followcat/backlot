@@ -281,3 +281,57 @@ async fn switch_drains_original_pending_input_and_parked_automatic_reply() {
     assert_eq!(data, expected);
     assert!(replies.starts_with(b"\x1b[?") && replies.ends_with(b"c"));
 }
+
+#[tokio::test]
+async fn a_retired_wires_deferred_drain_error_never_reaches_the_new_target() {
+    let (mut pane, mut rx, mut accept) = rig();
+    pane.want(Some(spec(Role::Active)));
+    let mut core = serve(&mut accept, true).await;
+    step_until_live(&mut pane, &mut rx).await;
+    paint(&mut pane, &mut rx, &mut core, b"ready").await;
+    let route = pane.park_outgoing().unwrap();
+    pane.unpark(route);
+    assert!(pane.closing.iter().any(|c| c.route == route));
+    // The t7 drain is still in flight while the pane retargets to t9.
+    pane.want(Some(Spec {
+        terminal: "t9".into(),
+        role: Role::Active,
+    }));
+    let mut replacement = serve(&mut accept, true).await;
+    step_until_live(&mut pane, &mut rx).await;
+    paint(&mut pane, &mut rx, &mut replacement, b"ready").await;
+    pane.on_event(
+        PaneEv::RouteClosed {
+            route,
+            error: Some("the attach stream ended".into()),
+        },
+        Instant::now(),
+    );
+    assert_eq!(
+        pane.close_failure(),
+        None,
+        "a dead wire's drain failure must not surface on the new target"
+    );
+    // The same deferred failure on a same-terminal reincarnation does.
+    let live_route = pane.park_outgoing().unwrap();
+    pane.unpark(live_route);
+    pane.want(Some(Spec {
+        terminal: "t9".into(),
+        role: Role::Active,
+    }));
+    let reincarnated = serve(&mut accept, true).await;
+    step_until_live(&mut pane, &mut rx).await;
+    pane.on_event(
+        PaneEv::RouteClosed {
+            route: live_route,
+            error: Some("the attach stream ended".into()),
+        },
+        Instant::now(),
+    );
+    assert_eq!(pane.notice().unwrap().title, "Input drain failed");
+    rx.close();
+    drop(core);
+    drop(replacement);
+    drop(reincarnated);
+    pane.shutdown().await;
+}

@@ -216,6 +216,62 @@ async fn visible_size_leases_survive_focus_and_leave_only_observers_off_tab() {
 }
 
 #[tokio::test]
+async fn zoomed_tab_keeps_covered_pane_lease_at_its_last_allocation() {
+    let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work")]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    let tab = app.projection.snapshot.focused_tab_id.clone().unwrap();
+    let key = crate::project::layout_key(None, &tab);
+    let split = serde_json::json!({"type":"split","vertical":true,"ratio":0.5,
+        "first":{"type":"pane","terminal":"t1"},
+        "second":{"type":"pane","terminal":"t2"}});
+    let base = Instant::now() + std::time::Duration::from_secs(60);
+    let draw = |app: &mut App, term: &mut Terminal<TestBackend>, tick: u64| {
+        let now = base + std::time::Duration::from_secs(tick);
+        app.sched.mark_dirty(now);
+        app.maybe_draw(term, now).unwrap();
+    };
+    let doc = |app: &mut App, value: serde_json::Value, version: u64| {
+        app.view.documents.insert(
+            hc_proto::watch::DocKey {
+                machine: None,
+                name: "hc-tui".into(),
+            },
+            hc_proto::watch::Document {
+                value,
+                version,
+                ..Default::default()
+            },
+        );
+        app.reconcile_published_view();
+    };
+    doc(
+        &mut app,
+        serde_json::json!({"schema":1,"focus":"t1","tabs":{key.clone():{"root":split}}}),
+        1,
+    );
+    draw(&mut app, &mut term, 0);
+    assert_eq!(app.size_leases.len(), 2);
+    let held = app.size_leases["t1"].allocated_size();
+    let zoomed_split = app.size_leases["t2"].allocated_size();
+
+    doc(
+        &mut app,
+        serde_json::json!({"schema":1,"focus":"t2","tabs":{key:{"root":split,"zoomed":"t2"}}}),
+        2,
+    );
+    term.backend_mut().resize(80, 30);
+    draw(&mut app, &mut term, 1);
+
+    assert!(app.size_leases.contains_key("t1"));
+    assert_eq!(app.size_leases["t1"].allocated_size(), held);
+    assert_ne!(app.size_leases["t2"].allocated_size(), zoomed_split);
+}
+
+#[tokio::test]
 async fn new_input_target_opens_at_its_current_geometry_before_any_draw() {
     let mut app = app_with(&["t1", "t2"]);
     let (tx, mut rx) = mpsc::channel(4);
@@ -242,4 +298,29 @@ async fn new_input_target_opens_at_its_current_geometry_before_any_draw() {
         assert_eq!((params.cols, params.rows), (inner.width, inner.height));
         assert_ne!((params.cols, params.rows), (80, 24));
     }
+}
+
+#[tokio::test]
+async fn dead_focus_falls_back_inside_its_tab_not_the_global_first() {
+    // A command overlay's terminal can exit inventory a view before the
+    // layout write that names the successor; the transient focus must not
+    // land on another workspace — painting it would ack its completions.
+    let mut app = app_with_spaces(&[("t1", "alpha"), ("t2", "beta"), ("t3", "beta")]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    app.focused = Some("t3".into());
+    app.refresh_projection();
+    assert_eq!(
+        app.projection.snapshot.focused_pane_id.as_deref(),
+        Some("t3")
+    );
+
+    let terms: Vec<_> = ["t1", "t2"]
+        .iter()
+        .map(|id| app.view.inventory.get(id.as_ref()).unwrap().clone())
+        .collect();
+    app.view.inventory.replace(2, terms);
+    app.reconcile_published_view();
+
+    assert_eq!(app.focused.as_deref(), Some("t2"));
 }

@@ -79,6 +79,7 @@ impl Pane {
             self.inventory_incarnation = None;
             self.pending.clear();
             self.pending_bytes = 0;
+            self.close_error = None;
         }
         self.teardown(false);
         match spec {

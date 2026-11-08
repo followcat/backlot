@@ -7,6 +7,8 @@ const MAX_CLOSING: usize = 8;
 
 struct Drain {
     route: u64,
+    /// The terminal this drain served — attributed through `Closing`.
+    terminal: String,
     attach: Arc<Attach>,
     out: mpsc::Sender<Out>,
     pending: VecDeque<Out>,
@@ -16,11 +18,21 @@ struct Drain {
 
 impl Pane {
     pub(super) fn begin_close(&mut self, mut parked: Parked) {
+        // Held-release encode failures belong to the parked terminal —
+        // never to whichever target the pane serves now.
+        let served = Some(parked.terminal.as_str()) == self.target();
+        let mut ignored = None;
+        let sink = if served {
+            &mut self.close_error
+        } else {
+            &mut ignored
+        };
         parked
             .held
-            .release_into(&parked.vt, &mut parked.pending_input, &mut self.close_error);
+            .release_into(&parked.vt, &mut parked.pending_input, sink);
         self.start_drain(Drain {
             route: parked.route,
+            terminal: parked.terminal,
             attach: parked.attach,
             out: parked.out,
             pending: parked
@@ -43,6 +55,7 @@ impl Pane {
             self.close_error = Some("Input drain limit exceeded; an older route was closed".into());
         }
         let route = drain.route;
+        let terminal = drain.terminal.clone();
         let writer_abort = drain.writer.abort_handle();
         let reader_abort = drain.reader.abort_handle();
         let abort_on_failure = writer_abort.clone();
@@ -64,6 +77,7 @@ impl Pane {
         });
         self.closing.push(Closing {
             route,
+            terminal,
             done,
             writer_abort,
             reader_abort,
@@ -135,6 +149,7 @@ impl Pane {
                 }
                 self.start_drain(Drain {
                     route: self.generation,
+                    terminal: live.spec.terminal.clone(),
                     attach: live.attach,
                     out: live.out,
                     pending,

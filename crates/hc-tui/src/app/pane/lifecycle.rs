@@ -128,6 +128,7 @@ impl Pane {
             self.parked.push(Parked {
                 held: live.held,
                 route,
+                terminal: live.spec.terminal.clone(),
                 attach: live.attach,
                 out: live.out,
                 vt,
@@ -287,6 +288,12 @@ impl Pane {
         }
         live.desired_size = Some((cols, rows));
         self.push_controls();
+    }
+
+    /// Test-only: the last layout allocation reported to this pane.
+    #[cfg(test)]
+    pub(crate) fn allocated_size(&self) -> (u16, u16) {
+        self.allocated
     }
 
     /// Sends what fits of the coalesced controls: latest desired size and

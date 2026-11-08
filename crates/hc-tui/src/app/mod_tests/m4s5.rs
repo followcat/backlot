@@ -94,7 +94,7 @@ async fn popup_command_runs_terminal_run_and_opens_the_popup() {
 }
 
 #[tokio::test]
-async fn popup_eats_keys_and_escape_closes_with_a_kill() {
+async fn popup_eats_keys_and_terminal_loss_closes_with_a_kill() {
     let mut app = app_with(&["t1"]);
     pending(&mut app);
     app.reconcile_published_view();
@@ -103,6 +103,7 @@ async fn popup_eats_keys_and_escape_closes_with_a_kill() {
     t9.created_ms = 9;
     t9.labels.insert("hc-tui.popup".into(), "1".into());
     app.view.inventory.replace(1, vec![t9]);
+    app.reconcile_published_view();
     let mut rx = operations(&mut app);
     core_id(&mut app, "core-fake-1");
     let server = tokio::spawn(async move {
@@ -122,12 +123,19 @@ async fn popup_eats_keys_and_escape_closes_with_a_kill() {
         height: Some(PopupSize::Percent(80)),
     });
     app.on_popup_spawned("t9".into());
-    // Keys route to the popup attach, never the focused pane.
+    // Keys route to the popup attach, never the focused pane — even
+    // Escape, which the reference forwards to the popup terminal.
     key(&mut app, Key::Char('x'));
     assert!(app.popup.as_ref().unwrap().pane.input_backlog().0 > 0);
     assert_eq!(app.pane.input_backlog().0, 0);
     key(&mut app, Key::Escape);
-    assert!(app.popup.is_none(), "Escape closes the popup");
+    assert!(app.popup.is_some(), "Escape is forwarded, not a close");
+    // A tab focus change dismisses the popup; the allow-gone kill cleans
+    // up its live `rm` terminal (or tolerates the core already reaping it).
+    app.popup.as_mut().unwrap().owner_tab = Some("tab-a".into());
+    app.projection.snapshot.focused_tab_id = Some("tab-b".into());
+    app.reconcile_published_view();
+    assert!(app.popup.is_none(), "tab change dismisses the popup");
     settle(&mut app).await;
     server.await.unwrap();
 }
@@ -154,7 +162,7 @@ async fn shell_command_dispatches_machine_exec() {
 }
 
 #[tokio::test]
-async fn pane_command_splits_the_focused_pane_with_the_command() {
+async fn pane_command_runs_zoomed_overlay_and_restores_on_exit() {
     let mut app = app_with_spaces(&[("t1", "work")]);
     pending(&mut app);
     app.reconcile_published_view();
@@ -166,30 +174,70 @@ async fn pane_command_splits_the_focused_pane_with_the_command() {
         core.answer_hello(true, &["doc.get", "doc.set", "terminal.run"], &[])
             .await;
         let mut version = 3u64;
-        for _ in 0..6 {
+        let mut written = json!({"schema": 1});
+        let mut sets = 0;
+        while sets < 2 {
             let req = core.read_request().await;
             match req["method"].as_str().unwrap() {
                 "doc.get" => {
-                    core.reply(
-                        &req["id"],
-                        json!({"value": {"schema":1}, "version": version}),
-                    )
-                    .await;
+                    core.reply(&req["id"], json!({"value": written, "version": version}))
+                        .await;
                 }
                 "terminal.run" => {
                     assert_eq!(req["params"]["line"], "echo hi");
+                    // A pane command is one-shot: `rm` reaps it, no
+                    // shell keeps its place — the reference's command
+                    // overlay exits instead of holding the split.
+                    assert_eq!(req["params"]["rm"].as_bool(), Some(true));
+                    assert_ne!(req["params"]["keep"].as_bool(), Some(true));
                     core.reply(&req["id"], run_reply()).await;
                 }
                 "doc.set" => {
+                    written = req["params"]["value"].clone();
                     version += 1;
+                    sets += 1;
                     core.reply(&req["id"], json!({"version": version})).await;
-                    break;
                 }
                 other => panic!("unexpected request {other}"),
             }
         }
+        // The second doc.set is the Forget CAS: the split collapsed back
+        // to a single pane, zoom cleared, focus back on the survivor,
+        // and the exited terminal tombstoned.
+        assert_eq!(written["closed"]["t9"], 9);
+        let tab = written["tabs"]
+            .as_object()
+            .unwrap()
+            .values()
+            .next()
+            .unwrap();
+        assert_eq!(tab["root"], json!({"type": "pane", "terminal": "t1"}));
+        assert_eq!(tab["focused"], "t1");
+        assert!(tab["zoomed"].is_null() || tab.get("zoomed").is_none());
     });
     app.run_custom_command(&command(CustomCommandAction::Pane, "echo hi"));
+    settle(&mut app).await;
+    // The written creation registers the overlay for its terminal.
+    let overlay = app.command_overlay.as_ref().expect("pane overlay tracked");
+    assert_eq!(overlay.terminal, "t9");
+    // The run lands in the inventory, then the program exits and `rm`
+    // drops it — the reconcile forgets it from the layout.
+    let mut t9 = crate::sidebar::fixture::term("t9");
+    t9.created_ms = 9;
+    t9.labels.insert("herdr.space".into(), "work".into());
+    t9.labels.insert("herdr.tab".into(), "tab".into());
+    let mut t1 = crate::sidebar::fixture::term("t1");
+    t1.labels.insert("herdr.space".into(), "work".into());
+    t1.labels.insert("herdr.tab".into(), "tab".into());
+    app.view.inventory.replace(2, vec![t1.clone(), t9]);
+    app.reconcile_published_view();
+    assert!(app.command_overlay.is_some(), "live overlay terminal keeps");
+    app.view.inventory.replace(3, vec![t1]);
+    app.reconcile_published_view();
+    assert!(
+        app.command_overlay.is_none(),
+        "the exited overlay submits Forget"
+    );
     settle(&mut app).await;
     server.await.unwrap();
 }

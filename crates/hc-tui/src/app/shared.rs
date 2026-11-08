@@ -81,6 +81,14 @@ impl App {
                     self.layout_confirmed = Some((written.core, stored.clone()));
                     self.view.documents.insert(key(), stored);
                 }
+                if let Some(terminal) = written.created {
+                    let observed = self.view.inventory.get(&terminal);
+                    self.command_overlay = Some(popup::CommandOverlay {
+                        terminal,
+                        created_ms: observed.map(|t| t.created_ms),
+                        seen: observed.is_some(),
+                    });
+                }
             }
             Some(Err(error)) => self.show_notice("Action failed", &error),
             None => {

@@ -30,10 +30,19 @@ impl Pane {
                 }
             }
             PaneEv::WriterFailed { generation, why } if self.parked_has(generation) => {
-                self.close_error = Some(format!(
-                    "Input route failed: {}",
-                    crate::sidebar::clean(&why)
-                ));
+                // A dead wire's failure belongs to its terminal — never
+                // to the pane's current target.
+                let served = self
+                    .parked
+                    .iter()
+                    .find(|p| p.route == generation)
+                    .map(|p| p.terminal.as_str());
+                if served == self.target() {
+                    self.close_error = Some(format!(
+                        "Input route failed: {}",
+                        crate::sidebar::clean(&why)
+                    ));
+                }
                 self.remove_parked(generation)
             }
             PaneEv::Opened { generation, attach } if generation == self.generation => {
@@ -69,11 +78,17 @@ impl Pane {
                 self.push_controls();
             }
             PaneEv::RouteClosed { route, error } => {
-                if let Some(error) = error {
-                    self.close_error = Some(error);
+                // The drain may finish after a retarget: its failure
+                // only surfaces while the pane still serves the terminal
+                // the drained wire belonged to.
+                let served = self
+                    .closing
+                    .iter()
+                    .find(|c| c.route == route)
+                    .map(|c| c.terminal.as_str());
+                if error.is_some() && served == self.target() {
+                    self.close_error = error;
                 }
-                // A parked route's ordered close finished — retire it
-                // now while idle instead of waiting for the next unpark.
                 self.closing.retain(|c| c.route != route);
             }
             PaneEv::WriterFailed { generation, why } if generation == self.generation => {

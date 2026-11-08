@@ -56,6 +56,7 @@ impl App {
             settings_hits: crate::chrome::settings_render::SettingsRender::default(),
             popup: None,
             popup_pending: None,
+            command_overlay: None,
             peek: None,
             sched: sched::Scheduler::default(),
             focused: None,

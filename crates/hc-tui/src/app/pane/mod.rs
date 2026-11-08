@@ -166,6 +166,9 @@ struct Parked {
     /// gets a new generation, so an old wire is never confused with a
     /// replacement for the same address.
     route: u64,
+    /// The terminal this wire served — its failures surface only while
+    /// the pane still targets that terminal.
+    terminal: String,
     attach: Arc<Attach>,
     out: mpsc::Sender<Out>,
     /// The live VT for this wire — fed parked DATA so releases encode
@@ -190,6 +193,9 @@ struct Closing {
     /// The parked generation being closed — `RouteClosed` retires
     /// exactly this entry while idle.
     route: u64,
+    /// The terminal this drain served — its failure reports only while
+    /// the pane still targets that terminal, never onto a retarget.
+    terminal: String,
     done: JoinHandle<Result<(), String>>,
     writer_abort: tokio::task::AbortHandle,
     reader_abort: tokio::task::AbortHandle,

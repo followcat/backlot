@@ -184,6 +184,9 @@ pub struct App {
     popup: Option<popup::PopupState>,
     /// Geometry for a `terminal.run` still in flight for a popup.
     popup_pending: Option<popup::PopupPending>,
+    /// The `pane` command's zoomed overlay — the reference's
+    /// `overlay_panes` entry for a spawned command pane.
+    command_overlay: Option<popup::CommandOverlay>,
     /// The worker-peek overlay — herdr-app's `terminal-peek`.
     peek: Option<popup::PeekState>,
     sched: sched::Scheduler,
@@ -381,9 +384,15 @@ impl App {
     fn reconcile_published_view(&mut self) {
         self.fence_chrome_core();
         self.follow_shared_focus();
+        // The dead pane's context survives the reprojection for the
+        // fallback below — a transient inventory view can precede the
+        // layout write that names the real successor.
+        let previous_tab = self.projection.snapshot.focused_tab_id.clone();
+        let previous_workspace = self.projection.snapshot.focused_workspace_id.clone();
         self.refresh_projection();
         // If the focused terminal fell out of the inventory entirely,
-        // the projection's first pane is the deterministic fallback.
+        // prefer a sibling in the same tab, then the same workspace —
+        // never a global first pane that could ack another space's work.
         if self.mode == Mode::Normal
             && self.focused.as_ref().is_none_or(|f| {
                 self.projection
@@ -393,11 +402,16 @@ impl App {
                     .all(|p| &p.pane_id != f)
             })
         {
-            let fallback = self
-                .projection
-                .snapshot
-                .panes
-                .first()
+            let panes = &self.projection.snapshot.panes;
+            let fallback = panes
+                .iter()
+                .find(|p| previous_tab.as_ref() == Some(&p.tab_id))
+                .or_else(|| {
+                    panes
+                        .iter()
+                        .find(|p| previous_workspace.as_ref() == Some(&p.workspace_id))
+                })
+                .or_else(|| panes.first())
                 .map(|p| p.pane_id.clone());
             if fallback != self.focused {
                 self.focused = fallback;

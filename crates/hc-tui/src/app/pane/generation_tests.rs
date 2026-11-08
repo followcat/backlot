@@ -57,6 +57,7 @@ async fn cancelling_shutdown_aborts_the_owned_drain_and_writer() {
     let done_abort = done.abort_handle();
     pane.closing.push(Closing {
         route: 1,
+        terminal: "t1".into(),
         done,
         writer_abort: writer_abort.clone(),
         reader_abort: reader_abort.clone(),

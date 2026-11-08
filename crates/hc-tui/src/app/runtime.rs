@@ -25,20 +25,43 @@ impl App {
             self.sidebar_width,
         );
         let infos = pane_geometry::pane_infos(self, layout.pane_surface);
+        // Zoom covers the rest of the focused tab: the reference resizes
+        // only the zoomed pane, so each covered pane's lease stays alive
+        // at its last allocation instead of dropping to headless size.
+        let covered = self
+            .projection
+            .snapshot
+            .focused_tab_id
+            .as_ref()
+            .and_then(|id| self.projection.layouts.get(id))
+            .filter(|tab| tab.zoomed.is_some())
+            .and_then(|tab| tab.root.as_ref())
+            .map(|root| {
+                root.terminals()
+                    .into_iter()
+                    .filter(|id| !infos.iter().any(|info| &info.id == id))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         self.size_leases.retain(|id, _| {
             !id.is_empty()
                 && self.view.inventory.get(id).is_some()
-                && infos.iter().any(|info| &info.id == id)
+                && (infos.iter().any(|info| &info.id == id) || covered.contains(id))
         });
+        // While a layout write is in flight, inventory can publish a new
+        // member before the CAS lands — a transient un-zoomed split that
+        // must not resize panes the confirmed layout will cover. Geometry
+        // still draws; size claims wait for the write to settle.
+        let settling = self.pending_actions > 0;
         for info in infos {
             let inner = self
                 .displayed_pane(&info.id)
                 .map(|pane| pane_geometry::inner_for(pane, &info, self.shell.pane_scrollbars).0)
                 .unwrap_or_else(|| crate::chrome::panes::pane_inner_rect(info.rect, info.borders));
-            if info.is_focused {
+            if info.is_focused && !settling {
                 self.pane.allocated(inner.width.max(1), inner.height.max(1));
             }
-            if let Some(pane) = self.observers.get_mut(&info.id) {
+            if !settling && let Some(pane) = self.observers.get_mut(&info.id) {
                 pane.allocated(inner.width.max(1), inner.height.max(1));
             }
             if info.id.is_empty() || self.view.inventory.get(&info.id).is_none() {
@@ -47,15 +70,24 @@ impl App {
             let lease = self.size_leases.entry(info.id.clone()).or_insert_with(|| {
                 let mut lease = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
                 lease.set_host_facts(self.host_facts.clone());
-                lease.allocated(inner.width.max(1), inner.height.max(1));
+                if !settling {
+                    lease.allocated(inner.width.max(1), inner.height.max(1));
+                }
                 lease.want(Some(Spec {
                     terminal: info.id,
                     role: Role::SizeLease,
                 }));
                 lease
             });
-            lease.allocated(inner.width.max(1), inner.height.max(1));
+            if !settling {
+                lease.allocated(inner.width.max(1), inner.height.max(1));
+            }
             lease.on_view(&self.view);
+        }
+        for id in covered {
+            if let Some(lease) = self.size_leases.get_mut(&id) {
+                lease.on_view(&self.view);
+            }
         }
         term.draw(|frame| draw::draw(self, frame, now))?;
         self.apply_cursor();
