@@ -19,12 +19,14 @@ pub mod raw_frames;
 pub mod raw_input;
 #[cfg(unix)]
 pub mod reader;
+pub mod selection;
 pub mod sidebar;
 pub mod term;
 pub mod terminal_modes;
 pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
+mod word_select;
 
 mod mouse_geometry;
 

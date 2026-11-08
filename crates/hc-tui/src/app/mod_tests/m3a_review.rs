@@ -118,7 +118,16 @@ async fn focused_tabs_are_revealed_and_one_cell_drag_outside_does_not_focus_or_r
     app.refresh_projection();
     draw_to(&mut app, 80, 24);
     let rect = app.hit_map.tabs[1].0;
-    app.mouse_press((rect.x, rect.y));
+    app.mouse_press(
+        &input::MouseInput {
+            kind: input::MouseEventKind::Down(input::MouseButton::Left),
+            col: rect.x,
+            row: rect.y,
+            mods: Mods::NONE,
+            sgr_position: None,
+        },
+        None,
+    );
     app.mouse_drag((rect.x + 1, rect.y));
     assert!(app.tab_dragged);
     app.mouse_drag((rect.x + 1, rect.y + 5));
@@ -199,7 +208,16 @@ async fn a_core_replacement_retires_pending_tab_and_workspace_gestures() {
     app.reconcile_published_view();
     draw_to(&mut app, 120, 40);
     let rect = app.hit_map.tabs[1].0;
-    app.mouse_press((rect.x, rect.y));
+    app.mouse_press(
+        &input::MouseInput {
+            kind: input::MouseEventKind::Down(input::MouseButton::Left),
+            col: rect.x,
+            row: rect.y,
+            mods: Mods::NONE,
+            sgr_position: None,
+        },
+        None,
+    );
     app.mouse_drag((rect.x + 1, rect.y));
     assert!(app.tab_press.is_some());
     assert!(app.tab_dragged);

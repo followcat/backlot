@@ -34,6 +34,7 @@ mod notifications_focus;
 mod pane;
 mod pane_geometry;
 mod pane_mouse;
+mod pane_selection;
 pub(crate) mod popup;
 mod presentation;
 mod reload;
@@ -41,11 +42,13 @@ mod routing;
 mod runtime;
 mod sched;
 mod seen;
+mod selection_copy;
 mod settings;
 mod shared;
 mod synthesize;
 mod tab_status;
 mod window_title;
+mod word_selection;
 
 pub use input::UiEvent;
 pub use pane::{OpenAttach, PaneEv, Role, Spec};
@@ -217,6 +220,23 @@ pub struct App {
     /// Active chrome drag grab (`ChromeDrag`).
     chrome_drag: Option<mouse::ChromeDrag>,
     pane_mouse_gesture: Option<pane_mouse::Gesture>,
+    /// Pane text selection — the reference's `state.selection`. Anchors
+    /// live on absolute screen rows, so scrolling and new output don't
+    /// move the selected text.
+    selection: Option<crate::selection::Selection>,
+    /// Double-click word-drag gesture — the reference's
+    /// `word_selection_gesture`, resolved against the pane's local VT.
+    word_selection: Option<word_selection::WordSelection>,
+    /// Edge autoscroll while a drag sits past the inner rect's top or
+    /// bottom — the reference's `ClientSelectionAutoscroll`.
+    selection_autoscroll: Option<pane_selection::SelectionAutoscroll>,
+    /// Next 30 ms autoscroll tick.
+    selection_autoscroll_deadline: Option<Instant>,
+    /// A bare double-click's word highlight clears after 500 ms.
+    selection_highlight_clear_deadline: Option<Instant>,
+    /// Last pane click — the reference's `ClientPaneClick` double-click
+    /// bookkeeping for word selection.
+    last_pane_click: Option<pane_selection::PaneClick>,
     /// Pressed-but-unreleased workspace/tab rows.
     workspace_press: Option<mouse::WorkspacePress>,
     tab_press: Option<mouse::TabPress>,

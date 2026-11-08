@@ -2,8 +2,14 @@
 use super::*;
 
 impl App {
-    /// `LeftDown` in the reference's hit order.
-    pub(in crate::app) fn mouse_press(&mut self, point: (u16, u16)) {
+    /// `LeftDown` in the reference's hit order. `previous_pane_click`
+    /// carries the double-click candidate the prologue took.
+    pub(in crate::app) fn mouse_press(
+        &mut self,
+        mouse: &MouseInput,
+        previous_pane_click: Option<crate::app::pane_selection::PaneClick>,
+    ) {
+        let point = (mouse.col, mouse.row);
         let hits = self.hit_map.clone();
         self.chrome_drag = None;
         self.workspace_press = None;
@@ -177,6 +183,13 @@ impl App {
                     self.pane_scroll_to_offset(&hit.pane_id, offset);
                 }
                 return;
+            }
+            // Only the inner rect anchors a selection — a press on the
+            // border still focuses but selects nothing (the reference's
+            // `contains(inner_rect)` gate). Reporting panes never reach
+            // here; `route_pane_mouse` forwarded them already.
+            if contains(hit.inner_rect, point) {
+                self.press_pane_selection(&hit, mouse, previous_pane_click);
             }
             self.focus_pane(hit.pane_id.clone());
         }

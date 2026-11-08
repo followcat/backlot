@@ -11,6 +11,7 @@ mod m4s2;
 mod m4s3;
 mod m4s4;
 mod m4s5;
+mod mouse_selection;
 mod narrow;
 mod reload;
 mod review_regressions;

@@ -167,6 +167,8 @@ impl App {
                     .chain(self.notice.as_ref().map(|n| n.deadline))
                     .chain(self.notification_deadline())
                     .chain(self.next_tab_status)
+                    .chain(self.selection_autoscroll_deadline)
+                    .chain(self.selection_highlight_clear_deadline)
                     .min()
             };
             self.probe
@@ -240,6 +242,9 @@ impl App {
             }
             self.expire_notice(now);
             self.tick_notifications(now);
+            if self.tick_selection(now) {
+                self.sched.mark_dirty(now);
+            }
             self.drain_bells();
             self.share_seen();
             self.update_window_title();

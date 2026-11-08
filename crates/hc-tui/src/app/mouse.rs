@@ -187,9 +187,42 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return;
         }
+        // Down(Left) prologue: every left press reaching the main
+        // dispatch retires the selection family first — the reference's
+        // `Down(Left)` arm before any hit routing.
+        let previous_pane_click = if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+            self.clear_selection_for_press()
+        } else {
+            None
+        };
         if mouse.kind == MouseEventKind::Down(MouseButton::Left)
             && self.grab_split((mouse.col, mouse.row))
         {
+            return;
+        }
+        // An in-progress selection owns the pointer wherever it roams:
+        // drags extend (clamped, edge-autoscrolling), releases finish and
+        // copy, and the wheel scrolls the selection's own pane — none of
+        // it reaches the pane under the cursor or chrome routing.
+        if mouse.kind == MouseEventKind::Drag(MouseButton::Left)
+            && let Some(hit) = self.active_selection_pane()
+        {
+            self.update_selection_drag(&hit, mouse.col, mouse.row);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        if mouse.kind == MouseEventKind::Up(MouseButton::Left) && self.word_selection.is_some() {
+            self.finish_word_selection();
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        if mouse.kind == MouseEventKind::Up(MouseButton::Left) && self.selection.is_some() {
+            self.finish_selection();
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        if self.scroll_in_progress_selection(mouse) {
+            self.sched.mark_dirty(Instant::now());
             return;
         }
         if self.route_pane_mouse(mouse) {
@@ -205,7 +238,7 @@ impl App {
                 self.mouse_release(point);
             }
             MouseEventKind::Down(MouseButton::Left) => {
-                self.mouse_press(point);
+                self.mouse_press(&mouse, previous_pane_click);
             }
             MouseEventKind::Down(MouseButton::Right) => {
                 self.context_menu_press(point);
