@@ -20,7 +20,9 @@ mod io;
 mod keybinds;
 mod registry;
 mod sidebar;
+mod sound;
 mod theme;
+mod toast;
 
 pub use io::{LoadedConfig, config_diagnostic_summary, load, load_live};
 
@@ -34,7 +36,9 @@ pub use sidebar::{
     AgentSidebarToken, AgentsSidebarConfig, SidebarConfig, SidebarTokenColor, SidebarTokenStyle,
     SpaceSidebarToken, SpacesSidebarConfig,
 };
+pub use sound::{AgentSoundOverrides, AgentSoundSetting, SoundConfig};
 pub use theme::{CustomThemeColors, ModeThemeColors, ThemeConfig};
+pub use toast::{HerdrToastConfig, ToastConfig, ToastDelivery, ToastHerdrPosition};
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
