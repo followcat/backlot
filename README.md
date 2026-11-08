@@ -5,6 +5,7 @@ people who work in a terminal or on a headless machine and want the Herdr TUI ex
 
 - a sidebar of spaces and agents with live status, including machines added with `hc machine add`;
 - tabs, split panes, zoom and keyboard lock;
+- mouse selection that copies on release (through OSC 52, so your terminal has to allow it);
 - Herdr's key bindings and configuration, read from your existing Herdr config;
 - spaces and tabs read from the same `herdr-app` document the desktop app uses;
 - local use, or remote use over plain SSH, with the session staying on the server.
@@ -14,14 +15,15 @@ people who work in a terminal or on a headless machine and want the Herdr TUI ex
 Early, and not yet packaged:
 
 - **No prebuilt release yet.** Build from source, as described below.
-- **Official `hc` support is the current goal.** So far hc-tui has been developed and tested against
-  [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`. CI runs the protocol
-  integration tests against an official herdr-core commit, but the full UI has not been verified on
-  official `hc` yet.
+- **It runs on official `hc`.** CI builds a pinned official herdr-core from source and drives the real
+  UI against it: sidebar, attach, switching, tabs, splits, status and detach. Day-to-day use is still mostly
+  on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so reports from
+  official `hc` are especially welcome.
 - **On official `hc`**, agents appear with a status only if they report it themselves (OSC 7501), and the
   sidebar's Git and hostname details are unavailable, because those facts exist only in the fork. See
   [Core compatibility](docs/compatibility.md) for the full per-core picture.
-- **Not implemented yet:** mouse selection, copy mode and clipboard image paste.
+- **Not implemented yet:** keyboard copy mode and clipboard image paste. Text a program copies itself
+  through OSC 52 doesn't reach your clipboard yet.
 
 hc-tui stays a plain terminal client for `hc`. Multi-agent coordination is being built as a separate
 project.
