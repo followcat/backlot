@@ -54,6 +54,8 @@ The binary is replaced atomically; running clients keep their own in-memory copy
 rm ~/.local/bin/hc-tui
 ```
 
-hc-tui writes no other files onto your machine: your Herdr config is read, never modified, and
-the SSH control socket under `$XDG_RUNTIME_DIR/hc-tui-ssh` (or `/tmp/hc-tui-ssh-<uid>`) expires on
-its own — remove it too if you like. The `hc-tui` layout document lives on the core, not here.
+hc-tui keeps its footprint small: your Herdr config is only written when you save a setting in
+the Settings overlay (theme, status indicators, sound, toast delivery) — unrelated content is
+preserved — and the SSH control socket under `$XDG_RUNTIME_DIR/hc-tui-ssh` (or
+`/tmp/hc-tui-ssh-<uid>`) expires on its own — remove it too if you like. The `hc-tui` layout
+document lives on the core, not here.

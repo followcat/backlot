@@ -2,7 +2,9 @@
 
 hc-tui uses Herdr's key model: a prefix key, then an action key. The default prefix is
 `Ctrl+B`; your existing Herdr configuration (`~/.config/herdr/config.toml`) supplies the
-prefix and every binding — hc-tui reads it, it never writes it.
+prefix and every binding. The only writes to that file come from you: changing theme,
+status indicators, sound or toast delivery in the Settings overlay saves them there,
+preserving unrelated content.
 
 The authoritative, always-current reference is inside the app: press `Ctrl+B ?` for the
 searchable keybind help, or `hc-tui --help` for the default map. [runtime.md](runtime.md)
