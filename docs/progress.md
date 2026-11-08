@@ -399,10 +399,10 @@
   stubbed `uname`/`curl`; it also runs in CI on both Linux and macOS.
 - Verified locally: the x86_64 musl build is `static-pie linked` (ldd
   agrees), `--version`/`--help` run, and a packaged archive installs
-  through the real script path. The aarch64 musl build links via
-  `zig cc` (`tools/zig-cc.sh`, `link-self-contained=no`) and `file`
-  reports a static ARM aarch64 ELF. Both Apple targets are exercised
-  by CI only.
+  through the real script path. The aarch64 musl build is checked on
+  CI's `ubuntu-24.04-arm` runner — native, after `zig cc` as linker
+  proved incompatible with rustc's `-Wl,--fix-cortex-a53-843419`
+  erratum flag. Both Apple targets are exercised by CI only.
 - Docs: README leads with Install; new `docs/install.md`,
   `docs/remote.md` and `docs/troubleshooting.md`. The first tag/release
   publication is pending — the user decides when it goes out.
