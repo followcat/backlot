@@ -112,7 +112,7 @@ pub(crate) fn navigator_rows(
             for workspace in &snapshot.workspaces {
                 let workspace_matches = endpoint_query_matches
                     || text(&workspace.label)
-                    || workspace.branch.as_deref().is_some_and(&text);
+                    || workspace.branch.as_deref().is_some_and(text);
                 let mut children = Vec::new();
                 let workspace_tabs = tabs_by_workspace
                     .get(workspace.workspace_id.as_str())
@@ -169,12 +169,12 @@ pub(crate) fn navigator_rows(
                             && (tab_matches
                                 || text(&label)
                                 || text(meta)
-                                || pane.cwd.as_deref().is_some_and(&text)
-                                || agent_kind.is_some_and(&text)
-                                || title.is_some_and(&text)
+                                || pane.cwd.as_deref().is_some_and(text)
+                                || agent_kind.is_some_and(text)
+                                || title.is_some_and(text)
                                 || agent
                                     .and_then(|agent| agent.display_agent.as_deref())
-                                    .is_some_and(&text)
+                                    .is_some_and(text)
                                 || text(&pane.pane_id))
                         {
                             children.push(NavigatorRow {
