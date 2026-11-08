@@ -22,9 +22,9 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
-          # zig cc links the foreign-arch musl binary; the system cc
-          # cannot. HC_TUI_LINK_TARGET feeds tools/zig-cc.sh.
-          - { os: ubuntu-latest, target: aarch64-unknown-linux-musl, zig_link: aarch64-linux-musl }
+          # Native arm runner: zig cc as linker fails on the erratum
+          # flag CI's rustc adds (-Wl,--fix-cortex-a53-843419).
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
           - { os: macos-latest, target: aarch64-apple-darwin }
           - { os: macos-latest, target: x86_64-apple-darwin }
     runs-on: ${{ matrix.os }}
@@ -48,21 +48,7 @@ jobs:
       - name: Check Zig version
         run: test "$(zig version)" = "0.16.0"
       - uses: Swatinem/rust-cache@v2
-      - name: Build
-        env:
-          TARGET: ${{ matrix.target }}
-          ZIG_LINK: ${{ matrix.zig_link }}
-        run: |
-          set -eu
-          if [ -n "$ZIG_LINK" ]; then
-            var=CARGO_TARGET_$(echo "$TARGET" | tr 'a-z.-' 'A-Z__')_LINKER
-            export "$var=$PWD/tools/zig-cc.sh"
-            export HC_TUI_LINK_TARGET=$ZIG_LINK
-            # zig provides the musl crt; rust's self-contained copy
-            # would collide with it.
-            export RUSTFLAGS="-C link-self-contained=no"
-          fi
-          cargo build --release --target "$TARGET" -p hc-tui
+      - run: cargo build --release --target ${{ matrix.target }} -p hc-tui
       # Static proof for musl, a run where the runner executes the
       # build's own architecture. Cross targets get `file` only.
       - name: Check binary
@@ -75,9 +61,7 @@ jobs:
           case "$TARGET" in
             *-musl)
               file "$b" | grep -q "static"
-              if [ "$TARGET" = x86_64-unknown-linux-musl ]; then
-                "$b" --version
-              fi
+              "$b" --version
               ;;
             aarch64-apple-darwin)
               "$b" --version
