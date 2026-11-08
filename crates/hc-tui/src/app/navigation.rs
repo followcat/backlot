@@ -267,14 +267,11 @@ impl App {
         if let T::Menu(index) = target {
             use crate::input::KeybindAction as A;
             if let Some(action) = [A::Settings, A::Help, A::ReloadConfig, A::Detach].get(*index) {
-                // Source mobile.rs suspends Navigate while help overlays it.
-                // Retaining that mode also retains report-all keyboard flags.
-                if *action == A::Help {
-                    self.mobile_switcher_suspended = true;
-                } else {
-                    self.mode = Mode::Normal;
-                    self.navigate_target = None;
-                }
+                // Source mobile.rs suspends Navigate for every actionable
+                // menu row, retaining the report-all keyboard flags while
+                // an overlay is open; the switcher resumes once no overlay
+                // remains (no overlay rows resume within the same event).
+                self.mobile_switcher_suspended = true;
                 self.on_action(*action, self.area.0);
             }
             return;
@@ -340,7 +337,12 @@ impl App {
 
     /// Derived from herdr src/client/shell/state.rs (Apache-2.0).
     pub(super) fn resume_mobile_switcher_if_ready(&mut self) {
-        if self.mobile_switcher_suspended && !self.help && self.dialog.is_none() {
+        let overlay = self.help
+            || self.dialog.is_some()
+            || self.menu.is_some()
+            || self.navigator.is_some()
+            || self.settings.is_some();
+        if self.mobile_switcher_suspended && !overlay {
             self.mobile_switcher_suspended = false;
             if self.projection.snapshot.focused_workspace_id.is_some() {
                 self.mode = Mode::Normal;

@@ -83,3 +83,33 @@ async fn mobile_menu_starts_at_the_source_boundary_and_routes_read_only_actions(
         assert!(app.quitting);
     }
 }
+
+#[tokio::test]
+async fn menu_opened_settings_suspends_the_switcher_until_it_closes() {
+    let mut app = app();
+    app.mode = Mode::Navigate;
+    app.on_mobile_target(&ClientMobileTarget::Menu(0));
+    assert!(app.settings.is_some());
+    assert_eq!(app.mode, Mode::Navigate);
+    assert!(app.mobile_switcher_suspended);
+    app.sync_keyboard_report_all();
+    assert!(app.host_reports_all_keys);
+    // The overlay gates every resume — and the Ctrl+G lock stays out.
+    app.resume_mobile_switcher_if_ready();
+    assert!(app.mobile_switcher_suspended);
+    app.on_key(
+        term_key(
+            hc_vt::Key::Char('g'),
+            hc_vt::Mods::CTRL,
+            hc_vt::Action::Press,
+        ),
+        64,
+    );
+    assert!(!app.keyboard_locked);
+    assert_eq!(app.mode, Mode::Navigate);
+    app.cancel_settings_overlay();
+    app.resume_mobile_switcher_if_ready();
+    assert!(!app.mobile_switcher_suspended);
+    // No focused workspace in this fixture — the switcher resumes.
+    assert_eq!(app.mode, Mode::Navigate);
+}

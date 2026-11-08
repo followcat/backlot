@@ -108,7 +108,8 @@ impl App {
                 || (!self.help
                     && self.dialog.is_none()
                     && self.menu.is_none()
-                    && self.navigator.is_none()))
+                    && self.navigator.is_none()
+                    && self.settings.is_none()))
         {
             if key.input.action == Action::Press {
                 self.keyboard_locked = !self.keyboard_locked;
