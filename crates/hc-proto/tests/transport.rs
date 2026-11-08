@@ -133,6 +133,23 @@ async fn connect_fake(
     conn.split()
 }
 
+/// Collects the argument vector an `argv` fake printed: one line per
+/// argument, ending at the remote `hc connect` line (the last argument).
+async fn fake_argv(reader: &mut Reader<ReadHalf>) -> Vec<String> {
+    timeout(async {
+        let mut args = Vec::new();
+        loop {
+            let line = reader.read_line().await.unwrap().unwrap();
+            let done = line.starts_with(b"hc connect");
+            args.push(String::from_utf8(line).unwrap());
+            if done {
+                break args;
+            }
+        }
+    })
+    .await
+}
+
 /// Reads the pid a `pid`/`holder` fake printed on its stderr.
 async fn child_pid(guard: &transport::Guard) -> u32 {
     timeout(async {
@@ -217,35 +234,71 @@ async fn fake_ssh_gets_batch_argv_and_remote_line() {
     .await
     .unwrap();
     let (mut reader, writer, guard) = conn.split();
-    let args = timeout(async {
-        let mut args = Vec::new();
-        for _ in 0..11 {
-            let line = reader.read_line().await.unwrap().unwrap();
-            args.push(String::from_utf8(line).unwrap());
-        }
-        args
-    })
-    .await;
-    assert_eq!(
-        args,
-        [
-            "-T",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "ServerAliveInterval=15",
-            "-o",
-            "ServerAliveCountMax=4",
-            "alice@host-b",
-            r"hc connect --session 'o'\''clock'",
-        ]
+    let args = fake_argv(&mut reader).await;
+    assert_eq!(args.len(), 17, "{args:?}");
+    for (i, option) in [
+        "BatchMode=yes",
+        "ConnectTimeout=10",
+        "ServerAliveInterval=15",
+        "ServerAliveCountMax=4",
+        "ControlMaster=auto",
+    ]
+    .iter()
+    .enumerate()
+    {
+        assert_eq!(args[1 + i * 2], "-o");
+        assert_eq!(args[2 + i * 2], *option);
+    }
+    assert_eq!(args[0], "-T");
+    assert_eq!(args[11], "-o");
+    assert!(
+        args[12].starts_with("ControlPath=") && args[12].ends_with("/%C"),
+        "{:?}",
+        args[12]
     );
+    assert_eq!(args[13], "-o");
+    assert_eq!(args[14], "ControlPersist=600");
+    assert_eq!(args[15], "alice@host-b");
+    assert_eq!(args[16], r"hc connect --session 'o'\''clock'");
     // Guard::close: stdin EOF lets the fake exit, status and tail come back.
     drop(writer);
     let closed = timeout(guard.close()).await.unwrap();
     assert!(closed.status.unwrap().success(), "the fake exits 0");
+}
+
+#[tokio::test]
+async fn remote_streams_share_one_control_path_in_a_private_dir() {
+    // Two opens must name the same ControlPath socket, under a dir this
+    // layer created private (0700).
+    let open_args = |target: &'static str| async move {
+        let (mut reader, writer, guard) = connect_fake("argv", target).await;
+        let args = fake_argv(&mut reader).await;
+        drop(writer);
+        timeout(guard.close()).await.unwrap();
+        args
+    };
+    let control_path = |args: &[String]| {
+        args.iter()
+            .find_map(|a| a.strip_prefix("ControlPath="))
+            .expect("ControlPath option")
+            .to_string()
+    };
+    let first = open_args("alice@host-b").await;
+    let second = open_args("alice@host-b").await;
+    assert!(first.iter().any(|a| a == "ControlMaster=auto"));
+    assert!(first.iter().any(|a| a == "ControlPersist=600"));
+    let (a, b) = (control_path(&first), control_path(&second));
+    assert_eq!(a, b, "every stream names the same shared socket");
+    let dir = PathBuf::from(a.strip_suffix("/%C").expect("ControlPath ends /%C"));
+    assert!(
+        dir.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("hc-tui-ssh"),
+        "{dir:?}"
+    );
+    let mode = std::fs::metadata(&dir).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o700, "{dir:?} must be private");
 }
 
 #[tokio::test]

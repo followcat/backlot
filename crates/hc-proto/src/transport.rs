@@ -3,16 +3,16 @@
 //
 //! One open connection to a core: a Unix socket locally, or one owned ssh
 //! child remotely. Gives the codec [`Reader`]/[`Writer`] its read and write
-//! halves; the ssh child's lifetime is owned here. This layer adds no
-//! sharing options — the user's ssh config may still share the login —
-//! askpass prompts are disabled, and stderr is kept as a bounded
-//! diagnostic tail.
+//! halves; the ssh child's lifetime is owned here. On Unix every remote
+//! stream rides one shared login per target through a private
+//! control-socket directory prepared here (10-minute persist; askpass
+//! prompts are disabled), and stderr is kept as a bounded diagnostic tail.
 
 use crate::endpoint::{Endpoint, Remote};
 use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
@@ -137,8 +137,9 @@ impl From<io::Error> for Error {
 
 /// Opens a connection for a resolved [`Endpoint`]. `ssh_program` overrides
 /// the `ssh` name — tests inject a scripted helper; production passes `None`.
-/// Each call opens its own ssh child; this layer adds no sharing options,
-/// though the user's ssh config may still share the underlying login.
+/// Each call opens its own ssh child; on Unix the child's argv asks ssh to
+/// share one login per target through [`control_dir`]'s socket, so a burst
+/// of streams costs one TCP/key exchange instead of one each.
 pub async fn connect(
     endpoint: &Endpoint,
     ssh_program: Option<&OsStr>,
@@ -166,13 +167,64 @@ async fn unix(path: &Path) -> Result<Connection, Error> {
     })
 }
 
+/// The control-socket directory every remote stream shares its login
+/// through: `$XDG_RUNTIME_DIR/hc-tui-ssh` when the variable is set, else
+/// `hc-tui-ssh-<uid>` under the temp dir. `None` — always off Unix, or
+/// whenever no private directory is usable — leaves every stream its own
+/// login (the user's ssh config may still share it).
+fn control_dir() -> Option<PathBuf> {
+    #[cfg(unix)]
+    {
+        control_dir_in(&crate::endpoint::env_snapshot())
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+/// Resolves and prepares the control dir for `env`.
+#[cfg(unix)]
+fn control_dir_in(env: &crate::endpoint::Env) -> Option<PathBuf> {
+    let dir = match env.get(OsStr::new("XDG_RUNTIME_DIR")) {
+        Some(runtime) if !runtime.is_empty() => {
+            PathBuf::from(runtime.as_os_str()).join("hc-tui-ssh")
+        }
+        _ => std::env::temp_dir().join(format!("hc-tui-ssh-{}", unsafe { libc::getuid() })),
+    };
+    private_dir(dir)
+}
+
+/// Creates `dir` private to this user (0700) and returns it, or `None`
+/// when it exists and this user does not own it or group/other can
+/// write it — a control socket in such a directory could be taken over.
+#[cfg(unix)]
+fn private_dir(dir: PathBuf) -> Option<PathBuf> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let safe = |meta: &std::fs::Metadata| {
+        meta.is_dir()
+            && meta.uid() == unsafe { libc::getuid() }
+            && meta.permissions().mode() & 0o022 == 0
+    };
+    if let Ok(meta) = std::fs::metadata(&dir)
+        && !safe(&meta)
+    {
+        return None;
+    }
+    std::fs::create_dir_all(&dir).ok()?;
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).ok()?;
+    let meta = std::fs::metadata(&dir).ok()?;
+    safe(&meta).then_some(dir)
+}
+
 /// Runs `ssh <target> 'hc connect …'` as an owned child: stdin/stdout are the
 /// protocol pipe, stderr drains into a bounded tail so a flood cannot
 /// deadlock the pipe. Batch mode plus askpass disabled means ssh can only
 /// fail, never prompt our UI.
 async fn ssh(remote: &Remote, program: &OsStr) -> Result<Connection, Error> {
+    let control = control_dir();
     let mut cmd = Command::new(program);
-    cmd.args(remote.argv())
+    cmd.args(remote.argv(control.as_deref()))
         .env_remove("SSH_ASKPASS")
         .env("SSH_ASKPASS_REQUIRE", "never")
         .stdin(std::process::Stdio::piped())

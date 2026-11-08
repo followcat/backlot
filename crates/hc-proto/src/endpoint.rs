@@ -284,6 +284,45 @@ pub fn remote(target: &str, session: &str) -> Result<Remote, RpcError> {
     })
 }
 
+/// The longest ControlPath this layer allows: ssh must fit the socket
+/// path in `sun_path`. `%C` expands to a 40-digit hash, so the control
+/// directory plus `/%C` must stay within this bound or the control
+/// options are skipped entirely.
+#[cfg(unix)]
+const CONTROL_PATH_MAX: usize = 100;
+
+/// `ControlMaster=auto` + `ControlPath=<dir>/%C` + `ControlPersist=600`:
+/// the first stream starts a master that every stream to the target
+/// rides, and it stays up 10 minutes after the last one ends — without
+/// the persist its exit would take the multiplexed streams down with
+/// it. Empty off Unix, without a usable directory, or when `dir/%C`
+/// would exceed [`CONTROL_PATH_MAX`].
+#[cfg(unix)]
+fn control_options(dir: Option<&Path>) -> Vec<OsString> {
+    /// `%C` expands to this many hash digits in the socket name.
+    const HASH: usize = 40;
+    let Some(dir) = dir else { return Vec::new() };
+    if dir.as_os_str().len() + 1 + HASH > CONTROL_PATH_MAX {
+        return Vec::new();
+    }
+    let mut path = OsString::from("ControlPath=");
+    path.push(dir.as_os_str());
+    path.push("/%C");
+    vec![
+        OsString::from("-o"),
+        OsString::from("ControlMaster=auto"),
+        OsString::from("-o"),
+        path,
+        OsString::from("-o"),
+        OsString::from("ControlPersist=600"),
+    ]
+}
+
+#[cfg(not(unix))]
+fn control_options(_: Option<&Path>) -> Vec<OsString> {
+    Vec::new()
+}
+
 impl Remote {
     /// The remote command line ssh executes: `hc connect --session '<name>'`.
     /// The normalized session always goes on the command — including
@@ -297,10 +336,13 @@ impl Remote {
     /// The ssh argument vector after the program name. `-T` because the
     /// stream is a pipe, never a terminal; batch mode so ssh fails fast
     /// instead of asking our UI for a password; keepalives so a dead link
-    /// closes instead of hanging forever. This layer adds no control options
-    /// — each open is its own child — while the user's ssh config (a
-    /// ControlMaster, say) may still share the underlying login as usual.
-    pub fn argv(&self) -> Vec<OsString> {
+    /// closes instead of hanging forever. On Unix a usable `control_dir`
+    /// adds the options that share one login per target for 10 minutes
+    /// past the last stream (see [`control_options`]). `None` — always
+    /// off Unix, for a refused directory or an over-long socket path —
+    /// leaves each open its own login; the user's ssh config may still
+    /// share it.
+    pub fn argv(&self, control_dir: Option<&Path>) -> Vec<OsString> {
         let mut argv = vec![OsString::from("-T")];
         for option in [
             "BatchMode=yes",
@@ -311,6 +353,7 @@ impl Remote {
             argv.push("-o".into());
             argv.push(option.into());
         }
+        argv.extend(control_options(control_dir));
         argv.push(self.target.clone().into());
         argv.push(self.line().into());
         argv

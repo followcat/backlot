@@ -338,7 +338,8 @@ fn explicit_default_session_survives_remote_resolution() {
 
 #[test]
 fn remote_argv_is_batch_piped_and_unshellable() {
-    let argv = remote("alice@host-b", "work").unwrap().argv();
+    // No usable control directory: each open stays its own login.
+    let argv = remote("alice@host-b", "work").unwrap().argv(None);
     let argv: Vec<&OsStr> = argv.iter().map(OsString::as_os_str).collect();
     assert_eq!(
         argv,
@@ -357,6 +358,61 @@ fn remote_argv_is_batch_piped_and_unshellable() {
         ]
     );
     // The remote line is one argument; no local shell ever sees it.
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_argv_shares_one_login_under_a_control_dir() {
+    let dir = PathBuf::from("/run/user/4242/hc-tui-ssh");
+    let argv = remote("alice@host-b", "work").unwrap().argv(Some(&dir));
+    let argv: Vec<&OsStr> = argv.iter().map(OsString::as_os_str).collect();
+    assert_eq!(
+        argv,
+        [
+            OsStr::new("-T"),
+            OsStr::new("-o"),
+            OsStr::new("BatchMode=yes"),
+            OsStr::new("-o"),
+            OsStr::new("ConnectTimeout=10"),
+            OsStr::new("-o"),
+            OsStr::new("ServerAliveInterval=15"),
+            OsStr::new("-o"),
+            OsStr::new("ServerAliveCountMax=4"),
+            OsStr::new("-o"),
+            OsStr::new("ControlMaster=auto"),
+            OsStr::new("-o"),
+            OsStr::new("ControlPath=/run/user/4242/hc-tui-ssh/%C"),
+            OsStr::new("-o"),
+            OsStr::new("ControlPersist=600"),
+            OsStr::new("alice@host-b"),
+            OsStr::new("hc connect --session 'work'"),
+        ]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn remote_argv_drops_control_options_for_an_unusable_or_long_dir() {
+    let no_control = |argv: Vec<OsString>| {
+        assert!(
+            argv.iter()
+                .all(|a| !a.to_string_lossy().starts_with("Control")),
+            "{argv:?}"
+        );
+    };
+    // An unusable dir comes in as None: every open is its own login.
+    no_control(remote("host-b", "default").unwrap().argv(None));
+    // `dir/%C` must fit 100 bytes — %C expands to a 40-digit hash, so a
+    // 59-byte dir exactly fits and a 60-byte dir drops the options.
+    let fits = PathBuf::from(format!("/{}", "d".repeat(58)));
+    let argv = remote("host-b", "default").unwrap().argv(Some(&fits));
+    assert!(
+        argv.iter()
+            .any(|a| a.to_string_lossy().starts_with("ControlPath=")),
+        "{argv:?}"
+    );
+    let too_long = PathBuf::from(format!("/{}", "d".repeat(59)));
+    no_control(remote("host-b", "default").unwrap().argv(Some(&too_long)));
 }
 
 #[test]
