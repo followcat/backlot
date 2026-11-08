@@ -674,6 +674,16 @@ Everything else on the compared surfaces still diffs normally.
   `config.toml …; herdr config check` summary. The underlying diagnostics,
   the summary text and the right-aligned yellow banner row are identical;
   the prefix and its extra width are not producible.
+- **Integrations section content.** hc advertises no
+  `integration.list`/`integration.install` methods, so the reference's
+  built-in target list (`pi`, `claude`, … with found/not-found rows and
+  install affordances) cannot be produced. hc-tui renders the section's
+  reference empty state — `no integration targets available` — and applying
+  the row is inert. The `settings-*-integrations` checkpoints therefore
+  differ by exactly that section body (measured 209 cells at 80/65 columns,
+  211 at 64/40, 1421 at 120/200 — the row count scales with the overlay
+  height); every other Settings checkpoint, including the menu-opened path
+  at mobile widths, is cell-identical.
 - **Navigator footer identity fields.** The "Go to" overlay's selected-row
   footer renders the reference's `detail`/`meta` strings verbatim:
   `workspace / tab / pane_id` and the pane's `cwd`. Two fields carry
