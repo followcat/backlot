@@ -25,14 +25,43 @@ def encode(value):
     raise ValueError('unsupported scratch TOML value')
 
 
+def emit_key(key):
+    # Bare-key form for `[ui]`/`name` lookups in write_edit; only unusual
+    # key bytes are quoted.
+    import re
+    return key if re.fullmatch(r'[A-Za-z0-9_-]+', key) else quote(key)
+
+
+def emit_into(prefix, table, lines):
+    # Canonical section form, not "key" = {inline}: write_edit upserts by
+    # `[section]` header and bare `key =` prefix, so the Settings save path
+    # only exercises its in-place branches when the scratch file looks like
+    # a real config.
+    scalars = {key: value for key, value in table.items()
+               if not isinstance(value, dict)
+               and not (isinstance(value, list)
+                        and any(isinstance(item, dict) for item in value))}
+    for key, value in sorted(scalars.items()):
+        lines.append(emit_key(key) + ' = ' + encode(value))
+    for key, value in sorted(table.items()):
+        if isinstance(value, dict):
+            lines += ['', '[' + prefix + emit_key(key) + ']']
+            emit_into(prefix + emit_key(key) + '.', value, lines)
+        elif isinstance(value, list) and any(isinstance(item, dict) for item in value):
+            for item in value:
+                lines += ['', '[[' + prefix + emit_key(key) + ']]']
+                emit_into(prefix + emit_key(key) + '.', item, lines)
+
+
 def update(contents, changes):
     parsed = tomllib.loads(contents)
     for section, values in changes.items():
         parsed.setdefault(section, {}).update(values)
-    # Only private fixture copies are rewritten. Inline tables preserve parsed
-    # values regardless of comments, quoted headers or multiline arrays.
-    contents = '\n'.join(quote(key) + ' = ' + encode(value)
-                         for key, value in sorted(parsed.items())) + '\n'
+    # Only private fixture copies are rewritten. Parsed values are preserved
+    # regardless of comments, quoted headers or multiline arrays.
+    lines = []
+    emit_into('', parsed, lines)
+    contents = '\n'.join(lines) + '\n'
     checked = tomllib.loads(contents)
     for section, values in changes.items():
         assert all(checked[section][key] == value for key, value in values.items())

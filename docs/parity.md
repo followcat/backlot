@@ -391,7 +391,7 @@ or title are masked. These are documented core-policy differences, not passes.
 | User Alt+F popup/custom command | Parsed but direct commands are silently consumed, with no execution or notice. M4 command/popup scope; not a missing core fact. Fixture scripts never send Alt+F or execute its command. |
 | Layout/tab navigation and lock | M3a implements indexed workspace/tab/agent selection, previous/next, directional pane focus/swap, cycle/last pane, zoom/resize and Ctrl+G lock with default/configured bindings. |
 | Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
-| Settings binding/menu | M4 implements the reference overlay: the five sections (theme, indicators, sound, toast, integrations), live theme preview, `write_edit` saves and the same config-reload path as the reload binding. The Integrations section has no core methods in hc, so it always renders the reference's empty state `no integration targets available` and applying it is inert — native parity holds while the reference also discovers no targets. |
+| Settings binding/menu | M4 implements the reference overlay: the five sections (theme, indicators, sound, toast, integrations), live theme preview, `write_edit` saves and the same config-reload path as the reload binding. The Integrations section has no `integration.list`/`integration.install` core methods in hc, so it renders the reference's empty state `no integration targets available` and applying it is inert — the reference renders its built-in target list instead, so that one checkpoint differs by the missing core methods (Known differences). |
 | Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. M4s1 adds the right-click context menu (workspace/tab/pane targets, reference items/geometry/highlight), workspace new/rename/close including the mobile `+ new workspace` row, and machine dialogs (add/connect/rename/remove). Custom commands, notifications, scrollback editing/clear and remaining actions stay in later M4 slices or M5. |
 | Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
@@ -665,6 +665,15 @@ Everything else on the compared surfaces still diffs normally.
   keep `delivery = "off"` (the reference's default) so every checkpoint is
   deterministic; the card/banner, queue, TTL, suppression and OSC paths
   are covered by the fake-core tests instead.
+- **Endpoint config diagnostic merge.** After a Settings save the reference
+  pushes `ServerReloadConfig` to its server and merges the endpoint's
+  `snapshot.config_diagnostic` into the config toast — identical local and
+  endpoint summaries render as `client + endpoint: <summary>`. hc's hello
+  has no `server.reload-config` method and no `config_diagnostic` field, so
+  hc-tui's reload stays client-local and the toast renders only the local
+  `config.toml …; herdr config check` summary. The underlying diagnostics,
+  the summary text and the right-aligned yellow banner row are identical;
+  the prefix and its extra width are not producible.
 - **Navigator footer identity fields.** The "Go to" overlay's selected-row
   footer renders the reference's `detail`/`meta` strings verbatim:
   `workspace / tab / pane_id` and the pane's `cwd`. Two fields carry
