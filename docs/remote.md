@@ -20,7 +20,8 @@ password, and it runs ssh with prompting disabled, so a broken login fails inste
 Connection costs stay low:
 
 - on Unix, all streams to one target share a single SSH login through hc-tui's control socket
-  (`$XDG_RUNTIME_DIR/hc-tui-ssh`, kept 10 minutes past the last stream);
+  (`$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>` without it, kept 10 minutes past the
+  last stream);
 - every attach on a remote endpoint multiplexes onto one framed `hc connect` channel each —
   one transport, one handshake.
 

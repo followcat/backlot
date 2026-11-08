@@ -169,9 +169,9 @@ async fn unix(path: &Path) -> Result<Connection, Error> {
 
 /// The control-socket directory every remote stream shares its login
 /// through: `$XDG_RUNTIME_DIR/hc-tui-ssh` when the variable is set, else
-/// `hc-tui-ssh-<uid>` under the temp dir. `None` — always off Unix, or
-/// whenever no private directory is usable — leaves every stream its own
-/// login (the user's ssh config may still share it).
+/// `hc-tui-ssh-<uid>` under the temp dir (`/tmp` on macOS). `None` —
+/// always off Unix, or whenever no private directory is usable — leaves
+/// every stream its own login (the user's ssh config may still share it).
 fn control_dir() -> Option<PathBuf> {
     #[cfg(unix)]
     {
@@ -190,9 +190,26 @@ fn control_dir_in(env: &crate::endpoint::Env) -> Option<PathBuf> {
         Some(runtime) if !runtime.is_empty() => {
             PathBuf::from(runtime.as_os_str()).join("hc-tui-ssh")
         }
-        _ => std::env::temp_dir().join(format!("hc-tui-ssh-{}", unsafe { libc::getuid() })),
+        _ => control_parent().join(format!("hc-tui-ssh-{}", unsafe { libc::getuid() })),
     };
     private_dir(dir)
+}
+
+/// The fallback parent of the control dir. macOS has no
+/// `XDG_RUNTIME_DIR`, and `$TMPDIR` is a long per-user path that pushes
+/// `dir/%C` past `CONTROL_PATH_MAX` — `control_options` would drop the
+/// options and every stream would silently become its own SSH login.
+/// `/tmp` keeps the socket name short; `private_dir` still enforces a
+/// user-owned 0700 directory.
+#[cfg(target_os = "macos")]
+fn control_parent() -> PathBuf {
+    PathBuf::from("/tmp")
+}
+
+/// Everywhere else the system temp dir is short enough.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn control_parent() -> PathBuf {
+    std::env::temp_dir()
 }
 
 /// Creates `dir` private to this user (0700) and returns it, or `None`
