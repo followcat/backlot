@@ -8,7 +8,7 @@ real `hc`.
 
 | Component | Pin |
 |---|---|
-| herdr-core | `ec8adcdf0da38e539e8702f7c37801647da035f3` (`herdrdev/herdr-core`) |
+| herdr-core | `06793ede1bedb1fed8d22d3cae476d3eb239edf0` (`herdrdev/herdr-core`, 0.1.19) |
 | Ghostty (`vendor/ghostty`) | `1e5cdb865807abc990181efb8ebfa9122955cce2` |
 | Zig | `0.16.0` (`zig-x86_64-linux`, sha256 `70e49664…52ba3d00`) |
 
