@@ -19,7 +19,8 @@ Early, and not yet packaged:
   integration tests against an official herdr-core commit, but the full UI has not been verified on
   official `hc` yet.
 - **On official `hc`**, agents appear with a status only if they report it themselves (OSC 7501), and the
-  sidebar's Git and hostname details are unavailable, because those facts exist only in the fork.
+  sidebar's Git and hostname details are unavailable, because those facts exist only in the fork. See
+  [Core compatibility](docs/compatibility.md) for the full per-core picture.
 - **Not implemented yet:** mouse selection, copy mode and clipboard image paste.
 
 hc-tui stays a plain terminal client for `hc`. Multi-agent coordination is being built as a separate
