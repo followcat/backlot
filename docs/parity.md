@@ -769,3 +769,23 @@ Everything else on the compared surfaces still diffs normally.
   previous `focused_tab_id`, then its workspace, and only then the
   global first pane — matching the reference, whose overlay unwind is
   one synchronous mutation with no transient window.
+- **Orphaned wide-grapheme tails.** The reference's ANSI emitter tracks
+  the cell-width a position was last emitted with: when a wide grapheme
+  is replaced, the covered tail cells are invalidated and re-emitted
+  even when the new cell is a plain blank. ratatui's buffer diff only
+  force-emits a revealed trailing cell when the previous wide cell had
+  a non-default background or blank-visible modifiers, so a plain wide
+  grapheme (the fixture's `中` at the popup's left border column) left
+  the host cell painted with the popup panel background — a permanent
+  one-column stripe on otherwise-empty interior rows at 120 columns.
+  At the end of `draw`, `mark_wide_tail_slots` walks the composited
+  buffer and marks every cell covered by a multi-cell head with
+  `CellDiffOption::Skip`; the option participates in `Cell::eq`, so the
+  slot stays suppressed while covered but becomes a real diff once
+  revealed. Marking the *final* composite — not the pane's VT cells —
+  matters: an early version marked `Wide::SpacerTail` during pane draw,
+  and overlay writes (`set_symbol`/`set_style` keep `diff_option`)
+  inherited the mark and were suppressed, leaving stale cells where a
+  covered pane's tails sat under the help/menu/navigator rows (two
+  cells at 80 columns, one at 64/40). `wide_tail_slot_reemits_when_head_narrows`
+  covers the reveal.

@@ -13,7 +13,7 @@
 use std::time::Instant;
 
 use hc_vt::{CellColor, CursorShape, Rgb, Wide};
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, CellWidth};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Paragraph, Widget};
@@ -390,6 +390,38 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         buf[position].modifier ^= Modifier::REVERSED;
         app.want_cursor.anchor = Some(position);
     }
+    mark_wide_tail_slots(buf);
+}
+
+/// Wide-grapheme tail slots: a cell covered by a multi-cell head in the
+/// final composite is marked `CellDiffOption::Skip`. The option
+/// participates in `Cell::eq`, so the slot stays suppressed while the head
+/// covers it but becomes a real diff once the head narrows — the reference
+/// emitter's invalidated-width rule (render_ansi.rs `affected_width`),
+/// without which an orphaned host cell keeps stale attributes. Marking
+/// after compositing — rather than while panes draw — keeps overlay writes
+/// over a tail slot emit-ready; stale marks on uncovered cells are cleared
+/// in the same pass.
+pub(super) fn mark_wide_tail_slots(buf: &mut Buffer) {
+    let width = buf.area.width;
+    for y in 0..buf.area.height {
+        let mut covered_until = 0u16;
+        for x in 0..width {
+            let cell = &mut buf[(x, y)];
+            if x < covered_until {
+                cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip);
+                continue;
+            }
+            if matches!(cell.diff_option, ratatui::buffer::CellDiffOption::Skip) {
+                cell.set_diff_option(ratatui::buffer::CellDiffOption::None);
+                #[allow(deprecated)]
+                {
+                    cell.set_skip(false);
+                }
+            }
+            covered_until = covered_until.max(x + cell.cell_width());
+        }
+    }
 }
 
 pub(super) fn draw_terminal(
@@ -438,7 +470,9 @@ pub(super) fn draw_terminal(
             }
             let x = inner.x + col as u16;
             match cell.wide {
-                // Covered by the wide head at col-1: paint nothing.
+                // Covered by the wide head at col-1: paint nothing. `draw`
+                // marks the slot Skip after compositing so a later diff
+                // re-emits it when the head narrows.
                 Wide::SpacerTail => continue,
                 // A wide grapheme at the clip edge can't show half —
                 // blank it rather than bleed over the border.

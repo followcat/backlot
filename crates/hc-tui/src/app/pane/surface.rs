@@ -260,6 +260,11 @@ impl Pane {
         self.vt.as_mut()
     }
 
+    #[cfg(test)]
+    pub(crate) fn install_vt(&mut self, vt: Vt) {
+        self.vt = Some(vt);
+    }
+
     pub(crate) fn vt_ref(&self) -> Option<&Vt> {
         self.vt.as_ref()
     }

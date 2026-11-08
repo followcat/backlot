@@ -318,3 +318,42 @@ async fn peek_keep_labels_cas_writes_then_keeps() {
     settle(&mut app).await;
     server.await.unwrap();
 }
+
+/// A wide-grapheme tail slot carries `CellDiffOption::Skip` while the head
+/// covers it, so a later frame where the head narrows re-emits the freed
+/// cell — the reference emitter's invalidated-width rule
+/// (`render_ansi.rs`: `affected_width` forces the trailing cell out even
+/// when visually equal). Without the mark the buffer keeps the pre-head
+/// content, the diff sees no change, and a host that orphans the tail
+/// keeps stale attributes (the parity popup's stray panel-bg column).
+#[tokio::test]
+async fn wide_tail_slot_reemits_when_head_narrows() {
+    use ratatui::buffer::{Buffer, CellDiffOption};
+    use ratatui::layout::Rect;
+
+    let mut app = app_with(&["t1"]);
+    pending(&mut app);
+    let mut vt = hc_vt::Vt::new(10, 2, 0);
+    vt.feed("中".as_bytes());
+    app.pane.install_vt(vt);
+    let rect = Rect::new(0, 0, 10, 4);
+    let mut prev = Buffer::empty(rect);
+    super::super::draw::draw_terminal(&mut app.pane, rect, &mut prev, Instant::now(), false);
+    super::super::draw::mark_wide_tail_slots(&mut prev);
+    assert_eq!(prev[(0, 0)].symbol(), "中");
+    assert!(matches!(prev[(1, 0)].diff_option, CellDiffOption::Skip));
+
+    // Next frame: a narrow cell replaces the head; the freed tail must be
+    // part of the emitted diff even though both buffers show ' ' there.
+    let mut next = Buffer::empty(rect);
+    next.set_string(0, 0, "│", ratatui::style::Style::default());
+    let emitted: Vec<(u16, u16)> = prev
+        .diff(&next)
+        .into_iter()
+        .map(|(x, y, _)| (x, y))
+        .collect();
+    assert!(
+        emitted.contains(&(1, 0)),
+        "tail slot must re-emit: {emitted:?}"
+    );
+}
