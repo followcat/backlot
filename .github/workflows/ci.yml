@@ -50,3 +50,7 @@ jobs:
           HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core
           cargo test -p hc-proto --test integration --
           --ignored --test-threads=1
+      - run: >
+          HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core
+          cargo test -p hc-tui --test real_core_smoke --
+          --ignored --test-threads=1

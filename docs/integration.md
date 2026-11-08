@@ -24,6 +24,17 @@ HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core \
     cargo test -p hc-proto --test integration -- --ignored --test-threads=1
 ```
 
+`crates/hc-tui/tests/real_core_smoke.rs` drives the real `hc-tui` binary in
+a PTY over the same scratch isolation — idle start, sidebar rows, attach and
+echo, pane cycling, tab and split creation, an OSC 7501 report, and a clean
+detach with restored terminal modes. It asserts only facts both cores
+share, so the same suite covers fork and official builds:
+
+```sh
+HC_TUI_TEST_CORE=$(command -v hc) \
+    cargo test -p hc-tui --test real_core_smoke -- --ignored --test-threads=1
+```
+
 A missing `HC_TUI_TEST_CORE` fails the explicit run — it never silently
 counts as skipped. `--test-threads=1` keeps the real cores serial; each
 test could run in parallel but serial runs are easier to debug. A second
