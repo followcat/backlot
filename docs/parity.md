@@ -607,3 +607,37 @@ Everything else on the compared surfaces still diffs normally.
   M4s1 (M3a navigate surface); the M4s1 scenario exits Navigate with Escape
   before later checkpoints, and the gap stays open here rather than fixed
   inside this slice.
+- **Synthesized notifications.** hc's core emits no notification events; the
+  reference receives `SemanticNotification`s from its server. hc-tui derives
+  alerts client-side by diffing each pane's effective status word on every
+  reconcile — the herdr-app `alert` rule (blocked/error entries and busy
+  exits; panes only, never sub-agents; unseen targets only; at most once per
+  turn) — then runs the reference client pipeline unchanged (settle delay,
+  completion-evidence validation, same-pane dedupe, queue, kind TTL). The
+  visible card/banner, OSC 9/99 bytes and `prefix+o` focus are byte/frame
+  identical; only the trigger evidence is a word diff instead of a server
+  event.
+- **Notification sound as a host bell.** The reference plays `done.mp3` /
+  `request.mp3` (or configured paths) through an audio player; hc-tui has no
+  audio surface and writes a single BEL to the outer terminal per accepted
+  sound request. `[ui.sound]` gating, per-agent overrides and the
+  `HERDR_DISABLE_SOUND`/`NEXTEST` kill-switches match the reference; the mp3
+  path fields parse but are never opened.
+- **Terminal bell accounting.** hc's core has no `TerminalBell` message, so
+  hc-tui counts BEL bytes inside its VT emulator and forwards them to the
+  host in 64-byte chunks. The wire effect is identical to the reference's
+  server-counted `ServerMessage::TerminalBell` fanout; the counting point
+  moved client-side.
+- **`system` delivery falls back to terminal.** hc-tui has no desktop
+  notification integration, so `delivery = "system"` writes the same OSC
+  9/99 sequence as `terminal`. `off` still synthesizes (and suppresses
+  output), `herdr` renders the card/banner.
+- **`[ui.toast.clipboard]` and extra kinds.** The reference's copy-toast
+  section and the `UpdateInstalled`/`Custom` notification kinds have no
+  trigger in hc-tui this slice; the keys are not parsed. `[ui.toast]` itself
+  matches the reference, including the legacy `enabled` mapping and the
+  3600-second `delay_seconds` cap.
+- **`herdr.seen` worker.** The label write and the turn rule are the
+  reference's; hc-tui performs them on a dedicated channel worker so a
+  failed write retries without touching layout operation results. The wire
+  writes are the same `terminal.label` calls.
