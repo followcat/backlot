@@ -704,11 +704,14 @@ Everything else on the compared surfaces still diffs normally.
   anything. hc-tui shows the reference's unavailable notice ("Plugin
   actions unavailable") with a hc-specific body explaining that hc has no
   plugin runtime, rather than attempting an RPC.
-- **Popup terminal input.** Keyboard input is modal like the reference,
-  and Escape or an outside click closes the popup (`terminal.kill`). The
-  reference forwards mouse input inside the popup terminal; hc-tui keeps
-  the popup modal but does not forward pointer events into its surface —
-  clicks inside are ignored.
+- **Popup terminal input.** Keyboard input is modal like the reference:
+  every key — Escape included — forwards to the popup program
+  (`popup_input_target`), and the popup closes when its terminal exits
+  or is removed, not on a key. The reference forwards pointer events
+  inside the popup terminal; hc-tui keeps the popup modal but does not
+  forward them — inside clicks are ignored and outside clicks are
+  swallowed rather than closing the popup, matching the reference's
+  `pane_blocked_by_popup` swallow.
 - **`type = "pane"` zoom.** The reference splits the focused pane
   horizontally and marks the new pane `zoomed` (a full-tab overlay).
   hc-tui performs the same through `Change::Split { vertical: false,
@@ -718,3 +721,51 @@ Everything else on the compared surfaces still diffs normally.
   80%×80% floating dialog. Keep performs label → layout CAS →
   `terminal.keep` exactly like `terminal.keep` semantics describe; close
   detaches without writes.
+- **Command-pane unwind.** The reference registers `pane`/`popup`
+  command terminals as `overlay_panes` and removes the split, restores
+  the previous focus and clears zoom when the command exits. hc-tui
+  matches by tracking the created terminal (`Written.created`), marking
+  it `rm`-ephemeral, and on exit issuing `Action::Forget` plus a layout
+  CAS that drops the node and restores `previous`/clears `zoomed`.
+- **Covered-pane sizes under zoom.** The reference resizes only the
+  zoomed pane; covered panes keep their pre-zoom geometry for the whole
+  overlay. hc-tui replicates this two ways: covered panes retain their
+  silent `SizeLease` at the last allocation so they never go observe-only
+  (a leaderless attach would reflow to the core's 200×120 headless
+  size), and while a layout write is in flight (`pending_actions > 0`)
+  no new size claims or allocations are applied — inventory can publish
+  the new terminal a frame before the document CAS lands, and letting
+  that transient un-zoomed view allocate covered panes resized them to
+  split geometry mid-overlay (observed 53×23 → 24×21 → 53×23).
+- **Overlay underline flattening.** The reference rebuilds the frame as
+  ratatui cells before drawing any overlay, and its `u16_to_modifier`
+  conversion drops the extended underline-style bits — curly/squiggly
+  underlines beneath a popup, navigator, help, settings or menu render
+  as plain `4`. hc-tui strips the same `0xf000` nibble on every overlay
+  path; the popup/peek path was missing it until this slice (four cells
+  of fixture `curl` text differed at 65 columns).
+- **Ephemeral tab naming.** Splitting an unlabeled tab promotes its
+  `herdr.tab` label to a random 128-bit hex identity (`opaque_id()`).
+  `herdr.tab` is a grouping key *and* the display name for explicit
+  labels (e.g. `zulu`), so hc-tui suppresses only the generated
+  32-hex-digit form — otherwise the command pane's tab renders its
+  identity as a visible name the reference never shows.
+- **Drain-error isolation.** A dead wire's input-drain failure belongs
+  to its terminal, never to the pane's next target: `Pane::want` clears
+  a retained `close_error` on retarget, and `Parked`/`Drain`/`Closing`
+  carry the served terminal so deferred `RouteClosed`/`WriterFailed`
+  reports (which can land frames after the retarget) only surface while
+  the pane still targets that terminal — the overlay pane's `exit`
+  drain can finish after focus already moved on. The retained VT
+  screen still survives a same-terminal reattach.
+- **Focus fallback stays in context.** A command-pane exit publishes
+  inventory one view before the layout CAS that restores `previous`
+  focus. In that transient the dead terminal is missing, the old
+  `panes.first()` fallback could focus a different workspace's pane for
+  a frame, painting it — and painting acknowledges completions, so a
+  background `●` done marker could silently drop to `○` (observed once
+  at 65 columns before the fix, instrumented the second time).
+  `reconcile_published_view` now falls back inside the dead pane's
+  previous `focused_tab_id`, then its workspace, and only then the
+  global first pane — matching the reference, whose overlay unwind is
+  one synchronous mutation with no transient window.
