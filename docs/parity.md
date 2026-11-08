@@ -696,3 +696,25 @@ Everything else on the compared surfaces still diffs normally.
   navigator checkpoint — each filter, search-without-results, movement
   and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.
+
+## Slice 5 — popups, peek and custom commands
+
+- **`keys.command` `type = "plugin_action"`.** hc advertises no plugin
+  runtime and no `plugin.*` methods, so a plugin keybind cannot invoke
+  anything. hc-tui shows the reference's unavailable notice ("Plugin
+  actions unavailable") with a hc-specific body explaining that hc has no
+  plugin runtime, rather than attempting an RPC.
+- **Popup terminal input.** Keyboard input is modal like the reference,
+  and Escape or an outside click closes the popup (`terminal.kill`). The
+  reference forwards mouse input inside the popup terminal; hc-tui keeps
+  the popup modal but does not forward pointer events into its surface —
+  clicks inside are ignored.
+- **`type = "pane"` zoom.** The reference splits the focused pane
+  horizontally and marks the new pane `zoomed` (a full-tab overlay).
+  hc-tui performs the same through `Change::Split { vertical: false,
+  zoomed: true }` in the layout-document CAS.
+- **Peek.** hc has no `terminal.peek` request: the agent-menu Peek item
+  opens an observe-only attach on the terminal, drawn as the reference's
+  80%×80% floating dialog. Keep performs label → layout CAS →
+  `terminal.keep` exactly like `terminal.keep` semantics describe; close
+  detaches without writes.
