@@ -6,7 +6,6 @@
 //! scratch `bin/` (first) and the system dirs, so a test can also place a
 //! fake `ssh`/`hc` ahead of real tools.
 
-use std::env;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,7 +31,7 @@ impl ScratchEnv {
             std::process::id(),
             SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed),
         );
-        let root = env::temp_dir().join(unique);
+        let root = scratch_parent().join(unique);
         for dir in [
             "home", "state", "config", "data", "runtime", "socket", "bin",
         ] {
@@ -50,6 +49,19 @@ impl Drop for ScratchEnv {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
+}
+
+/// Parent of the scratch tree. macOS's per-user `$TMPDIR` is so long
+/// that the scratch socket path would exceed `sun_path` and tests
+/// would fail at endpoint resolution instead of what they assert.
+#[cfg(target_os = "macos")]
+fn scratch_parent() -> PathBuf {
+    PathBuf::from("/tmp")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn scratch_parent() -> PathBuf {
+    std::env::temp_dir()
 }
 
 /// A `Command` for the compiled hc-tui binary with nothing inherited and
