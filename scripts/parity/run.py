@@ -294,6 +294,30 @@ def one_size(args, size, binary):
                     programs[1].send(('\x1b[2;2H' + marker + '\x1b[K\x1b[18;8H').encode(), grid=grid)
                     wait_program(owner, programs[1], programs[1].serial)
                 compare('resize-' + str(len(reference.resizes)), geometry=new_size, grid_marker=marker)
+
+            # keys.command: the audited Alt+F popup (80%x80% floating
+            # terminal running the scratch shell) opened and typed into.
+            # The reference forwards every key — including Escape — into
+            # the popup terminal; the popup closes when its program exits.
+            # The forwarded Escape leaves the shell's line editor holding
+            # a partial escape sequence that swallows a following CR, so
+            # Ctrl-U kills the pending line before `exit`. Then the Alt+P
+            # pane command — a horizontal split the reference zooms over
+            # the whole tab — and its shell exit.
+            for name, keys, expected in [
+                ('popup-open', b'\x1b[102;3u', ['popup']),
+                ('popup-type', b'echo P5\r', ['P5']),
+                ('popup-escape', b'\x1b[27u', []),
+                ('popup-exit', b'\x15exit\r', []),
+                ('popup-closed', b'', []),
+                ('pane-open', b'\x1b[112;3u', []),
+                ('pane-exit', b'exit\r', []),
+                ('pane-closed', b'', []),
+            ]:
+                if keys:
+                    reference.ui.send(keys)
+                    core.ui.send(keys)
+                compare(name, text_contains=expected)
             result['idle'] = core.ui.idle_measurement(10)
 
 

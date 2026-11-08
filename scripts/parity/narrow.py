@@ -67,3 +67,21 @@ def run(owners, programs, compare, size):
     compare('navigator-end')
     send(b'\x1b[27u')
     compare('navigator-close')
+    # keys.command at boundary/mobile widths: Alt+F popup open, type,
+    # forwarded Escape, program exit; the Alt+P pane command and its exit.
+    # The forwarded Escape leaves the shell's line editor holding a
+    # partial escape sequence that swallows a following CR — Ctrl-U kills
+    # the pending line before `exit`.
+    for name, keys, expected in [
+        ('popup-open', b'\x1b[102;3u', ['popup']),
+        ('popup-type', b'echo P5\r', ['P5']),
+        ('popup-escape', b'\x1b[27u', []),
+        ('popup-exit', b'\x15exit\r', []),
+        ('popup-closed', b'', []),
+        ('pane-open', b'\x1b[112;3u', []),
+        ('pane-exit', b'exit\r', []),
+        ('pane-closed', b'', []),
+    ]:
+        if keys:
+            send(keys)
+        compare(name, text_contains=expected)

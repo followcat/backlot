@@ -44,15 +44,22 @@ def copy_config(original, env):
     for entry in parsed.get('ui', {}).get('tab_bar_right', []):
         if not isinstance(entry, dict) or entry.get('type') == 'command' or 'command' in entry:
             raise ValueError('parity baseline contains executable tab-bar configuration')
-    # Only this audited, unrelated chord is permitted for custom commands.
-    # The scripts never send Alt+F; arbitrary direct/prefix aliases are refused.
+    # Only these audited chords are permitted for custom commands: the
+    # Alt+F popup and the Alt+P pane command, both executing the same inert
+    # scratch shell. Arbitrary direct/prefix aliases are refused.
     for binding in parsed.get('keys', {}).get('command', []):
         if not isinstance(binding, dict):
             raise ValueError('unexpected command binding shape')
         keys = binding.get('key', [])
         keys = [keys] if isinstance(keys, str) else keys
-        if not keys or any(''.join(str(key).lower().split()) != 'alt+f' for key in keys):
+        allowed = {'alt+f': 'popup', 'alt+p': 'pane'}
+        if not keys or any(''.join(str(key).lower().split()) not in allowed for key in keys):
             raise ValueError('parity baseline has an unaudited custom command chord')
+        for key in keys:
+            chord = ''.join(str(key).lower().split())
+            if binding.get('type') != allowed[chord] or \
+                    binding.get('command') != 'exec "${SHELL:-sh}"':
+                raise ValueError('parity baseline has an unaudited custom command entry')
     # Sound otherwise spawns real audio players and uses shared /tmp.
     sound = parsed.get('ui', {}).get('sound')
     if sound is not None:
