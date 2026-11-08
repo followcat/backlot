@@ -72,9 +72,12 @@ fn tui_env(scratch: &ScratchCore) -> Vec<(String, String)> {
 /// A pty pair at `cols`x`rows`: nonblocking master for the pump, slave
 /// kept open so the final termios check still has a handle after the
 /// child exits. `openpty` applies the size atomically on every Unix.
+// Apple's openpty takes *mut winsize; the &mut is needed there and
+// harmless on Linux where it coerces to *const.
+#[allow(clippy::unnecessary_mut_passed)]
 fn openpty(cols: u16, rows: u16) -> (OwnedFd, OwnedFd) {
     unsafe {
-        let ws = libc::winsize {
+        let mut ws = libc::winsize {
             ws_col: cols,
             ws_row: rows,
             ws_xpixel: 0,
@@ -86,8 +89,8 @@ fn openpty(cols: u16, rows: u16) -> (OwnedFd, OwnedFd) {
                 &mut master,
                 &mut slave,
                 std::ptr::null_mut(),
-                std::ptr::null(),
-                &ws,
+                std::ptr::null_mut(),
+                &mut ws,
             ),
             0,
             "openpty: {:?}",

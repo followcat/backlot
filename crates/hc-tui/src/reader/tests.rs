@@ -148,11 +148,14 @@ async fn final_coalesced_resize_survives_a_full_channel() {
     reader.stop();
 }
 
+// Apple's openpty takes *mut winsize; the &mut is needed there and
+// harmless on Linux where it coerces to *const.
+#[allow(clippy::unnecessary_mut_passed)]
 #[tokio::test]
 async fn sigwinch_reads_the_owned_input_descriptor() {
     let mut master = -1;
     let mut slave = -1;
-    let size = libc::winsize {
+    let mut size = libc::winsize {
         ws_row: 24,
         ws_col: 80,
         ws_xpixel: 0,
@@ -166,8 +169,8 @@ async fn sigwinch_reads_the_owned_input_descriptor() {
                 &mut master,
                 &mut slave,
                 std::ptr::null_mut(),
-                std::ptr::null(),
-                &size,
+                std::ptr::null_mut(),
+                &mut size,
             )
         },
         0
