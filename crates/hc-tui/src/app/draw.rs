@@ -319,6 +319,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // the restored mode bar; the Navigator variant is the only one the
     // reference does not dim the background for.
     app.navigator_hits = if let Some(navigator) = app.navigator.as_ref() {
+        // The source composes overlays by rebuilding the wire frame as
+        // ratatui cells (wire.rs u16_to_modifier drops extended underline
+        // bits); it does not dim the background for the navigator.
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
         crate::chrome::navigator_render::render_navigator_overlay(
             buf,
             navigator,
