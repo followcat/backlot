@@ -75,10 +75,22 @@ esac
 EOF
 cat >"$BIN/curl" <<EOF
 #!/bin/sh
+# Behaves like real curl on the /latest redirect: url_effective is the
+# target only when -L (alone or bundled like -fsSIL) is among the args.
 last=
-for a in "\$@"; do last=\$a; done
+follow=
+for a in "\$@"; do
+    last=\$a
+    case "\$a" in -*L* | --location*) follow=1 ;; esac
+done
 case "\$last" in
-    */latest) printf '%s\n' "\${HC_TUI_FAKE_REDIRECT:?redirect unset}" ;;
+    */latest)
+        if [ "\$follow" ]; then
+            printf '%s\n' "\${HC_TUI_FAKE_REDIRECT:?redirect unset}"
+        else
+            printf '%s\n' "\$last"
+        fi
+        ;;
     *) exec $(command -v curl) "\$@" ;;
 esac
 EOF
@@ -165,6 +177,16 @@ else
 fi
 
 # --- latest release resolution ------------------------------------------------
+# The stub mirrors real curl: without -L a /latest request answers the
+# URL it was given, so the installer cannot see the tag.
+nol=$(HC_TUI_FAKE_REDIRECT="file://$FIX/tag/v9.9.9" \
+    "$BIN/curl" -fsSI -o /dev/null -w '%{url_effective}' "file://$FIX/latest")
+wit=$(HC_TUI_FAKE_REDIRECT="file://$FIX/tag/v9.9.9" \
+    "$BIN/curl" -fsSIL -o /dev/null -w '%{url_effective}' "file://$FIX/latest")
+[ "$nol" = "file://$FIX/latest" ] && [ "$wit" = "file://$FIX/tag/v9.9.9" ] \
+    && ok "stub curl only follows with -L" \
+    || bad "stub curl: no-L '$nol', with-L '$wit'"
+
 out=$(run latest Linux x86_64 HC_TUI_FAKE_REDIRECT="file://$FIX/tag/v9.9.9")
 st=$?
 got=$(cat "$work/latest/hc-tui" 2>/dev/null)

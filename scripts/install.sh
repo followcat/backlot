@@ -74,7 +74,7 @@ if [ "${HC_TUI_VERSION:-}" ]; then
 else
     # releases/latest redirects to releases/tag/<tag> — follow it with a
     # HEAD request and take the last path component as the tag.
-    url=$(curl -fsSI -o /dev/null -w '%{url_effective}' "$BASE_URL/latest") \
+    url=$(curl -fsSIL -o /dev/null -w '%{url_effective}' "$BASE_URL/latest") \
         || die "could not resolve the latest release"
     tag=${url##*/}
     case "$tag" in
@@ -99,10 +99,11 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' INT TERM
 
-curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 600 \
+# No --retry-all-errors: it needs curl 7.71+, older releases reject it.
+curl -fsSL --retry 3 --connect-timeout 15 --max-time 600 \
     "$BASE_URL/download/$tag/$archive" -o "$work/$archive" \
     || die "download failed — does release $tag contain $archive?"
-curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 120 \
+curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 \
     "$BASE_URL/download/$tag/sha256sums.txt" -o "$work/sha256sums.txt" \
     || die "download failed — release $tag has no sha256sums.txt"
 
