@@ -306,6 +306,9 @@ pub struct CustomCommandKeybind {
     pub command: String,
     pub action: CustomCommandAction,
     pub description: Option<String>,
+    /// Popup geometry, only meaningful for `action == Popup`.
+    pub width: Option<crate::popup_size::PopupSize>,
+    pub height: Option<crate::popup_size::PopupSize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

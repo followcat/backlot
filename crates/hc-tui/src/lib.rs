@@ -35,4 +35,5 @@ mod keybind_help;
 pub mod layout;
 
 pub mod operations;
+pub mod popup_size;
 pub mod structure;

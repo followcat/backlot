@@ -406,12 +406,24 @@ fn append_custom_command_bindings(
             CommandKeybindType::Popup => CustomCommandAction::Popup,
             CommandKeybindType::PluginAction => CustomCommandAction::PluginAction,
         };
+        let mut width = None;
+        let mut height = None;
         if action != CustomCommandAction::Popup
             && (command.width.is_some() || command.height.is_some())
         {
             diagnostics.push(format!(
                 "popup size on non-popup custom command: keys.command[{index}]; ignoring width and height"
             ));
+        } else {
+            for (slot, raw) in [(&mut width, &command.width), (&mut height, &command.height)] {
+                match raw.as_ref().map(crate::popup_size::PopupSize::from_toml) {
+                    None => {}
+                    Some(Ok(size)) => *slot = Some(size),
+                    Some(Err(error)) => diagnostics.push(format!(
+                        "invalid popup size on keys.command[{index}]: {error}"
+                    )),
+                }
+            }
         }
         let label = bindings.label().unwrap_or_else(|| "unset".to_string());
         keybinds.custom_commands.push(CustomCommandKeybind {
@@ -420,6 +432,8 @@ fn append_custom_command_bindings(
             command: command.command.clone(),
             action,
             description: command.description.clone(),
+            width,
+            height,
         });
     }
 }
