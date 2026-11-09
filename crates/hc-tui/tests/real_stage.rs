@@ -187,6 +187,45 @@ async fn wait_read(client: &Client, terminal: &str, needle: &str) -> String {
     }
 }
 
+/// `terminal.send` raw text into a terminal's program.
+async fn send_text(client: &Client, terminal: &str, text: &str) {
+    client
+        .call(
+            "terminal.send",
+            Some(serde_json::json!({"terminal": terminal, "text": text})),
+        )
+        .await
+        .expect("terminal.send");
+}
+
+/// The acme-shop role's summary entry once `want` holds for it.
+async fn wait_role(
+    client: &Client,
+    role: &str,
+    want: fn(&serde_json::Value) -> bool,
+) -> serde_json::Value {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let (_, doc) = wait_doc(client).await;
+        let found = doc["studios"]
+            .as_array()
+            .and_then(|ss| ss.iter().find(|s| s["id"] == "acme-shop"))
+            .and_then(|s| {
+                s["roles"]
+                    .as_array()
+                    .and_then(|rs| rs.iter().find(|r| r["role"] == role))
+            });
+        if let Some(r) = found.filter(|r| want(r)) {
+            return r.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{role} never matched in the doc: {doc}"
+        );
+        tokio::time::sleep(POLL).await;
+    }
+}
+
 /// The `backlot` document's version and value once it exists.
 async fn wait_doc(client: &Client) -> (u64, serde_json::Value) {
     let deadline = Instant::now() + DEADLINE;
@@ -243,6 +282,26 @@ fn wait_event(state: &Path, kind: &str, role: &str) -> serde_json::Value {
         assert!(
             Instant::now() < deadline,
             "no {kind} for {role} in the ledger"
+        );
+        std::thread::sleep(POLL);
+    }
+}
+
+/// The ledger reaches `n` events of `kind` on `role` — the count
+/// catches a repeated event the single-event wait cannot see.
+fn wait_events(state: &Path, kind: &str, role: &str, n: usize) {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let count = ledger(state)
+            .iter()
+            .filter(|e| e["kind"] == kind && e["role"] == role)
+            .count();
+        if count >= n {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "wanted {n} {kind} for {role} in the ledger"
         );
         std::thread::sleep(POLL);
     }
@@ -479,6 +538,18 @@ async fn real_stage_loop() {
         "{doc}"
     );
 
+    // The work sample (R17): the fake's announce screen reads
+    // `waiting`, and `work:` lines move it through `working` to
+    // `blocked` — the summary carries the classification, never
+    // the ledger.
+    wait_role(&client, "actor-t1-c2", |r| r["work"] == "waiting").await;
+    send_text(&client, &second.address, "work:working\n").await;
+    wait_role(&client, "actor-t1-c2", |r| r["work"] == "working").await;
+    send_text(&client, &second.address, "work:blocked\n").await;
+    let c2 = wait_role(&client, "actor-t1-c2", |r| r["work"] == "blocked").await;
+    assert_eq!(c2["task"], "t1", "{c2}");
+    assert_eq!(c2["priority"], "normal", "{c2}");
+
     // Closing the task stops the actor deliberately.
     bl(
         &scratch,
@@ -554,6 +625,44 @@ async fn real_stage_loop() {
         );
         tokio::time::sleep(POLL).await;
     }
+
+    // A closed person with a session is `resumable` — and the
+    // document itself never carries a session id.
+    let c2 = wait_role(&client, "actor-t1-c2", |r| {
+        r["state"] == "closed" && r["resumable"] == true
+    })
+    .await;
+    assert_eq!(c2["task"], "t1", "{c2}");
+    let (_, doc) = wait_doc(&client).await;
+    let json = serde_json::to_string(&doc).unwrap();
+    assert!(
+        !json.contains("fake-bl"),
+        "a session id reached the document: {json}"
+    );
+
+    // `backlot reopen` holds the closed person; the stage resumes it
+    // into the same fake session under `role.resumed`. `backlot
+    // close` releases it and the usual Stop path closes it again.
+    bl(&scratch, &state, "reopen --person actor-t1-c2 --as user");
+    let resumed = wait_event(&state, "role.resumed", "actor-t1-c2");
+    assert_eq!(resumed["reason"], "reopened", "{resumed}");
+    assert_eq!(resumed["session_id"], "fake-bl-acme-shop-t1", "{resumed}");
+    let back = wait_terminal(&client, "bl-acme-shop-t1").await;
+    check_labels(&back, "acme-shop", "actor-t1-c2", Some("t1"));
+    let status = bl(&scratch, &state, "status --json");
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let c2s = &status["roles"]["actor-t1-c2"];
+    assert_eq!(c2s["held"], true, "{c2s}");
+    assert_eq!(c2s["live"], true, "{c2s}");
+
+    bl(&scratch, &state, "close --person actor-t1-c2 --as user");
+    wait_absent(&client, "bl-acme-shop-t1").await;
+    wait_events(&state, "role.closed", "actor-t1-c2", 2);
+    let status = bl(&scratch, &state, "status --json");
+    let status: serde_json::Value = serde_json::from_str(&status).unwrap();
+    let c2s = &status["roles"]["actor-t1-c2"];
+    assert_eq!(c2s["held"], false, "{c2s}");
+    assert_eq!(c2s["closed"], true, "{c2s}");
 
     // A burst of changes: at most one write per two seconds. The gap
     // is open, then several ledger-changing commands land inside it.
