@@ -157,7 +157,10 @@ pub(crate) fn render(
                 );
             }
             Row::Studio(studio) => {
-                buf.set_stringn(
+                // The id can carry wide characters: the tail starts
+                // at the position `set_stringn` reports, not a char
+                // count.
+                let (id_end, _) = buf.set_stringn(
                     rect.x,
                     rect.y,
                     &studio.id,
@@ -168,9 +171,14 @@ pub(crate) fn render(
                 );
                 if studio.state != "live" {
                     let tail = " ·finished";
-                    let x = rect.x + studio.id.chars().count() as u16;
-                    if x < rect.x + rect.width {
-                        buf.set_stringn(x, rect.y, tail, (rect.x + rect.width - x) as usize, dim);
+                    if id_end < rect.x + rect.width {
+                        buf.set_stringn(
+                            id_end,
+                            rect.y,
+                            tail,
+                            (rect.x + rect.width - id_end) as usize,
+                            dim,
+                        );
                     }
                 }
             }
@@ -230,14 +238,17 @@ fn draw_person(
         palette.text
     };
     let mut x = rect.x + 2;
-    buf.set_stringn(
+    // Names can carry wide characters: `set_stringn` reports the
+    // display position after the name — advance by it, not a char
+    // count.
+    let (name_end, _) = buf.set_stringn(
         x,
         rect.y,
         &role.name,
         (rect.x + rect.width).saturating_sub(x) as usize,
         Style::default().fg(name_fg),
     );
-    x += role.name.chars().count() as u16;
+    x = name_end;
     if let Some(priority) = role.priority {
         let (flag, fg) = match priority {
             Priority::High => ("↑", palette.red),

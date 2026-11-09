@@ -149,6 +149,34 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
 }
 
 #[test]
+fn a_wide_name_pushes_the_runner_past_its_display_width() {
+    // "\u{738B}\u{4E94}" is two characters but four cells: the runner
+    // text must start after the display width, not the char count.
+    let mut value = summary_json();
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "role": "actor-we", "name": "\u{738B}\u{4E94}", "state": "live",
+            "work": "waiting", "runner": "agent-a",
+        }));
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let mut buf = Buffer::empty(area);
+    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, crate::panel::Target::Person(_, r) if r == "actor-we"))
+        .map(|(rect, _)| rect.y)
+        .expect("the actor row drew");
+    // mark at 0, name at 2 covering four cells, runner's 'a' at 7 —
+    // a char-count advance would put it at 5, over the name's tail.
+    assert_eq!(buf[(7, y)].symbol(), "a");
+}
+
+#[test]
 fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
