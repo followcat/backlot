@@ -3,7 +3,7 @@
 
 use crate::correct::{SeqTarget, correction_keys, correction_value_ok};
 use crate::event::*;
-use crate::state::{StudioState, TaskStatus};
+use crate::state::{RoleLifecycle, StudioState, TaskStatus, actor_task};
 
 pub use crate::refusal::Refusal;
 
@@ -16,6 +16,13 @@ fn require_task<'a>(state: &'a StudioState, id: &str) -> Result<&'a crate::state
         .tasks
         .get(id)
         .ok_or_else(|| Refusal::NoTask(id.into()))
+}
+
+/// Two role keys resolve to one terminal name when both are actors on
+/// the same task — a recast reuses `bl-<studio>-<task>`. Any other
+/// pairing produces different names.
+fn shared_terminal(a: &str, b: &str) -> bool {
+    actor_task(a).is_some() && actor_task(a) == actor_task(b)
 }
 
 /// Reject events on tasks that can no longer take them.
@@ -61,6 +68,48 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Ok(())
             } else {
                 Err(Refusal::NoRole(role.clone()))
+            }
+        }
+        // Reopening takes a closed person with a session to resume —
+        // and a free terminal name: a recast reuses `bl-<studio>-<task>`,
+        // so a live sibling actor on the same task blocks it.
+        EventKind::RoleReopen { role } => {
+            require_studio(state)?;
+            let r = state
+                .roles
+                .get(role)
+                .ok_or_else(|| Refusal::NoRole(role.clone()))?;
+            if r.lifecycle() != RoleLifecycle::Closed {
+                let state = if r.live { "live" } else { "lost" };
+                return Err(Refusal::RoleNotClosed {
+                    role: role.clone(),
+                    state,
+                });
+            }
+            if r.session_id.is_none() {
+                return Err(Refusal::RoleNoSession(role.clone()));
+            }
+            if r.held {
+                return Err(Refusal::RoleHeld(role.clone()));
+            }
+            let taken = state
+                .roles
+                .iter()
+                .find(|(k, v)| k.as_str() != role && v.live && shared_terminal(role, k));
+            match taken {
+                Some((other, _)) => Err(Refusal::RoleTerminalTaken {
+                    role: role.clone(),
+                    other: other.clone(),
+                }),
+                None => Ok(()),
+            }
+        }
+        EventKind::RoleRelease { role } => {
+            require_studio(state)?;
+            match state.roles.get(role) {
+                Some(r) if r.held => Ok(()),
+                Some(_) => Err(Refusal::RoleNotHeld(role.clone())),
+                None => Err(Refusal::NoRole(role.clone())),
             }
         }
         EventKind::MessageDelivered { target } => {

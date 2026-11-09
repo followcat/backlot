@@ -195,6 +195,12 @@ pub struct RoleState {
     /// are kept. A later `role.started`/`role.resumed` clears it.
     #[serde(default)]
     pub closed: bool,
+    /// `role.reopen` asked for this closed person back (R19): the
+    /// stage keeps it desired with a resume until `role.release` or
+    /// `role.closed` clears the hold. A resumed role stays held — the
+    /// hold is what keeps it desired once live.
+    #[serde(default)]
+    pub held: bool,
     /// When the current lifecycle state began.
     #[serde(default)]
     pub since_ms: u64,

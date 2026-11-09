@@ -65,6 +65,17 @@ pub enum Refusal {
         status: TaskStatus,
     },
     NoRole(String),
+    RoleNotClosed {
+        role: String,
+        state: &'static str,
+    },
+    RoleNoSession(String),
+    RoleHeld(String),
+    RoleNotHeld(String),
+    RoleTerminalTaken {
+        role: String,
+        other: String,
+    },
     NoMessage(u64),
     MessageDone(u64),
     NoAttention(u64),
@@ -153,6 +164,21 @@ impl fmt::Display for Refusal {
                 write!(f, "task '{task}' is {status:?}; cannot record '{state}'")
             }
             Refusal::NoRole(r) => write!(f, "no role '{r}' recorded"),
+            Refusal::RoleNotClosed { role, state } => {
+                write!(
+                    f,
+                    "role '{role}' is {state}; only a closed person can be reopened"
+                )
+            }
+            Refusal::RoleNoSession(r) => {
+                write!(f, "role '{r}' has no recorded session to reopen")
+            }
+            Refusal::RoleHeld(r) => write!(f, "role '{r}' is already held for reopening"),
+            Refusal::RoleNotHeld(r) => write!(f, "role '{r}' is not held"),
+            Refusal::RoleTerminalTaken { role, other } => write!(
+                f,
+                "cannot reopen '{role}': live role '{other}' uses its terminal name"
+            ),
             Refusal::NoMessage(seq) => write!(f, "event {seq} is not a queued message"),
             Refusal::MessageDone(seq) => write!(f, "message at {seq} is already delivered"),
             Refusal::NoAttention(seq) => write!(f, "event {seq} is not an attention raise"),

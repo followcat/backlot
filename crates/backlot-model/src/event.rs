@@ -264,6 +264,17 @@ pub enum EventKind {
     /// the ids adapters choose at launch).
     #[serde(rename = "role.session")]
     RoleSession { role: String, session_id: String },
+    /// Ask to reopen a closed person (R19): sets `held` so the stage
+    /// wants it back, resumed in the session it closed with. Refused
+    /// unless the role is closed, has a session id and is not already
+    /// held — and while another live role uses its terminal name.
+    #[serde(rename = "role.reopen")]
+    RoleReopen { role: String },
+    /// Let a held person go: `held` clears, the role stops being
+    /// desired and the existing Stop path closes it. Refused unless
+    /// the role is held.
+    #[serde(rename = "role.release")]
+    RoleRelease { role: String },
     #[serde(rename = "req.version")]
     ReqVersion {
         version: u32,
@@ -401,6 +412,8 @@ impl EventKind {
             EventKind::RoleResumed { .. } => "role.resumed",
             EventKind::RoleClosed { .. } => "role.closed",
             EventKind::RoleSession { .. } => "role.session",
+            EventKind::RoleReopen { .. } => "role.reopen",
+            EventKind::RoleRelease { .. } => "role.release",
             EventKind::ReqVersion { .. } => "req.version",
             EventKind::PlanPublished { .. } => "plan.published",
             EventKind::TaskCreated { .. } => "task.created",

@@ -37,6 +37,8 @@ mod records_extra_tests;
 #[cfg(test)]
 mod records_tests;
 #[cfg(test)]
+mod reopen_tests;
+#[cfg(test)]
 mod state_tests;
 #[cfg(test)]
 mod summary_tests;

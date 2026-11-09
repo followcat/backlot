@@ -74,6 +74,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             let entry = state.roles.entry(role.clone()).or_default();
             entry.live = false;
             entry.closed = true;
+            entry.held = false;
             entry.since_ms = ts;
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
@@ -82,6 +83,21 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             // knows; it never creates the entry.
             if let Some(entry) = state.roles.get_mut(role) {
                 entry.session_id = Some(session_id.clone());
+            }
+            state.targets.insert(seq, SeqTarget::Role(role.clone()));
+        }
+        // `held` is the panel's hold on a person: it survives a
+        // resume (the hold is what keeps a reopened role desired)
+        // and clears on release or on the next close.
+        EventKind::RoleReopen { role } => {
+            if let Some(entry) = state.roles.get_mut(role) {
+                entry.held = true;
+            }
+            state.targets.insert(seq, SeqTarget::Role(role.clone()));
+        }
+        EventKind::RoleRelease { role } => {
+            if let Some(entry) = state.roles.get_mut(role) {
+                entry.held = false;
             }
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
