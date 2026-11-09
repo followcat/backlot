@@ -37,6 +37,8 @@ pub(crate) const TRUST_WINDOW_MS: u64 = 60_000;
 pub(crate) const TRUST_SETTLE_MS: u64 = 2_000;
 /// The least time between two keys, whatever they are.
 pub(crate) const TRUST_KEY_GAP_MS: u64 = 1_500;
+/// A live role's screen is sampled for work at most this often.
+pub(crate) const WORK_SAMPLE_EVERY_MS: u64 = 1_000;
 /// The attention reason a missing session id raises.
 pub(crate) const SESSION_NOT_FOUND: &str = "session id not found";
 
@@ -201,6 +203,12 @@ pub(crate) fn discovery_due(
     last_look_ms.is_none_or(|t| now_ms.saturating_sub(t) >= DISCOVERY_EVERY_MS)
 }
 
+/// Whether this tick reads the role's screen for a work sample:
+/// never before a second has passed since the last read.
+pub(crate) fn work_due(last_ms: Option<u64>, now_ms: u64) -> bool {
+    last_ms.is_none_or(|t| now_ms.saturating_sub(t) >= WORK_SAMPLE_EVERY_MS)
+}
+
 /// The ledger event a session-less live role's watch yields: a
 /// `role.session` when the id was found, or one `attention.raised`
 /// once the wait ran out — ever, so a resolved attention stays the
@@ -271,6 +279,11 @@ impl Stage {
                 self.answer_trust(studio, key, term, &repo, now_ms).await?;
             }
 
+            // The work sample: one screen read a second per role,
+            // classified into the `work` map for the summary.
+            self.sample_work(studio, key, &actor.runner, term, now_ms)
+                .await?;
+
             if role.session_id.is_some() {
                 continue;
             }
@@ -304,6 +317,45 @@ impl Stage {
                 record(dir, kind)?;
             }
         }
+        // Samples belong to live roles — a role that stopped being
+        // live drops its entry (other studios' entries stay).
+        let keep = |s: &str, r: &str| s != studio || state.roles.get(r).is_some_and(|e| e.live);
+        self.work.borrow_mut().retain(|(s, r), _| keep(s, r));
+        self.work_looked.borrow_mut().retain(|(s, r), _| keep(s, r));
+        Ok(())
+    }
+
+    /// Read one live role's visible screen into the `work` map, at
+    /// most once a second per role. A refused read — the terminal
+    /// raced away — keeps the last value.
+    async fn sample_work(
+        &self,
+        studio: &str,
+        role: &str,
+        runner: &str,
+        term: &LiveTerminal,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        let pair = (studio.to_string(), role.to_string());
+        if !work_due(self.work_looked.borrow().get(&pair).copied(), now_ms) {
+            return Ok(());
+        }
+        self.work_looked.borrow_mut().insert(pair.clone(), now_ms);
+        let text = match self
+            .client
+            .terminal_read(ReadParams {
+                terminal: term.address.clone(),
+                lines: 0,
+                caller: None,
+            })
+            .await
+        {
+            Ok(r) => r.text,
+            Err(CallError::Rpc(_)) => return Ok(()),
+            Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
+        };
+        let state = runners::work_state(runner, &text);
+        self.work.borrow_mut().insert(pair, state);
         Ok(())
     }
 

@@ -10,6 +10,9 @@ mod codex;
 mod devin;
 mod fake;
 pub mod opencode;
+pub(crate) mod work;
+
+pub(crate) use work::work_state;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -281,3 +284,5 @@ fn uuid_v4() -> String {
 mod argv_tests;
 #[cfg(test)]
 mod decision_tests;
+#[cfg(test)]
+mod work_tests;

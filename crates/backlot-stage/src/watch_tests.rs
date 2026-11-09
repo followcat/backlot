@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 
 use crate::watch::{
     DISCOVERY_STOP_MS, SESSION_NOT_FOUND, SESSION_WAIT_MS, TRUST_KEY_GAP_MS, TRUST_SETTLE_MS,
-    TrustPace, discovery_blocked, discovery_due, session_event, taken_ids, trust_dialog, trust_key,
-    trust_step,
+    TrustPace, WORK_SAMPLE_EVERY_MS, discovery_blocked, discovery_due, session_event, taken_ids,
+    trust_dialog, trust_key, trust_step, work_due,
 };
 
 fn actor(runner: &str) -> ActorIdentity {
@@ -162,6 +162,17 @@ fn taken_ids_pool_every_studio_and_the_pass() {
         taken,
         BTreeSet::from(["s1".into(), "s2".into(), "s3".into()])
     );
+}
+
+/// A work sample reads the screen at most once a second per role —
+/// always the first time, then only when the gap has passed.
+#[test]
+fn work_sample_is_throttled_to_once_a_second() {
+    assert!(work_due(None, 1_000));
+    assert!(!work_due(Some(1_000), 1_999));
+    assert!(work_due(Some(1_000), 1_000 + WORK_SAMPLE_EVERY_MS));
+    // A clock going backwards never re-samples early.
+    assert!(!work_due(Some(5_000), 4_000));
 }
 
 /// The dialog is its two marker lines together — either alone,

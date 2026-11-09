@@ -68,4 +68,11 @@ if [ "${FAKE_MODEL:-}" = "trust" ]; then
     fi
 fi
 echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of ${BACKLOT_STUDIO:-studio}"
-cat >/dev/null
+# Read lines like the old `cat >/dev/null`: a `work:<state>` line
+# echoes `fake-work: <state>` for the stage's work sample; anything
+# else is ignored. The loop stays alive until killed.
+while IFS= read -r line; do
+    case "$line" in
+        work:*) printf 'fake-work: %s\n' "${line#work:}" ;;
+    esac
+done

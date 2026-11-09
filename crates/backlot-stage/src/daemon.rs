@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use backlot_model::state::StudioState;
-use backlot_model::summary::{self, Summary};
+use backlot_model::summary::{self, Summary, Work};
 use hc_proto::client::Client;
 use hc_proto::events::SubscribeParams;
 use hc_proto::subscribe::Subscription;
@@ -109,6 +109,13 @@ pub(crate) struct Stage {
     /// `(studio, role)` → the trust exchange's pace: the dialog's
     /// first sighting and the last key sent.
     pub(crate) trust_pace: std::cell::RefCell<BTreeMap<(String, String), watch::TrustPace>>,
+    /// `(studio, role)` → the screen's latest work classification —
+    /// the watch samples it, the summary reads it. It stays out of
+    /// the ledger entirely.
+    pub(crate) work: std::cell::RefCell<BTreeMap<(String, String), Work>>,
+    /// `(studio, role)` → when the work sample last read the screen —
+    /// the one-second throttle.
+    pub(crate) work_looked: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -173,9 +180,7 @@ impl Stage {
             .into_iter()
             .map(|(n, s)| (n.clone(), s.clone()))
             .collect();
-        // No work samples yet — the watch's screen reads land with
-        // its sampling pass.
-        summary::summary(&owned, doing, &BTreeMap::new(), 0)
+        summary::summary(&owned, doing, &self.work.borrow(), 0)
     }
 }
 
@@ -221,6 +226,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         discover_looked: std::cell::RefCell::new(BTreeMap::new()),
         trust_pace: std::cell::RefCell::new(BTreeMap::new()),
+        work: std::cell::RefCell::new(BTreeMap::new()),
+        work_looked: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };
