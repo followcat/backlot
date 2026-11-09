@@ -6,7 +6,7 @@
   file (one complete example and every key), starting, talking to roles, the task flow, permission
   prompts, a midway requirement revision, every attention reason with its way on, restart
   recovery, finishing and cleanup, the state layout and the panel's config. `docs/studio/limits.md`
-  says plainly what real agents ran (two recorded runs on Claude Code; launch and session-id
+  says plainly what real agents ran (three recorded runs on Claude Code; launch and session-id
   capture only for the rest), what is fork-only, and the detection, timing and cleanup limits.
   The README describes the studio, gains a "Run a studio" section and links both docs; `backlot
   --help` points at the guide and `docs/keys.md` lists `prefix+y` and the panel's keys. The
@@ -27,9 +27,9 @@
 - Measured: the four docs tests are green; `cargo fmt --check`, `cargo clippy --all-targets --
   -D warnings` and `cargo test` (1227) pass; `scripts/test-install.sh` still passes (29 checks);
   the workflow parses through `yaml.safe_load`. Corrections the check made to the supplied
-  limits list: the record shows two real runs, not three (the exact model id and effort are not
-  in it either); OpenCode gets no approval key at all by design, which is stronger than "partly
-  unmeasured"; `git` calls on the stage's loop have no timeout at all (the `--version` and
+  limits list: the record at the time showed two real runs — the third ran the same day and the
+  S5b entry below records it; OpenCode gets no approval key at all by design, which is stronger
+  than "partly unmeasured"; `git` calls on the stage's loop have no timeout at all (the `--version` and
   session probes do, at 5 s and 10 s); the panel reads only the local core's document, so a
   remote studio shows nothing; and a held role's restart after terminal loss is unmeasured on a
   real core.
@@ -121,6 +121,18 @@
   connection-error screen patterns are not built — nothing measures them — so such a role reaches
   its reviewer as a stall. A stage restart loses the screen track, so an open stall clears and can
   re-raise one limit later. Restart recovery is S6b.
+
+## S5b: third real run (2026-11-10)
+
+- Done: the loop closed again end to end on real Claude Code agents — a requirement through plan,
+  tasks, deliveries and reviews to an integration branch, in 12m48s and 83 ledger events across
+  five sessions and two casts. Both task branches were merged into the integration branch and
+  eight tests passed there; the sample repository's own `main` was untouched.
+- Measured: eleven permission prompts over the run, answered by the director and by the person;
+  two actors ran at once.
+- Not verified: one actor hit a denied command, blocked and had no way on, so its task ended
+  taken over with no delivery or review. S6a closed that gap — `backlot task resume` unblocks a
+  blocked task — and that fix has not run on real agents.
 
 ## S5b: fixes from the second real run (2026-11-09)
 
