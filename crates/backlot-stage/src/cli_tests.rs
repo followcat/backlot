@@ -335,6 +335,49 @@ fn missing_caller_values_are_usage_errors() {
     assert!(usage(&env, "block --reason x").contains("BACKLOT_TASK"));
 }
 
+/// Studio names are `[a-z0-9_-]{1,16}`: bad names are usage errors
+/// (exit 2) checked before any path is built, and commands on a
+/// studio with no log are refused without touching the disk.
+#[test]
+fn studio_names_are_checked_and_missing_studios_refused() {
+    let (scratch, env) = scratch();
+    let studios_dir = scratch.dir.join("studios");
+    let nothing_on_disk =
+        || !studios_dir.exists() || fs::read_dir(&studios_dir).unwrap().next().is_none();
+
+    // Traversal, uppercase and over-length names are all usage errors.
+    for bad in ["../x", "../../escape", "Upper", "seventeen_charname"] {
+        let m = usage(&env, &format!("status --studio {bad}"));
+        assert!(m.contains("bad studio name"), "{bad}: {m}");
+        let m = usage(&env, &format!("plan request --studio {bad} --as producer"));
+        assert!(m.contains("bad studio name"), "{bad}: {m}");
+    }
+    assert!(nothing_on_disk());
+
+    // A well-formed but absent studio is refused (exit 1) on reads
+    // and appends alike; the directory is never created.
+    assert!(refused(&env, "status --studio nosuch").contains("no studio 'nosuch'"));
+    assert!(
+        refused(&env, "plan request --studio nosuch --as producer").contains("no studio 'nosuch'")
+    );
+    assert!(!scratch.dir.join("studios/nosuch").exists());
+
+    // The 16-char maximum works: `studio new` creates the directory.
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!(
+            "studio new --title Shop --repo /home/user/acme-shop --cast {cast} --studio abcdefghijklmnop"
+        ),
+    );
+    assert!(
+        scratch
+            .dir
+            .join("studios/abcdefghijklmnop/events.jsonl")
+            .is_file()
+    );
+}
+
 #[test]
 fn cast_toml_needs_all_roles() {
     let (scratch, env) = scratch();

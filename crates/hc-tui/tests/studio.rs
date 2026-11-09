@@ -393,6 +393,34 @@ fn concurrent_appends_across_processes() {
     assert_eq!(seqs, (1..=total).collect::<Vec<_>>());
 }
 
+/// Studio names are `[a-z0-9_-]{1,16}`: bad names exit 2 before any
+/// path is built, and an append on a missing studio exits 1 without
+/// creating anything — `../../escape` can never leave the state dir.
+#[test]
+fn studio_names_are_checked_before_paths() {
+    let s = Scratch::new();
+    for bad in ["../x", "../../escape", "Upper", "seventeen_charname"] {
+        let o = run(&s, &["status", "--studio", bad]);
+        assert_eq!(o.status.code(), Some(2), "{bad}: {}", stderr(&o));
+        let o = run(
+            &s,
+            &["plan", "request", "--studio", bad, "--as", "producer"],
+        );
+        assert_eq!(o.status.code(), Some(2), "{bad}: {}", stderr(&o));
+    }
+    let studios = s.state.join("studios");
+    assert!(!studios.exists() || fs::read_dir(studios).unwrap().next().is_none());
+    assert!(!s.root.join("escape").exists());
+
+    let o = run(
+        &s,
+        &["plan", "request", "--studio", "nosuch", "--as", "producer"],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", stdout(&o));
+    assert!(stderr(&o).contains("no studio 'nosuch'"), "{}", stderr(&o));
+    assert!(!s.state.join("studios/nosuch").exists());
+}
+
 /// The hook leaves TUI arguments exactly as before: `--version`,
 /// `--session x` (fails at the terminal, not in studio parsing), and
 /// an unknown word (exit 2 from the TUI parser).

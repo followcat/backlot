@@ -56,6 +56,26 @@ impl Env {
     }
 }
 
+/// Studio names are `[a-z0-9_-]{1,16}` (terminal names are
+/// `bl-<studio>-<role>`, limit 32). Checked before any path is built
+/// so a name can never escape the state directory.
+pub fn valid_studio_name(name: &str) -> bool {
+    (1..=16).contains(&name.len())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-'))
+}
+
+fn check_studio_name(name: &str) -> Result<String, Fail> {
+    if valid_studio_name(name) {
+        Ok(name.to_string())
+    } else {
+        Err(Fail::usage(format!(
+            "bad studio name '{name}': want [a-z0-9_-]{{1,16}}"
+        )))
+    }
+}
+
 /// The resolved caller: `BACKLOT_STUDIO`, `BACKLOT_ROLE`,
 /// `BACKLOT_TASK`, overridable by `--studio`, `--as`, `--task`.
 pub struct Caller {
@@ -75,11 +95,13 @@ impl Caller {
 }
 
 fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
-    let studio = common
-        .studio
-        .clone()
-        .or_else(|| env.get("BACKLOT_STUDIO").map(String::from))
-        .ok_or_else(|| Fail::usage("missing studio: set BACKLOT_STUDIO or pass --studio"))?;
+    let studio = check_studio_name(
+        &common
+            .studio
+            .clone()
+            .or_else(|| env.get("BACKLOT_STUDIO").map(String::from))
+            .ok_or_else(|| Fail::usage("missing studio: set BACKLOT_STUDIO or pass --studio"))?,
+    )?;
     let role = common
         .role
         .clone()
@@ -102,11 +124,13 @@ fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
 
 /// Studio name only (for `studio new` and `status`).
 fn studio_name(common: &Common, env: &Env) -> Result<String, Fail> {
-    common
-        .studio
-        .clone()
-        .or_else(|| env.get("BACKLOT_STUDIO").map(String::from))
-        .ok_or_else(|| Fail::usage("missing studio: set BACKLOT_STUDIO or pass --studio"))
+    check_studio_name(
+        &common
+            .studio
+            .clone()
+            .or_else(|| env.get("BACKLOT_STUDIO").map(String::from))
+            .ok_or_else(|| Fail::usage("missing studio: set BACKLOT_STUDIO or pass --studio"))?,
+    )
 }
 
 fn refused<E: ToString>(e: E) -> Fail {
@@ -202,6 +226,11 @@ fn exec_event(common: Common, cmd: Cmd, env: &Env, base: &Path) -> Result<String
         _ => caller(&common, env, needs_task)?,
     };
     let dir = store::studio_dir(base, &caller.studio);
+    // Only `studio new` may create a studio directory; anything else
+    // against a studio with no log is refused without touching disk.
+    if !matches!(cmd, Cmd::StudioNew { .. }) && !dir.join("events.jsonl").is_file() {
+        return Err(Fail::refused(format!("no studio '{}'", caller.studio)));
+    }
     let built = commands::build(&caller, cmd)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;
     Ok(commands::confirm(&event))
