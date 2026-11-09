@@ -215,6 +215,58 @@ async fn visible_size_leases_survive_focus_and_leave_only_observers_off_tab() {
     assert_eq!(app.observers.len(), 3);
 }
 
+/// While the cached observer repaints for a new size, the attach that just
+/// opened has nothing to show yet. The old screen stays up until one has.
+#[tokio::test]
+async fn a_repainting_observer_stays_on_screen_until_something_has_painted() {
+    let mut app = app_with(&["t1"]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    app.pane.want(Some(Spec {
+        terminal: "t1".into(),
+        role: Role::Active,
+    }));
+    let mut observer = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    observer.install_vt(hc_vt::Vt::new(80, 24, 0));
+    app.observers.insert("t1".into(), observer);
+
+    let shown = app.displayed_pane("t1").unwrap();
+    assert!(!shown.has_fresh_paint());
+    assert!(shown.vt_ref().is_some(), "the retained screen must stay up");
+    assert!(app.displayed_pane_mut("t1").unwrap().vt().is_some());
+}
+
+/// A switch writes the layout, so the newly shown pane is drawn while that
+/// write is in flight. A lease opened then has no size yet, attaches at the
+/// default 80x24 and, as the newest typing viewer, resizes the program.
+#[tokio::test]
+async fn a_new_size_lease_waits_until_the_layout_write_settles() {
+    let mut app = app_with_spaces(&[("t1", "work"), ("t2", "other")]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    let now = Instant::now();
+    let draw = |app: &mut App, term: &mut Terminal<TestBackend>, tick: u64| {
+        let now = now + std::time::Duration::from_secs(tick);
+        app.sched.mark_dirty(now);
+        app.maybe_draw(term, now).unwrap();
+    };
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    app.sync_observers();
+
+    app.pending_actions = 1;
+    draw(&mut app, &mut term, 0);
+    assert!(
+        !app.size_leases.contains_key("t1"),
+        "no lease may open before its size is known"
+    );
+
+    app.pending_actions = 0;
+    draw(&mut app, &mut term, 1);
+    assert_ne!(app.size_leases["t1"].allocated_size(), (80, 24));
+}
+
 #[tokio::test]
 async fn zoomed_tab_keeps_covered_pane_lease_at_its_last_allocation() {
     let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work")]);

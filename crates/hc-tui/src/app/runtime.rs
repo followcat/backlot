@@ -67,12 +67,16 @@ impl App {
             if info.id.is_empty() || self.view.inventory.get(&info.id).is_none() {
                 continue;
             }
+            // A new lease takes its size from this layout, which isn't final
+            // while a write is in flight. Opened now, it would attach at the
+            // default size and, as the newest typing viewer, resize the program.
+            if settling && !self.size_leases.contains_key(&info.id) {
+                continue;
+            }
             let lease = self.size_leases.entry(info.id.clone()).or_insert_with(|| {
                 let mut lease = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
                 lease.set_host_facts(self.host_facts.clone());
-                if !settling {
-                    lease.allocated(inner.width.max(1), inner.height.max(1));
-                }
+                lease.allocated(inner.width.max(1), inner.height.max(1));
                 lease.want(Some(Spec {
                     terminal: info.id,
                     role: Role::SizeLease,

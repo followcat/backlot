@@ -196,20 +196,25 @@ impl App {
         }
     }
 
+    /// The pane whose screen to draw: whichever has a complete paint. While
+    /// neither has one, a retained observer screen beats an attach with
+    /// nothing to show, so a switch or resize never flashes an empty pane.
     pub(super) fn displayed_pane(&self, id: &str) -> Option<&pane::Pane> {
-        if let Some(pane) = self.observers.get(id).filter(|p| p.has_fresh_paint()) {
-            Some(pane)
-        } else if self.pane.target() == Some(id) {
-            Some(&self.pane)
-        } else {
-            self.observers.get(id)
-        }
+        let observer = self.observers.get(id);
+        let active = (self.pane.target() == Some(id)).then_some(&self.pane);
+        observer
+            .filter(|p| p.has_fresh_paint())
+            .or_else(|| active.filter(|p| p.has_fresh_paint()))
+            .or_else(|| observer.filter(|p| p.vt_ref().is_some()))
+            .or(active)
+            .or(observer)
     }
 
     pub(super) fn displayed_pane_mut(&mut self, id: &str) -> Option<&mut pane::Pane> {
-        if self.observers.get(id).is_some_and(|p| p.has_fresh_paint()) {
-            self.observers.get_mut(id)
-        } else if self.pane.target() == Some(id) {
+        if self
+            .displayed_pane(id)
+            .is_some_and(|p| std::ptr::eq(p, &self.pane))
+        {
             Some(&mut self.pane)
         } else {
             self.observers.get_mut(id)
