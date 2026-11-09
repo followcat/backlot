@@ -116,6 +116,44 @@ async fn the_scrollbar_drags_the_body() {
     assert!(app.panel.scroll > 0, "drag scrolled the body");
 }
 
+/// `draw` with a caller-chosen instant — the animation test steps
+/// time frame by frame.
+fn draw_at(app: &mut App, w: u16, h: u16, t: std::time::Instant) {
+    let mut term = ratatui::Terminal::new(ratatui::backend::TestBackend::new(w, h)).unwrap();
+    term.draw(|f| crate::app::draw::draw(app, f, t)).unwrap();
+}
+
+#[tokio::test]
+async fn a_redraw_does_not_push_the_spin_deadline_out() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    let t0 = std::time::Instant::now();
+    let due = t0 + crate::app::panel::PANEL_SPIN;
+    // Frames every 16 ms draw a working mark each time; the armed
+    // deadline must stay put instead of moving with every redraw.
+    for i in 0..8u64 {
+        draw_at(
+            &mut app,
+            120,
+            24,
+            t0 + std::time::Duration::from_millis(16 * i),
+        );
+        assert_eq!(app.panel_anim_deadline, Some(due), "frame {i} moved it");
+        assert_eq!(app.panel.spin, 0, "frame {i} ticked early");
+    }
+    // Past the deadline the tick advances the frame and the next draw
+    // arms the next one-shot.
+    app.tick_panel(due);
+    assert_eq!(app.panel.spin, 1);
+    let later = due + std::time::Duration::from_millis(16);
+    draw_at(&mut app, 120, 24, later);
+    assert_eq!(
+        app.panel_anim_deadline,
+        Some(later + crate::app::panel::PANEL_SPIN)
+    );
+}
+
 #[tokio::test]
 async fn the_animation_deadline_only_arms_while_something_works() {
     let mut app = app_with_panel_doc();

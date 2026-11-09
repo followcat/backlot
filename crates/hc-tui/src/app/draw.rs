@@ -247,7 +247,14 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.panel,
             &app.shell.palette,
         );
-        app.panel_anim_deadline = hits.working_drawn.then(|| _now + super::panel::PANEL_SPIN);
+        if hits.working_drawn {
+            // Arm only when nothing is pending — a redraw before the
+            // deadline must not push it out or the spin starves.
+            app.panel_anim_deadline
+                .get_or_insert(_now + super::panel::PANEL_SPIN);
+        } else {
+            app.panel_anim_deadline = None;
+        }
         hits
     } else {
         app.panel_anim_deadline = None;
