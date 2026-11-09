@@ -126,10 +126,10 @@ async fn wait_terminal(client: &Client, name: &str) -> Terminal {
 async fn wait_replaced(client: &Client, name: &str, old: &str) -> Terminal {
     let deadline = Instant::now() + DEADLINE;
     loop {
-        if let Some(t) = terminal_named(client, name).await {
-            if t.address != old {
-                return t;
-            }
+        if let Some(t) = terminal_named(client, name).await
+            && t.address != old
+        {
+            return t;
         }
         assert!(
             Instant::now() < deadline,
