@@ -382,6 +382,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             state.approvals.push(ApprovalRecord {
                 seq,
                 role: role.clone(),
+                by: event.by.role.clone(),
                 decision: *decision,
                 ts_ms: ts,
             });

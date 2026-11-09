@@ -8,14 +8,16 @@
 //! the producer cast it, the director otherwise — a
 //! `changes_requested` review to the task's actor, a blocked task
 //! to its reviewer, a requirement revision above v1 to the
-//! director naming the tasks now behind, and an actor's
+//! director naming the tasks now behind, an actor's
 //! `permission prompt` attention to the director — a non-actor's
-//! episode is the user's, and gets no notice.
+//! episode is the user's, and gets no notice — and a `deny`
+//! approval to the denied role, which the esc interruption left
+//! waiting.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use backlot_model::event::{TaskStateChange, Verdict};
+use backlot_model::event::{ApprovalDecision, TaskStateChange, Verdict};
 use backlot_model::state::StudioState;
 
 /// A notice the ledger owes: a generated body file and the queued
@@ -151,6 +153,22 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                 body,
             });
         }
+    }
+    // A deny sends esc and the role lands on an interrupted screen
+    // that waits for input — it is owed a notice, for any role.
+    for a in &state.approvals {
+        if sent.contains(&a.seq) || a.decision != ApprovalDecision::Deny {
+            continue;
+        }
+        out.push(Notice {
+            source_seq: a.seq,
+            to: a.role.clone(),
+            label: "denied",
+            body: format!(
+                "# permission denied\n\n`{}` denied your permission prompt — the command did not run.\n\nTry another way that needs no permission, or stop waiting on it with `backlot block --reason <reason>`.\n",
+                a.by,
+            ),
+        });
     }
     for req in &state.requirements {
         if sent.contains(&req.seq) || req.version <= 1 {

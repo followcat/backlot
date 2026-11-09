@@ -84,12 +84,14 @@ fn pending_approval_is_latest_and_current() {
     state.approvals.push(ApprovalRecord {
         seq: 3,
         role: "actor-t1-c1".into(),
+        by: "director".into(),
         decision: ApprovalDecision::Allow,
         ts_ms: 1,
     });
     state.approvals.push(ApprovalRecord {
         seq: 5,
         role: "actor-t1-c1".into(),
+        by: "director".into(),
         decision: ApprovalDecision::Deny,
         ts_ms: 2,
     });
@@ -197,4 +199,67 @@ fn attention_notice_owed_once() {
         delivered: false,
     });
     assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 7));
+}
+
+fn approval(seq: u64, role: &str, by: &str, decision: ApprovalDecision) -> ApprovalRecord {
+    ApprovalRecord {
+        seq,
+        role: role.into(),
+        by: by.into(),
+        decision,
+        ts_ms: 1,
+    }
+}
+
+/// A `deny` strands the role at its interrupted screen, so it is
+/// owed one notice naming who denied it — an actor and a non-actor
+/// alike — saying the command did not run and pointing at `backlot
+/// block`; `allow` owes nothing, and a carried `source_seq` owes
+/// nothing again.
+#[test]
+fn deny_notice_owed_once() {
+    let mut state = StudioState::default();
+    state.approvals.push(approval(
+        4,
+        "actor-t1-c1",
+        "director",
+        ApprovalDecision::Deny,
+    ));
+    state
+        .approvals
+        .push(approval(6, "writer", "user", ApprovalDecision::Deny));
+    state.approvals.push(approval(
+        8,
+        "actor-t2-c1",
+        "director",
+        ApprovalDecision::Allow,
+    ));
+    let dir = Path::new("/state/studios/acme-shop");
+    let got = notices::owed(&state, dir);
+    let denied: Vec<_> = got.iter().filter(|n| n.label == "denied").collect();
+    assert_eq!(denied.len(), 2, "{got:?}");
+    let actor = denied.iter().find(|n| n.source_seq == 4).unwrap();
+    assert_eq!(actor.to, "actor-t1-c1");
+    assert!(actor.body.contains("director"), "{}", actor.body);
+    assert!(actor.body.contains("did not run"), "{}", actor.body);
+    assert!(
+        actor.body.contains("backlot block --reason"),
+        "{}",
+        actor.body
+    );
+    let writer = denied.iter().find(|n| n.source_seq == 6).unwrap();
+    assert_eq!(writer.to, "writer");
+    assert!(writer.body.contains("user"), "{}", writer.body);
+    assert!(got.iter().all(|n| n.source_seq != 8));
+    // Once a message carries that source_seq, nothing is owed.
+    state.messages.push(backlot_model::state::Message {
+        seq: 9,
+        from: "stage".into(),
+        to: "actor-t1-c1".into(),
+        file: Some("messages/4-denied.md".into()),
+        purpose: None,
+        source_seq: Some(4),
+        delivered: false,
+    });
+    assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 4));
 }

@@ -279,6 +279,10 @@ pub struct Attention {
 pub struct ApprovalRecord {
     pub seq: u64,
     pub role: String,
+    /// Who recorded the decision — the deny notice names them.
+    /// Older ledgers have no `by`.
+    #[serde(default)]
+    pub by: String,
     pub decision: ApprovalDecision,
     pub ts_ms: u64,
 }

@@ -995,7 +995,9 @@ async fn real_stage_closed_loop() {
     wait_kind(&state, "attention.cleared", 1);
 
     // The second, already-open prompt raises its own attention on
-    // the still-blocked screen; `deny` sends esc.
+    // the still-blocked screen; `deny` sends esc, and the denied
+    // role is owed a notice telling it the command did not run —
+    // an `esc` interruption alone would leave it waiting forever.
     wait_events(&state, "attention.raised", "actor-t1-c1", 2);
     bl(
         &scratch,
@@ -1004,6 +1006,7 @@ async fn real_stage_closed_loop() {
     );
     wait_read(&client, &actor.address, "fake-approved: esc").await;
     wait_kind(&state, "attention.cleared", 2);
+    wait_inbox(&state, "fake-inbox-actor-t1", "-denied.md");
 
     // `studio finish` names the tasks still open; once accepted the
     // actor closes deliberately and stays resumable.

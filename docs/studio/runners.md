@@ -45,7 +45,7 @@ allow option, `deny` dismisses it.
 | Runner | `allow` | `deny` | Markers from |
 |---|---|---|---|
 | `fake` | `enter` | `esc` | The script itself — byte-verified in `real_stage_closed_loop` |
-| Claude Code | `enter` | `esc` | `allow` measured on 2.1.319 — the real run's prompts took `enter`; `deny` from its picker, not exercised |
+| Claude Code | `enter` | `esc` | Both measured on 2.1.319 — `enter` takes the allow option; `esc` does not run the command, shows `Interrupted · What should Claude do instead?` and waits for input |
 | Codex | `enter` | `esc` | From its `› 1.` picker — still to be measured |
 | Devin | `enter` | `esc` | Observed on 3000.12.32 — `enter` takes the highlighted `Once`, `esc` cancels |
 | OpenCode | none sent | none sent | Not measured — the attention stays open for the user |

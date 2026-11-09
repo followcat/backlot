@@ -87,7 +87,8 @@ Two `message.queued` events carry a `purpose` the stage acts on: `plan request` 
 `message.queued` may carry `source_seq`, the seq of the ledger event it was generated from. The
 stage's automatic notices — a delivery to whoever cast the task, a `changes_requested` review to
 the actor, a blocked task or a requirement revision above v1 to the director, an actor's permission
-prompt to the director — are ordinary queued messages whose body file lands under `messages/` first.
+prompt to the director, a `deny` approval to the denied role — are ordinary queued messages whose
+body file lands under `messages/` first.
 A notice is owed only while no message has its source event's `seq`, so a stage restart repeats
 nothing. A `report.sent` to a role is deliverable the same way; `to: user` is never sent to a
 terminal. `message.delivered` marks the target — a message or a report — only after `terminal.send`
@@ -101,7 +102,8 @@ delivery notice to the producer; a director's or unattributed cast routes it to 
 refused without one. The stage sends the runner's approval key while the prompt still shows, then
 `attention.cleared` lands; a prompt already gone clears with no key sent. The stage never answers a
 prompt without a recorded decision, and a decision recorded before the attention does not answer a
-later prompt.
+later prompt. A `deny` also owes the denied role a notice naming who denied it — the esc
+interruption alone leaves the role waiting for input.
 
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director

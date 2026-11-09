@@ -64,8 +64,8 @@ fn approval_needs_an_open_permission_attention() {
     );
 }
 
-/// The folded record keeps role, decision and time; replay and
-/// incremental apply agree.
+/// The folded record keeps role, who recorded it, decision and
+/// time; replay and incremental apply agree.
 #[test]
 fn approval_folds_into_approvals() {
     let mut log = base_events();
@@ -83,6 +83,7 @@ fn approval_folds_into_approvals() {
     let a = &state.approvals[0];
     assert_eq!(a.seq, 5);
     assert_eq!(a.role, "actor-t1-c1");
+    assert_eq!(a.by, "director");
     assert_eq!(a.decision, ApprovalDecision::Deny);
     assert_eq!(a.ts_ms, 5_000);
 }
