@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use backlot_model::correct::parse_verdict;
+use backlot_model::event::TaskStateChange;
 
 use crate::args::*;
 use crate::cli::Fail;
@@ -47,6 +48,36 @@ pub(crate) fn task_new(common: &mut Common, it: &mut It) -> Result<(Common, Cmd)
             acceptance_file: acceptance
                 .ok_or_else(|| usage("missing --acceptance-file", U_TASK))?,
             depends_on: deps,
+        },
+    ))
+}
+
+/// `task pause|resume|abandon|takeover`: one `--reason` on top of the
+/// common `--task`.
+pub(crate) fn task_state(
+    common: &mut Common,
+    it: &mut It,
+    change: TaskStateChange,
+) -> Result<(Common, Cmd), Fail> {
+    let mut reason = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_TASK)));
+        }
+        if common_flag(it, common, &arg, U_TASK)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--reason" => reason = Some(it.value("--reason", U_TASK)?),
+            _ if eq(&arg, "--reason").is_some() => reason = eq(&arg, "--reason").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_TASK)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::TaskState {
+            change,
+            reason: reason.ok_or_else(|| usage("missing --reason", U_TASK))?,
         },
     ))
 }

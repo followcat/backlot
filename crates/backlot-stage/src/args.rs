@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use backlot_model::event::{Check, PlanKind, Verdict};
+use backlot_model::event::{Check, PlanKind, TaskStateChange, Verdict};
 
 use crate::cli::Fail;
 use crate::{args_studio, args_task};
@@ -53,6 +53,10 @@ pub enum Cmd {
         task_kind: String,
         acceptance_file: PathBuf,
         depends_on: Vec<String>,
+    },
+    TaskState {
+        change: TaskStateChange,
+        reason: String,
     },
     Cast {
         actor: String,
@@ -102,8 +106,7 @@ pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
 pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> --file <f>";
-pub(crate) const U_TASK: &str =
-    "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]";
+pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]\n       backlot task pause|resume|abandon|takeover --task <id> --reason <r>";
 pub(crate) const U_CAST: &str = "usage: backlot cast --task <id> --actor <name> --reason <r>";
 pub(crate) const U_DELIVER: &str =
     "usage: backlot deliver --commits A..B --report <f> [--check name=pass|fail...]";
@@ -256,6 +259,14 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             };
             match sub.as_str() {
                 "new" => args_task::task_new(&mut common, &mut it),
+                "pause" => args_task::task_state(&mut common, &mut it, TaskStateChange::Paused),
+                "resume" => args_task::task_state(&mut common, &mut it, TaskStateChange::Resumed),
+                "abandon" => {
+                    args_task::task_state(&mut common, &mut it, TaskStateChange::Abandoned)
+                }
+                "takeover" => {
+                    args_task::task_state(&mut common, &mut it, TaskStateChange::TakenOver)
+                }
                 "-h" | "--help" => Ok((common, Cmd::Help(U_TASK))),
                 _ => Err(usage(format!("unknown task subcommand '{sub}'"), U_TASK)),
             }

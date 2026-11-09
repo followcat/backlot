@@ -304,6 +304,20 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
+        Cmd::TaskState { change, reason } => {
+            let task = caller.task.clone().unwrap_or_default();
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::TaskState {
+                        task,
+                        state: change,
+                        reason,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::Review {
             delivery,
             verdict,

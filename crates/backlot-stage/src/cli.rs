@@ -213,6 +213,7 @@ fn exec_event(common: Common, cmd: Cmd, env: &Env, base: &Path) -> Result<String
             | Cmd::Cast { .. }
             | Cmd::Review { .. }
             | Cmd::Finding { .. }
+            | Cmd::TaskState { .. }
     );
     let caller = match &cmd {
         // `studio new` runs before any role terminal exists; the user
