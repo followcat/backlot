@@ -45,9 +45,9 @@ allow option, `deny` dismisses it.
 | Runner | `allow` | `deny` | Markers from |
 |---|---|---|---|
 | `fake` | `enter` | `esc` | The script itself — byte-verified in `real_stage_closed_loop` |
-| Claude Code | `enter` | `esc` | Same numbered-picker convention as the measured trust dialog — the permission prompt itself is not separately verified |
-| Codex | `enter` | `esc` | Assumed from its `› 1.` picker — not measured |
-| Devin | none sent | none sent | Not measured — the attention stays open for the user |
+| Claude Code | `enter` | `esc` | From its `❯ 1.` picker — still to be measured in S5b |
+| Codex | `enter` | `esc` | From its `› 1.` picker — still to be measured in S5b |
+| Devin | `enter` | `esc` | Observed on 3000.12.32 — `enter` takes the highlighted `Once`, `esc` cancels |
 | OpenCode | none sent | none sent | Not measured — the attention stays open for the user |
 | Anything else | none sent | none sent | — |
 

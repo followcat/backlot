@@ -26,11 +26,12 @@ fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
 }
 
 /// `allow` presses enter and `deny` presses esc on the runners whose
-/// pickers share that convention; an unmeasured runner answers
-/// nothing — the attention stays open for the user.
+/// pickers share that convention — `devin` measured on 3000.12.32;
+/// an unmeasured runner answers nothing — the attention stays open
+/// for the user.
 #[test]
 fn keys_per_runner() {
-    for runner in ["fake", "claude", "codex"] {
+    for runner in ["fake", "claude", "codex", "devin"] {
         assert_eq!(
             approval_keys(runner, ApprovalDecision::Allow),
             Some("enter"),
@@ -42,7 +43,7 @@ fn keys_per_runner() {
             "{runner}"
         );
     }
-    for runner in ["devin", "opencode", "unknown"] {
+    for runner in ["opencode", "unknown"] {
         assert_eq!(
             approval_keys(runner, ApprovalDecision::Allow),
             None,

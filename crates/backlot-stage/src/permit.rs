@@ -41,13 +41,14 @@ pub fn episode_due(in_episode: bool, since: Option<u64>, now_ms: u64) -> (Option
 /// The key a recorded decision sends while the prompt still shows:
 /// `enter` takes the highlighted allow option, `esc` dismisses. That
 /// is measured on `fake` (the byte stream is asserted in tests) and
-/// matches the permission pickers `claude` and `codex` show; any
-/// other runner is unmeasured and answers nothing — the open
-/// attention stays for the user. docs/studio/runners.md says which
-/// are measured.
+/// observed on `devin` 3000.12.32; `claude` and `codex` are mapped
+/// from their pickers and still to be measured in S5b. Any other
+/// runner is unmeasured and answers nothing — the open attention
+/// stays for the user. docs/studio/runners.md says which are
+/// measured.
 pub fn approval_keys(runner: &str, decision: ApprovalDecision) -> Option<&'static str> {
     match runner {
-        "fake" | "claude" | "codex" => Some(match decision {
+        "fake" | "claude" | "codex" | "devin" => Some(match decision {
             ApprovalDecision::Allow => "enter",
             ApprovalDecision::Deny => "esc",
         }),
