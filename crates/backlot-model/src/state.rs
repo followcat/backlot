@@ -74,6 +74,9 @@ pub struct CastRecord {
     pub candidate: String,
     pub actor: ActorIdentity,
     pub reason: String,
+    /// The display priority this cast set, when it set one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
     pub seq: u64,
     pub ts_ms: u64,
 }
@@ -138,6 +141,9 @@ pub struct Task {
     pub paused_from: Option<TaskStatus>,
     /// `changes_requested` reviews so far.
     pub rework_rounds: u32,
+    /// Display priority (D11): panel order only, never scheduling.
+    #[serde(default)]
+    pub priority: Priority,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cast: Option<CastRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -293,4 +299,14 @@ impl StudioState {
     pub fn open_attention(&self) -> impl Iterator<Item = &Attention> {
         self.attention.iter().filter(|a| a.open)
     }
+}
+
+/// The task an actor role key works on: `actor-<task>-c<n>` →
+/// `<task>`, `None` for any other key.
+pub fn actor_task(role: &str) -> Option<&str> {
+    let (task, n) = role.strip_prefix("actor-")?.rsplit_once("-c")?;
+    if task.is_empty() || n.parse::<usize>().is_err() {
+        return None;
+    }
+    Some(task)
 }

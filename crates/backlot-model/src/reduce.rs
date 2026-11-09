@@ -136,6 +136,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     status: TaskStatus::Created,
                     paused_from: None,
                     rework_rounds: 0,
+                    priority: Priority::default(),
                     cast: None,
                     casts: Vec::new(),
                     deliveries: Vec::new(),
@@ -157,16 +158,22 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             candidate,
             actor,
             reason,
+            priority,
         } => {
             if let Some(t) = state.tasks.get_mut(task) {
                 t.casts.push(CastRecord {
                     candidate: candidate.clone(),
                     actor: actor.clone(),
                     reason: reason.clone(),
+                    priority: *priority,
                     seq,
                     ts_ms: ts,
                 });
                 t.cast = t.casts.last().cloned();
+                // A cast without a priority leaves the task's alone.
+                if let Some(p) = priority {
+                    t.priority = *p;
+                }
                 t.last_ts_ms = ts;
                 state.targets.insert(
                     seq,
@@ -176,6 +183,12 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     },
                 );
                 reduce_task(t, cap);
+            }
+        }
+        EventKind::TaskPriority { task, priority } => {
+            if let Some(t) = state.tasks.get_mut(task) {
+                t.priority = *priority;
+                t.last_ts_ms = ts;
             }
         }
         EventKind::TaskDelivered {

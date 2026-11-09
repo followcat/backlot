@@ -151,6 +151,13 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Some(_) => Ok(()),
             }
         }
+        // Priority only orders people in the panel: any recorded
+        // task takes it, open or closed.
+        EventKind::TaskPriority { task, .. } => {
+            require_studio(state)?;
+            require_task(state, task)?;
+            Ok(())
+        }
         EventKind::TaskDelivered {
             task,
             delivery,

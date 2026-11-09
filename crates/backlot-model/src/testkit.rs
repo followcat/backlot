@@ -75,6 +75,7 @@ pub fn cast(task: &str, name: &str, tag: &str) -> EventKind {
         candidate: name.into(),
         actor: actor(tag),
         reason: "picked".into(),
+        priority: None,
     }
 }
 

@@ -84,6 +84,40 @@ pub enum PlanKind {
     Acceptance,
 }
 
+/// A task's display priority (R20, D11): it orders people in the
+/// panel and nothing else — scheduling never reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Priority {
+    Low,
+    #[default]
+    Normal,
+    High,
+}
+
+impl std::fmt::Display for Priority {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Priority::Low => "low",
+            Priority::Normal => "normal",
+            Priority::High => "high",
+        };
+        f.write_str(s)
+    }
+}
+
+impl std::str::FromStr for Priority {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "low" => Ok(Priority::Low),
+            "normal" => Ok(Priority::Normal),
+            "high" => Ok(Priority::High),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Review verdict (ledger.md task-state diagram).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -259,7 +293,15 @@ pub enum EventKind {
         actor: ActorIdentity,
         #[serde(default)]
         reason: String,
+        /// Display priority at cast time; absent keeps the task's
+        /// current one. Old logs carry no field and still load.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        priority: Option<Priority>,
     },
+    /// A display-priority change (D11): order only, never
+    /// scheduling. The task must exist — open or closed.
+    #[serde(rename = "task.priority")]
+    TaskPriority { task: String, priority: Priority },
     #[serde(rename = "task.delivered")]
     TaskDelivered {
         task: String,
@@ -363,6 +405,7 @@ impl EventKind {
             EventKind::PlanPublished { .. } => "plan.published",
             EventKind::TaskCreated { .. } => "task.created",
             EventKind::TaskCast { .. } => "task.cast",
+            EventKind::TaskPriority { .. } => "task.priority",
             EventKind::TaskDelivered { .. } => "task.delivered",
             EventKind::TaskReviewed { .. } => "task.reviewed",
             EventKind::TaskFinding { .. } => "task.finding",

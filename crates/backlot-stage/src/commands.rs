@@ -256,6 +256,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         candidate: cand.name.clone(),
                         actor: cand.actor(),
                         reason,
+                        priority: None,
                     },
                     by,
                     Vec::new(),

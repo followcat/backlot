@@ -31,6 +31,8 @@ pub mod testkit;
 #[cfg(test)]
 mod cap_tests;
 #[cfg(test)]
+mod priority_tests;
+#[cfg(test)]
 mod records_extra_tests;
 #[cfg(test)]
 mod records_tests;
