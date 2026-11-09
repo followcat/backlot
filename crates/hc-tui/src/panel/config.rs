@@ -78,7 +78,13 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
             config.width = config.width.clamp(WIDTH_MIN, WIDTH_MAX);
         }
         if let Some(key) = panel.key.filter(|k| !k.trim().is_empty()) {
-            config.key = key;
+            if crate::config::parse_key_combo(&key).is_some() {
+                config.key = key;
+            } else {
+                // A key that does not parse falls back to `y` — the
+                // notice names the file, never the value.
+                return (config, Some(format!("{path:?} ignored: invalid panel.key")));
+            }
         }
     }
     (config, None)

@@ -139,6 +139,27 @@ async fn esc_disarms_a_pending_reopen() {
 }
 
 #[tokio::test]
+async fn a_bad_panel_key_still_toggles_with_y() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    let dir = std::env::temp_dir().join(format!("panel-key-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    std::fs::write(&path, "[panel]\nkey = \"nope+\"\n").unwrap();
+    let (config, notice) = crate::panel::load(&path);
+    app.set_panel_config(config, notice);
+    assert!(app.notice.is_some(), "the bad key notices once");
+    // The notice names the file, never the bogus value — the screen
+    // shows no "nope".
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(!text.contains("nope"), "{text}");
+    // The combo fell back to `y` — the chord still toggles.
+    prefix(&mut app);
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+}
+
+#[tokio::test]
 async fn activating_another_row_disarms_a_pending_reopen() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);

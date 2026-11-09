@@ -62,6 +62,19 @@ fn the_key_overrides_and_an_empty_one_keeps_the_default() {
 }
 
 #[test]
+fn an_unparseable_key_falls_back_to_y_with_a_notice() {
+    let dir = std::env::temp_dir().join(format!("panel-badkey-{}", std::process::id()));
+    let path = write(&dir, "[panel]\nkey = \"nope+\"\n");
+    let (config, notice) = load(&path);
+    assert_eq!(config.key, "y", "an invalid key keeps the default");
+    let notice = notice.expect("the ignored key notices once");
+    assert!(notice.contains("config.toml"), "{notice}");
+    assert!(notice.contains("panel.key"), "{notice}");
+    // The invalid value itself never reaches the screen.
+    assert!(!notice.contains("nope"), "{notice}");
+}
+
+#[test]
 fn a_malformed_file_is_defaults_plus_a_position() {
     let dir = std::env::temp_dir().join(format!("panel-bad-{}", std::process::id()));
     let path = write(&dir, "[panel\nwidth = ");
