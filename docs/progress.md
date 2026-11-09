@@ -575,3 +575,30 @@
   linewise yanks emitted the expected OSC 52 payloads (`line`, two
   numbered fixture rows), copy-mode keys reached the pane program zero
   times, and pane input resumed after exit.
+
+## CI: cache the Ghostty zig-pkg download (branch ci/zig-deps)
+
+- Every job that builds `hc-vt` (`checks`, `macos`, `integration` in
+  ci.yml and the release matrix) now restores
+  `vendor/ghostty/zig-pkg` through the composite action
+  `.github/actions/zig-deps`, keyed on the Ghostty zon files and
+  tools/install-zig.sh. On a miss, `tools/fetch-zig-deps.sh` runs
+  `zig build --fetch=needed` with the same `-D` flags as
+  crates/hc-vt/build.rs, so only the packages the build really needs
+  are fetched (about 33 MB, lazy dependencies included), with up to 5
+  attempts, a per-attempt timeout and linear backoff. The directory is
+  saved right after the fetch, before the build can fail for other
+  reasons. tools/build-test-core.sh warms the inner tree the same way
+  before its cargo build.
+- A populated zig-pkg alone builds offline: `zig build -Demit-lib-vt
+  -Doptimize=ReleaseFast -Dcpu=baseline` succeeded under `unshare -rn`
+  with an empty global cache and a fresh `--cache-dir` for the native,
+  x86_64-linux-musl, aarch64-linux-musl, x86_64-macos and aarch64-macos
+  targets, so no global-cache caching was needed. No proxy, no secrets.
+- Every job also got a `timeout-minutes` (up to 120 for a cold macOS
+  build). tools/test-fetch-zig-deps.sh exercises the retry loop against
+  stub zig binaries (flaky-then-ok, always failing, hung past the
+  timeout) and parses the workflow YAML; it runs in the checks job.
+- Gates: `cargo fmt --check`, `sh scripts/test-install.sh` and
+  `sh tools/test-fetch-zig-deps.sh` under the heavy-lock; no crates/
+  files were touched, so clippy and cargo test were not required.

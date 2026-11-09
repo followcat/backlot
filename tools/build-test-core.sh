@@ -56,7 +56,9 @@ if [ ! -f "$SRC/vendor/ghostty/build.zig" ]; then
     tar -xzf "$OUT/ghostty.tar.gz" -C "$SRC/vendor/ghostty" --strip-components=1
 fi
 
-# crates/ghostty-vt/build.rs builds libghostty-vt through $ZIG.
+# crates/ghostty-vt/build.rs builds libghostty-vt through $ZIG. Fetch
+# its zig-pkg first: one flaky download there used to fail the job.
+tools/fetch-zig-deps.sh "$PWD/$ZIG_DIR/zig" "$SRC/vendor/ghostty"
 ZIG="$PWD/$ZIG_DIR/zig" \
     cargo build --locked --release -p herdr-core \
     --manifest-path "$SRC/Cargo.toml" --target-dir "$OUT/build"
