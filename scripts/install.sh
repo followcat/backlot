@@ -1,21 +1,21 @@
 #!/bin/sh
-# hc-tui installer: picks the release archive for this platform,
+# backlot installer: picks the release archive for this platform,
 # verifies it against the release's sha256sums.txt, and installs the
 # binary — nothing is written to the install dir before the checksum
 # matches.
 #
 #   sh install.sh                 # latest release
-#   HC_TUI_VERSION=v0.2.0 sh install.sh
-#   HC_TUI_INSTALL_DIR=~/bin sh install.sh
+#   BACKLOT_VERSION=v0.2.0 sh install.sh
+#   BACKLOT_INSTALL_DIR=~/bin sh install.sh
 #
-# HC_TUI_REPO (default followcat/hc-tui) and HC_TUI_BASE_URL
+# BACKLOT_REPO (default followcat/backlot) and BACKLOT_BASE_URL
 # (default the repo's GitHub releases URL) exist for mirrors and
 # tests — the public install path is always HTTPS.
 set -eu
 
-REPO=${HC_TUI_REPO:-followcat/hc-tui}
-BASE_URL=${HC_TUI_BASE_URL:-https://github.com/$REPO/releases}
-INSTALL_DIR=${HC_TUI_INSTALL_DIR:-${HOME:?set HOME or HC_TUI_INSTALL_DIR}/.local/bin}
+REPO=${BACKLOT_REPO:-followcat/backlot}
+BASE_URL=${BACKLOT_BASE_URL:-https://github.com/$REPO/releases}
+INSTALL_DIR=${BACKLOT_INSTALL_DIR:-${HOME:?set HOME or BACKLOT_INSTALL_DIR}/.local/bin}
 
 die() {
     echo "install.sh: $*" >&2
@@ -43,7 +43,7 @@ file_sha256() {
 sys=$(uname -s)
 mach=$(uname -m)
 unsupported() {
-    die "no prebuilt hc-tui for $sys/$mach — releases cover Linux \
+    die "no prebuilt backlot for $sys/$mach — releases cover Linux \
 x86_64/aarch64 (static musl) and macOS arm64/x86_64; build from source: \
 https://github.com/$REPO#build-and-run"
 }
@@ -66,10 +66,10 @@ case "$sys" in
 esac
 
 # --- version --------------------------------------------------------------
-if [ "${HC_TUI_VERSION:-}" ]; then
-    case "$HC_TUI_VERSION" in
-        v*) tag=$HC_TUI_VERSION ;;
-        *) tag="v$HC_TUI_VERSION" ;;
+if [ "${BACKLOT_VERSION:-}" ]; then
+    case "$BACKLOT_VERSION" in
+        v*) tag=$BACKLOT_VERSION ;;
+        *) tag="v$BACKLOT_VERSION" ;;
     esac
 else
     # releases/latest redirects to releases/tag/<tag> — follow it with a
@@ -89,7 +89,7 @@ esac
 version=${tag#v}
 
 # --- download + verify -----------------------------------------------------
-archive="hc-tui-$version-$target.tar.gz"
+archive="backlot-$version-$target.tar.gz"
 work=$(mktemp -d)
 tmp_dest=
 cleanup() {
@@ -115,21 +115,21 @@ actual=$(file_sha256 "$work/$archive")
     || die "checksum mismatch for $archive — nothing was installed"
 
 tar -xzf "$work/$archive" -C "$work"
-[ -f "$work/hc-tui" ] || die "$archive did not contain an hc-tui binary"
+[ -f "$work/backlot" ] || die "$archive did not contain a backlot binary"
 
 # --- install ---------------------------------------------------------------
 mkdir -p "$INSTALL_DIR"
 # Write inside the destination directory, then rename: the new binary
-# appears atomically, never a half-written hc-tui.
-tmp_dest="$INSTALL_DIR/.hc-tui.tmp.$$"
-cp "$work/hc-tui" "$tmp_dest"
+# appears atomically, never a half-written backlot.
+tmp_dest="$INSTALL_DIR/.backlot.tmp.$$"
+cp "$work/backlot" "$tmp_dest"
 chmod 755 "$tmp_dest"
-mv -f "$tmp_dest" "$INSTALL_DIR/hc-tui"
+mv -f "$tmp_dest" "$INSTALL_DIR/backlot"
 tmp_dest=
 
-echo "installed hc-tui $version ($target) to $INSTALL_DIR/hc-tui"
+echo "installed backlot $version ($target) to $INSTALL_DIR/backlot"
 case ":$PATH:" in
     *":$INSTALL_DIR:"*) ;;
     *) echo "note: $INSTALL_DIR is not on your PATH — add it or run the binary by its full path" ;;
 esac
-echo "hc-tui needs the hc core installed: https://github.com/herdrdev/herdr-core"
+echo "backlot needs the hc core installed: https://github.com/herdrdev/herdr-core"

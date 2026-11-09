@@ -56,7 +56,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -eu
-          b=target/$TARGET/release/hc-tui
+          b=target/$TARGET/release/backlot
           file "$b"
           case "$TARGET" in
             *-musl)
@@ -80,15 +80,15 @@ jobs:
             v*) ver=${GITHUB_REF_NAME#v} ;;
             *) ver=0.0.0-pr ;;
           esac
-          stage=hc-tui-$ver-$TARGET
+          stage=backlot-$ver-$TARGET
           mkdir -p "$stage"
-          cp "target/$TARGET/release/hc-tui" "$stage/hc-tui"
+          cp "target/$TARGET/release/backlot" "$stage/backlot"
           cp LICENSE NOTICE dist/README.md "$stage/"
-          tar -czf "hc-tui-$ver-$TARGET.tar.gz" -C "$stage" .
+          tar -czf "backlot-$ver-$TARGET.tar.gz" -C "$stage" .
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.target }}
-          path: hc-tui-*.tar.gz
+          path: backlot-*.tar.gz
           if-no-files-found: error
 
   release:
@@ -117,8 +117,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
           gh release create "$GITHUB_REF_NAME" --draft
-          --title "hc-tui $GITHUB_REF_NAME"
+          --title "backlot $GITHUB_REF_NAME"
           --notes "Install: sh scripts/install.sh, or fetch an archive
           and verify it against sha256sums.txt. See
-          https://github.com/followcat/hc-tui#install"
+          https://github.com/followcat/backlot#install"
           dist/*.tar.gz dist/install.sh dist/sha256sums.txt

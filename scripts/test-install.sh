@@ -45,13 +45,13 @@ make_release() {
     for target in "$@"; do
         staging=$work/stage-$version-$target
         mkdir -p "$staging"
-        printf 'fake-hc-tui %s %s\n' "$version" "$target" >"$staging/hc-tui"
-        chmod 755 "$staging/hc-tui"
+        printf 'fake-backlot %s %s\n' "$version" "$target" >"$staging/backlot"
+        chmod 755 "$staging/backlot"
         : >"$staging/LICENSE"
         : >"$staging/NOTICE"
         echo readme >"$staging/README.md"
-        tar -czf "$dir/hc-tui-$version-$target.tar.gz" -C "$staging" .
-        sums="$sums$(file_sha256 "$dir/hc-tui-$version-$target.tar.gz")  hc-tui-$version-$target.tar.gz
+        tar -czf "$dir/backlot-$version-$target.tar.gz" -C "$staging" .
+        sums="$sums$(file_sha256 "$dir/backlot-$version-$target.tar.gz")  backlot-$version-$target.tar.gz
 "
     done
     printf '%s' "$sums" >"$dir/sha256sums.txt"
@@ -86,7 +86,7 @@ done
 case "\$last" in
     */latest)
         if [ "\$follow" ]; then
-            printf '%s\n' "\${HC_TUI_FAKE_REDIRECT:?redirect unset}"
+            printf '%s\n' "\${BACKLOT_FAKE_REDIRECT:?redirect unset}"
         else
             printf '%s\n' "\$last"
         fi
@@ -104,7 +104,7 @@ run() {
     shift 3
     env -i PATH="$BIN:$SYSBIN" HOME="$work/home" \
         FAKE_SYS=$sys FAKE_MACH=$mach \
-        HC_TUI_BASE_URL="file://$FIX" HC_TUI_INSTALL_DIR="$work/$dest" \
+        BACKLOT_BASE_URL="file://$FIX" BACKLOT_INSTALL_DIR="$work/$dest" \
         "$@" sh "$INSTALLER" 2>&1
 }
 
@@ -120,14 +120,14 @@ n=0
 check_platform() { # sys mach target
     n=$((n + 1))
     dest="dest-$n"
-    out=$(run "$dest" "$1" "$2" HC_TUI_VERSION=v0.1.0)
+    out=$(run "$dest" "$1" "$2" BACKLOT_VERSION=v0.1.0)
     st=$?
     [ $st -eq 0 ] || {
         bad "$1/$2 install — exit $st: $out"
         return
     }
-    got=$(cat "$work/$dest/hc-tui" 2>/dev/null)
-    if [ "$got" = "fake-hc-tui 0.1.0 $3" ]; then
+    got=$(cat "$work/$dest/backlot" 2>/dev/null)
+    if [ "$got" = "fake-backlot 0.1.0 $3" ]; then
         ok "$1/$2 installs $3"
     else
         bad "$1/$2 installs $3 — got '$got'"
@@ -143,32 +143,32 @@ check_platform Darwin x86_64 x86_64-apple-darwin
 # --- checksum mismatch installs nothing --------------------------------------
 bad_sums=$work/bad-release
 mkdir -p "$bad_sums/download/v9.9.9"
-cp "$FIX/download/v9.9.9/hc-tui-9.9.9-x86_64-unknown-linux-musl.tar.gz" \
+cp "$FIX/download/v9.9.9/backlot-9.9.9-x86_64-unknown-linux-musl.tar.gz" \
     "$bad_sums/download/v9.9.9/"
-echo "0000000000000000000000000000000000000000000000000000000000000000  hc-tui-9.9.9-x86_64-unknown-linux-musl.tar.gz" \
+echo "0000000000000000000000000000000000000000000000000000000000000000  backlot-9.9.9-x86_64-unknown-linux-musl.tar.gz" \
     >"$bad_sums/download/v9.9.9/sha256sums.txt"
 out=$(env -i PATH="$BIN:$SYSBIN" HOME="$work/home" \
     FAKE_SYS=Linux FAKE_MACH=x86_64 \
-    HC_TUI_BASE_URL="file://$bad_sums" HC_TUI_INSTALL_DIR="$work/mismatch" \
-    HC_TUI_VERSION=v9.9.9 sh "$INSTALLER" 2>&1)
+    BACKLOT_BASE_URL="file://$bad_sums" BACKLOT_INSTALL_DIR="$work/mismatch" \
+    BACKLOT_VERSION=v9.9.9 sh "$INSTALLER" 2>&1)
 st=$?
 [ $st -ne 0 ] && want "mismatch reports checksum" "$out" "checksum mismatch"
-[ ! -e "$work/mismatch/hc-tui" ] && ok "mismatch installs nothing" \
+[ ! -e "$work/mismatch/backlot" ] && ok "mismatch installs nothing" \
     || bad "mismatch left a binary in $work/mismatch"
-[ -z "$(ls "$work/mismatch"/.hc-tui.tmp.* 2>/dev/null)" ] \
+[ -z "$(ls "$work/mismatch"/.backlot.tmp.* 2>/dev/null)" ] \
     && ok "mismatch leaves no tmp file" || bad "mismatch left tmp file"
 
 # --- unsupported platform fails cleanly --------------------------------------
-out=$(run unsupported FreeBSD amd64 HC_TUI_VERSION=v0.1.0)
+out=$(run unsupported FreeBSD amd64 BACKLOT_VERSION=v0.1.0)
 st=$?
 if [ $st -ne 0 ]; then
     want "unsupported names the platform" "$out" "FreeBSD/amd64"
 else
     bad "unsupported platform installed: $out"
 fi
-[ ! -e "$work/unsupported/hc-tui" ] || bad "unsupported left a binary"
+[ ! -e "$work/unsupported/backlot" ] || bad "unsupported left a binary"
 
-out=$(run unsp2 Linux mips HC_TUI_VERSION=v0.1.0)
+out=$(run unsp2 Linux mips BACKLOT_VERSION=v0.1.0)
 st=$?
 if [ $st -ne 0 ]; then
     want "unsupported arch fails" "$out" "no prebuilt"
@@ -179,57 +179,57 @@ fi
 # --- latest release resolution ------------------------------------------------
 # The stub mirrors real curl: without -L a /latest request answers the
 # URL it was given, so the installer cannot see the tag.
-nol=$(HC_TUI_FAKE_REDIRECT="file://$FIX/tag/v9.9.9" \
+nol=$(BACKLOT_FAKE_REDIRECT="file://$FIX/tag/v9.9.9" \
     "$BIN/curl" -fsSI -o /dev/null -w '%{url_effective}' "file://$FIX/latest")
-wit=$(HC_TUI_FAKE_REDIRECT="file://$FIX/tag/v9.9.9" \
+wit=$(BACKLOT_FAKE_REDIRECT="file://$FIX/tag/v9.9.9" \
     "$BIN/curl" -fsSIL -o /dev/null -w '%{url_effective}' "file://$FIX/latest")
 [ "$nol" = "file://$FIX/latest" ] && [ "$wit" = "file://$FIX/tag/v9.9.9" ] \
     && ok "stub curl only follows with -L" \
     || bad "stub curl: no-L '$nol', with-L '$wit'"
 
-out=$(run latest Linux x86_64 HC_TUI_FAKE_REDIRECT="file://$FIX/tag/v9.9.9")
+out=$(run latest Linux x86_64 BACKLOT_FAKE_REDIRECT="file://$FIX/tag/v9.9.9")
 st=$?
-got=$(cat "$work/latest/hc-tui" 2>/dev/null)
-[ $st -eq 0 ] && [ "$got" = "fake-hc-tui 9.9.9 x86_64-unknown-linux-musl" ] \
+got=$(cat "$work/latest/backlot" 2>/dev/null)
+[ $st -eq 0 ] && [ "$got" = "fake-backlot 9.9.9 x86_64-unknown-linux-musl" ] \
     && ok "latest resolves and installs" \
     || bad "latest — exit $st, binary '$got', out: $out"
 
 # --- version without leading v ------------------------------------------------
-out=$(run nov Linux x86_64 HC_TUI_VERSION=0.1.0)
+out=$(run nov Linux x86_64 BACKLOT_VERSION=0.1.0)
 st=$?
-got=$(cat "$work/nov/hc-tui" 2>/dev/null)
-[ $st -eq 0 ] && [ "$got" = "fake-hc-tui 0.1.0 x86_64-unknown-linux-musl" ] \
+got=$(cat "$work/nov/backlot" 2>/dev/null)
+[ $st -eq 0 ] && [ "$got" = "fake-backlot 0.1.0 x86_64-unknown-linux-musl" ] \
     && ok "bare version installs" || bad "bare version — exit $st: $out"
 
 # --- missing archive entry in sha256sums -------------------------------------
 empty_sums=$work/empty-release
 mkdir -p "$empty_sums/download/v0.1.0"
-cp "$FIX/download/v0.1.0/hc-tui-0.1.0-x86_64-unknown-linux-musl.tar.gz" \
+cp "$FIX/download/v0.1.0/backlot-0.1.0-x86_64-unknown-linux-musl.tar.gz" \
     "$empty_sums/download/v0.1.0/"
 echo "1111111111111111111111111111111111111111111111111111111111111111  other.tar.gz" \
     >"$empty_sums/download/v0.1.0/sha256sums.txt"
 out=$(env -i PATH="$BIN:$SYSBIN" HOME="$work/home" \
     FAKE_SYS=Linux FAKE_MACH=x86_64 \
-    HC_TUI_BASE_URL="file://$empty_sums" HC_TUI_INSTALL_DIR="$work/nosum" \
-    HC_TUI_VERSION=v0.1.0 sh "$INSTALLER" 2>&1)
+    BACKLOT_BASE_URL="file://$empty_sums" BACKLOT_INSTALL_DIR="$work/nosum" \
+    BACKLOT_VERSION=v0.1.0 sh "$INSTALLER" 2>&1)
 st=$?
 if [ $st -ne 0 ]; then
     want "unlisted archive fails" "$out" "not listed"
 else
     bad "unlisted archive installed: $out"
 fi
-[ ! -e "$work/nosum/hc-tui" ] || bad "unlisted archive left a binary"
+[ ! -e "$work/nosum/backlot" ] || bad "unlisted archive left a binary"
 
 # --- PATH warning and default install dir -------------------------------------
-out=$(run pathwarn Linux x86_64 HC_TUI_VERSION=v0.1.0 PATH="$BIN:$SYSBIN")
+out=$(run pathwarn Linux x86_64 BACKLOT_VERSION=v0.1.0 PATH="$BIN:$SYSBIN")
 want "off-PATH install warns" "$out" "not on your PATH"
 
 out=$(env -i PATH="$BIN:$SYSBIN" HOME="$work/defaulthome" \
     FAKE_SYS=Linux FAKE_MACH=x86_64 \
-    HC_TUI_BASE_URL="file://$FIX" \
-    HC_TUI_VERSION=v0.1.0 sh "$INSTALLER" 2>&1)
+    BACKLOT_BASE_URL="file://$FIX" \
+    BACKLOT_VERSION=v0.1.0 sh "$INSTALLER" 2>&1)
 st=$?
-[ $st -eq 0 ] && [ -f "$work/defaulthome/.local/bin/hc-tui" ] \
+[ $st -eq 0 ] && [ -f "$work/defaulthome/.local/bin/backlot" ] \
     && ok "default install dir is ~/.local/bin" \
     || bad "default dir — exit $st: $out"
 
@@ -241,10 +241,10 @@ for tool in sh tar gzip awk mktemp rm cp chmod mv mkdir openssl cat; do
 done
 cp "$BIN/uname" "$BIN/curl" "$MINBIN/"
 chmod 755 "$MINBIN/uname" "$MINBIN/curl"
-out=$(run minpath Linux x86_64 HC_TUI_VERSION=v0.1.0 PATH="$MINBIN")
+out=$(run minpath Linux x86_64 BACKLOT_VERSION=v0.1.0 PATH="$MINBIN")
 st=$?
-got=$(cat "$work/minpath/hc-tui" 2>/dev/null)
-[ $st -eq 0 ] && [ "$got" = "fake-hc-tui 0.1.0 x86_64-unknown-linux-musl" ] \
+got=$(cat "$work/minpath/backlot" 2>/dev/null)
+[ $st -eq 0 ] && [ "$got" = "fake-backlot 0.1.0 x86_64-unknown-linux-musl" ] \
     && ok "installs with openssl-only sha256" \
     || bad "openssl fallback — exit $st: $out"
 
