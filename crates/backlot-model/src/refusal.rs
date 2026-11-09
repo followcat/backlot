@@ -64,6 +64,7 @@ pub enum Refusal {
         state: &'static str,
         status: TaskStatus,
     },
+    NoRole(String),
     NoMessage(u64),
     MessageDone(u64),
     NoAttention(u64),
@@ -151,6 +152,7 @@ impl fmt::Display for Refusal {
             } => {
                 write!(f, "task '{task}' is {status:?}; cannot record '{state}'")
             }
+            Refusal::NoRole(r) => write!(f, "no role '{r}' recorded"),
             Refusal::NoMessage(seq) => write!(f, "event {seq} is not a queued message"),
             Refusal::MessageDone(seq) => write!(f, "message at {seq} is already delivered"),
             Refusal::NoAttention(seq) => write!(f, "event {seq} is not an attention raise"),

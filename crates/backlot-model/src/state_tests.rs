@@ -276,6 +276,52 @@ fn lost_and_closed_are_distinct() {
     assert!(!r.live && !r.closed);
 }
 
+/// `role.session` fills the id an adapter finds only after launch;
+/// a later event may correct it.
+#[test]
+fn role_session_sets_the_session_id() {
+    let mut log = base_events();
+    log.push(ev(
+        4,
+        "stage",
+        EventKind::RoleStarted {
+            role: "producer".into(),
+            terminal: Some("t3".into()),
+            actor: Some(actor("a")),
+            session_id: None,
+            reason: None,
+        },
+    ));
+    log.push(ev(
+        5,
+        "stage",
+        EventKind::RoleSession {
+            role: "producer".into(),
+            session_id: "codex-1".into(),
+        },
+    ));
+    let r = &replay(&log).roles["producer"];
+    assert_eq!(r.session_id.as_deref(), Some("codex-1"));
+    assert_eq!(r.lifecycle(), RoleLifecycle::Live);
+    // The seq target is the role, so `session_id` stays correctable.
+    let mut set = BTreeMap::new();
+    set.insert("session_id".to_string(), "codex-2".to_string());
+    let mut log2 = log;
+    log2.push(ev(
+        6,
+        "producer",
+        EventKind::Correction {
+            target: 5,
+            reason: "picked the wrong rollout".into(),
+            set,
+        },
+    ));
+    assert_eq!(
+        replay(&log2).roles["producer"].session_id.as_deref(),
+        Some("codex-2")
+    );
+}
+
 /// A later `role.started` (or `role.resumed`) clears the closed state.
 #[test]
 fn a_later_start_clears_the_closed_state() {

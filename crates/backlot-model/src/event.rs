@@ -225,6 +225,11 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// The session id a runner reports after launch, found by the
+    /// stage once the role is live (`role.started` already carries
+    /// the ids adapters choose at launch).
+    #[serde(rename = "role.session")]
+    RoleSession { role: String, session_id: String },
     #[serde(rename = "req.version")]
     ReqVersion {
         version: u32,
@@ -353,6 +358,7 @@ impl EventKind {
             EventKind::RoleLost { .. } => "role.lost",
             EventKind::RoleResumed { .. } => "role.resumed",
             EventKind::RoleClosed { .. } => "role.closed",
+            EventKind::RoleSession { .. } => "role.session",
             EventKind::ReqVersion { .. } => "req.version",
             EventKind::PlanPublished { .. } => "plan.published",
             EventKind::TaskCreated { .. } => "task.created",

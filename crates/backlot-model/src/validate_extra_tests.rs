@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::event::*;
-use crate::state::{TaskStatus, apply, replay};
+use crate::state::{StudioState, TaskStatus, apply, replay};
 use crate::testkit::*;
 use crate::validate::{Refusal, validate};
 
@@ -209,6 +209,46 @@ fn task_finding_rules() {
     assert_eq!(t.finding_reports[0].delivery, 1);
     assert_eq!(t.finding_reports[0].by, "producer");
     assert_eq!(t.finding_reports[0].findings[0].id, "D1");
+}
+
+/// `role.session` records only on a role the log knows.
+#[test]
+fn role_session_needs_a_recorded_role() {
+    let mut base = base_events();
+    base.push(ev(
+        4,
+        "stage",
+        EventKind::RoleStarted {
+            role: "producer".into(),
+            terminal: Some("t3".into()),
+            actor: None,
+            session_id: None,
+            reason: None,
+        },
+    ));
+    let state = replay(&base);
+    let known = EventKind::RoleSession {
+        role: "producer".into(),
+        session_id: "s-1".into(),
+    };
+    assert_eq!(validate(&state, &new_ev("stage", known)), Ok(()));
+    let unknown = EventKind::RoleSession {
+        role: "actor-t9-c1".into(),
+        session_id: "s-2".into(),
+    };
+    assert_eq!(
+        validate(&state, &new_ev("stage", unknown)),
+        Err(Refusal::NoRole("actor-t9-c1".into()))
+    );
+    // No studio at all is refused before the role check.
+    let no_studio = EventKind::RoleSession {
+        role: "producer".into(),
+        session_id: "s-1".into(),
+    };
+    assert_eq!(
+        validate(&StudioState::default(), &new_ev("stage", no_studio)),
+        Err(Refusal::NoStudio)
+    );
 }
 
 #[test]

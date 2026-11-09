@@ -77,6 +77,14 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             entry.since_ms = ts;
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
+        EventKind::RoleSession { role, session_id } => {
+            // A found session id lands on a role the log already
+            // knows; it never creates the entry.
+            if let Some(entry) = state.roles.get_mut(role) {
+                entry.session_id = Some(session_id.clone());
+            }
+            state.targets.insert(seq, SeqTarget::Role(role.clone()));
+        }
         EventKind::ReqVersion {
             version,
             file,

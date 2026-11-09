@@ -53,6 +53,16 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             require_studio(state)?;
             Ok(())
         }
+        // `role.session` lands on a role the log already knows —
+        // the stage only looks up live roles it started.
+        EventKind::RoleSession { role, .. } => {
+            require_studio(state)?;
+            if state.roles.contains_key(role) {
+                Ok(())
+            } else {
+                Err(Refusal::NoRole(role.clone()))
+            }
+        }
         EventKind::MessageDelivered { target } => {
             require_studio(state)?;
             match state.targets.get(target) {

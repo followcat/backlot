@@ -34,6 +34,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 |---|---|
 | `studio.created` | title, repo, mode, candidates, role configurations |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
+| `role.session` | role, session ID |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
@@ -52,6 +53,10 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 replacement — so a deliberate stop is never mistaken for a loss, and a closed role keeps its actor
 identity and session ID: it stays resumable while its studio is live. A later `role.started` or
 `role.resumed` clears the closed state.
+
+Adapters that choose the session ID at launch record it in `role.started`. Ones the runner assigns
+itself — found by a file scan or a CLI query after the terminal is up — land in `role.session`, which
+the stage records once it finds the ID. A `role.session` for a role the log does not know is refused.
 
 Two `message.queued` events carry a `purpose` the stage acts on: `plan request` records `plan`
 (to the writer), `dispatch` records `dispatch` (to the director). The writer is wanted from a
