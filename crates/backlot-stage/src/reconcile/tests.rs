@@ -317,6 +317,44 @@ fn a_recast_keeps_the_earlier_person() {
     assert!(state.roles.contains_key("actor-t1-c1"));
 }
 
+/// After a recast the closed earlier cast must not stop the new
+/// person's terminal under the shared name: only the address the
+/// close recorded is finished. Sibling roles stay live.
+#[test]
+fn a_closed_role_finishes_only_its_own_terminal() {
+    let mut events = studio();
+    events.push(dispatch(3));
+    events.push(ev(4, "director", task_created("t1", "feature", 1)));
+    events.push(ev(5, "director", cast("t1", "actor-a", "a")));
+    events.push(started(6, "actor-t1-c1", "t5", "sess-1"));
+    events.push(started(7, "producer", "t1x", "sess-p"));
+    events.push(started(8, "director", "t2x", "sess-d"));
+    events.push(ev(9, "director", cast("t1", "actor-b", "b")));
+    events.push(closed(10, "actor-t1-c1"));
+    events.push(started(11, "actor-t1-c2", "t6", "sess-2"));
+    let state = log(events);
+    // c1 closed at t5; the shared name now holds c2's t6: no actions.
+    let view = live(&[
+        ("bl-acme-shop-producer", "t1x"),
+        ("bl-acme-shop-director", "t2x"),
+        ("bl-acme-shop-t1", "t6"),
+    ]);
+    let actions = reconcile(STUDIO, &state, &view);
+    assert_eq!(actions, Vec::<Action>::new(), "{actions:?}");
+    // At c1's own recorded address the crashed stop still finishes.
+    let view = live(&[
+        ("bl-acme-shop-producer", "t1x"),
+        ("bl-acme-shop-director", "t2x"),
+        ("bl-acme-shop-t1", "t5"),
+    ]);
+    let actions = reconcile(STUDIO, &state, &view);
+    assert_eq!(
+        stops(&actions),
+        [("actor-t1-c1", "bl-acme-shop-t1", false)],
+        "{actions:?}"
+    );
+}
+
 /// A terminal the ledger never recorded is adopted for a desired
 /// role — the stage died between run and record.
 #[test]

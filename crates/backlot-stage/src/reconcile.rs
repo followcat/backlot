@@ -215,8 +215,11 @@ pub fn reconcile(
                 }
             }
             RoleLifecycle::Closed => {
-                if let Some(address) = term {
-                    // A crashed stop finishing: already closed.
+                // A crashed stop finishing — but only for this role's
+                // own recorded terminal. The same name at another
+                // address belongs to whoever came after (a recast
+                // reuses the name): leave that terminal alone.
+                if let Some(address) = term.filter(|a| r.terminal.as_ref() == Some(a)) {
                     stops.push(Action::Stop {
                         role: key.clone(),
                         terminal: name,
