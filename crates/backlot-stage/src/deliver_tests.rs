@@ -183,18 +183,29 @@ fn every_gate_on_its_own() {
     assert!(gate_open(&g, now));
 }
 
-/// Only `sent: true` records the delivery: `sent: false` and an
-/// answer with no `sent` field stay queued, the reason (when the
-/// core gave one) surfacing for the stage's log.
+/// An explicit `sent: false` stays queued, its reason surfacing
+/// for the stage's log; a successful call's answer — this core's
+/// `SendResult` carries `status`/`turn`/`started`, no `sent` —
+/// records the delivery.
 #[test]
-fn only_sent_true_delivers() {
+fn only_sent_false_stays_queued() {
     assert!(send_outcome(&serde_json::json!({"sent": true})).is_ok());
+    let sent_result = serde_json::json!({
+        "status": "waiting",
+        "turn": 5,
+        "started": null,
+        "waited_for_person": false,
+    });
+    assert!(send_outcome(&sent_result).is_ok());
+    assert!(send_outcome(&serde_json::json!({})).is_ok());
     assert_eq!(
         send_outcome(&serde_json::json!({"sent": false, "reason": "no person"})).unwrap_err(),
         Some("no person".to_string())
     );
-    assert_eq!(send_outcome(&serde_json::json!({})).unwrap_err(), None);
-    assert_eq!(send_outcome(&serde_json::json!(null)).unwrap_err(), None);
+    assert_eq!(
+        send_outcome(&serde_json::json!({"sent": false})).unwrap_err(),
+        None
+    );
 }
 
 /// Collecting finished sends drains only the calling studio's —

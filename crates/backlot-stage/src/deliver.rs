@@ -155,17 +155,19 @@ pub fn gate_open(g: &Gate, now_ms: u64) -> bool {
             .is_none_or(|t| now_ms.saturating_sub(t) >= SEND_GAP_MS)
 }
 
-/// What a finished `terminal.send` answer means: `sent: true`
-/// records the delivery. Anything else — `sent: false` or no
-/// `sent` field at all — is a refusal that leaves the message
-/// queued, the answer's `reason` (when given) for the stage's log.
+/// What a finished `terminal.send` answer means: an explicit
+/// `sent: false` is a refusal that leaves the message queued, the
+/// answer's `reason` (when given) for the stage's log. Anything
+/// else a successful call returns — this core's `SendResult`
+/// carries `status`/`turn`/`started` and no `sent` — means the
+/// text went in.
 pub fn send_outcome(answer: &serde_json::Value) -> Result<(), Option<String>> {
     match answer.get("sent").and_then(|s| s.as_bool()) {
-        Some(true) => Ok(()),
-        _ => Err(answer
+        Some(false) => Err(answer
             .get("reason")
             .and_then(|r| r.as_str())
             .map(String::from)),
+        _ => Ok(()),
     }
 }
 
@@ -246,7 +248,7 @@ impl Stage {
                         let _ = record(dir, EventKind::MessageDelivered { target: f.seq });
                         eprintln!("stage: delivered message {} to {}", f.seq, pair.1);
                     }
-                    // `sent: false` (or no `sent`) is a refusal —
+                    // An explicit `sent: false` is a refusal —
                     // queued for a later tick, send gap applies.
                     Err(reason) => {
                         eprintln!(
