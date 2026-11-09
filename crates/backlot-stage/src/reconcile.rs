@@ -141,6 +141,30 @@ pub fn terminal_name(studio: &str, role_key: &str) -> Option<String> {
     }
 }
 
+/// `role.lost` plus a `role lost` clear for every open attention of
+/// the role — the prompt or stall it named is gone with the
+/// terminal, in the same pass. `cleared` keeps a seq from clearing
+/// twice in one pass.
+fn lost_records(
+    state: &StudioState,
+    key: &str,
+    records: &mut Vec<Action>,
+    cleared: &mut BTreeSet<u64>,
+) {
+    records.push(Action::Lost {
+        role: key.into(),
+        reason: "terminal gone".into(),
+    });
+    for a in state.open_attention().filter(|a| a.role == key) {
+        if cleared.insert(a.seq) {
+            records.push(Action::ClearAttention {
+                target: a.seq,
+                reason: "role lost".into(),
+            });
+        }
+    }
+}
+
 /// The `RoleKind` a recorded role key resolves to — the same shape
 /// `desired` builds for fresh starts.
 fn kind_of(role_key: &str) -> RoleKind {
@@ -287,10 +311,7 @@ pub fn reconcile(
                 RoleLifecycle::Live => {
                     if wanted_keys.contains(key.as_str()) {
                         if term.is_none() {
-                            records.push(Action::Lost {
-                                role: key.clone(),
-                                reason: "terminal gone".into(),
-                            });
+                            lost_records(state, key, &mut records, &mut cleared);
                         }
                     } else if let Some(address) = term {
                         stops.push(Action::Stop {
@@ -303,10 +324,7 @@ pub fn reconcile(
                     } else {
                         // Undesired but recorded live with the terminal
                         // already gone — a loss, not a stop.
-                        records.push(Action::Lost {
-                            role: key.clone(),
-                            reason: "terminal gone".into(),
-                        });
+                        lost_records(state, key, &mut records, &mut cleared);
                     }
                 }
                 RoleLifecycle::Closed => {

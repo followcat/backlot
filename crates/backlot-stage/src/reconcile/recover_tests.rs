@@ -272,6 +272,35 @@ fn an_open_cannot_resume_clears() {
     );
 }
 
+/// `role.lost` clears the role's open attention in the same pass —
+/// the prompt or stall it named is gone with the terminal. Another
+/// role's attention is untouched.
+#[test]
+fn role_lost_clears_the_roles_open_attention() {
+    let mut events = studio();
+    events.push(started(3, "producer", Some("sess-1")));
+    events.push(started(4, "director", Some("sess-2")));
+    events.push(attention(5, "producer", PERMISSION_PROMPT));
+    events.push(attention(6, "producer", STALLED));
+    events.push(attention(7, "director", PERMISSION_PROMPT));
+    // The producer's terminal is gone; the director's is still up.
+    let view = live(&[("bl-acme-shop-director", "t4")]);
+    let actions = reconcile(STUDIO, &log(events), &view, 10_000);
+    let mut clears: Vec<(u64, &str)> = actions
+        .iter()
+        .filter_map(|a| match a {
+            Action::ClearAttention { target, reason } => Some((*target, reason.as_str())),
+            _ => None,
+        })
+        .collect();
+    clears.sort();
+    assert_eq!(
+        clears,
+        [(5, "role lost"), (6, "role lost")],
+        "producer's open attention clears with its loss, the director's stays open: {actions:?}"
+    );
+}
+
 /// A held person's reopen stays `reopened` — recovery is for lost
 /// roles, not deliberate holds.
 #[test]
