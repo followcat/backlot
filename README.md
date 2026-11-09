@@ -87,8 +87,6 @@ The macOS builds pass CI but haven't been tried on a real Mac yet.
 Not done yet:
 
 - keyboard copy mode
-- clipboard image paste
-- passing on text that a program copies itself through OSC 52
 
 hc-tui will stay a plain terminal client for `hc`. Multi-agent coordination is being built as a separate project.
 

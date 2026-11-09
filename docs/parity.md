@@ -37,7 +37,7 @@ milestone available.
 |---|---|
 | M2 | Sidebar and endpoint rows, pane cells/attributes/cursor, titles, switching/navigation, resize, applicable mouse behavior, baseline configuration, scratch PTY harness |
 | M3 | Herdr-app structure reader, shared splits/focus/zoom/tabs, complete default/configured bindings and lock |
-| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight and OSC 52 copy on release/Ctrl+C under `ui.copy_on_select` are implemented. Keyboard copy mode, popup selection, clipboard image paste and forwarding pane-emitted OSC 52 remain. |
+| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight, OSC 52 copy on release/Ctrl+C under `ui.copy_on_select`, forwarding pane-emitted OSC 52 and clipboard image paste over remote endpoints are implemented. Keyboard copy mode and popup selection remain. |
 
 The M2 joint review pause stays in place. Later milestones do not excuse
 incorrect behavior on an M2 surface. Popups, confirmations and other actions

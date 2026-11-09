@@ -471,3 +471,32 @@
   ignored) and 29 installer tests. On an owned scratch session, three
   copies from two stand-in agents, with switches between them, reached
   the outer terminal once each. The build before this change wrote none.
+
+## Clipboard image paste on remote endpoints (branch feat/image-paste)
+
+- `Ctrl+V` now reads the local clipboard image and uploads it to the
+  program's machine with `terminal.put`, then pastes the returned path
+  into the pane through the normal paste path. It applies on
+  `--remote`, on hc-tui itself running over SSH, and on a focused
+  terminal on another machine (`machine/tN`) — matching the reference's
+  `endpoint_accepts_local_images`. On a plain local endpoint `Ctrl+V`
+  still reaches the program unchanged, and `Ctrl+Shift+V` stays text
+  paste everywhere.
+- The other two reference triggers come along: an empty bracketed paste
+  (a terminal's image-only `Ctrl+Shift+V`) and a paste holding one
+  absolute image path (a file drop, including quoted and escaped
+  forms). On Linux the read tries WSL PowerShell, `wl-paste` under
+  Wayland and `xclip` under X11 in the reference's MIME order; each
+  tool is killed after about two seconds and a missing tool counts as
+  no image. macOS uses `osascript`. Payloads over the 8 MB
+  `terminal.put` limit are consumed with a notice and never reach the
+  wire. A key release for a consumed press is suppressed on hosts that
+  report releases, and the suppress set only grows on those hosts.
+- Gates: formatting, all-target Clippy, the full suite (890 passed, 8
+  ignored) and 29 installer tests. The parity vectors replayed all 390
+  input cases on reference and candidate with zero failures, and the
+  80x24 run matched on every checkpoint except the documented navigator
+  footer-identity cells. On an owned scratch session with a fake `ssh`
+  running `hc connect` locally and a fake `wl-paste` serving a PNG, the
+  ignored end-to-end test uploaded through the real `terminal.put` and
+  the pasted path landed in the program's stdin.
