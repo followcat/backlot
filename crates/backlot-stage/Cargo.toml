@@ -1,0 +1,15 @@
+[package]
+name = "backlot-stage"
+description = "Studio state directory, append-only ledger store and the studio CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+backlot-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

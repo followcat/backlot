@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/backlot-model",
+    "crates/backlot-stage",
     "crates/hc-proto",
     "crates/hc-tui",
     "crates/hc-vt",
@@ -14,6 +15,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 backlot-model = { path = "crates/backlot-model" }
+backlot-stage = { path = "crates/backlot-stage" }
 hc-proto = { path = "crates/hc-proto" }
 hc-vt = { path = "crates/hc-vt" }
 libc = "0.2"

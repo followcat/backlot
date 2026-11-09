@@ -32,6 +32,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "backlot-stage"
+version = "0.1.0"
+dependencies = [
+ "backlot-model",
+ "libc",
+ "serde",
+ "serde_json",
+ "toml 1.2.0+spec-1.1.0",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
