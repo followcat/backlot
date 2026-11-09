@@ -121,6 +121,24 @@ async fn wait_terminal(client: &Client, name: &str) -> Terminal {
     }
 }
 
+/// `name` exists again at an address different from `old` — a
+/// stopped-and-restarted terminal under the shared name.
+async fn wait_replaced(client: &Client, name: &str, old: &str) -> Terminal {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        if let Some(t) = terminal_named(client, name).await {
+            if t.address != old {
+                return t;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "terminal {name} never left {old}"
+        );
+        tokio::time::sleep(POLL).await;
+    }
+}
+
 /// Wait until `name` is absent even counting finished terminals —
 /// `terminal.kill` + `terminal.rm` leave no record.
 async fn wait_absent(client: &Client, name: &str) {
@@ -210,6 +228,24 @@ fn ledger(state: &Path) -> Vec<serde_json::Value> {
         .filter(|l| !l.is_empty())
         .map(|l| serde_json::from_str(l).expect("ledger line"))
         .collect()
+}
+
+/// The ledger gains an event of `kind` on `role` within the deadline.
+fn wait_event(state: &Path, kind: &str, role: &str) -> serde_json::Value {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        if let Some(e) = ledger(state)
+            .into_iter()
+            .find(|e| e["kind"] == kind && e["role"] == role)
+        {
+            return e;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no {kind} for {role} in the ledger"
+        );
+        std::thread::sleep(POLL);
+    }
 }
 
 const CAST_TOML: &str = r#"
@@ -336,7 +372,24 @@ async fn real_stage_loop() {
     );
     wait_absent(&client, "bl-acme-shop-writer").await;
 
-    // A cast starts an actor; closing its task removes the terminal.
+    // A second studio beside acme-shop: `acme`'s names share a
+    // prefix with `acme-shop`'s, and all four role terminals must
+    // stay live — ownership is the label, not the name.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --studio acme --title acme --repo {} --cast {}",
+            scratch.work.display(),
+            cast.display()
+        ),
+    );
+    let p2 = wait_terminal(&client, "bl-acme-producer").await;
+    let d2 = wait_terminal(&client, "bl-acme-director").await;
+    check_labels(&p2, "acme", "producer", None);
+    check_labels(&d2, "acme", "director", None);
+
+    // A cast starts an actor; a recast hands the name to c2.
     bl(
         &scratch,
         &state,
@@ -350,12 +403,49 @@ async fn real_stage_loop() {
         &state,
         "cast --task t1 --actor actor-a --reason first --as director",
     );
-    let actor_t = wait_terminal(&client, "bl-acme-shop-t1").await;
-    check_labels(&actor_t, "acme-shop", "actor-t1-c1", Some("t1"));
+    let first = wait_terminal(&client, "bl-acme-shop-t1").await;
+    check_labels(&first, "acme-shop", "actor-t1-c1", Some("t1"));
+
+    // The recast closes c1 and starts c2 under the shared name. c1's
+    // stop finishes only its own terminal: c2 stays live across the
+    // following ticks and is never recorded lost.
+    bl(
+        &scratch,
+        &state,
+        "cast --task t1 --actor actor-b --reason recast --as director",
+    );
+    wait_event(&state, "role.started", "actor-t1-c2");
+    let second = wait_replaced(&client, "bl-acme-shop-t1", &first.address).await;
+    check_labels(&second, "acme-shop", "actor-t1-c2", Some("t1"));
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(
+        terminal_named(&client, "bl-acme-shop-t1")
+            .await
+            .is_some_and(|t| t.address == second.address),
+        "the recast actor did not stay live"
+    );
+    // Both studios' fixed roles are still up — neither killed the
+    // other's, and no `bl-`-named user's terminal is touched.
+    for name in [
+        "bl-acme-shop-producer",
+        "bl-acme-shop-director",
+        "bl-acme-producer",
+        "bl-acme-director",
+    ] {
+        assert!(
+            terminal_named(&client, name).await.is_some(),
+            "{name} is gone"
+        );
+    }
 
     // The summary document appears and names the studio.
     let (_, doc) = wait_doc(&client).await;
-    assert_eq!(doc["studios"][0]["id"], "acme-shop", "{doc}");
+    assert!(
+        doc["studios"]
+            .as_array()
+            .is_some_and(|ss| ss.iter().any(|s| s["id"] == "acme-shop")),
+        "{doc}"
+    );
 
     // Closing the task stops the actor deliberately.
     bl(
@@ -371,12 +461,16 @@ async fn real_stage_loop() {
     fn kind(e: &serde_json::Value) -> &str {
         e["kind"].as_str().unwrap_or("")
     }
-    assert!(
-        events
-            .iter()
-            .any(|e| kind(e) == "role.closed" && e["role"] == "actor-t1-c1"),
-        "no role.closed for actor-t1-c1: {events:?}"
-    );
+    // Both casts closed deliberately: c1 at the recast, c2 at the
+    // task close — and nobody was ever recorded lost.
+    for role in ["actor-t1-c1", "actor-t1-c2"] {
+        assert!(
+            events
+                .iter()
+                .any(|e| kind(e) == "role.closed" && e["role"] == role),
+            "no role.closed for {role}: {events:?}"
+        );
+    }
     assert!(
         !events.iter().any(|e| kind(e) == "role.lost"),
         "role.lost present: {events:?}"
@@ -385,7 +479,7 @@ async fn real_stage_loop() {
         .iter()
         .filter(|e| kind(e) == "role.started")
         .collect();
-    assert!(started.len() >= 4, "{events:?}");
+    assert!(started.len() >= 5, "{events:?}");
     for e in &started {
         assert!(
             e["terminal"].as_str().is_some_and(|s| !s.is_empty()),
@@ -393,26 +487,32 @@ async fn real_stage_loop() {
         );
     }
 
-    // status --json still shows the closed role and its session id.
+    // status --json still shows the closed roles and their session id.
     let status = bl(&scratch, &state, "status --json");
     let status: serde_json::Value = serde_json::from_str(&status).unwrap();
-    let closed = &status["roles"]["actor-t1-c1"];
-    assert_eq!(closed["closed"], true, "{closed}");
-    assert_eq!(closed["live"], false, "{closed}");
-    assert_eq!(
-        closed["session_id"].as_str(),
-        Some("fake-bl-acme-shop-t1"),
-        "{closed}"
-    );
+    for role in ["actor-t1-c1", "actor-t1-c2"] {
+        let closed = &status["roles"][role];
+        assert_eq!(closed["closed"], true, "{closed}");
+        assert_eq!(closed["live"], false, "{closed}");
+        assert_eq!(
+            closed["session_id"].as_str(),
+            Some("fake-bl-acme-shop-t1"),
+            "{closed}"
+        );
+    }
 
     // The document saw the close too.
     let deadline = Instant::now() + DEADLINE;
     loop {
         let (_, doc) = wait_doc(&client).await;
-        let roles = &doc["studios"][0]["roles"];
-        let closed_role = roles
+        let studio = doc["studios"]
             .as_array()
-            .and_then(|rs| rs.iter().find(|r| r["role"] == "actor-t1-c1"));
+            .and_then(|ss| ss.iter().find(|s| s["id"] == "acme-shop"));
+        let closed_role = studio.and_then(|s| {
+            s["roles"]
+                .as_array()
+                .and_then(|rs| rs.iter().find(|r| r["role"] == "actor-t1-c2"))
+        });
         if closed_role.is_some_and(|r| r["state"] == "closed" && r["doing"].is_null()) {
             break;
         }
@@ -459,7 +559,11 @@ async fn real_stage_loop() {
     );
     // The last change's content landed.
     let (_, doc) = wait_doc(&client).await;
-    assert_eq!(doc["studios"][0]["requirement_version"], 2, "{doc}");
+    let shop = doc["studios"]
+        .as_array()
+        .and_then(|ss| ss.iter().find(|s| s["id"] == "acme-shop"))
+        .expect("acme-shop in the doc");
+    assert_eq!(shop["requirement_version"], 2, "{doc}");
 
     drop(client);
     scratch.finish().expect("scratch teardown");
