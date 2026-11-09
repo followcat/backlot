@@ -148,11 +148,50 @@ async fn press_and_release_in_one_read_suppresses_the_release() {
 #[tokio::test]
 async fn consumed_press_repeat_is_swallowed() {
     let mut app = remote_app(&["t1"]);
+    // Repeats only arrive from event-type-reporting hosts, the same
+    // flag that grows the suppress set.
+    app.host_reports_key_releases = true;
     let _rx = operations(&mut app);
     core_id(&mut app, "core-fake-1");
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(&mut app, ctrl_v(Action::Repeat));
     assert_eq!(app.pane.input_backlog().0, 0);
+}
+
+#[tokio::test]
+async fn an_orphan_repeat_reaches_the_program_on_a_local_endpoint() {
+    let mut app = app_with(&["t1"]);
+    pending(&mut app);
+    app.image_paste_reader = Box::new(png_image);
+    app.reconcile_published_view();
+    // No press of this key was ever consumed — a bare repeat matching
+    // the trigger must route like ordinary input.
+    press_key(&mut app, ctrl_v(Action::Repeat));
+    assert_eq!(app.pane.input_backlog().0, 1, "orphan repeat forwards");
+}
+
+#[tokio::test]
+async fn an_orphan_repeat_reaches_the_program_on_a_remote_endpoint() {
+    let mut app = remote_app(&["t1"]);
+    app.image_paste_reader = Box::new(no_image);
+    press_key(&mut app, ctrl_v(Action::Repeat));
+    assert_eq!(app.pane.input_backlog().0, 1, "orphan repeat forwards");
+}
+
+#[tokio::test]
+async fn an_unconsumed_press_clears_stale_repeat_suppression() {
+    let mut app = remote_app(&["t1"]);
+    app.image_paste_reader = Box::new(no_image);
+    // A suppress entry orphaned by a lost release must not survive a
+    // press of the same key that was forwarded unconsumed.
+    app.image_paste_suppress
+        .insert(ctrl_v(Action::Press).identity());
+    press_key(&mut app, ctrl_v(Action::Press));
+    assert_eq!(app.pane.input_backlog().0, 1, "unconsumed press forwards");
+    assert!(
+        app.image_paste_suppress.is_empty(),
+        "stale entry removed with the unconsumed press"
+    );
 }
 
 #[tokio::test]

@@ -71,15 +71,19 @@ impl App {
     }
 
     /// The press/repeat arm of `route_key_press`: a configured-trigger
-    /// press starts an upload and is consumed; a re-dispatched repeat of
-    /// a consumed press is swallowed. `None` means the key continues
-    /// into normal routing — the program sees it unchanged.
+    /// press starts an upload and is consumed; a re-dispatched repeat
+    /// is swallowed only when the suppress set recorded its press.
+    /// `None` means the key continues into normal routing — the program
+    /// sees it unchanged, including an orphan repeat.
     pub(super) fn route_image_paste_key(&mut self, key: &input::TerminalKey) -> Option<()> {
         if !self.image_paste_trigger_matches(key) {
             return None;
         }
         match key.input.action {
-            hc_vt::Action::Repeat => Some(()),
+            hc_vt::Action::Repeat => self
+                .image_paste_suppress
+                .contains(&key.identity())
+                .then_some(()),
             hc_vt::Action::Press if self.start_clipboard_image_paste() => {
                 // Only a release-reporting host can ever send the
                 // release — legacy hosts must not grow the set.
@@ -87,6 +91,12 @@ impl App {
                     self.image_paste_suppress.insert(key.identity());
                 }
                 Some(())
+            }
+            hc_vt::Action::Press => {
+                // Matched but not consumed — drop any stale suppress
+                // entry so a following repeat routes normally.
+                self.image_paste_suppress.remove(&key.identity());
+                None
             }
             _ => None,
         }
