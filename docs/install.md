@@ -13,8 +13,11 @@ hc-tui is a single binary. It talks to the `hc` core: see
 ## Install script
 
 ```sh
-curl -fsSL https://github.com/followcat/hc-tui/releases/latest/download/install.sh | sh
+curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh
 ```
+
+The same script is attached to every release, at
+`https://github.com/followcat/hc-tui/releases/latest/download/install.sh`.
 
 The script (`scripts/install.sh`):
 

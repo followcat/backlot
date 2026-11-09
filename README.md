@@ -22,7 +22,7 @@ terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
 ## Install
 
 ```sh
-curl -fsSL https://github.com/followcat/hc-tui/releases/latest/download/install.sh | sh
+curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh
 ```
 
 This installs hc-tui and, when it's missing, the `hc` core it talks to. hc-tui goes into `~/.local/bin`, without
