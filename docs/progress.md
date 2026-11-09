@@ -443,3 +443,16 @@
   about 17 of 30 switches, and one was left with blank rows under its
   footer. With this build they were only ever given the pane's size
   after the first attach, and no blank rows remained.
+
+## macOS: detach in a PTY (known issue, 2026-11-09)
+
+- On macOS the six `autostart` PTY tests time out: after `Ctrl+B q`
+  hc-tui is still running. A stack sample on the CI runner shows the
+  main loop and the input thread idle in `kevent` and `poll`, so it
+  isn't stuck on the way out. The cause isn't known, and no real macOS
+  terminal has been checked. The input code is the same in v0.1.0.
+- Those tests are ignored on macOS for v0.1.1 (user decision). The
+  issue is listed in `docs/troubleshooting.md` and the release notes.
+- Commit `be10620` blames a full PTY buffer. That guess was wrong:
+  draining the PTY didn't change the result. The draining stays, since
+  a test shouldn't leave the child blocked on output.

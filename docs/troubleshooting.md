@@ -50,6 +50,10 @@ specific core that you manage yourself.
   take control.
 - **Shortcuts do nothing and every key goes to the program.** The keyboard lock is on. Press `Ctrl+G` to turn it off.
   The tab bar shows when it's on.
+- **On macOS, `Ctrl+B q` doesn't exit.** Known issue. Automated tests on macOS see hc-tui keep running after this key
+  in a pseudo-terminal. The cause isn't known yet, and it hasn't been checked in a real macOS terminal. If you hit it,
+  close the terminal window: your agents keep running in the core. Please open an issue with your macOS version and
+  terminal.
 
 ## Reporting a bug
 
