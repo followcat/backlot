@@ -62,6 +62,20 @@ TARGETS="x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-apple-darw
 make_release v0.1.0 0.1.0 $TARGETS
 make_release v9.9.9 9.9.9 x86_64-unknown-linux-musl
 
+# The fixture core installers: one drops an hc next to hc-tui (the test
+# env passes HC_TUI_INSTALL_DIR through to the installer's children), the
+# other fails — neither touches the network.
+cat >"$FIX/core-install.sh" <<'EOF'
+#!/bin/sh
+echo fake-hc >"$HC_TUI_INSTALL_DIR/hc"
+chmod 755 "$HC_TUI_INSTALL_DIR/hc"
+EOF
+cat >"$FIX/core-fail.sh" <<'EOF'
+#!/bin/sh
+echo "core boom" >&2
+exit 3
+EOF
+
 # --- tool stubs -------------------------------------------------------------
 BIN=$work/bin
 mkdir -p "$BIN"
@@ -105,6 +119,7 @@ run() {
     env -i PATH="$BIN:$SYSBIN" HOME="$work/home" \
         FAKE_SYS=$sys FAKE_MACH=$mach \
         HC_TUI_BASE_URL="file://$FIX" HC_TUI_INSTALL_DIR="$work/$dest" \
+        HC_TUI_CORE_URL="file://$FIX/core-install.sh" \
         "$@" sh "$INSTALLER" 2>&1
 }
 
@@ -132,7 +147,8 @@ check_platform() { # sys mach target
     else
         bad "$1/$2 installs $3 — got '$got'"
     fi
-    want "$1/$2 prints hc reminder" "$out" "herdr-core"
+    [ -x "$work/$dest/hc" ] && ok "$1/$2 installs the hc core" \
+        || bad "$1/$2 core install — out: $out"
 }
 
 check_platform Linux x86_64 x86_64-unknown-linux-musl
@@ -226,7 +242,7 @@ want "off-PATH install warns" "$out" "not on your PATH"
 
 out=$(env -i PATH="$BIN:$SYSBIN" HOME="$work/defaulthome" \
     FAKE_SYS=Linux FAKE_MACH=x86_64 \
-    HC_TUI_BASE_URL="file://$FIX" \
+    HC_TUI_BASE_URL="file://$FIX" HC_TUI_SKIP_CORE=1 \
     HC_TUI_VERSION=v0.1.0 sh "$INSTALLER" 2>&1)
 st=$?
 [ $st -eq 0 ] && [ -f "$work/defaulthome/.local/bin/hc-tui" ] \
@@ -247,6 +263,67 @@ got=$(cat "$work/minpath/hc-tui" 2>/dev/null)
 [ $st -eq 0 ] && [ "$got" = "fake-hc-tui 0.1.0 x86_64-unknown-linux-musl" ] \
     && ok "installs with openssl-only sha256" \
     || bad "openssl fallback — exit $st: $out"
+
+# --- hc core install ----------------------------------------------------------
+# Missing everywhere -> the fixture core installer runs and drops an hc in
+# the install dir.
+out=$(run core-missing Linux x86_64 HC_TUI_VERSION=v0.1.0)
+st=$?
+[ $st -eq 0 ] && [ -x "$work/core-missing/hc" ] \
+    && want "missing hc installs the core" "$out" "installing the hc core" \
+    || bad "missing hc — exit $st: $out"
+
+# Present in any of the three places -> no core install.
+extrabin=$work/extra-bin
+mkdir -p "$extrabin"
+printf '#!/bin/sh\n' >"$extrabin/hc"
+chmod 755 "$extrabin/hc"
+out=$(run core-onpath Linux x86_64 HC_TUI_VERSION=v0.1.0 \
+    PATH="$extrabin:$BIN:$SYSBIN")
+st=$?
+{ [ $st -eq 0 ] && [ ! -e "$work/core-onpath/hc" ] \
+    && case "$out" in *"installing the hc core"*) false ;; *) true ;; esac; } \
+    && ok "hc on PATH skips the core installer" \
+    || bad "hc on PATH — exit $st: $out"
+
+mkdir -p "$work/core-indir"
+printf '#!/bin/sh\n' >"$work/core-indir/hc"
+chmod 755 "$work/core-indir/hc"
+out=$(run core-indir Linux x86_64 HC_TUI_VERSION=v0.1.0)
+st=$?
+{ [ $st -eq 0 ] && case "$out" in *"installing the hc core"*) false ;; *) true ;; esac; } \
+    && ok "hc in install dir skips the core installer" \
+    || bad "hc in install dir — exit $st: $out"
+
+mkdir -p "$work/home-hc/.local/bin"
+printf '#!/bin/sh\n' >"$work/home-hc/.local/bin/hc"
+chmod 755 "$work/home-hc/.local/bin/hc"
+out=$(run core-localbin Linux x86_64 HC_TUI_VERSION=v0.1.0 HOME="$work/home-hc")
+st=$?
+{ [ $st -eq 0 ] && [ ! -e "$work/core-localbin/hc" ] \
+    && case "$out" in *"installing the hc core"*) false ;; *) true ;; esac; } \
+    && ok "hc in ~/.local/bin skips the core installer" \
+    || bad "hc in ~/.local/bin — exit $st: $out"
+
+# Opt-out skips it too.
+out=$(run core-skip Linux x86_64 HC_TUI_VERSION=v0.1.0 HC_TUI_SKIP_CORE=1)
+st=$?
+{ [ $st -eq 0 ] && [ ! -e "$work/core-skip/hc" ] \
+    && case "$out" in *"installing the hc core"*) false ;; *) true ;; esac; } \
+    && ok "HC_TUI_SKIP_CORE skips the core installer" \
+    || bad "HC_TUI_SKIP_CORE — exit $st: $out"
+
+# A failing core installer warns but keeps hc-tui and exits 0.
+out=$(run core-fail Linux x86_64 HC_TUI_VERSION=v0.1.0 \
+    HC_TUI_CORE_URL="file://$FIX/core-fail.sh")
+st=$?
+[ $st -eq 0 ] || bad "core failure exits nonzero — exit $st: $out"
+[ -f "$work/core-fail/hc-tui" ] \
+    && ok "failed core install keeps hc-tui" \
+    || bad "failed core install lost hc-tui"
+want "failed core warns" "$out" "core installer failed"
+want "failed core prints the manual command" "$out" \
+    "curl -fsSL https://releases.herdr.dev/core/install.sh | sh"
 
 echo "---"
 echo "$pass passed, $fail failed"
