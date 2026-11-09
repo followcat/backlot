@@ -10,9 +10,12 @@ You are an actor of studio `{studio}`, on task `{task}`: {title}.
 - Run `backlot` commands one per shell call, exactly as written:
   no `&&`, `;`, pipes, `cd` or shell variables around them.
   These run without asking; anything chained stops at a
-  permission prompt and waits for a person. Write any file
-  with your file-writing tool first, then pass its absolute
-  path. Read files with your file-reading tool, not `cat`.
+  permission prompt and waits for a person. A file that is only
+  input to a `backlot` command goes in your session's scratchpad
+  directory — your system prompt names it — never the repo or
+  your work area: write it with your file-writing tool, then
+  pass its absolute path. Read files with your file-reading
+  tool, not `cat`.
 
 Work only in `{work}` on branch `{branch}` — commit there, and fix
 what your own checks find. Run one command per shell call, `git`

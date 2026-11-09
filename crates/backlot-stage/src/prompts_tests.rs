@@ -180,6 +180,19 @@ fn every_command_in_the_prompts_parses() {
     }
 }
 
+/// Once the plan and the acceptance list are both published, the
+/// writer's last step is telling the producer — the dispatch is
+/// the producer's to send, not the director's to take.
+#[test]
+fn writer_done_goes_through_the_producer() {
+    let text = template(RoleKind::Writer);
+    let tail = text.rsplit("published").next().unwrap();
+    assert!(
+        tail.contains("backlot tell producer --file <file>"),
+        "writer.md does not end by telling the producer: {tail}"
+    );
+}
+
 /// All four prompts carry the shared one-command rule verbatim —
 /// a chained command falls outside `Bash(backlot *)` and waits on
 /// a person — and nothing outside that rule instructs a chained
@@ -190,9 +203,12 @@ fn prompts_share_the_one_command_rule() {
         "- Run `backlot` commands one per shell call, exactly as written:\n",
         "  no `&&`, `;`, pipes, `cd` or shell variables around them.\n",
         "  These run without asking; anything chained stops at a\n",
-        "  permission prompt and waits for a person. Write any file\n",
-        "  with your file-writing tool first, then pass its absolute\n",
-        "  path. Read files with your file-reading tool, not `cat`."
+        "  permission prompt and waits for a person. A file that is only\n",
+        "  input to a `backlot` command goes in your session's scratchpad\n",
+        "  directory — your system prompt names it — never the repo or\n",
+        "  your work area: write it with your file-writing tool, then\n",
+        "  pass its absolute path. Read files with your file-reading\n",
+        "  tool, not `cat`."
     );
     for (kind, name) in [
         (RoleKind::Producer, "producer"),
