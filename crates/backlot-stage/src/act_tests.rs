@@ -6,8 +6,9 @@ use std::collections::BTreeMap;
 use backlot_model::event::ActorIdentity;
 use backlot_model::state::{Attention, StudioState};
 
-use crate::act::{attention_open, labels, role_env};
+use crate::act::{attention_open, labels, role_env, start_event};
 use crate::reconcile::{RoleKind, Start};
+use crate::runners::{Launch, Session};
 
 fn start() -> Start {
     Start {
@@ -23,6 +24,7 @@ fn start() -> Start {
             permission_profile: "standard".into(),
         },
         repo: "/home/user/acme-shop".into(),
+        resume: None,
     }
 }
 
@@ -108,4 +110,52 @@ fn attention_is_deduped_per_role_and_reason() {
     assert!(!attention_open(&state, "producer", "unknown runner"));
     state.attention[0].open = false;
     assert!(!attention_open(&state, "producer", "launch refused"));
+}
+
+/// A resume launch appends `role.resumed` with the requested session
+/// — post-launch runners report no id on a resume, so `launch` has
+/// none to give. A fresh start records `role.started` with whatever
+/// the adapter chose.
+#[test]
+fn a_resume_launch_records_role_resumed_with_the_asked_session() {
+    let mut held = start();
+    held.resume = Some("sess-1".into());
+    let launch = Launch {
+        argv: vec!["runner".into()],
+        env: BTreeMap::new(),
+        // Codex and devin stay PostLaunch even on a resume.
+        session: Session::PostLaunch,
+    };
+    match start_event(&held, &launch, "t7") {
+        backlot_model::EventKind::RoleResumed {
+            role,
+            terminal,
+            actor,
+            session_id,
+            reason,
+        } => {
+            assert_eq!(role, "producer");
+            assert_eq!(terminal.as_deref(), Some("t7"));
+            assert!(actor.is_some());
+            assert_eq!(session_id.as_deref(), Some("sess-1"));
+            assert_eq!(reason.as_deref(), Some("reopened"));
+        }
+        other => panic!("a resume must record role.resumed, got {other:?}"),
+    }
+
+    let fresh = start();
+    let launch = Launch {
+        argv: vec!["runner".into()],
+        env: BTreeMap::new(),
+        session: Session::Chosen("chosen-1".into()),
+    };
+    match start_event(&fresh, &launch, "t7") {
+        backlot_model::EventKind::RoleStarted {
+            session_id, reason, ..
+        } => {
+            assert_eq!(session_id.as_deref(), Some("chosen-1"));
+            assert_eq!(reason, None);
+        }
+        other => panic!("a fresh start must record role.started, got {other:?}"),
+    }
 }

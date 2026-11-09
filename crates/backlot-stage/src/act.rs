@@ -117,6 +117,29 @@ pub(crate) fn attention_open(state: &StudioState, role: &str, reason: &str) -> b
         .any(|a| a.role == role && a.reason == reason)
 }
 
+/// The lifecycle event a successful `terminal.run` appends:
+/// `role.resumed` (reason `reopened`) for a held person's reopen —
+/// its session is the requested one, since post-launch runners
+/// report no id on a resume — and `role.started` otherwise.
+pub(crate) fn start_event(start: &Start, launch: &runners::Launch, address: &str) -> EventKind {
+    match &start.resume {
+        Some(session) => EventKind::RoleResumed {
+            role: start.role.clone(),
+            terminal: Some(address.into()),
+            actor: Some(start.actor.clone()),
+            session_id: Some(session.clone()),
+            reason: Some("reopened".into()),
+        },
+        None => EventKind::RoleStarted {
+            role: start.role.clone(),
+            terminal: Some(address.into()),
+            actor: Some(start.actor.clone()),
+            session_id: launch.session_id(),
+            reason: None,
+        },
+    }
+}
+
 /// The labels a role terminal carries (design.md "Role terminals").
 pub(crate) fn labels(studio: &str, start: &Start) -> BTreeMap<String, String> {
     let mut labels = BTreeMap::from([
@@ -208,16 +231,7 @@ impl Stage {
             }
             Err(e) => return Err(fatal(e)),
         };
-        record(
-            dir,
-            EventKind::RoleStarted {
-                role: start.role.clone(),
-                terminal: Some(address),
-                actor: Some(start.actor.clone()),
-                session_id: launch.session_id(),
-                reason: None,
-            },
-        )?;
+        record(dir, start_event(start, launch, &address))?;
         eprintln!("stage: started {} as {}", start.role, start.terminal);
         Ok(true)
     }
@@ -320,7 +334,7 @@ impl Stage {
                     terminal: &start.terminal,
                     cwd: &start.repo,
                     prompt: None,
-                    resume: None,
+                    resume: start.resume.as_deref(),
                     stage_env: &self.env_vars,
                 };
                 match runners::decide_start(

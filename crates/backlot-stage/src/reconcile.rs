@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use backlot_model::event::ActorIdentity;
-use backlot_model::state::{RoleLifecycle, StudioState};
+use backlot_model::state::{RoleLifecycle, StudioState, actor_task};
 
 /// Which fixed role a terminal plays (actors key on the task).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +45,9 @@ pub struct Start {
     pub actor: ActorIdentity,
     /// The studio repo — the terminal's working directory.
     pub repo: String,
+    /// The session a held person is reopened into; `None` for a
+    /// fresh start.
+    pub resume: Option<String>,
 }
 
 /// One action the stage carries out, in order.
@@ -119,6 +122,17 @@ pub fn terminal_name(studio: &str, role_key: &str) -> Option<String> {
     }
 }
 
+/// The `RoleKind` a recorded role key resolves to — the same shape
+/// `desired` builds for fresh starts.
+fn kind_of(role_key: &str) -> RoleKind {
+    match role_key {
+        "producer" => RoleKind::Producer,
+        "director" => RoleKind::Director,
+        "writer" => RoleKind::Writer,
+        _ => RoleKind::Actor,
+    }
+}
+
 /// The writer is wanted from a `purpose: "plan"` message until the
 /// next `purpose: "dispatch"` one.
 fn writer_wanted(state: &StudioState) -> bool {
@@ -148,6 +162,7 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
             terminal: format!("bl-{studio}-{role}"),
             actor: actor.clone(),
             repo: cfg.repo.clone(),
+            resume: None,
         })
         .collect();
     if writer_wanted(state) {
@@ -158,6 +173,7 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
             terminal: format!("bl-{studio}-writer"),
             actor: cfg.roles.writer.clone(),
             repo: cfg.repo.clone(),
+            resume: None,
         });
     }
     for t in state.tasks.values() {
@@ -173,8 +189,38 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
                 terminal: format!("bl-{studio}-{}", t.id),
                 actor: cast.actor.clone(),
                 repo: cfg.repo.clone(),
+                resume: None,
             });
         }
+    }
+    // A held person joins the desired set with its recorded session
+    // (R19). One already listed stays one entry, resume set either
+    // way; a held role with no actor has nothing to launch.
+    for want in out.iter_mut() {
+        if let Some(r) = state.roles.get(&want.role)
+            && r.held
+        {
+            want.resume = r.session_id.clone();
+        }
+    }
+    for (key, r) in &state.roles {
+        if !r.held || out.iter().any(|w| w.role == *key) {
+            continue;
+        }
+        let (Some(actor), Some(terminal), Some(session)) =
+            (&r.actor, terminal_name(studio, key), &r.session_id)
+        else {
+            continue;
+        };
+        out.push(Start {
+            role: key.clone(),
+            kind: kind_of(key),
+            task: actor_task(key).map(String::from),
+            terminal,
+            actor: actor.clone(),
+            repo: cfg.repo.clone(),
+            resume: Some(session.clone()),
+        });
     }
     out
 }
@@ -309,5 +355,7 @@ pub fn reconcile(
     actions
 }
 
+#[cfg(test)]
+mod reopen_tests;
 #[cfg(test)]
 mod tests;
