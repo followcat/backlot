@@ -1,5 +1,39 @@
 # Studio progress
 
+## S3: Runner adapters (2026-11-09)
+
+- Done: `runners.rs` is now a `runners/` module, one adapter file per runner plus `fake`. `plan`
+  takes the identity, terminal name, working directory, an optional first prompt and an optional
+  session ID to resume, and returns argv, env and how the session ID is known (`Chosen` now, or
+  `PostLaunch`). Claude Code, Codex, Devin and OpenCode launch and resume with the measured
+  commands in `docs/studio/runners.md`; `standard` and `worktree` permission profiles map to the
+  right flags per runner, and an unknown runner or profile is an `attention.raised`, never a
+  launch. Claude Code argv is prefixed `env -u` for each inherited `CLAUDECODE`, `CLAUDE_EFFORT`,
+  `CLAUDE_PID`, `AI_AGENT` or `CLAUDE_CODE_*` marker; OpenCode gets its model through
+  `OPENCODE_CONFIG_CONTENT` and no effort flag. `role.session { role, session_id }` joined the
+  model: codex IDs are found in `~/.codex/sessions/**/rollout-*.jsonl` (newest day first, matching
+  cwd, created after the role started, unclaimed), devin's via `devin list --format json` in the
+  role's cwd, both through an injected exec; claude and opencode IDs read back off the terminal's
+  argv for adopted roles. A live role still without a session after 60s raises one
+  `attention.raised` ("session id not found"), ever. At most one real runner launches per tick
+  (`fake` exempt); `runner_version` comes from `<runner> --version` once per runner per run.
+  `[runner_env.<runner>]` in `<state base>/config.toml` reaches the terminal env only — malformed
+  config refuses the role. Claude Code's folder-trust dialog is answered with Down then Enter
+  once per role when the screen shows it inside the role's own cwd in its first 60s.
+- Measured: 45 model + 57 stage tests cover the exact argv per runner/profile/prompt/resume,
+  refusals, marker scrubbing, codex/devin capture edge cases (claimed, pre-start, wrong cwd,
+  failures), the 60s attention once, `runner_env` parsing and confidentiality, and the trust
+  parser. `real_stage.rs` passed on a scratch core with `model = "trust"` making the fake runner
+  show the dialog — the stage answered, the role announced itself, the ledger stayed unchanged.
+  `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` green on every
+  commit; clippy also green on the CI-pinned 1.99.0 toolchain.
+- Not verified: no real `claude`/`codex`/`devin`/`opencode` launch was run — forbidden by the
+  milestone; every argv is unit-tested, not observed. Resume argv is built but nothing calls it
+  for a lost or closed role yet (S6). Codex/devin session discovery ran only against fake trees
+  and injected output; `devin list`'s exact field names are as specified, not re-measured. The
+  trust answer is verified through the fake's trust mode, not a real Claude Code screen. Running
+  on official hc remains unverified.
+
 ## S2: The stage process (2026-11-09)
 
 - Done: `backlot stage start` launches a `backlot-stage` terminal whose child runs

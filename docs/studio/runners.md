@@ -3,18 +3,19 @@
 A runner is a coding agent CLI that can fill a role. An adapter holds what differs between them: how to launch one with
 a chosen model and thinking depth, how to resume it, and how to read its screen.
 
-The table comes from each CLI's `--help` on 2026-11-09. **None of it has been exercised by a launch yet.** Milestone S3
-measures each row and records the result here.
+Measured on 2026-11-09 with real launches in an isolated hc session, unless a cell says otherwise. Kimi 0.38.0 has not
+been measured.
 
-| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.28 | OpenCode 2.2.5 | Kimi 0.38.0 |
-|---|---|---|---|---|---|
-| Model | `--model` | `-m` | `--model` | `-m provider/model#variant` | `-m` (alias) |
-| Thinking depth | `--effort` | Config key `model_reasoning_effort`, likely through `-c`; to measure | Part of the model ID | `#variant` in the model | None in `--help` |
-| First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` | Send after start; `-p` is non-interactive |
-| Resume by ID | `-r <id>` | `codex resume <id>` | `-r <id>` | `-s <id>` | `-S <id>` |
-| Choose the ID at launch | `--session-id <uuid>` | No; find it after launch | No; find it after launch | `-s` creates if missing | To measure |
-| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | To measure | `-y` |
-| hc status | OSC 7501 if configured; fork screen detection | Same | Same | Same | OSC 7501 only |
+| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 |
+|---|---|---|---|---|
+| Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` |
+| Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured |
+| First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` |
+| Resume by ID | `-r <id>`, prompt positional, context kept | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered |
+| Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` |
+| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used |
+| Folder trust | Dialog on first use, cursor on "No, exit": Down, then Enter. The answer is saved in the user's Claude config | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen |
+| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen |
 
 Screen detection exists only on the followcat core and covers each agent partially (`docs/screen-status.md` in that core).
 On official hc, an agent that does not report status has none, so the stage's own screen sampling matters there. Running
@@ -36,10 +37,11 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 
 | Runner | Screen shows | Meaning | Response |
 |---|---|---|---|
+| Claude Code | `Quick safety check` with `Yes, I trust this folder`, cursor on `No, exit` | First use of a folder | Down then Enter, once, only when the terminal's cwd is the role's own folder |
+| Codex | Workspace trust prompt | First run in a folder | Launch-time `-c 'projects={"<cwd>"={trust_level="trusted"}}'` keeps it away; if seen, answer for the actor's own work area only |
 | Devin | `Connection error` | Stopped until it gets a message | One short continue message |
 | Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | Wait, then a short retry. Do not change model |
 | Any | Permission dialog | Waiting on a person | Approval policy |
-| Codex | Workspace trust prompt | First run in a folder | Answer for the actor's own work area only |
 
 Fixtures use neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
 
