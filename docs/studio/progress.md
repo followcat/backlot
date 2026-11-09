@@ -1,5 +1,27 @@
 # Studio progress
 
+## S5b: fixes from the second real run (2026-11-09)
+
+- Done: a sent approval key now ends the blocked episode — `blocked_since` is forgotten when the
+  clear is recorded, so a prompt already up (or still up) after the answer starts its own count and
+  raises its own attention at the full window; in round 2 a back-to-back `git commit` prompt sat
+  four minutes unraised. A `deny` approval owes the denied role a notice — any role, not only
+  actors — naming who denied it, that the command did not run, and pointing at `backlot block`;
+  `ApprovalRecord` keeps `by` for it, and Claude Code's `esc` is measured on 2.1.319 to interrupt
+  with `Interrupted · What should Claude do instead?` and wait. The writer's last step now sends
+  `backlot tell producer --file <file>` — the director acts only on the producer's dispatch, which
+  is what the seven-minute idle waited on. All four prompts' shared rule sends a file that is only
+  input to a `backlot` command to the session's scratchpad directory — the system prompt names it —
+  never the repo or the work area.
+- Measured: a stage-level test on a duplex fake core runs two blocked episodes with no unblocked
+  sample between them — the second attention raises at its own window, never sooner, and the spent
+  decision sends no second key; `real_stage_closed_loop` chains `work:blocked:2` through the fake
+  runner end to end and asserts the `denied` notice lands in the actor's inbox. Notice unit tests
+  cover actor and non-actor denies, dedup on `source_seq`, and `allow` owing nothing; prompt tests
+  pin the writer's `tell` line and the scratchpad rule in all four. fmt, clippy (stable and
+  1.99.0), `cargo test` (1106) and `real_stage` (2) green.
+- Not verified: the changes have not run on real agents; Codex's approval keys remain unmeasured.
+
 ## S5b: the role prompts after the first real run (2026-11-09)
 
 - Done: all four role prompts carry the same one-command rule — a `backlot` command runs one per
