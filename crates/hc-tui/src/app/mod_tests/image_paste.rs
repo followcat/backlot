@@ -7,22 +7,22 @@ use serde_json::json;
 
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR";
 
-fn png_image() -> Option<crate::clipboard::ClipboardImage> {
-    Some(crate::clipboard::ClipboardImage {
+fn png_image() -> crate::clipboard::ClipboardRead {
+    crate::clipboard::ClipboardRead::Image(crate::clipboard::ClipboardImage {
         bytes: PNG.to_vec(),
         extension: "png",
     })
 }
 
-fn big_image() -> Option<crate::clipboard::ClipboardImage> {
-    Some(crate::clipboard::ClipboardImage {
+fn big_image() -> crate::clipboard::ClipboardRead {
+    crate::clipboard::ClipboardRead::Image(crate::clipboard::ClipboardImage {
         bytes: vec![0u8; crate::clipboard::MAX_CLIPBOARD_IMAGE_BYTES + 1],
         extension: "png",
     })
 }
 
-fn no_image() -> Option<crate::clipboard::ClipboardImage> {
-    None
+fn no_image() -> crate::clipboard::ClipboardRead {
+    crate::clipboard::ClipboardRead::None
 }
 
 fn ctrl_v(action: Action) -> input::TerminalKey {
@@ -59,7 +59,7 @@ fn remote_app(addresses: &[&str]) -> App {
     let mut app = app_with(addresses);
     pending(&mut app);
     app.set_image_paste_context(true, false);
-    app.image_paste_reader = png_image;
+    app.image_paste_reader = Box::new(png_image);
     app.reconcile_published_view();
     app
 }
@@ -197,7 +197,7 @@ async fn empty_remote_image_paste_disables_the_key_trigger() {
 async fn local_endpoint_bridges_nothing() {
     let mut app = app_with(&["t1"]);
     pending(&mut app);
-    app.image_paste_reader = png_image;
+    app.image_paste_reader = Box::new(png_image);
     app.reconcile_published_view();
     press_key(&mut app, ctrl_v(Action::Press));
     app.on_input(input::UiEvent::Paste(Vec::new()), 120);
@@ -213,7 +213,7 @@ async fn local_endpoint_bridges_nothing() {
 async fn machine_terminal_bridges_on_a_local_endpoint() {
     let mut app = app_with(&["m1/t9"]);
     pending(&mut app);
-    app.image_paste_reader = png_image;
+    app.image_paste_reader = Box::new(png_image);
     app.reconcile_published_view();
     let _rx = operations(&mut app);
     app.focused = Some("m1/t9".into());
@@ -227,7 +227,7 @@ async fn machine_terminal_bridges_on_a_local_endpoint() {
 #[tokio::test]
 async fn no_image_forwards_the_key_unchanged_and_in_order() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = no_image;
+    app.image_paste_reader = Box::new(no_image);
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(
         &mut app,
@@ -244,7 +244,7 @@ async fn no_image_forwards_the_key_unchanged_and_in_order() {
 #[tokio::test]
 async fn no_image_forwards_the_release_like_any_key() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = no_image;
+    app.image_paste_reader = Box::new(no_image);
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(&mut app, ctrl_v(Action::Release));
     assert_eq!(app.pane.input_backlog().0, 2, "press and release forward");
@@ -278,7 +278,7 @@ async fn empty_bracketed_paste_uploads_the_clipboard_image() {
 #[tokio::test]
 async fn empty_paste_with_no_image_stays_an_empty_paste() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = no_image;
+    app.image_paste_reader = Box::new(no_image);
     app.on_input(input::UiEvent::Paste(Vec::new()), 120);
     assert_eq!(app.pane.input_backlog().0, 1, "empty paste forwards");
 }
@@ -475,7 +475,7 @@ async fn a_core_without_put_surfaces_as_a_notice() {
 async fn oversized_image_consumes_with_a_notice_and_no_rpc() {
     let mut app = remote_app(&["t1"]);
     let mut rx = operations(&mut app);
-    app.image_paste_reader = big_image;
+    app.image_paste_reader = Box::new(big_image);
     press_key(&mut app, ctrl_v(Action::Press));
     assert_eq!(app.pane.input_backlog().0, 0, "the key is consumed");
     assert_eq!(app.pending_actions, 0, "no action submitted");
@@ -484,4 +484,130 @@ async fn oversized_image_consumes_with_a_notice_and_no_rpc() {
         rx.try_recv().is_err(),
         "no connection is even opened for an oversized image"
     );
+}
+
+/// The real reader path: the stub tool serves more than the upload
+/// bound of valid-looking PNG, so `linux::read` answers `TooLarge` —
+/// the key is consumed with a notice instead of falling through as
+/// ordinary Ctrl+V input.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn oversized_clipboard_image_consumes_with_a_notice_and_no_rpc() {
+    let dir = stub_tools::StubDir::new();
+    let mut bytes = PNG.to_vec();
+    bytes.resize(crate::clipboard::MAX_CLIPBOARD_IMAGE_BYTES + 64, 0);
+    let payload = dir.write("big.png", &bytes);
+    dir.stub("wl-paste", &format!("cat \"{}\"", payload.display()));
+    let env = dir.env();
+    let mut app = remote_app(&["t1"]);
+    let mut rx = operations(&mut app);
+    app.image_paste_reader =
+        Box::new(move || crate::clipboard::linux::read(&env, std::time::Duration::from_secs(15)));
+    press_key(&mut app, ctrl_v(Action::Press));
+    assert_eq!(app.pane.input_backlog().0, 0, "the key is consumed");
+    assert_eq!(app.pending_actions, 0, "no action submitted");
+    assert!(app.notice.is_some(), "too-large notice");
+    assert!(
+        rx.try_recv().is_err(),
+        "no connection is even opened for an oversized image"
+    );
+}
+
+#[tokio::test]
+async fn dropped_oversized_image_consumes_with_a_notice_and_no_rpc() {
+    let dir = std::env::temp_dir().join(format!("hc-tui-drop-big-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("big.png");
+    let mut bytes = PNG.to_vec();
+    bytes.resize(crate::clipboard::MAX_CLIPBOARD_IMAGE_BYTES + 1, 0);
+    std::fs::write(&file, &bytes).unwrap();
+    let mut app = remote_app(&["t1"]);
+    let mut rx = operations(&mut app);
+    app.on_input(
+        input::UiEvent::Paste(file.display().to_string().into_bytes()),
+        120,
+    );
+    assert_eq!(app.pane.input_backlog().0, 0, "the paste is consumed");
+    assert_eq!(app.pending_actions, 0, "no action submitted");
+    assert!(app.notice.is_some(), "too-large notice");
+    assert!(
+        rx.try_recv().is_err(),
+        "no connection is even opened for an oversized file"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A scratch dir of PATH stubs for tests that run the real reader —
+/// the same ETXTBSY probe discipline as `clipboard::tests`.
+#[cfg(target_os = "linux")]
+mod stub_tools {
+    use std::path::{Path, PathBuf};
+
+    pub(super) struct StubDir(PathBuf);
+
+    impl StubDir {
+        pub(super) fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "hc-tui-image-paste-test-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        pub(super) fn write(&self, name: &str, bytes: &[u8]) -> PathBuf {
+            let path = self.0.join(name);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        }
+
+        pub(super) fn stub(&self, name: &str, body: &str) {
+            let path = self.0.join(name);
+            std::fs::write(
+                &path,
+                format!("#!/bin/sh\n[ -n \"$STUB_PROBE\" ] && exit 0\n{body}\n"),
+            )
+            .unwrap();
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            wait_executable(&path);
+        }
+
+        pub(super) fn env(&self) -> crate::clipboard::ClipboardEnv {
+            crate::clipboard::ClipboardEnv {
+                wayland: true,
+                path: Some(format!("{}:/usr/bin:/bin", self.0.display()).into()),
+                ..Default::default()
+            }
+        }
+    }
+
+    impl Drop for StubDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn wait_executable(path: &Path) {
+        for _ in 0..200 {
+            match std::process::Command::new(path)
+                .env("STUB_PROBE", "1")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+            {
+                Ok(_) => return,
+                Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(e) => panic!("cannot exec stub {}: {e}", path.display()),
+            }
+        }
+        panic!("stub {} never became executable", path.display());
+    }
 }

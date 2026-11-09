@@ -102,11 +102,8 @@ impl App {
         if !self.image_bridge_applies(target.terminal()) {
             return false;
         }
-        let Some(image) = (self.image_paste_reader)() else {
-            return false;
-        };
-        self.submit_image_upload(target, image);
-        true
+        let read = (self.image_paste_reader)();
+        self.dispatch_image_read(target, read)
     }
 
     /// The paste-arm of `UiEvent::Paste`: an empty bracketed paste is
@@ -119,7 +116,7 @@ impl App {
         if !self.image_bridge_applies(target.terminal()) {
             return false;
         }
-        let image = if text.is_empty() {
+        let read = if text.is_empty() {
             (self.image_paste_reader)()
         } else {
             let Ok(text) = std::str::from_utf8(text) else {
@@ -130,11 +127,34 @@ impl App {
             };
             crate::clipdrop::read_image_file(&path, extension)
         };
-        let Some(image) = image else {
-            return false;
-        };
-        self.submit_image_upload(target, image);
-        true
+        self.dispatch_image_read(target, read)
+    }
+
+    /// Shared end of both triggers: upload an image, notice a too-large
+    /// one, or leave the gesture untouched when there is none.
+    fn dispatch_image_read(
+        &mut self,
+        target: ImagePasteTarget,
+        read: crate::clipboard::ClipboardRead,
+    ) -> bool {
+        match read {
+            crate::clipboard::ClipboardRead::Image(image) => {
+                self.submit_image_upload(target, image);
+                true
+            }
+            crate::clipboard::ClipboardRead::TooLarge => {
+                self.image_too_large_notice();
+                true
+            }
+            crate::clipboard::ClipboardRead::None => false,
+        }
+    }
+
+    fn image_too_large_notice(&mut self) {
+        self.show_notice(
+            "Image too large",
+            "The clipboard image exceeds the core's 8 MB upload limit",
+        );
     }
 
     /// `terminal.put` through the operations store, off the UI path.
@@ -146,10 +166,7 @@ impl App {
         image: crate::clipboard::ClipboardImage,
     ) {
         if image.bytes.len() > crate::clipboard::MAX_CLIPBOARD_IMAGE_BYTES {
-            self.show_notice(
-                "Image too large",
-                "The clipboard image exceeds the core's 8 MB upload limit",
-            );
+            self.image_too_large_notice();
             return;
         }
         let terminal = target.terminal().to_owned();

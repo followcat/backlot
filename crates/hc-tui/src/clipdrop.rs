@@ -6,7 +6,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::clipboard::{ClipboardImage, LimitedRead, MAX_CLIPBOARD_IMAGE_BYTES, read_limited};
+use crate::clipboard::{
+    ClipboardImage, ClipboardRead, LimitedRead, MAX_CLIPBOARD_IMAGE_BYTES,
+    bytes_match_image_signature, read_limited,
+};
 
 /// A pasted text holding exactly one local absolute image path — what a
 /// terminal file drop delivers. Quoted and backslash-escaped forms are
@@ -72,16 +75,26 @@ fn recognized_image_extension(extension: &str) -> Option<&'static str> {
 
 /// The dropped image file: a regular file under the `terminal.put`
 /// limit, like the reference's `read_image_file`. The filename's
-/// extension is the claimed format — contents are not sniffed.
-pub(crate) fn read_image_file(path: &Path, extension: &'static str) -> Option<ClipboardImage> {
-    let metadata = std::fs::metadata(path).ok()?;
+/// extension is the claimed format — a file over the limit counts as
+/// `TooLarge` only when its capped prefix matches that format.
+pub(crate) fn read_image_file(path: &Path, extension: &'static str) -> ClipboardRead {
+    let Some(metadata) = std::fs::metadata(path).ok() else {
+        return ClipboardRead::None;
+    };
     if !metadata.is_file() {
-        return None;
+        return ClipboardRead::None;
     }
-    let bytes =
-        match read_limited(std::fs::File::open(path).ok()?, MAX_CLIPBOARD_IMAGE_BYTES).ok()? {
-            LimitedRead::Complete(bytes) => bytes,
-            LimitedRead::Empty | LimitedRead::Oversized => return None,
-        };
-    Some(ClipboardImage { bytes, extension })
+    let Some(read) = std::fs::File::open(path)
+        .ok()
+        .and_then(|file| read_limited(file, MAX_CLIPBOARD_IMAGE_BYTES).ok())
+    else {
+        return ClipboardRead::None;
+    };
+    match read {
+        LimitedRead::Complete(bytes) => ClipboardRead::Image(ClipboardImage { bytes, extension }),
+        LimitedRead::Oversized(prefix) if bytes_match_image_signature(extension, &prefix) => {
+            ClipboardRead::TooLarge
+        }
+        _ => ClipboardRead::None,
+    }
 }

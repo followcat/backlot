@@ -255,9 +255,9 @@ pub struct App {
     /// Kitty releases of presses the image bridge consumed: the release
     /// arm consults this before the popup's unconditional release leg.
     image_paste_suppress: std::collections::HashSet<hc_vt::Key>,
-    /// The clipboard-image read — a field so tests never touch a real
-    /// clipboard.
-    image_paste_reader: fn() -> Option<crate::clipboard::ClipboardImage>,
+    /// The clipboard-image read — a boxed field so tests never touch a
+    /// real clipboard and can close over stub-tool environments.
+    image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
     /// The host was told to report every key as an escape code —

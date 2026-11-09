@@ -8,16 +8,23 @@
 
 use std::ffi::OsString;
 use std::io::Read;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::process::{Command, Stdio};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::sync::mpsc;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::thread;
-use std::time::{Duration, Instant};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::time::Duration;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use std::time::Instant;
 
 /// `terminal.put` accepts at most 8 MB of raw data — the bridge bound.
 pub(crate) const MAX_CLIPBOARD_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 
 /// About how long one clipboard read may run before its owner is
 /// declared hung. Kept a named constant so tests can shrink it.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const READER_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// One image read off the local clipboard or a dropped file.
@@ -27,27 +34,46 @@ pub(crate) struct ClipboardImage {
     pub extension: &'static str,
 }
 
+/// What a clipboard or dropped-file read produced: nothing usable
+/// (`None`), an image under the `terminal.put` bound (`Image`), or a
+/// payload over the bound whose capped prefix still matched the
+/// advertised format (`TooLarge`). The bridge reports `TooLarge`
+/// instead of forwarding the gesture as plain input.
+#[derive(Debug)]
+pub(crate) enum ClipboardRead {
+    None,
+    Image(ClipboardImage),
+    TooLarge,
+}
+
 /// The reader-selection facts `read_clipboard_image` needs; tests inject
-/// fakes so they never touch a real clipboard.
+/// fakes so they never touch a real clipboard. Display-selection fields
+/// exist only where a reader consults them.
 #[derive(Debug, Default)]
 pub(crate) struct ClipboardEnv {
     /// Inside WSL: `powershell.exe` answers the Windows clipboard first.
+    #[cfg(target_os = "linux")]
     pub wsl: bool,
     /// `WAYLAND_DISPLAY` is set: `wl-paste` may answer.
+    #[cfg(target_os = "linux")]
     pub wayland: bool,
     /// `DISPLAY` is set: `xclip` may answer.
+    #[cfg(target_os = "linux")]
     pub display: bool,
     /// PATH the spawned tools resolve against. `None` inherits the
     /// process's own; tests pass a directory of stubs.
     pub path: Option<OsString>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 impl ClipboardEnv {
     fn current() -> Self {
         Self {
+            #[cfg(target_os = "linux")]
             wsl: running_inside_wsl(),
+            #[cfg(target_os = "linux")]
             wayland: std::env::var_os("WAYLAND_DISPLAY").is_some(),
+            #[cfg(target_os = "linux")]
             display: std::env::var_os("DISPLAY").is_some(),
             path: None,
         }
@@ -55,9 +81,10 @@ impl ClipboardEnv {
 }
 
 /// The image on the local clipboard, if one is offered in a supported
-/// format. A missing tool, an empty clipboard, an oversized payload and
-/// a timed-out owner all read as "no image".
-pub(crate) fn read_clipboard_image() -> Option<ClipboardImage> {
+/// format. A missing tool, an empty clipboard, an invalid payload and a
+/// timed-out owner all read as `None`; a payload over the bound with a
+/// matching signature prefix reads as `TooLarge`.
+pub(crate) fn read_clipboard_image() -> ClipboardRead {
     #[cfg(target_os = "linux")]
     {
         read_linux_clipboard_image(&ClipboardEnv::current(), READER_TIMEOUT)
@@ -68,15 +95,17 @@ pub(crate) fn read_clipboard_image() -> Option<ClipboardImage> {
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        None
+        ClipboardRead::None
     }
 }
 
-/// The bounded-read outcome of one spawned tool.
+/// The bounded-read outcome of one spawned tool. `Oversized` keeps the
+/// capped prefix so a caller's signature check can tell "too large"
+/// apart from "not an image".
 pub(crate) enum LimitedRead {
     Empty,
     Complete(Vec<u8>),
-    Oversized,
+    Oversized(Vec<u8>),
 }
 
 /// The reference `read_limited_reader`: at most `max_bytes`, then one
@@ -108,7 +137,7 @@ pub(crate) fn read_limited(
         return match reader.read(&mut sentinel) {
             Ok(0) if bytes.is_empty() => Ok(LimitedRead::Empty),
             Ok(0) => Ok(LimitedRead::Complete(bytes)),
-            Ok(_) => Ok(LimitedRead::Oversized),
+            Ok(_) => Ok(LimitedRead::Oversized(bytes)),
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => Err(e),
         };
@@ -117,15 +146,20 @@ pub(crate) fn read_limited(
 
 /// What one bounded tool run produced. `TimedOut` aborts the whole
 /// clipboard read: a hung owner stalls every later read the same way.
+/// `Oversized` keeps the capped prefix for the caller's signature check.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 enum ReaderOutcome {
     Data(Vec<u8>),
+    Oversized(Vec<u8>),
     Empty,
     TimedOut,
 }
 
 /// Spawn a clipboard tool and drain its stdout, bounded in bytes and
-/// time. A missing tool, a nonzero exit and an oversized or empty
-/// payload are `Empty`; a deadline kill is `TimedOut`.
+/// time. A missing tool, a nonzero exit and an empty payload are
+/// `Empty`; a deadline kill is `TimedOut`; a stream that filled the cap
+/// is `Oversized` with the prefix retained.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_tool(mut command: Command, timeout: Duration) -> ReaderOutcome {
     let mut child = match command
         .stdin(Stdio::null())
@@ -165,11 +199,11 @@ fn read_tool(mut command: Command, timeout: Duration) -> ReaderOutcome {
             }
         }
     };
-    if matches!(outcome, LimitedRead::Oversized) {
+    if let LimitedRead::Oversized(prefix) = outcome {
         let _ = child.kill();
         let _ = child.wait();
         let _ = drain.join();
-        return ReaderOutcome::Empty;
+        return ReaderOutcome::Oversized(prefix);
     }
     // stdout closed: give the child the rest of the deadline to exit,
     // then take its status like the reference does.
@@ -194,7 +228,7 @@ fn read_tool(mut command: Command, timeout: Duration) -> ReaderOutcome {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn tool_command(env: &ClipboardEnv, program: &str, args: &[&str]) -> Command {
     let mut command = Command::new(program);
     command.args(args);
@@ -205,8 +239,10 @@ fn tool_command(env: &ClipboardEnv, program: &str, args: &[&str]) -> Command {
 }
 
 /// The reference's magic-byte checks per advertised format — a tool
-/// answering with the wrong shape never reaches `terminal.put`.
-fn bytes_match_image_signature(extension: &str, bytes: &[u8]) -> bool {
+/// answering with the wrong shape never reaches `terminal.put`, and an
+/// oversized stream only counts as too large when its capped prefix
+/// still matches.
+pub(crate) fn bytes_match_image_signature(extension: &str, bytes: &[u8]) -> bool {
     match extension {
         "png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
         "jpg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
@@ -224,7 +260,7 @@ fn bytes_match_image_signature(extension: &str, bytes: &[u8]) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-mod linux {
+pub(crate) mod linux {
     use super::*;
     use std::path::Path;
 
@@ -264,8 +300,11 @@ mod linux {
     }
 
     /// WSL → `wl-paste` (Wayland) → `xclip` (X11), in the reference's
-    /// MIME order. A `TimedOut` read stops the whole attempt.
-    pub(super) fn read(env: &ClipboardEnv, timeout: Duration) -> Option<ClipboardImage> {
+    /// MIME order. A `TimedOut` read stops the whole attempt. An
+    /// oversized stream stops it too when its prefix still matches the
+    /// advertised image signature — that is a real image, just too big;
+    /// an oversized stream with a foreign prefix stays "no image".
+    pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
         if env.wsl {
             let args = [
                 "-NoProfile",
@@ -276,12 +315,15 @@ mod linux {
             ];
             match read_tool(tool_command(env, "powershell.exe", &args), timeout) {
                 ReaderOutcome::Data(bytes) if bytes_match_image_signature("png", &bytes) => {
-                    return Some(ClipboardImage {
+                    return ClipboardRead::Image(ClipboardImage {
                         bytes,
                         extension: "png",
                     });
                 }
-                ReaderOutcome::TimedOut => return None,
+                ReaderOutcome::Oversized(prefix) if bytes_match_image_signature("png", &prefix) => {
+                    return ClipboardRead::TooLarge;
+                }
+                ReaderOutcome::TimedOut => return ClipboardRead::None,
                 _ => {}
             }
         }
@@ -301,19 +343,24 @@ mod linux {
                     ReaderOutcome::Data(bytes)
                         if bytes_match_image_signature(extension, &bytes) =>
                     {
-                        return Some(ClipboardImage { bytes, extension });
+                        return ClipboardRead::Image(ClipboardImage { bytes, extension });
                     }
-                    ReaderOutcome::TimedOut => return None,
+                    ReaderOutcome::Oversized(prefix)
+                        if bytes_match_image_signature(extension, &prefix) =>
+                    {
+                        return ClipboardRead::TooLarge;
+                    }
+                    ReaderOutcome::TimedOut => return ClipboardRead::None,
                     _ => {}
                 }
             }
         }
-        None
+        ClipboardRead::None
     }
 }
 
 #[cfg(target_os = "linux")]
-fn read_linux_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> Option<ClipboardImage> {
+fn read_linux_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
     linux::read(env, timeout)
 }
 #[cfg(target_os = "linux")]
@@ -322,7 +369,7 @@ use linux::running_inside_wsl;
 /// The reference's `osascript` PNG read: the clipboard is rendered into
 /// a uniquely-named temp file, which is then read back bounded.
 #[cfg(target_os = "macos")]
-fn read_macos_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> Option<ClipboardImage> {
+fn read_macos_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
     let path = std::env::temp_dir().join(format!(
         "hc-tui-clipboard-image-{}-{}.png",
         std::process::id(),
@@ -337,19 +384,22 @@ fn read_macos_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> Option<C
     let image = match run {
         // osascript emits no stdout; anything else is still only the
         // temp-file payload below.
-        ReaderOutcome::Data(_) | ReaderOutcome::TimedOut => None,
-        ReaderOutcome::Empty => std::fs::File::open(&path)
+        ReaderOutcome::Empty => match std::fs::File::open(&path)
             .ok()
             .and_then(|file| read_limited(file, MAX_CLIPBOARD_IMAGE_BYTES).ok())
-            .and_then(|read| match read {
-                LimitedRead::Complete(bytes) if bytes_match_image_signature("png", &bytes) => {
-                    Some(ClipboardImage {
-                        bytes,
-                        extension: "png",
-                    })
-                }
-                _ => None,
-            }),
+        {
+            Some(LimitedRead::Complete(bytes)) if bytes_match_image_signature("png", &bytes) => {
+                ClipboardRead::Image(ClipboardImage {
+                    bytes,
+                    extension: "png",
+                })
+            }
+            Some(LimitedRead::Oversized(prefix)) if bytes_match_image_signature("png", &prefix) => {
+                ClipboardRead::TooLarge
+            }
+            _ => ClipboardRead::None,
+        },
+        _ => ClipboardRead::None,
     };
     let _ = std::fs::remove_file(&path);
     image
