@@ -131,13 +131,28 @@ fn can_show_trust(actor: &backlot_model::ActorIdentity) -> bool {
     actor.runner == "claude" || (actor.runner == "fake" && actor.model == "trust")
 }
 
+/// A `session not found` attention from the role's current life —
+/// raised at or after `since_ms`. An older one is the previous
+/// terminal's business: it neither stops the looks nor holds a
+/// pending `(runner, folder)` pair.
+fn session_attention<'a>(
+    state: &'a StudioState,
+    role: &str,
+    since_ms: u64,
+) -> Option<&'a backlot_model::state::Attention> {
+    state
+        .attention
+        .iter()
+        .find(|a| a.role == role && a.reason == SESSION_NOT_FOUND && a.ts_ms >= since_ms)
+}
+
 /// Every `(runner, working directory)` a new start must wait on: a
 /// live role of a post-launch runner — in any studio — that has no
-/// session id yet and has not hit its 60 second attention. Two such
-/// roles in one folder could claim the same session, so the second
-/// defers until the first has its id or is given up on. The folder
-/// is the role's work area, so `dir_of` maps a studio name to its
-/// state directory.
+/// session id yet and has not hit its 60 second attention *in this
+/// life*. Two such roles in one folder could claim the same session,
+/// so the second defers until the first has its id or is given up
+/// on. The folder is the role's work area, so `dir_of` maps a studio
+/// name to its state directory.
 pub(crate) fn discovery_blocked(
     states: &std::collections::BTreeMap<String, StudioState>,
     dir_of: &dyn Fn(&str) -> PathBuf,
@@ -154,10 +169,7 @@ pub(crate) fn discovery_blocked(
                 && r.actor
                     .as_ref()
                     .is_some_and(|a| runners::post_launch_session(&a.runner))
-                && !s
-                    .attention
-                    .iter()
-                    .any(|a| a.role == *key && a.reason == SESSION_NOT_FOUND);
+                && session_attention(s, key, r.since_ms).is_none();
             if pending {
                 let runner = r
                     .actor
@@ -192,23 +204,13 @@ pub(crate) fn taken_ids(
         .collect()
 }
 
-/// Whether this tick pays for a discovery look at all: never once
-/// the role's attention exists or it is past the hard stop, and at
-/// most once every [`DISCOVERY_EVERY_MS`] otherwise. `now_ms` is the
-/// tick's clock, injected so the cadence is testable.
-pub(crate) fn discovery_due(
-    role: &str,
-    state: &StudioState,
-    age_ms: u64,
-    last_look_ms: Option<u64>,
-    now_ms: u64,
-) -> bool {
-    if age_ms > DISCOVERY_STOP_MS
-        || state
-            .attention
-            .iter()
-            .any(|a| a.role == role && a.reason == SESSION_NOT_FOUND)
-    {
+/// Whether this tick pays for a discovery look at all: at most once
+/// every [`DISCOVERY_EVERY_MS`], and never past the hard stop. The
+/// 60 second attention never pauses the looks — a slow first start
+/// still gets found until then. `now_ms` is the tick's clock,
+/// injected so the cadence is testable.
+pub(crate) fn discovery_due(age_ms: u64, last_look_ms: Option<u64>, now_ms: u64) -> bool {
+    if age_ms > DISCOVERY_STOP_MS {
         return false;
     }
     last_look_ms.is_none_or(|t| now_ms.saturating_sub(t) >= DISCOVERY_EVERY_MS)
@@ -220,36 +222,44 @@ pub(crate) fn work_due(last_ms: Option<u64>, now_ms: u64) -> bool {
     last_ms.is_none_or(|t| now_ms.saturating_sub(t) >= WORK_SAMPLE_EVERY_MS)
 }
 
-/// The ledger event a session-less live role's watch yields: a
-/// `role.session` when the id was found, or one `attention.raised`
-/// once the wait ran out — ever, so a resolved attention stays the
-/// answer and the check is the log's whole history.
+/// The ledger events a session-less live role's watch yields: a
+/// `role.session` — plus an `attention.cleared` for any still-open
+/// `session not found` of the role — when the id was found, or one
+/// `attention.raised` once the wait ran out in this life, so a
+/// relaunched role can raise its own while a resolved one stays the
+/// answer.
 pub(crate) fn session_event(
     role: &str,
     runner: &str,
     found: Option<String>,
     state: &StudioState,
+    since_ms: u64,
     age_ms: u64,
-) -> Option<EventKind> {
+) -> Vec<EventKind> {
     if let Some(session_id) = found {
-        return Some(EventKind::RoleSession {
+        let mut events = vec![EventKind::RoleSession {
             role: role.into(),
             session_id,
-        });
+        }];
+        events.extend(
+            state
+                .open_attention()
+                .filter(|a| a.role == role && a.reason == SESSION_NOT_FOUND)
+                .map(|a| EventKind::AttentionCleared {
+                    target: a.seq,
+                    reason: Some("session found".into()),
+                }),
+        );
+        return events;
     }
-    if age_ms < SESSION_WAIT_MS
-        || state
-            .attention
-            .iter()
-            .any(|a| a.role == role && a.reason == SESSION_NOT_FOUND)
-    {
-        return None;
+    if age_ms < SESSION_WAIT_MS || session_attention(state, role, since_ms).is_some() {
+        return Vec::new();
     }
-    Some(EventKind::AttentionRaised {
+    vec![EventKind::AttentionRaised {
         role: role.into(),
         reason: SESSION_NOT_FOUND.into(),
         detail: format!("runner '{runner}' gave no session id within 60s of the role starting"),
-    })
+    }]
 }
 
 impl Stage {
@@ -310,11 +320,12 @@ impl Stage {
                 continue;
             }
             // Discovery is throttled: at most one look per five
-            // seconds per role, and none once the role's attention
-            // exists or ten minutes passed.
+            // seconds per role, for as long as the role is young
+            // enough — its 60 second attention never pauses the
+            // looks.
             let pair = (studio.to_string(), key.clone());
             let last_look = self.discover_looked.borrow().get(&pair).copied();
-            let found = if discovery_due(key, state, age_ms, last_look, now_ms) {
+            let found = if discovery_due(age_ms, last_look, now_ms) {
                 self.discover_looked.borrow_mut().insert(pair, now_ms);
                 // Claimed ids come from every studio, not just this
                 // one, plus anything found earlier in this pass.
@@ -331,7 +342,7 @@ impl Stage {
             } else {
                 None
             };
-            if let Some(kind) = session_event(key, &actor.runner, found, state, age_ms) {
+            for kind in session_event(key, &actor.runner, found, state, role.since_ms, age_ms) {
                 if let EventKind::RoleSession { session_id, .. } = &kind {
                     self.found_sessions.borrow_mut().insert(session_id.clone());
                     eprintln!("stage: {key} session is {session_id}");
@@ -378,7 +389,7 @@ impl Stage {
             Ok(r) => r.text,
             // A refused read (the terminal raced away) is nothing.
             Err(CallError::Rpc(_)) => return Ok(()),
-            Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
+            Err(e) => return Err(Fail::core(format!("core call failed: {e}"))),
         };
         let pair = (studio.to_string(), role.to_string());
         let prev = self.trust_pace.borrow().get(&pair).copied();
@@ -403,7 +414,7 @@ impl Stage {
         match sent {
             Ok(_) => eprintln!("stage: answered folder trust for {role} ({key})"),
             Err(CallError::Rpc(_)) => {}
-            Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
+            Err(e) => return Err(Fail::core(format!("core call failed: {e}"))),
         }
         Ok(())
     }

@@ -121,30 +121,22 @@ fn discovery_blocked_while_an_id_is_outstanding() {
     assert_eq!(blocked.len(), 1, "{blocked:?}");
 }
 
-/// A look happens at most every five seconds per role, never
-/// once the role's attention exists, and never past ten
-/// minutes — the injected clock makes the cadence testable.
+/// A look happens at most every five seconds per role and keeps
+/// happening — the 60 second attention never pauses it — until the
+/// ten-minute hard stop. The injected clock makes the cadence
+/// testable.
 #[test]
-fn discovery_is_throttled_and_stops() {
-    let state = StudioState::default();
+fn discovery_is_throttled_and_stops_only_at_the_stop() {
     // First look always; again only after five seconds.
-    assert!(discovery_due("r", &state, 1_000, None, 1_000));
-    assert!(!discovery_due("r", &state, 1_000, Some(1_000), 2_000));
-    assert!(!discovery_due("r", &state, 1_000, Some(1_000), 5_999));
-    assert!(discovery_due("r", &state, 1_000, Some(1_000), 6_000));
-    // The role's attention exists: given up, no more looking.
-    let mut state = StudioState::default();
-    state.attention.push(raised("r"));
-    assert!(!discovery_due("r", &state, 61_000, None, 200_000));
+    assert!(discovery_due(1_000, None, 1_000));
+    assert!(!discovery_due(1_000, Some(1_000), 2_000));
+    assert!(!discovery_due(1_000, Some(1_000), 5_999));
+    assert!(discovery_due(1_000, Some(1_000), 6_000));
+    // The looks continue past the attention's minute — the watch
+    // consults no attention here at all.
+    assert!(discovery_due(61_000, None, 200_000));
     // And nothing looks past the hard stop.
-    let state = StudioState::default();
-    assert!(!discovery_due(
-        "r",
-        &state,
-        DISCOVERY_STOP_MS + 1,
-        None,
-        700_000
-    ));
+    assert!(!discovery_due(DISCOVERY_STOP_MS + 1, None, 700_000));
 }
 
 /// Claimed ids pool across every studio and the ids this pass
@@ -256,33 +248,30 @@ fn trust_step_paces_the_exchange() {
 }
 
 /// A found id records `role.session`; under the wait nothing
-/// happens; past it, one attention — and never a second, even
-/// after the first resolved.
+/// happens; past it, one attention per life — and never a
+/// second in the same life, even after the first resolved.
 #[test]
 fn session_event_timing() {
     let state = StudioState::default();
-    let found = session_event("producer", "codex", Some("s1".into()), &state, 5_000);
+    let found = session_event("producer", "codex", Some("s1".into()), &state, 0, 5_000);
     assert_eq!(
         found,
-        Some(EventKind::RoleSession {
+        vec![EventKind::RoleSession {
             role: "producer".into(),
             session_id: "s1".into(),
-        })
+        }]
     );
     // Inside the wait a miss stays quiet.
-    assert_eq!(
-        session_event("producer", "codex", None, &state, SESSION_WAIT_MS - 1),
-        None
-    );
+    assert!(session_event("producer", "codex", None, &state, 0, SESSION_WAIT_MS - 1).is_empty());
     // Past it the attention raises, once.
-    let raised = session_event("producer", "codex", None, &state, SESSION_WAIT_MS);
+    let raised = session_event("producer", "codex", None, &state, 0, SESSION_WAIT_MS);
     assert!(
-        matches!(&raised, Some(EventKind::AttentionRaised { reason, .. }) if reason == SESSION_NOT_FOUND),
+        matches!(raised.as_slice(), [EventKind::AttentionRaised { reason, .. }] if reason == SESSION_NOT_FOUND),
         "{raised:?}"
     );
-    // A prior attention for the same role and reason — open or
-    // resolved — means never again; a different role's does not
-    // count.
+    // A prior attention for the same role and reason in this life —
+    // open or resolved — means never again; a different role's does
+    // not count.
     let mut state = StudioState::default();
     for (role, open) in [("producer", true), ("other", false)] {
         state.attention.push(Attention {
@@ -294,19 +283,86 @@ fn session_event_timing() {
             ts_ms: 0,
         });
     }
-    assert_eq!(
-        session_event("producer", "codex", None, &state, SESSION_WAIT_MS + 1),
-        None
-    );
+    assert!(session_event("producer", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty());
     state.attention[0].open = false;
-    assert_eq!(
-        session_event("producer", "codex", None, &state, SESSION_WAIT_MS + 1),
-        None,
+    assert!(
+        session_event("producer", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty(),
         "resolved stays answered"
     );
     assert!(
-        session_event("other", "codex", None, &state, SESSION_WAIT_MS + 1).is_none(),
+        session_event("other", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty(),
         "a different role's resolved attention does not fire again"
     );
-    assert!(session_event("director", "codex", None, &state, SESSION_WAIT_MS + 1).is_some());
+    assert!(!session_event("director", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty());
+}
+
+/// An attention from before `since_ms` — a previous life's — neither
+/// unblocks a pending `(runner, folder)` pair nor suppresses this
+/// life's own raise; the same attention raised in this life does
+/// both.
+#[test]
+fn a_previous_lifes_attention_counts_for_nothing() {
+    let dir_of = |name: &str| std::path::PathBuf::from(format!("/state/{name}"));
+    let mut states = std::collections::BTreeMap::new();
+    let mut one = studio("/repo");
+    let mut relaunched = live("codex", None);
+    relaunched.since_ms = 200;
+    one.roles.insert("producer".into(), relaunched);
+    one.attention.push(Attention {
+        seq: 3,
+        role: "producer".into(),
+        reason: SESSION_NOT_FOUND.into(),
+        detail: String::new(),
+        open: false,
+        ts_ms: 50,
+    });
+    states.insert("one".into(), one);
+    // A previous life's raise never unblocks the pair…
+    let blocked = discovery_blocked(&states, &dir_of);
+    assert!(
+        blocked.contains(&("codex".into(), "/repo".into())),
+        "{blocked:?}"
+    );
+    // …nor suppresses this life's own raise.
+    let state = &states["one"];
+    let events = session_event("producer", "codex", None, state, 200, SESSION_WAIT_MS + 1);
+    assert!(
+        matches!(events.as_slice(), [EventKind::AttentionRaised { reason, .. }] if reason == SESSION_NOT_FOUND),
+        "{events:?}"
+    );
+    // The same attention raised in this life does both.
+    states.get_mut("one").unwrap().attention[0].ts_ms = 250;
+    let blocked = discovery_blocked(&states, &dir_of);
+    assert!(!blocked.contains(&("codex".into(), "/repo".into())));
+    let state = &states["one"];
+    assert!(session_event("producer", "codex", None, state, 200, SESSION_WAIT_MS + 1).is_empty());
+}
+
+/// The id turning up after the attention records `role.session` and
+/// clears the open `session not found` in the same pass.
+#[test]
+fn a_late_found_id_clears_the_open_attention() {
+    let mut state = StudioState::default();
+    state.attention.push(Attention {
+        seq: 7,
+        role: "producer".into(),
+        reason: SESSION_NOT_FOUND.into(),
+        detail: String::new(),
+        open: true,
+        ts_ms: 100,
+    });
+    let events = session_event("producer", "codex", Some("s9".into()), &state, 0, 120_000);
+    assert_eq!(
+        events,
+        vec![
+            EventKind::RoleSession {
+                role: "producer".into(),
+                session_id: "s9".into(),
+            },
+            EventKind::AttentionCleared {
+                target: 7,
+                reason: Some("session found".into()),
+            },
+        ]
+    );
 }
