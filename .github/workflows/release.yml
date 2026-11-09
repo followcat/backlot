@@ -1,0 +1,124 @@
+name: release
+
+# pull_request lets the full matrix prove itself before the first tag;
+# paths limits it to the files this workflow exercises.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - tools/**
+      - scripts/install.sh
+      - dist/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          # Native arm runner: zig cc as linker fails on the erratum
+          # flag CI's rustc adds (-Wl,--fix-cortex-a53-843419).
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: macos-latest, target: x86_64-apple-darwin }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/cache@v4
+        id: zig-cache
+        with:
+          path: ${{ runner.temp }}/hc-tui-zig-0.16.0
+          key: zig-0.16.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-zig.sh') }}
+      - name: Install Zig 0.16.0
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        run: tools/install-zig.sh "${{ runner.temp }}/hc-tui-zig-0.16.0"
+      - name: Add Zig to PATH
+        run: echo "${{ runner.temp }}/hc-tui-zig-0.16.0" >> "$GITHUB_PATH"
+      - name: Check Zig version
+        run: test "$(zig version)" = "0.16.0"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target ${{ matrix.target }} -p hc-tui
+      # Static proof for musl, a run where the runner executes the
+      # build's own architecture. Cross targets get `file` only.
+      - name: Check binary
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          b=target/$TARGET/release/hc-tui
+          file "$b"
+          case "$TARGET" in
+            *-musl)
+              file "$b" | grep -q "static"
+              "$b" --version
+              ;;
+            aarch64-apple-darwin)
+              "$b" --version
+              ;;
+          esac
+      # The archive layout (binary + LICENSE + NOTICE + README.md, all
+      # flat) is what scripts/install.sh and docs/install.md describe.
+      - name: Package
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          # GITHUB_REF_NAME is the tag on a tag push, "<n>/merge" on a
+          # pull request — a fixed placeholder keeps the archive name sane.
+          case "$GITHUB_REF_NAME" in
+            v*) ver=${GITHUB_REF_NAME#v} ;;
+            *) ver=0.0.0-pr ;;
+          esac
+          stage=hc-tui-$ver-$TARGET
+          mkdir -p "$stage"
+          cp "target/$TARGET/release/hc-tui" "$stage/hc-tui"
+          cp LICENSE NOTICE dist/README.md "$stage/"
+          tar -czf "hc-tui-$ver-$TARGET.tar.gz" -C "$stage" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: hc-tui-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The tag's own installer ships as an asset so the documented
+      # `curl …/latest/download/install.sh | sh` always matches it.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - run: cp scripts/install.sh dist/install.sh
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > sha256sums.txt
+          cat sha256sums.txt
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" --draft
+          --title "hc-tui $GITHUB_REF_NAME"
+          --notes "Install: sh scripts/install.sh, or fetch an archive
+          and verify it against sha256sums.txt. See
+          https://github.com/followcat/hc-tui#install"
+          dist/*.tar.gz dist/install.sh dist/sha256sums.txt

@@ -57,7 +57,9 @@ impl App {
 }
 
 fn local_datetime() -> Option<time::PrimitiveDateTime> {
-    let mut timestamp: libc::time_t = 0;
+    // time_t is i64 on every target hc-tui builds for; the libc alias
+    // itself is deprecated on musl (its width changed in musl 1.2).
+    let mut timestamp: i64 = 0;
     if unsafe { libc::time(&mut timestamp) } == -1 {
         return None;
     }

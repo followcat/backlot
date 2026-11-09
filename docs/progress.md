@@ -351,3 +351,58 @@
   fence gap, first attach/reconnect/eviction appearance, native program OSC12,
   reporter labels and remaining M4 actions stay deferred. Pause for review;
   M4 is not started.
+
+## Shared remote attach connection (fix branch `fix/shared-attach-conn`, unpushed)
+
+- A remote endpoint's attaches now multiplex onto one framed `hc connect`:
+  `AttachConn` is a lazy single-flight registry — the first open connects,
+  concurrent opens share one transport and one `hello`, the first open
+  after a death rebuilds once, and the last attach's end closes it. The
+  shared reader routes through a channel table (held slots for pre-install
+  frames, dead slots for late ones); the writer keeps control frames and
+  owed credit first and serves stream input fairly across channels.
+- Detach and drop close only their own channel — a synchronous CLOSE from
+  `Drop` prevents a leaked viewer on the shared connection — and a
+  cancelled open's late attach reply still gets its channel CLOSED.
+  Per-channel violations (credit overflow, malformed stream data) end
+  only that attach; a dead transport or channel-0 violation ends every
+  attach through the existing error path.
+- Local Unix sockets keep `Attach::connect`; watch and RPC streams keep
+  their own connections; every connection to a target still shares the
+  one ControlMaster login.
+- Gates: formatting, all-target Clippy and the full test suite pass,
+  including new fake-core shared-connection suites and a fake-ssh proof
+  that two opens spawn one child and one `hello`. The real-core
+  integration suite gained a two-attaches-one-connection case.
+
+## M6: Release tooling and install path (2026-11-09)
+
+- Release targets: `x86_64-unknown-linux-musl` and
+  `aarch64-unknown-linux-musl` (static, Zig cross-builds libghostty-vt
+  for the Cargo target) plus `aarch64-apple-darwin` and
+  `x86_64-apple-darwin`. Portability fixes: `libc` names no
+  TIOC*WINSZ/TIOCSCTTY constants on Apple targets — the fixed Darwin
+  values are supplied where needed and the PTY smoke fixture uses
+  `openpty`/`login_tty`; the deprecated `libc::time_t` alias is an
+  explicit `i64` now.
+- CI grows a macOS job (build all targets, `cargo test`,
+  `scripts/test-install.sh` for the shasum fallback), and
+  `.github/workflows/release.yml` builds all four targets on a `v*` tag,
+  packages `hc-tui-<version>-<target>.tar.gz` (binary + LICENSE + NOTICE
+  + short README), writes `sha256sums.txt`, and opens a **draft** GitHub
+  release — publishing stays manual.
+- `scripts/install.sh` (POSIX): platform detection with a clear
+  unsupported message, latest release or `HC_TUI_VERSION`, sha256
+  verification that installs nothing on mismatch, atomic install into
+  `${HC_TUI_INSTALL_DIR:-$HOME/.local/bin}`, PATH and `hc` reminders.
+  `scripts/test-install.sh` covers it offline — file:// fixtures and
+  stubbed `uname`/`curl`; it also runs in CI on both Linux and macOS.
+- Verified locally: the x86_64 musl build is `static-pie linked` (ldd
+  agrees), `--version`/`--help` run, and a packaged archive installs
+  through the real script path. The aarch64 musl build is checked on
+  CI's `ubuntu-24.04-arm` runner — native, after `zig cc` as linker
+  proved incompatible with rustc's `-Wl,--fix-cortex-a53-843419`
+  erratum flag. Both Apple targets are exercised by CI only.
+- Docs: README leads with Install; new `docs/install.md`,
+  `docs/remote.md` and `docs/troubleshooting.md`. The first tag/release
+  publication is pending — the user decides when it goes out.

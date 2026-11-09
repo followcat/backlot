@@ -239,6 +239,117 @@ pub type SizeFn = unsafe extern "C" fn(Terminal, *mut c_void, *mut SizeReport) -
 /// `GhosttyTerminalBellFn` — BEL (0x07) notifications, no payload.
 pub type BellFn = unsafe extern "C" fn(Terminal, *mut c_void);
 
+pub type Formatter = *mut c_void;
+
+// GhosttyPointTag — vendor/ghostty/include/ghostty/vt/point.h.
+pub const POINT_TAG_SCREEN: i32 = 2;
+
+/// `GhosttyPointCoordinate`.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct PointCoordinate {
+    /// Column (0-indexed).
+    pub x: u16,
+    /// Row (0-indexed). May exceed the viewport for screen/history tags.
+    pub y: u32,
+}
+
+/// `GhosttyPointValue`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union PointValue {
+    pub coordinate: PointCoordinate,
+    pub _padding: [u64; 2],
+}
+
+impl Default for PointValue {
+    fn default() -> Self {
+        Self { _padding: [0; 2] }
+    }
+}
+
+/// `GhosttyPoint` — a point in the terminal grid under a coordinate tag.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct Point {
+    pub tag: i32,
+    pub value: PointValue,
+}
+
+/// `GhosttyGridRef` — a snapshot cell reference, valid until the next
+/// mutating terminal call. `size` must be set to `size_of::<GridRef>()`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct GridRef {
+    pub size: usize,
+    pub node: *mut c_void,
+    pub x: u16,
+    pub y: u16,
+}
+
+impl Default for GridRef {
+    fn default() -> Self {
+        Self {
+            size: 0,
+            node: std::ptr::null_mut(),
+            x: 0,
+            y: 0,
+        }
+    }
+}
+
+/// `GhosttySelection` — an inclusive endpoint pair; `size` must be set.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Selection {
+    pub size: usize,
+    pub start: GridRef,
+    pub end: GridRef,
+    pub rectangle: bool,
+}
+
+// GhosttyFormatterFormat — vendor/ghostty/include/ghostty/vt/types.h.
+pub const FORMATTER_FORMAT_PLAIN: i32 = 0;
+
+/// `GhosttyFormatterScreenExtra`.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct FormatterScreenExtra {
+    pub size: usize,
+    pub cursor: bool,
+    pub style: bool,
+    pub hyperlink: bool,
+    pub protection: bool,
+    pub kitty_keyboard: bool,
+    pub charsets: bool,
+}
+
+/// `GhosttyFormatterTerminalExtra`.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct FormatterTerminalExtra {
+    pub size: usize,
+    pub palette: bool,
+    pub modes: bool,
+    pub scrolling_region: bool,
+    pub tabstops: bool,
+    pub pwd: bool,
+    pub keyboard: bool,
+    pub screen: FormatterScreenExtra,
+}
+
+/// `GhosttyFormatterTerminalOptions`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct FormatterTerminalOptions {
+    pub size: usize,
+    pub emit: i32,
+    pub unwrap: bool,
+    pub trim: bool,
+    pub extra: FormatterTerminalExtra,
+    pub selection: *const Selection,
+}
+
 unsafe extern "C" {
     pub fn ghostty_color_palette_default(out: *mut Rgb);
     pub fn ghostty_terminal_new(
@@ -252,6 +363,22 @@ unsafe extern "C" {
     pub fn ghostty_terminal_get(t: Terminal, data: i32, out: *mut c_void) -> i32;
     pub fn ghostty_terminal_vt_write(t: Terminal, data: *const u8, len: usize);
     pub fn ghostty_terminal_scroll_viewport(t: Terminal, behavior: ScrollViewport);
+    pub fn ghostty_terminal_grid_ref(t: Terminal, point: Point, out: *mut GridRef) -> i32;
+    pub fn ghostty_formatter_terminal_new(
+        alloc: *const c_void,
+        out: *mut Formatter,
+        t: Terminal,
+        options: FormatterTerminalOptions,
+    ) -> i32;
+    pub fn ghostty_formatter_format_alloc(
+        f: Formatter,
+        alloc: *const c_void,
+        out_ptr: *mut *mut u8,
+        out_len: *mut usize,
+    ) -> i32;
+    pub fn ghostty_formatter_free(f: Formatter);
+    pub fn ghostty_free(alloc: *const c_void, ptr: *mut u8, len: usize);
+    pub fn ghostty_unicode_codepoint_width(cp: u32) -> u8;
     pub fn ghostty_terminal_resize(
         t: Terminal,
         cols: u16,
@@ -333,5 +460,17 @@ mod tests {
         assert_eq!(offset_of!(RenderStateCursor, visual_style), 20);
         assert_eq!(size_of::<RenderStateColors>(), 792);
         assert_eq!(offset_of!(RenderStateColors, palette), 18);
+        assert_eq!(size_of::<Point>(), 24);
+        assert_eq!(offset_of!(Point, value), 8);
+        assert_eq!(size_of::<GridRef>(), 24);
+        assert_eq!(offset_of!(GridRef, x), 16);
+        assert_eq!(size_of::<Selection>(), 64);
+        assert_eq!(offset_of!(Selection, rectangle), 56);
+        assert_eq!(size_of::<FormatterScreenExtra>(), 16);
+        assert_eq!(offset_of!(FormatterScreenExtra, charsets), 13);
+        assert_eq!(size_of::<FormatterTerminalExtra>(), 32);
+        assert_eq!(offset_of!(FormatterTerminalExtra, screen), 16);
+        assert_eq!(size_of::<FormatterTerminalOptions>(), 56);
+        assert_eq!(offset_of!(FormatterTerminalOptions, selection), 48);
     }
 }

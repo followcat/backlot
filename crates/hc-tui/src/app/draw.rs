@@ -160,6 +160,15 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         let (content, track, scroll) = inner_for(pane, info, scrollbars);
         let suppressed = !info.is_focused || hide_cursor;
         let wish = draw_terminal(pane, content, buf, _now, suppressed);
+        crate::chrome::selection_highlight::render_selection_highlight(
+            app.selection.as_ref(),
+            buf,
+            &info.id,
+            content,
+            scroll,
+            &app.shell.palette,
+            &app.host_facts.theme,
+        );
         if info.is_focused {
             cursor = wish;
         }

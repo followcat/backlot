@@ -13,7 +13,17 @@ struct Clock {
 
 impl Clock {
     fn of(term: &Terminal) -> Option<Self> {
-        let activity = term.activity.as_ref()?;
+        let Some(activity) = term.activity.as_ref() else {
+            // Without `record_activity` the only authoritative change
+            // marker is `turn` — a counter private to this terminal, so it
+            // rides in a singleton domain keyed by the address: its bumps
+            // still reallocate the display receipt but the ordinal can
+            // never sort against a foreign counter.
+            return Some(Self {
+                domain: (term.address.clone(), String::new(), 0),
+                ordinal: Some(term.turn),
+            });
+        };
         let ordinal = activity
             .records
             .iter()

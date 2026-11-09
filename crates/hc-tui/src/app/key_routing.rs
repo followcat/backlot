@@ -1,5 +1,7 @@
 // Derived from herdr src/client/shell/input.rs (Apache-2.0).
 //! Source press/consumed/repeat/release policy, with hc attach generations.
+use std::time::Instant;
+
 use super::input::{Decision, TerminalKey};
 use super::key_leases::{InputLease, InputLeaseKey, RepeatPlan};
 use super::{App, Mode};
@@ -33,6 +35,14 @@ impl App {
 
     pub(super) fn on_key(&mut self, key: TerminalKey, width: u16) {
         if let Some(text) = self.host_text_commit(&key) {
+            // `prepare_committed_text`: committed text retires the word
+            // gesture and clears a retained selection.
+            self.word_selection = None;
+            if self.selection.take().is_some() {
+                self.stop_selection_autoscroll();
+                self.selection_highlight_clear_deadline = None;
+                self.sched.mark_dirty(Instant::now());
+            }
             self.reset_displayed_scroll();
             self.pane.input_encoded(text.into_bytes());
             return;
@@ -155,6 +165,30 @@ impl App {
         }
         if self.route_settings_key(&press) {
             return None;
+        }
+        // The reference clears the word gesture on any key and lets a
+        // retained (non `copy_on_select`) selection copy on Ctrl/Cmd+C;
+        // every other key reaching pane dispatch clears the highlight.
+        self.word_selection = None;
+        if !self.shell.copy_on_select
+            && matches!(press.input.key, Key::Char('c' | 'C'))
+            && matches!(press.input.mods, m if m == hc_vt::Mods::CTRL || m == hc_vt::Mods::SUPER)
+            && self
+                .selection
+                .as_ref()
+                .is_some_and(crate::selection::Selection::is_visible)
+        {
+            self.request_selection_copy();
+            self.selection = None;
+            self.stop_selection_autoscroll();
+            self.selection_highlight_clear_deadline = None;
+            self.sched.mark_dirty(Instant::now());
+            return None;
+        }
+        if self.selection.take().is_some() {
+            self.stop_selection_autoscroll();
+            self.selection_highlight_clear_deadline = None;
+            self.sched.mark_dirty(Instant::now());
         }
         if self.mode == Mode::Navigate {
             if let Some(nav) = super::input::navigate_key(&press, &self.live) {

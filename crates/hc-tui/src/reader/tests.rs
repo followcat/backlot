@@ -91,10 +91,12 @@ async fn stopping_a_full_input_queue_is_prompt_and_releases_its_descriptor() {
     let (mut reader, mut host) = pair(1);
     host.write_all(&[b'a'; 256]).unwrap();
     tokio::time::sleep(Duration::from_millis(30)).await;
+    // Arm the timeout before the peer closes: macOS answers EINVAL
+    // when it is set on a socket whose peer is gone.
+    host.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
     let began = Instant::now();
     reader.stop();
     assert!(began.elapsed() < Duration::from_millis(500));
-    host.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
     assert_eq!(host.read(&mut [0]).unwrap(), 0);
     reader.stop(); // idempotent, including after workers have exited
 }
@@ -102,8 +104,9 @@ async fn stopping_a_full_input_queue_is_prompt_and_releases_its_descriptor() {
 #[test]
 fn dropping_an_idle_reader_closes_its_input_and_signal_workers() {
     let (reader, mut host) = pair(1);
-    drop(reader);
+    // Arm the timeout before the peer closes: see above.
     host.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+    drop(reader);
     assert_eq!(host.read(&mut [0]).unwrap(), 0);
 }
 
@@ -148,11 +151,14 @@ async fn final_coalesced_resize_survives_a_full_channel() {
     reader.stop();
 }
 
+// Apple's openpty takes *mut winsize; the &mut is needed there and
+// harmless on Linux where it coerces to *const.
+#[allow(clippy::unnecessary_mut_passed)]
 #[tokio::test]
 async fn sigwinch_reads_the_owned_input_descriptor() {
     let mut master = -1;
     let mut slave = -1;
-    let size = libc::winsize {
+    let mut size = libc::winsize {
         ws_row: 24,
         ws_col: 80,
         ws_xpixel: 0,
@@ -166,8 +172,8 @@ async fn sigwinch_reads_the_owned_input_descriptor() {
                 &mut master,
                 &mut slave,
                 std::ptr::null_mut(),
-                std::ptr::null(),
-                &size,
+                std::ptr::null_mut(),
+                &mut size,
             )
         },
         0
@@ -184,7 +190,7 @@ async fn sigwinch_reads_the_owned_input_descriptor() {
     };
     // SAFETY: master remains open and ioctl reads the initialized winsize.
     assert_eq!(
-        unsafe { libc::ioctl(master.as_raw_fd(), libc::TIOCSWINSZ, &size) },
+        unsafe { libc::ioctl(master.as_raw_fd(), winsz::TIOCSWINSZ, &size) },
         0
     );
     signal_hook::low_level::raise(signal_hook::consts::SIGWINCH).unwrap();

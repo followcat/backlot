@@ -25,6 +25,7 @@ pub mod panes;
 pub mod panes_draw;
 pub mod render;
 pub mod scroll;
+pub(crate) mod selection_highlight;
 pub(crate) mod settings;
 pub(crate) mod settings_render;
 pub mod sidebar_render;
@@ -69,6 +70,9 @@ pub struct ClientShellConfig {
     pub palette: Palette,
     pub keybinds: LiveKeybindConfig,
     pub mouse_capture: bool,
+    /// `ui.copy_on_select` — release copies a dragged selection and
+    /// clears it; `false` retains the highlight for Ctrl+C.
+    pub copy_on_select: bool,
     pub draw_host_cursor: bool,
     pub window_title: Option<crate::config::WindowTitleTemplate>,
     pub tab_bar_right: Vec<crate::config::TabBarRightEntryConfig>,
@@ -135,6 +139,7 @@ impl ClientShellConfig {
             palette: resolved,
             keybinds: config.live_keybinds(),
             mouse_capture: ui.mouse_capture,
+            copy_on_select: ui.copy_on_select,
             window_title: crate::config::WindowTitleTemplate::parse(&ui.window_title)
                 .ok()
                 .flatten(),

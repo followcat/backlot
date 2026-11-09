@@ -37,7 +37,7 @@ milestone available.
 |---|---|
 | M2 | Sidebar and endpoint rows, pane cells/attributes/cursor, titles, switching/navigation, resize, applicable mouse behavior, baseline configuration, scratch PTY harness |
 | M3 | Herdr-app structure reader, shared splits/focus/zoom/tabs, complete default/configured bindings and lock |
-| M5 | Copy mode, selection and clipboard behavior/visuals |
+| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight and OSC 52 copy on release/Ctrl+C under `ui.copy_on_select` are implemented. Keyboard copy mode, popup selection, clipboard image paste and forwarding pane-emitted OSC 52 remain. |
 
 The M2 joint review pause stays in place. Later milestones do not excuse
 incorrect behavior on an M2 surface. Popups, confirmations and other actions
@@ -393,7 +393,7 @@ or title are masked. These are documented core-policy differences, not passes.
 | Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
 | Settings binding/menu | M4 implements the reference overlay: the five sections (theme, indicators, sound, toast, integrations), live theme preview, `write_edit` saves and the same config-reload path as the reload binding. The Integrations section has no `integration.list`/`integration.install` core methods in hc, so it renders the reference's empty state `no integration targets available` and applying it is inert — the reference renders its built-in target list instead, so that one checkpoint differs by the missing core methods (Known differences). |
 | Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. M4s1 adds the right-click context menu (workspace/tab/pane targets, reference items/geometry/highlight), workspace new/rename/close including the mobile `+ new workspace` row, and machine dialogs (add/connect/rename/remove). Custom commands, notifications, scrollback editing/clear and remaining actions stay in later M4 slices or M5. |
-| Copy mode/selection/clipboard help entries | M5; not an available M2 action. |
+| Copy mode/selection/clipboard help entries | M5; not an available M2 action. Mouse selection and OSC 52 copy on the pane surface are implemented; the keyboard copy-mode help entries remain unbound until M5's copy-mode slice. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
 
 The joint review accepted documented deferral of dead-wire held releases,
@@ -642,6 +642,12 @@ Everything else on the compared surfaces still diffs normally.
   host in 64-byte chunks. The wire effect is identical to the reference's
   server-counted `ServerMessage::TerminalBell` fanout; the counting point
   moved client-side.
+- **Pane-emitted OSC 52 is swallowed.** The reference's core detects OSC 52
+  writes inside a pane and relays them as `ServerMessage::Clipboard`, which
+  `client/clipboard_forwarding.rs` decodes and re-emits to the host. hc's
+  wire has no clipboard message and pane paint feeds only the local VT —
+  a program writing OSC 52 inside a pane sets no host clipboard. Forwarding
+  remains M5 work.
 - **`system` delivery falls back to terminal.** hc-tui has no desktop
   notification integration, so `delivery = "system"` writes the same OSC
   9/99 sequence as `terminal`. `off` still synthesizes (and suppresses
