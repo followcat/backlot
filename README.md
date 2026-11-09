@@ -31,9 +31,6 @@ This puts a single binary in `~/.local/bin`, without sudo, after checking it aga
 There are builds for Linux (x86_64 and aarch64) and macOS (arm64 and Intel). To pin a version, upgrade or uninstall,
 see [docs/install.md](docs/install.md).
 
-If the [Releases page](https://github.com/followcat/hc-tui/releases) is still empty, the first release isn't out yet,
-so [build from source](#build-from-source).
-
 ## Usage
 
 ```sh
