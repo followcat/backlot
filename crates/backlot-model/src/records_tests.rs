@@ -290,6 +290,38 @@ fn fewer_than_five_tasks_is_not_enough_data() {
     assert_eq!(a.studios, vec!["s1".to_string()]);
 }
 
+/// Wall time follows each actor's cast intervals: a recast splits the
+/// task's span between the actors instead of double-counting it.
+#[test]
+fn wall_time_splits_at_a_recast() {
+    let mut log = base_events();
+    let mut seq = log.len() as u64;
+    let mut push = |role: &str, kind: EventKind| {
+        seq += 1;
+        log.push(ev(seq, role, kind));
+    };
+    push("director", cast("t1", "actor-a", "a")); // seq 4
+    push("actor", delivered("t1", 1, "a", 1));
+    push(
+        "director",
+        reviewed("t1", 1, Verdict::ChangesRequested, vec![]),
+    );
+    push("director", cast("t1", "actor-b", "b")); // seq 7
+    push("actor", delivered("t1", 2, "b", 1));
+    push("director", reviewed("t1", 2, Verdict::Accepted, vec![])); // seq 9
+    let recs = records(&[StudioLog {
+        studio: "s1".into(),
+        events: log,
+    }]);
+    let a = rec(&recs, "a", "feature");
+    let b = rec(&recs, "b", "feature");
+    // ts_ms is seq*1000: a runs cast@4000 → recast@7000, b runs to
+    // the task's last event @9000.
+    assert_eq!(a.wall_time_ms, 3000);
+    assert_eq!(b.wall_time_ms, 2000);
+    assert!(a.wall_time_ms + b.wall_time_ms <= 9000 - 3000);
+}
+
 /// `task.finding` findings become `later_defects` on the actor who
 /// made the named delivery — each side of a recast gets its own.
 #[test]

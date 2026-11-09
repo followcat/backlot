@@ -180,7 +180,6 @@ fn fold_task(accs: &mut BTreeMap<(ActorIdentity, String), Acc>, task: &Task, stu
         .state_changes
         .iter()
         .any(|s| s.state == TaskStateChange::TakenOver);
-    let wall = task.last_ts_ms.saturating_sub(task.created_ts_ms);
 
     for actor in actors {
         let acc = accs
@@ -188,7 +187,20 @@ fn fold_task(accs: &mut BTreeMap<(ActorIdentity, String), Acc>, task: &Task, stu
             .or_default();
         acc.studios.insert(studio.to_string());
         acc.tasks += 1;
-        acc.wall_time_ms += wall;
+        // Wall time is the actor's own cast intervals: each of their
+        // casts runs to the next cast on the task, or to the task's
+        // last event if theirs is the latest. A recast splits the
+        // task's span rather than double-counting it.
+        for (i, c) in task.casts.iter().enumerate() {
+            if &c.actor == actor {
+                let end = task
+                    .casts
+                    .get(i + 1)
+                    .map(|n| n.ts_ms)
+                    .unwrap_or(task.last_ts_ms);
+                acc.wall_time_ms += end.saturating_sub(c.ts_ms);
+            }
+        }
         if taken_over {
             acc.takeovers += 1;
         }
