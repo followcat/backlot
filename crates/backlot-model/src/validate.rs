@@ -40,6 +40,9 @@ pub enum Refusal {
         task: String,
         delivery: u32,
     },
+    AtCapVerdict {
+        task: String,
+    },
     UnknownCandidate(String),
     CandidateMismatch {
         candidate: String,
@@ -119,6 +122,12 @@ impl fmt::Display for Refusal {
             }
             Refusal::NoDelivery { task, delivery } => {
                 write!(f, "task '{task}' has no delivery {delivery}")
+            }
+            Refusal::AtCapVerdict { task } => {
+                write!(
+                    f,
+                    "task '{task}' is at the rework cap; only 'accepted' or 'partially-accepted' can review it"
+                )
             }
             Refusal::UnknownCandidate(c) => write!(f, "'{c}' is not a studio candidate"),
             Refusal::CandidateMismatch { candidate } => {
@@ -327,14 +336,30 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
-        EventKind::TaskReviewed { task, delivery, .. } => {
+        EventKind::TaskReviewed {
+            task,
+            delivery,
+            verdict,
+            ..
+        } => {
             require_studio(state)?;
             let t = require_task(state, task)?;
-            if t.status != TaskStatus::Delivered {
-                return Err(Refusal::NotDelivered {
-                    task: task.clone(),
-                    status: t.status,
-                });
+            match t.status {
+                TaskStatus::Delivered => {}
+                // At the cap the producer resolves the task: accept
+                // it (possibly with documented gaps) or partially
+                // accept. More rework at the cap is refused.
+                TaskStatus::AtCap => {
+                    if !matches!(verdict, Verdict::Accepted | Verdict::PartiallyAccepted) {
+                        return Err(Refusal::AtCapVerdict { task: task.clone() });
+                    }
+                }
+                _ => {
+                    return Err(Refusal::NotDelivered {
+                        task: task.clone(),
+                        status: t.status,
+                    });
+                }
             }
             let latest = t.deliveries.last().map(|d| d.n).unwrap_or(0);
             if *delivery != latest {

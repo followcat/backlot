@@ -34,11 +34,18 @@ pub fn reduce_task(task: &mut Task, cap: u32) {
 
     let mut status = TaskStatus::Created;
     let mut paused_from = None;
+    // `rework_rounds` is the task's total; the cap counts the
+    // changes-requested rounds since the latest cast — a recast
+    // starts the producer's budget over.
     let mut rounds = 0u32;
+    let mut cap_rounds = 0u32;
     let mut closed = None;
     for (seq, step) in steps {
         let next = match step {
-            Step::Cast => TaskStatus::Running,
+            Step::Cast => {
+                cap_rounds = 0;
+                TaskStatus::Running
+            }
             Step::Delivered => TaskStatus::Delivered,
             Step::Reviewed(verdict) => match verdict {
                 Verdict::Accepted => TaskStatus::Accepted,
@@ -46,7 +53,8 @@ pub fn reduce_task(task: &mut Task, cap: u32) {
                 Verdict::Blocked => TaskStatus::Blocked,
                 Verdict::ChangesRequested => {
                     rounds += 1;
-                    if rounds > cap {
+                    cap_rounds += 1;
+                    if cap_rounds > cap {
                         TaskStatus::AtCap
                     } else {
                         TaskStatus::Running
