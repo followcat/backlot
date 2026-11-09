@@ -172,12 +172,17 @@ permission-prompted command must be run again.
 
 A crash loop is bounded: the reducer keeps every `role.lost` time, so the guard survives the restart, and a third loss
 inside ten minutes — or a lost role with no recorded session — raises a `cannot resume` attention instead of starting,
-routed to the role's reviewer like a stalled one. Session discovery for a post-launch runner keeps looking past the
-60-second `session id not found` attention until the discovery stop, so a slow first start still gets an id.
+routed to the role's reviewer like a stalled one. A live terminal already carrying the role's name is re-joined by
+recording `role.resumed` alone — no `terminal.run` — checked before the guard. Session discovery for a post-launch
+runner keeps looking past the 60-second `session id not found` attention until the discovery stop, so a slow first
+start still gets an id.
 
-A studio whose ledger cannot be loaded, or whose act, watch or deliver pass fails, is skipped and shown with an
-`error` line in the summary while the other studios carry on; the stage picks it up again when it loads. Only losing
-the core ends the stage.
+A studio whose ledger cannot be loaded is skipped and retried every tick — a repair at the same length is picked up —
+while one whose act, watch or deliver pass fails is logged once and tried again on the next tick; either way the
+summary shows the ledger error, otherwise the last pass error, as the studio's `error` line, and the other studios
+carry on. Only losing the core ends the stage: a dead wire — `Closed` or `Protocol` on any call — or a lost event
+stream. A timeout, a full queue or an unoffered method is one studio's refused pass, and a failed terminal-list
+refresh keeps the last inventory for the next pass.
 
 The panel shows a one-line "stage not running" while keeping the last document on screen. Starting
 the stage from the panel is not implemented — the stage runs as its own process.

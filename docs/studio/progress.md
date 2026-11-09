@@ -22,6 +22,15 @@
   `real_stage_restart_stage_only` kills only `backlot-stage` and asserts nothing is lost or
   relaunched. fmt, clippy and `cargo test` green on every commit; `real_stage` (2) green against
   the pinned core.
+- Fix round: a broken ledger is retried every tick — a same-length repair recovers — and a failing
+  pass keeps its latest error beside `broken`, shown in the summary until a pass succeeds. One
+  helper, `Fail::call`, classifies every call error: only `Closed` and `Protocol` — a dead wire —
+  or a lost event stream end the stage, while a timeout, full queue or unoffered method is that
+  studio's refused pass and a failed terminal-list refresh keeps the last inventory. A wanted
+  lost role whose terminal is already live records `role.resumed` `recovered` on that address —
+  no second `terminal.run`, checked before the loss guard. `reconcile.rs` split into `desired.rs`
+  and `recover.rs`. Both `real_stage_restart*` runs green three consecutive times against the
+  pinned core, logs kept outside the repo.
 - Not verified: no real agents ran a recovered session — the resume flag is the fake runner's, and
   whether a real runner picks a stopped core's session back up is untested.
 
