@@ -97,6 +97,14 @@ pub enum Action {
         terminal: String,
         address: String,
     },
+    /// Append `role.resumed` with reason `recovered` for a lost role
+    /// whose terminal is already live — no `terminal.run`, just the
+    /// record so the `recovered` notice goes out.
+    Resumed {
+        role: String,
+        address: String,
+        session: String,
+    },
     /// `terminal.run` then `role.started`.
     Start(Start),
 }
@@ -345,9 +353,19 @@ pub fn reconcile(
                 // A wanted lost role comes back into its recorded
                 // session; without one — or once the loss guard trips —
                 // it gets a `cannot resume` attention instead. An
-                // unwanted lost role needs nothing.
+                // unwanted lost role needs nothing. A live terminal
+                // under the role's name needs no `terminal.run` — the
+                // record alone rejoins it, checked before the guard.
                 RoleLifecycle::Lost => {
                     if wanted_keys.contains(key.as_str()) {
+                        if let (Some(session), Some(address)) = (&r.session_id, &term) {
+                            records.push(Action::Resumed {
+                                role: key.clone(),
+                                address: address.clone(),
+                                session: session.clone(),
+                            });
+                            continue;
+                        }
                         match recover::lost_step(r, now_ms) {
                             recover::Lost::Resume(session) => {
                                 let mut want = wanted

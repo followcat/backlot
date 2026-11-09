@@ -335,3 +335,72 @@ fn a_held_reopen_stays_reopened() {
         "{start:?}"
     );
 }
+
+/// A lost role whose terminal is already up needs no `terminal.run`:
+/// the pass records `role.resumed` with that terminal's address and
+/// the recorded session, and no `Start` runs.
+#[test]
+fn a_lost_role_with_its_terminal_up_records_resumed() {
+    let mut events = studio();
+    events.push(started(3, "producer", Some("sess-1")));
+    events.push(lost(4, "producer"));
+    // The terminal came back without the stage — another core took
+    // the role's name before this pass ran.
+    let view = live(&[("bl-acme-shop-producer", "t9")]);
+    let actions = reconcile(STUDIO, &log(events), &view, 10_000);
+    assert!(
+        actions.iter().any(|a| matches!(a,
+            Action::Resumed { role, address, session }
+            if role == "producer" && address == "t9" && session == "sess-1")),
+        "{actions:?}"
+    );
+    assert!(start_for(&actions, "producer").is_none(), "{actions:?}");
+}
+
+/// The live-terminal record is checked before the guard: even a
+/// tripped loss guard cannot leave a live terminal `cannot resume`.
+#[test]
+fn a_live_terminal_recovers_past_the_guard() {
+    let mut events = studio();
+    events.push(started(3, "producer", Some("sess-1")));
+    events.push(lost_at(4, "producer", 100_000));
+    events.push(started(5, "producer", Some("sess-1")));
+    events.push(lost_at(6, "producer", 200_000));
+    events.push(started(7, "producer", Some("sess-1")));
+    events.push(lost_at(8, "producer", 300_000));
+    let view = live(&[("bl-acme-shop-producer", "t9")]);
+    let actions = reconcile(STUDIO, &log(events), &view, 310_000);
+    assert!(
+        actions.iter().any(|a| matches!(a,
+            Action::Resumed { role, address, session }
+            if role == "producer" && address == "t9" && session == "sess-1")),
+        "{actions:?}"
+    );
+    assert!(
+        !actions.iter().any(|a| matches!(a,
+            Action::Attention { role, reason, .. }
+            if role == "producer" && reason == CANNOT_RESUME)),
+        "{actions:?}"
+    );
+    assert!(start_for(&actions, "producer").is_none(), "{actions:?}");
+}
+
+/// No recorded session stays `cannot resume` even when the terminal
+/// name is live — the record would carry no session to rejoin.
+#[test]
+fn a_terminal_up_without_a_session_stays_cannot_resume() {
+    let mut events = studio();
+    events.push(started(3, "producer", None));
+    events.push(lost(4, "producer"));
+    let view = live(&[("bl-acme-shop-producer", "t9")]);
+    let actions = reconcile(STUDIO, &log(events), &view, 10_000);
+    assert!(
+        actions.iter().any(|a| matches!(a,
+            Action::Attention { role, reason, detail }
+            if role == "producer"
+                && reason == CANNOT_RESUME
+                && detail == "no session id to resume")),
+        "{actions:?}"
+    );
+    assert!(start_for(&actions, "producer").is_none(), "{actions:?}");
+}

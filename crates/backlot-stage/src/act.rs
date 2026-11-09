@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use backlot_model::EventBy;
-use backlot_model::event::{ActorIdentity, Event, EventKind, NewEvent};
+use backlot_model::event::{ActorIdentity, Event, EventKind, NewEvent, RECOVERED};
 use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
 use hc_proto::terminal::{RunParams, TerminalParams};
@@ -359,6 +359,23 @@ impl Stage {
                     },
                 )?;
                 eprintln!("stage: adopted {terminal} for {role}");
+            }
+            Action::Resumed {
+                role,
+                address,
+                session,
+            } => {
+                record(
+                    dir,
+                    EventKind::RoleResumed {
+                        role: role.clone(),
+                        terminal: Some(address.clone()),
+                        actor: desired_actor(state, role).cloned(),
+                        session_id: Some(session.clone()),
+                        reason: Some(RECOVERED.into()),
+                    },
+                )?;
+                eprintln!("stage: resumed {role} on live terminal {address}");
             }
             Action::Start(start) => {
                 // The role's work area (D10): a pure plan over the

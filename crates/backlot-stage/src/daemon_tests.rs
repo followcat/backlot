@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use backlot_model::event::EventKind;
+use backlot_model::state::{RoleLifecycle, StudioState};
 use backlot_model::{EventBy, NewEvent};
 use hc_proto::client::{CallError, Client};
 use hc_proto::codec::Reader;
@@ -21,6 +22,7 @@ use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use crate::cli::Fail;
 use crate::daemon::{Inventory, Stage, keep_or_fail, resolved_base};
+use crate::reconcile::Action;
 use crate::store::{self, Pending};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -489,4 +491,36 @@ async fn a_failing_pass_shows_then_clears() {
         .find(|st| st.id == "acme")
         .and_then(|st| st.error.clone());
     assert_eq!(error, None);
+}
+
+/// `Action::Resumed` records `role.resumed` with the live
+/// terminal's address and the recorded session — a record only,
+/// no `terminal.run`.
+#[tokio::test]
+async fn act_records_resumed_with_the_live_address() {
+    let base = tmp();
+    let dir = studio(&base, "acme");
+    let stage = stage().await;
+    let mut free = true;
+    stage
+        .act(
+            "acme",
+            &dir,
+            &StudioState::default(),
+            &Action::Resumed {
+                role: "producer".into(),
+                address: "t9".into(),
+                session: "sess-1".into(),
+            },
+            &mut free,
+            &std::collections::BTreeSet::new(),
+        )
+        .await
+        .unwrap();
+    let state = store::load_state(&dir).unwrap();
+    let role = &state.roles["producer"];
+    assert_eq!(role.lifecycle(), RoleLifecycle::Live);
+    assert_eq!(role.terminal.as_deref(), Some("t9"));
+    assert_eq!(role.session_id.as_deref(), Some("sess-1"));
+    assert_eq!(role.recovered_seq, Some(2), "the recovered notice is owed");
 }
