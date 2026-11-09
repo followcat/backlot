@@ -267,7 +267,12 @@ async fn a_corrupt_ledger_is_skipped_until_it_loads() {
         .into_iter()
         .find(|st| st.id == "bad")
         .and_then(|st| st.error);
-    assert!(error.is_some(), "the broken studio shows no error");
+    assert!(
+        error
+            .as_deref()
+            .is_some_and(|e| e.starts_with("events.jsonl")),
+        "the error leads with the reason, not the studio: {error:?}"
+    );
 
     // The person repairs the file; the next tick picks it up again.
     fs::remove_file(bad.join("events.jsonl")).unwrap();

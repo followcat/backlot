@@ -206,7 +206,7 @@ impl Stage {
             // the length, or a transient read error, must not leave it
             // skipped until something appends.
             if self.seen.get(&name).map(|s| s.len) != Some(len) || self.broken.contains_key(&name) {
-                match load_studio(&dir, &name) {
+                match load_studio(&dir) {
                     Ok(state) => {
                         self.cached.insert(name.clone(), state);
                         self.broken.remove(&name);
@@ -340,11 +340,13 @@ impl Stage {
     }
 }
 
-/// One studio's state read for `tick`, errors saying which studio.
-fn load_studio(dir: &Path, name: &str) -> Result<StudioState, Fail> {
+/// One studio's state read for `tick`. The caller's `log_once` and
+/// the summary row above it already name the studio, so the error
+/// starts with the reason — the panel's `error` line is short.
+fn load_studio(dir: &Path) -> Result<StudioState, Fail> {
     store::load_state(dir).map_err(|e| match e {
-        StoreError::Io(e) => Fail::refused(format!("studio '{name}': {e}")),
-        StoreError::Corrupt(c) => Fail::refused(format!("studio '{name}': {c}")),
+        StoreError::Io(e) => Fail::refused(format!("{e}")),
+        StoreError::Corrupt(c) => Fail::refused(format!("{c}")),
         _ => Fail::refused("unexpected store error"),
     })
 }
