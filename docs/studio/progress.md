@@ -1,5 +1,48 @@
 # Studio progress
 
+## S4b: The studio panel (2026-11-09)
+
+- Done: the client reads the local `backlot` document through the watcher's new
+  `local_documents` param (this core only; remote machines never carry the stage's document)
+  and parses it into `backlot_model::summary::Summary` — `backlot/1` only, a missing, malformed
+  or foreign-schema document reads as `no studios`, and an unknown `work` degrades to waiting.
+  A right-column panel draws it: `Closed` (default, zero width, no keys, no timer),
+  `Collapsed` (16 columns, working groups or `idle`), `Expanded` (configured width 24–60,
+  default 30). Beside the panes only past the mobile threshold with 60+ columns left for them;
+  otherwise it covers the frame and the pane geometry keeps the closed shape. All five
+  `layout_config().layout(...)` call sites go through `chrome_layout`. Expanded shows studios,
+  the four role groups (each collapsible, empty groups skipped) and people — mark, name,
+  priority flag, runner/model, `doing`, attention — with five distinct mark+colour pairs from
+  `chrome/status.rs`; working marks spin on a ~120 ms one-shot deadline armed only while a
+  working mark is drawn. Selection, clicks and Enter act on stable targets, never indices.
+  `prefix+y` toggles; focused keys move/collapse/flip/act; `+`/`-` run `backlot priority` and
+  a two-step Enter runs `backlot reopen` on resumable closed people — off the event loop via an
+  injectable runner (`current_exe()` in production), failures notice with the first stderr
+  line. Mouse: title flips, rows act like Enter, wheel scrolls, the scrollbar drags, an outside
+  click unfocuses. Without a live `backlot-stage` terminal the panel shows `stage not running`
+  and keeps the last document. Panel settings live in `$XDG_CONFIG_HOME/backlot/config.toml`
+  (`[panel] width`, `key`) — malformed files notice with line:column only; herdr's config is
+  untouched.
+- Measured: 45 new tests — the row model (grouping, order, collapse, titles, idle), document
+  reading (missing/malformed/wrong schema/unknown `work`/stage liveness), config (defaults,
+  clamp, malformed position, path), the renderer (distinct marks and colours, the animated
+  working mark, overflow scrollbar, stage line, selection), and App wiring (geometry at
+  200/120/80/40 beside and full-screen, the toggle cycle, every focused key, two-step reopen,
+  injected priority argv, the failure notice, title/row/outside clicks, wheel and scrollbar
+  drag, the deadline arming only while working, and a closed panel identical in geometry,
+  forwarded keys and cells). `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`
+  and `cargo test` (1039 tests) green; clippy also green on the CI-pinned 1.99.0 toolchain;
+  `real_stage` passes on the real core.
+- Key finding: `y` is unbound in the reference default keybinds and nothing in
+  `scripts/parity/` sends it, so `prefix+y` is safe; a configured herdr binding on the same
+  tail wins while the panel is closed or unfocused.
+- Not verified: the full parity harness was not run (the reviewer runs it against a saved
+  baseline). The panel landed inside `hc-tui` (`src/panel/` + `src/app/panel.rs`), not a
+  separate `backlot-panel` crate — design updated. The stage-down state shows the line only;
+  starting the stage from the panel is not implemented.
+- Deviations from the design brief: none beyond the crate placement and the stage-down offer
+  above.
+
 ## S4a: The data behind the panel (2026-11-09)
 
 - Done: tasks carry a `priority` (`low`/`normal`/`high`, default `normal`) — `task.cast` gains an

@@ -146,7 +146,8 @@ When the stage starts, it replays the ledger and lists terminals by label. A rol
 is adopted. One that is gone is recorded as lost and resumed with its runner's resume flag and recorded session ID, then
 told it was resumed. A role that cannot be resumed is reported to the director or producer.
 
-The panel shows when the stage is not running and offers to start it.
+The panel shows a one-line "stage not running" while keeping the last document on screen. Starting
+the stage from the panel is not implemented — the stage runs as its own process.
 
 ## Studio panel
 
@@ -171,8 +172,11 @@ The panel shows when the stage is not running and offers to start it.
   and the stage resumes the session with the runner's resume flag and records `role.resumed`.
 - **Interaction:** click or keys. Selecting an open person focuses their terminal. Selecting a studio focuses the
   producer.
-- **Parity:** one new action toggles the panel, bound to a key herdr does not use. With the panel closed nothing else
-  changes. Panel settings live in backlot's own config file, so herdr's config is read exactly as before.
+- **Parity:** one new action toggles the panel, bound to `prefix+y` by default (`y` is unbound in
+  herdr's defaults and parity scripts never send it). A user-configured herdr binding on the same
+  tail wins while the panel is closed or unfocused; a focused panel owns every key. With the panel
+  closed nothing else changes. Panel settings live in backlot's own config file, so herdr's config
+  is read exactly as before.
 - **Local state:** whether the panel is closed, collapsed or expanded, and which role groups are collapsed, is per
   client. The content is shared by every client through the document.
 
@@ -184,7 +188,12 @@ The panel shows when the stage is not running and offers to start it.
 | `crates/hc-tui` | The TUI, with small hooks only. Keeps its directory while upstream work is landing |
 | `crates/backlot-model` | Events, reducer, summary schema. No I/O |
 | `crates/backlot-stage` | The stage process and runner adapters |
-| `crates/backlot-panel` | The ratatui panel widget |
+
+The panel landed inside `hc-tui` — `src/panel/` holds the model, document reading, config, row
+builder, renderer and action runner; `src/app/panel.rs` holds the geometry, key, mouse and runtime
+wiring. A separate `backlot-panel` crate was planned but the widget needs the client's hit maps,
+geometry helper, prefix dispatch and scheduler deadlines, and extracting it would mean exporting
+most of the App's internals.
 
 The binary is `backlot`. `main.rs` sends studio subcommands to the new crates before TUI argument parsing. The `hc-tui`
 layout document key and the herdr config path stay as they are, so backlot and hc-tui on one core share a layout.
