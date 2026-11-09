@@ -79,11 +79,15 @@ pub enum Action {
     Start(Start),
 }
 
-/// One live named terminal as the label view sees it.
+/// One live named terminal as the label view sees it. `argv` and
+/// `cwd` let the watch pass read a chosen session id back and check
+/// the folder a trust dialog guards.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveTerminal {
     pub name: String,
     pub address: String,
+    pub argv: Vec<String>,
+    pub cwd: String,
     pub labels: BTreeMap<String, String>,
 }
 

@@ -382,6 +382,8 @@ fn the_label_decides_the_studio_view() {
     let term = |name: &str, address: &str, studio: Option<&str>| LiveTerminal {
         name: name.into(),
         address: address.into(),
+        argv: Vec::new(),
+        cwd: String::new(),
         labels: studio
             .map(|s| BTreeMap::from([("backlot.studio".to_string(), s.to_string())]))
             .unwrap_or_default(),

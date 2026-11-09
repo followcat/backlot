@@ -63,6 +63,8 @@ async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
             inv.terms.push(reconcile::LiveTerminal {
                 name,
                 address: t.address,
+                argv: t.argv,
+                cwd: t.cwd,
                 labels: t.labels,
             });
         }
@@ -86,6 +88,9 @@ pub(crate) struct Stage {
     pub(crate) path_env: String,
     /// `BACKLOT_STATE_DIR` for role terminals.
     pub(crate) state_dir: String,
+    /// The stage's own environment: adapters scrub inherited markers
+    /// from it, and `HOME` locates runner session files.
+    pub(crate) env_vars: BTreeMap<String, String>,
     /// Reduced state per studio, reloaded when its log grew.
     cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -114,12 +119,15 @@ impl Stage {
                 .unwrap_or(0);
             self.seen.insert(name, Seen { len, mtime_ms });
         }
+        // At most one real runner launches per tick, across studios.
+        let mut real_slot_free = true;
         for name in self.cached.keys().cloned().collect::<Vec<_>>() {
             let dir = store::studio_dir(&self.base, &name);
             let state = &self.cached[&name];
             let view = reconcile::studio_view(&name, &live.terms);
             for action in reconcile::reconcile(&name, state, &view) {
-                self.act(&name, &dir, state, &action).await?;
+                self.act(&name, &dir, state, &action, &mut real_slot_free)
+                    .await?;
             }
         }
         Ok(())
@@ -176,6 +184,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         base: base.clone(),
         path_env,
         state_dir: base.to_string_lossy().into_owned(),
+        env_vars: env.vars.clone(),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

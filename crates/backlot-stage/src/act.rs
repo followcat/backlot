@@ -16,11 +16,11 @@ use hc_proto::terminal::{RunParams, TerminalParams};
 use crate::cli::Fail;
 use crate::daemon::Stage;
 use crate::reconcile::{Action, Start};
-use crate::runners;
+use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
 
 /// A ledger event the stage appends for one studio.
-fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
+pub(crate) fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
     store::append(dir, move |_state, _seq| {
         Ok::<_, std::convert::Infallible>(store::Pending {
             event: NewEvent::new(EventBy::role("stage"), kind),
@@ -71,15 +71,19 @@ fn desired_actor<'s>(state: &'s StudioState, role: &str) -> Option<&'s ActorIden
     }
 }
 
-/// The env a role terminal gets: the runner's plus the role's own.
+/// The env a role terminal gets: the adapter's, then the runner's own
+/// config map, then the role's structural variables on top — the
+/// launch's working set never overrides `BACKLOT_*` or `PATH`.
 fn role_env(
     studio: &str,
     start: &Start,
     state_dir: &str,
     path_env: &str,
+    adapter_env: BTreeMap<String, String>,
     runner_env: BTreeMap<String, String>,
 ) -> BTreeMap<String, String> {
-    let mut env = runner_env;
+    let mut env = adapter_env;
+    env.extend(runner_env);
     env.insert("BACKLOT_STUDIO".into(), studio.into());
     env.insert("BACKLOT_ROLE".into(), start.kind.name().into());
     if let Some(task) = &start.task {
@@ -136,6 +140,7 @@ impl Stage {
         dir: &Path,
         start: &Start,
         launch: &runners::Launch,
+        runner_env: BTreeMap<String, String>,
     ) -> Result<(), Fail> {
         let run = self
             .client
@@ -149,6 +154,7 @@ impl Stage {
                     &self.state_dir,
                     &self.path_env,
                     launch.env.clone(),
+                    runner_env,
                 ),
                 labels: labels(studio, start),
                 no_parent: true,
@@ -170,7 +176,7 @@ impl Stage {
                 role: start.role.clone(),
                 terminal: Some(address),
                 actor: Some(start.actor.clone()),
-                session_id: runners::session_id(&start.actor, &start.terminal),
+                session_id: launch.session_id(),
                 reason: None,
             },
         )?;
@@ -178,14 +184,23 @@ impl Stage {
         Ok(())
     }
 
+    /// The `[runner_env.<runner>]` map — empty until config.toml
+    /// parsing lands with the watch pass.
+    fn runner_env(&self, _runner: &str) -> Result<BTreeMap<String, String>, String> {
+        Ok(BTreeMap::new())
+    }
+
     /// One reconcile action. Ledger appends land before their terminal
-    /// calls so a crash leaves a recoverable state.
+    /// calls so a crash leaves a recoverable state. `real_slot_free`
+    /// is the tick's one-real-launch allowance: a deferred start
+    /// waits for the next tick.
     pub(crate) async fn act(
         &self,
         studio: &str,
         dir: &Path,
         state: &StudioState,
         action: &Action,
+        real_slot_free: &mut bool,
     ) -> Result<(), Fail> {
         match action {
             Action::Lost { role, reason } => {
@@ -241,27 +256,44 @@ impl Stage {
                 )?;
                 eprintln!("stage: adopted {terminal} for {role}");
             }
-            Action::Start(start) => match runners::plan(&start.actor, &start.terminal) {
-                // An unsupported runner is an `attention.raised`, not a
-                // launch — one open attention per role, re-checked
-                // each tick.
-                Err(detail) => {
-                    let open = state
-                        .open_attention()
-                        .any(|a| a.role == start.role && a.reason == "runner not supported");
-                    if !open {
-                        record(
-                            dir,
-                            EventKind::AttentionRaised {
-                                role: start.role.clone(),
-                                reason: "runner not supported".into(),
-                                detail,
-                            },
-                        )?;
+            Action::Start(start) => {
+                let ctx = LaunchCtx {
+                    terminal: &start.terminal,
+                    cwd: &start.repo,
+                    prompt: None,
+                    resume: None,
+                    stage_env: &self.env_vars,
+                };
+                match runners::decide_start(
+                    runners::plan(&start.actor, &ctx),
+                    &start.actor.runner,
+                    self.runner_env(&start.actor.runner),
+                    real_slot_free,
+                ) {
+                    // A refusal is an `attention.raised`, not a
+                    // launch — one open attention per role and
+                    // reason, re-checked each tick.
+                    StartDecision::Attention(e) => {
+                        let open = state
+                            .open_attention()
+                            .any(|a| a.role == start.role && a.reason == e.reason);
+                        if !open {
+                            record(
+                                dir,
+                                EventKind::AttentionRaised {
+                                    role: start.role.clone(),
+                                    reason: e.reason.into(),
+                                    detail: e.detail,
+                                },
+                            )?;
+                        }
+                    }
+                    StartDecision::Defer => {}
+                    StartDecision::Launch { launch, runner_env } => {
+                        self.launch(studio, dir, start, &launch, runner_env).await?
                     }
                 }
-                Ok(launch) => self.launch(studio, dir, start, &launch).await?,
-            },
+            }
         }
         Ok(())
     }
