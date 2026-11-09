@@ -58,6 +58,98 @@ async fn enter_on_a_person_focuses_their_terminal() {
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.focused.as_deref(), Some("t4"));
     assert!(!app.panel.focused);
+    assert_eq!(app.panel.mode, PanelMode::Expanded, "beside stays open");
+}
+
+#[tokio::test]
+async fn a_full_screen_panel_owns_the_keyboard() {
+    let mut app = app_with_panel_doc();
+    app.area = (40, 20);
+    open_panel(&mut app);
+    assert!(app.panel_fullscreen());
+    assert!(app.panel_focused());
+    // Even with the focus latch off the panel still eats the keys —
+    // nobody can see the panes it covers.
+    app.panel.focused = false;
+    assert!(app.panel_focused());
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
+    assert_eq!(app.pane.input_backlog().0, 0, "keys leaked to the pane");
+}
+
+#[tokio::test]
+async fn esc_closes_a_full_screen_panel() {
+    let mut app = app_with_panel_doc();
+    app.area = (40, 20);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+    // Beside the panes Esc only leaves focus, panel stays open.
+    app.area = (200, 24);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused);
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+}
+
+#[tokio::test]
+async fn the_chord_closes_full_screen_on_the_first_press() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    // Unfocus beside the panes, then shrink under the threshold: the
+    // next chord must close, not re-focus.
+    key(&mut app, hc_vt::Key::Escape);
+    app.area = (40, 20);
+    prefix(&mut app);
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+}
+
+#[tokio::test]
+async fn enter_on_a_person_closes_a_full_screen_panel() {
+    let mut app = app_with_panel_doc();
+    app.area = (40, 20);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.focused.as_deref(), Some("t4"));
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+}
+
+#[tokio::test]
+async fn esc_disarms_a_pending_reopen() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(app.panel.reopen_confirm.is_some());
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.panel.reopen_confirm.is_none(), "Esc disarms the reopen");
+    // Esc also left focus; the chord re-focuses and dave's next Enter
+    // starts the two-step over instead of reopening.
+    prefix(&mut app);
+    key(&mut app, hc_vt::Key::Char('y'));
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(
+        app.panel.reopen_confirm,
+        Some(("acme-shop".into(), "actor-dave".into()))
+    );
+}
+
+#[tokio::test]
+async fn activating_another_row_disarms_a_pending_reopen() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(app.panel.reopen_confirm.is_some());
+    // Enter on a different person disarms dave's armed row.
+    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(app.panel.reopen_confirm.is_none());
 }
 
 #[tokio::test]

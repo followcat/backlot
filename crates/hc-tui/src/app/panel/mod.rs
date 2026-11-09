@@ -76,9 +76,11 @@ impl App {
 
     // ---------- state ----------
 
-    /// Panel keys/mouse are owned by the panel.
+    /// Panel keys/mouse are owned by the panel — focused beside the
+    /// panes, or whenever the panel covers the frame: nobody can see
+    /// the panes then, so their keys must not reach them either.
     pub(crate) fn panel_focused(&self) -> bool {
-        self.panel.open() && self.panel.focused
+        self.panel.open() && (self.panel.focused || self.panel_fullscreen())
     }
 
     /// The current `backlot` summary for this view.
@@ -121,15 +123,33 @@ impl App {
             self.panel.scroll = 0;
             return;
         }
-        if !self.panel.focused {
-            self.panel.focused = true;
+        // Full-screen owns the keys: the chord closes on the first
+        // press, even when the focus latch is off after a resize from
+        // beside to full-screen.
+        if self.panel_fullscreen() || self.panel.focused {
+            self.panel_close();
             return;
         }
+        self.panel.focused = true;
+    }
+
+    /// Close the panel and drop every piece of interaction state.
+    pub(super) fn panel_close(&mut self) {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
         self.panel.selected = None;
         self.panel.reopen_confirm = None;
         self.panel_anim_deadline = None;
+    }
+
+    /// Leave the panel after a row focused a terminal: full-screen
+    /// closes (the pane becomes visible), beside stays open unfocused.
+    fn panel_leave(&mut self) {
+        if self.panel_fullscreen() {
+            self.panel_close();
+        } else {
+            self.panel.focused = false;
+        }
     }
 
     /// Collapsed ↔ expanded (the `c` key and the title click).

@@ -48,6 +48,32 @@ async fn a_click_outside_a_focused_panel_returns_focus_to_the_panes() {
 }
 
 #[tokio::test]
+async fn a_click_on_another_row_disarms_a_pending_reopen() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(app.panel.reopen_confirm.is_some());
+    draw_to(&mut app, 120, 24);
+    // A click on the studio row goes through `panel_activate` — it
+    // disarms dave's armed row like Enter would.
+    let studio = app
+        .panel_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Studio(id) if id == "acme-shop"))
+        .map(|(r, _)| *r)
+        .expect("studio hit row");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        studio.x,
+        studio.y,
+    ));
+    assert!(app.panel.reopen_confirm.is_none(), "the click disarmed it");
+}
+
+#[tokio::test]
 async fn the_wheel_scrolls_the_body() {
     let mut app = app_with_panel_doc();
     app.view.documents.insert(doc_key(), overflow_doc());

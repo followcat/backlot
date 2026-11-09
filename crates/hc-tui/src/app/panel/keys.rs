@@ -69,7 +69,16 @@ impl App {
         }
         use crossterm::event::{KeyCode, KeyModifiers};
         match code {
-            KeyCode::Esc => self.panel.focused = false,
+            KeyCode::Esc => {
+                self.panel.reopen_confirm = None;
+                // Full-screen owns the keyboard: Esc closes, it cannot
+                // leave keys leaking to a pane nobody sees.
+                if self.panel_fullscreen() {
+                    self.panel_close();
+                } else {
+                    self.panel.focused = false;
+                }
+            }
             KeyCode::Char('c') if plain => self.panel_flip_mode(),
             KeyCode::Char(' ') if plain => self.panel_collapse_selected(),
             KeyCode::Enter => self.panel_activate(),
@@ -95,6 +104,9 @@ impl App {
         let summary = self.panel_summary();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
+        // Activating any row drops an armed reopen — only a second
+        // Enter on the same closed person still finds it armed.
+        let confirm = self.panel.reopen_confirm.take();
         match targets.get(index).cloned() {
             Some(Target::Title) => self.panel_flip_mode(),
             Some(Target::WorkingGroup(_)) => self.panel.mode = crate::panel::PanelMode::Expanded,
@@ -116,7 +128,7 @@ impl App {
                     .and_then(|r| r.terminal.clone());
                 if let Some(terminal) = producer {
                     self.focus_pane(terminal);
-                    self.panel.focused = false;
+                    self.panel_leave();
                 }
             }
             Some(Target::Person(studio, role_name)) => {
@@ -126,8 +138,11 @@ impl App {
                         .find(|st| st.id == studio)
                         .and_then(|st| st.roles.iter().find(|r| r.role == role_name))
                 });
+                let armed = confirm
+                    .as_ref()
+                    .is_some_and(|(s, r)| s == &studio && r == &role_name);
                 if let Some(role) = role.cloned() {
-                    self.panel_person_enter(&studio, &role);
+                    self.panel_person_enter(&studio, &role, armed);
                 }
             }
             _ => {}
@@ -135,9 +150,9 @@ impl App {
     }
 
     /// Enter on a person: a live one focuses its terminal; a closed
-    /// one arms the row hint first and reopens on the second press —
-    /// or explains why it cannot.
-    fn panel_person_enter(&mut self, studio: &str, role: &RoleSummary) {
+    /// one arms the row hint first and reopens on the second armed
+    /// press — or explains why it cannot.
+    fn panel_person_enter(&mut self, studio: &str, role: &RoleSummary, armed: bool) {
         if role.state == "closed" {
             if !role.resumable {
                 self.show_notice(
@@ -146,9 +161,7 @@ impl App {
                 );
                 return;
             }
-            let key = (studio.to_owned(), role.role.clone());
-            if self.panel.reopen_confirm.as_ref() == Some(&key) {
-                self.panel.reopen_confirm = None;
+            if armed {
                 let argv = self.panel_argv(
                     studio,
                     &["reopen".into(), "--person".into(), role.role.clone()],
@@ -158,7 +171,7 @@ impl App {
                     argv,
                 });
             } else {
-                self.panel.reopen_confirm = Some(key);
+                self.panel.reopen_confirm = Some((studio.to_owned(), role.role.clone()));
             }
             return;
         }
@@ -166,7 +179,7 @@ impl App {
             && let Some(terminal) = role.terminal.clone()
         {
             self.focus_pane(terminal);
-            self.panel.focused = false;
+            self.panel_leave();
         }
     }
 
