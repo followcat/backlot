@@ -6,10 +6,12 @@ use std::path::Path;
 
 use backlot_model::event::{ApprovalDecision, PERMISSION_PROMPT};
 use backlot_model::state::{ApprovalRecord, Attention, StudioState};
+use backlot_model::summary::Work;
 
 use crate::notices;
 use crate::permit::{
-    approval_keys, director_notice, episode_raised, is_actor, open_episode, pending_approval,
+    approval_keys, director_notice, episode_due, episode_raised, in_episode, is_actor,
+    open_episode, pending_approval,
 };
 
 fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
@@ -98,6 +100,35 @@ fn pending_approval_is_latest_and_current() {
     // from the earlier episode.
     assert!(pending_approval(&state, "actor-t1-c1", 10).is_none());
     assert!(pending_approval(&state, "writer", 0).is_none());
+}
+
+/// The folder-trust dialog is not a permission episode — the trust
+/// pass is already answering it. Held past two seconds it raises
+/// nothing, for an actor and for the director, and it ends an
+/// episode in progress: a prompt right after it needs its own
+/// full two seconds.
+#[test]
+fn trust_dialog_is_no_permission_episode() {
+    let trust = "Quick safety check\n\n ❯ Yes, I trust this folder\n   No, exit\n";
+    let prompt = "Do you want to proceed?\n❯ 1. Yes\n";
+    for role in ["actor-t1-c1", "director"] {
+        assert!(!in_episode(Work::Blocked, trust), "{role}");
+        let mut since = None;
+        for now in [0, 1_000, 2_500] {
+            let (s, due) = episode_due(in_episode(Work::Blocked, trust), since, now);
+            assert!(!due, "{role} at {now}");
+            since = s;
+        }
+        assert_eq!(since, None, "{role}: the dialog opened an episode");
+    }
+    // A prompt right after the dialog starts the count fresh.
+    let (since, due) = episode_due(in_episode(Work::Blocked, prompt), None, 3_000);
+    assert_eq!(since, Some(3_000));
+    assert!(!due);
+    let (since, due) = episode_due(in_episode(Work::Blocked, prompt), since, 4_999);
+    assert!(!due);
+    let (_, due) = episode_due(in_episode(Work::Blocked, prompt), since, 5_000);
+    assert!(due);
 }
 
 /// An episode is raised once: an attention at or after the episode

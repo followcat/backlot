@@ -87,24 +87,28 @@ impl Stage {
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
-        if work == Work::Blocked {
-            let since = *self
-                .blocked_since
-                .borrow_mut()
-                .entry(pair)
-                .or_insert(now_ms);
-            let raise = now_ms.saturating_sub(since) >= permit::EPISODE_MIN_MS
-                && !permit::episode_raised(state, role, since)
-                && !crate::act::attention_open(
-                    state,
-                    role,
-                    backlot_model::event::PERMISSION_PROMPT,
-                );
-            if raise {
-                self.raise_permission(dir, role, text).await?;
+        // The trust dialog is the trust pass's concern, not a
+        // permission episode — it resets the blocked clock.
+        let ep = permit::in_episode(work, text);
+        let (since, due) =
+            permit::episode_due(ep, self.blocked_since.borrow().get(&pair).copied(), now_ms);
+        match since {
+            Some(since) => {
+                self.blocked_since.borrow_mut().insert(pair.clone(), since);
+                if due
+                    && !permit::episode_raised(state, role, since)
+                    && !crate::act::attention_open(
+                        state,
+                        role,
+                        backlot_model::event::PERMISSION_PROMPT,
+                    )
+                {
+                    self.raise_permission(dir, role, text).await?;
+                }
             }
-        } else {
-            self.blocked_since.borrow_mut().remove(&pair);
+            None => {
+                self.blocked_since.borrow_mut().remove(&pair);
+            }
         }
         let Some(attn) = permit::open_episode(state, role) else {
             return Ok(());
@@ -112,7 +116,7 @@ impl Stage {
         let Some(appr) = permit::pending_approval(state, role, attn.ts_ms) else {
             return Ok(());
         };
-        if work != Work::Blocked {
+        if !ep {
             // The prompt went away on its own — nothing to send.
             record(
                 dir,

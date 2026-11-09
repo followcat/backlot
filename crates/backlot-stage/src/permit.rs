@@ -10,10 +10,33 @@
 
 use backlot_model::event::{ApprovalDecision, PERMISSION_PROMPT};
 use backlot_model::state::{ApprovalRecord, Attention, StudioState, actor_task};
+use backlot_model::summary::Work;
+
+use crate::watch::trust_dialog;
 
 /// Two samples this far apart make a blocked episode — the same
 /// window the send gate's screen stability uses.
 pub const EPISODE_MIN_MS: u64 = 2_000;
+
+/// Whether this sample sits inside a permission episode: a blocked
+/// screen that is not the folder-trust dialog — the watch's trust
+/// pass is already answering that one, so it neither starts nor
+/// holds an episode. `work` still reads `blocked` for the panel.
+pub fn in_episode(work: Work, screen: &str) -> bool {
+    work == Work::Blocked && !trust_dialog(screen)
+}
+
+/// The episode bookkeeping for one fresh sample: inside an episode
+/// the start holds (or begins now) and the raise is due at
+/// [`EPISODE_MIN_MS`]; outside it the episode is over — a prompt
+/// after the dialog starts its own count.
+pub fn episode_due(in_episode: bool, since: Option<u64>, now_ms: u64) -> (Option<u64>, bool) {
+    if !in_episode {
+        return (None, false);
+    }
+    let since = since.unwrap_or(now_ms);
+    (Some(since), now_ms.saturating_sub(since) >= EPISODE_MIN_MS)
+}
 
 /// The key a recorded decision sends while the prompt still shows:
 /// `enter` takes the highlighted allow option, `esc` dismisses. That
