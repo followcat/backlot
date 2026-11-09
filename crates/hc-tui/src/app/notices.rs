@@ -11,7 +11,38 @@ pub(super) struct Notice {
     pub(super) deadline: Instant,
 }
 
+/// The reference's `CopyFeedback` — the `copied to clipboard` card.
+pub(super) struct CopyFeedback {
+    pub message: String,
+}
+
 impl App {
+    /// The reference's `show_copy_feedback`: two seconds of the copy
+    /// card when `[ui.toast.clipboard]` is enabled.
+    pub(super) fn show_copy_feedback(&mut self, now: Instant) -> bool {
+        if !self.shell.clipboard_toast_enabled {
+            return false;
+        }
+        self.copy_feedback = Some(CopyFeedback {
+            message: "copied to clipboard".to_owned(),
+        });
+        self.copy_feedback_deadline = Some(now + Duration::from_secs(2));
+        true
+    }
+
+    /// The deadline arm of the reference's `tick_copy_feedback`.
+    pub(super) fn tick_copy_feedback(&mut self, now: Instant) -> bool {
+        if self
+            .copy_feedback_deadline
+            .is_some_and(|deadline| now >= deadline)
+        {
+            self.copy_feedback = None;
+            self.copy_feedback_deadline = None;
+            return true;
+        }
+        false
+    }
+
     pub(super) fn reject_input(&mut self, body: &str) {
         self.show_notice("Input rejected", body);
     }
@@ -29,6 +60,32 @@ impl App {
     pub(super) fn expire_notice(&mut self, now: Instant) {
         if self.notice.as_ref().is_some_and(|n| now >= n.deadline) {
             self.notice = None;
+        }
+    }
+
+    /// Installs the one-shot `hc server start` report — `cli` calls it
+    /// once terminal setup succeeded.
+    pub fn set_core_start(&mut self, report: Option<crate::core_start::Report>) {
+        self.core_start = report;
+    }
+
+    /// `pending()` while no start was kicked; resolves once with its
+    /// outcome — `Some(notice)` means the start failed and is shown.
+    pub(super) async fn core_start_report(
+        rx: &mut Option<crate::core_start::Report>,
+    ) -> Option<crate::core_start::Notice> {
+        match rx {
+            Some(rx) => rx.await.ok().flatten(),
+            None => std::future::pending().await,
+        }
+    }
+
+    /// One resolution ever: a failed start surfaces as a notice; a
+    /// quiet report (started, or nothing to do) just disarms the arm.
+    pub(super) fn on_core_start(&mut self, report: Option<crate::core_start::Notice>) {
+        self.core_start = None;
+        if let Some((title, body)) = report {
+            self.show_notice(&title, &body);
         }
     }
 }
@@ -55,6 +112,14 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {
     let palette = &app.shell.palette;
     // The reference's `if notice else if notification`: the endpoint
     // notice takes precedence; the toast shows only in its absence.
+    // Either card composes through the ratatui rebuild, which drops the
+    // extended underline bits from everything painted so far.
+    if notice.is_some() || app.notifications.visible.is_some() {
+        for cell in &mut buffer.content {
+            cell.modifier =
+                ratatui::style::Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
+    }
     if let Some((title, body, take_control)) = notice {
         let rect = if mobile {
             crate::chrome::notice_render::render_mobile_notice_banner(

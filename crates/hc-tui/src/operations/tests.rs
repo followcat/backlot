@@ -172,6 +172,31 @@ async fn a_changed_core_cannot_receive_a_stale_mutation() {
 }
 
 #[test]
+fn put_image_gets_the_call_timeout_everything_else_the_interactive_one() {
+    let put = Action::PutImage {
+        terminal: "t1".into(),
+        created_ms: 1,
+        name: "clipboard-1.png".into(),
+        data: String::new(),
+    };
+    assert_eq!(action_deadline(&put), std::time::Duration::from_secs(120));
+    for action in [
+        Action::Edit(edit(Change::Focus("t1".into()))),
+        Action::Kill {
+            terminal: "t1".into(),
+            created_ms: 1,
+            allow_gone: false,
+        },
+        Action::Exec {
+            line: "ls".into(),
+            machine: None,
+        },
+    ] {
+        assert_eq!(action_deadline(&action), std::time::Duration::from_secs(15));
+    }
+}
+
+#[test]
 fn primitive_edits_preserve_concurrent_splits_and_opaque_metadata() {
     let mut document = Document::default();
     document.extra.insert("future".into(), json!([1, 2, 3]));

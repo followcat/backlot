@@ -72,6 +72,9 @@ pub(crate) struct ShellHitMap {
     pub workspace_max_scroll: usize,
     pub tabs: Vec<(Rect, String)>,
     pub panes: Vec<PaneHit>,
+    /// The floating popup's hit — the reference's `hits.popup`, rebuilt
+    /// each frame by `draw_popups`.
+    pub popup: Option<PaneHit>,
     pub pane_splits: Vec<crate::app::layout_mouse::SplitHit>,
     pub agents: Vec<(Rect, String)>,
     pub endpoint_agents: Vec<(Rect, ClientEndpointId, String)>,

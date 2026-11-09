@@ -150,6 +150,8 @@ impl Pane {
                 self.pending_bells = self
                     .pending_bells
                     .saturating_add(parked.vt.take_bell_count());
+                // Only a live wire's copies are forwarded.
+                parked.vt.take_clipboard_writes();
             }
             Output::Closed(_) | Output::Failed(_) => self.remove_parked(route),
             Output::Resize { .. } | Output::Control { .. } => {}
@@ -218,6 +220,11 @@ impl Pane {
                     live.vt_broken = Some(format!("credit: {e}"));
                 }
                 let bells = vt.take_bell_count();
+                // A paint redraws state. Only live output is a program copying.
+                let mut clipboard = vt.take_clipboard_writes();
+                if live.await_paint {
+                    clipboard.clear();
+                }
                 match vt.take_replies() {
                     // An observer never sends — but the reply buffer
                     // must still be drained or it overflows and marks
@@ -233,6 +240,7 @@ impl Pane {
                     Err(e) => live.vt_broken = Some(format!("replies: {e}")),
                 }
                 self.pending_bells = self.pending_bells.saturating_add(bells);
+                self.pending_clipboard.extend(clipboard);
                 // Fresh VT built: input queued for this incarnation
                 // encodes now — once, under the fresh modes.
                 self.flush_pending();

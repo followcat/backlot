@@ -2,6 +2,8 @@
 //! Source press/consumed/repeat/release policy, with hc attach generations.
 use std::time::Instant;
 
+use crossterm::event::{KeyCode, KeyModifiers};
+
 use super::input::{Decision, TerminalKey};
 use super::key_leases::{InputLease, InputLeaseKey, RepeatPlan};
 use super::{App, Mode};
@@ -70,6 +72,12 @@ impl App {
             Action::Press => {
                 let initial = self.key_context();
                 let mut target = self.route_key_press(&key, width);
+                if target.is_some() && self.pane_page_scroll(&key) {
+                    // A plain page key paged the pane's own scrollback
+                    // instead of reaching the program; its release is
+                    // swallowed with the press's consumed lease.
+                    target = None;
+                }
                 if target.is_some() {
                     self.reset_displayed_scroll();
                 }
@@ -94,7 +102,12 @@ impl App {
                 self.execute_repeat(lease_key, key, plan, width);
             }
             Action::Release => {
-                if let Some(popup) = self.popup.as_mut() {
+                // The release of a press the image bridge consumed never
+                // reaches a program — including the popup, which eats
+                // releases unconditionally while open.
+                if !self.image_paste_suppress.remove(&key.identity())
+                    && let Some(popup) = self.popup.as_mut()
+                {
                     popup.pane.key(&key);
                 }
                 self.release_pane_lease(&key);
@@ -117,14 +130,18 @@ impl App {
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);
-        // The floating popup eats every key while open — the reference
-        // routes raw input to it before UI bindings (`popup.rs`).
-        if self.popup_key(&press) {
+        // The clipboard-image trigger precedes every consumer, popup
+        // included: a matching press either starts an upload (consumed)
+        // or, with no image on the clipboard, continues into normal
+        // routing byte-for-byte. Re-dispatched repeats of a consumed
+        // press stop here. Copy mode keeps the key for its own dispatch —
+        // the reference's modal-paste arm never pastes into the pane.
+        if self.copy_or_terminal_mode() != Mode::Copy && self.route_image_paste_key(key).is_some() {
             return None;
         }
-        if self.peek_key(&press) {
-            return None;
-        }
+        // The reference's Ctrl+G arm precedes the popup and the lock:
+        // copy mode exits without copying, selections clear, then the
+        // lock toggles.
         if key.input.key == Key::Char('g')
             && key.input.mods == hc_vt::Mods::CTRL
             && (self.keyboard_locked
@@ -135,15 +152,48 @@ impl App {
                     && self.settings.is_none()))
         {
             if key.input.action == Action::Press {
-                self.keyboard_locked = !self.keyboard_locked;
-                self.prefix.reset();
+                self.exit_copy_mode(false);
                 self.mode = Mode::Normal;
                 self.navigate_target = None;
+                self.selection = None;
+                self.clear_popup_selection();
+                self.stop_selection_autoscroll();
+                self.keyboard_locked = !self.keyboard_locked;
+                self.prefix.reset();
             }
             return None;
         }
         if self.keyboard_locked {
+            self.clear_popup_selection();
             return self.pane.target().map(|_| self.pane.generation());
+        }
+        // The floating popup eats every key while open — the reference
+        // routes raw input to it before UI bindings (`popup.rs`). A
+        // retained popup selection copies on Ctrl/Cmd+C first; every
+        // other key reaching the popup clears it.
+        if self.popup.is_some() {
+            let popup_combo = crate::input::terminal_key_of(&press);
+            if matches!(popup_combo.code, KeyCode::Char('c' | 'C'))
+                && matches!(
+                    popup_combo.modifiers,
+                    KeyModifiers::CONTROL | KeyModifiers::SUPER
+                )
+                && self.copy_popup_selection()
+            {
+                self.clear_popup_selection();
+                return None;
+            }
+            self.clear_popup_selection();
+            self.popup_key(&press);
+            return None;
+        }
+        // A popup still opening swallows input — the reference's
+        // `popup_pending` arm.
+        if self.popup_pending.is_some() {
+            return None;
+        }
+        if self.peek_key(&press) {
+            return None;
         }
         if self.dialog.is_some() {
             self.dialog_key(&press);
@@ -171,8 +221,12 @@ impl App {
         // The reference clears the word gesture on any key and lets a
         // retained (non `copy_on_select`) selection copy on Ctrl/Cmd+C;
         // every other key reaching pane dispatch clears the highlight.
+        // Both arms stay out of Copy mode — the copy-mode selection and
+        // its search state survive until its own keys act.
         self.word_selection = None;
-        if !self.shell.copy_on_select
+        let outside_copy = self.mode != Mode::Copy && self.copy_or_terminal_mode() != Mode::Copy;
+        if outside_copy
+            && !self.shell.copy_on_select
             && matches!(press.input.key, Key::Char('c' | 'C'))
             && matches!(press.input.mods, m if m == hc_vt::Mods::CTRL || m == hc_vt::Mods::SUPER)
             && self
@@ -187,7 +241,7 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return None;
         }
-        if self.selection.take().is_some() {
+        if outside_copy && self.selection.take().is_some() {
             self.stop_selection_autoscroll();
             self.selection_highlight_clear_deadline = None;
             self.sched.mark_dirty(Instant::now());
@@ -198,10 +252,33 @@ impl App {
             }
             return None;
         }
+        // The reference's `ClientShellMode::Copy` arm: the prefix keys out
+        // to the prefix machine only while no search prompt is open;
+        // every other key belongs to copy mode alone. This precedes the
+        // panel arms so copy mode owns every key while it is on — an open
+        // search prompt takes even the chord's keys.
+        if self.mode == Mode::Copy {
+            if self
+                .copy_mode
+                .as_ref()
+                .is_none_or(|copy_mode| copy_mode.search_prompt.is_none())
+                && self
+                    .live
+                    .matches_prefix(&crate::input::terminal_key_of(&press))
+            {
+                self.mode = Mode::Normal;
+                let _ = self.prefix.feed(&press, &self.live);
+                return None;
+            }
+            self.route_copy_mode_key(&press);
+            return None;
+        }
         // `prefix+<panel.key>` is the studio panel's own chord — it
         // fires whether the panel is closed, open or focused. A herdr
         // binding on the same tail still wins while the panel does not
-        // own the keys.
+        // own the keys. The chord sits ahead of the focused-panel
+        // catch-all so the toggle stays reachable while the panel owns
+        // every other key.
         if self.prefix.armed() && self.panel_key_press(&press) {
             let matched = crate::input::terminal_key_of(&press);
             if self.panel_focused()
@@ -236,29 +313,36 @@ impl App {
                 self.run_custom_command(&command);
                 None
             }
-            None => match self.prefix.feed(&press, &self.live) {
-                Decision::Action(action) => {
-                    self.on_action(action, width);
-                    None
-                }
-                Decision::Command(command) => {
-                    self.run_custom_command(&command);
-                    None
-                }
-                Decision::Held => None,
-                Decision::ToTerm(forwarded)
-                    if matches!(forwarded.input.key, Key::Functional(_)) =>
-                {
-                    // The pinned Linux thin-client consumes these reports;
-                    // actual reference lock/keypad/media captures produce no
-                    // program bytes. Keep their typed shape out of text paths.
-                    None
-                }
-                Decision::ToTerm(forwarded) => {
-                    debug_assert_eq!(forwarded.input, press.input);
-                    self.pane.target().map(|_| self.pane.generation())
-                }
-            },
+            None => {
+                let target = match self.prefix.feed(&press, &self.live) {
+                    Decision::Action(action) => {
+                        self.on_action(action, width);
+                        None
+                    }
+                    Decision::Command(command) => {
+                        self.run_custom_command(&command);
+                        None
+                    }
+                    Decision::Held => None,
+                    Decision::ToTerm(forwarded)
+                        if matches!(forwarded.input.key, Key::Functional(_)) =>
+                    {
+                        // The pinned Linux thin-client consumes these reports;
+                        // actual reference lock/keypad/media captures produce no
+                        // program bytes. Keep their typed shape out of text paths.
+                        None
+                    }
+                    Decision::ToTerm(forwarded) => {
+                        debug_assert_eq!(forwarded.input, press.input);
+                        self.pane.target().map(|_| self.pane.generation())
+                    }
+                };
+                // The reference's Prefix `return_mode`: every exit from
+                // the prefix machine re-arms Copy when its pane is still
+                // focused (`sync_copy_focus` no-ops while armed).
+                self.sync_copy_focus();
+                target
+            }
         }
     }
 
@@ -276,7 +360,7 @@ impl App {
                     .forwarded_for(&lease_key)
                     .map(|lease| self.lease_route(lease))
                     .unwrap_or(target);
-                if self.pane.accepts_route(route) {
+                if self.pane.accepts_route(route) && !self.pane_page_scroll(&key) {
                     self.reset_displayed_scroll();
                     self.pane.key(&key);
                 }
@@ -297,7 +381,9 @@ impl App {
                         break;
                     }
                     let repeated = key.clone().with_action(Action::Repeat);
-                    if self.route_key_press(&repeated, width).is_some() {
+                    if self.route_key_press(&repeated, width).is_some()
+                        && !self.pane_page_scroll(&repeated)
+                    {
                         self.reset_displayed_scroll();
                         self.pane.key(&repeated);
                     }

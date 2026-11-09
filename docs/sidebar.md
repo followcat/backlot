@@ -8,7 +8,7 @@ are still in progress.
 
 ## Reported status
 
-Core is the authority for status. hc-tui does not infer it from screen text,
+Core is the authority for status. backlot does not infer it from screen text,
 program arguments or foreground process names. It reads:
 
 - `status`, the root OSC 7501 record;
@@ -24,7 +24,7 @@ The winning record supplies the agent's application and reported title.
 Unknown words and extension fields remain in the protocol inventory. The
 renderer consumes herdr's status vocabulary, with the exact mapping recorded
 in [parity](parity.md#status-vocabulary). Record names, `source` extensions,
-progress and blocked-kind fields do not add hc-tui-specific badges.
+progress and blocked-kind fields do not add backlot-specific badges.
 
 ## Program lifecycle
 
@@ -134,5 +134,5 @@ selected row using the reference scrolling rules.
 
 Sidebar widths, collapse behavior, mobile header, tab bar, pane gutters and
 borders use the reference configuration and geometry. Narrow terminals do
-not introduce a separate hc-tui status-line format. Divider dragging updates
+not introduce a separate backlot status-line format. Divider dragging updates
 both drawing and the size allocated to the attached program.

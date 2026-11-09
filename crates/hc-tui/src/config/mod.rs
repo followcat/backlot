@@ -40,7 +40,10 @@ pub use sidebar::{
 };
 pub use sound::{AgentSoundOverrides, AgentSoundSetting, SoundConfig};
 pub use theme::{CustomThemeColors, ModeThemeColors, ThemeConfig};
-pub use toast::{HerdrToastConfig, ToastConfig, ToastDelivery, ToastHerdrPosition};
+pub use toast::{
+    ClipboardToastConfig, HerdrToastConfig, ToastClipboardPosition, ToastConfig, ToastDelivery,
+    ToastHerdrPosition,
+};
 
 use std::num::NonZeroUsize;
 use std::path::PathBuf;

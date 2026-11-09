@@ -35,7 +35,9 @@ impl App {
         // Reload does not reset startup preferences or a user's current collapse state.
         next.sidebar_start_collapsed = previous.sidebar_start_collapsed;
         next.keybinds = previous.keybinds.clone();
-        if !invalid("keys") {
+        if invalid("keys") {
+            next.remote_image_paste_key = previous.remote_image_paste_key;
+        } else {
             match loaded.config.live_keybinds_with_diagnostics() {
                 Ok((keybinds, notices)) => {
                     next.keybinds = keybinds;

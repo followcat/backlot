@@ -75,10 +75,30 @@ def ready(frame, name, previous, program_input, expected=None):
                'navigator-open', 'navigator-blocked', 'navigator-working',
                'navigator-idle', 'navigator-done', 'navigator-all',
                'navigator-search', 'navigator-search-none', 'navigator-move',
-               'navigator-end', 'navigator-close'}
+               'navigator-end', 'navigator-close',
+               'copy-open', 'copy-move', 'copy-word', 'copy-visual',
+               'copy-yank', 'copy-search-open',
+               'copy-search-submit', 'copy-search-next', 'copy-search-prev',
+               'copy-search-cancel', 'copy-cancel', 'copy-history',
+               'copy-bottom', 'copy-half-up', 'copy-page-up', 'copy-page-down',
+               'copy-linewise', 'copy-yank-line', 'copy-prefix-arm',
+               'copy-prefix-cancel', 'copy-quit', 'copy-reopen'}
     if name.startswith('status-') or name in changed:
         return previous is None or frame != previous
     return True
+
+
+def last_osc52(output):
+    """The most recent OSC 52 write in a captured PTY stream — both clients
+    copy through the same `\\x1b]52;c;<base64>\\x07` host sequence."""
+    marker = b'\x1b]52;'
+    index = bytes(output).rfind(marker)
+    if index < 0:
+        return None
+    end = bytes(output).find(b'\x07', index)
+    if end < 0:
+        return None
+    return bytes(output[index:end + 1])
 
 
 def title_difference(reference, candidate):

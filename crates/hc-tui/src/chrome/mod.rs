@@ -4,6 +4,7 @@
 
 pub mod agents;
 pub(crate) mod config_diagnostic;
+pub(crate) mod copy_feedback;
 pub mod detect;
 pub(crate) mod dialogs;
 pub mod endpoint_agents;
@@ -86,6 +87,9 @@ pub struct ClientShellConfig {
     pub toast_delivery: ToastDelivery,
     pub toast_delay_seconds: u64,
     pub toast_position: ToastHerdrPosition,
+    /// `[ui.toast.clipboard]` — the copied-to-clipboard card.
+    pub clipboard_toast_enabled: bool,
+    pub clipboard_toast_position: crate::config::ToastClipboardPosition,
     /// `[ui.sound]` — whether synthesized notification sounds ring the bell.
     pub sound: crate::config::SoundConfig,
     pub pane_borders: PaneBordersConfig,
@@ -95,6 +99,10 @@ pub struct ClientShellConfig {
     pub show_agent_labels_on_pane_borders: bool,
     pub startup_config_diagnostic: Option<String>,
     pub local_config_path: PathBuf,
+    /// `keys.remote_image_paste` resolved once — `None` disables the
+    /// image-paste key trigger (empty or invalid value, diagnosed at
+    /// load).
+    pub remote_image_paste_key: Option<crate::config::KeyCombo>,
 }
 
 impl ClientShellConfig {
@@ -171,6 +179,8 @@ impl ClientShellConfig {
             toast_delivery: ui.toast.delivery,
             toast_delay_seconds: ui.toast.delay_seconds,
             toast_position: ui.toast.herdr.position,
+            clipboard_toast_enabled: ui.toast.clipboard.enabled,
+            clipboard_toast_position: ui.toast.clipboard.position,
             sound: ui.sound.clone(),
             pane_borders: ui.pane_borders,
             pane_gaps: ui.pane_gaps,
@@ -179,6 +189,7 @@ impl ClientShellConfig {
             show_agent_labels_on_pane_borders: ui.show_agent_labels_on_pane_borders,
             startup_config_diagnostic: diagnostic,
             local_config_path,
+            remote_image_paste_key: config.remote_image_paste_key().ok().flatten(),
         }
     }
 }

@@ -49,10 +49,14 @@ impl Pane {
     fn start_drain(&mut self, drain: Drain) {
         self.sweep_closing();
         if self.closing.len() >= MAX_CLOSING {
+            // The route was already retiring — dropping its queued tail
+            // is a route-local event the client survives, not a pane
+            // failure. Report it on the pane, never at exit.
             let oldest = self.closing.remove(0);
             oldest.writer_abort.abort();
             oldest.done.abort();
-            self.close_error = Some("Input drain limit exceeded; an older route was closed".into());
+            self.dropped_drain =
+                Some("Input drain limit exceeded; an older route was closed".into());
         }
         let route = drain.route;
         let terminal = drain.terminal.clone();

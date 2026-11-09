@@ -59,6 +59,8 @@ struct Hooks {
     cell: (u32, u32),
     /// BEL characters seen since the last `take_bell_count`.
     bells: u64,
+    /// Text programs copied since the last `take_clipboard_writes`.
+    clipboard_writes: Vec<Vec<u8>>,
 }
 
 extern "C" fn on_bell(_: ffi::Terminal, ud: *mut c_void) {
@@ -68,6 +70,88 @@ extern "C" fn on_bell(_: ffi::Terminal, ud: *mut c_void) {
     unsafe {
         let hooks = &mut *(ud as *mut Hooks);
         hooks.bells = hooks.bells.saturating_add(1);
+    }
+}
+
+/// The largest clipboard write kept, the same limit the reference uses.
+const CLIPBOARD_MAX_BYTES: usize = 192 * 1024;
+
+// `on_clipboard_write` and `capture_clipboard_write` are derived from
+// herdr crates/ghostty-vt/src/lib.rs (Apache-2.0).
+extern "C" fn on_clipboard_write(
+    _: ffi::Terminal,
+    ud: *mut c_void,
+    write: *const ffi::ClipboardWrite,
+) {
+    // SAFETY: `ud` is the `Hooks` pointer installed with OPT_USERDATA. The
+    // library keeps the request alive for this callback, and the size check
+    // covers every field read here and in the capture below.
+    unsafe {
+        if write.is_null() || (*write).size < std::mem::size_of::<ffi::ClipboardWrite>() {
+            return;
+        }
+        let Some(reply) = (*write).reply else {
+            return;
+        };
+        let response = ffi::ClipboardWriteReply {
+            size: std::mem::size_of::<ffi::ClipboardWriteReply>(),
+            result: capture_clipboard_write(&mut *(ud as *mut Hooks), &*write),
+            remember: false,
+        };
+        reply(write, &response);
+    }
+}
+
+/// Keeps a plain-text write to the standard clipboard. A request to clear
+/// the clipboard succeeds and does nothing.
+///
+/// # Safety
+/// The request's contents and their strings must be valid for this call.
+unsafe fn capture_clipboard_write(hooks: &mut Hooks, request: &ffi::ClipboardWrite) -> i32 {
+    if request.location != ffi::CLIPBOARD_LOCATION_STANDARD {
+        return ffi::CLIPBOARD_WRITE_UNSUPPORTED;
+    }
+    if request.contents_len == 0 {
+        return ffi::CLIPBOARD_WRITE_SUCCESS;
+    }
+    if request.contents_len != 1 {
+        return ffi::CLIPBOARD_WRITE_UNSUPPORTED;
+    }
+    if request.contents.is_null() {
+        return ffi::CLIPBOARD_WRITE_INVALID_DATA;
+    }
+    // SAFETY: non-null, and valid for this call per the contract above.
+    let content = unsafe { &*request.contents };
+    // SAFETY: as above; both strings are borrowed from the live request.
+    let (Some(mime), Some(bytes)) = (unsafe { borrowed_bytes(&content.mime) }, unsafe {
+        borrowed_bytes(&content.data)
+    }) else {
+        return ffi::CLIPBOARD_WRITE_INVALID_DATA;
+    };
+    let is_text = std::str::from_utf8(mime)
+        .ok()
+        .and_then(|mime| mime.split(';').next())
+        .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/plain"));
+    if !is_text || bytes.is_empty() {
+        return ffi::CLIPBOARD_WRITE_UNSUPPORTED;
+    }
+    if bytes.len() > CLIPBOARD_MAX_BYTES {
+        return ffi::CLIPBOARD_WRITE_INVALID_DATA;
+    }
+    hooks.clipboard_writes.push(bytes.to_vec());
+    ffi::CLIPBOARD_WRITE_SUCCESS
+}
+
+/// # Safety
+/// A non-empty `value` must point at `len` bytes that outlive `'a`.
+unsafe fn borrowed_bytes<'a>(value: &ffi::StringView) -> Option<&'a [u8]> {
+    if value.len == 0 {
+        Some(&[])
+    } else if value.ptr.is_null() {
+        None
+    } else {
+        // SAFETY: per this function's contract.
+        Some(unsafe { std::slice::from_raw_parts(value.ptr, value.len) })
     }
 }
 
@@ -122,6 +206,10 @@ pub struct Vt {
     hooks: Box<Hooks>,
     /// The overscan request currently in effect on the render state.
     pub(crate) overscan: u16,
+    /// Content mutation counter — the reference's `content_seq`, used by
+    /// copy mode to invalidate matches/motions computed against older
+    /// buffer contents. Scroll-only changes do not count.
+    content_revision: u64,
 }
 
 impl Vt {
@@ -166,8 +254,10 @@ impl Vt {
                 replies_overflowed: false,
                 cell: CELL,
                 bells: 0,
+                clipboard_writes: Vec::new(),
             }),
             overscan: 0,
+            content_revision: 0,
         };
         let ud: *const Hooks = &*vt.hooks;
         unsafe {
@@ -206,6 +296,10 @@ impl Vt {
                 on_write_pty as ffi::WritePtyFn as *const c_void,
             );
             set(ffi::OPT_BELL, on_bell as ffi::BellFn as *const c_void);
+            set(
+                ffi::OPT_CLIPBOARD_WRITE,
+                on_clipboard_write as ffi::ClipboardWriteFn as *const c_void,
+            );
             set(ffi::OPT_SIZE, on_size as ffi::SizeFn as *const c_void);
         }
         vt
@@ -215,6 +309,7 @@ impl Vt {
     /// `ghostty_terminal_vt_write` cannot fail.
     pub fn feed(&mut self, bytes: &[u8]) {
         self.cursor_tracker.observe(bytes);
+        self.content_revision = self.content_revision.saturating_add(1);
         unsafe { ffi::ghostty_terminal_vt_write(self.raw, bytes.as_ptr(), bytes.len()) };
     }
 
@@ -249,7 +344,15 @@ impl Vt {
                 self.hooks.cell.1,
             )
         };
-        (rc == ffi::SUCCESS).then_some(()).ok_or(Error::Ghostty(rc))
+        (rc == ffi::SUCCESS)
+            .then(|| self.content_revision = self.content_revision.saturating_add(1))
+            .ok_or(Error::Ghostty(rc))
+    }
+
+    /// The content mutation counter — bumps on every `feed` and `resize`.
+    /// Copy mode snapshots it to notice buffer changes under it.
+    pub fn content_revision(&self) -> u64 {
+        self.content_revision
     }
 
     pub fn size(&self) -> Result<(u16, u16), Error> {
@@ -404,6 +507,12 @@ impl Vt {
     /// ghostty `OPT_BELL` hook the reference uses for pane bells.
     pub fn take_bell_count(&mut self) -> u64 {
         std::mem::take(&mut self.hooks.bells)
+    }
+
+    /// Text programs copied (OSC 52 to the standard clipboard) since the
+    /// last drain, oldest first and already decoded.
+    pub fn take_clipboard_writes(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.hooks.clipboard_writes)
     }
 
     /// Bytes the terminal generated for the pty side — query replies and

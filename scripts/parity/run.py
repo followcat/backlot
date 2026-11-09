@@ -7,7 +7,7 @@ import subprocess
 import time
 import tomllib
 
-from checks import ready, title_difference, verify_restored
+from checks import last_osc52, ready, title_difference, verify_restored
 
 from fixtures import prepare_core, prepare_reference, wait_program
 from sessions import Core, Reference, digest
@@ -115,16 +115,21 @@ def one_size(args, size, binary):
         previous = {}
         def capture_ready(owner, name, program, expected):
             deadline = time.monotonic() + 5
+            stable = None
             while True:
                 frame = checkpoint(owner, name, size, args.decoder)
                 requirements = dict(expected)
                 requirements.update(expected.get(owner.kind, {}))
                 if ready(frame, name, previous.get(owner.kind), program.received(), requirements):
                     # Demand a quiet output interval rather than taking a stale
-                    # pair merely because both clients are equally late.
-                    if owner.capture_quiet:
+                    # pair merely because both clients are equally late. The
+                    # reference keeps repainting an identical copy-mode frame
+                    # on its client timer; a repeated decode also counts as
+                    # settled.
+                    if owner.capture_quiet or stable == frame:
                         previous[owner.kind] = frame
                         return frame
+                    stable = frame
                 assert time.monotonic() < deadline, f'{owner.kind} {name} did not reach a settled expected checkpoint'
 
         def compare(name, **expected):
@@ -278,6 +283,57 @@ def one_size(args, size, binary):
                 core.ui.send(keys)
                 compare(name)
 
+            # Keyboard copy mode (prefix+[) over beta's 100-line history:
+            # motions, a visual and a linewise selection copied through
+            # OSC 52 (byte-compared), a literal search with N/M paging,
+            # g/G history jumps, half/page scrolling, the prefix key
+            # arming inside copy mode, and both exits (y/Enter, q).
+            for name, keys in [
+                ('copy-open', b'\x02['),
+                ('copy-move', b'kkhh'),
+                ('copy-word', b'we'),
+                ('copy-visual', b'vjj$'),
+                ('copy-yank', b'y'),
+            ]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name)
+            assert last_osc52(reference.ui.output) == last_osc52(core.ui.output), \
+                'copy-mode selection bytes differ'
+            # The `copied to clipboard` card lives exactly two seconds on
+            # both clients while the captures run seconds apart; without a
+            # settle, later checkpoints would race its expiry repaint.
+            time.sleep(2.4)
+            for name, keys in [
+                ('copy-search-open', b'\x02[/line 09'),
+                ('copy-search-submit', b'\r'),
+                ('copy-search-next', b'n'),
+                ('copy-search-prev', b'N'),
+                ('copy-search-cancel', b'\x1b[27u'),
+                ('copy-cancel', b'\x1b[27u'),
+                ('copy-history', b'\x02[g'),
+                ('copy-bottom', b'G'),
+                ('copy-half-up', b'\x15'),
+                ('copy-page-up', b'\x1b[5~'),
+                ('copy-page-down', b'\x1b[6~'),
+                ('copy-linewise', b'Vj'),
+                ('copy-yank-line', b'\r'),
+            ]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name)
+            assert last_osc52(reference.ui.output) == last_osc52(core.ui.output), \
+                'copy-mode linewise bytes differ'
+            time.sleep(2.4)
+            for name, keys in [
+                ('copy-prefix-arm', b'\x02[\x02'),
+                ('copy-prefix-cancel', b'\x1b[27u'),
+                ('copy-quit', b'q'),
+            ]:
+                reference.ui.send(keys)
+                core.ui.send(keys)
+                compare(name)
+
             # Decode each full output stream using the actual resize offsets;
             # feeding old bytes into only the final dimensions is not valid.
             for new_size in [(120, 40), (80, 24), (200, 50), size]:
@@ -307,6 +363,9 @@ def one_size(args, size, binary):
             for name, keys, expected in [
                 ('popup-open', b'\x1b[102;3u', ['popup']),
                 ('popup-type', b'echo P5\r', ['P5']),
+                ('popup-select', f'\x1b[<0;{size[0] * 6 // 10};{size[1] * 4 // 10}M'
+                                 f'\x1b[<32;{size[0] * 6 // 10 + 8};{size[1] * 4 // 10}M'
+                                 f'\x1b[<0;{size[0] * 6 // 10 + 8};{size[1] * 4 // 10}m'.encode(), []),
                 ('popup-escape', b'\x1b[27u', []),
                 ('popup-exit', b'\x15exit\r', []),
                 ('popup-closed', b'', []),
@@ -318,6 +377,13 @@ def one_size(args, size, binary):
                     reference.ui.send(keys)
                     core.ui.send(keys)
                 compare(name, text_contains=expected)
+                if name == 'popup-select':
+                    # Let the two-second copy card expire on both clients.
+                    time.sleep(2.4)
+            # The drag inside the popup copies its visible frame text
+            # through the same OSC 52 host write both clients emit.
+            assert last_osc52(reference.ui.output) == last_osc52(core.ui.output), \
+                'popup selection bytes differ'
             result['idle'] = core.ui.idle_measurement(10)
 
 

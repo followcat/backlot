@@ -34,6 +34,37 @@ pub enum ToastHerdrPosition {
     BottomRight,
 }
 
+/// The reference `ToastClipboardPosition` — six anchor spots for the
+/// copied-to-clipboard card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToastClipboardPosition {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomCenter,
+    BottomRight,
+}
+
+/// `[ui.toast.clipboard]` — the reference `ClipboardToastConfig`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct ClipboardToastConfig {
+    pub enabled: bool,
+    pub position: ToastClipboardPosition,
+}
+
+impl Default for ClipboardToastConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: ToastClipboardPosition::BottomCenter,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct HerdrToastConfig {
@@ -48,14 +79,14 @@ impl Default for HerdrToastConfig {
     }
 }
 
-/// `[ui.toast]` — the reference's `ToastConfig`, minus the clipboard
-/// toast hc-tui does not implement.
+/// `[ui.toast]` — the reference's `ToastConfig`.
 #[derive(Debug, Clone)]
 pub struct ToastConfig {
     pub delivery: ToastDelivery,
     /// Seconds a synthesized alert settles before validation/delivery.
     pub delay_seconds: u64,
     pub herdr: HerdrToastConfig,
+    pub clipboard: ClipboardToastConfig,
 }
 
 impl Default for ToastConfig {
@@ -64,6 +95,7 @@ impl Default for ToastConfig {
             delivery: ToastDelivery::Off,
             delay_seconds: 1,
             herdr: HerdrToastConfig::default(),
+            clipboard: ClipboardToastConfig::default(),
         }
     }
 }
@@ -80,6 +112,7 @@ impl<'de> Deserialize<'de> for ToastConfig {
             enabled: Option<bool>,
             delay_seconds: Option<u64>,
             herdr: HerdrToastConfig,
+            clipboard: ClipboardToastConfig,
         }
 
         let raw = RawToastConfig::deserialize(deserializer)?;
@@ -99,6 +132,7 @@ impl<'de> Deserialize<'de> for ToastConfig {
             delivery,
             delay_seconds,
             herdr: raw.herdr,
+            clipboard: raw.clipboard,
         })
     }
 }

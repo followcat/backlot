@@ -29,7 +29,7 @@ pub(crate) fn render_selection_highlight(
     else {
         return;
     };
-    let style = automatic_selection_style(p, host_theme);
+    let style = selection_style(p, host_theme);
     for y in 0..inner.height {
         for x in 0..inner.width {
             if selection.contains(y, x, scroll) {
@@ -41,7 +41,9 @@ pub(crate) fn render_selection_highlight(
 
 type Rgb = (u8, u8, u8);
 
-fn automatic_selection_style(p: &Palette, host_theme: &HostTheme) -> Style {
+/// The one computed selection style — shared by pane and popup
+/// selection paint.
+pub(crate) fn selection_style(p: &Palette, host_theme: &HostTheme) -> Style {
     let bg = automatic_selection_bg(p, host_theme);
     Style::reset().fg(selection_fg_for_bg(bg, p)).bg(bg)
 }

@@ -11,12 +11,17 @@ mod agent_ops;
 mod agent_presentation;
 mod closing;
 mod context_menu;
+mod copy_keys;
+pub(crate) mod copy_mode;
+mod copy_move;
+mod copy_render;
 mod creation;
 mod dialogs;
 mod draw;
 mod endpoint_navigation;
 mod help;
 mod host;
+mod image_paste;
 mod init;
 pub(crate) mod input;
 mod input_dispatch;
@@ -37,6 +42,7 @@ mod pane_mouse;
 mod pane_selection;
 mod panel;
 pub(crate) mod popup;
+mod popup_selection;
 mod presentation;
 mod reload;
 mod routing;
@@ -80,6 +86,10 @@ pub(crate) enum Mode {
     /// Navigate mode — the workspace picker the reference enters on
     /// `WorkspacePicker`; the pane previews the highlight via `observe`.
     Navigate,
+    /// Keyboard copy mode — the reference's `ClientShellMode::Copy`.
+    /// Keys drive the copy cursor, selection and search; the pane's
+    /// program sees none of them.
+    Copy,
     Resize,
 }
 
@@ -140,6 +150,8 @@ type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
 /// The whole application.
 pub struct App {
     notice: Option<notices::Notice>,
+    /// The one-shot `hc server start` report — `Some` until it lands.
+    core_start: Option<crate::core_start::Report>,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,
@@ -243,6 +255,16 @@ pub struct App {
     /// live on absolute screen rows, so scrolling and new output don't
     /// move the selected text.
     selection: Option<crate::selection::Selection>,
+    /// Keyboard copy mode — the reference's `copy_mode`. The mode is
+    /// armed per pane: it survives losing focus and re-arms `Mode::Copy`
+    /// when its pane is focused again.
+    pub(crate) copy_mode: Option<copy_mode::CopyModeState>,
+    /// Selection inside the floating popup terminal — the reference's
+    /// `popup_selection`, resolved against the popup's visible frame.
+    popup_selection: Option<crate::selection::Selection>,
+    /// Mouse button captured by a reporting popup terminal — the
+    /// reference's shared `pane_mouse_gesture` for `hit.popup` targets.
+    popup_gesture: Option<popup::PopupGesture>,
     /// Double-click word-drag gesture — the reference's
     /// `word_selection_gesture`, resolved against the pane's local VT.
     word_selection: Option<word_selection::WordSelection>,
@@ -253,6 +275,10 @@ pub struct App {
     selection_autoscroll_deadline: Option<Instant>,
     /// A bare double-click's word highlight clears after 500 ms.
     selection_highlight_clear_deadline: Option<Instant>,
+    /// The `copied to clipboard` card — the reference's `copy_feedback`
+    /// with its two-second deadline.
+    copy_feedback: Option<notices::CopyFeedback>,
+    copy_feedback_deadline: Option<Instant>,
     /// Last pane click — the reference's `ClientPaneClick` double-click
     /// bookkeeping for word selection.
     last_pane_click: Option<pane_selection::PaneClick>,
@@ -264,6 +290,16 @@ pub struct App {
     interaction_core: Option<String>,
     /// For the divider's double-click reset.
     last_divider_click: Option<Instant>,
+    /// Image-paste bridge context (`endpoint_accepts_local_images`):
+    /// the endpoint is `--remote`, or this client itself runs over SSH.
+    image_paste_remote: bool,
+    image_paste_over_ssh: bool,
+    /// Kitty releases of presses the image bridge consumed: the release
+    /// arm consults this before the popup's unconditional release leg.
+    image_paste_suppress: std::collections::HashSet<hc_vt::Key>,
+    /// The clipboard-image read — a boxed field so tests never touch a
+    /// real clipboard and can close over stub-tool environments.
+    image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
     /// The host was told to report every key as an escape code —
@@ -402,6 +438,9 @@ impl App {
         self.presentation.project(&self.view, &mut self.projection);
         self.update_tab_status(Instant::now());
         self.update_window_title();
+        // The reference's `apply_active_snapshot` copy arms: pane loss
+        // unarms the mode, focus re-arms/disarms it.
+        self.sync_copy_focus();
     }
 
     /// Request a surface draw; Source acknowledges only displayed output.

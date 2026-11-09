@@ -4,7 +4,7 @@
 //! The floating popup terminal and the worker-peek overlay. Both float over
 //! the tab that opened them: leaving the tab (or losing the terminal)
 //! dismisses them — the reference's `popup_owner_tab_id` rule.
-use super::input::TerminalKey;
+use super::input::{MouseButton, MouseEventKind, MouseInput, TerminalKey};
 use super::pane::{Pane, Role, Spec};
 use super::*;
 use crate::config::{CustomCommandAction, CustomCommandKeybind};
@@ -41,6 +41,16 @@ pub(super) struct PopupState {
 pub(super) struct PopupPending {
     pub width: Option<PopupSize>,
     pub height: Option<PopupSize>,
+}
+
+/// A reporting popup's captured button — the reference's
+/// `ClientPaneMouseGesture` for `hit.popup` targets: the press's hit is
+/// kept so drag/release forward even while the pointer leaves the
+/// popup's frame.
+#[derive(Clone)]
+pub(super) struct PopupGesture {
+    pub button: MouseButton,
+    pub hit: crate::chrome::render::PaneHit,
 }
 
 /// The `pane` command's zoomed overlay: when its one-shot terminal exits,
@@ -182,6 +192,8 @@ impl App {
     /// reference's `close_popup_pane` drops the runtime; the core's
     /// equivalent is `terminal.kill` on the `hc-tui.popup` child.
     pub(super) fn close_popup(&mut self) {
+        self.popup_selection = None;
+        self.popup_gesture = None;
         if let Some(mut popup) = self.popup.take() {
             popup.pane.want(None);
             if let Some(term) = self.view.inventory.get(&popup.terminal) {
@@ -257,8 +269,12 @@ impl App {
         true
     }
 
-    /// Paste/IME text goes to the popup while it is open.
+    /// Paste/IME text goes to the popup while it is open — the
+    /// reference clears the popup selection on the same arm.
     pub(super) fn popup_text(&mut self, bytes: Vec<u8>) -> bool {
+        if self.popup.is_some() {
+            self.clear_popup_selection();
+        }
         if let Some(popup) = self.popup.as_mut() {
             popup.pane.input_encoded(bytes);
             return true;
@@ -266,8 +282,10 @@ impl App {
         false
     }
 
-    /// Re-resolve geometry on a host resize and refit the popup attach.
+    /// Re-resolve geometry on a host resize and refit the popup attach —
+    /// the reference drops the popup selection on a size change.
     pub(super) fn popup_resize(&mut self) {
+        self.popup_selection = None;
         let area = self.frame_area();
         if let Some(popup) = self.popup.as_mut()
             && let Some(geometry) = resolve_popup_geometry(popup.width, popup.height, area)
@@ -276,11 +294,120 @@ impl App {
         }
     }
 
-    /// The reference swallows mouse input while the popup is open: presses
-    /// inside go to the popup terminal, presses outside are ignored.
-    /// Forwarding pointer events into the surface is a documented gap —
-    /// both sides currently drop them.
-    pub(super) fn popup_mouse(&mut self, _mouse: &super::input::MouseInput) -> bool {
+    /// Send a host mouse event to the popup terminal — the reference's
+    /// `push_pane_mouse_event` for `hit.popup`. Pixel position is used
+    /// when the popup program enabled SGR pixel reporting (1016), like
+    /// `send_pane_mouse` for panes.
+    fn send_popup_mouse(&mut self, hit: &crate::chrome::render::PaneHit, mouse: MouseInput) {
+        let Some(popup) = self
+            .popup
+            .as_mut()
+            .filter(|popup| popup.terminal == hit.pane_id)
+        else {
+            return;
+        };
+        let mut input = pane_mouse::native_input(hit, mouse);
+        if let Some(vt) = popup.pane.vt_ref()
+            && vt.mode(1016).unwrap_or(false)
+        {
+            let (cw, ch) = vt.cell_px();
+            if let Some(crate::mouse_geometry::Position::Pixels { x, y }) =
+                self.host_mouse_pixels.and_then(|p| {
+                    p.pane_position(
+                        hit.inner_rect,
+                        u32::from(hit.inner_rect.width) * cw,
+                        u32::from(hit.inner_rect.height) * ch,
+                    )
+                })
+            {
+                input.position = hc_vt::MousePosition::Pixels { x, y };
+            }
+        }
+        popup.pane.mouse(input);
+    }
+
+    /// The reference's popup mouse arm. Its shared `pane_mouse_gesture`
+    /// continuation runs first, then `popup_pending` eats everything,
+    /// then selection owns non-reporting presses
+    /// (`handle_popup_mouse_selection`); inside the frame, presses and
+    /// wheel events always reach the popup terminal (its VT decides
+    /// whether they encode), tracked motion follows `mouse_reporting`,
+    /// and a reporting press captures the button until release. Outside
+    /// events are ignored while a popup is open.
+    pub(super) fn popup_mouse(&mut self, mouse: &MouseInput) -> bool {
+        // A pane gesture armed before the popup opened keeps its
+        // button's drag/release — `route_pane_mouse` owns the rest.
+        if self.pane_mouse_gesture.is_some() {
+            return false;
+        }
+        if let Some(gesture) = self.popup_gesture.clone() {
+            let gesture_event = matches!(mouse.kind,
+                MouseEventKind::Drag(button) | MouseEventKind::Up(button)
+                    if button == gesture.button);
+            if gesture_event {
+                let hit = self
+                    .hit_map
+                    .popup
+                    .as_ref()
+                    .filter(|hit| hit.pane_id == gesture.hit.pane_id)
+                    .cloned()
+                    .unwrap_or_else(|| gesture.hit.clone());
+                self.send_popup_mouse(&hit, *mouse);
+                if mouse.kind == MouseEventKind::Up(gesture.button) {
+                    self.popup_gesture = None;
+                }
+                return true;
+            }
+            if matches!(
+                mouse.kind,
+                MouseEventKind::Down(_) | MouseEventKind::Drag(_) | MouseEventKind::Up(_)
+            ) {
+                return true;
+            }
+        }
+        if self.popup_pending.is_some() {
+            return true;
+        }
+        if let Some(hit) = self.hit_map.popup.clone() {
+            if self.handle_popup_mouse_selection(&hit, mouse) {
+                return true;
+            }
+            if super::mouse::contains(hit.inner_rect, (mouse.col, mouse.row)) {
+                match mouse.kind {
+                    MouseEventKind::Down(button) => {
+                        self.send_popup_mouse(&hit, *mouse);
+                        if self
+                            .popup
+                            .as_ref()
+                            .and_then(|popup| popup.pane.vt_ref())
+                            .is_some_and(|vt| vt.mouse_tracking())
+                        {
+                            self.popup_gesture = Some(PopupGesture {
+                                button,
+                                hit: hit.clone(),
+                            });
+                        }
+                    }
+                    MouseEventKind::Moved
+                        if self
+                            .popup
+                            .as_ref()
+                            .and_then(|popup| popup.pane.vt_ref())
+                            .is_some_and(|vt| vt.mouse_tracking()) =>
+                    {
+                        self.send_popup_mouse(&hit, *mouse);
+                    }
+                    MouseEventKind::ScrollUp
+                    | MouseEventKind::ScrollDown
+                    | MouseEventKind::ScrollLeft
+                    | MouseEventKind::ScrollRight => {
+                        self.send_popup_mouse(&hit, *mouse);
+                    }
+                    MouseEventKind::Up(_) | MouseEventKind::Drag(_) | MouseEventKind::Moved => {}
+                }
+            }
+            return true;
+        }
         self.popup.is_some()
     }
 
@@ -319,6 +446,7 @@ impl App {
     pub(super) fn draw_popups(&mut self, buf: &mut ratatui::buffer::Buffer, now: Instant) {
         use ratatui::style::{Modifier, Style};
         use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
+        self.hit_map.popup = None;
         if self.popup.is_none() && self.peek.is_none() {
             return;
         }
@@ -366,6 +494,11 @@ impl App {
                 .render(header, buf);
             Clear.render(surface, buf);
             super::draw::draw_terminal(&mut peek.pane, surface, buf, now, true);
+            // The peek surface is composed into the rebuilt ratatui
+            // frame: its extended underline bits drop too.
+            for cell in &mut buf.content {
+                cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            }
         }
         let Some(geometry) = self
             .popup
@@ -408,6 +541,20 @@ impl App {
         // exactly the surface area and keep the panel fill outside it.
         Clear.render(surface, buf);
         let wish = super::draw::draw_terminal(&mut popup.pane, surface, buf, now, false);
+        // The popup's VT cells went through the same ratatui rebuild in
+        // the reference — extended underline bits collapse to single.
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
+        let popup_terminal = popup.terminal.clone();
+        self.hit_map.popup = Some(crate::chrome::render::PaneHit {
+            rect: geometry.outer,
+            inner_rect: inner,
+            scrollbar_rect: None,
+            scroll: None,
+            pane_id: popup_terminal,
+        });
+        self.render_popup_selection(buf, inner);
         // The returned wish is surface-relative; shift into frame cells.
         self.want_cursor = super::draw::CursorWish {
             pos: wish.pos.map(|(x, y)| (surface.x + x, surface.y + y)),

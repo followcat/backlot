@@ -100,7 +100,8 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
   - visible background panes hold size leases, with no human input or focus claims;
   - transport recovery is passive (`resumed`), including visible size holders;
     real tab entry, focus or allocation changes may reclaim size;
-  - off-tab recent panes and peek panes stay strictly `observe`;
+  - off-tab recent panes display through `observe` wires and keep the size lease they had while visible, so a program
+    isn't resized when you switch away and back (user decision, 2026-11-09); peek panes stay strictly `observe`;
   - when another client owns the size, show a banner and offer "take control";
   - respond to RESIZE, FOCUS and FACTS.
 - **Scrollback:** history from the first paint, plus local history. A copy mode with keyboard and

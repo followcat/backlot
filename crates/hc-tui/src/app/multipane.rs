@@ -1,10 +1,11 @@
-//! Persistent observers retain appearance; visible panes also hold silent size leases.
+//! Persistent observers retain appearance. A pane that has been visible also
+//! holds a silent size lease for as long as its observer stays cached.
 //! The focused pane keeps
 //! its existing original-wire input leases, including across focus changes.
 use super::*;
 
 /// The current tab is pinned; retain at most this many off-tab VTs. Every
-/// cached wire is observe-only. Scrollback remains bounded per Pane.
+/// cached VT wire is observe-only. Scrollback remains bounded per Pane.
 pub(super) const RECENT_PANES: usize = 32;
 
 impl App {
@@ -48,6 +49,20 @@ impl App {
         {
             vt.scroll_to_row(scroll.total.saturating_sub(scroll.len) as usize);
         }
+    }
+
+    /// A pane-bound page key pages the *displayed* pane's scrollback —
+    /// the reference applies its PageKey rule to whatever the pane
+    /// shows, so the scroll must land on the same surface
+    /// `reset_displayed_scroll` and wheel scrolling use: a
+    /// fresh-painted observer can hold the screen during reattach.
+    /// `true` once scrolled: the key is UI-consumed and never forwards.
+    pub(super) fn pane_page_scroll(&mut self, key: &input::TerminalKey) -> bool {
+        let Some(id) = self.pane.target().map(str::to_owned) else {
+            return false;
+        };
+        self.displayed_pane_mut(&id)
+            .is_some_and(|pane| pane.page_scroll(key))
     }
     pub(super) fn follow_shared_focus(&mut self) {
         if self.pending_actions > 0 {
@@ -196,20 +211,25 @@ impl App {
         }
     }
 
+    /// The pane whose screen to draw: whichever has a complete paint. While
+    /// neither has one, a retained observer screen beats an attach with
+    /// nothing to show, so a switch or resize never flashes an empty pane.
     pub(super) fn displayed_pane(&self, id: &str) -> Option<&pane::Pane> {
-        if let Some(pane) = self.observers.get(id).filter(|p| p.has_fresh_paint()) {
-            Some(pane)
-        } else if self.pane.target() == Some(id) {
-            Some(&self.pane)
-        } else {
-            self.observers.get(id)
-        }
+        let observer = self.observers.get(id);
+        let active = (self.pane.target() == Some(id)).then_some(&self.pane);
+        observer
+            .filter(|p| p.has_fresh_paint())
+            .or_else(|| active.filter(|p| p.has_fresh_paint()))
+            .or_else(|| observer.filter(|p| p.vt_ref().is_some()))
+            .or(active)
+            .or(observer)
     }
 
     pub(super) fn displayed_pane_mut(&mut self, id: &str) -> Option<&mut pane::Pane> {
-        if self.observers.get(id).is_some_and(|p| p.has_fresh_paint()) {
-            self.observers.get_mut(id)
-        } else if self.pane.target() == Some(id) {
+        if self
+            .displayed_pane(id)
+            .is_some_and(|p| std::ptr::eq(p, &self.pane))
+        {
             Some(&mut self.pane)
         } else {
             self.observers.get_mut(id)

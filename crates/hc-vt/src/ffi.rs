@@ -16,6 +16,8 @@ pub type RowIterator = *mut c_void;
 pub type RowCells = *mut c_void;
 pub type KeyEncoder = *mut c_void;
 pub type KeyEvent = *mut c_void;
+/// `GhosttyRow` — an opaque packed row handle from a grid ref.
+pub type Row = u64;
 
 pub const SUCCESS: i32 = 0;
 pub const INVALID_VALUE: i32 = -2;
@@ -26,6 +28,7 @@ pub const OPT_USERDATA: i32 = 0;
 pub const OPT_WRITE_PTY: i32 = 1;
 pub const OPT_BELL: i32 = 2;
 pub const OPT_SIZE: i32 = 6;
+pub const OPT_CLIPBOARD_WRITE: i32 = 26;
 // GHOSTTY_TERMINAL_OPT_COLOR_* — vendor/ghostty/include/ghostty/vt/terminal.h.
 pub const OPT_COLOR_FOREGROUND: i32 = 11;
 pub const OPT_COLOR_BACKGROUND: i32 = 12;
@@ -43,6 +46,7 @@ pub const DATA_SCROLLBAR: i32 = 9;
 pub const DATA_KITTY_KEYBOARD_FLAGS: i32 = 8;
 pub const DATA_MOUSE_TRACKING: i32 = 11;
 pub const DATA_TITLE: i32 = 12;
+pub const DATA_TOTAL_ROWS: i32 = 14;
 
 #[repr(C)]
 pub struct StringView {
@@ -107,6 +111,11 @@ pub const CURSOR_BLOCK_HOLLOW: i32 = 3;
 pub const ROW_DIRTY: i32 = 1;
 pub const ROW_CELLS: i32 = 3;
 pub const ROW_VIEWPORT_Y: i32 = 6;
+
+// Grid-ref row data (GhosttyRowData) — vendor/ghostty
+// include/ghostty/vt/screen.h.
+pub const ROW_DATA_WRAP: i32 = 1;
+pub const ROW_DATA_WRAP_CONTINUATION: i32 = 2;
 
 // Row-cell data (GhosttyRenderStateRowCellsData).
 pub const CELL_RAW: i32 = 1;
@@ -239,6 +248,48 @@ pub type SizeFn = unsafe extern "C" fn(Terminal, *mut c_void, *mut SizeReport) -
 /// `GhosttyTerminalBellFn` — BEL (0x07) notifications, no payload.
 pub type BellFn = unsafe extern "C" fn(Terminal, *mut c_void);
 
+// GhosttyClipboardLocation and GhosttyClipboardWriteResult —
+// vendor/ghostty/include/ghostty/vt/terminal.h.
+pub const CLIPBOARD_LOCATION_STANDARD: i32 = 0;
+pub const CLIPBOARD_WRITE_SUCCESS: i32 = 0;
+pub const CLIPBOARD_WRITE_UNSUPPORTED: i32 = 2;
+pub const CLIPBOARD_WRITE_INVALID_DATA: i32 = 4;
+
+/// `GhosttyClipboardContent`. Borrowed for the callback only.
+#[repr(C)]
+pub struct ClipboardContent {
+    pub mime: StringView,
+    pub data: StringView,
+}
+
+/// `GhosttyClipboardWriteReply`.
+#[repr(C)]
+pub struct ClipboardWriteReply {
+    pub size: usize,
+    pub result: i32,
+    pub remember: bool,
+}
+
+pub type ClipboardWriteReplyFn =
+    unsafe extern "C" fn(*const ClipboardWrite, *const ClipboardWriteReply);
+
+/// `GhosttyClipboardWrite`. A sized struct, borrowed for the callback only.
+#[repr(C)]
+pub struct ClipboardWrite {
+    pub size: usize,
+    pub location: i32,
+    pub contents: *const ClipboardContent,
+    pub contents_len: usize,
+    pub name: StringView,
+    pub granted: bool,
+    pub can_remember: bool,
+    pub ctx: *const c_void,
+    pub reply: Option<ClipboardWriteReplyFn>,
+}
+
+/// `GhosttyTerminalClipboardWriteFn`.
+pub type ClipboardWriteFn = unsafe extern "C" fn(Terminal, *mut c_void, *const ClipboardWrite);
+
 pub type Formatter = *mut c_void;
 
 // GhosttyPointTag — vendor/ghostty/include/ghostty/vt/point.h.
@@ -364,6 +415,15 @@ unsafe extern "C" {
     pub fn ghostty_terminal_vt_write(t: Terminal, data: *const u8, len: usize);
     pub fn ghostty_terminal_scroll_viewport(t: Terminal, behavior: ScrollViewport);
     pub fn ghostty_terminal_grid_ref(t: Terminal, point: Point, out: *mut GridRef) -> i32;
+    pub fn ghostty_grid_ref_cell(ref_: *const GridRef, out_cell: *mut u64) -> i32;
+    pub fn ghostty_grid_ref_row(ref_: *const GridRef, out_row: *mut Row) -> i32;
+    pub fn ghostty_grid_ref_graphemes(
+        ref_: *const GridRef,
+        buf: *mut u32,
+        buf_len: usize,
+        out_len: *mut usize,
+    ) -> i32;
+    pub fn ghostty_row_get(row: Row, data: i32, out: *mut c_void) -> i32;
     pub fn ghostty_formatter_terminal_new(
         alloc: *const c_void,
         out: *mut Formatter,

@@ -80,6 +80,7 @@ impl Pane {
             self.pending.clear();
             self.pending_bytes = 0;
             self.close_error = None;
+            self.dropped_drain = None;
         }
         self.teardown(false);
         match spec {

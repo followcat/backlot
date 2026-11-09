@@ -128,6 +128,16 @@
       "name": "generated-shifted-slash",
       "outer_hex": "1b5b35353b323b343775",
       "received_hex": "1b5b35353a34373b323b343775"
+    },
+    {
+      "name": "page-up",
+      "outer_hex": "1b5b357e",
+      "received_hex": ""
+    },
+    {
+      "name": "page-down",
+      "outer_hex": "1b5b367e",
+      "received_hex": ""
     }
   ],
   "provenance": "Captured from herdr 0.9.5-followcat in an owned scratch PTY; neutral raw input fixture with inner Kitty flags 31.",

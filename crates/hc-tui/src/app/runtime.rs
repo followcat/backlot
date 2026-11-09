@@ -37,10 +37,14 @@ impl App {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        // A lease outlives its tab for as long as the pane's observer is cached:
+        // the program keeps its size while hidden, so coming back resizes nothing.
         self.size_leases.retain(|id, _| {
             !id.is_empty()
                 && self.view.inventory.get(id).is_some()
-                && (infos.iter().any(|info| &info.id == id) || covered.contains(id))
+                && (infos.iter().any(|info| &info.id == id)
+                    || covered.contains(id)
+                    || self.observers.contains_key(id))
         });
         // While a layout write is in flight, inventory can publish a new
         // member before the CAS lands — a transient un-zoomed split that
@@ -61,12 +65,16 @@ impl App {
             if info.id.is_empty() || self.view.inventory.get(&info.id).is_none() {
                 continue;
             }
+            // A new lease takes its size from this layout, which isn't final
+            // while a write is in flight. Opened now, it would attach at the
+            // default size and, as the newest typing viewer, resize the program.
+            if settling && !self.size_leases.contains_key(&info.id) {
+                continue;
+            }
             let lease = self.size_leases.entry(info.id.clone()).or_insert_with(|| {
                 let mut lease = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
                 lease.set_host_facts(self.host_facts.clone());
-                if !settling {
-                    lease.allocated(inner.width.max(1), inner.height.max(1));
-                }
+                lease.allocated(inner.width.max(1), inner.height.max(1));
                 lease.want(Some(Spec {
                     terminal: info.id,
                     role: Role::SizeLease,
@@ -76,12 +84,9 @@ impl App {
             if !settling {
                 lease.allocated(inner.width.max(1), inner.height.max(1));
             }
-            lease.on_view(&self.view);
         }
-        for id in covered {
-            if let Some(lease) = self.size_leases.get_mut(&id) {
-                lease.on_view(&self.view);
-            }
+        for lease in self.size_leases.values_mut() {
+            lease.on_view(&self.view);
         }
         term.draw(|frame| draw::draw(self, frame, now))?;
         self.apply_cursor();
@@ -164,6 +169,7 @@ impl App {
                     .chain(self.selection_autoscroll_deadline)
                     .chain(self.selection_highlight_clear_deadline)
                     .chain(self.panel_anim_deadline)
+                    .chain(self.copy_feedback_deadline)
                     .min()
             };
             self.probe
@@ -188,6 +194,7 @@ impl App {
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
+                    report = Self::core_start_report(&mut self.core_start) => self.on_core_start(report),
                     seen = self.seen_rx.recv() => {
                         if let Some(seen) = seen {
                             self.on_seen_result(seen);
@@ -222,6 +229,7 @@ impl App {
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
+                    report = Self::core_start_report(&mut self.core_start) => self.on_core_start(report),
                     seen = self.seen_rx.recv() => {
                         if let Some(seen) = seen {
                             self.on_seen_result(seen);
@@ -248,10 +256,11 @@ impl App {
             self.expire_notice(now);
             self.tick_notifications(now);
             self.tick_panel(now);
-            if self.tick_selection(now) {
+            if self.tick_selection(now) | self.tick_copy_feedback(now) {
                 self.sched.mark_dirty(now);
             }
             self.drain_bells();
+            self.drain_clipboard_writes();
             self.share_seen();
             self.update_window_title();
             if self.next_tab_status.is_some_and(|due| now >= due) {

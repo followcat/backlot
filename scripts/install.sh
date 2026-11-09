@@ -8,14 +8,20 @@
 #   BACKLOT_VERSION=v0.2.0 sh install.sh
 #   BACKLOT_INSTALL_DIR=~/bin sh install.sh
 #
-# BACKLOT_REPO (default followcat/backlot) and BACKLOT_BASE_URL
-# (default the repo's GitHub releases URL) exist for mirrors and
-# tests — the public install path is always HTTPS.
+# When no hc core is found (on PATH, in the install dir, or in
+# ~/.local/bin) the official hc installer runs next.
+# BACKLOT_SKIP_CORE=1 skips that step.
+#
+# BACKLOT_REPO (default followcat/backlot), BACKLOT_BASE_URL (default
+# the repo's GitHub releases URL) and BACKLOT_CORE_URL (default the
+# official core installer URL) exist for mirrors and tests — the public
+# install paths are always HTTPS.
 set -eu
 
 REPO=${BACKLOT_REPO:-followcat/backlot}
 BASE_URL=${BACKLOT_BASE_URL:-https://github.com/$REPO/releases}
 INSTALL_DIR=${BACKLOT_INSTALL_DIR:-${HOME:?set HOME or BACKLOT_INSTALL_DIR}/.local/bin}
+CORE_URL=${BACKLOT_CORE_URL:-https://releases.herdr.dev/core/install.sh}
 
 die() {
     echo "install.sh: $*" >&2
@@ -132,4 +138,24 @@ case ":$PATH:" in
     *":$INSTALL_DIR:"*) ;;
     *) echo "note: $INSTALL_DIR is not on your PATH — add it or run the binary by its full path" ;;
 esac
-echo "backlot needs the hc core installed: https://github.com/herdrdev/herdr-core"
+
+# --- hc core ---------------------------------------------------------------
+# backlot starts its own core, but hc must be installed first — a new user
+# gets the whole thing in one command.
+have_hc() {
+    command -v hc >/dev/null 2>&1 \
+        || [ -x "$INSTALL_DIR/hc" ] \
+        || [ -x "${HOME:-}/.local/bin/hc" ]
+}
+if [ "${BACKLOT_SKIP_CORE:-}" != "1" ] && ! have_hc; then
+    echo "installing the hc core with the official installer"
+    if curl -fsSL --retry 3 --connect-timeout 15 --max-time 600 \
+        "$CORE_URL" -o "$work/core-install.sh" \
+        && sh "$work/core-install.sh"; then
+        echo "installed the hc core"
+    else
+        echo "install.sh: warning: the hc core installer failed — backlot is installed" >&2
+        echo "install it later with:" >&2
+        echo "  curl -fsSL https://releases.herdr.dev/core/install.sh | sh" >&2
+    fi
+fi

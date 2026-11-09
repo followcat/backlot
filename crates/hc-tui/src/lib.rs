@@ -9,7 +9,13 @@
 pub mod app;
 pub mod chrome;
 pub mod cli;
+mod clipboard;
+mod clipdrop;
 pub mod config;
+pub(crate) mod copy_buffer;
+pub mod copy_mode;
+pub(crate) mod copy_window;
+pub mod core_start;
 pub mod host;
 pub mod input;
 pub mod project;

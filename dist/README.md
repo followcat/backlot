@@ -1,11 +1,9 @@
 # backlot
 
-A terminal UI client for [herdr-core](https://github.com/herdrdev/herdr-core)
-(`hc`) — sidebar, tabs and split panes for your hc terminals and agents, on
-the local machine or over SSH. Unofficial; not affiliated with the Herdr
-project.
+A terminal UI for [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`), with a sidebar, tabs and split panes for
+your terminals and agents, locally or over SSH. Unofficial, and not affiliated with the Herdr project.
 
-The `hc` core must be installed and running separately. Put `backlot` on your
+You need `hc` installed — backlot starts the core itself when nothing answers. Put `backlot` on your
 PATH and run it:
 
 ```sh

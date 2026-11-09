@@ -1,15 +1,15 @@
 # Runtime
 
-Start a local client with `hc-tui --session <name>`, or use
-`hc-tui --remote <ssh-target> --session <name>`. The remote machine needs
+Start a local client with `backlot --session <name>`, or use
+`backlot --remote <ssh-target> --session <name>`. The remote machine needs
 `hc` on its SSH command path. SSH authentication and host verification use
-normal SSH configuration; hc-tui does not store credentials. On Unix the RPC,
+normal SSH configuration; backlot does not store credentials. On Unix the RPC,
 subscription and attach connections share one SSH login per target through
-hc-tui's own control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, created private),
+backlot's own control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, created private),
 kept for 10 minutes after the last connection ends. On top of that shared
 login, every attach on a remote endpoint is a channel on one framed
-`hc connect` — one transport, one `hello` — that opens lazily with the first
-attach, is shared by concurrent opens, is rebuilt once after a death and
+`hc connect`, with one transport and one `hello`. It opens with the first
+attach, is shared by concurrent opens, is rebuilt once if it dies and
 closes with its last attach. RPC and subscription streams keep their own
 connections on the same login.
 
@@ -17,15 +17,12 @@ The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.
 Navigation uses the configured movement keys, Enter to select and Escape
 to cancel. Herdr's configuration supplies the prefix, bindings, theme,
-sidebar, tab bar and pane chrome. M3a adds layout/tab navigation, new tabs,
-splits, close, rename, resize mode and Ctrl+G lock. Custom commands,
-notifications and the remaining mutation actions belong to M4. Ctrl+B then
+sidebar, tab bar and pane chrome. Ctrl+B then
 Shift+R, or the mobile reload-config menu, rereads this client's herdr config.
 Bindings, theme, chrome and allocated geometry update immediately. Invalid
 sections keep their current values; valid siblings still reload. A malformed
 or unreadable file keeps the current configuration and shows its diagnostic.
-Manual sidebar width and agent ordering survive reload. Settings currently
-shows a transient unavailable notice; its overlay belongs to M4.
+Manual sidebar width and agent ordering survive reload.
 
 The focused terminal has the human-input connection. Persistent observers
 retain the current tab and 32 most recent off-tab panes. An observer never sends

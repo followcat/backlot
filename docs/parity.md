@@ -37,7 +37,7 @@ milestone available.
 |---|---|
 | M2 | Sidebar and endpoint rows, pane cells/attributes/cursor, titles, switching/navigation, resize, applicable mouse behavior, baseline configuration, scratch PTY harness |
 | M3 | Herdr-app structure reader, shared splits/focus/zoom/tabs, complete default/configured bindings and lock |
-| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight and OSC 52 copy on release/Ctrl+C under `ui.copy_on_select` are implemented. Keyboard copy mode, popup selection, clipboard image paste and forwarding pane-emitted OSC 52 remain. |
+| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight, OSC 52 copy on release/Ctrl+C under `ui.copy_on_select`, forwarding pane-emitted OSC 52 and clipboard image paste over remote endpoints, keyboard copy mode (`keys.copy_mode`, motions, search, visual/linewise selection, copy feedback toast) and popup mouse selection are implemented. |
 
 The M2 joint review pause stays in place. Later milestones do not excuse
 incorrect behavior on an M2 surface. Popups, confirmations and other actions
@@ -145,7 +145,9 @@ Visible current-tab panes also hold silent size leases, including the focused
 pane, so focus switches have no gap without a visible size owner. These
 controllers send size and measured display facts, consume credit, allocate no
 VT and send neither human input, focus nor automatic replies. Leaving the tab
-closes the controller; off-tab LRU connections remain strictly observe-only.
+keeps the controller for as long as the pane's observer stays in the LRU, so
+the program keeps its size while hidden, as it does under Herdr, instead of
+falling back to the core's headless size and redrawing on every switch.
 A visible controller recovers with passive `resumed`; it never claims focus
 or sends input. Transport recovery alone does not reclaim another viewer's size.
 This user-approved rule supersedes the earlier blanket observe-only rule for
@@ -393,7 +395,7 @@ or title are masked. These are documented core-policy differences, not passes.
 | Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
 | Settings binding/menu | M4 implements the reference overlay: the five sections (theme, indicators, sound, toast, integrations), live theme preview, `write_edit` saves and the same config-reload path as the reload binding. The Integrations section has no `integration.list`/`integration.install` core methods in hc, so it renders the reference's empty state `no integration targets available` and applying it is inert — the reference renders its built-in target list instead, so that one checkpoint differs by the missing core methods (Known differences). |
 | Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. M4s1 adds the right-click context menu (workspace/tab/pane targets, reference items/geometry/highlight), workspace new/rename/close including the mobile `+ new workspace` row, and machine dialogs (add/connect/rename/remove). Custom commands, notifications, scrollback editing/clear and remaining actions stay in later M4 slices or M5. |
-| Copy mode/selection/clipboard help entries | M5; not an available M2 action. Mouse selection and OSC 52 copy on the pane surface are implemented; the keyboard copy-mode help entries remain unbound until M5's copy-mode slice. |
+| Copy mode/selection/clipboard help entries | M5 implements the binding (`keys.copy_mode`, default `prefix+[`), the copy cursor/mode bar/search prompt visuals, motions, search and visual/linewise selection, plus mouse and popup selection through OSC 52. The help overlay lists the same entries as the reference. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
 
 The joint review accepted documented deferral of dead-wire held releases,
@@ -417,7 +419,9 @@ reconnect with `resumed: true`, without focus or human-input activity. Merely
 recovering the desktop transport does not displace the phone. When the phone
 detaches, the remaining passive desktop viewers restore the desktop allocation.
 
-Entering or revisiting a tab creates fresh size holders. Moving focus opens
+Entering a tab creates size holders for panes that have none; a revisit reuses
+the ones still cached, and a reused holder doesn't reclaim size from another
+client by itself. Moving focus opens
 that pane's active input wire, and a real allocation change sends a resize.
 Those local activities, input and explicit take-control may reclaim sizing;
 unchanged allocation or a mismatching core grid does not trigger a reclaim loop.
@@ -642,21 +646,40 @@ Everything else on the compared surfaces still diffs normally.
   host in 64-byte chunks. The wire effect is identical to the reference's
   server-counted `ServerMessage::TerminalBell` fanout; the counting point
   moved client-side.
-- **Pane-emitted OSC 52 is swallowed.** The reference's core detects OSC 52
-  writes inside a pane and relays them as `ServerMessage::Clipboard`, which
-  `client/clipboard_forwarding.rs` decodes and re-emits to the host. hc's
-  wire has no clipboard message and pane paint feeds only the local VT —
-  a program writing OSC 52 inside a pane sets no host clipboard. Forwarding
-  remains M5 work.
+- **Pane-emitted OSC 52 is forwarded by every attached hc-tui.** The
+  reference's core detects OSC 52 writes inside a pane and sends
+  `ServerMessage::Clipboard` to the foreground client only. hc's wire has
+  no clipboard message, so hc-tui takes the write from the pane's own VT
+  and re-emits it to the host. With two hc-tui clients on one core, both
+  write. Only panes with a cached observer, and popups, are covered.
+- **Copy-mode motions and search run client-side.** The reference asks
+  its server through `pane.copy-motion`/`pane.copy-search` RPCs and
+  streams matches back; hc's wire has neither method, so hc-tui ports
+  the reference's own algorithms (`RetainedTextBuffer` word/paragraph
+  atoms, literal case-aware search with the same 4096-byte query and
+  1024-match limits) over the visible VT text. Cursor targets, match
+  spans, count and highlight cells are identical; only the transport
+  differs. Popup selection likewise reads the popup's own VT frame
+  instead of a server surface snapshot, producing the same copied text.
+- **No host clipboard read for the copy search prompt.** In the
+  reference, `Ctrl+V`/`Ctrl+Shift+V` inside an open copy search prompt
+  (or a focused overlay query) reads the host clipboard and inserts the
+  text. hc-tui has no clipboard-read surface, so the key is consumed
+  with no insert. Bracketed-paste events do reach the prompt's query
+  through `insert_copy_search_text`, exactly like the reference's Paste
+  arm; the image-paste key is also consumed inside copy mode rather
+  than pasting into the pane.
 - **`system` delivery falls back to terminal.** hc-tui has no desktop
   notification integration, so `delivery = "system"` writes the same OSC
   9/99 sequence as `terminal`. `off` still synthesizes (and suppresses
   output), `herdr` renders the card/banner.
-- **`[ui.toast.clipboard]` and extra kinds.** The reference's copy-toast
-  section and the `UpdateInstalled`/`Custom` notification kinds have no
-  trigger in hc-tui this slice; the keys are not parsed. `[ui.toast]` itself
-  matches the reference, including the legacy `enabled` mapping and the
-  3600-second `delay_seconds` cap.
+- **`[ui.toast.clipboard]` and extra kinds.** The clipboard toast section
+  is implemented: a successful nonempty copy shows the `copied to
+  clipboard` card at the configured `position` for the reference's fixed
+  two seconds, gated by `enabled`. The `UpdateInstalled`/`Custom`
+  notification kinds still have no trigger in hc-tui and their keys are
+  not parsed. `[ui.toast]` itself matches the reference, including the
+  legacy `enabled` mapping and the 3600-second `delay_seconds` cap.
 - **`herdr.seen` worker.** The label write and the turn rule are the
   reference's; hc-tui performs them on a dedicated channel worker so a
   failed write retries without touching layout operation results. The wire
@@ -697,8 +720,11 @@ Everything else on the compared surfaces still diffs normally.
   panes `t<N>` where the reference core names them `w<W>:p<P>`, and each
   parity owner's scratch root is a separate `mkdtemp`, so the `cwd` path
   differs in its random segment (`/tmp/hctui-parity-<seed>/acme-shop`).
-  Those cells differ on checkpoints where a pane row (id + path, 12
-  cells) or a workspace row (path, 8 cells) is selected; every other
+  Those cells differ on checkpoints where a pane row (id + path) or a
+  workspace row (path) is selected — the two runs' random path segments
+  have the same length, so the count varies with how many positions
+  happen to share a character between them (twelve and eight at the
+  documented capture, eleven and seven at a later one); every other
   navigator checkpoint — each filter, search-without-results, movement
   and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.

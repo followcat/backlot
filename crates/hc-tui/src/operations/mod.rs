@@ -118,6 +118,15 @@ pub enum Action {
         terminal: String,
         created_ms: u64,
     },
+    /// `terminal.put` — the R9 image-paste upload: write the image next
+    /// to the terminal so the returned path can be pasted into it.
+    /// `data` is base64; the incarnation check matches `Kill`/`SendLine`.
+    PutImage {
+        terminal: String,
+        created_ms: u64,
+        name: String,
+        data: String,
+    },
 }
 
 /// What a store request produced. `Written` carries the confirmed layout
@@ -126,6 +135,12 @@ pub enum Outcome {
     Written(Box<Written>),
     Ran(String),
     Done,
+    /// A `terminal.put` landed: the terminal it wrote beside plus the
+    /// path the core returned.
+    Put {
+        terminal: String,
+        path: String,
+    },
 }
 
 #[cfg(test)]
@@ -166,6 +181,17 @@ pub struct Store {
     task: JoinHandle<()>,
 }
 
+/// The per-action deadline: `PutImage` pushes up to ~11 MB of base64
+/// through the link, so it borrows the protocol call-timeout scale
+/// (hc-proto's `CALL_TIMEOUT` = 120 s) instead of the interactive
+/// default.
+fn action_deadline(action: &Action) -> std::time::Duration {
+    match action {
+        Action::PutImage { .. } => std::time::Duration::from_secs(120),
+        _ => std::time::Duration::from_secs(15),
+    }
+}
+
 impl Store {
     pub fn new(open: OpenRpc) -> Self {
         let (send, mut receive) = mpsc::channel::<Request>(16);
@@ -174,7 +200,7 @@ impl Store {
             let mut client = None;
             while let Some(request) = receive.recv().await {
                 let work = tokio::time::timeout(
-                    std::time::Duration::from_secs(15),
+                    action_deadline(&request.action),
                     rpc::run(&open, &mut client, request),
                 )
                 .await

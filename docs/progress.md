@@ -406,3 +406,202 @@
 - Docs: README leads with Install; new `docs/install.md`,
   `docs/remote.md` and `docs/troubleshooting.md`. The first tag/release
   publication is pending — the user decides when it goes out.
+
+## v0.1.1: one-command install and start (branch feat/one-command)
+
+- `hc-tui` starts a local core itself when the resolved socket answers
+  nothing (missing or refused), once per run, after terminal setup and
+  without blocking the UI. It never starts one for `--remote` or a set
+  `HC_SOCKET`; the watcher reconnect picks the new core up. Failures
+  show a notice: `hc isn't installed` with the official install
+  command, or `Core start failed` with the first error line.
+- `scripts/install.sh` now runs the official `hc` installer when no
+  `hc` is found on `PATH`, in the install dir or in `~/.local/bin`.
+  `HC_TUI_SKIP_CORE=1` skips it; a failed core install warns and keeps
+  hc-tui.
+- `.github/workflows/pages.yml` publishes `scripts/install.sh` from a
+  published release tag to Pages, with a minimal index; the short URL
+  is not documented until a release ships.
+- Gates: formatting, all-target Clippy, the full suite (8 `core_start`
+  unit tests, 6 PTY tests driving a fake `hc`), 28 offline installer
+  tests and parsed workflow YAML all pass. On an owned scratch session
+  a core started by hc-tui (`hc 0.1.18-followcat.1`, `serve` pid
+  1013562) still answered `hc server status` after detach and was
+  stopped with `{"stopped":true}`.
+
+## Hidden panes keep their size (branch fix/keep-hidden-size)
+
+- A pane's silent size lease now lasts as long as its observer stays
+  cached (user decision, 2026-11-09), so switching away and back no
+  longer resizes the program. Peek panes stay strictly observe.
+- Gates: formatting, all-target Clippy and the full suite (855 passed,
+  7 ignored). On an owned scratch session, 30 switches between three
+  stand-in agents painted no intermediate screen, and each agent was
+  resized at most twice in the whole run.
+- An inline stand-in with a footer shows the layout side of this. The
+  build from before the lease fix gave two of the three an 80x24 size on
+  about 17 of 30 switches, and one was left with blank rows under its
+  footer. With this build they were only ever given the pane's size
+  after the first attach, and no blank rows remained.
+
+## macOS: detach in a PTY (known issue, 2026-11-09)
+
+- On macOS the six `autostart` PTY tests time out: after `Ctrl+B q`
+  hc-tui is still running. A stack sample on the CI runner shows the
+  main loop and the input thread idle in `kevent` and `poll`, so it
+  isn't stuck on the way out. The cause isn't known, and no real macOS
+  terminal has been checked. The input code is the same in v0.1.0.
+- Those tests are ignored on macOS for v0.1.1 (user decision). The
+  issue is listed in `docs/troubleshooting.md` and the release notes.
+- Commit `be10620` blames a full PTY buffer. That guess was wrong:
+  draining the PTY didn't change the result. The draining stays, since
+  a test shouldn't leave the child blocked on output.
+
+## Programs can copy through hc-tui (branch fix/forward-osc52)
+
+- A program's OSC 52 write used to stop at the pane's VT. Codex selects
+  with the mouse and copies this way, so it reported a copy while the
+  clipboard stayed as it was. hc-tui now takes the write from the VT,
+  through the same library hook the reference uses, and re-emits it to
+  the host.
+- Each copy is written once: observers and popups count, the focused
+  pane's input wire doesn't, since it carries the same bytes. Writes
+  inside a paint are dropped.
+- Gates: formatting, all-target Clippy, the full suite (858 passed, 7
+  ignored) and 29 installer tests. On an owned scratch session, three
+  copies from two stand-in agents, with switches between them, reached
+  the outer terminal once each. The build before this change wrote none.
+
+## Clipboard image paste on remote endpoints (branch feat/image-paste)
+
+- `Ctrl+V` now reads the local clipboard image and uploads it to the
+  program's machine with `terminal.put`, then pastes the returned path
+  into the pane through the normal paste path. It applies on
+  `--remote`, on hc-tui itself running over SSH, and on a focused
+  terminal on another machine (`machine/tN`) — matching the reference's
+  `endpoint_accepts_local_images`. On a plain local endpoint `Ctrl+V`
+  still reaches the program unchanged, and `Ctrl+Shift+V` stays text
+  paste everywhere.
+- The other two reference triggers come along: an empty bracketed paste
+  (a terminal's image-only `Ctrl+Shift+V`) and a paste holding one
+  absolute image path (a file drop, including quoted and escaped
+  forms). On Linux the read tries WSL PowerShell, `wl-paste` under
+  Wayland and `xclip` under X11 in the reference's MIME order; each
+  tool is killed after about two seconds and a missing tool counts as
+  no image. macOS uses `osascript`. Payloads over the 8 MB
+  `terminal.put` limit are consumed with a notice and never reach the
+  wire. A key release for a consumed press is suppressed on hosts that
+  report releases, and the suppress set only grows on those hosts.
+- Gates: formatting, all-target Clippy, the full suite (890 passed, 8
+  ignored) and 29 installer tests. The parity vectors replayed all 390
+  input cases on reference and candidate with zero failures, and the
+  80x24 run matched on every checkpoint except the documented navigator
+  footer-identity cells. On an owned scratch session with a fake `ssh`
+  running `hc connect` locally and a fake `wl-paste` serving a PNG, the
+  ignored end-to-end test uploaded through the real `terminal.put` and
+  the pasted path landed in the program's stdin.
+
+## PgUp and PgDown page panes (branch fix/page-keys)
+
+- Plain `PageUp` and `PageDown` reached the program as `ESC [ 5 ~` and
+  `ESC [ 6 ~` and never moved the pane's own scrollback. The reference
+  pages its scrollback by one pane height for those keys in a normal
+  pane: main screen, no mouse reporting, and not a bare application
+  cursor program without bracketed paste.
+- hc-tui now applies the same rule per key event at the pane route.
+  Presses and repeats page the displayed pane's scrollback by its own
+  height, their releases stay swallowed, and every other case falls
+  through to encode and forward. The scroll lands on whatever surface
+  holds the screen, so a fresh-painted observer during reattach pages
+  too. A key the program receives still jumps the view back to the
+  bottom. Popup terminals are unchanged: their programs get every key.
+- Gates: formatting, all-target Clippy, the full suite (867 passed, 7
+  ignored), 29 installer tests, all 13 reference vectors including 14
+  new page-key cases captured from the pinned binary, and the 80x24
+  native parity run (only the documented navigator identity cells
+  differ). On an owned scratch session both clients paged the same
+  scrollback region while the fixture program received nothing.
+## Input drain budget no longer ends the client (branch fix/input-drain)
+
+- hc-tui could exit with `error: Input drain limit exceeded; an older
+  route was closed`. The pane keeps at most eight in-flight route
+  drains; when a burst of parked-route closes pushed a ninth, the
+  oldest drain was dropped and the pane latched `close_error`. That
+  field doubles as the "Input drain failed" notice and the failure the
+  client reports at exit, so a routine budget eviction became a fatal
+  process exit. The burst is easy to reach: held keys pin every visited
+  wire, and detach (or losing outer-terminal focus, which releases all
+  forwarded leases) starts one drain per parked route back to back.
+- The eviction now records a sibling `dropped_drain` notice instead.
+  The pane still shows "Input drain failed" because queued input can be
+  lost, but `close_failure` never sees it, so the client keeps running
+  and exits cleanly. The route itself was already retiring, which is
+  the reference behavior at the same point: herdr revokes the congested
+  connection and recovers through the normal lifecycle, it never fails
+  the client. Reproduced end to end through `--remote` on an owned
+  scratch core with ten one-tab terminals and held F-keys; the binary
+  built before image paste fails identically, so this is not an
+  image-paste regression.
+- Gates: formatting, all-target Clippy and the full suite. The pane
+  test `many_parked_routes_at_detach_evict_a_drain_without_failing`
+  fails before the fix, and the new ignored end-to-end
+  `input_drain_e2e` drives the real `hc-tui --remote` through a fake
+  `ssh` and exits with the error before the fix. The 80x24 parity run
+  matched on every checkpoint except the documented navigator
+  footer-identity cells, and the installer and reference-vector gates
+  are unchanged.
+## Keyboard copy mode and popup selection (branch feat/copy-mode)
+
+- `Ctrl+B [` (`keys.copy_mode`) opens herdr's copy mode on the focused
+  pane: the copy cursor walks the visible screen and scrollback, `v`/`V`
+  start character/line selections, `y`/`Enter` copy through OSC 52 and
+  show the `copied to clipboard` card, and `Esc`/`q` unwind in the
+  reference's phases. Motions, word/paragraph atoms, `0 ^ $ g G`,
+  half/full paging and the `/` `?` `n` `N` literal search all run the
+  reference's own algorithms locally. hc has no `pane.copy-motion` or
+  `pane.copy-search` RPC, so the transport moved client-side while the
+  results and paints stay identical (docs/parity.md).
+- Mouse selection inside a popup terminal is ported too: drags select
+  over the popup's visible VT frame, report-tracking popup programs get
+  the events forwarded through the shared gesture continuation, and the
+  copied text rides the same OSC 52 path.
+- The copy-feedback card (`[ui.toast.clipboard]`) is implemented with
+  the reference's two-second lifetime and BottomCenter default.
+- Gates: formatting, all-target Clippy and the full suite, the 29
+  installer tests, all 13 reference vectors, and the parity harness at
+  80x24 and 40x24. Every copy-mode, popup-selection and toast
+  checkpoint matches cell for cell (only the documented navigator
+  footer-identity cells differ). On an owned scratch core, visual and
+  linewise yanks emitted the expected OSC 52 payloads (`line`, two
+  numbered fixture rows), copy-mode keys reached the pane program zero
+  times, and pane input resumed after exit.
+
+## CI: cache the Ghostty zig-pkg download (branch ci/zig-deps)
+
+- Every job that builds `hc-vt` (`checks`, `macos`, `integration` in
+  ci.yml and the release matrix) now restores
+  `vendor/ghostty/zig-pkg` through the composite action
+  `.github/actions/zig-deps`, keyed on the Ghostty zon files,
+  tools/install-zig.sh and tools/fetch-zig-deps.sh. On a miss,
+  `tools/fetch-zig-deps.sh` runs a real `zig build` with the same `-D`
+  flags as crates/hc-vt/build.rs (prefix and local cache in temp), so
+  the lazy dependencies the build requests while build.zig runs are
+  fetched too (about 33 MB; `zig build --fetch=needed` covers only the
+  eager set and leaves a partial cache). Up to 5 attempts, a
+  per-attempt timeout and linear backoff; on success it logs the
+  package count and size. The directory is saved right after the
+  fetch, before the build can fail for other reasons.
+  tools/build-test-core.sh warms the inner tree the same way before
+  its cargo build.
+- A populated zig-pkg alone builds offline: `zig build -Demit-lib-vt
+  -Doptimize=ReleaseFast -Dcpu=baseline` succeeded under `unshare -rn`
+  with an empty global cache and a fresh `--cache-dir` for the native,
+  x86_64-linux-musl, aarch64-linux-musl, x86_64-macos and aarch64-macos
+  targets, so no global-cache caching was needed. No proxy, no secrets.
+- Every job also got a `timeout-minutes` (up to 120 for a cold macOS
+  build). tools/test-fetch-zig-deps.sh exercises the retry loop against
+  stub zig binaries (flaky-then-ok, always failing, hung past the
+  timeout) and parses the workflow YAML; it runs in the checks job.
+- Gates: `cargo fmt --check`, `sh scripts/test-install.sh` and
+  `sh tools/test-fetch-zig-deps.sh` under the heavy-lock; no crates/
+  files were touched, so clippy and cargo test were not required.

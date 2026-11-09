@@ -2,6 +2,7 @@
 mod cases_1;
 mod cases_2;
 mod endpoint_nav;
+mod image_paste;
 mod layout;
 mod layout_regressions;
 mod m3a;
@@ -13,6 +14,7 @@ mod m4s4;
 mod m4s5;
 mod mouse_selection;
 mod narrow;
+mod page_keys;
 mod panel;
 mod reload;
 mod review_regressions;
