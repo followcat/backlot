@@ -206,6 +206,10 @@ pub struct Vt {
     hooks: Box<Hooks>,
     /// The overscan request currently in effect on the render state.
     pub(crate) overscan: u16,
+    /// Content mutation counter — the reference's `content_seq`, used by
+    /// copy mode to invalidate matches/motions computed against older
+    /// buffer contents. Scroll-only changes do not count.
+    content_revision: u64,
 }
 
 impl Vt {
@@ -253,6 +257,7 @@ impl Vt {
                 clipboard_writes: Vec::new(),
             }),
             overscan: 0,
+            content_revision: 0,
         };
         let ud: *const Hooks = &*vt.hooks;
         unsafe {
@@ -304,6 +309,7 @@ impl Vt {
     /// `ghostty_terminal_vt_write` cannot fail.
     pub fn feed(&mut self, bytes: &[u8]) {
         self.cursor_tracker.observe(bytes);
+        self.content_revision = self.content_revision.saturating_add(1);
         unsafe { ffi::ghostty_terminal_vt_write(self.raw, bytes.as_ptr(), bytes.len()) };
     }
 
@@ -338,7 +344,15 @@ impl Vt {
                 self.hooks.cell.1,
             )
         };
-        (rc == ffi::SUCCESS).then_some(()).ok_or(Error::Ghostty(rc))
+        (rc == ffi::SUCCESS)
+            .then(|| self.content_revision = self.content_revision.saturating_add(1))
+            .ok_or(Error::Ghostty(rc))
+    }
+
+    /// The content mutation counter — bumps on every `feed` and `resize`.
+    /// Copy mode snapshots it to notice buffer changes under it.
+    pub fn content_revision(&self) -> u64 {
+        self.content_revision
     }
 
     pub fn size(&self) -> Result<(u16, u16), Error> {

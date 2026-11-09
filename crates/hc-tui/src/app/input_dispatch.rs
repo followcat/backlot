@@ -38,22 +38,19 @@ impl App {
                 // single dropped image path on remote-capable targets;
                 // anything else stays text exactly as before.
                 if !self.try_image_paste_bridge(&text) {
-                    if self.insert_dialog_text(&String::from_utf8_lossy(&text)) {
+                    // The reference's Paste arm: an open copy-mode search
+                    // prompt takes the text first.
+                    let lossy = String::from_utf8_lossy(&text);
+                    if self.insert_copy_search_text(&lossy) || self.insert_dialog_text(&lossy) {
+                        // The copy search prompt or dialog consumed it.
                     } else if self.help {
-                        if self.help_state.search_focused
-                            && self
-                                .help_state
-                                .query
-                                .insert(&String::from_utf8_lossy(&text))
-                        {
+                        if self.help_state.search_focused && self.help_state.query.insert(&lossy) {
                             self.help_state.scroll = 0;
                         }
                     } else if let Some(navigator) = self.navigator.as_mut() {
                         // `insert_overlay_text`: the focused search takes
                         // paste as query text; unfocused, the overlay eats it.
-                        if navigator.search_focused
-                            && navigator.query.insert(&String::from_utf8_lossy(&text))
-                        {
+                        if navigator.search_focused && navigator.query.insert(&lossy) {
                             navigator.filter = None;
                             navigator.selected = None;
                         }
@@ -72,7 +69,8 @@ impl App {
             UiEvent::Key(key) => self.on_key(key, width),
             UiEvent::Text(text) => {
                 // IME/commit text: bytes only, never a UI binding.
-                if self.insert_dialog_text(&text) {
+                if self.insert_copy_search_text(&text) || self.insert_dialog_text(&text) {
+                    // The copy search prompt or dialog consumed it.
                 } else if self.help {
                     if self.help_state.search_focused && self.help_state.query.insert(&text) {
                         self.help_state.scroll = 0;

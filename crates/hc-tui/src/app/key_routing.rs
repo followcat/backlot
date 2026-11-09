@@ -130,18 +130,14 @@ impl App {
         // included: a matching press either starts an upload (consumed)
         // or, with no image on the clipboard, continues into normal
         // routing byte-for-byte. Re-dispatched repeats of a consumed
-        // press stop here.
-        if self.route_image_paste_key(key).is_some() {
+        // press stop here. Copy mode keeps the key for its own dispatch —
+        // the reference's modal-paste arm never pastes into the pane.
+        if self.copy_or_terminal_mode() != Mode::Copy && self.route_image_paste_key(key).is_some() {
             return None;
         }
-        // The floating popup eats every key while open — the reference
-        // routes raw input to it before UI bindings (`popup.rs`).
-        if self.popup_key(&press) {
-            return None;
-        }
-        if self.peek_key(&press) {
-            return None;
-        }
+        // The reference's Ctrl+G arm precedes the popup and the lock:
+        // copy mode exits without copying, selections clear, then the
+        // lock toggles.
         if key.input.key == Key::Char('g')
             && key.input.mods == hc_vt::Mods::CTRL
             && (self.keyboard_locked
@@ -152,15 +148,26 @@ impl App {
                     && self.settings.is_none()))
         {
             if key.input.action == Action::Press {
-                self.keyboard_locked = !self.keyboard_locked;
-                self.prefix.reset();
+                self.exit_copy_mode(false);
                 self.mode = Mode::Normal;
                 self.navigate_target = None;
+                self.selection = None;
+                self.stop_selection_autoscroll();
+                self.keyboard_locked = !self.keyboard_locked;
+                self.prefix.reset();
             }
             return None;
         }
         if self.keyboard_locked {
             return self.pane.target().map(|_| self.pane.generation());
+        }
+        // The floating popup eats every key while open — the reference
+        // routes raw input to it before UI bindings (`popup.rs`).
+        if self.popup_key(&press) {
+            return None;
+        }
+        if self.peek_key(&press) {
+            return None;
         }
         if self.dialog.is_some() {
             self.dialog_key(&press);
@@ -188,8 +195,12 @@ impl App {
         // The reference clears the word gesture on any key and lets a
         // retained (non `copy_on_select`) selection copy on Ctrl/Cmd+C;
         // every other key reaching pane dispatch clears the highlight.
+        // Both arms stay out of Copy mode — the copy-mode selection and
+        // its search state survive until its own keys act.
         self.word_selection = None;
-        if !self.shell.copy_on_select
+        let outside_copy = self.mode != Mode::Copy && self.copy_or_terminal_mode() != Mode::Copy;
+        if outside_copy
+            && !self.shell.copy_on_select
             && matches!(press.input.key, Key::Char('c' | 'C'))
             && matches!(press.input.mods, m if m == hc_vt::Mods::CTRL || m == hc_vt::Mods::SUPER)
             && self
@@ -204,7 +215,7 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return None;
         }
-        if self.selection.take().is_some() {
+        if outside_copy && self.selection.take().is_some() {
             self.stop_selection_autoscroll();
             self.selection_highlight_clear_deadline = None;
             self.sched.mark_dirty(Instant::now());
@@ -213,6 +224,25 @@ impl App {
             if let Some(nav) = super::input::navigate_key(&press, &self.live) {
                 self.on_navigate(nav);
             }
+            return None;
+        }
+        // The reference's `ClientShellMode::Copy` arm: the prefix keys out
+        // to the prefix machine only while no search prompt is open;
+        // every other key belongs to copy mode alone.
+        if self.mode == Mode::Copy {
+            if self
+                .copy_mode
+                .as_ref()
+                .is_none_or(|copy_mode| copy_mode.search_prompt.is_none())
+                && self
+                    .live
+                    .matches_prefix(&crate::input::terminal_key_of(&press))
+            {
+                self.mode = Mode::Normal;
+                let _ = self.prefix.feed(&press, &self.live);
+                return None;
+            }
+            self.route_copy_mode_key(&press);
             return None;
         }
         match (!self.prefix.armed())
@@ -232,29 +262,36 @@ impl App {
                 self.run_custom_command(&command);
                 None
             }
-            None => match self.prefix.feed(&press, &self.live) {
-                Decision::Action(action) => {
-                    self.on_action(action, width);
-                    None
-                }
-                Decision::Command(command) => {
-                    self.run_custom_command(&command);
-                    None
-                }
-                Decision::Held => None,
-                Decision::ToTerm(forwarded)
-                    if matches!(forwarded.input.key, Key::Functional(_)) =>
-                {
-                    // The pinned Linux thin-client consumes these reports;
-                    // actual reference lock/keypad/media captures produce no
-                    // program bytes. Keep their typed shape out of text paths.
-                    None
-                }
-                Decision::ToTerm(forwarded) => {
-                    debug_assert_eq!(forwarded.input, press.input);
-                    self.pane.target().map(|_| self.pane.generation())
-                }
-            },
+            None => {
+                let target = match self.prefix.feed(&press, &self.live) {
+                    Decision::Action(action) => {
+                        self.on_action(action, width);
+                        None
+                    }
+                    Decision::Command(command) => {
+                        self.run_custom_command(&command);
+                        None
+                    }
+                    Decision::Held => None,
+                    Decision::ToTerm(forwarded)
+                        if matches!(forwarded.input.key, Key::Functional(_)) =>
+                    {
+                        // The pinned Linux thin-client consumes these reports;
+                        // actual reference lock/keypad/media captures produce no
+                        // program bytes. Keep their typed shape out of text paths.
+                        None
+                    }
+                    Decision::ToTerm(forwarded) => {
+                        debug_assert_eq!(forwarded.input, press.input);
+                        self.pane.target().map(|_| self.pane.generation())
+                    }
+                };
+                // The reference's Prefix `return_mode`: every exit from
+                // the prefix machine re-arms Copy when its pane is still
+                // focused (`sync_copy_focus` no-ops while armed).
+                self.sync_copy_focus();
+                target
+            }
         }
     }
 

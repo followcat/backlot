@@ -18,6 +18,9 @@ impl App {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
             }
             A::OpenNotificationTarget => self.focus_visible_notification(),
+            A::CopyMode => {
+                self.enter_copy_mode();
+            }
             A::OpenNavigator => self.open_navigator_overlay(),
             A::WorkspacePicker => self.enter_workspace_picker(),
             // Workspace-level actions don't require a focused workspace to

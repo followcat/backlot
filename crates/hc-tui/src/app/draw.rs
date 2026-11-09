@@ -151,35 +151,101 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()
+        || app.mode == Mode::Copy
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
+    // The reference rebuilds the whole frame as ratatui cells whenever a
+    // selection/search highlight or the copy-mode cursor paints
+    // (wire.rs u16_to_modifier drops the extended underline bits), so the
+    // styled underlines of every already-painted pane cell collapse to
+    // single. Track whether this frame hits any of those paths.
+    let mut pane_overlay_flatten = app
+        .selection
+        .as_ref()
+        .is_some_and(|selection| selection.is_visible())
+        || app
+            .copy_mode
+            .as_ref()
+            .is_some_and(|copy_mode| !copy_mode.search_matches.is_empty());
     for info in &pane_infos {
+        let Some((content, track, scroll)) = app
+            .displayed_pane(&info.id)
+            .map(|pane| inner_for(pane, info, scrollbars))
+        else {
+            continue;
+        };
+        let hit = crate::chrome::render::PaneHit {
+            rect: info.rect,
+            inner_rect: content,
+            scrollbar_rect: track,
+            scroll,
+            pane_id: info.id.clone(),
+        };
+        // The reference's `apply_pane_surface`: the frame's metrics sync
+        // the copy snapshot before its highlights and cursor paint.
+        app.sync_copy_surface(&info.id, content, scroll);
+        let copy_coherent = super::copy_render::copy_surface_coherent(app.copy_mode.as_ref(), &hit);
+        let suppressed = !info.is_focused || hide_cursor;
         let Some(pane) = app.displayed_pane_mut(&info.id) else {
             continue;
         };
-        let (content, track, scroll) = inner_for(pane, info, scrollbars);
-        let suppressed = !info.is_focused || hide_cursor;
         let wish = draw_terminal(pane, content, buf, _now, suppressed);
-        crate::chrome::selection_highlight::render_selection_highlight(
-            app.selection.as_ref(),
-            buf,
-            &info.id,
-            content,
-            scroll,
-            &app.shell.palette,
-            &app.host_facts.theme,
-        );
+        // The reference paints non-current matches over the already
+        // composed pane surface, then the selection, then the current
+        // match and the copy cursor.
+        if copy_coherent {
+            super::copy_render::render_copy_search_highlights(
+                buf,
+                app.copy_mode.as_ref(),
+                &hit,
+                &app.shell.palette,
+                false,
+            );
+        }
+        let stale_copy_projection = !copy_coherent
+            && app
+                .copy_mode
+                .as_ref()
+                .is_some_and(|copy_mode| copy_mode.pane_id == info.id)
+            && app
+                .selection
+                .as_ref()
+                .is_some_and(|selection| selection.pane_id == info.id);
+        if !stale_copy_projection {
+            crate::chrome::selection_highlight::render_selection_highlight(
+                app.selection.as_ref(),
+                buf,
+                &info.id,
+                content,
+                scroll,
+                &app.shell.palette,
+                &app.host_facts.theme,
+            );
+        }
+        if copy_coherent {
+            super::copy_render::render_copy_search_highlights(
+                buf,
+                app.copy_mode.as_ref(),
+                &hit,
+                &app.shell.palette,
+                true,
+            );
+            if app.mode == Mode::Copy
+                && let Some(copy_mode) = app.copy_mode.as_ref()
+            {
+                pane_overlay_flatten |= super::copy_render::render_copy_cursor(
+                    buf,
+                    copy_mode,
+                    &hit,
+                    &app.shell.palette,
+                );
+            }
+        }
         if info.is_focused {
             cursor = wish;
         }
         if !info.id.is_empty() {
-            app.hit_map.panes.push(crate::chrome::render::PaneHit {
-                rect: info.rect,
-                inner_rect: content,
-                scrollbar_rect: track,
-                scroll,
-                pane_id: info.id.clone(),
-            });
+            app.hit_map.panes.push(hit);
         }
         crate::chrome::panes_draw::render_pane_scrollbar(
             buf,
@@ -188,6 +254,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.shell.palette,
             info.is_focused,
         );
+    }
+    if pane_overlay_flatten {
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
     }
     let mode_bar_area = if layout.mobile_header.is_empty()
         && app.shell.tab_bar_position == crate::config::TabBarPositionConfig::Bottom
@@ -218,9 +289,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 }
                 Mode::Normal => crate::chrome::modebar::ClientShellMode::Terminal,
                 Mode::Navigate => crate::chrome::modebar::ClientShellMode::Navigate,
+                Mode::Copy => crate::chrome::modebar::ClientShellMode::Copy,
                 Mode::Resize => crate::chrome::modebar::ClientShellMode::Resize,
             },
             app.keyboard_locked,
+            app.copy_mode.as_ref(),
             None,
             false,
             &app.live,
@@ -234,11 +307,15 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         app.hit_map.tab_scroll_right = Rect::default();
     }
     // The mobile switcher IS the Navigate surface under the threshold —
-    // `composition.rs` renders it over the whole frame.
+    // `composition.rs` renders it over the whole frame, rebuilding the
+    // wire frame as ratatui cells (dropping extended underline bits).
     if layout.mobile_header.height > 0
         && app.mode == Mode::Navigate
         && !app.mobile_switcher_suspended
     {
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
         crate::chrome::mobile_switcher::render_mobile_switcher(
             buf,
             area,
@@ -272,6 +349,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     };
     let mut config_covered = Vec::new();
     if let Some(diagnostic) = app.shell.startup_config_diagnostic.as_deref() {
+        // The reference composes the diagnostic card through the ratatui
+        // rebuild, dropping extended underline bits first.
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
         let diagnostic_area = if layout.mobile_header.is_empty() {
             area
         } else {
@@ -294,6 +376,38 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
                 .collect()
         })
         .unwrap_or_default();
+    // The `copied to clipboard` card sits under the popup and the
+    // notices — the reference composes it after its toast and before
+    // the popup. The notification hit from the last frame is the toast
+    // it must not overlap.
+    if let Some(feedback) = app.copy_feedback.as_ref() {
+        // Same ratatui rebuild as the other overlays: extended underline
+        // bits drop before the card paints.
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+        }
+        let feedback_area = if layout.mobile_header.is_empty() {
+            layout.pane_surface
+        } else {
+            area
+        };
+        let base = u16::from(!config_covered.is_empty());
+        let offset = crate::chrome::copy_feedback::copy_feedback_offset_for_toast(
+            feedback_area,
+            &feedback.message,
+            base,
+            app.shell.clipboard_toast_position,
+            app.notification_hit,
+        );
+        crate::chrome::copy_feedback::render_copy_feedback_buffer(
+            buf,
+            feedback_area,
+            &feedback.message,
+            offset,
+            app.shell.clipboard_toast_position,
+            &app.shell.palette,
+        );
+    }
     app.draw_popups(buf, _now);
     super::notices::render(app, buf, area);
     if let Some(bar) = mode_bar {

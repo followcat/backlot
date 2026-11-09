@@ -17,6 +17,8 @@ toml = "=0.8.23"
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 unicode-segmentation = "1.12.0"
 unicode-width = "0.2.2"
+# The reference's literal-search engine (regex::escape + case rules).
+regex = "1.11"
 futures-lite = "2"
 serde_ignored = "0.1.14"
 signal-hook = "0.3"

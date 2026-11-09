@@ -72,6 +72,10 @@ impl App {
             }
         }
         self.pane.want(desired);
+        // Focus restores (navigate cancel, sidebar clicks) re-arm Copy
+        // when the copy pane is focused again — the reference's
+        // `apply_active_snapshot` arm.
+        self.sync_copy_focus();
     }
 
     /// Synthesized releases for pane-bound presses on real detach —

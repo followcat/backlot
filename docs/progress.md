@@ -550,3 +550,24 @@
   matched on every checkpoint except the documented navigator
   footer-identity cells, and the installer and reference-vector gates
   are unchanged.
+## Keyboard copy mode (branch feat/copy-mode)
+
+- `Ctrl+B [` (`keys.copy_mode`) opens herdr's copy mode on the focused
+  pane: the copy cursor walks the visible screen and scrollback, `v`/`V`
+  start character/line selections, `y`/`Enter` copy through OSC 52 and
+  show the `copied to clipboard` card, and `Esc`/`q` unwind in the
+  reference's phases. Motions, word/paragraph atoms, `0 ^ $ g G`,
+  half/full paging and the `/` `?` `n` `N` literal search all run the
+  reference's own algorithms locally — hc has no `pane.copy-motion` or
+  `pane.copy-search` RPC, so the transport moved client-side while the
+  results and paints stay identical (docs/parity.md).
+- The copy-feedback card (`[ui.toast.clipboard]`) is implemented with
+  the reference's two-second lifetime and BottomCenter default.
+- Gates: formatting, all-target Clippy and the full suite, the 29
+  installer tests, all 13 reference vectors, and the parity harness at
+  80x24 and 40x24 — every copy-mode and toast checkpoint matches cell
+  for cell (only the documented navigator footer-identity cells
+  differ). On an owned scratch core, visual and linewise yanks emitted
+  the expected OSC 52 payloads (`line`, two numbered fixture rows),
+  copy-mode keys reached the pane program zero times, and pane input
+  resumed after exit.

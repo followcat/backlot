@@ -174,6 +174,7 @@ impl App {
                     .chain(self.next_tab_status)
                     .chain(self.selection_autoscroll_deadline)
                     .chain(self.selection_highlight_clear_deadline)
+                    .chain(self.copy_feedback_deadline)
                     .min()
             };
             self.probe
@@ -249,7 +250,7 @@ impl App {
             }
             self.expire_notice(now);
             self.tick_notifications(now);
-            if self.tick_selection(now) {
+            if self.tick_selection(now) | self.tick_copy_feedback(now) {
                 self.sched.mark_dirty(now);
             }
             self.drain_bells();

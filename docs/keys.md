@@ -41,6 +41,37 @@ back to the bottom. The mouse wheel scrolls the pane the same way.
 Inside a floating terminal (`type = "popup"`), every key goes to the popup's program, so `PageUp` and
 `PageDown` do not page the pane behind it.
 
+## Copy mode
+
+`Ctrl+B [` enters copy mode on the focused pane. The program gets none of these keys; the copy cursor
+walks the visible screen and the scrollback above it, and `y` copies the selection through OSC 52.
+
+| Keys | Action |
+|---|---|
+| `h` `j` `k` `l` or arrows | Move the copy cursor |
+| `w` `b` `e` | Next word start, previous word start, word end |
+| `W` `B` `E` | Same, on whitespace-delimited big words |
+| `{` `}` | Previous or next paragraph (blank line) |
+| `0` `Home` | Line start |
+| `^` `$` `End` | First non-blank cell, line end |
+| `g` `G` | Top of history, bottom of the screen |
+| `Ctrl+U` `Ctrl+D` | Half page up, half page down |
+| `PageUp` `PageDown` | Full page up, full page down |
+| `/`, `?` | Search forward or backward; `Enter` runs it, `Esc` cancels |
+| `n` `N` | Repeat the search forward or backward |
+| `v` or `Space` | Start a selection; `V` selects whole lines |
+| `y` or `Enter` | Copy the selection and leave copy mode |
+| `Esc` | Clear the selection or search; press again to leave |
+| `q` | Leave copy mode |
+
+Rebind the entry key with `keys.copy_mode` in your Herdr config, for example `copy_mode = "prefix+escape"`.
+
+The prefix still arms inside copy mode (unless a search prompt is open): press it, then a normal
+binding key, or `Esc` to cancel the armed prefix. Because the prefix key is claimed first, the
+copy-mode `Ctrl+B`/`Ctrl+F` page keys only fire when you have bound a different prefix.
+
+Entering copy mode drops any mouse selection in progress.
+
 ## Alt shortcuts
 
 None of these are bound by default. Add the ones you want to `~/.config/herdr/config.toml`, then press `Ctrl+B Shift+R`

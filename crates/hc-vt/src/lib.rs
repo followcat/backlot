@@ -27,6 +27,7 @@ mod ffi;
 mod key;
 mod mouse;
 mod render;
+mod screen_text;
 mod text;
 mod vt;
 
@@ -35,6 +36,7 @@ pub use data::{
 };
 pub use key::{Action, Key, KeyInput, Mods, VtKeyEvent};
 pub use mouse::{MouseAction, MouseButton, MouseInput, MousePosition};
+pub use screen_text::{KITTY_UNICODE_PLACEHOLDER, ScreenTextCell, ScreenTextRow};
 pub use text::codepoint_width;
 pub use vt::{Error, Vt};
 

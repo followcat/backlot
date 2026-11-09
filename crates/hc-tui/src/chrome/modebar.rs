@@ -1,6 +1,4 @@
 // Derived from herdr src/client/shell/render.rs::render_mode_bar (Apache-2.0).
-// Copy-mode chrome is deferred (see docs/parity.md); hc-tui's M2 modes are
-// Terminal, Prefix, Navigate, Resize plus keyboard-lock/endpoint-error.
 
 use ratatui::{
     buffer::Buffer,
@@ -11,13 +9,16 @@ use unicode_width::UnicodeWidthStr;
 
 use super::palette::Palette;
 use super::render::put_right_text;
+use crate::app::copy_mode::CopyModeState;
 use crate::config::LiveKeybindConfig;
+use crate::copy_mode::CopySearchDirection;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClientShellMode {
     Terminal,
     Prefix,
     Navigate,
+    Copy,
     Resize,
 }
 
@@ -27,6 +28,7 @@ pub(crate) fn render_mode_bar(
     pane_area: Rect,
     mode: ClientShellMode,
     keyboard_locked: bool,
+    copy_mode: Option<&CopyModeState>,
     endpoint_error: Option<&str>,
     update_available: bool,
     keybinds: &LiveKeybindConfig,
@@ -122,6 +124,78 @@ pub(crate) fn render_mode_bar(
                     ("esc".to_owned(), key),
                     (" done".to_owned(), base),
                 ]);
+            }
+            ClientShellMode::Copy => {
+                let copy_mode = copy_mode?;
+                if let Some(prompt) = copy_mode.search_prompt.as_ref() {
+                    let marker = match prompt.direction {
+                        CopySearchDirection::Forward => "/",
+                        CopySearchDirection::Backward => "?",
+                    };
+                    buffer.set_stringn(bar.x, bar.y, " COPY ", usize::from(bar.width), mode_style);
+                    let prefix = 8.min(bar.width);
+                    if bar.width >= 8 {
+                        buffer.set_string(bar.x + 7, bar.y, marker, key);
+                    }
+                    let footer = "  enter search  esc cancel";
+                    let footer_width = if bar.width >= 50 {
+                        footer.len() as u16
+                    } else {
+                        0
+                    };
+                    let field = Rect::new(
+                        bar.x + prefix,
+                        bar.y,
+                        bar.width.saturating_sub(prefix + footer_width),
+                        1,
+                    );
+                    if let Some(cursor) = super::text_editor::render(
+                        buffer,
+                        field,
+                        &prompt.query,
+                        Style::default().fg(palette.text).bg(palette.panel_bg),
+                    ) {
+                        buffer[(cursor.x, cursor.y)]
+                            .set_style(Style::default().fg(palette.panel_bg).bg(palette.text));
+                    }
+                    if footer_width > 0 {
+                        buffer.set_string(bar.right() - footer_width, bar.y, footer, base);
+                    }
+                    return Some(bar);
+                } else {
+                    let select = if copy_mode.selection.is_some() {
+                        "selecting"
+                    } else {
+                        "select"
+                    };
+                    let match_status = copy_mode
+                        .search_current_global
+                        .map(|current| format!(" {}/{}", current + 1, copy_mode.search_total))
+                        .or_else(|| (!copy_mode.search_query.is_empty()).then(|| " 0/0".to_owned()))
+                        .unwrap_or_default();
+                    let (exit_keys, exit_label) =
+                        if copy_mode.search_query.is_empty() && copy_mode.selection.is_none() {
+                            ("q/esc", " exit")
+                        } else {
+                            ("esc", " clear  q exit")
+                        };
+                    segments.extend([
+                        (" COPY ".to_owned(), mode_style),
+                        (" ".to_owned(), base),
+                        ("h/j/k/l w/b/e { }".to_owned(), key),
+                        (" move  ".to_owned(), base),
+                        ("/ ?".to_owned(), key),
+                        (" search  ".to_owned(), base),
+                        ("n/N".to_owned(), key),
+                        (format!(" repeat{match_status}  "), base),
+                        ("v/space".to_owned(), key),
+                        (format!(" {select}  "), base),
+                        ("y/enter".to_owned(), key),
+                        (" copy  ".to_owned(), base),
+                        (exit_keys.to_owned(), key),
+                        (exit_label.to_owned(), base),
+                    ]);
+                }
             }
             ClientShellMode::Terminal => unreachable!(),
         }
