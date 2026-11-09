@@ -66,6 +66,7 @@ fn delivered_and_cleared_links_validate() {
             to: "director".into(),
             file: None,
             purpose: None,
+            source_seq: None,
         },
     ));
     base.push(ev(

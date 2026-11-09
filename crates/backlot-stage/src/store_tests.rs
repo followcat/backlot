@@ -28,6 +28,7 @@ fn msg(i: impl std::fmt::Display) -> NewEvent {
             to: "director".into(),
             file: Some(format!("messages/{i}.md")),
             purpose: None,
+            source_seq: None,
         },
     )
 }

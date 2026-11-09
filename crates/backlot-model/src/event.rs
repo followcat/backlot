@@ -84,6 +84,20 @@ pub enum PlanKind {
     Acceptance,
 }
 
+/// A recorded `role.approval` decision answering an open `permission
+/// prompt` attention (D9). The stage sends the runner's approval key
+/// only while the prompt still shows — never without one of these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+}
+
+/// The `attention` reason a permission prompt raises (D9): a role
+/// sampled `blocked` for two samples raises one per blocked episode.
+pub const PERMISSION_PROMPT: &str = "permission prompt";
+
 /// A task's display priority (R20, D11): it orders people in the
 /// panel and nothing else — scheduling never reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -363,6 +377,11 @@ pub enum EventKind {
         /// reads it to know when the writer is wanted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         purpose: Option<String>,
+        /// The seq of the source event a stage-generated notice
+        /// relays, so a notice is owed only while no message carries
+        /// its source's seq — a stage restart repeats nothing.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_seq: Option<u64>,
     },
     /// `target` is the seq of the `message.queued` event.
     #[serde(rename = "message.delivered")]
@@ -386,6 +405,21 @@ pub enum EventKind {
         target: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+    },
+    /// `role.approval`: a permission-prompt decision (D9). Refused
+    /// unless `role` has an open `permission prompt` attention.
+    #[serde(rename = "role.approval")]
+    RoleApproval {
+        role: String,
+        decision: ApprovalDecision,
+    },
+    /// `studio.finished`: the producer or user ended the studio.
+    /// Refused while any task is not terminal. From here on only
+    /// explicitly reopened people are desired.
+    #[serde(rename = "studio.finished")]
+    StudioFinished {
+        #[serde(default)]
+        reason: String,
     },
     /// `target` is the seq of the event being corrected; `set` holds
     /// the changed fields. The earlier event stays in the log.
@@ -428,6 +462,8 @@ impl EventKind {
             EventKind::ReportSent { .. } => "report.sent",
             EventKind::AttentionRaised { .. } => "attention.raised",
             EventKind::AttentionCleared { .. } => "attention.cleared",
+            EventKind::RoleApproval { .. } => "role.approval",
+            EventKind::StudioFinished { .. } => "studio.finished",
             EventKind::Correction { .. } => "correction",
         }
     }

@@ -37,6 +37,7 @@ fn plan_request(seq: u64) -> Event {
             to: "writer".into(),
             file: None,
             purpose: Some("plan".into()),
+            source_seq: None,
         },
     )
 }
@@ -49,6 +50,7 @@ fn dispatch(seq: u64) -> Event {
             to: "director".into(),
             file: Some("messages/d.md".into()),
             purpose: Some("dispatch".into()),
+            source_seq: None,
         },
     )
 }

@@ -77,6 +77,11 @@ pub struct CastRecord {
     /// The display priority this cast set, when it set one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<Priority>,
+    /// Who recorded the cast (`by.role`); a light-path producer cast
+    /// routes the task's delivery notice to the producer. Empty on
+    /// logs that predate the field.
+    #[serde(default)]
+    pub by: String,
     pub seq: u64,
     pub ts_ms: u64,
 }
@@ -236,6 +241,10 @@ pub struct Message {
     /// fixed meaning; unset for `tell`/`ask`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
+    /// For a stage-generated notice, the seq of the source event it
+    /// relays — the dedup key that keeps a restart from repeating it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_seq: Option<u64>,
     pub delivered: bool,
 }
 
@@ -255,6 +264,27 @@ pub struct Attention {
     pub reason: String,
     pub detail: String,
     pub open: bool,
+    /// When the raise was recorded; a permission-prompt episode
+    /// dedups on "an attention at or after the episode's start".
+    #[serde(default)]
+    pub ts_ms: u64,
+}
+
+/// A recorded `role.approval` — a permission-prompt decision.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ApprovalRecord {
+    pub seq: u64,
+    pub role: String,
+    pub decision: ApprovalDecision,
+    pub ts_ms: u64,
+}
+
+/// The `studio.finished` record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FinishRecord {
+    pub seq: u64,
+    pub reason: String,
+    pub ts_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -286,6 +316,12 @@ pub struct StudioState {
     pub reports: Vec<ReportRecord>,
     #[serde(default)]
     pub attention: Vec<Attention>,
+    /// `role.approval` records, in log order.
+    #[serde(default)]
+    pub approvals: Vec<ApprovalRecord>,
+    /// `studio.finished`; `Some` means the studio ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished: Option<FinishRecord>,
     #[serde(default)]
     pub corrections: Vec<CorrectionRecord>,
     /// seq → what the event touched, for corrections and links.

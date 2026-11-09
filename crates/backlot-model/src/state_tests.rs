@@ -44,6 +44,7 @@ fn script() -> Vec<Event> {
                 to: "director".into(),
                 file: Some("messages/10-note.md".into()),
                 purpose: None,
+                source_seq: None,
             },
         ),
         ev(11, "stage", EventKind::MessageDelivered { target: 10 }),

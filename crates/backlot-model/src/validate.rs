@@ -138,6 +138,38 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 _ => Err(Refusal::NoAttention(*target)),
             }
         }
+        // An approval answers an open `permission prompt` attention —
+        // refusing without one keeps the stage from answering a prompt
+        // nobody recorded a decision for.
+        EventKind::RoleApproval { role, .. } => {
+            require_studio(state)?;
+            let open = state
+                .open_attention()
+                .any(|a| a.role == *role && a.reason == PERMISSION_PROMPT);
+            if open {
+                Ok(())
+            } else {
+                Err(Refusal::NoPermissionPrompt(role.clone()))
+            }
+        }
+        EventKind::StudioFinished { .. } => {
+            require_studio(state)?;
+            if state.finished.is_some() {
+                return Err(Refusal::AlreadyFinished);
+            }
+            let mut open: Vec<String> = state
+                .tasks
+                .values()
+                .filter(|t| !t.status.is_terminal())
+                .map(|t| t.id.clone())
+                .collect();
+            open.sort();
+            if open.is_empty() {
+                Ok(())
+            } else {
+                Err(Refusal::UnfinishedTasks(open))
+            }
+        }
         EventKind::ReqVersion { version, .. } => {
             require_studio(state)?;
             let expected = state.requirement_version + 1;

@@ -57,6 +57,7 @@ fn raised(role: &str) -> Attention {
         reason: SESSION_NOT_FOUND.into(),
         detail: String::new(),
         open: true,
+        ts_ms: 0,
     }
 }
 
@@ -286,6 +287,7 @@ fn session_event_timing() {
             reason: SESSION_NOT_FOUND.into(),
             detail: String::new(),
             open,
+            ts_ms: 0,
         });
     }
     assert_eq!(

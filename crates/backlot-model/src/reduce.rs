@@ -182,6 +182,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     actor: actor.clone(),
                     reason: reason.clone(),
                     priority: *priority,
+                    by: event.by.role.clone(),
                     seq,
                     ts_ms: ts,
                 });
@@ -308,13 +309,19 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 reduce_task(t, cap);
             }
         }
-        EventKind::MessageQueued { to, file, purpose } => {
+        EventKind::MessageQueued {
+            to,
+            file,
+            purpose,
+            source_seq,
+        } => {
             state.messages.push(Message {
                 seq,
                 from: event.by.role.clone(),
                 to: to.clone(),
                 file: file.clone(),
                 purpose: purpose.clone(),
+                source_seq: *source_seq,
                 delivered: false,
             });
             state
@@ -351,6 +358,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 reason: reason.clone(),
                 detail: detail.clone(),
                 open: true,
+                ts_ms: ts,
             });
             state
                 .targets
@@ -362,6 +370,21 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             {
                 a.open = false;
             }
+        }
+        EventKind::RoleApproval { role, decision } => {
+            state.approvals.push(ApprovalRecord {
+                seq,
+                role: role.clone(),
+                decision: *decision,
+                ts_ms: ts,
+            });
+        }
+        EventKind::StudioFinished { reason } => {
+            state.finished = Some(FinishRecord {
+                seq,
+                reason: reason.clone(),
+                ts_ms: ts,
+            });
         }
         EventKind::Correction {
             target,

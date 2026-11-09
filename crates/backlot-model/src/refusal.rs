@@ -80,6 +80,9 @@ pub enum Refusal {
     MessageDone(u64),
     NoAttention(u64),
     AttentionDone(u64),
+    NoPermissionPrompt(String),
+    UnfinishedTasks(Vec<String>),
+    AlreadyFinished,
     NoCorrectionTarget(u64),
     BadCorrectionKey {
         target: u64,
@@ -183,6 +186,13 @@ impl fmt::Display for Refusal {
             Refusal::MessageDone(seq) => write!(f, "message at {seq} is already delivered"),
             Refusal::NoAttention(seq) => write!(f, "event {seq} is not an attention raise"),
             Refusal::AttentionDone(seq) => write!(f, "attention at {seq} is already cleared"),
+            Refusal::NoPermissionPrompt(role) => {
+                write!(f, "role '{role}' has no open permission prompt")
+            }
+            Refusal::UnfinishedTasks(tasks) => {
+                write!(f, "cannot finish; open tasks: {}", tasks.join(", "))
+            }
+            Refusal::AlreadyFinished => write!(f, "studio is already finished"),
             Refusal::NoCorrectionTarget(seq) => {
                 write!(f, "no correctable event at seq {seq}")
             }
