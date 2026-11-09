@@ -1,5 +1,27 @@
 # Studio progress
 
+## S7a: merge hc-tui main at 2c85e84 (2026-11-10)
+
+- Done: upstream's 35 commits landed as merge `d05843b` — keyboard copy mode, PgUp/PgDn
+  scrollback, image paste, OSC 52, the input-drain fix, starting a missing local core,
+  `install.sh` installing `hc`, and the user-doc rewrite. All ten conflicts kept both sides:
+  copy mode routes before the panel (a copy-mode search prompt takes even the panel chord's
+  keys), the chord still toggles from normal mode, a focused panel eats text and image paste,
+  hide-cursor keeps the panel-fullscreen and Copy arms, and the tick runs `tick_panel` plus
+  `tick_selection` and `tick_copy_feedback` independently. Installer and docs keep the backlot
+  name, `BACKLOT_*` variables and the releases/download URL while taking the core-install
+  behavior (`BACKLOT_SKIP_CORE`, `BACKLOT_CORE_URL`); upstream's `github.io` install shortcut
+  and its pages workflow were dropped.
+- Measured: four new tests pin the merge decisions — the chord toggles the panel from normal
+  mode, a copy-mode search prompt receives the chord's keys, a focused panel eats an image
+  paste, and `tick_panel` runs on a tick where the selection also ticks. All gates green:
+  `cargo fmt --check`, clippy with `-D warnings`, `cargo test` (every suite, 0 failures),
+  `parity_cells` (3), the parity Python tests (31), `test-install.sh` (29 checks covering
+  `BACKLOT_SKIP_CORE` and a stub `BACKLOT_CORE_URL`), `test-fetch-zig-deps.sh` (15),
+  `real_core_smoke` (1) and `real_stage` (5) against the real pinned `hc`.
+- Not verified: the parity harness was not run — the maintainer runs it. No real agent or live
+  panel session was exercised, and no release was tagged.
+
 ## S6b: recover after a restart (2026-11-10)
 
 - Done: a `backlot stage start` after an hc restart brings the studio back from the ledger alone. A
