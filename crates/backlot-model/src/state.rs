@@ -229,6 +229,11 @@ pub struct RoleState {
     /// history, kept so a stage restart does not lose the count.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub losses: Vec<u64>,
+    /// The seq of the `role.resumed` with reason `recovered`, while
+    /// the recovered notice is owed — any other resume or start
+    /// clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovered_seq: Option<u64>,
 }
 
 impl RoleState {

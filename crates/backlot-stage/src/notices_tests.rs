@@ -185,6 +185,102 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
     );
 }
 
+/// A `role.resumed` with reason `recovered` owes the role itself
+/// exactly one `recovered` notice — the terminal was lost, the
+/// session resumed, anything running then has stopped, a
+/// permission-prompted command must be run again. A `reopened`
+/// resume owes none.
+#[test]
+fn a_recovered_resume_owes_the_role_one_notice() {
+    let resumed = |seq: u64, role: &str, reason: &str| {
+        (
+            "stage",
+            EventKind::RoleResumed {
+                role: role.into(),
+                terminal: Some(format!("t{seq}")),
+                actor: Some(actor("a")),
+                session_id: Some("sess-1".into()),
+                reason: Some(reason.into()),
+            },
+        )
+    };
+    let mut state = state_with(
+        &base_events(),
+        vec![
+            (
+                "stage",
+                EventKind::RoleStarted {
+                    role: "producer".into(),
+                    terminal: Some("t4".into()),
+                    actor: Some(actor("a")),
+                    session_id: Some("sess-1".into()),
+                    reason: None,
+                },
+            ),
+            resumed(5, "producer", "recovered"),
+        ],
+    );
+    let owed = notices::owed(&state, dir());
+    let recovered: Vec<_> = owed.iter().filter(|n| n.label == "recovered").collect();
+    assert_eq!(recovered.len(), 1, "{owed:?}");
+    let n = recovered[0];
+    assert_eq!(n.to, "producer");
+    assert_eq!(n.source_seq, 5);
+    for want in [
+        "terminal was lost",
+        "resumed its session",
+        "has stopped",
+        "backlot status",
+        "permission prompt",
+        "run again",
+    ] {
+        assert!(
+            n.body.contains(want),
+            "recovered body misses {want}: {}",
+            n.body
+        );
+    }
+
+    // Queued once: nothing is owed again — a restart repeats nothing.
+    state.messages.push(Message {
+        seq: 40,
+        from: "stage".into(),
+        to: "producer".into(),
+        file: Some("messages/5-recovered.md".into()),
+        purpose: None,
+        source_seq: Some(5),
+        delivered: false,
+    });
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "recovered")
+    );
+
+    // A `reopened` resume owes none.
+    let state = state_with(
+        &base_events(),
+        vec![
+            (
+                "stage",
+                EventKind::RoleStarted {
+                    role: "producer".into(),
+                    terminal: Some("t4".into()),
+                    actor: Some(actor("a")),
+                    session_id: Some("sess-1".into()),
+                    reason: None,
+                },
+            ),
+            resumed(5, "producer", "reopened"),
+        ],
+    );
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "recovered")
+    );
+}
+
 /// A `changes_requested` review below the cap still owes the actor
 /// its rework notice, unchanged.
 #[test]

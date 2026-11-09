@@ -62,6 +62,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             if session_id.is_some() {
                 entry.session_id = session_id.clone();
             }
+            // A `recovered` resume owes the role a notice; any other
+            // start or resume clears the owed seq.
+            entry.recovered_seq = match &event.kind {
+                EventKind::RoleResumed {
+                    reason: Some(reason),
+                    ..
+                } if reason == RECOVERED => Some(seq),
+                _ => None,
+            };
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
         EventKind::RoleLost { role, .. } => {

@@ -15,7 +15,8 @@
 //! `permission prompt` attention to the director — a non-actor's
 //! episode is the user's, and gets no notice — a `stalled`
 //! attention to the role's reviewer — a `cannot resume`
-//! attention routed like a stall — and a `deny`
+//! attention routed like a stall — a `recovered` resume to
+//! the role itself — and a `deny`
 //! approval to the denied role, which the esc interruption left
 //! waiting.
 
@@ -274,6 +275,26 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
             }
             _ => {}
         }
+    }
+    // A `role.resumed` with reason `recovered` owes the role itself
+    // one notice: its terminal was lost and the stage resumed its
+    // session — anything running then has stopped, and a command
+    // stopped at a permission prompt must be run again.
+    for (key, r) in &state.roles {
+        let Some(seq) = r.recovered_seq else {
+            continue;
+        };
+        if sent.contains(&seq) {
+            continue;
+        }
+        out.push(Notice {
+            source_seq: seq,
+            to: key.clone(),
+            label: "recovered",
+            body: format!(
+                "# recovered\n\n`{key}`'s terminal was lost and the stage resumed its session. Anything that was running then has stopped: check `backlot status` and carry on. A command stopped at a permission prompt must be run again.\n"
+            ),
+        });
     }
     // A deny sends esc and the role lands on an interrupted screen
     // that waits for input — it is owed a notice, for any role.
