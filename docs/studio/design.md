@@ -74,8 +74,14 @@ If an actor goes quiet without delivering, the stage reminds it once and then ra
 ## Messages
 
 - **User to producer:** the user types in the producer's terminal. Selecting a studio focuses it.
-- **Role to role:** `backlot tell` records the message and writes its body to a file. The stage sends the target a
-  one-line pointer to that file with `terminal.send`, once the target is not working and shows no prompt.
+- **Role to role:** `backlot tell` records the message and writes its body to a file. The stage sends the target one
+  line — `[backlot] <from> → <to>: read <file>` — with `terminal.send`, oldest first, at most one send per role at a
+  time. A send goes only while the target is live, its work sample is `waiting`, its screen has been unchanged for two
+  samples at least two seconds apart, it has been up at least five seconds, and no send to it finished in the last five
+  seconds. A refused send stays queued and is retried; a crash between send and record can repeat a line, which is
+  harmless. `terminal.send` can hold for minutes, so it is spawned off the stage loop and collected on a later tick.
+  `report.sent` to a role delivers the same way. The stage's own notices (see ledger.md `source_seq`) queue as ordinary
+  messages with a generated body file under `messages/`.
 - **Producer to user:** in the producer's terminal, with a one-line summary in the panel.
 
 ## Flow
@@ -90,8 +96,13 @@ Normal path:
 6. The director reviews against the plan and acceptance list, requests rework or accepts, and integrates.
 7. At nodes, the director reports to the producer, and the producer reports to the user.
 
-Light path: the producer dispatches one task directly to one actor, or does the job itself. It is recorded the same way,
-so the two paths can be compared on real work.
+Light path: the producer dispatches one task directly to one actor, or does the job itself — `task new`, `cast` and
+`review` have no caller restriction, so `backlot … --as producer` runs the whole path. A producer's cast is recorded in
+`task.cast`'s `by` and routes the delivery notice to the producer. It is recorded the same way, so the two paths can be
+compared on real work.
+
+When everything is accepted the user decides; `backlot studio finish` records `studio.finished` and the studio stops
+scheduling — only a person explicitly reopened is desired again.
 
 ## Stop conditions
 
@@ -202,15 +213,25 @@ Pull from `upstream` often. Keeping new code in new crates limits conflicts to t
 
 ## Actor work areas and integration (D7, D10)
 
-Each actor takes its own task, in its own git worktree on `backlot/<studio>/<task>`. The director integrates accepted
-deliveries into `backlot/<studio>/integration` and runs the project's checks there. Merging into the user's own branches
-stays with the user.
+Each actor takes its own task, in its own git worktree on `backlot/<studio>/<task>` — created from the integration
+branch's current tip — at `<studio dir>/work/<task>`. The director integrates accepted deliveries into
+`backlot/<studio>/integration` in `<studio dir>/work/integration` and runs the project's checks there. Producer and
+writer run in the studio repo itself. Merging into the user's own branches stays with the user.
+
+A studio repo that is not a git work tree raises `not a git repository` and starts no actor or director. Every step is
+idempotent: an existing branch or worktree is reused, a failure raises `work area failed` once with git's first stderr
+line and is retried on a later tick, and a recast or a reopen reuses the task's tree — work continues on top. Worktrees
+stay after a task closes; removing them is a later step.
 
 ## Permission prompts (D9)
 
-Each role starts with a permission profile from `runners.md`. A prompt that still appears is raised to the director, who
-may approve it when it stays inside the actor's own work area. A prompt that touches real sessions, production, accounts
-or global settings, or is destructive outside the work area, goes to the user and shows in the panel.
+Each role starts with a permission profile from `runners.md`. A live role sampled `blocked` on two samples two seconds
+apart raises one `permission prompt` attention per blocked episode, with the visible screen saved to
+`attention/<seq>.txt`. An actor's episode notices the director, who may approve it when it stays inside the actor's own
+work area; `backlot approve --person <role> --decision allow|deny` records `role.approval` and the stage sends the
+runner's approval key while the prompt still shows — never without a recorded decision — then clears the attention. A
+prompt that touches real sessions, production, accounts or global settings, or is destructive outside the work area,
+goes to the user and shows in the panel; so does a prompt on any role that is not an actor.
 
 ## Defaults that can still change
 

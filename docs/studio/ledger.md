@@ -16,8 +16,15 @@ $XDG_STATE_HOME/backlot/<core id>/
     req/v<N>.md       requirement versions
     plan/             writer's plans and acceptance lists
     reports/          deliveries and node reports
-    messages/         role-to-role message bodies
+    messages/         role-to-role and stage notice bodies
+    attention/        screens saved when an attention was raised
+    prompts/          the rendered role prompt each fresh start was given
+    work/integration  the director's worktree, backlot/<studio>/integration
+    work/<task>       each task's actor worktree, backlot/<studio>/<task>
 ```
+
+`work/` trees stay after a task closes — a reopen resumes in the same folder. Removing them is not
+part of this step.
 
 - `backlot` commands append directly under the lock. One lock gives one total order, and no socket or daemon is needed
   to record an event.
@@ -36,16 +43,18 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
 | `role.session` | role, session ID |
+| `role.approval` | role, decision (`allow` or `deny`) |
+| `studio.finished` | reason |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
-| `task.cast` | task, actor identity, reason, optional priority |
+| `task.cast` | task, actor identity, reason, optional priority, by (the caster) |
 | `task.priority` | task, priority |
 | `task.delivered` | task, delivery number, actor identity, commit range, report file, requirement version, checks run |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
-| `message.queued` / `message.delivered` | from, to, file, purpose |
+| `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq` |
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail |
 | `correction` | target event, changed fields, reason |
@@ -74,6 +83,29 @@ the stage records once it finds the ID. A `role.session` for a role the log does
 Two `message.queued` events carry a `purpose` the stage acts on: `plan request` records `plan`
 (to the writer), `dispatch` records `dispatch` (to the director). The writer is wanted from a
 `plan` message until the next `dispatch`; plain `tell`/`ask` messages carry no purpose.
+
+`message.queued` may carry `source_seq`, the seq of the ledger event it was generated from. The
+stage's automatic notices — a delivery to whoever cast the task, a `changes_requested` review to
+the actor, a blocked task or a requirement revision above v1 to the director, an actor's permission
+prompt to the director — are ordinary queued messages whose body file lands under `messages/` first.
+A notice is owed only while no message has its source event's `seq`, so a stage restart repeats
+nothing. A `report.sent` to a role is deliverable the same way; `to: user` is never sent to a
+terminal. `message.delivered` marks the target — a message or a report — only after `terminal.send`
+reports sent. A crash between the send and the record can send the same line twice on restart;
+that is harmless.
+
+`task.cast` records `by`, the role that cast. A producer's cast (the light path) routes the
+delivery notice to the producer; a director's or unattributed cast routes it to the director.
+
+`role.approval` records a director's or user's decision on an open `permission prompt` attention —
+refused without one. The stage sends the runner's approval key while the prompt still shows, then
+`attention.cleared` lands; a prompt already gone clears with no key sent. The stage never answers a
+prompt without a recorded decision, and a decision recorded before the attention does not answer a
+later prompt.
+
+`studio.finished` — producer or user only — is refused while any task is not terminal, naming the
+open tasks. From then on `desired` holds only explicitly reopened people, so producer and director
+close the usual way and keep their sessions. `role.reopen` still works after finish.
 
 ## Task states
 

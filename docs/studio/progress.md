@@ -1,5 +1,44 @@
 # Studio progress
 
+## S5a: The closed loop's mechanics (2026-11-09)
+
+- Done: the stage closes the loop end to end on the fake runner. Role launches ensure git work
+  areas first — `work/integration` on `backlot/<studio>/integration` for the director,
+  `work/<task>` on `backlot/<studio>/<task>` for each actor, planned over injected git and reused
+  on recast and reopen; a non-git repo raises `not a git repository` and starts neither, and a git
+  failure raises `work area failed` once with the first stderr line. Producer and writer stay in
+  the studio repo. Fresh starts render a role prompt from `prompts/<role>.md` into
+  `prompts/<role key>.md` and hand the runner one line (`Read <path> and follow it.`; Devin gets
+  the file form); resumes get none. Queued messages and reports deliver oldest-first per role as
+  `[backlot] <from> → <to>: read <file>` behind a live/waiting/stable-screen/uptime/send-gap gate,
+  one `terminal.send` per role at a time spawned off the loop; `to: user` is never sent.
+  Stage-generated notices (delivery → caster, rework review → actor, blocked task and
+  requirement revision above v1 → director, actor permission prompt → director) queue as ordinary
+  messages deduped by `source_seq`. A role sampled blocked for two seconds raises one
+  `permission prompt` attention per episode with the screen saved under `attention/`; `backlot
+  approve` records `role.approval` (refused without an open prompt) and the stage sends the
+  runner's key while the prompt still shows — never without a decision at or after the attention —
+  then clears; a gone prompt clears with no key. `studio finish` refuses while tasks are open,
+  then leaves `desired` holding only reopened people. The summary marks a behind actor's `doing`
+  as `task t1 · behind vN`; the panel draws it verbatim.
+- Measured: the model suite (65) covers the new events and fields; stage tests (122) cover
+  work-area planning over a fake git runner and one real repo, prompt render and every prompt
+  command through the real parser, each delivery gate on its own, oldest-first, a refused send,
+  owed notices once per source event across restarts, approval keys per runner, episode dedup,
+  and finish's reopen-only desired. `real_stage_closed_loop` drives the full loop on a scratch
+  core — requirement, plan request (writer starts and is told), dispatch (director is told),
+  cast into its own worktree and branch, delivery and rework notices, a midway revision notice,
+  two blocked episodes answered by `backlot approve` (enter, then esc), a finish refusal naming
+  the open task, acceptance, finish, and a reopen after finish. `real_stage_loop` still passes.
+- Key findings: the light path needed no change — `task new`, `cast` and `review` have no caller
+  restriction, and `cast.by` routes the delivery notice to the producer. The run exposed two
+  bugs: `approve` was missing from the binary's command list, and an approval must be at or after
+  the open attention or a stale decision answers a new prompt.
+- Not verified: prompts are untested on real agents (S5b tunes them), Claude/Codex approval keys
+  are convention not measurement (runners.md), the panel's behind-marker was drawn only in the
+  row test, and worktree removal is out of scope — trees accumulate under `work/` until a later
+  step.
+
 ## S4b: The studio panel (2026-11-09)
 
 - Done: the client reads the local `backlot` document through the watcher's new

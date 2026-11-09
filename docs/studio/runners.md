@@ -37,6 +37,20 @@ sees it.
 | OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
+## Approval keys
+
+A recorded `role.approval` sends one key while the prompt still shows — `allow` takes the highlighted
+allow option, `deny` dismisses it.
+
+| Runner | `allow` | `deny` | Markers from |
+|---|---|---|---|
+| `fake` | `enter` | `esc` | The script itself — byte-verified in `real_stage_closed_loop` |
+| Claude Code | `enter` | `esc` | Same numbered-picker convention as the measured trust dialog — the permission prompt itself is not separately verified |
+| Codex | `enter` | `esc` | Assumed from its `› 1.` picker — not measured |
+| Devin | none sent | none sent | Not measured — the attention stays open for the user |
+| OpenCode | none sent | none sent | Not measured — the attention stays open for the user |
+| Anything else | none sent | none sent | — |
+
 ## Rules for adapters
 
 - **Per-session flags only.** Interactive model switchers such as `/model` can change the account default. An adapter
