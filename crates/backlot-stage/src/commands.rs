@@ -316,6 +316,41 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
+        // `approve` answers an open `permission prompt` attention on
+        // the person — the model refuses when none is open (D9: no
+        // prompt answered without a recorded decision).
+        Cmd::Approve { person, decision } => {
+            person_gate(caller)?;
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::RoleApproval {
+                        role: person,
+                        decision,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
+        // `studio finish` ends the studio; the model refuses while
+        // any task is not terminal, naming them.
+        Cmd::StudioFinish { reason } => {
+            match caller.role.as_str() {
+                "user" | "producer" => {}
+                other => {
+                    return Err(Fail::refused(format!(
+                        "role '{other}' cannot do this; the user or the producer can"
+                    )));
+                }
+            }
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::StudioFinished { reason },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::Deliver {
             commits,
             report,

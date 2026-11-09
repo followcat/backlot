@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use backlot_model::correct::parse_verdict;
-use backlot_model::event::{Priority, TaskStateChange};
+use backlot_model::event::{ApprovalDecision, Priority, TaskStateChange};
 
 use crate::args::*;
 use crate::cli::Fail;
@@ -207,6 +207,54 @@ pub(crate) fn deliver(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             checks,
         },
     ))
+}
+
+/// `approve`: the permission-prompt decision (D9) for `--person` —
+/// recording it is refused without an open `permission prompt`
+/// attention on that role, the check is the model's.
+pub(crate) fn approve(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut person = None;
+    let mut decision = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_APPROVE)));
+        }
+        if common_flag(it, common, &arg, U_APPROVE)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--person" => person = Some(it.value("--person", U_APPROVE)?),
+            _ if eq(&arg, "--person").is_some() => person = eq(&arg, "--person").map(String::from),
+            "--decision" => {
+                let v = it.value("--decision", U_APPROVE)?;
+                decision = Some(parse_decision(&v).ok_or_else(|| {
+                    usage(format!("bad --decision '{v}', want allow|deny"), U_APPROVE)
+                })?)
+            }
+            _ if eq(&arg, "--decision").is_some() => {
+                let v = eq(&arg, "--decision").unwrap_or_default();
+                decision = Some(parse_decision(v).ok_or_else(|| {
+                    usage(format!("bad --decision '{v}', want allow|deny"), U_APPROVE)
+                })?)
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_APPROVE)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Approve {
+            person: person.ok_or_else(|| usage("missing --person", U_APPROVE))?,
+            decision: decision.ok_or_else(|| usage("missing --decision", U_APPROVE))?,
+        },
+    ))
+}
+
+fn parse_decision(v: &str) -> Option<ApprovalDecision> {
+    match v {
+        "allow" => Some(ApprovalDecision::Allow),
+        "deny" => Some(ApprovalDecision::Deny),
+        _ => None,
+    }
 }
 
 pub(crate) fn block(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {

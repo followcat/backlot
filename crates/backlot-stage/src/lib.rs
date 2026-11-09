@@ -32,6 +32,8 @@ mod cli_tests;
 #[cfg(test)]
 mod discover_tests;
 #[cfg(test)]
+mod loop_cmd_tests;
+#[cfg(test)]
 mod priority_cmd_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;

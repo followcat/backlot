@@ -56,6 +56,28 @@ fn repo_path(repo: &str) -> Result<String, Fail> {
     })
 }
 
+/// `studio finish`: an optional `--reason`, refused while any task
+/// is open — the check is the model's, this only collects the text.
+pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut reason = String::new();
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--reason" => reason = it.value("--reason", U_STUDIO)?,
+            _ if eq(&arg, "--reason").is_some() => {
+                reason = eq(&arg, "--reason").map(String::from).unwrap_or_default()
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::StudioFinish { reason }))
+}
+
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut file = None;
     let mut summary = None;

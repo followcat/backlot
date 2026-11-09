@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use backlot_model::event::{Check, PlanKind, Priority, TaskStateChange, Verdict};
+use backlot_model::event::{ApprovalDecision, Check, PlanKind, Priority, TaskStateChange, Verdict};
 
 use crate::cli::Fail;
 use crate::{args_studio, args_task};
@@ -77,6 +77,13 @@ pub enum Cmd {
     Close {
         person: String,
     },
+    Approve {
+        person: String,
+        decision: ApprovalDecision,
+    },
+    StudioFinish {
+        reason: String,
+    },
     Deliver {
         commits: String,
         report: PathBuf,
@@ -115,8 +122,7 @@ pub enum Cmd {
 pub const COMMON: &str =
     "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t>";
 
-pub(crate) const U_STUDIO: &str =
-    "usage: backlot studio new --title <t> --repo <path> --cast <file.toml>";
+pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml>\n       backlot studio finish [--reason <r>]";
 pub(crate) const U_REQ: &str = "usage: backlot req revise --file <f> --summary <s>";
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
@@ -130,6 +136,8 @@ pub(crate) const U_CAST: &str =
 pub(crate) const U_PRIORITY: &str = "usage: backlot priority --task <id> --level low|normal|high";
 pub(crate) const U_REOPEN: &str = "usage: backlot reopen --person <role key>";
 pub(crate) const U_CLOSE: &str = "usage: backlot close --person <role key>";
+pub(crate) const U_APPROVE: &str =
+    "usage: backlot approve --person <role key> --decision allow|deny";
 pub(crate) const U_DELIVER: &str =
     "usage: backlot deliver --commits A..B --report <f> [--check name=pass|fail...]";
 pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
@@ -240,6 +248,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             };
             match sub.as_str() {
                 "new" => args_studio::studio_new(&mut common, &mut it),
+                "finish" => args_studio::studio_finish(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STUDIO))),
                 _ => Err(usage(
                     format!("unknown studio subcommand '{sub}'"),
@@ -311,6 +320,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "close" => args_task::person(&mut common, &mut it, U_CLOSE, |person| Cmd::Close {
             person,
         }),
+        "approve" => args_task::approve(&mut common, &mut it),
         "deliver" => args_task::deliver(&mut common, &mut it),
         "block" => args_task::block(&mut common, &mut it),
         "review" => args_task::review(&mut common, &mut it),
