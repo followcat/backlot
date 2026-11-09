@@ -1,0 +1,36 @@
+name: pages
+
+# Publishes install.sh from the released tag so the short URL
+# https://followcat.github.io/hc-tui/install.sh tracks releases.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # On a release, check out that tag so install.sh matches it;
+      # workflow_dispatch uses the ref the run was started on.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - name: Stage the site
+        run: |
+          mkdir _site
+          cp scripts/install.sh _site/install.sh
+          cp .github/pages/index.html _site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
+        id: deployment
