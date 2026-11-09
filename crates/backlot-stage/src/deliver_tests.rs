@@ -375,6 +375,22 @@ fn notices_are_owed_once_per_source_event() {
     assert!(notices::owed(&state, dir()).is_empty());
 }
 
+/// A task's notices go to the producer only when the producer cast
+/// it — a `user` cast, an empty name or the director's own cast all
+/// report to the director, and a task never cast reports too.
+#[test]
+fn reviewer_for_routes_task_notices() {
+    let mut t = task("t1");
+    t.cast.as_mut().unwrap().by = "producer".into();
+    assert_eq!(notices::reviewer_for(&t), "producer");
+    for by in ["director", "user", ""] {
+        t.cast.as_mut().unwrap().by = by.into();
+        assert_eq!(notices::reviewer_for(&t), "director", "{by}");
+    }
+    t.cast = None;
+    assert_eq!(notices::reviewer_for(&t), "director");
+}
+
 /// A light-path task — cast by the producer — routes its delivery
 /// notice to the producer.
 #[test]
@@ -393,8 +409,14 @@ fn a_producer_cast_routes_the_delivery_notice() {
         seq: 9,
         ts_ms: 0,
     });
+    t.state_changes.push(StateChangeRecord {
+        state: TaskStateChange::Blocked,
+        reason: "needs an answer".into(),
+        seq: 13,
+        ts_ms: 0,
+    });
     state.tasks.insert("t1".into(), t);
     let owed = notices::owed(&state, dir());
-    assert_eq!(owed.len(), 1);
-    assert_eq!(owed[0].to, "producer");
+    assert_eq!(owed.len(), 2);
+    assert!(owed.iter().all(|n| n.to == "producer"), "{owed:?}");
 }

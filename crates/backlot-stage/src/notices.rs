@@ -4,12 +4,13 @@
 //! owed only while no message has that seq — so a stage restart
 //! repeats nothing.
 //!
-//! Owed today: a delivery to the director (or, on the light path,
-//! whoever cast the task), a `changes_requested` review to the
-//! task's actor, a blocked task to the director, a requirement
-//! revision above v1 to the director naming the tasks now behind,
-//! and an actor's `permission prompt` attention to the director —
-//! a non-actor's episode is the user's, and gets no notice.
+//! Owed today: a delivery to the task's reviewer — `producer` when
+//! the producer cast it, the director otherwise — a
+//! `changes_requested` review to the task's actor, a blocked task
+//! to its reviewer, a requirement revision above v1 to the
+//! director naming the tasks now behind, and an actor's
+//! `permission prompt` attention to the director — a non-actor's
+//! episode is the user's, and gets no notice.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -31,16 +32,15 @@ pub struct Notice {
     pub body: String,
 }
 
-/// Who a task's notices go to: whoever cast it (`cast.by` — the
-/// light path's producer) or the director when the cast names
-/// nobody.
-fn reviewer_for(task: &backlot_model::state::Task) -> String {
-    task.cast
-        .as_ref()
-        .map(|c| c.by.as_str())
-        .filter(|by| !by.is_empty())
-        .unwrap_or("director")
-        .to_string()
+/// Who a task's notices go to: `producer` when the producer cast
+/// it — the light path has no director to tell — and the director
+/// in every other case. `user` and the empty name have no
+/// terminal, so they fall to the director too.
+pub fn reviewer_for(task: &backlot_model::state::Task) -> String {
+    match task.cast.as_ref().map(|c| c.by.as_str()) {
+        Some("producer") => "producer".into(),
+        _ => "director".into(),
+    }
 }
 
 /// The role key the task's current cast runs under — the same key
@@ -120,7 +120,7 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
             }
             out.push(Notice {
                 source_seq: ch.seq,
-                to: "director".into(),
+                to: reviewer_for(t),
                 label: "blocked",
                 body: format!(
                     "# {} blocked\n\nTask `{}` is blocked{}\n",
