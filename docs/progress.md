@@ -424,5 +424,7 @@
   is not documented until a release ships.
 - Gates: formatting, all-target Clippy, the full suite (8 `core_start`
   unit tests, 6 PTY tests driving a fake `hc`), 28 offline installer
-  tests and parsed workflow YAML all pass. The scratch-session check
-  that a started core outlives detach is pending.
+  tests and parsed workflow YAML all pass. On an owned scratch session
+  a core started by hc-tui (`hc 0.1.18-followcat.1`, `serve` pid
+  1013562) still answered `hc server status` after detach and was
+  stopped with `{"stopped":true}`.
