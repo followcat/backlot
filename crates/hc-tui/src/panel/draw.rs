@@ -46,6 +46,16 @@ pub(crate) fn render(
     panel: &Panel,
     palette: &Palette,
 ) -> PanelRender {
+    // Reset every cell first: `set_style` alone leaves the symbols the
+    // frame underneath drew — a full-screen panel must not show pane
+    // borders or titles through its blank cells.
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.reset();
+            }
+        }
+    }
     buf.set_style(area, Style::default().bg(palette.panel_bg));
     let mut hits = PanelRender {
         area,

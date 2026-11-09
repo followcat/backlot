@@ -6,6 +6,7 @@ use crate::panel::rows::Mark;
 use crate::panel::{Panel, PanelMode, mark_color, mark_symbol, render};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 
 fn palette() -> Palette {
     Palette::from_name("catppuccin").unwrap()
@@ -120,6 +121,31 @@ fn an_overflowing_body_draws_a_scrollbar() {
     assert!(!hits.scrollbar.is_empty(), "overflow draws the track");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains('▕'), "scrollbar cells: {text}");
+}
+
+#[test]
+fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
+    // The frame underneath wrote text into the same rect — full-screen
+    // at 40 columns is exactly this shape.
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 20);
+    let mut buf = Buffer::empty(area);
+    for y in area.y..area.y + area.height {
+        // Only glyphs the panel itself can never draw, so a leak is
+        // unambiguous.
+        buf.set_string(area.x, y, "│9│8│6│4", Style::default());
+    }
+    render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    for y in area.y..area.y + area.height {
+        for x in area.x..area.x + area.width {
+            let symbol = buf[(x, y)].symbol();
+            assert!(
+                !"│9864".contains(symbol),
+                "frame symbol {symbol:?} leaked at ({x},{y})"
+            );
+        }
+    }
 }
 
 #[test]
