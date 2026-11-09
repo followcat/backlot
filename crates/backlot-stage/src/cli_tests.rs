@@ -49,13 +49,67 @@ fn studio_new_records_everything() {
             "--title".into(),
             "x".into(),
             "--repo".into(),
-            "y".into(),
+            "/home/user/other".into(),
             "--cast".into(),
             fixture(&scratch, "cast.toml", CAST_TOML),
         ],
         &env,
     );
     assert!(matches!(again, Err(Fail::Refused(_))));
+}
+
+/// A relative `--repo` is a usage error (exit 2) — the studio would
+/// otherwise bind to whatever cwd the stage happened to run from.
+/// An existing path is canonicalized (`..` resolved); a missing
+/// path keeps its spelling, since fixtures use neutral paths.
+#[test]
+fn studio_new_repo_must_be_absolute_and_canonical() {
+    let (scratch, env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let err = run(
+        &[
+            "studio".into(),
+            "new".into(),
+            "--title".into(),
+            "t".into(),
+            "--repo".into(),
+            "relative/shop".into(),
+            "--cast".into(),
+            cast.clone(),
+        ],
+        &env,
+    );
+    assert!(matches!(err, Err(Fail::Usage(_))));
+
+    // An existing path canonicalizes: `<dir>/./` records `<dir>`.
+    let repo_dir = scratch.dir.join("repo");
+    fs::create_dir(&repo_dir).unwrap();
+    let spelled = format!("{}/.", repo_dir.display());
+    let out = run(
+        &[
+            "studio".into(),
+            "new".into(),
+            "--title".into(),
+            "t".into(),
+            "--repo".into(),
+            spelled,
+            "--cast".into(),
+            cast,
+        ],
+        &env,
+    )
+    .unwrap();
+    assert!(out.contains("studio.created"), "{out}");
+    let (events, _) =
+        crate::store::load_events(&crate::store::studio_dir(&scratch.dir, "acme-shop")).unwrap();
+    match &events[0].kind {
+        backlot_model::EventKind::StudioCreated { repo, .. } => {
+            // Same canonicalization the parser ran — /var →
+            // /private/var on macOS included.
+            assert_eq!(*repo, repo_dir.canonicalize().unwrap().to_string_lossy());
+        }
+        other => panic!("wrong event: {other:?}"),
+    }
 }
 
 #[test]

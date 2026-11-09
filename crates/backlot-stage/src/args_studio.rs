@@ -1,7 +1,7 @@
 //! Parsers for the studio-level commands: `studio new`, `req revise`,
 //! `plan publish`, and the one-file message commands.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use backlot_model::correct::parse_plan_kind;
 
@@ -31,10 +31,29 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
     }
     let cmd = Cmd::StudioNew {
         title: title.ok_or_else(|| usage("missing --title", U_STUDIO))?,
-        repo: repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?,
+        repo: repo_path(&repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?)?,
         cast_file: cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?,
     };
     Ok((std::mem::take(common), cmd))
+}
+
+/// `--repo` must be absolute: a relative path would bind the studio
+/// to whatever cwd the stage happened to run from. An existing path
+/// is canonicalized so `..` and symlink spellings of one folder
+/// cannot masquerade as two; a path that does not exist yet is kept
+/// as spelled.
+fn repo_path(repo: &str) -> Result<String, Fail> {
+    let path = Path::new(repo);
+    if !path.is_absolute() {
+        return Err(usage(
+            format!("--repo must be an absolute path, got '{repo}'"),
+            U_STUDIO,
+        ));
+    }
+    Ok(match path.canonicalize() {
+        Ok(p) => p.to_string_lossy().into_owned(),
+        Err(_) => repo.into(),
+    })
 }
 
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
