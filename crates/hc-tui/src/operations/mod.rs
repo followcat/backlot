@@ -181,6 +181,17 @@ pub struct Store {
     task: JoinHandle<()>,
 }
 
+/// The per-action deadline: `PutImage` pushes up to ~11 MB of base64
+/// through the link, so it borrows the protocol call-timeout scale
+/// (hc-proto's `CALL_TIMEOUT` = 120 s) instead of the interactive
+/// default.
+fn action_deadline(action: &Action) -> std::time::Duration {
+    match action {
+        Action::PutImage { .. } => std::time::Duration::from_secs(120),
+        _ => std::time::Duration::from_secs(15),
+    }
+}
+
 impl Store {
     pub fn new(open: OpenRpc) -> Self {
         let (send, mut receive) = mpsc::channel::<Request>(16);
@@ -189,7 +200,7 @@ impl Store {
             let mut client = None;
             while let Some(request) = receive.recv().await {
                 let work = tokio::time::timeout(
-                    std::time::Duration::from_secs(15),
+                    action_deadline(&request.action),
                     rpc::run(&open, &mut client, request),
                 )
                 .await
