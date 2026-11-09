@@ -176,6 +176,23 @@ pub struct InFlight {
     pub handle: JoinHandle<Result<serde_json::Value, CallError>>,
 }
 
+/// This studio's finished in-flight sends, drained for collection —
+/// another studio's stays put for its own tick, whose records land
+/// in its own ledger.
+pub fn take_finished(
+    sending: &mut BTreeMap<(String, String), InFlight>,
+    studio: &str,
+) -> Vec<((String, String), InFlight)> {
+    let keys: Vec<(String, String)> = sending
+        .iter()
+        .filter(|(k, f)| k.0 == studio && f.handle.is_finished())
+        .map(|(k, _)| k.clone())
+        .collect();
+    keys.into_iter()
+        .filter_map(|k| sending.remove(&k).map(|f| (k, f)))
+        .collect()
+}
+
 impl Stage {
     /// After the watch: land owed notices, collect finished sends,
     /// then offer each role's oldest queued item to `terminal.send`
@@ -216,16 +233,10 @@ impl Stage {
         }
 
         // Collect finished sends — a finished handle answers without
-        // blocking the tick.
-        let done: Vec<(String, String)> = self
-            .sending
-            .borrow()
-            .iter()
-            .filter(|(_, f)| f.handle.is_finished())
-            .map(|(k, _)| k.clone())
-            .collect();
-        for pair in done {
-            let f = self.sending.borrow_mut().remove(&pair).unwrap();
+        // blocking the tick. Only this studio's: another's record
+        // and seq belong to its own ledger.
+        let done = take_finished(&mut self.sending.borrow_mut(), studio);
+        for (pair, f) in done {
             self.sent_ms.borrow_mut().insert(pair.clone(), now_ms);
             match f.handle.await {
                 Ok(Ok(v)) => match send_outcome(&v) {

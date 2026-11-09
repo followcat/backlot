@@ -3,6 +3,7 @@
 //! on its own, and the notices a state owes — once per source
 //! event, stable across a stage restart.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use backlot_model::event::{ActorIdentity, Check, Severity, TaskStateChange, Verdict};
@@ -13,7 +14,8 @@ use backlot_model::state::{
 use backlot_model::summary::Work;
 
 use crate::deliver::{
-    Gate, MIN_UP_MS, SCREEN_STABLE_MS, SEND_GAP_MS, Screen, gate_open, outbox, send_outcome,
+    Gate, InFlight, MIN_UP_MS, SCREEN_STABLE_MS, SEND_GAP_MS, Screen, gate_open, outbox,
+    send_outcome, take_finished,
 };
 use crate::notices;
 
@@ -193,6 +195,48 @@ fn only_sent_true_delivers() {
     );
     assert_eq!(send_outcome(&serde_json::json!({})).unwrap_err(), None);
     assert_eq!(send_outcome(&serde_json::json!(null)).unwrap_err(), None);
+}
+
+/// Collecting finished sends drains only the calling studio's —
+/// another studio's stays in the map for its own tick, so its
+/// `message.delivered` lands in its own ledger with its own seq.
+#[tokio::test]
+async fn only_this_studios_sends_are_collected() {
+    let mut sending: BTreeMap<(String, String), InFlight> = BTreeMap::new();
+    for (studio, seq) in [("shop-a", 3), ("shop-b", 7)] {
+        sending.insert(
+            (studio.to_string(), "director".to_string()),
+            InFlight {
+                seq,
+                handle: tokio::spawn(async move {
+                    Ok::<_, hc_proto::client::CallError>(serde_json::json!({"sent": true}))
+                }),
+            },
+        );
+    }
+    // One send that never finishes stays put for both studios.
+    sending.insert(
+        ("shop-a".to_string(), "writer".to_string()),
+        InFlight {
+            seq: 9,
+            handle: tokio::spawn(std::future::pending::<
+                Result<serde_json::Value, hc_proto::client::CallError>,
+            >()),
+        },
+    );
+    while !sending
+        .values()
+        .filter(|f| f.seq != 9)
+        .all(|f| f.handle.is_finished())
+    {
+        tokio::task::yield_now().await;
+    }
+    let done = take_finished(&mut sending, "shop-a");
+    assert_eq!(done.len(), 1);
+    assert_eq!(done[0].0, ("shop-a".to_string(), "director".to_string()));
+    assert_eq!(done[0].1.seq, 3);
+    assert!(sending.contains_key(&("shop-b".to_string(), "director".to_string())));
+    assert!(sending.contains_key(&("shop-a".to_string(), "writer".to_string())));
 }
 
 fn task(id: &str) -> Task {
