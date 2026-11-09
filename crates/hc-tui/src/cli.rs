@@ -218,6 +218,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         input_control.written(bytes);
         Ok(())
     }));
+    // Terminal setup has succeeded — a run with no terminal already
+    // failed above and starts nothing. Kick the one-shot local core
+    // start; its report lands as a notice only when it fails.
+    app.set_core_start(crate::core_start::kick(endpoint, env));
     let result = app
         .run(&mut terminal, &mut reader.ui, &mut reader.replies)
         .await;

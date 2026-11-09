@@ -197,6 +197,7 @@ impl App {
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
+                    report = Self::core_start_report(&mut self.core_start) => self.on_core_start(report),
                     seen = self.seen_rx.recv() => {
                         if let Some(seen) = seen {
                             self.on_seen_result(seen);
@@ -226,6 +227,7 @@ impl App {
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
+                    report = Self::core_start_report(&mut self.core_start) => self.on_core_start(report),
                     seen = self.seen_rx.recv() => {
                         if let Some(seen) = seen {
                             self.on_seen_result(seen);

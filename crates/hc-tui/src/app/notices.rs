@@ -31,6 +31,32 @@ impl App {
             self.notice = None;
         }
     }
+
+    /// Installs the one-shot `hc server start` report — `cli` calls it
+    /// once terminal setup succeeded.
+    pub fn set_core_start(&mut self, report: Option<crate::core_start::Report>) {
+        self.core_start = report;
+    }
+
+    /// `pending()` while no start was kicked; resolves once with its
+    /// outcome — `Some(notice)` means the start failed and is shown.
+    pub(super) async fn core_start_report(
+        rx: &mut Option<crate::core_start::Report>,
+    ) -> Option<crate::core_start::Notice> {
+        match rx {
+            Some(rx) => rx.await.ok().flatten(),
+            None => std::future::pending().await,
+        }
+    }
+
+    /// One resolution ever: a failed start surfaces as a notice; a
+    /// quiet report (started, or nothing to do) just disarms the arm.
+    pub(super) fn on_core_start(&mut self, report: Option<crate::core_start::Notice>) {
+        self.core_start = None;
+        if let Some((title, body)) = report {
+            self.show_notice(&title, &body);
+        }
+    }
 }
 
 pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {

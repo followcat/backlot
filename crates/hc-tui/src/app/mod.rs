@@ -139,6 +139,8 @@ type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
 /// The whole application.
 pub struct App {
     notice: Option<notices::Notice>,
+    /// The one-shot `hc server start` report — `Some` until it lands.
+    core_start: Option<crate::core_start::Report>,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,

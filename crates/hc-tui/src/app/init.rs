@@ -20,6 +20,7 @@ impl App {
         let mouse_capture = shell.mouse_capture;
         App {
             notice: None,
+            core_start: None,
             background_failure: None,
             next_tab_status: None,
             last_window_title: None,

@@ -10,6 +10,7 @@ pub mod app;
 pub mod chrome;
 pub mod cli;
 pub mod config;
+pub mod core_start;
 pub mod host;
 pub mod input;
 pub mod project;
