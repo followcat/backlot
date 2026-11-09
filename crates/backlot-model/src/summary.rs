@@ -218,7 +218,19 @@ fn role_summary(
             .as_ref()
             .and_then(|t| live.get(t))
             .map(|d| cap(d))
-            .or_else(|| actor_task(role).map(|t| format!("task {}", cap(t)))),
+            .or_else(|| {
+                actor_task(role).map(|t| {
+                    if state
+                        .tasks
+                        .get(t)
+                        .is_some_and(|task| task.is_behind(state.requirement_version))
+                    {
+                        format!("task {} · behind v{}", cap(t), state.requirement_version)
+                    } else {
+                        format!("task {}", cap(t))
+                    }
+                })
+            }),
         _ => None,
     };
     // Work is a live screen's read — a stale sample for a role that

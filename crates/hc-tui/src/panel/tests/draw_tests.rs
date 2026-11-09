@@ -87,6 +87,28 @@ fn expanded_draw_shows_groups_people_and_their_lines() {
     assert!(hits.title.height == 1);
 }
 
+/// The summary builds `task t1 · behind v2` for an actor whose task
+/// trails the current requirement — the panel draws the `doing` line
+/// verbatim, so the marker needs no panel code of its own.
+#[test]
+fn a_behind_actor_draws_its_doing_line() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "role": "actor-t1-c1", "name": "actor-t1-c1", "terminal": "t9",
+            "state": "live", "task": "t1", "doing": "task t1 · behind v2",
+        }));
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 40);
+    let mut buf = Buffer::empty(area);
+    render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("task t1 · behind v2"), "{text}");
+}
+
 #[test]
 fn collapsed_draw_lists_working_groups() {
     let summary = summary();

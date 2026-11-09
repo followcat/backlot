@@ -121,6 +121,40 @@ fn an_actor_names_its_candidate_and_task() {
     assert_eq!(a.doing.as_deref(), Some("task t1"));
 }
 
+/// An actor whose task `is_behind` the current requirement says so
+/// on its `doing` line — the panel draws it verbatim.
+#[test]
+fn a_behind_actor_marks_its_doing_line() {
+    let mut base = base_events();
+    base.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    let state = state_with(
+        &base,
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            (
+                "producer",
+                EventKind::ReqVersion {
+                    version: 2,
+                    file: "req/v2.md".into(),
+                    summary: "new".into(),
+                },
+            ),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let a = s.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "actor-t1-c1")
+        .unwrap();
+    assert_eq!(a.doing.as_deref(), Some("task t1 · behind v2"));
+}
+
 /// Open reviews count delivered tasks; waiting counts open attention.
 #[test]
 fn counters_follow_the_ledger() {
