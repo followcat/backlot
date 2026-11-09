@@ -39,7 +39,9 @@ impl App {
                 // anything else stays text exactly as before.
                 if !self.try_image_paste_bridge(&text) {
                     // The reference's Paste arm: an open copy-mode search
-                    // prompt takes the text first.
+                    // prompt takes the text first, and a popup selection
+                    // clears on the same event.
+                    self.clear_popup_selection();
                     let lossy = String::from_utf8_lossy(&text);
                     if self.insert_copy_search_text(&lossy) || self.insert_dialog_text(&lossy) {
                         // The copy search prompt or dialog consumed it.

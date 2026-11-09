@@ -2,6 +2,8 @@
 //! Source press/consumed/repeat/release policy, with hc attach generations.
 use std::time::Instant;
 
+use crossterm::event::{KeyCode, KeyModifiers};
+
 use super::input::{Decision, TerminalKey};
 use super::key_leases::{InputLease, InputLeaseKey, RepeatPlan};
 use super::{App, Mode};
@@ -152,6 +154,7 @@ impl App {
                 self.mode = Mode::Normal;
                 self.navigate_target = None;
                 self.selection = None;
+                self.clear_popup_selection();
                 self.stop_selection_autoscroll();
                 self.keyboard_locked = !self.keyboard_locked;
                 self.prefix.reset();
@@ -159,11 +162,32 @@ impl App {
             return None;
         }
         if self.keyboard_locked {
+            self.clear_popup_selection();
             return self.pane.target().map(|_| self.pane.generation());
         }
         // The floating popup eats every key while open — the reference
-        // routes raw input to it before UI bindings (`popup.rs`).
-        if self.popup_key(&press) {
+        // routes raw input to it before UI bindings (`popup.rs`). A
+        // retained popup selection copies on Ctrl/Cmd+C first; every
+        // other key reaching the popup clears it.
+        if self.popup.is_some() {
+            let popup_combo = crate::input::terminal_key_of(&press);
+            if matches!(popup_combo.code, KeyCode::Char('c' | 'C'))
+                && matches!(
+                    popup_combo.modifiers,
+                    KeyModifiers::CONTROL | KeyModifiers::SUPER
+                )
+                && self.copy_popup_selection()
+            {
+                self.clear_popup_selection();
+                return None;
+            }
+            self.clear_popup_selection();
+            self.popup_key(&press);
+            return None;
+        }
+        // A popup still opening swallows input — the reference's
+        // `popup_pending` arm.
+        if self.popup_pending.is_some() {
             return None;
         }
         if self.peek_key(&press) {

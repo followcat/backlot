@@ -41,6 +41,7 @@ mod pane_geometry;
 mod pane_mouse;
 mod pane_selection;
 pub(crate) mod popup;
+mod popup_selection;
 mod presentation;
 mod reload;
 mod routing;
@@ -239,6 +240,12 @@ pub struct App {
     /// armed per pane: it survives losing focus and re-arms `Mode::Copy`
     /// when its pane is focused again.
     pub(crate) copy_mode: Option<copy_mode::CopyModeState>,
+    /// Selection inside the floating popup terminal — the reference's
+    /// `popup_selection`, resolved against the popup's visible frame.
+    popup_selection: Option<crate::selection::Selection>,
+    /// Mouse button captured by a reporting popup terminal — the
+    /// reference's shared `pane_mouse_gesture` for `hit.popup` targets.
+    popup_gesture: Option<popup::PopupGesture>,
     /// Double-click word-drag gesture — the reference's
     /// `word_selection_gesture`, resolved against the pane's local VT.
     word_selection: Option<word_selection::WordSelection>,

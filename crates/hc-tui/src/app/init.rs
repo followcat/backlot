@@ -78,6 +78,8 @@ impl App {
             pane_mouse_gesture: None,
             selection: None,
             copy_mode: None,
+            popup_selection: None,
+            popup_gesture: None,
             word_selection: None,
             selection_autoscroll: None,
             selection_autoscroll_deadline: None,

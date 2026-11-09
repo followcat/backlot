@@ -98,6 +98,7 @@ def run(owners, programs, compare, size):
     assert last_osc52(reference.ui.output) == last_osc52(core.ui.output), \
         'copy-mode selection bytes differ'
     # keys.command at boundary/mobile widths: Alt+F popup open, type,
+    # a drag selection inside its frame copying through OSC 52, the
     # forwarded Escape, program exit; the Alt+P pane command and its exit.
     # The forwarded Escape leaves the shell's line editor holding a
     # partial escape sequence that swallows a following CR — Ctrl-U kills
@@ -105,6 +106,9 @@ def run(owners, programs, compare, size):
     for name, keys, expected in [
         ('popup-open', b'\x1b[102;3u', ['popup']),
         ('popup-type', b'echo P5\r', ['P5']),
+        ('popup-select', f'\x1b[<0;10;{size[1] // 2}M'
+                         f'\x1b[<32;18;{size[1] // 2}M'
+                         f'\x1b[<0;18;{size[1] // 2}m'.encode(), []),
         ('popup-escape', b'\x1b[27u', []),
         ('popup-exit', b'\x15exit\r', []),
         ('popup-closed', b'', []),
@@ -115,3 +119,7 @@ def run(owners, programs, compare, size):
         if keys:
             send(keys)
         compare(name, text_contains=expected)
+        if name == 'popup-select':
+            time.sleep(2.4)
+    assert last_osc52(reference.ui.output) == last_osc52(core.ui.output), \
+        'popup selection bytes differ'

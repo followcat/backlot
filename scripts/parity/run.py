@@ -363,6 +363,9 @@ def one_size(args, size, binary):
             for name, keys, expected in [
                 ('popup-open', b'\x1b[102;3u', ['popup']),
                 ('popup-type', b'echo P5\r', ['P5']),
+                ('popup-select', f'\x1b[<0;{size[0] * 6 // 10};{size[1] * 4 // 10}M'
+                                 f'\x1b[<32;{size[0] * 6 // 10 + 8};{size[1] * 4 // 10}M'
+                                 f'\x1b[<0;{size[0] * 6 // 10 + 8};{size[1] * 4 // 10}m'.encode(), []),
                 ('popup-escape', b'\x1b[27u', []),
                 ('popup-exit', b'\x15exit\r', []),
                 ('popup-closed', b'', []),
@@ -374,6 +377,13 @@ def one_size(args, size, binary):
                     reference.ui.send(keys)
                     core.ui.send(keys)
                 compare(name, text_contains=expected)
+                if name == 'popup-select':
+                    # Let the two-second copy card expire on both clients.
+                    time.sleep(2.4)
+            # The drag inside the popup copies its visible frame text
+            # through the same OSC 52 host write both clients emit.
+            assert last_osc52(reference.ui.output) == last_osc52(core.ui.output), \
+                'popup selection bytes differ'
             result['idle'] = core.ui.idle_measurement(10)
 
 

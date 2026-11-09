@@ -72,6 +72,9 @@ copy-mode `Ctrl+B`/`Ctrl+F` page keys only fire when you have bound a different 
 
 Entering copy mode drops any mouse selection in progress.
 
+Inside a popup terminal there is no copy mode: drag with the mouse to select over the popup's visible
+frame and the selection copies on release, through the same OSC 52 path as pane selection.
+
 ## Alt shortcuts
 
 None of these are bound by default. Add the ones you want to `~/.config/herdr/config.toml`, then press `Ctrl+B Shift+R`

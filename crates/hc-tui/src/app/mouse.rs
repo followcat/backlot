@@ -21,7 +21,7 @@ use super::input::{MouseButton, MouseEventKind, MouseInput};
 use super::{App, Mode};
 
 /// The reference's `super::contains`.
-fn contains(rect: Rect, point: (u16, u16)) -> bool {
+pub(super) fn contains(rect: Rect, point: (u16, u16)) -> bool {
     rect.contains(Position {
         x: point.0,
         y: point.1,

@@ -37,7 +37,7 @@ milestone available.
 |---|---|
 | M2 | Sidebar and endpoint rows, pane cells/attributes/cursor, titles, switching/navigation, resize, applicable mouse behavior, baseline configuration, scratch PTY harness |
 | M3 | Herdr-app structure reader, shared splits/focus/zoom/tabs, complete default/configured bindings and lock |
-| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight, OSC 52 copy on release/Ctrl+C under `ui.copy_on_select`, forwarding pane-emitted OSC 52 and clipboard image paste over remote endpoints, and keyboard copy mode (`keys.copy_mode`, motions, search, visual/linewise selection, copy feedback toast) are implemented. Popup mouse selection remains. |
+| M5 | Copy mode, selection and clipboard behavior/visuals. Mouse selection (drag, double-click word, edge autoscroll, absolute rows), the reference selection highlight, OSC 52 copy on release/Ctrl+C under `ui.copy_on_select`, forwarding pane-emitted OSC 52 and clipboard image paste over remote endpoints, keyboard copy mode (`keys.copy_mode`, motions, search, visual/linewise selection, copy feedback toast) and popup mouse selection are implemented. |
 
 The M2 joint review pause stays in place. Later milestones do not excuse
 incorrect behavior on an M2 surface. Popups, confirmations and other actions
@@ -395,7 +395,7 @@ or title are masked. These are documented core-policy differences, not passes.
 | Reload config binding/menu | M3a.1 rereads local herdr config, rebuilds bindings/theme/chrome and reallocates panes. Invalid sections keep their old values while valid siblings apply; parse/read failures retain the current config. Manual sidebar width and agent sorting survive. |
 | Settings binding/menu | M4 implements the reference overlay: the five sections (theme, indicators, sound, toast, integrations), live theme preview, `write_edit` saves and the same config-reload path as the reload binding. The Integrations section has no `integration.list`/`integration.install` core methods in hc, so it renders the reference's empty state `no integration targets available` and applying it is inert — the reference renders its built-in target list instead, so that one checkpoint differs by the missing core methods (Known differences). |
 | Mutation actions | M3a includes new tabs, both split axes, close tab/pane and rename tab/pane, with matching dialogs. M4s1 adds the right-click context menu (workspace/tab/pane targets, reference items/geometry/highlight), workspace new/rename/close including the mobile `+ new workspace` row, and machine dialogs (add/connect/rename/remove). Custom commands, notifications, scrollback editing/clear and remaining actions stay in later M4 slices or M5. |
-| Copy mode/selection/clipboard help entries | M5 implements the binding (`keys.copy_mode`, default `prefix+[`), the copy cursor/mode bar/search prompt visuals, motions, search and visual/linewise selection, plus mouse selection through OSC 52. The help overlay lists the same entries as the reference. |
+| Copy mode/selection/clipboard help entries | M5 implements the binding (`keys.copy_mode`, default `prefix+[`), the copy cursor/mode bar/search prompt visuals, motions, search and visual/linewise selection, plus mouse and popup selection through OSC 52. The help overlay lists the same entries as the reference. |
 | Create/open/remove worktree help entries | Listed for source help fidelity; worktree mutation is outside v1. Read-only Git/worktree presentation remains required. |
 
 The joint review accepted documented deferral of dead-wire held releases,
@@ -659,7 +659,8 @@ Everything else on the compared surfaces still diffs normally.
   atoms, literal case-aware search with the same 4096-byte query and
   1024-match limits) over the visible VT text. Cursor targets, match
   spans, count and highlight cells are identical; only the transport
-  differs.
+  differs. Popup selection likewise reads the popup's own VT frame
+  instead of a server surface snapshot, producing the same copied text.
 - **No host clipboard read for the copy search prompt.** In the
   reference, `Ctrl+V`/`Ctrl+Shift+V` inside an open copy search prompt
   (or a focused overlay query) reads the host clipboard and inserts the
