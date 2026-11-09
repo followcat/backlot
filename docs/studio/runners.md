@@ -29,13 +29,13 @@ prompt is checked before the working marker — a prompt can sit on a screen tha
 working line — and anything unmatched is `waiting`, the role answering to nothing. The ledger never
 sees it.
 
-| Runner | `blocked` | `working` |
-|---|---|---|
-| Claude Code | a line containing `Do you want to` and a line trimmed to `❯ 1.`; or the folder-trust dialog | `esc to interrupt` |
-| Codex | a line containing `Would you like to` and a line trimmed to `› 1.` | `esc to interrupt` |
-| Devin | a line trimmed to `Allow` containing `Once`, plus a line trimmed to `Deny` | `to interrupt` |
-| OpenCode | `Permission required` and `Allow once` | `esc interrupt` — guessed from the permission card, not measured yet |
-| `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` |
+| Runner | `blocked` | `working` | Markers from |
+|---|---|---|---|
+| Claude Code | a line containing `Do you want to` and a line trimmed to `❯ 1.`; or the folder-trust dialog | `esc to interrupt`, or a spinner line: a trimmed line of one glyph from `·✢✳✶✻✽*`, a space, a word ending in `…` | Measured on 2.1.319 — trust dialog, permission prompt, spinner line |
+| Codex | a line containing `Would you like to` and a line trimmed to `› 1.` | `esc to interrupt` | An older capture — not measured on 0.166.0 |
+| Devin | a line trimmed to `Allow` containing `Once`, plus a line trimmed to `Deny` | `to interrupt` | Live 3000.12.32 screens — `esc twice to interrupt`, the `Allow … Once`/`Deny` prompt |
+| OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
+| `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
 ## Rules for adapters
 

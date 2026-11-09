@@ -61,13 +61,36 @@ fn blocked(runner: &str, screen: &str) -> bool {
 /// The runner's screen reads as mid-turn.
 fn working(runner: &str, screen: &str) -> bool {
     match runner {
-        "claude" | "codex" => screen.contains("esc to interrupt"),
+        "claude" => screen.contains("esc to interrupt") || claude_spinner(screen),
+        "codex" => screen.contains("esc to interrupt"),
         "devin" => screen.contains("to interrupt"),
         // Not measured yet — see docs/studio/runners.md.
         "opencode" => screen.contains("esc interrupt"),
         "fake" => fake_state(screen) == Some(Work::Working),
         _ => false,
     }
+}
+
+/// Claude Code's running turn on 2.1.319: a spinner glyph from
+/// `·✢✳✶✻✽*`, a space, then a word ending in `…` —
+/// `· Schlepping… (17s · ↓ 95 tokens)`. The finished line keeps the
+/// glyph but loses the `…` (`✻ Churned for 2s · done 3:07 PM`), and
+/// a transcript bullet was never a turn — both stay waiting. Older
+/// versions' `esc to interrupt` line still matches separately.
+fn claude_spinner(screen: &str) -> bool {
+    const GLYPHS: &[char] = &['·', '✢', '✳', '✶', '✻', '✽', '*'];
+    screen.lines().any(|l| {
+        let mut parts = l.trim().splitn(2, ' ');
+        let (Some(glyph), Some(rest)) = (parts.next(), parts.next()) else {
+            return false;
+        };
+        glyph.chars().count() == 1
+            && GLYPHS.contains(&glyph.chars().next().unwrap_or_default())
+            && rest
+                .split_whitespace()
+                .next()
+                .is_some_and(|w| w.ends_with('…'))
+    })
 }
 
 /// The fake runner's last announced state: `work:<state>` input

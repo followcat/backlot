@@ -31,6 +31,30 @@ fn claude_trust_dialog_is_blocked() {
     assert_eq!(work_state("claude", trust), Work::Blocked);
 }
 
+/// Claude 2.1.319's running turn is a spinner glyph and a `…`
+/// gerund, with no `esc to interrupt` on screen; the finished line
+/// keeps the glyph but drops the `…`, and a transcript bullet is
+/// not a turn — both stay waiting.
+#[test]
+fn claude_spinner_line_is_working() {
+    assert_eq!(
+        work_state("claude", "· Schlepping… (17s · ↓ 95 tokens)\n"),
+        Work::Working
+    );
+    assert_eq!(work_state("claude", "· Schlepping…\n"), Work::Working);
+    assert_eq!(
+        work_state("claude", "✻ Churned for 2s · done 3:07 PM\n"),
+        Work::Waiting
+    );
+    assert_eq!(
+        work_state("claude", "· a bullet in the transcript\n"),
+        Work::Waiting
+    );
+    // A permission prompt on a spinner screen is still blocked.
+    let screen = "· Schlepping… (17s · ↓ 95 tokens)\n\n Do you want to proceed?\n ❯ 1. Yes\n";
+    assert_eq!(work_state("claude", screen), Work::Blocked);
+}
+
 /// Codex's `Would you like to` + `› 1.` picker.
 #[test]
 fn codex_working_and_blocked() {
