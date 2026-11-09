@@ -285,6 +285,7 @@ dependencies = [
 name = "hc-tui"
 version = "0.1.0"
 dependencies = [
+ "backlot-stage",
  "crossterm",
  "futures-lite",
  "hc-proto",
