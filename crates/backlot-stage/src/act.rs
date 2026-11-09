@@ -20,6 +20,7 @@ use crate::discover;
 use crate::reconcile::{Action, Start};
 use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
+use crate::workareas::{self, AreaFail};
 
 /// A ledger event the stage appends for one studio.
 pub(crate) fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
@@ -192,12 +193,13 @@ impl Stage {
         launch: &runners::Launch,
         runner_env: BTreeMap<String, String>,
     ) -> Result<bool, Fail> {
+        let cwd = workareas::role_dir(dir, &start.repo, &start.role);
         let run = self
             .client
             .terminal_run(RunParams {
                 argv: launch.argv.clone(),
                 name: Some(start.terminal.clone()),
-                cwd: Some(start.repo.clone()),
+                cwd: Some(cwd.to_string_lossy().into_owned()),
                 env: role_env(
                     studio,
                     start,
@@ -330,9 +332,43 @@ impl Stage {
                 eprintln!("stage: adopted {terminal} for {role}");
             }
             Action::Start(start) => {
+                // The role's work area (D10): a pure plan over the
+                // injected git runner. A failure raises the matching
+                // attention once per role and reason and the start
+                // retries on a later tick.
+                let area = workareas::area_of(start);
+                let cwd = match workareas::ensure(
+                    &mut *self.git.borrow_mut(),
+                    studio,
+                    &start.repo,
+                    dir,
+                    &area,
+                ) {
+                    Ok(cwd) => cwd.to_string_lossy().into_owned(),
+                    Err(fail) => {
+                        let (reason, detail) = match fail {
+                            AreaFail::NotGit => (
+                                "not a git repository",
+                                format!("{} is not a git work tree", start.repo),
+                            ),
+                            AreaFail::Git(detail) => ("work area failed", detail),
+                        };
+                        if !attention_open(state, &start.role, reason) {
+                            record(
+                                dir,
+                                EventKind::AttentionRaised {
+                                    role: start.role.clone(),
+                                    reason: reason.into(),
+                                    detail,
+                                },
+                            )?;
+                        }
+                        return Ok(());
+                    }
+                };
                 let ctx = LaunchCtx {
                     terminal: &start.terminal,
-                    cwd: &start.repo,
+                    cwd: &cwd,
                     prompt: None,
                     resume: start.resume.as_deref(),
                     stage_env: &self.env_vars,
@@ -343,7 +379,7 @@ impl Stage {
                     self.runner_env(&start.actor.runner),
                     real_slot_free,
                     blocked,
-                    &start.repo,
+                    &cwd,
                 ) {
                     // A refusal is an `attention.raised`, not a
                     // launch — one open attention per role and

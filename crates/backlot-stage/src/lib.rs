@@ -19,6 +19,7 @@ mod runners;
 mod stage;
 pub mod store;
 mod watch;
+mod workareas;
 
 #[cfg(test)]
 mod act_tests;
@@ -38,5 +39,7 @@ mod reopen_cmd_tests;
 mod store_tests;
 #[cfg(test)]
 mod watch_tests;
+#[cfg(test)]
+mod workareas_tests;
 
 pub use cli::{Env, Fail, maybe_run};

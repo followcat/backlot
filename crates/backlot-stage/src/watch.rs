@@ -19,6 +19,7 @@ use crate::daemon::Stage;
 use crate::discover;
 use crate::reconcile::{self, LiveTerminal};
 use crate::runners;
+use crate::workareas;
 
 /// A live role may keep its session id hidden this long before the
 /// stage asks for attention.
@@ -133,15 +134,19 @@ fn can_show_trust(actor: &backlot_model::ActorIdentity) -> bool {
 /// live role of a post-launch runner — in any studio — that has no
 /// session id yet and has not hit its 60 second attention. Two such
 /// roles in one folder could claim the same session, so the second
-/// defers until the first has its id or is given up on.
+/// defers until the first has its id or is given up on. The folder
+/// is the role's work area, so `dir_of` maps a studio name to its
+/// state directory.
 pub(crate) fn discovery_blocked(
     states: &std::collections::BTreeMap<String, StudioState>,
+    dir_of: &dyn Fn(&str) -> PathBuf,
 ) -> BTreeSet<(String, String)> {
     let mut blocked = BTreeSet::new();
-    for s in states.values() {
+    for (name, s) in states {
         let Some(repo) = s.studio.as_ref().map(|c| c.repo.as_str()) else {
             continue;
         };
+        let dir = dir_of(name);
         for (key, r) in &s.roles {
             let pending = r.live
                 && r.session_id.is_none()
@@ -158,7 +163,12 @@ pub(crate) fn discovery_blocked(
                     .as_ref()
                     .map(|a| a.runner.clone())
                     .unwrap_or_default();
-                blocked.insert((runner, repo.to_string()));
+                blocked.insert((
+                    runner,
+                    workareas::role_dir(&dir, repo, key)
+                        .to_string_lossy()
+                        .into_owned(),
+                ));
             }
         }
     }
@@ -271,12 +281,16 @@ impl Stage {
                 continue;
             };
             let age_ms = now_ms.saturating_sub(role.since_ms);
+            // The folder the role launched in: its work area.
+            let cwd = workareas::role_dir(dir, &repo, key)
+                .to_string_lossy()
+                .into_owned();
 
             // The first-use folder-trust dialog: paced keys, in the
             // role's first minute only — the window bounds the
             // exchange.
             if can_show_trust(actor) && age_ms < TRUST_WINDOW_MS {
-                self.answer_trust(studio, key, term, &repo, now_ms).await?;
+                self.answer_trust(studio, key, term, &cwd, now_ms).await?;
             }
 
             // The work sample: one screen read a second per role,
@@ -300,7 +314,7 @@ impl Stage {
                 discover::find_session(
                     &actor.runner,
                     &term.argv,
-                    &repo,
+                    &cwd,
                     role.since_ms,
                     &taken,
                     &home,

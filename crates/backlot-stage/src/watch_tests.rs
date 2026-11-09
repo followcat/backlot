@@ -64,13 +64,16 @@ fn raised(role: &str) -> Attention {
 /// A live post-launch role with no id blocks its (runner,
 /// folder) pair — across studios — until it has the id or hit
 /// the attention; chosen-id runners and dead roles never block.
+/// The folder is the role's work area: the producer blocks the
+/// repo itself, the director its integration worktree.
 #[test]
 fn discovery_blocked_while_an_id_is_outstanding() {
+    let dir_of = |name: &str| std::path::PathBuf::from(format!("/state/{name}"));
     let mut states = std::collections::BTreeMap::new();
     let mut one = studio("/repo");
     one.roles.insert("producer".into(), live("codex", None));
     states.insert("one".into(), one);
-    let blocked = discovery_blocked(&states);
+    let blocked = discovery_blocked(&states, &dir_of);
     assert!(
         blocked.contains(&("codex".into(), "/repo".into())),
         "{blocked:?}"
@@ -79,9 +82,9 @@ fn discovery_blocked_while_an_id_is_outstanding() {
     let mut two = studio("/other");
     two.roles.insert("director".into(), live("devin", None));
     states.insert("two".into(), two);
-    let blocked = discovery_blocked(&states);
+    let blocked = discovery_blocked(&states, &dir_of);
     assert_eq!(blocked.len(), 2, "{blocked:?}");
-    assert!(blocked.contains(&("devin".into(), "/other".into())));
+    assert!(blocked.contains(&("devin".into(), "/state/two/work/integration".into())));
     // The id arriving — or the attention giving up — frees it.
     states
         .get_mut("one")
@@ -90,7 +93,7 @@ fn discovery_blocked_while_an_id_is_outstanding() {
         .get_mut("producer")
         .unwrap()
         .session_id = Some("s1".into());
-    let blocked = discovery_blocked(&states);
+    let blocked = discovery_blocked(&states, &dir_of);
     assert!(!blocked.contains(&("codex".into(), "/repo".into())));
     states
         .get_mut("one")
@@ -104,7 +107,7 @@ fn discovery_blocked_while_an_id_is_outstanding() {
         .unwrap()
         .attention
         .push(raised("producer"));
-    let blocked = discovery_blocked(&states);
+    let blocked = discovery_blocked(&states, &dir_of);
     assert!(!blocked.contains(&("codex".into(), "/repo".into())));
     // A chosen-id runner or a dead role blocks nothing.
     let mut three = studio("/third");
@@ -113,7 +116,7 @@ fn discovery_blocked_while_an_id_is_outstanding() {
     dead.live = false;
     three.roles.insert("actor-t1-c1".into(), dead);
     states.insert("three".into(), three);
-    let blocked = discovery_blocked(&states);
+    let blocked = discovery_blocked(&states, &dir_of);
     assert_eq!(blocked.len(), 1, "{blocked:?}");
 }
 

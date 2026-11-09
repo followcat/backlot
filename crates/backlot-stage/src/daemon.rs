@@ -26,6 +26,7 @@ use crate::link;
 use crate::reconcile;
 use crate::store::{self, StoreError};
 use crate::watch;
+use crate::workareas;
 
 /// Poll cadence: ledgers grow-check and, without `events.subscribe`,
 /// the terminal inventory.
@@ -98,6 +99,9 @@ pub(crate) struct Stage {
     /// How external commands run — `discover::real_exec` live, a fake
     /// in tests.
     pub(crate) exec: Box<discover::Exec>,
+    /// How git runs for work areas — `workareas::real_git` live, a
+    /// fake in tests.
+    pub(crate) git: std::cell::RefCell<Box<workareas::GitRun<'static>>>,
     /// `<runner> --version` answers, asked once per runner per run.
     pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
     /// Session ids the running pass recorded — `cached` cannot see
@@ -149,7 +153,8 @@ impl Stage {
         // And at most one live role still looking for its post-launch
         // session id per (runner, folder) — a second start in the
         // same pair would race it for the same session.
-        let blocked = watch::discovery_blocked(&self.cached);
+        let blocked =
+            watch::discovery_blocked(&self.cached, &|name| store::studio_dir(&self.base, name));
         self.found_sessions.borrow_mut().clear();
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -222,6 +227,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         state_dir: base.to_string_lossy().into_owned(),
         env_vars: env.vars.clone(),
         exec: Box::new(discover::real_exec),
+        git: std::cell::RefCell::new(Box::new(workareas::real_git)),
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         discover_looked: std::cell::RefCell::new(BTreeMap::new()),
