@@ -1,5 +1,34 @@
 # Studio progress
 
+## S6a: stalls, the rework cap, going on after a block (2026-11-10)
+
+- Done: three real rounds found four gaps and all four are closed. A live role whose screen is
+  unchanged for the studio's `stall_limit_s` — a new optional cast-file key, default 600 s — raises
+  one `stalled` attention per frozen episode with the screen saved under `attention/<seq>.txt`, and
+  a changed screen clears it; the rule reads the send gate's `Screen` stability track, so detection
+  costs no extra `terminal.read`. An actor stalls only on a `running` task — `working` and `waiting`
+  both count — and the producer, director and writer only while `working`; `blocked` never counts.
+  The notice goes to the actor's task reviewer, the writer's and director's to the producer, the
+  producer's to nobody. The review that takes a task to `at_cap` now owes the producer one `at-cap`
+  notice naming the verdict, the rounds and the three ways on, and the actor nothing it could not
+  act on — below-cap reviews keep their `rework` notice. `task resume` validates from `blocked` as
+  well as `paused` and replays to `running` with the same cast and session — a pause of a blocked
+  task still restores `blocked` — and a resume that lands on `running` owes the actor one `resumed`
+  notice naming who resumed it (`StateChangeRecord` keeps `by` and the `resumed_to` outcome for it).
+  A denied non-actor's notice no longer names the actor-only `backlot block`.
+- Measured: the `stall` truth table, stage-level episode tests on a fake client — raise once per
+  episode, clear on change, re-raise — notice routing for actor, writer, director and producer, the
+  cap below/at/second-pass cases, resume validation and replay including pause-of-blocked and
+  pause-of-delivered restores, actor and non-actor deny wording, and the prompt parser covering the
+  new `backlot` lines. `real_stage_watch` on the fake runner with `stall_limit_s = 5` raises
+  `stalled`, queues the director's notice, clears on a changed screen, then blocks, resumes and
+  delivers — run here against the pinned core. fmt, clippy, `cargo test` and `real_stage` (3) green
+  on every commit.
+- Not verified: no real agents ran the new prompts or the stall notice flow. Rate-limit and
+  connection-error screen patterns are not built — nothing measures them — so such a role reaches
+  its reviewer as a stall. A stage restart loses the screen track, so an open stall clears and can
+  re-raise one limit later. Restart recovery is S6b.
+
 ## S5b: fixes from the second real run (2026-11-09)
 
 - Done: a sent approval key now ends the blocked episode — `blocked_since` is forgotten when the

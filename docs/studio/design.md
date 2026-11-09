@@ -111,7 +111,8 @@ Agents reviewing agents can loop without end, so the stage enforces limits:
 - Rework rounds per task. Default 2. At the cap the task goes to the producer to accept with documented gaps, rescope or
   recast.
 - A running time budget per task, optional.
-- A stall limit, below.
+- A stall limit on a role's unchanged screen — `stall_limit_s` in the cast file, default 600 s — detailed under
+  "Watching agents".
 
 ## Watching agents
 
@@ -122,11 +123,20 @@ official hc, agents that do not report status have none at all. The stage theref
 |---|---|
 | Explicit `backlot` commands | Task state. This is the authority. |
 | hc status and turn events | Working or stopped, when reported |
-| `terminal.read` samples, about every 30 s | Stalls: the screen has not changed for a limit, default 10 minutes |
-| Per-runner screen patterns | Attention reasons: connection error, rate limit, permission prompt |
+| `terminal.read` samples | Stalls: a live role's screen unchanged for `stall_limit_s` |
+| Per-runner screen patterns | Attention reasons: permission prompt |
 
-Known conditions have known responses: a connection error gets one short continue message; a rate limit waits for its
-reset; a permission prompt follows the approval policy. Anything else goes to the director as attention.
+The stall rule reads the send gate's screen-stability track — a live role is stalled when its screen has not changed
+for `stall_limit_s` (default 600 s) and its work counts: an actor only on a `running` task, where `working` and
+`waiting` both count — an actor that went idle is exactly the case — while the producer, director and writer stall only
+while `working`; an idle one is normal, and `blocked` never counts because a permission prompt has its own attention.
+One `stalled` attention raises per frozen episode with the screen saved under `attention/<seq>.txt`; a changed screen
+clears it and a later freeze raises its own. The notice goes to the actor's task reviewer and to the producer for the
+other fixed roles — the producer's own stall is panel-only.
+
+A permission prompt follows the approval policy. Rate-limit and connection-error screen patterns are not built —
+nothing is measured — so a role that hits one simply stops, and reaches its reviewer as a stall like any other frozen
+screen.
 
 ## State directory
 
