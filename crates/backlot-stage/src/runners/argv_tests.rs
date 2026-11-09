@@ -274,3 +274,19 @@ fn an_unknown_profile_refuses_every_runner() {
         assert!(e.detail.contains("nowhere"), "{e:?}");
     }
 }
+
+/// `session_in_argv` reads the chosen id back off a live terminal.
+#[test]
+fn session_ids_read_back_from_argv() {
+    let env = BTreeMap::new();
+    let l = plan(&actor("claude", "standard"), &ctx(&env, None, None)).unwrap();
+    assert_eq!(session_in_argv("claude", &l.argv), l.session_id());
+    // A resume id reads back too, through `-r`.
+    let c = ctx(&env, None, Some("old-1"));
+    let l = plan(&actor("claude", "standard"), &c).unwrap();
+    assert_eq!(session_in_argv("claude", &l.argv).as_deref(), Some("old-1"));
+    let l = plan(&actor("opencode", "standard"), &ctx(&env, None, None)).unwrap();
+    assert_eq!(session_in_argv("opencode", &l.argv), l.session_id());
+    // Runners that do not choose give nothing.
+    assert_eq!(session_in_argv("codex", &["codex".into()]), None);
+}

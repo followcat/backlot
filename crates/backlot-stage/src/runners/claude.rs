@@ -28,6 +28,13 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     }
 }
 
+/// The session id a live claude terminal's argv chose: the value
+/// after `--session-id`, or after `-r` when it was a resume.
+pub fn session_in_argv(argv: &[String]) -> Option<String> {
+    let flag = argv.iter().position(|a| a == "--session-id" || a == "-r")?;
+    argv.get(flag + 1).cloned()
+}
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     let mode = permission_mode(&identity.permission_profile)?;
     let mut argv: Vec<String> = Vec::new();

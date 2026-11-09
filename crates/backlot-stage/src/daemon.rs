@@ -20,6 +20,7 @@ use hc_proto::terminal::ListParams;
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
+use crate::discover;
 use crate::doc;
 use crate::link;
 use crate::reconcile;
@@ -91,6 +92,13 @@ pub(crate) struct Stage {
     /// The stage's own environment: adapters scrub inherited markers
     /// from it, and `HOME` locates runner session files.
     pub(crate) env_vars: BTreeMap<String, String>,
+    /// How external commands run — `discover::real_exec` live, a fake
+    /// in tests.
+    pub(crate) exec: Box<discover::Exec>,
+    /// `<runner> --version` answers, asked once per runner per run.
+    pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
+    /// `(studio, role)` pairs whose trust dialog was answered.
+    pub(crate) trust_answered: std::cell::RefCell<std::collections::BTreeSet<(String, String)>>,
     /// Reduced state per studio, reloaded when its log grew.
     cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -121,6 +129,10 @@ impl Stage {
         }
         // At most one real runner launches per tick, across studios.
         let mut real_slot_free = true;
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
         for name in self.cached.keys().cloned().collect::<Vec<_>>() {
             let dir = store::studio_dir(&self.base, &name);
             let state = &self.cached[&name];
@@ -129,6 +141,7 @@ impl Stage {
                 self.act(&name, &dir, state, &action, &mut real_slot_free)
                     .await?;
             }
+            self.watch(&name, &dir, state, &live.terms, now_ms).await?;
         }
         Ok(())
     }
@@ -185,6 +198,9 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         path_env,
         state_dir: base.to_string_lossy().into_owned(),
         env_vars: env.vars.clone(),
+        exec: Box::new(discover::real_exec),
+        versions: std::cell::RefCell::new(BTreeMap::new()),
+        trust_answered: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

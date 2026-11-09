@@ -9,6 +9,7 @@ mod args_task;
 pub mod cli;
 pub mod commands;
 mod daemon;
+mod discover;
 mod doc;
 pub mod link;
 pub mod reconcile;
@@ -16,6 +17,7 @@ pub mod render;
 mod runners;
 mod stage;
 pub mod store;
+mod watch;
 
 #[cfg(test)]
 mod cli_state_tests;

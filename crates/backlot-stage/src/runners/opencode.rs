@@ -20,6 +20,12 @@ fn new_session_id() -> String {
     id
 }
 
+/// The id a live opencode terminal's argv chose: the value after `-s`.
+pub fn session_in_argv(argv: &[String]) -> Option<String> {
+    let flag = argv.iter().position(|a| a == "-s")?;
+    argv.get(flag + 1).cloned()
+}
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         // Neither profile adds flags; only an unknown one refuses.

@@ -5,11 +5,11 @@
 //! config that does not parse. At most one real runner launches per
 //! tick ([`decide_start`]); `fake` is exempt.
 
-mod claude;
+pub mod claude;
 mod codex;
 mod devin;
 mod fake;
-mod opencode;
+pub mod opencode;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -160,10 +160,22 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
 
 /// The session id derivable without the terminal: `fake` from the
 /// name. Chosen-at-launch ids (claude, opencode) sit in the terminal's
-/// argv; codex and devin ids are found after launch.
+/// argv — [`claude::session_in_argv`], [`opencode::session_in_argv`]
+/// find them there; codex and devin ids are found after launch.
 pub fn session_id(identity: &ActorIdentity, terminal: &str) -> Option<String> {
     match identity.runner.as_str() {
         "fake" => Some(format!("fake-{terminal}")),
+        _ => None,
+    }
+}
+
+/// The session id a runner chose at launch, read back from a live
+/// terminal's argv — how an adopted claude or opencode role recovers
+/// its id without a `role.started` to carry it.
+pub fn session_in_argv(runner: &str, argv: &[String]) -> Option<String> {
+    match runner {
+        "claude" => claude::session_in_argv(argv),
+        "opencode" => opencode::session_in_argv(argv),
         _ => None,
     }
 }

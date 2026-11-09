@@ -15,6 +15,7 @@ use hc_proto::terminal::{RunParams, TerminalParams};
 
 use crate::cli::Fail;
 use crate::daemon::Stage;
+use crate::discover;
 use crate::reconcile::{Action, Start};
 use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
@@ -190,6 +191,17 @@ impl Stage {
         Ok(BTreeMap::new())
     }
 
+    /// `<runner> --version`'s first line, asked once per runner per
+    /// stage run; a failure stays an empty `runner_version`.
+    fn runner_version(&self, runner: &str) -> Option<String> {
+        if let Some(v) = self.versions.borrow().get(runner) {
+            return v.clone();
+        }
+        let v = discover::runner_version(&*self.exec, runner);
+        self.versions.borrow_mut().insert(runner.into(), v.clone());
+        v
+    }
+
     /// One reconcile action. Ledger appends land before their terminal
     /// calls so a crash leaves a recoverable state. `real_slot_free`
     /// is the tick's one-real-launch allowance: a deferred start
@@ -290,7 +302,12 @@ impl Stage {
                     }
                     StartDecision::Defer => {}
                     StartDecision::Launch { launch, runner_env } => {
-                        self.launch(studio, dir, start, &launch, runner_env).await?
+                        // `role.started` carries the runner's version
+                        // when `--version` answered.
+                        let mut start = start.clone();
+                        start.actor.runner_version = self.runner_version(&start.actor.runner);
+                        self.launch(studio, dir, &start, &launch, runner_env)
+                            .await?
                     }
                 }
             }
