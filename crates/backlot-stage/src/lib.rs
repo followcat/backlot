@@ -20,6 +20,7 @@ mod prompts;
 pub mod reconcile;
 pub mod render;
 mod runners;
+mod sample;
 mod stage;
 pub mod store;
 mod watch;
