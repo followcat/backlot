@@ -25,6 +25,22 @@ tail still wins while the panel is closed or unfocused.
 All other keys are eaten while the panel owns focus, except the prefix, which still arms the
 toggle chord.
 
+## Full screen
+
+When the window cannot fit a beside panel (under the mobile threshold, or fewer than 60
+columns left for the panes) an open panel covers the whole frame. In that shape:
+
+- The panel owns the keyboard for as long as it is drawn — the `focused` latch does not
+  matter, since nobody can see the panes it covers.
+- `Esc` closes the panel. The toggle chord also closes it on the first press, even after a
+  resize from beside to full screen.
+- `Enter` on a live person or a studio focuses that terminal and closes the panel.
+- The panel's rect is reset cell by cell before painting, so nothing from the frame
+  underneath shows through its blank cells.
+
+Beside the panes nothing changes: `Esc` only leaves focus and the panel stays open; `Enter`
+on a live person or studio focuses the terminal and leaves the panel open unfocused.
+
 ## Mouse
 
 - Click on the title flips collapsed and expanded.
@@ -43,8 +59,9 @@ key = "y"   # the chord tail after the prefix
 ```
 
 A missing file means defaults. A malformed file means defaults plus one notice carrying only
-the line and column — file contents never reach the screen. herdr's own `config.toml` is read
-exactly as before.
+the line and column — file contents never reach the screen. A `key` that does not parse falls
+back to `y` with one notice naming the file; the invalid value is never echoed. herdr's own
+`config.toml` is read exactly as before.
 
 ## Behaviour notes
 

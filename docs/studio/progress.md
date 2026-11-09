@@ -42,6 +42,13 @@
   starting the stage from the panel is not implemented.
 - Deviations from the design brief: none beyond the crate placement and the stage-down offer
   above.
+- Rework 1 (2026-11-09): real-TUI fixes — a full-screen panel resets its rect before painting
+  and owns the keyboard (`Esc`/Enter/one chord all close it; beside semantics unchanged), a
+  beside reservation can no longer flip the chrome to the mobile layout, the spin deadline is
+  armed only when none is pending, runner text advances by display width past wide-character
+  names, an unparseable `panel.key` falls back to `y` with a file-naming notice, `Esc` or
+  activating another row disarms a pending reopen, and the wheel bounds by the scroll
+  metrics' line maximum.
 
 ## S4a: The data behind the panel (2026-11-09)
 
