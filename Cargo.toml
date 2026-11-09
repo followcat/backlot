@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/hc-proto", "crates/hc-tui", "crates/hc-vt"]
+members = [
+    "crates/backlot-model",
+    "crates/hc-proto",
+    "crates/hc-tui",
+    "crates/hc-vt",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -8,6 +13,7 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+backlot-model = { path = "crates/backlot-model" }
 hc-proto = { path = "crates/hc-proto" }
 hc-vt = { path = "crates/hc-vt" }
 libc = "0.2"
