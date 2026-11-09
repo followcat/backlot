@@ -374,32 +374,57 @@ fn an_unrecorded_desired_terminal_is_adopted() {
     );
 }
 
-/// A `bl-<studio>-` terminal no role explains is dropped; other
-/// studios' and users' terminals are left alone.
+/// Ownership is the `backlot.studio` label, never the name: each
+/// studio's view holds only its own terminals — not a hand-named
+/// lookalike, not an unlabelled one, not another studio's.
 #[test]
-fn stray_bl_terminals_are_dropped_only() {
+fn the_label_decides_the_studio_view() {
+    let term = |name: &str, address: &str, studio: Option<&str>| LiveTerminal {
+        name: name.into(),
+        address: address.into(),
+        labels: studio
+            .map(|s| BTreeMap::from([("backlot.studio".to_string(), s.to_string())]))
+            .unwrap_or_default(),
+    };
+    let terms = vec![
+        term("bl-acme-producer", "t1", Some("acme")),
+        term("bl-acme-shop-producer", "t2", Some("acme-shop")),
+        // A matching name with no label is nobody's.
+        term("bl-acme-x", "t3", None),
+        // A matching name with another studio's label is theirs.
+        term("bl-acme-y", "t4", Some("acme-shop")),
+    ];
+    assert_eq!(
+        studio_view("acme", &terms),
+        live(&[("bl-acme-producer", "t1")])
+    );
+    assert_eq!(
+        studio_view("acme-shop", &terms),
+        live(&[("bl-acme-shop-producer", "t2"), ("bl-acme-y", "t4")])
+    );
+}
+
+/// Every terminal in the studio's view that no role entry explains
+/// is a stray and is dropped — the label already said it is ours.
+#[test]
+fn stray_terminals_in_the_view_are_dropped() {
     let actions = reconcile(
         STUDIO,
         &log(studio()),
-        &live(&[
-            ("bl-acme-shop-ghost", "t9"),
-            ("bl-other-producer", "t8"),
-            ("notes", "t1"),
-        ]),
+        &live(&[("bl-acme-shop-ghost", "t9"), ("bl-acme-shop-old", "t8")]),
     );
-    assert!(
-        actions.iter().any(|a| matches!(a, Action::DropTerminal {
-            terminal,
-            address,
-        } if terminal == "bl-acme-shop-ghost" && address == "t9")),
-        "{actions:?}"
-    );
+    let dropped: Vec<(&str, &str)> = actions
+        .iter()
+        .filter_map(|a| match a {
+            Action::DropTerminal { terminal, address } => {
+                Some((terminal.as_str(), address.as_str()))
+            }
+            _ => None,
+        })
+        .collect();
     assert_eq!(
-        actions
-            .iter()
-            .filter(|a| matches!(a, Action::DropTerminal { .. }))
-            .count(),
-        1,
+        dropped,
+        [("bl-acme-shop-ghost", "t9"), ("bl-acme-shop-old", "t8")],
         "{actions:?}"
     );
 }

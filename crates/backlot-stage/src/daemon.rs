@@ -31,21 +31,21 @@ const TICK: Duration = Duration::from_secs(1);
 
 /// The live terminal view the loop works on.
 struct Inventory {
-    /// Name → address, for reconcile.
-    by_name: BTreeMap<String, String>,
+    /// Every live named terminal; per-studio views come from labels.
+    terms: Vec<reconcile::LiveTerminal>,
     /// Address → what the program reports doing, for the summary.
     doing: BTreeMap<String, String>,
 }
 
-/// Every live terminal the core knows, named for reconcile and with
-/// its reported status for the summary.
+/// Every live terminal the core knows, kept for the per-studio
+/// label views and with its reported status for the summary.
 async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
     let list = client
         .terminal_list(ListParams::default())
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
     let mut inv = Inventory {
-        by_name: BTreeMap::new(),
+        terms: Vec::new(),
         doing: BTreeMap::new(),
     };
     for t in list.terminals.into_iter().filter(|t| t.state == "live") {
@@ -60,7 +60,11 @@ async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
             }
         }
         if let Some(name) = t.name {
-            inv.by_name.insert(name, t.address);
+            inv.terms.push(reconcile::LiveTerminal {
+                name,
+                address: t.address,
+                labels: t.labels,
+            });
         }
     }
     Ok(inv)
@@ -89,8 +93,10 @@ pub(crate) struct Stage {
 }
 
 impl Stage {
-    /// Reload changed ledgers, reconcile each studio and act.
-    async fn tick(&mut self, live: &BTreeMap<String, String>) -> Result<(), Fail> {
+    /// Reload changed ledgers, reconcile each studio and act. Each
+    /// studio sees only the terminals its label owns — the name is
+    /// never enough to stop, adopt or drop.
+    async fn tick(&mut self, live: &Inventory) -> Result<(), Fail> {
         for name in store::studios(&self.base)
             .map_err(|e| Fail::refused(format!("cannot read {}: {e}", self.base.display())))?
         {
@@ -111,7 +117,8 @@ impl Stage {
         for name in self.cached.keys().cloned().collect::<Vec<_>>() {
             let dir = store::studio_dir(&self.base, &name);
             let state = &self.cached[&name];
-            for action in reconcile::reconcile(&name, state, live) {
+            let view = reconcile::studio_view(&name, &live.terms);
+            for action in reconcile::reconcile(&name, state, &view) {
                 self.act(&name, &dir, state, &action).await?;
             }
         }
@@ -180,7 +187,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
     let mut live = live_terminals(&link.client).await?;
     println!("stage: live on core {}", link.core_id);
     loop {
-        stage.tick(&live.by_name).await?;
+        stage.tick(&live).await?;
         // The summary regenerates each tick; the throttle writes it
         // only on change, at most once per gap.
         throttle.note(stage.summary_view(&live.doing));

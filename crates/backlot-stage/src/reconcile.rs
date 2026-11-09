@@ -79,6 +79,26 @@ pub enum Action {
     Start(Start),
 }
 
+/// One live named terminal as the label view sees it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LiveTerminal {
+    pub name: String,
+    pub address: String,
+    pub labels: BTreeMap<String, String>,
+}
+
+/// This studio's live terminals by name: only the ones labelled
+/// `backlot.studio=<studio>`. The name never confers ownership — a
+/// hand-named `bl-acme-x` or another studio's `bl-acme-shop-*` lands
+/// in no view but its labelled studio's, so it is never stopped,
+/// adopted or dropped here.
+pub fn studio_view(studio: &str, live: &[LiveTerminal]) -> BTreeMap<String, String> {
+    live.iter()
+        .filter(|t| t.labels.get("backlot.studio").is_some_and(|s| s == studio))
+        .map(|t| (t.name.clone(), t.address.clone()))
+        .collect()
+}
+
 /// `bl-<studio>-<role>` for fixed roles, `bl-<studio>-<task>` for
 /// `actor-<task>-c<n>` keys; `None` for anything else.
 pub fn terminal_name(studio: &str, role_key: &str) -> Option<String> {
@@ -156,18 +176,14 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
 }
 
 /// The actions that move the live view toward the ledger's desired
-/// one. `live` is name → hc address for this core's live terminals;
-/// only names under `bl-<studio>-` are considered.
+/// one. `live` is name → hc address for the terminals this studio
+/// owns — the caller builds it with [`studio_view`], so every name
+/// here is already the studio's by label.
 pub fn reconcile(
     studio: &str,
     state: &StudioState,
     live: &BTreeMap<String, String>,
 ) -> Vec<Action> {
-    let prefix = format!("bl-{studio}-");
-    let ours: BTreeMap<&String, &String> = live
-        .iter()
-        .filter(|(name, _)| name.starts_with(&prefix))
-        .collect();
     let wanted = desired(studio, state);
     let wanted_keys: BTreeSet<&str> = wanted.iter().map(|w| w.role.as_str()).collect();
     // Whether any recorded role's key resolves to this terminal name.
@@ -187,7 +203,7 @@ pub fn reconcile(
         let Some(name) = terminal_name(studio, key) else {
             continue;
         };
-        let term = ours.get(&name).map(|a| (*a).clone());
+        let term = live.get(&name).cloned();
         match r.lifecycle() {
             RoleLifecycle::Live => {
                 if wanted_keys.contains(key.as_str()) {
@@ -246,7 +262,7 @@ pub fn reconcile(
             // next `plan request`), as a new `role.started`.
             Some(_) => starts.push(Action::Start(want)),
             None => {
-                if let Some(address) = ours.get(&want.terminal) {
+                if let Some(address) = live.get(&want.terminal) {
                     // A terminal under that name is up. If another
                     // role entry owns the name, it is being stopped
                     // above; otherwise it is this role's own — the
@@ -267,19 +283,19 @@ pub fn reconcile(
         }
     }
 
-    // Stray `bl-<studio>-` terminals: no role entry explains them and
-    // nothing adopted them this round.
-    for (name, address) in &ours {
+    // Strays: terminals in this studio's view that no role entry
+    // explains and nothing adopted this round.
+    for (name, address) in live {
         let adopted = records.iter().any(|a| match a {
-            Action::Adopt { terminal, .. } => terminal == *name,
+            Action::Adopt { terminal, .. } => terminal == name,
             _ => false,
         });
         if owned(name, "") || adopted {
             continue;
         }
         stops.push(Action::DropTerminal {
-            terminal: (*name).clone(),
-            address: (*address).clone(),
+            terminal: name.clone(),
+            address: address.clone(),
         });
     }
 
