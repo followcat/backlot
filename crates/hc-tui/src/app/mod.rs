@@ -35,6 +35,7 @@ mod pane;
 mod pane_geometry;
 mod pane_mouse;
 mod pane_selection;
+mod panel;
 pub(crate) mod popup;
 mod presentation;
 mod reload;
@@ -193,6 +194,24 @@ pub struct App {
     command_overlay: Option<popup::CommandOverlay>,
     /// The worker-peek overlay — herdr-app's `terminal-peek`.
     peek: Option<popup::PeekState>,
+    /// The studio panel's client-local state — `Closed` by default, so
+    /// a stock frame is cell-identical to herdr (no width, no keys).
+    panel: crate::panel::Panel,
+    /// The `[panel]` config and the resolved toggle chord tail.
+    panel_config: crate::panel::PanelConfig,
+    panel_key_combo: Option<crate::config::KeyCombo>,
+    /// Last frame's panel hit rectangles (`PanelRender`).
+    panel_hits: crate::panel::PanelRender,
+    /// One-shot spin deadline — armed only while a working mark is
+    /// drawn, so an idle or closed panel wakes nothing (sched.rs).
+    panel_anim_deadline: Option<Instant>,
+    /// Injectable `backlot …` runner — tests record argv, production
+    /// spawns `current_exe()` off the event loop.
+    panel_runner: crate::panel::PanelRunner,
+    panel_action_tx: mpsc::Sender<(String, Result<(), String>)>,
+    panel_rx: mpsc::Receiver<(String, Result<(), String>)>,
+    /// Endpoint flags (`--session`/`--remote`) for spawned actions.
+    panel_endpoint_args: Vec<String>,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,

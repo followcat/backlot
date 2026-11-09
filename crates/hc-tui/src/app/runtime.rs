@@ -17,13 +17,7 @@ impl App {
         // inner rect — no clipped last column, row or cursor.
         let size = term.size()?;
         self.area = (size.width, size.height);
-        let layout = self.shell.layout_config().layout(
-            size.width,
-            size.height,
-            self.shell_state.sidebar_collapsed,
-            pane_geometry::focused_tab_count(self),
-            self.sidebar_width,
-        );
+        let layout = self.chrome_layout(size.width, size.height);
         let infos = pane_geometry::pane_infos(self, layout.pane_surface);
         // Zoom covers the rest of the focused tab: the reference resizes
         // only the zoomed pane, so each covered pane's lease stays alive
@@ -169,6 +163,7 @@ impl App {
                     .chain(self.next_tab_status)
                     .chain(self.selection_autoscroll_deadline)
                     .chain(self.selection_highlight_clear_deadline)
+                    .chain(self.panel_anim_deadline)
                     .min()
             };
             self.probe
@@ -203,6 +198,11 @@ impl App {
                             self.pane_event(ev, Instant::now());
                         }
                     },
+                    result = self.panel_rx.recv() => {
+                        if let Some(result) = result {
+                            self.on_panel_action(result);
+                        }
+                    },
                     _ = tokio::time::sleep_until(deadline.into()) => {
                         self.pane_retry(Instant::now());
                     }
@@ -232,6 +232,11 @@ impl App {
                             self.pane_event(ev, Instant::now());
                         }
                     },
+                    result = self.panel_rx.recv() => {
+                        if let Some(result) = result {
+                            self.on_panel_action(result);
+                        }
+                    },
                 }
             }
             self.reconcile_key_routes();
@@ -242,6 +247,7 @@ impl App {
             }
             self.expire_notice(now);
             self.tick_notifications(now);
+            self.tick_panel(now);
             if self.tick_selection(now) {
                 self.sched.mark_dirty(now);
             }

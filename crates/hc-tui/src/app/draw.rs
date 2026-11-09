@@ -20,7 +20,7 @@ use ratatui::widgets::{Paragraph, Widget};
 
 use super::pane::Paint;
 pub(crate) use super::pane_geometry::pane_inner;
-use super::pane_geometry::{focused_tab_count, inner_for, pane_infos, split_borders};
+use super::pane_geometry::{inner_for, pane_infos, split_borders};
 use super::{App, Mode};
 
 #[cfg(test)]
@@ -63,13 +63,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             .acknowledge(&mut app.projection, &pane_id, app.outer_focused);
     }
     let collapsed = app.shell_state.sidebar_collapsed;
-    let layout = app.shell.layout_config().layout(
-        area.width,
-        area.height,
-        collapsed,
-        focused_tab_count(app),
-        app.sidebar_width,
-    );
+    let layout = app.chrome_layout(area.width, area.height);
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -151,6 +145,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()
+        || app.panel_fullscreen()
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
     for info in &pane_infos {
@@ -233,6 +228,31 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         app.hit_map.tab_scroll_left = Rect::default();
         app.hit_map.tab_scroll_right = Rect::default();
     }
+    // The studio panel: beside the panes when it fits, else over the
+    // whole frame — always under the popup/notice/overlay stack so
+    // dialogs and action notices still win.
+    app.panel_hits = if app.panel.open() {
+        let rect = if app.panel_beside(area.width) {
+            let width = app.panel_width();
+            Rect::new(area.x + area.width - width, area.y, width, area.height)
+        } else {
+            area
+        };
+        let summary = app.panel_summary();
+        let hits = crate::panel::render(
+            buf,
+            rect,
+            summary.as_ref(),
+            crate::panel::stage_running(&app.view),
+            &app.panel,
+            &app.shell.palette,
+        );
+        app.panel_anim_deadline = hits.working_drawn.then(|| _now + super::panel::PANEL_SPIN);
+        hits
+    } else {
+        app.panel_anim_deadline = None;
+        crate::panel::PanelRender::default()
+    };
     // The mobile switcher IS the Navigate surface under the threshold —
     // `composition.rs` renders it over the whole frame.
     if layout.mobile_header.height > 0
@@ -296,7 +316,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         .unwrap_or_default();
     app.draw_popups(buf, _now);
     super::notices::render(app, buf, area);
-    if let Some(bar) = mode_bar {
+    // The restore would repaint the bar over a full-screen panel —
+    // skipped then; beside the panes the bar is never covered anyway.
+    if !app.panel_fullscreen()
+        && let Some(bar) = mode_bar
+    {
         for (offset, cell) in mode_bar_cells.into_iter().enumerate() {
             *buf.cell_mut((bar.x + offset as u16, bar.y))
                 .expect("bar cell") = cell;

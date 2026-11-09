@@ -17,6 +17,7 @@ pub(super) struct Context {
     menu: bool,
     navigator: bool,
     settings: bool,
+    panel: bool,
 }
 
 impl App {
@@ -30,6 +31,7 @@ impl App {
             menu: self.menu.is_some(),
             navigator: self.navigator.is_some(),
             settings: self.settings.is_some(),
+            panel: self.panel_focused(),
         }
     }
 
@@ -194,6 +196,27 @@ impl App {
             if let Some(nav) = super::input::navigate_key(&press, &self.live) {
                 self.on_navigate(nav);
             }
+            return None;
+        }
+        // `prefix+<panel.key>` is the studio panel's own chord — it
+        // fires whether the panel is closed, open or focused. A herdr
+        // binding on the same tail still wins while the panel does not
+        // own the keys.
+        if self.prefix.armed() && self.panel_key_press(&press) {
+            let matched = crate::input::terminal_key_of(&press);
+            if self.panel_focused()
+                || crate::input::resolve_prefix_binding(&self.live.keybinds, &matched).is_none()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.panel_toggle();
+                return None;
+            }
+        }
+        // A focused panel owns every key like the navigator does; the
+        // prefix itself still arms so the toggle chord stays reachable.
+        if self.panel_focused() {
+            self.handle_panel_key(&press);
             return None;
         }
         match (!self.prefix.armed())

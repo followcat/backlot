@@ -175,16 +175,7 @@ impl App {
     /// (right of the sidebar, under the tab bar) — the reference's
     /// `layout.pane_surface` in `composition.rs`.
     fn frame_area(&self) -> Rect {
-        self.shell
-            .layout_config()
-            .layout(
-                self.area.0,
-                self.area.1,
-                self.shell_state.sidebar_collapsed,
-                super::pane_geometry::focused_tab_count(self),
-                self.sidebar_width,
-            )
-            .pane_surface
+        self.chrome_layout(self.area.0, self.area.1).pane_surface
     }
 
     /// Close the popup: detach and kill the owned terminal — the

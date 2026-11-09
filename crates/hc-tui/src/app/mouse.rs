@@ -54,6 +54,10 @@ pub(crate) enum ChromeDrag {
     NavigatorScrollbar {
         grab_row_offset: u16,
     },
+    /// The studio panel's body scrollbar.
+    PanelScrollbar {
+        grab_row_offset: u16,
+    },
 }
 
 /// A workspace row press pending release-or-drag — the reference
@@ -151,6 +155,19 @@ impl App {
             self.handle_settings_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
             return;
+        }
+        // The open panel owns its rect: rows act like Enter, the wheel
+        // scrolls, the scrollbar grabs. A press outside a focused panel
+        // hands focus back to the panes and routes normally.
+        if self.panel.open() {
+            if contains(self.panel_hits.area, (mouse.col, mouse.row)) {
+                self.panel_mouse(mouse);
+                self.sched.mark_dirty(Instant::now());
+                return;
+            }
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) && self.panel.focused {
+                self.panel.focused = false;
+            }
         }
         if contains(self.take_control_hit, (mouse.col, mouse.row)) {
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) {

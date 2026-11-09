@@ -127,13 +127,7 @@ pub(super) fn inner_for(
 }
 
 pub(crate) fn pane_inner(app: &mut App, cols: u16, rows: u16) -> Rect {
-    let layout = app.shell.layout_config().layout(
-        cols,
-        rows,
-        app.shell_state.sidebar_collapsed,
-        focused_tab_count(app),
-        app.sidebar_width,
-    );
+    let layout = app.chrome_layout(cols, rows);
     let infos = pane_infos(app, layout.pane_surface);
     let info = infos.iter().find(|p| p.is_focused).unwrap_or(&infos[0]);
     let pane = app.displayed_pane(&info.id).unwrap_or(&app.pane);

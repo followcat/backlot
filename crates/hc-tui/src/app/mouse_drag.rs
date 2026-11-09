@@ -54,6 +54,9 @@ impl App {
                     );
                 }
             }
+            Some(ChromeDrag::PanelScrollbar { grab_row_offset }) => {
+                self.panel_drag_scrollbar(point.1, grab_row_offset);
+            }
             Some(ChromeDrag::PaneScrollbar {
                 pane_id,
                 grab_row_offset,

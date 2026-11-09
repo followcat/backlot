@@ -55,6 +55,8 @@ impl App {
                     }
                 } else if self.settings.is_some() {
                     // The Settings overlay has no text field — eat it.
+                } else if self.panel_focused() {
+                    // The panel has no text field — eat it.
                 } else if self.popup_text(text.clone()) {
                     // The popup terminal owns paste while open.
                 } else if self.peek.is_some() {
@@ -79,6 +81,8 @@ impl App {
                     }
                 } else if self.settings.is_some() {
                     // The Settings overlay has no text field — eat it.
+                } else if self.panel_focused() {
+                    // The panel has no text field — eat it.
                 } else if self.popup_text(text.clone().into_bytes()) {
                     // The popup terminal owns IME text while open.
                 } else if self.peek.is_some() {
@@ -112,6 +116,7 @@ impl App {
             || self.dialog.is_some()
             || self.navigator.is_some()
             || self.settings.is_some()
+            || self.panel_focused()
         {
             return None;
         }

@@ -40,17 +40,7 @@ impl App {
             A::FocusPaneRight | A::SwapPaneRight | A::ResizePaneRight => Some(D::Right),
             _ => None,
         };
-        let area = self
-            .shell
-            .layout_config()
-            .layout(
-                self.area.0,
-                self.area.1,
-                self.shell_state.sidebar_collapsed,
-                tabs.len(),
-                self.sidebar_width,
-            )
-            .pane_surface;
+        let area = self.chrome_layout(self.area.0, self.area.1).pane_surface;
         let neighbour = root.as_ref().and_then(|root| {
             let (layout, ids) = root.layout(focus.as_deref());
             let panes = layout.panes(area);

@@ -13,6 +13,7 @@ impl App {
         let (pane_tx, pane_rx) = mpsc::channel(64);
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
+        let (panel_action_tx, panel_rx) = mpsc::channel(16);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         let sidebar_collapsed = shell.sidebar_start_collapsed;
@@ -58,6 +59,20 @@ impl App {
             popup_pending: None,
             command_overlay: None,
             peek: None,
+            panel: crate::panel::Panel::new(),
+            panel_config: crate::panel::PanelConfig::default(),
+            panel_key_combo: crate::config::parse_key_combo("y"),
+            panel_hits: crate::panel::PanelRender::default(),
+            panel_anim_deadline: None,
+            // Never spawn here: tests build `App` through this path and
+            // must stay process-free. cli installs `spawn_runner` on the
+            // real binary before the loop starts.
+            panel_runner: std::sync::Arc::new(|_| {
+                Box::pin(async { Err("panel actions unavailable".into()) })
+            }),
+            panel_action_tx,
+            panel_rx,
+            panel_endpoint_args: Vec::new(),
             sched: sched::Scheduler::default(),
             focused: None,
             before_navigate: None,
