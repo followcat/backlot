@@ -120,6 +120,14 @@ pub fn finding(id: &str, cause: Cause) -> Finding {
     }
 }
 
+/// The record for actor `tag` and task `kind`, or panic.
+pub fn rec<'a>(recs: &'a [crate::ActorRecord], tag: &str, kind: &str) -> &'a crate::ActorRecord {
+    let want = actor(tag);
+    recs.iter()
+        .find(|r| r.actor == want && r.task_kind == kind)
+        .unwrap_or_else(|| panic!("no record for {tag}/{kind}"))
+}
+
 /// Studio + requirement v1 + one created task, ready for more events.
 pub fn base_events() -> Vec<Event> {
     vec![

@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::correct::SeqTarget;
 use crate::event::*;
 
-pub use crate::reduce::{apply, reduce_task, replay};
+pub use crate::reduce::{apply, replay};
+pub use crate::task_reduce::reduce_task;
 
 /// Studio configuration from `studio.created`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

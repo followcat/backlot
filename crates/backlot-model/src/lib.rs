@@ -12,7 +12,9 @@ pub mod correct;
 pub mod event;
 pub mod records;
 pub mod reduce;
+pub mod refusal;
 pub mod state;
+pub mod task_reduce;
 pub mod validate;
 
 pub use event::{ActorIdentity, Event, EventBy, EventKind, NewEvent};
@@ -20,6 +22,10 @@ pub use records::{ActorRecord, StudioLog, records};
 pub use state::{StudioState, TaskStatus, apply, replay};
 pub use validate::{Refusal, validate};
 
+#[cfg(test)]
+mod cap_tests;
+#[cfg(test)]
+mod records_extra_tests;
 #[cfg(test)]
 mod records_tests;
 #[cfg(test)]
