@@ -204,8 +204,15 @@ impl App {
     fn panel_scroll_to(&mut self, start: usize, viewport_rows: usize) {
         let targets = self.panel_targets();
         let viewport_rows = viewport_rows.max(1);
-        let body_len = targets.len().saturating_sub(1);
-        self.panel.scroll = start.min(body_len.saturating_sub(viewport_rows));
+        // `scroll` is a line offset and rows are variable height: the
+        // bound is the drawn metrics' line maximum, not a row count —
+        // otherwise the wheel dies above the bottom on two-line rows.
+        let max = self
+            .panel_hits
+            .metrics
+            .map(|m| m.max_offset_from_bottom)
+            .unwrap_or_else(|| targets.len().saturating_sub(viewport_rows));
+        self.panel.scroll = start.min(max);
         let selected = self
             .panel_selected_index(&targets)
             .max(1)

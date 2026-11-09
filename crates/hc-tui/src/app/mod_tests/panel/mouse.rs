@@ -116,6 +116,39 @@ async fn the_scrollbar_drags_the_body() {
     assert!(app.panel.scroll > 0, "drag scrolled the body");
 }
 
+#[tokio::test]
+async fn the_wheel_reaches_the_bottom_when_rows_are_two_lines_tall() {
+    let mut app = app_with_panel_doc();
+    // A `doing` line makes a person row two lines tall on screen:
+    // scroll is a line offset, so a row-count bound would strand the
+    // wheel above the bottom.
+    let mut value = summary_json();
+    let roles = value["studios"][0]["roles"].as_array_mut().unwrap();
+    for i in 0..10 {
+        roles.push(serde_json::json!({
+            "role": format!("actor-t{i}"), "name": format!("t{i}"),
+            "state": "live", "work": "waiting", "doing": "busy",
+        }));
+    }
+    app.view.documents.insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        },
+    );
+    app.area = (120, 10);
+    open_panel(&mut app);
+    draw_to(&mut app, 120, 10);
+    let max = app.panel_hits.metrics.unwrap().max_offset_from_bottom;
+    assert!(max > 0, "two-line rows overflow the body");
+    let body = app.panel_hits.body;
+    for _ in 0..max + 4 {
+        app.on_mouse(mouse(MouseEventKind::ScrollDown, body.x, body.y));
+    }
+    assert_eq!(app.panel.scroll, max, "the wheel reached the bottom");
+}
+
 /// `draw` with a caller-chosen instant — the animation test steps
 /// time frame by frame.
 fn draw_at(app: &mut App, w: u16, h: u16, t: std::time::Instant) {
