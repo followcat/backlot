@@ -155,10 +155,11 @@ impl Stage {
     }
 
     /// `terminal.run` a role, then record `role.started` with its
-    /// address. A method-level refusal (a name taken in a race, a
+    /// address. A method-level refusal (a name taken in a race, an
     /// argv the core rejects) raises `launch refused` attention —
-    /// once per role and reason — and the start is retried next
-    /// tick. A dead wire is fatal.
+    /// once per role and reason — reports `false` so the tick's
+    /// real-launch slot is handed back, and the start is retried
+    /// next tick. `true` is accepted; a dead wire is fatal.
     async fn launch(
         &self,
         studio: &str,
@@ -167,7 +168,7 @@ impl Stage {
         start: &Start,
         launch: &runners::Launch,
         runner_env: BTreeMap<String, String>,
-    ) -> Result<(), Fail> {
+    ) -> Result<bool, Fail> {
         let run = self
             .client
             .terminal_run(RunParams {
@@ -203,7 +204,7 @@ impl Stage {
                         },
                     )?;
                 }
-                return Ok(());
+                return Ok(false);
             }
             Err(e) => return Err(fatal(e)),
         };
@@ -218,7 +219,7 @@ impl Stage {
             },
         )?;
         eprintln!("stage: started {} as {}", start.role, start.terminal);
-        Ok(())
+        Ok(true)
     }
 
     /// The `[runner_env.<runner>]` map from `<base>/config.toml` —
@@ -348,11 +349,17 @@ impl Stage {
                     StartDecision::Defer => {}
                     StartDecision::Launch { launch, runner_env } => {
                         // `role.started` carries the runner's version
-                        // when `--version` answered.
+                        // when `--version` answered. A refused launch
+                        // hands the tick's real-launch slot back so a
+                        // stuck role cannot starve the ones behind it.
                         let mut start = start.clone();
                         start.actor.runner_version = self.runner_version(&start.actor.runner);
-                        self.launch(studio, dir, state, &start, &launch, runner_env)
+                        if !self
+                            .launch(studio, dir, state, &start, &launch, runner_env)
                             .await?
+                        {
+                            *real_slot_free = true;
+                        }
                     }
                 }
             }
