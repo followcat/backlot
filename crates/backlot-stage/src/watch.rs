@@ -34,6 +34,30 @@ pub(crate) fn trust_dialog(text: &str) -> bool {
     text.contains("Quick safety check") && text.contains("Yes, I trust this folder")
 }
 
+/// The one key the trust dialog wants next, read off the screen.
+/// The picker cursor `❯` on the `No, exit` line needs a `down` to
+/// reach the trust option; on the `Yes, I trust this folder` line an
+/// `enter` accepts. No cursor on an option line — or a screen that is
+/// not the dialog — sends nothing. Enter goes out only with the
+/// cursor on Yes.
+pub(crate) fn trust_key(text: &str) -> Option<&'static str> {
+    if !trust_dialog(text) {
+        return None;
+    }
+    for line in text.lines() {
+        if !line.contains('❯') {
+            continue;
+        }
+        if line.contains("No, exit") {
+            return Some("down");
+        }
+        if line.contains("Yes, I trust this folder") {
+            return Some("enter");
+        }
+    }
+    None
+}
+
 /// Whether the role might show the trust dialog at all: claude, or
 /// the fake runner's trust mode that exercises the same path.
 fn can_show_trust(actor: &backlot_model::ActorIdentity) -> bool {
@@ -103,13 +127,11 @@ impl Stage {
             };
             let age_ms = now_ms.saturating_sub(role.since_ms);
 
-            // The first-use folder-trust dialog: answered once, in
-            // the role's first minute only.
-            if can_show_trust(actor)
-                && age_ms < TRUST_WINDOW_MS
-                && !self.trust_answered.borrow().contains(&key_of(studio, key))
-            {
-                self.answer_trust(studio, key, term, &repo).await?;
+            // The first-use folder-trust dialog: one key per tick,
+            // in the role's first minute only — the window bounds
+            // the exchange.
+            if can_show_trust(actor) && age_ms < TRUST_WINDOW_MS {
+                self.answer_trust(key, term, &repo).await?;
             }
 
             if role.session_id.is_some() {
@@ -140,16 +162,12 @@ impl Stage {
         Ok(())
     }
 
-    /// Read the role's screen and, when it is the trust dialog in the
-    /// role's own working directory, send Down then Enter — once: the
-    /// answered set is marked only after the keys land.
-    async fn answer_trust(
-        &self,
-        studio: &str,
-        role: &str,
-        term: &LiveTerminal,
-        repo: &str,
-    ) -> Result<(), Fail> {
+    /// Read the role's screen and, when the trust dialog shows in
+    /// the role's own working directory, send the one key the
+    /// cursor position calls for. One key per tick: the dialog
+    /// needs the redraw between them, and [`trust_key`] never sends
+    /// Enter while the cursor is off the trust option.
+    async fn answer_trust(&self, role: &str, term: &LiveTerminal, repo: &str) -> Result<(), Fail> {
         if term.cwd != repo {
             return Ok(());
         }
@@ -167,37 +185,26 @@ impl Stage {
             Err(CallError::Rpc(_)) => return Ok(()),
             Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
         };
-        if !trust_dialog(&text) {
+        let Some(key) = trust_key(&text) else {
             return Ok(());
-        }
+        };
         let sent = self
             .client
             .call(
                 "terminal.keys",
                 Some(serde_json::json!({
                     "terminal": term.address,
-                    "keys": ["down", "enter"],
+                    "keys": [key],
                 })),
             )
             .await;
         match sent {
-            Ok(_) => {
-                self.trust_answered
-                    .borrow_mut()
-                    .insert(key_of(studio, role));
-                eprintln!("stage: answered folder trust for {role}");
-            }
+            Ok(_) => eprintln!("stage: answered folder trust for {role} ({key})"),
             Err(CallError::Rpc(_)) => {}
             Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
         }
         Ok(())
     }
-}
-
-/// The answered set's key: studio-scoped so a role name in two
-/// studios answers twice, as it should.
-fn key_of(studio: &str, role: &str) -> (String, String) {
-    (studio.into(), role.into())
 }
 
 #[cfg(test)]
@@ -215,6 +222,27 @@ mod tests {
         assert!(!trust_dialog("Quick safety check\n"));
         assert!(!trust_dialog("Allow edit to src/main.rs? [y/n]\n"));
         assert!(!trust_dialog(""));
+    }
+
+    /// The key follows the `❯`: on `No, exit` it is `down`, on
+    /// `Yes, I trust this folder` it is `enter`; an option without
+    /// the cursor, a cursor elsewhere or another prompt sends
+    /// nothing — Enter only ever goes out on Yes.
+    #[test]
+    fn trust_key_follows_the_cursor() {
+        let on_no = "Quick safety check\nDo you trust the files in this folder?\n❯ No, exit\n  Yes, I trust this folder\n";
+        assert_eq!(trust_key(on_no), Some("down"));
+        let on_yes = "Quick safety check\nDo you trust the files in this folder?\n  No, exit\n❯ Yes, I trust this folder\n";
+        assert_eq!(trust_key(on_yes), Some("enter"));
+        // Options drawn with the cursor elsewhere, or not at all.
+        let cursor_elsewhere =
+            "Quick safety check\n❯ Continue\n  No, exit\n  Yes, I trust this folder\n";
+        assert_eq!(trust_key(cursor_elsewhere), None);
+        let no_cursor = "Quick safety check\n  No, exit\n  Yes, I trust this folder\n";
+        assert_eq!(trust_key(no_cursor), None);
+        // Not the dialog at all.
+        assert_eq!(trust_key("❯ allow edit? [y/n]\n"), None);
+        assert_eq!(trust_key(""), None);
     }
 
     /// A found id records `role.session`; under the wait nothing

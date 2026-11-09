@@ -97,8 +97,6 @@ pub(crate) struct Stage {
     pub(crate) exec: Box<discover::Exec>,
     /// `<runner> --version` answers, asked once per runner per run.
     pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
-    /// `(studio, role)` pairs whose trust dialog was answered.
-    pub(crate) trust_answered: std::cell::RefCell<std::collections::BTreeSet<(String, String)>>,
     /// Reduced state per studio, reloaded when its log grew.
     cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -200,7 +198,6 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         env_vars: env.vars.clone(),
         exec: Box::new(discover::real_exec),
         versions: std::cell::RefCell::new(BTreeMap::new()),
-        trust_answered: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

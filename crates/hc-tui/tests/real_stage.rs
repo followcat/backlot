@@ -348,11 +348,13 @@ async fn real_stage_loop() {
     );
     // The producer's `model = "trust"` puts the fake runner behind
     // Claude Code's folder-trust dialog: the stage reads the screen,
-    // sees it is the role's own folder, sends Down then Enter — once —
-    // and the runner announces itself. The answer is a terminal
-    // interaction only: no ledger event comes of it.
-    wait_read(&client, "bl-acme-shop-producer", "Quick safety check").await;
-    wait_read(&client, "bl-acme-shop-producer", "Yes, I trust this folder").await;
+    // sees it is the role's own folder, and sends the one key the
+    // `❯` cursor calls for per tick — Down while it sits on "No,
+    // exit", Enter once it is on the trust option — and the runner
+    // announces itself. The answer is a terminal interaction only:
+    // no ledger event comes of it.
+    let screen = wait_read(&client, "bl-acme-shop-producer", "Quick safety check").await;
+    assert!(screen.contains("❯ No, exit"), "{screen}");
     wait_read(
         &client,
         "bl-acme-shop-producer",
