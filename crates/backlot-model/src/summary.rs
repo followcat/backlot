@@ -49,6 +49,10 @@ pub struct StudioSummary {
     pub open_reviews: u32,
     /// Open attention records — what is waiting on a person.
     pub waiting: u32,
+    /// The stage's last error for this studio — an unreadable ledger
+    /// or a failed pass — while it stays broken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
 }
@@ -276,16 +280,36 @@ fn role_summary(
 /// `live` maps a live terminal's address to what it reports doing.
 /// `work` maps `(studio, role)` to the watch pass's latest screen
 /// classification — the summary stays pure; the stage owns the map.
+/// `errors` maps a studio to the stage's last error for it — the row
+/// carries it, and a studio whose state never loaded still gets a
+/// stub row so the panel can show why.
 pub fn summary(
     studios: &[(String, StudioState)],
     live: &BTreeMap<String, String>,
     work: &BTreeMap<(String, String), Work>,
+    errors: &BTreeMap<String, String>,
     updated_ms: u64,
 ) -> Summary {
     let mut live_studios = Vec::new();
     let mut finished_studios = Vec::new();
     for (name, state) in studios {
+        let error = errors.get(name).map(|e| cap(e));
         let Some(cfg) = &state.studio else {
+            // No studio event: normally not a studio at all — but a
+            // broken ledger still gets a stub so its error shows.
+            if let Some(error) = error {
+                live_studios.push(StudioSummary {
+                    id: cap(name),
+                    title: String::new(),
+                    state: "live".into(),
+                    requirement_version: 0,
+                    mode: StudioMode::default(),
+                    open_reviews: 0,
+                    waiting: 0,
+                    error: Some(error),
+                    roles: Vec::new(),
+                });
+            }
             continue;
         };
         let done = finished(state);
@@ -305,6 +329,7 @@ pub fn summary(
                 .filter(|t| t.status == TaskStatus::Delivered)
                 .count() as u32,
             waiting: state.open_attention().count() as u32,
+            error,
             roles,
         };
         if done {

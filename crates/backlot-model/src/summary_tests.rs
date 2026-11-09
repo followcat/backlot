@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::event::{Event, EventKind, Priority, Verdict};
-use crate::state::replay;
+use crate::state::{StudioState, replay};
 use crate::summary::*;
 use crate::testkit::*;
 
@@ -46,6 +46,7 @@ fn summary_shape_and_live_doing() {
         &[("acme-shop".into(), state)],
         &live_view(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         42,
     );
     assert_eq!(s.schema, SUMMARY_SCHEMA);
@@ -84,6 +85,7 @@ fn a_closed_role_stays_listed_without_doing() {
         &[("acme-shop".into(), state)],
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let w = s.studios[0]
@@ -108,6 +110,7 @@ fn an_actor_names_its_candidate_and_task() {
     let state = state_with(&base, vec![("stage", started("actor-t1-c1", "t7", "a"))]);
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         1,
@@ -145,6 +148,7 @@ fn a_behind_actor_marks_its_doing_line() {
         &[("acme-shop".into(), state)],
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let a = s.studios[0]
@@ -176,6 +180,7 @@ fn counters_follow_the_ledger() {
     );
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         1,
@@ -222,6 +227,7 @@ fn fixed_roles_come_first_and_every_role_is_listed() {
         &[("acme-shop".into(), state)],
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let roles = &s.studios[0].roles;
@@ -259,7 +265,13 @@ fn finished_studios_drop_for_size_but_live_stay() {
         studios.push((format!("done-{i}"), big_finished(&format!("d{i}"))));
     }
     let total = studios.len();
-    let s = summary(&studios, &BTreeMap::new(), &BTreeMap::new(), 1);
+    let s = summary(
+        &studios,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     assert!(s.studios.iter().any(|st| st.id == "live-0"), "{s:?}");
     assert!(s.studios.len() < total, "{}", s.studios.len());
     assert!(
@@ -273,6 +285,7 @@ fn finished_studios_drop_for_size_but_live_stay() {
     closed_actors(&mut events, "huge", 350);
     let s = summary(
         &[("big-live".into(), replay(&events))],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         1,
@@ -302,7 +315,13 @@ fn finished_studios_drop_off_after_live_ones() {
         );
         studios.push((format!("done-{i}"), state));
     }
-    let s = summary(&studios, &BTreeMap::new(), &BTreeMap::new(), 1);
+    let s = summary(
+        &studios,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     assert_eq!(s.studios.len(), MAX_STUDIOS);
     assert_eq!(s.studios[0].id, "live-0");
     assert_eq!(s.studios[1].id, "live-1");
@@ -327,7 +346,13 @@ fn work_is_sampled_into_live_roles_only() {
         (("acme-shop".into(), "producer".into()), Work::Working),
         (("acme-shop".into(), "writer".into()), Work::Blocked),
     ]);
-    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), &work, 1);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &work,
+        &BTreeMap::new(),
+        1,
+    );
     let find = |role: &str| s.studios[0].roles.iter().find(|r| r.role == role).unwrap();
     assert_eq!(find("producer").work, Some(Work::Working));
     assert_eq!(find("writer").work, None);
@@ -359,6 +384,7 @@ fn actors_carry_task_and_priority() {
     );
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         1,
@@ -406,6 +432,7 @@ fn resumable_is_a_closed_person_with_a_session_and_no_hold() {
     );
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         1,
@@ -465,6 +492,7 @@ fn actors_order_by_priority_then_key_with_closed_last() {
         &[("acme-shop".into(), state)],
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let order: Vec<&str> = s.studios[0].roles.iter().map(|r| r.role.as_str()).collect();
@@ -482,6 +510,36 @@ fn actors_order_by_priority_then_key_with_closed_last() {
     );
 }
 
+/// A studio in the errors map carries it on the row — capped — and
+/// a studio whose state never loaded still gets a stub row so the
+/// panel can say why.
+#[test]
+fn a_broken_studio_shows_its_error_even_unloaded() {
+    let long = "e".repeat(200);
+    let errors = BTreeMap::from([
+        ("good".to_string(), "act failed".to_string()),
+        ("dead".to_string(), long),
+    ]);
+    let s = summary(
+        &[
+            ("good".into(), base_state()),
+            ("dead".into(), StudioState::default()),
+        ],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &errors,
+        1,
+    );
+    assert_eq!(s.studios.len(), 2);
+    let good = s.studios.iter().find(|st| st.id == "good").unwrap();
+    assert_eq!(good.error.as_deref(), Some("act failed"));
+    assert_eq!(good.state, "live");
+    let dead = s.studios.iter().find(|st| st.id == "dead").unwrap();
+    assert_eq!(dead.error.as_ref().map(String::len), Some(96));
+    assert_eq!(dead.state, "live");
+    assert!(dead.roles.is_empty());
+}
+
 /// Long fields are capped and the document stays small.
 #[test]
 fn strings_are_capped() {
@@ -490,6 +548,7 @@ fn strings_are_capped() {
     state.studio.as_mut().unwrap().title = long.clone();
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         1,

@@ -46,7 +46,7 @@ pub fn ok(env: &Env, s: &str) -> String {
     match run(&args(s), env) {
         Ok(out) => out,
         Err(Fail::Usage(m)) => panic!("usage error on '{s}': {m}"),
-        Err(Fail::Refused(m)) => panic!("refused on '{s}': {m}"),
+        Err(Fail::Refused(m) | Fail::Core(m)) => panic!("refused on '{s}': {m}"),
     }
 }
 

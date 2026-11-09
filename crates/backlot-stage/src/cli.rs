@@ -24,11 +24,15 @@ const COMMANDS: &[&str] = &[
     "close", "approve",
 ];
 
-/// Failure with its exit code: `Usage` → 2, `Refused` → 1.
+/// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
+/// `Core` marks a lost hc connection — inside a stage tick it is the
+/// one failure that still ends the stage; everything else is a
+/// per-studio error the tick logs and walks past.
 #[derive(Debug)]
 pub enum Fail {
     Usage(String),
     Refused(String),
+    Core(String),
 }
 
 impl Fail {
@@ -37,6 +41,15 @@ impl Fail {
     }
     pub fn refused(msg: impl Into<String>) -> Self {
         Fail::Refused(msg.into())
+    }
+    pub fn core(msg: impl Into<String>) -> Self {
+        Fail::Core(msg.into())
+    }
+    /// The message for logging or reporting.
+    pub fn message(&self) -> &str {
+        match self {
+            Fail::Usage(m) | Fail::Refused(m) | Fail::Core(m) => m,
+        }
     }
 }
 
@@ -302,7 +315,7 @@ pub fn maybe_run(args: &[String]) -> Option<ExitCode> {
             eprintln!("{msg}");
             ExitCode::from(2)
         }
-        Err(Fail::Refused(msg)) => {
+        Err(Fail::Refused(msg) | Fail::Core(msg)) => {
             eprintln!("{msg}");
             ExitCode::FAILURE
         }

@@ -61,7 +61,7 @@ impl Stage {
         {
             Ok(r) => r.text,
             Err(CallError::Rpc(_)) => return Ok(()),
-            Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
+            Err(e) => return Err(Fail::core(format!("core call failed: {e}"))),
         };
         let work = runners::work_state(w.runner, &text);
         self.work.borrow_mut().insert(pair.clone(), work);
@@ -202,7 +202,7 @@ impl Stage {
             // A terminal that raced away keeps the attention; the
             // role's loss is reconciled elsewhere.
             Err(CallError::Rpc(_)) => {}
-            Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
+            Err(e) => return Err(Fail::core(format!("core call failed: {e}"))),
         }
         Ok(())
     }

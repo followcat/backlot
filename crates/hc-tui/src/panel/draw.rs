@@ -181,6 +181,17 @@ pub(crate) fn render(
                         );
                     }
                 }
+                // The studio's stage error gets its own line, drawn
+                // like a person's attention line.
+                if let Some(error) = &studio.error {
+                    buf.set_stringn(
+                        rect.x + 2,
+                        rect.y + 1,
+                        format!("! {error}"),
+                        (rect.x + rect.width).saturating_sub(rect.x + 2) as usize,
+                        Style::default().fg(palette.red),
+                    );
+                }
             }
             Row::Group {
                 group,

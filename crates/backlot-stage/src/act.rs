@@ -41,8 +41,10 @@ pub(crate) fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
 
 /// Call answers that mean the wire is gone — an `Rpc` answer is the
 /// method's own verdict (usually "no such terminal"), tolerated.
+/// A dead wire is `Fail::Core`: the one failure a tick does not
+/// walk past.
 fn fatal(e: CallError) -> Fail {
-    Fail::refused(format!("core call failed: {e}"))
+    Fail::core(format!("core call failed: {e}"))
 }
 
 /// A call result where an `Rpc` verdict is fine — anything else fails.

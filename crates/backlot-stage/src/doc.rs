@@ -112,6 +112,7 @@ mod tests {
                     mode: backlot_model::event::StudioMode::Standard,
                     open_reviews: 0,
                     waiting: 0,
+                    error: None,
                     roles: Vec::new(),
                 })
                 .collect(),

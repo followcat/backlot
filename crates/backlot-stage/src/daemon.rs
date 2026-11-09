@@ -4,9 +4,12 @@
 //! (polled about once a second) and hc events via `events.subscribe`;
 //! a core without it is polled on the same cadence. The summary
 //! document regenerates every tick and is written on change, at most
-//! once per gap. Losing the core exits non-zero — recovery is S6's.
+//! once per gap. A studio whose ledger cannot be loaded is skipped —
+//! and shown with `error` — until the file loads again, and a failing
+//! action, watch or delivery logs once and moves on; losing the core
+//! is the one failure that still exits the stage.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -34,11 +37,11 @@ use crate::workareas;
 const TICK: Duration = Duration::from_secs(1);
 
 /// The live terminal view the loop works on.
-struct Inventory {
+pub(crate) struct Inventory {
     /// Every live named terminal; per-studio views come from labels.
-    terms: Vec<reconcile::LiveTerminal>,
+    pub(crate) terms: Vec<reconcile::LiveTerminal>,
     /// Address → what the program reports doing, for the summary.
-    doing: BTreeMap<String, String>,
+    pub(crate) doing: BTreeMap<String, String>,
 }
 
 /// Every live terminal the core knows, kept for the per-studio
@@ -87,7 +90,7 @@ struct Seen {
 pub(crate) struct Stage {
     pub(crate) client: Client,
     /// The state base (`studios/<name>` lives under it).
-    base: PathBuf,
+    pub(crate) base: PathBuf,
     /// `PATH` for role terminals: this exe's directory first.
     pub(crate) path_env: String,
     /// This exe's own directory: it leads a configured `PATH` too.
@@ -137,13 +140,29 @@ pub(crate) struct Stage {
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
     seen: BTreeMap<String, Seen>,
+    /// Studio → the last load error while its ledger stays unreadable:
+    /// the tick skips it and the summary shows it.
+    broken: BTreeMap<String, String>,
+    /// Every error line already printed — each distinct message logs
+    /// once, whatever its studio.
+    logged: BTreeSet<String>,
 }
 
 impl Stage {
+    /// `eprintln!` each distinct line once — a studio stuck in a
+    /// failing pass reports its error without spamming every tick.
+    fn log_once(&mut self, studio: &str, msg: &str) {
+        if self.logged.insert(format!("{studio}: {msg}")) {
+            eprintln!("stage: {studio}: {msg}");
+        }
+    }
+
     /// Reload changed ledgers, reconcile each studio and act. Each
     /// studio sees only the terminals its label owns — the name is
-    /// never enough to stop, adopt or drop.
-    async fn tick(&mut self, live: &Inventory) -> Result<(), Fail> {
+    /// never enough to stop, adopt or drop. One studio's bad ledger
+    /// or failing pass logs and skips it; the others carry on, and
+    /// only a lost core (`Fail::Core`) ends the stage.
+    pub(crate) async fn tick(&mut self, live: &Inventory) -> Result<(), Fail> {
         for name in store::studios(&self.base)
             .map_err(|e| Fail::refused(format!("cannot read {}: {e}", self.base.display())))?
         {
@@ -151,7 +170,19 @@ impl Stage {
             let meta = fs::metadata(dir.join("events.jsonl"));
             let len = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             if self.seen.get(&name).map(|s| s.len) != Some(len) {
-                self.cached.insert(name.clone(), load_studio(&dir, &name)?);
+                match load_studio(&dir, &name) {
+                    Ok(state) => {
+                        self.cached.insert(name.clone(), state);
+                        self.broken.remove(&name);
+                    }
+                    // A ledger that cannot be loaded marks the studio
+                    // broken; it stays skipped until the file loads.
+                    Err(e) => {
+                        let msg = e.message().to_string();
+                        self.broken.insert(name.clone(), msg.clone());
+                        self.log_once(&name, &msg);
+                    }
+                }
             }
             let mtime_ms = meta
                 .ok()
@@ -174,33 +205,61 @@ impl Stage {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
         for name in self.cached.keys().cloned().collect::<Vec<_>>() {
-            let dir = store::studio_dir(&self.base, &name);
-            let state = &self.cached[&name];
-            let view = reconcile::studio_view(&name, &live.terms);
-            for action in reconcile::reconcile(&name, state, &view, now_ms) {
-                self.act(&name, &dir, state, &action, &mut real_slot_free, &blocked)
-                    .await?;
+            if self.broken.contains_key(&name) {
+                continue;
             }
-            self.watch(&name, &dir, state, &live.terms, now_ms).await?;
-            self.deliver(&name, &dir, state, &live.terms, now_ms)
-                .await?;
+            match self
+                .studio_pass(&name, live, &mut real_slot_free, &blocked, now_ms)
+                .await
+            {
+                Err(e @ Fail::Core(_)) => return Err(e),
+                Err(e) => self.log_once(&name, e.message()),
+                Ok(()) => {}
+            }
         }
         Ok(())
     }
 
+    /// One studio's reconcile → act → watch → deliver for a tick, so
+    /// any failure inside it is one studio's, never the stage's.
+    async fn studio_pass(
+        &self,
+        name: &str,
+        live: &Inventory,
+        real_slot_free: &mut bool,
+        blocked: &BTreeSet<(String, String)>,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        let dir = store::studio_dir(&self.base, name);
+        let state = &self.cached[name];
+        let view = reconcile::studio_view(name, &live.terms);
+        for action in reconcile::reconcile(name, state, &view, now_ms) {
+            self.act(name, &dir, state, &action, real_slot_free, blocked)
+                .await?;
+        }
+        self.watch(name, &dir, state, &live.terms, now_ms).await?;
+        self.deliver(name, &dir, state, &live.terms, now_ms).await
+    }
+
     /// The `backlot` document's view: cached states, most recently
     /// changed first (the summary keeps live studios and lets old
-    /// finished ones drop off).
-    fn summary_view(&self, doing: &BTreeMap<String, String>) -> Summary {
+    /// finished ones drop off). A broken studio with no loaded state
+    /// still gets a row — its `error` is all the panel can show.
+    pub(crate) fn summary_view(&self, doing: &BTreeMap<String, String>) -> Summary {
         let mut pairs: Vec<(&String, &StudioState)> = self.cached.iter().collect();
         pairs.sort_by_key(|(name, _)| {
             std::cmp::Reverse(self.seen.get(*name).map(|s| s.mtime_ms).unwrap_or(0))
         });
-        let owned: Vec<(String, StudioState)> = pairs
+        let mut owned: Vec<(String, StudioState)> = pairs
             .into_iter()
             .map(|(n, s)| (n.clone(), s.clone()))
             .collect();
-        summary::summary(&owned, doing, &self.work.borrow(), 0)
+        for name in self.broken.keys() {
+            if !self.cached.contains_key(name) {
+                owned.push((name.clone(), StudioState::default()));
+            }
+        }
+        summary::summary(&owned, doing, &self.work.borrow(), &self.broken, 0)
     }
 }
 
@@ -230,6 +289,8 @@ impl Stage {
             blocked_since: std::cell::RefCell::new(BTreeMap::new()),
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
+            broken: BTreeMap::new(),
+            logged: BTreeSet::new(),
         }
     }
 }
@@ -295,6 +356,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         blocked_since: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
+        broken: BTreeMap::new(),
+        logged: BTreeSet::new(),
     };
     // A core without `events.subscribe` still works, polled on TICK.
     let mut sub = Subscription::connect(&link.endpoint, None, &SubscribeParams::default())
