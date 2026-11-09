@@ -11,6 +11,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 static SCRATCH_COUNTER: AtomicU32 = AtomicU32::new(0);
 
+/// Parent of the scratch tree. macOS's per-user `$TMPDIR` is so long
+/// that the socket path for `--session` would exceed `sun_path` and
+/// tests would fail at endpoint resolution instead of what they assert.
+#[cfg(target_os = "macos")]
+fn scratch_parent() -> PathBuf {
+    PathBuf::from("/tmp")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn scratch_parent() -> PathBuf {
+    std::env::temp_dir()
+}
+
 /// Scratch HOME/XDG/BACKLOT_STATE_DIR for one test.
 pub struct Scratch {
     pub root: PathBuf,
@@ -28,7 +41,7 @@ impl Scratch {
             std::process::id(),
             SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed),
         );
-        let root = std::env::temp_dir().join(unique);
+        let root = scratch_parent().join(unique);
         let state = root.join("backlot-state");
         for dir in ["home", "files"] {
             fs::create_dir_all(root.join(dir)).unwrap();

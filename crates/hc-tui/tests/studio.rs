@@ -209,8 +209,6 @@ fn scripted_studio_loop() {
     assert!(seqs.windows(2).all(|w| w[1] == w[0] + 1), "{seqs:?}");
 }
 
-/// Eight processes racing `plan request` keep one total order under
-/// the flock: 200 events, unique increasing seqs, nothing lost.
 /// The hook leaves TUI arguments exactly as before: `--version`,
 /// `--session x` (fails at the terminal, not in studio parsing), and
 /// an unknown word (exit 2 from the TUI parser).
