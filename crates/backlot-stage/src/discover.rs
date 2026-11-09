@@ -109,23 +109,85 @@ fn file_time_ms(path: &Path) -> Option<u64> {
     )
 }
 
+/// `YYYY/MM/DD` for a unix-ms timestamp in UTC — Howard Hinnant's
+/// civil-from-days, so no date dependency is needed.
+fn day_string(ms: u64) -> String {
+    let z = (ms / 86_400_000) as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}/{m:02}/{d:02}")
+}
+
+/// Day directories `YYYY/MM/DD` under `base` at or after `floor`
+/// (same shape), sorted. The walk prunes by segment — an older
+/// year, month or day directory is never even opened, and names
+/// that are not date segments are skipped.
+fn collect_days(base: &Path, floor: &str) -> Vec<PathBuf> {
+    let bounds: Vec<&str> = floor.split('/').collect();
+    let mut out = Vec::new();
+    if bounds.len() == 3 {
+        walk_days(base, 0, &bounds, true, &mut out);
+    }
+    out.sort();
+    out
+}
+
+fn walk_days(dir: &Path, level: usize, bounds: &[&str], on_floor: bool, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.filter_map(|e| e.ok()) {
+        let p = e.path();
+        if !p.is_dir() {
+            continue;
+        }
+        let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.len() != [4, 2, 2][level] || !name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        if on_floor && name < bounds[level] {
+            continue;
+        }
+        if level == 2 {
+            out.push(p);
+        } else {
+            walk_days(
+                &p,
+                level + 1,
+                bounds,
+                on_floor && name == bounds[level],
+                out,
+            );
+        }
+    }
+}
+
 /// Codex's session files, oldest match first: day directories and
 /// their `rollout-*.jsonl` names sort chronologically, so the first
 /// candidate is the session the launch created — a person's own
-/// session opened later in the same folder never wins. A file
-/// counts when its cwd is the role's, it was created after the role
-/// started and no other role already claims the id.
+/// session opened later in the same folder never wins. Only day
+/// directories from the day before the role started onward are
+/// read at all. A file counts when its cwd is the role's, it was
+/// created after the role started and no other role already claims
+/// the id.
 fn codex_session(
     home: &Path,
     cwd: &str,
     started_ms: u64,
     taken: &BTreeSet<String>,
 ) -> Option<String> {
-    let mut days: Vec<PathBuf> = Vec::new();
     let sessions = home.join(".codex").join("sessions");
-    collect_dirs(&sessions, 3, &mut days);
-    days.sort();
-    for day in days {
+    let floor = day_string(started_ms.saturating_sub(86_400_000));
+    for day in collect_days(&sessions, &floor) {
         let Ok(entries) = fs::read_dir(&day) else {
             continue;
         };
@@ -164,24 +226,6 @@ fn codex_session(
         }
     }
     None
-}
-
-/// Collect every directory exactly `depth` levels under `base`.
-fn collect_dirs(base: &Path, depth: u32, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(base) else {
-        return;
-    };
-    for e in entries.filter_map(|e| e.ok()) {
-        let p = e.path();
-        if !p.is_dir() {
-            continue;
-        }
-        if depth == 1 {
-            out.push(p);
-        } else {
-            collect_dirs(&p, depth - 1, out);
-        }
-    }
 }
 
 /// `devin list --format json` in the role's cwd: an array of

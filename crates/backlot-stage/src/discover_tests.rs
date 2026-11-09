@@ -66,6 +66,32 @@ fn codex_prefers_the_oldest_match() {
     );
 }
 
+/// A day directory older than the day before the role started is
+/// never read — its files are not even opened.
+#[test]
+fn codex_skips_day_directories_before_the_role() {
+    let home = tmp("codex-days");
+    rollout(&home, "1970/01/01", "rollout-a.jsonl", "sess-ancient", CWD);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    // The file itself is fresh — only its day directory is stale.
+    assert_eq!(
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            now.saturating_sub(60_000),
+            &BTreeSet::new(),
+            &home,
+            &no_exec
+        ),
+        None,
+        "a day directory from before the role started is never read"
+    );
+}
+
 /// The newest day is scanned first; a wrong cwd or an already
 /// claimed id does not count, and a pre-start file never does.
 #[test]

@@ -101,6 +101,9 @@ pub(crate) struct Stage {
     /// Session ids the running pass recorded — `cached` cannot see
     /// them until the ledgers reload, so the watch adds them itself.
     pub(crate) found_sessions: std::cell::RefCell<std::collections::BTreeSet<String>>,
+    /// `(studio, role)` → when discovery last looked for the
+    /// session id — the watch's five-second throttle.
+    pub(crate) discover_looked: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -208,6 +211,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         exec: Box::new(discover::real_exec),
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
+        discover_looked: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

@@ -23,6 +23,12 @@ use crate::runners;
 /// A live role may keep its session id hidden this long before the
 /// stage asks for attention.
 const SESSION_WAIT_MS: u64 = 60_000;
+/// A session-less role's id is looked for at most this often —
+/// a rollout walk or a `devin list` every tick would block the loop.
+const DISCOVERY_EVERY_MS: u64 = 5_000;
+/// … and stops entirely after this long; the role's 60 second
+/// attention has long said its piece by then.
+const DISCOVERY_STOP_MS: u64 = 600_000;
 /// The folder-trust dialog is answered only this early in a role.
 const TRUST_WINDOW_MS: u64 = 60_000;
 /// The attention reason a missing session id raises.
@@ -117,6 +123,28 @@ pub(crate) fn taken_ids(
         .collect()
 }
 
+/// Whether this tick pays for a discovery look at all: never once
+/// the role's attention exists or it is past the hard stop, and at
+/// most once every [`DISCOVERY_EVERY_MS`] otherwise. `now_ms` is the
+/// tick's clock, injected so the cadence is testable.
+fn discovery_due(
+    role: &str,
+    state: &StudioState,
+    age_ms: u64,
+    last_look_ms: Option<u64>,
+    now_ms: u64,
+) -> bool {
+    if age_ms > DISCOVERY_STOP_MS
+        || state
+            .attention
+            .iter()
+            .any(|a| a.role == role && a.reason == SESSION_NOT_FOUND)
+    {
+        return false;
+    }
+    last_look_ms.is_none_or(|t| now_ms.saturating_sub(t) >= DISCOVERY_EVERY_MS)
+}
+
 /// The ledger event a session-less live role's watch yields: a
 /// `role.session` when the id was found, or one `attention.raised`
 /// once the wait ran out — ever, so a resolved attention stays the
@@ -190,18 +218,28 @@ impl Stage {
             if role.session_id.is_some() {
                 continue;
             }
-            // Claimed ids come from every studio, not just this one,
-            // and include anything found earlier in this same pass.
-            let taken = taken_ids(&self.cached, &self.found_sessions.borrow());
-            let found = discover::find_session(
-                &actor.runner,
-                &term.argv,
-                &repo,
-                role.since_ms,
-                &taken,
-                &home,
-                &*self.exec,
-            );
+            // Discovery is throttled: at most one look per five
+            // seconds per role, and none once the role's attention
+            // exists or ten minutes passed.
+            let pair = (studio.to_string(), key.clone());
+            let last_look = self.discover_looked.borrow().get(&pair).copied();
+            let found = if discovery_due(key, state, age_ms, last_look, now_ms) {
+                self.discover_looked.borrow_mut().insert(pair, now_ms);
+                // Claimed ids come from every studio, not just this
+                // one, plus anything found earlier in this pass.
+                let taken = taken_ids(&self.cached, &self.found_sessions.borrow());
+                discover::find_session(
+                    &actor.runner,
+                    &term.argv,
+                    &repo,
+                    role.since_ms,
+                    &taken,
+                    &home,
+                    &*self.exec,
+                )
+            } else {
+                None
+            };
             if let Some(kind) = session_event(key, &actor.runner, found, state, age_ms) {
                 if let EventKind::RoleSession { session_id, .. } = &kind {
                     self.found_sessions.borrow_mut().insert(session_id.clone());
@@ -366,6 +404,26 @@ mod tests {
         states.insert("three".into(), three);
         let blocked = discovery_blocked(&states);
         assert_eq!(blocked.len(), 1, "{blocked:?}");
+    }
+
+    /// A look happens at most every five seconds per role, never
+    /// once the role's attention exists, and never past ten
+    /// minutes — the injected clock makes the cadence testable.
+    #[test]
+    fn discovery_is_throttled_and_stops() {
+        let state = StudioState::default();
+        // First look always; again only after five seconds.
+        assert!(discovery_due("r", &state, 1_000, None, 1_000));
+        assert!(!discovery_due("r", &state, 1_000, Some(1_000), 2_000));
+        assert!(!discovery_due("r", &state, 1_000, Some(1_000), 5_999));
+        assert!(discovery_due("r", &state, 1_000, Some(1_000), 6_000));
+        // The role's attention exists: given up, no more looking.
+        let mut state = StudioState::default();
+        state.attention.push(raised("r"));
+        assert!(!discovery_due("r", &state, 61_000, None, 200_000));
+        // And nothing looks past the hard stop.
+        let state = StudioState::default();
+        assert!(!discovery_due("r", &state, 600_001, None, 700_000));
     }
 
     /// Claimed ids pool across every studio and the ids this pass
