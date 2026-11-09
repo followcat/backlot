@@ -35,6 +35,17 @@ fn must_exist(path: &Path, flag: &str) -> Result<(), Fail> {
     }
 }
 
+/// `priority`, `reopen` and `close` are person-facing commands: the
+/// user or the director records them; a working role cannot.
+fn person_gate(caller: &Caller) -> Result<(), Fail> {
+    match caller.role.as_str() {
+        "user" | "director" => Ok(()),
+        other => Err(Fail::refused(format!(
+            "role '{other}' cannot do this; the user or the director can"
+        ))),
+    }
+}
+
 /// `seq`-prefixed copy name under a content dir.
 fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -> PendingFile {
     let base = src
@@ -242,7 +253,11 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
-        Cmd::Cast { actor, reason } => {
+        Cmd::Cast {
+            actor,
+            reason,
+            priority,
+        } => {
             let task = caller.task.clone().unwrap_or_default();
             Ok(Box::new(move |state, _| {
                 let cand = state
@@ -256,7 +271,21 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         candidate: cand.name.clone(),
                         actor: cand.actor(),
                         reason,
-                        priority: None,
+                        priority,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
+        Cmd::Priority { level } => {
+            person_gate(caller)?;
+            let task = caller.task.clone().unwrap_or_default();
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::TaskPriority {
+                        task,
+                        priority: level,
                     },
                     by,
                     Vec::new(),

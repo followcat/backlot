@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use backlot_model::event::{Check, PlanKind, TaskStateChange, Verdict};
+use backlot_model::event::{Check, PlanKind, Priority, TaskStateChange, Verdict};
 
 use crate::cli::Fail;
 use crate::{args_studio, args_task};
@@ -66,6 +66,10 @@ pub enum Cmd {
     Cast {
         actor: String,
         reason: String,
+        priority: Option<Priority>,
+    },
+    Priority {
+        level: Priority,
     },
     Deliver {
         commits: String,
@@ -115,7 +119,9 @@ pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> --file <f>";
 pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]\n       backlot task pause|resume|abandon|takeover --task <id> --reason <r>";
-pub(crate) const U_CAST: &str = "usage: backlot cast --task <id> --actor <name> --reason <r>";
+pub(crate) const U_CAST: &str =
+    "usage: backlot cast --task <id> --actor <name> [--reason <r>] [--priority low|normal|high]";
+pub(crate) const U_PRIORITY: &str = "usage: backlot priority --task <id> --level low|normal|high";
 pub(crate) const U_DELIVER: &str =
     "usage: backlot deliver --commits A..B --report <f> [--check name=pass|fail...]";
 pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
@@ -290,6 +296,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "ask" => args_studio::one_file(&mut common, &mut it, U_ASK, |file| Cmd::Ask { file }),
         "tell" => args_studio::tell(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
+        "priority" => args_task::priority(&mut common, &mut it),
         "deliver" => args_task::deliver(&mut common, &mut it),
         "block" => args_task::block(&mut common, &mut it),
         "review" => args_task::review(&mut common, &mut it),

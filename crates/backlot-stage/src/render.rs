@@ -237,6 +237,7 @@ pub fn confirm(event: &backlot_model::Event) -> String {
         EventKind::TaskCast {
             task, candidate, ..
         } => format!(" {task} {candidate}"),
+        EventKind::TaskPriority { task, priority } => format!(" {task} {priority}"),
         EventKind::TaskDelivered { task, delivery, .. } => format!(" {task} d{delivery}"),
         EventKind::TaskReviewed {
             task,

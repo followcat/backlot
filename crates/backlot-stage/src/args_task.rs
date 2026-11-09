@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use backlot_model::correct::parse_verdict;
-use backlot_model::event::TaskStateChange;
+use backlot_model::event::{Priority, TaskStateChange};
 
 use crate::args::*;
 use crate::cli::Fail;
@@ -82,9 +82,16 @@ pub(crate) fn task_state(
     ))
 }
 
+/// `low|normal|high` for `--priority` and `--level`.
+fn parse_level(v: &str, u: &'static str) -> Result<Priority, Fail> {
+    v.parse::<Priority>()
+        .map_err(|_| usage(format!("bad level '{v}', want low|normal|high"), u))
+}
+
 pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut actor = None;
     let mut reason = None;
+    let mut priority = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_CAST)));
@@ -97,6 +104,10 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
             _ if eq(&arg, "--actor").is_some() => actor = eq(&arg, "--actor").map(String::from),
             "--reason" => reason = Some(it.value("--reason", U_CAST)?),
             _ if eq(&arg, "--reason").is_some() => reason = eq(&arg, "--reason").map(String::from),
+            "--priority" => priority = Some(parse_level(&it.value("--priority", U_CAST)?, U_CAST)?),
+            _ if eq(&arg, "--priority").is_some() => {
+                priority = Some(parse_level(eq(&arg, "--priority").unwrap(), U_CAST)?)
+            }
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_CAST)),
         }
     }
@@ -105,6 +116,33 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         Cmd::Cast {
             actor: actor.ok_or_else(|| usage("missing --actor", U_CAST))?,
             reason: reason.unwrap_or_default(),
+            priority,
+        },
+    ))
+}
+
+/// `priority --level`: the task is the common `--task`.
+pub(crate) fn priority(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut level = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_PRIORITY)));
+        }
+        if common_flag(it, common, &arg, U_PRIORITY)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--level" => level = Some(parse_level(&it.value("--level", U_PRIORITY)?, U_PRIORITY)?),
+            _ if eq(&arg, "--level").is_some() => {
+                level = Some(parse_level(eq(&arg, "--level").unwrap(), U_PRIORITY)?)
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_PRIORITY)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Priority {
+            level: level.ok_or_else(|| usage("missing --level", U_PRIORITY))?,
         },
     ))
 }
