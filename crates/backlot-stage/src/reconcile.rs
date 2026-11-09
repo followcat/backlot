@@ -6,9 +6,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use backlot_model::event::{ActorIdentity, CANNOT_RESUME, RECOVERED, REOPENED};
-use backlot_model::state::{RoleLifecycle, StudioState, actor_task};
+use backlot_model::event::ActorIdentity;
+use backlot_model::state::{RoleLifecycle, StudioState};
 
+mod desired;
 mod recover;
 
 /// Which fixed role a terminal plays (actors key on the task).
@@ -149,141 +150,6 @@ pub fn terminal_name(studio: &str, role_key: &str) -> Option<String> {
     }
 }
 
-/// `role.lost` plus a `role lost` clear for every open attention of
-/// the role — the prompt or stall it named is gone with the
-/// terminal, in the same pass. `cleared` keeps a seq from clearing
-/// twice in one pass.
-fn lost_records(
-    state: &StudioState,
-    key: &str,
-    records: &mut Vec<Action>,
-    cleared: &mut BTreeSet<u64>,
-) {
-    records.push(Action::Lost {
-        role: key.into(),
-        reason: "terminal gone".into(),
-    });
-    for a in state.open_attention().filter(|a| a.role == key) {
-        if cleared.insert(a.seq) {
-            records.push(Action::ClearAttention {
-                target: a.seq,
-                reason: "role lost".into(),
-            });
-        }
-    }
-}
-
-/// The `RoleKind` a recorded role key resolves to — the same shape
-/// `desired` builds for fresh starts.
-fn kind_of(role_key: &str) -> RoleKind {
-    match role_key {
-        "producer" => RoleKind::Producer,
-        "director" => RoleKind::Director,
-        "writer" => RoleKind::Writer,
-        _ => RoleKind::Actor,
-    }
-}
-
-/// The writer is wanted from a `purpose: "plan"` message until the
-/// next `purpose: "dispatch"` one.
-fn writer_wanted(state: &StudioState) -> bool {
-    state
-        .messages
-        .iter()
-        .rev()
-        .find(|m| m.purpose.is_some())
-        .is_some_and(|m| m.purpose.as_deref() == Some("plan"))
-}
-
-/// Roles the ledger wants live right now. A finished studio wants
-/// nobody on its own — the held pass below still re-launches a
-/// person an explicit `role.reopen` held.
-fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
-    let Some(cfg) = &state.studio else {
-        return Vec::new();
-    };
-    let mut out: Vec<Start> = Vec::new();
-    if state.finished.is_none() {
-        let fixed = [
-            ("producer", RoleKind::Producer, &cfg.roles.producer),
-            ("director", RoleKind::Director, &cfg.roles.director),
-        ];
-        out.extend(fixed.into_iter().map(|(role, kind, actor)| Start {
-            role: role.into(),
-            kind,
-            task: None,
-            terminal: format!("bl-{studio}-{role}"),
-            actor: actor.clone(),
-            repo: cfg.repo.clone(),
-            resume: None,
-        }));
-        if writer_wanted(state) {
-            out.push(Start {
-                role: "writer".into(),
-                kind: RoleKind::Writer,
-                task: None,
-                terminal: format!("bl-{studio}-writer"),
-                actor: cfg.roles.writer.clone(),
-                repo: cfg.repo.clone(),
-                resume: None,
-            });
-        }
-        for t in state.tasks.values() {
-            // Cast and not closed: running, delivered or awaiting rework
-            // all keep their person until the task closes.
-            if let Some(cast) = &t.cast
-                && !t.status.is_terminal()
-            {
-                out.push(Start {
-                    role: format!("actor-{}-c{}", t.id, t.casts.len()),
-                    kind: RoleKind::Actor,
-                    task: Some(t.id.clone()),
-                    terminal: format!("bl-{studio}-{}", t.id),
-                    actor: cast.actor.clone(),
-                    repo: cfg.repo.clone(),
-                    resume: None,
-                });
-            }
-        }
-    }
-    // A held person joins the desired set with its recorded session
-    // (R19). One already listed stays one entry, resume set either
-    // way; a held role with no actor has nothing to launch.
-    for want in out.iter_mut() {
-        if let Some(r) = state.roles.get(&want.role)
-            && r.held
-        {
-            want.resume = r.session_id.clone().map(|session| Resume {
-                session,
-                reason: REOPENED,
-            });
-        }
-    }
-    for (key, r) in &state.roles {
-        if !r.held || out.iter().any(|w| w.role == *key) {
-            continue;
-        }
-        let (Some(actor), Some(terminal), Some(session)) =
-            (&r.actor, terminal_name(studio, key), &r.session_id)
-        else {
-            continue;
-        };
-        out.push(Start {
-            role: key.clone(),
-            kind: kind_of(key),
-            task: actor_task(key).map(String::from),
-            terminal,
-            actor: actor.clone(),
-            repo: cfg.repo.clone(),
-            resume: Some(Resume {
-                session: session.clone(),
-                reason: REOPENED,
-            }),
-        });
-    }
-    out
-}
-
 /// The actions that move the live view toward the ledger's desired
 /// one. `live` is name → hc address for the terminals this studio
 /// owns — the caller builds it with [`studio_view`], so every name
@@ -295,7 +161,7 @@ pub fn reconcile(
     live: &BTreeMap<String, String>,
     now_ms: u64,
 ) -> Vec<Action> {
-    let wanted = desired(studio, state);
+    let wanted = desired::desired(studio, state);
     let wanted_keys: BTreeSet<&str> = wanted.iter().map(|w| w.role.as_str()).collect();
     // Whether any recorded role's key resolves to this terminal name.
     let owned = |name: &str, except: &str| {
@@ -319,7 +185,7 @@ pub fn reconcile(
                 RoleLifecycle::Live => {
                     if wanted_keys.contains(key.as_str()) {
                         if term.is_none() {
-                            lost_records(state, key, &mut records, &mut cleared);
+                            recover::lost_records(state, key, &mut records, &mut cleared);
                         }
                     } else if let Some(address) = term {
                         stops.push(Action::Stop {
@@ -332,7 +198,7 @@ pub fn reconcile(
                     } else {
                         // Undesired but recorded live with the terminal
                         // already gone — a loss, not a stop.
-                        lost_records(state, key, &mut records, &mut cleared);
+                        recover::lost_records(state, key, &mut records, &mut cleared);
                     }
                 }
                 RoleLifecycle::Closed => {
@@ -358,35 +224,19 @@ pub fn reconcile(
                 // record alone rejoins it, checked before the guard.
                 RoleLifecycle::Lost => {
                     if wanted_keys.contains(key.as_str()) {
-                        if let (Some(session), Some(address)) = (&r.session_id, &term) {
-                            records.push(Action::Resumed {
-                                role: key.clone(),
-                                address: address.clone(),
-                                session: session.clone(),
-                            });
-                            continue;
-                        }
-                        match recover::lost_step(r, now_ms) {
-                            recover::Lost::Resume(session) => {
-                                let mut want = wanted
-                                    .iter()
-                                    .find(|w| w.role == *key)
-                                    .expect("a wanted key has a Start")
-                                    .clone();
-                                want.resume = Some(Resume {
-                                    session,
-                                    reason: RECOVERED,
-                                });
-                                starts.push(Action::Start(want));
-                            }
-                            recover::Lost::Attention(detail) => {
-                                records.push(Action::Attention {
-                                    role: key.clone(),
-                                    reason: CANNOT_RESUME.into(),
-                                    detail,
-                                });
-                            }
-                        }
+                        let want = wanted
+                            .iter()
+                            .find(|w| w.role == *key)
+                            .expect("a wanted key has a Start");
+                        recover::lost_actions(
+                            key,
+                            r,
+                            want,
+                            term.as_ref(),
+                            now_ms,
+                            &mut records,
+                            &mut starts,
+                        );
                     }
                 }
             }
@@ -394,17 +244,14 @@ pub fn reconcile(
         // An open `cannot resume` clears once the role is live again
         // or no longer wanted — after any `role.lost` above took its
         // own clears, so a seq clears once per pass.
-        if let Some(reason) = recover::cannot_resume_done(r, wanted_keys.contains(key.as_str()))
-            && let Some(a) = state
-                .open_attention()
-                .find(|a| a.role == *key && a.reason == CANNOT_RESUME)
-            && cleared.insert(a.seq)
-        {
-            records.push(Action::ClearAttention {
-                target: a.seq,
-                reason: reason.into(),
-            });
-        }
+        recover::cannot_resume_clear(
+            key,
+            r,
+            state,
+            wanted_keys.contains(key.as_str()),
+            &mut records,
+            &mut cleared,
+        );
     }
 
     // Desired roles.
