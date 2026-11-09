@@ -97,6 +97,8 @@ pub enum Cmd {
     Records {
         json: bool,
     },
+    StageStart,
+    StageRun,
 }
 
 /// Tail line of every command's usage text.
@@ -126,6 +128,8 @@ pub(crate) const U_CORRECT: &str =
     "usage: backlot correct --event <seq> --reason <r> --set <key=value> [--set ...]";
 pub(crate) const U_STATUS: &str = "usage: backlot status [--json]";
 pub(crate) const U_RECORDS: &str = "usage: backlot records [--json]";
+pub(crate) const U_STAGE: &str =
+    "usage: backlot stage start [--session <s>] [--remote <t>]\n       backlot stage run";
 
 pub(crate) fn usage(msg: impl Into<String>, u: &'static str) -> Fail {
     Fail::usage(format!("{}\n{}\n{}", msg.into(), u, COMMON))
@@ -297,6 +301,17 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "records" => args_task::flags_only(&mut common, &mut it, U_RECORDS, |json| Cmd::Records {
             json,
         }),
+        "stage" => {
+            let Some(sub) = it.next() else {
+                return Err(usage("missing stage subcommand", U_STAGE));
+            };
+            match sub.as_str() {
+                "start" => args_studio::common_only(&mut common, &mut it, U_STAGE, Cmd::StageStart),
+                "run" => args_studio::common_only(&mut common, &mut it, U_STAGE, Cmd::StageRun),
+                "-h" | "--help" => Ok((common, Cmd::Help(U_STAGE))),
+                _ => Err(usage(format!("unknown stage subcommand '{sub}'"), U_STAGE)),
+            }
+        }
         other => Err(usage(format!("unknown command '{other}'"), U_STATUS)),
     }
 }

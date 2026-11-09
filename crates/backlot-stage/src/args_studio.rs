@@ -104,6 +104,25 @@ pub(crate) fn plan_publish(common: &mut Common, it: &mut It) -> Result<(Common, 
     ))
 }
 
+/// Commands taking only common flags (`stage start`, `stage run`).
+pub(crate) fn common_only(
+    common: &mut Common,
+    it: &mut It,
+    u: &'static str,
+    cmd: Cmd,
+) -> Result<(Common, Cmd), Fail> {
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(u)));
+        }
+        if common_flag(it, common, &arg, u)? {
+            continue;
+        }
+        return Err(usage(format!("unexpected argument '{arg}'"), u));
+    }
+    Ok((std::mem::take(common), cmd))
+}
+
 /// Commands taking just `--file`.
 pub(crate) fn one_file(
     common: &mut Common,

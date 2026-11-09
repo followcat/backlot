@@ -272,6 +272,30 @@ fn session_and_remote_are_common_flags() {
     );
 }
 
+/// `stage` subcommand parsing plus `run`'s outside-the-terminal
+/// refusal (which happens before any core call).
+#[test]
+fn stage_parses_and_run_refuses_outside() {
+    let (_scratch, env) = scratch();
+    assert!(usage(&env, "stage").contains("missing stage subcommand"));
+    assert!(usage(&env, "stage nope").contains("unknown stage subcommand"));
+    let msg = refused(&env, "stage run");
+    assert!(msg.contains("stage start"), "{msg}");
+}
+
+/// `stage start` always connects (it creates a terminal); absent
+/// endpoint pointers make that a clear refusal, never a real session.
+#[test]
+fn stage_start_with_no_core_is_a_clear_refusal() {
+    let mut vars = std::collections::BTreeMap::new();
+    vars.insert("HOME".into(), "/definitely/absent".into());
+    vars.insert("XDG_RUNTIME_DIR".into(), "/definitely/absent/run".into());
+    vars.insert("HC_SOCKET".into(), "/definitely/absent/hc.sock".into());
+    let env = crate::cli::Env { vars };
+    let msg = refused(&env, "stage start");
+    assert!(msg.contains("cannot reach the hc core"), "{msg}");
+}
+
 #[test]
 fn cast_toml_needs_all_roles() {
     let (scratch, env) = scratch();

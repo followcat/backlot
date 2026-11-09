@@ -18,6 +18,18 @@ pub enum RoleKind {
     Actor,
 }
 
+impl RoleKind {
+    /// The `BACKLOT_ROLE` a terminal of this kind gets.
+    pub fn name(self) -> &'static str {
+        match self {
+            RoleKind::Producer => "producer",
+            RoleKind::Director => "director",
+            RoleKind::Writer => "writer",
+            RoleKind::Actor => "actor",
+        }
+    }
+}
+
 /// A `terminal.run` plus a `role.started` record.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Start {

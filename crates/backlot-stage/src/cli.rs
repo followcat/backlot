@@ -20,7 +20,7 @@ use crate::store::{self, StoreError};
 /// left for the TUI's own argument parsing.
 const COMMANDS: &[&str] = &[
     "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "deliver",
-    "block", "review", "correct", "status", "records", "finding",
+    "block", "review", "correct", "status", "records", "finding", "stage",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused` → 1.
@@ -172,6 +172,12 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     let (common, cmd) = parse(args)?;
     if let Cmd::Help(u) = cmd {
         return Ok(format!("{u}\n{}", crate::args::COMMON));
+    }
+    match cmd {
+        // The stage connects itself; no ledger command needs it here.
+        Cmd::StageStart => return crate::stage::start(&common, env),
+        Cmd::StageRun => return crate::stage::run(&common, env),
+        _ => {}
     }
     let base = base(env, &common)?;
     match cmd {

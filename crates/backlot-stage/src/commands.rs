@@ -118,8 +118,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
     let by = caller.by();
     match cmd {
         Cmd::Help(_) => unreachable!("help is answered in cli::run"),
-        Cmd::Status { .. } | Cmd::Records { .. } => {
-            unreachable!("read-only commands do not append")
+        Cmd::Status { .. } | Cmd::Records { .. } | Cmd::StageStart | Cmd::StageRun => {
+            unreachable!("commands without a ledger event do not append")
         }
         Cmd::StudioNew {
             title,
