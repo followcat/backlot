@@ -212,10 +212,10 @@ fn approval(seq: u64, role: &str, by: &str, decision: ApprovalDecision) -> Appro
 }
 
 /// A `deny` strands the role at its interrupted screen, so it is
-/// owed one notice naming who denied it — an actor and a non-actor
-/// alike — saying the command did not run and pointing at `backlot
-/// block`; `allow` owes nothing, and a carried `source_seq` owes
-/// nothing again.
+/// owed one notice naming who denied it — an actor's points at
+/// `backlot block`, a non-actor's at reporting back, since `block`
+/// is actor-only; `allow` owes nothing, and a carried `source_seq`
+/// owes nothing again.
 #[test]
 fn deny_notice_owed_once() {
     let mut state = StudioState::default();
@@ -250,6 +250,23 @@ fn deny_notice_owed_once() {
     let writer = denied.iter().find(|n| n.source_seq == 6).unwrap();
     assert_eq!(writer.to, "writer");
     assert!(writer.body.contains("user"), "{}", writer.body);
+    assert!(
+        writer.body.contains("needs no permission"),
+        "{}",
+        writer.body
+    );
+    assert!(
+        writer
+            .body
+            .contains("tell whoever asked what could not be done"),
+        "{}",
+        writer.body
+    );
+    assert!(
+        !writer.body.contains("backlot block"),
+        "non-actor deny must not name the actor-only block: {}",
+        writer.body
+    );
     assert!(got.iter().all(|n| n.source_seq != 8));
     // Once a message carries that source_seq, nothing is owed.
     state.messages.push(backlot_model::state::Message {

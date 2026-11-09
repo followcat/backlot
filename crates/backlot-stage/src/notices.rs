@@ -246,16 +246,23 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
     }
     // A deny sends esc and the role lands on an interrupted screen
     // that waits for input — it is owed a notice, for any role.
+    // `backlot block` is an actor's command: a fixed role can only
+    // work around the denial or report back what could not be done.
     for a in &state.approvals {
         if sent.contains(&a.seq) || a.decision != ApprovalDecision::Deny {
             continue;
         }
+        let way = if crate::permit::is_actor(&a.role) {
+            "stop waiting on it with `backlot block --reason <reason>`"
+        } else {
+            "tell whoever asked what could not be done"
+        };
         out.push(Notice {
             source_seq: a.seq,
             to: a.role.clone(),
             label: "denied",
             body: format!(
-                "# permission denied\n\n`{}` denied your permission prompt — the command did not run.\n\nTry another way that needs no permission, or stop waiting on it with `backlot block --reason <reason>`.\n",
+                "# permission denied\n\n`{}` denied your permission prompt — the command did not run.\n\nTry another way that needs no permission, or {way}.\n",
                 a.by,
             ),
         });
