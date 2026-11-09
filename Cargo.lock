@@ -36,9 +36,11 @@ name = "backlot-stage"
 version = "0.1.0"
 dependencies = [
  "backlot-model",
+ "hc-proto",
  "libc",
  "serde",
  "serde_json",
+ "tokio",
  "toml 1.2.0+spec-1.1.0",
 ]
 

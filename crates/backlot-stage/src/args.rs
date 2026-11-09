@@ -16,6 +16,11 @@ pub struct Common {
     pub studio: Option<String>,
     pub role: Option<String>,
     pub task: Option<String>,
+    /// `--session`/`--remote`, as the TUI takes them. Used only when a
+    /// command must reach the core (no `BACKLOT_STATE_DIR`, or the
+    /// stage commands).
+    pub session: Option<String>,
+    pub remote: Option<String>,
 }
 
 pub enum Cmd {
@@ -95,7 +100,8 @@ pub enum Cmd {
 }
 
 /// Tail line of every command's usage text.
-pub const COMMON: &str = "  common: --studio <name> --as <role> --task <id>";
+pub const COMMON: &str =
+    "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t>";
 
 pub(crate) const U_STUDIO: &str =
     "usage: backlot studio new --title <t> --repo <path> --cast <file.toml>";
@@ -167,6 +173,8 @@ pub(crate) fn common_flag(
     flag!(studio, "--studio");
     flag!(role, "--as");
     flag!(task, "--task");
+    flag!(session, "--session");
+    flag!(remote, "--remote");
     Ok(false)
 }
 

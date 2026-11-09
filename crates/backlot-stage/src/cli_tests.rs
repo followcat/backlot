@@ -239,6 +239,39 @@ fn missing_caller_values_are_usage_errors() {
     env.vars.insert("BACKLOT_ROLE".into(), "actor".into());
     assert!(usage(&env, "block --reason x").contains("BACKLOT_TASK"));
 }
+/// Without `BACKLOT_STATE_DIR` a command needs the core for its id;
+/// an unreachable one refuses with a clear message. Every pointer is
+/// aimed at absent paths so a real session can never answer.
+#[test]
+fn no_state_dir_and_no_core_is_a_clear_refusal() {
+    let mut vars = std::collections::BTreeMap::new();
+    vars.insert("HOME".into(), "/definitely/absent".into());
+    vars.insert("XDG_RUNTIME_DIR".into(), "/definitely/absent/run".into());
+    vars.insert("HC_SOCKET".into(), "/definitely/absent/hc.sock".into());
+    let env = crate::cli::Env { vars };
+    let msg = refused(&env, "status --studio acme-shop");
+    assert!(msg.contains("cannot reach the hc core"), "{msg}");
+    assert!(msg.contains("BACKLOT_STATE_DIR"), "{msg}");
+}
+
+/// `--session`/`--remote` parse as common flags; with the override
+/// set they cost nothing.
+#[test]
+fn session_and_remote_are_common_flags() {
+    let (scratch, _env) = scratch();
+    let mut vars = std::collections::BTreeMap::new();
+    vars.insert(
+        "BACKLOT_STATE_DIR".into(),
+        scratch.dir.to_string_lossy().into_owned(),
+    );
+    let env = crate::cli::Env { vars };
+    // Reaches the ledger lookup, so the flag was consumed, not rejected.
+    assert!(
+        refused(&env, "status --studio acme-shop --session scratch-x")
+            .contains("no studio 'acme-shop'")
+    );
+}
+
 #[test]
 fn cast_toml_needs_all_roles() {
     let (scratch, env) = scratch();

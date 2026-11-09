@@ -66,21 +66,26 @@ impl<E> From<Refusal> for StoreError<E> {
     }
 }
 
-/// The per-core base directory: `$BACKLOT_STATE_DIR`, else
-/// `$XDG_STATE_HOME/backlot/default`, else `~/.local/state/backlot/default`.
-/// Keying by core id arrives with the stage (S2).
-pub fn base_dir(env: &BTreeMap<String, String>) -> PathBuf {
-    if let Some(d) = env.get("BACKLOT_STATE_DIR") {
-        return PathBuf::from(d);
-    }
+/// The parent every core's state lives under:
+/// `$XDG_STATE_HOME/backlot` or `~/.local/state/backlot`.
+pub fn root_dir(env: &BTreeMap<String, String>) -> PathBuf {
     if let Some(x) = env.get("XDG_STATE_HOME") {
-        return PathBuf::from(x).join("backlot/default");
+        return PathBuf::from(x).join("backlot");
     }
     let home = env
         .get("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
-    home.join(".local/state/backlot/default")
+    home.join(".local/state/backlot")
+}
+
+/// The per-core base directory: `$BACKLOT_STATE_DIR` always wins;
+/// otherwise `root_dir/<core id>` so scratch sessions stay apart.
+pub fn base_dir(env: &BTreeMap<String, String>, core_id: &str) -> PathBuf {
+    if let Some(d) = env.get("BACKLOT_STATE_DIR") {
+        return PathBuf::from(d);
+    }
+    root_dir(env).join(sanitize(core_id))
 }
 
 /// `studios/<name>` under the base directory.

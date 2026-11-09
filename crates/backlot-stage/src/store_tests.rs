@@ -186,13 +186,20 @@ fn state_dir_resolution_order() {
     let mut env = std::collections::BTreeMap::new();
     env.insert("HOME".into(), "/home/user".into());
     assert_eq!(
-        base_dir(&env),
-        PathBuf::from("/home/user/.local/state/backlot/default")
+        base_dir(&env, "core-9"),
+        PathBuf::from("/home/user/.local/state/backlot/core-9")
     );
     env.insert("XDG_STATE_HOME".into(), "/xdg".into());
-    assert_eq!(base_dir(&env), PathBuf::from("/xdg/backlot/default"));
+    assert_eq!(
+        base_dir(&env, "core-9"),
+        PathBuf::from("/xdg/backlot/core-9")
+    );
+    // The explicit override always wins, whatever the core id is.
     env.insert("BACKLOT_STATE_DIR".into(), "/scratch".into());
-    assert_eq!(base_dir(&env), PathBuf::from("/scratch"));
+    assert_eq!(base_dir(&env, "core-9"), PathBuf::from("/scratch"));
+    // A core id that is not a safe name component is sanitised.
+    env.remove("BACKLOT_STATE_DIR");
+    assert_eq!(base_dir(&env, "co/re"), PathBuf::from("/xdg/backlot/co-re"));
 }
 
 #[test]

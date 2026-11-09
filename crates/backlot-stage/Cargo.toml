@@ -7,8 +7,10 @@ license.workspace = true
 
 [dependencies]
 backlot-model.workspace = true
+hc-proto.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 toml.workspace = true
 
 [target.'cfg(unix)'.dependencies]

@@ -4,7 +4,7 @@
 //! 2 usage error.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use backlot_model::EventBy;
@@ -12,6 +12,7 @@ use backlot_model::state::StudioState;
 
 use crate::args::{Cmd, Common, parse};
 use crate::commands;
+use crate::link;
 use crate::render;
 use crate::store::{self, StoreError};
 
@@ -156,13 +157,23 @@ fn load(dir: &Path) -> Result<StudioState, Fail> {
     })
 }
 
+/// The state base for one command: the override, else one connection
+/// for the core id (`--session`/`--remote` apply as the TUI's do).
+fn base(env: &Env, common: &Common) -> Result<PathBuf, Fail> {
+    link::state_dir_sync(
+        env,
+        common.session.as_deref().map(std::ffi::OsStr::new),
+        common.remote.as_deref(),
+    )
+}
+
 /// Run the command; the string is printed on stdout on success.
 pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     let (common, cmd) = parse(args)?;
     if let Cmd::Help(u) = cmd {
         return Ok(format!("{u}\n{}", crate::args::COMMON));
     }
-    let base = store::base_dir(&env.vars);
+    let base = base(env, &common)?;
     match cmd {
         Cmd::Status { json } => {
             let name = studio_name(&common, env)?;
