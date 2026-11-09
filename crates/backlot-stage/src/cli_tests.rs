@@ -267,6 +267,27 @@ fn exit_kinds_usage_vs_refused() {
         &env,
         &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
     );
+    // A cast file whose stall limit is zero is a usage error like
+    // any other bad value — and it creates nothing.
+    let zero = fixture(
+        &scratch,
+        "cast-zero.toml",
+        &CAST_TOML.replacen("rework_cap = 2", "stall_limit_s = 0", 1),
+    );
+    let mut vars = env.vars.clone();
+    vars.insert("BACKLOT_STUDIO".into(), "shop-zero".into());
+    let env_zero = crate::cli::Env { vars };
+    assert!(
+        usage(
+            &env_zero,
+            &format!("studio new --title Zero --repo /home/user/acme-shop --cast {zero}")
+        )
+        .contains("stall_limit_s")
+    );
+    assert!(
+        !crate::store::studio_dir(&scratch.dir, "shop-zero").exists(),
+        "the refused studio was still created"
+    );
     assert!(refused(&env, "cast --task t9 --actor actor-a --as director").contains("no task 't9'"));
     assert!(
         refused(&env, "cast --task t1 --actor nobody --as director")

@@ -81,7 +81,14 @@ struct CastFile {
 fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     must_exist(path, "--cast")?;
     let text = fs::read_to_string(path).map_err(|e| Fail::usage(format!("--cast: {e}")))?;
-    toml::from_str(&text).map_err(|e| Fail::usage(format!("--cast {}: {e}", path.display())))
+    let cast: CastFile = toml::from_str(&text)
+        .map_err(|e| Fail::usage(format!("--cast {}: {e}", path.display())))?;
+    // Zero stalls every waiting screen at once — the limit needs a
+    // real number like every other cast value.
+    if cast.stall_limit_s == Some(0) {
+        return Err(Fail::usage("stall_limit_s must be at least 1"));
+    }
+    Ok(cast)
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, flag: &str) -> Result<T, Fail> {
