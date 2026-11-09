@@ -11,6 +11,10 @@ pub mod render;
 pub mod store;
 
 #[cfg(test)]
+mod cli_state_tests;
+#[cfg(test)]
+mod cli_testkit;
+#[cfg(test)]
 mod cli_tests;
 #[cfg(test)]
 mod store_tests;

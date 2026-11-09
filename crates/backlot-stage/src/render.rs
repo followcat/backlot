@@ -2,6 +2,7 @@
 
 use std::fmt::Write as _;
 
+use backlot_model::event::EventKind;
 use backlot_model::state::{StudioState, Task, TaskStatus};
 use backlot_model::{ActorIdentity, ActorRecord};
 
@@ -223,4 +224,31 @@ pub fn records(recs: &[ActorRecord]) -> String {
         let _ = writeln!(out, "    wall time: {}", fmt_ms(r.wall_time_ms));
     }
     out
+}
+
+/// The one-line confirmation printed after an append.
+pub fn confirm(event: &backlot_model::Event) -> String {
+    let subject = match &event.kind {
+        EventKind::StudioCreated { title, .. } => format!(" '{title}'"),
+        EventKind::ReqVersion { version, .. } => format!(" v{version}"),
+        EventKind::PlanPublished { plan_kind, .. } => format!(" {plan_kind:?}"),
+        EventKind::TaskCreated { task, title, .. } => format!(" {task} '{title}'"),
+        EventKind::TaskCast {
+            task, candidate, ..
+        } => format!(" {task} {candidate}"),
+        EventKind::TaskDelivered { task, delivery, .. } => format!(" {task} d{delivery}"),
+        EventKind::TaskReviewed {
+            task,
+            delivery,
+            verdict,
+            ..
+        } => format!(" {task} d{delivery} {verdict:?}"),
+        EventKind::TaskFinding { task, delivery, .. } => format!(" {task} d{delivery}"),
+        EventKind::TaskState { task, state, .. } => format!(" {task} {state:?}"),
+        EventKind::MessageQueued { to, .. } => format!(" → {to}"),
+        EventKind::ReportSent { node, to, .. } => format!(" {node} → {to}"),
+        EventKind::Correction { target, .. } => format!(" on event {target}"),
+        _ => String::new(),
+    };
+    format!("event {}: {}{}", event.seq, event.kind.name(), subject)
 }

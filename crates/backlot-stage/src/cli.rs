@@ -238,7 +238,7 @@ fn exec_event(common: Common, cmd: Cmd, env: &Env, base: &Path) -> Result<String
     }
     let built = commands::build(&caller, cmd)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;
-    Ok(commands::confirm(&event))
+    Ok(render::confirm(&event))
 }
 
 /// Entry point for `main`: `None` unless argv[1] is a studio command.
