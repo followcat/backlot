@@ -255,6 +255,10 @@ pub struct ReportRecord {
     pub to: String,
     pub node: String,
     pub file: String,
+    /// `message.delivered` on this report's seq — reports to a role
+    /// deliver like messages (`to: user` is never sent anywhere).
+    #[serde(default)]
+    pub delivered: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

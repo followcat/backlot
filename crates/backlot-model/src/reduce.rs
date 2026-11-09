@@ -328,13 +328,19 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 .targets
                 .insert(seq, SeqTarget::Message(state.messages.len() - 1));
         }
-        EventKind::MessageDelivered { target } => {
-            if let Some(SeqTarget::Message(idx)) = state.targets.get(target)
-                && let Some(m) = state.messages.get_mut(*idx)
-            {
-                m.delivered = true;
+        EventKind::MessageDelivered { target } => match state.targets.get(target) {
+            Some(SeqTarget::Message(idx)) => {
+                if let Some(m) = state.messages.get_mut(*idx) {
+                    m.delivered = true;
+                }
             }
-        }
+            Some(SeqTarget::Report(idx)) => {
+                if let Some(r) = state.reports.get_mut(*idx) {
+                    r.delivered = true;
+                }
+            }
+            _ => {}
+        },
         EventKind::ReportSent { to, node, file } => {
             state.reports.push(ReportRecord {
                 seq,
@@ -342,6 +348,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 to: to.clone(),
                 node: node.clone(),
                 file: file.clone(),
+                delivered: false,
             });
             state
                 .targets

@@ -112,17 +112,19 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 None => Err(Refusal::NoRole(role.clone())),
             }
         }
+        // `message.delivered` marks a queued message — or a report
+        // sent to a role — as handed to its terminal.
         EventKind::MessageDelivered { target } => {
             require_studio(state)?;
-            match state.targets.get(target) {
-                Some(SeqTarget::Message(idx)) => {
-                    if state.messages[*idx].delivered {
-                        Err(Refusal::MessageDone(*target))
-                    } else {
-                        Ok(())
-                    }
-                }
-                _ => Err(Refusal::NoMessage(*target)),
+            let done = match state.targets.get(target) {
+                Some(SeqTarget::Message(idx)) => Some(state.messages[*idx].delivered),
+                Some(SeqTarget::Report(idx)) => Some(state.reports[*idx].delivered),
+                _ => None,
+            };
+            match done {
+                Some(true) => Err(Refusal::MessageDone(*target)),
+                Some(false) => Ok(()),
+                None => Err(Refusal::NoMessage(*target)),
             }
         }
         EventKind::AttentionCleared { target, .. } => {

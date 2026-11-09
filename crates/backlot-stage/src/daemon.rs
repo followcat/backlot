@@ -20,6 +20,7 @@ use hc_proto::terminal::ListParams;
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
+use crate::deliver;
 use crate::discover;
 use crate::doc;
 use crate::link;
@@ -120,6 +121,15 @@ pub(crate) struct Stage {
     /// `(studio, role)` → when the work sample last read the screen —
     /// the one-second throttle.
     pub(crate) work_looked: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → the screen-stability track the send gate
+    /// reads — updated with each work sample.
+    pub(crate) screens: std::cell::RefCell<BTreeMap<(String, String), deliver::Screen>>,
+    /// `(studio, role)` → when the last `terminal.send` to it
+    /// finished — ok or refused — for the five-second send gap.
+    pub(crate) sent_ms: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → the one in-flight `terminal.send`, spawned
+    /// off the loop and collected on a later tick.
+    pub(crate) sending: std::cell::RefCell<BTreeMap<(String, String), deliver::InFlight>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -169,6 +179,8 @@ impl Stage {
                     .await?;
             }
             self.watch(&name, &dir, state, &live.terms, now_ms).await?;
+            self.deliver(&name, &dir, state, &live.terms, now_ms)
+                .await?;
         }
         Ok(())
     }
@@ -234,6 +246,9 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         trust_pace: std::cell::RefCell::new(BTreeMap::new()),
         work: std::cell::RefCell::new(BTreeMap::new()),
         work_looked: std::cell::RefCell::new(BTreeMap::new()),
+        screens: std::cell::RefCell::new(BTreeMap::new()),
+        sent_ms: std::cell::RefCell::new(BTreeMap::new()),
+        sending: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

@@ -336,6 +336,7 @@ impl Stage {
         let keep = |s: &str, r: &str| s != studio || state.roles.get(r).is_some_and(|e| e.live);
         self.work.borrow_mut().retain(|(s, r), _| keep(s, r));
         self.work_looked.borrow_mut().retain(|(s, r), _| keep(s, r));
+        self.screens.borrow_mut().retain(|(s, r), _| keep(s, r));
         Ok(())
     }
 
@@ -369,7 +370,14 @@ impl Stage {
             Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
         };
         let state = runners::work_state(runner, &text);
-        self.work.borrow_mut().insert(pair, state);
+        self.work.borrow_mut().insert(pair.clone(), state);
+        // The send gate's screen-stability track — same screen, same
+        // `same_since`; a new screen resets the window.
+        let prev = self.screens.borrow().get(&pair).cloned();
+        self.screens.borrow_mut().insert(
+            pair,
+            crate::deliver::Screen::note(prev.as_ref(), text, now_ms),
+        );
         Ok(())
     }
 

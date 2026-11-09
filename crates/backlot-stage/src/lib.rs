@@ -10,9 +10,11 @@ pub mod cli;
 pub mod commands;
 mod config;
 mod daemon;
+mod deliver;
 mod discover;
 mod doc;
 pub mod link;
+mod notices;
 mod prompts;
 pub mod reconcile;
 pub mod render;
@@ -30,6 +32,8 @@ mod cli_state_tests;
 mod cli_testkit;
 #[cfg(test)]
 mod cli_tests;
+#[cfg(test)]
+mod deliver_tests;
 #[cfg(test)]
 mod discover_tests;
 #[cfg(test)]
