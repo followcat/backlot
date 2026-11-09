@@ -130,7 +130,8 @@ document list is set when it starts, while studios come and go.
 - The stage is the only writer, and it writes with the CAS version.
 - It writes only on change, at most once every 2 seconds. Core rewrites all documents in one file, so writes stay rare.
 - It stays small: target under 64 KiB, against the 1 MiB limit. Field lengths are capped and old finished studios drop
-  off. The full history is in the ledger.
+  off. Closed people stay listed while their studio is live (R19), with no "doing" text. The full history is in the
+  ledger.
 - No credentials, environment values or prompt text.
 
 Whether the stage is running comes from the terminal inventory (`backlot-stage` live or not), not from a heartbeat, so a
@@ -151,12 +152,29 @@ The panel shows when the stage is not running and offers to start it.
 
 - **Geometry:** a right column, default 30 columns. The panel sits beside the panes only when they keep at least 60
   columns. Otherwise, including at or below the mobile threshold of 64, it is a full-screen view.
-- **Content:** studios, each with its roles: role, runner and model, state, a one-line "doing", and what needs attention.
-  Built to scroll for R13.
-- **Interaction:** click or keys. Selecting a role focuses its terminal. Selecting a studio focuses the producer.
+- **States (R17, D6, D12):** closed, collapsed or expanded. Closed draws nothing and is the state the parity harness
+  checks. Collapsed is a narrow column of about 16 columns listing only the working roles, each with its status mark and
+  the number of people working, such as `director` and `actors 2`. Expanded shows the people, and each role group can
+  collapse on its own. The 60-column rule above applies to whichever width the panel has.
+- **Content (R19):** studios, each with its roles and the people in each role: runner and model, state, a one-line
+  "doing", and what needs attention.
+- **Work states (R17):** working, waiting for input, blocked, lost and closed each have their own colour and mark, from
+  the palette in `chrome/status.rs`. Working is animated (spinning or a slow blink). The animation runs only while
+  something is working, so an idle panel causes no redraws. The stage derives the state from per-runner screen patterns
+  and publishes it in the summary, separately from whether the role is live, lost or closed.
+- **Scrolling (R13, R18):** a visible scrollbar, reusing `chrome/scroll`, with wheel, drag and keys.
+- **Order (R20, D11):** several people in one role are ordered by priority, and closed people come after open ones. The
+  director sets priority per task with `backlot cast --priority`, the default is normal, and the user can change it in
+  the panel, which records a `task.priority` event. It affects display order only, never scheduling.
+- **Closed people (R19):** a person whose work is finished stays listed as closed. Closing frees the terminal and keeps
+  the session ID in the ledger. Selecting a closed person offers to reopen them: `backlot reopen` records the request,
+  and the stage resumes the session with the runner's resume flag and records `role.resumed`.
+- **Interaction:** click or keys. Selecting an open person focuses their terminal. Selecting a studio focuses the
+  producer.
 - **Parity:** one new action toggles the panel, bound to a key herdr does not use. With the panel closed nothing else
   changes. Panel settings live in backlot's own config file, so herdr's config is read exactly as before.
-- **Local state:** whether the panel is open is per client. The content is shared by every client through the document.
+- **Local state:** whether the panel is closed, collapsed or expanded, and which role groups are collapsed, is per
+  client. The content is shared by every client through the document.
 
 ## Repository layout
 
