@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::discover::{ExecCall, find_session, runner_version};
+use crate::discover::{ExecCall, find_session, real_exec, runner_version};
 
 const CWD: &str = "/home/user/acme-shop";
 
@@ -230,6 +230,26 @@ fn chosen_ids_come_off_argv() {
         ),
         None
     );
+}
+
+/// `real_exec` is the one place a command really spawns: output
+/// bigger than a pipe holds must still come back whole — a child
+/// that fills its stdout would otherwise deadlock against a reader
+/// that only starts after exit.
+#[cfg(unix)]
+#[test]
+fn real_exec_drains_a_full_pipe() {
+    use std::time::Duration;
+    let dir = tmp("exec-pipe");
+    let big = dir.join("big.txt");
+    fs::write(&big, "x".repeat(200_000)).unwrap();
+    let call = ExecCall {
+        argv: vec!["cat".into(), big.to_string_lossy().into_owned()],
+        cwd: ".".into(),
+        timeout: Duration::from_secs(10),
+    };
+    let out = real_exec(&call).unwrap();
+    assert_eq!(out.len(), 200_000, "the whole file came back");
 }
 
 /// The version probe takes the first line; failure and empty

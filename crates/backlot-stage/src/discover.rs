@@ -24,7 +24,10 @@ pub struct ExecCall {
 /// the failure string out. Injected so tests never spawn a real CLI.
 pub type Exec = dyn Fn(&ExecCall) -> Result<String, String> + Send + Sync;
 
-/// The real [`Exec`]: spawn, poll, kill past the timeout.
+/// The real [`Exec`]: spawn, drain stdout on its own thread — a
+/// child writing more than the pipe holds would otherwise block
+/// forever, since nobody reads while it runs — then poll and kill
+/// past the timeout.
 pub fn real_exec(call: &ExecCall) -> Result<String, String> {
     let Some((program, args)) = call.argv.split_first() else {
         return Err("empty argv".into());
@@ -37,16 +40,21 @@ pub fn real_exec(call: &ExecCall) -> Result<String, String> {
         .stderr(std::process::Stdio::null())
         .spawn()
         .map_err(|e| format!("{program}: {e}"))?;
+    let stdout = child.stdout.take();
+    let reader = std::thread::spawn(move || {
+        let mut out = Vec::new();
+        if let Some(mut pipe) = stdout {
+            use std::io::Read;
+            let _ = pipe.read_to_end(&mut out);
+        }
+        out
+    });
     let deadline = std::time::Instant::now() + call.timeout;
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
-                let mut out = String::new();
-                if let Some(mut pipe) = child.stdout.take() {
-                    use std::io::Read;
-                    let _ = pipe.read_to_string(&mut out);
-                }
-                return Ok(out);
+                let out = reader.join().unwrap_or_default();
+                return Ok(String::from_utf8_lossy(&out).into_owned());
             }
             Ok(None) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(20));
@@ -54,6 +62,7 @@ pub fn real_exec(call: &ExecCall) -> Result<String, String> {
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
+                let _ = reader.join();
                 return Err(format!("{program}: timed out"));
             }
             Err(e) => return Err(format!("{program}: {e}")),
