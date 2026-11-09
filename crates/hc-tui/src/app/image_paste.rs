@@ -217,10 +217,10 @@ impl App {
                 if let Some(popup) = self.popup.as_mut() {
                     popup.pane.paste(path.as_bytes());
                 } else {
-                    self.show_notice("Image pasted", path);
+                    self.show_notice("Image uploaded", path);
                 }
             }
-            _ => self.show_notice("Image pasted", path),
+            _ => self.show_notice("Image uploaded", path),
         }
     }
 }
