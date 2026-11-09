@@ -181,7 +181,7 @@ async fn wait_read(client: &Client, terminal: &str, needle: &str) -> String {
         }
         assert!(
             Instant::now() < deadline,
-            "{terminal} never showed {needle:?}"
+            "{terminal} never showed {needle:?}; screen: {text:?}"
         );
         tokio::time::sleep(POLL).await;
     }
@@ -350,11 +350,19 @@ async fn real_stage_loop() {
     // Claude Code's folder-trust dialog: the stage reads the screen,
     // sees it is the role's own folder, and sends the one key the
     // `❯` cursor calls for per tick — Down while it sits on "No,
-    // exit", Enter once it is on the trust option — and the runner
-    // announces itself. The answer is a terminal interaction only:
-    // no ledger event comes of it.
-    let screen = wait_read(&client, "bl-acme-shop-producer", "Quick safety check").await;
-    assert!(screen.contains("❯ No, exit"), "{screen}");
+    // exit", Enter once it is on the trust option. The fake's picker
+    // holds each frame, so the cursor's move is observable: `❯ No`,
+    // then `❯ Yes`, and only then does the runner announce itself.
+    // The answer is a terminal interaction only: no ledger event
+    // comes of it.
+    let screen = wait_read(&client, "bl-acme-shop-producer", "❯ No, exit").await;
+    assert!(screen.contains("Quick safety check"), "{screen}");
+    wait_read(
+        &client,
+        "bl-acme-shop-producer",
+        "❯ Yes, I trust this folder",
+    )
+    .await;
     wait_read(
         &client,
         "bl-acme-shop-producer",
