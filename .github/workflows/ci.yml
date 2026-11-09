@@ -84,3 +84,8 @@ jobs:
           HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core
           cargo test -p hc-tui --test real_core_smoke --
           --ignored --test-threads=1
+      - run: >
+          ZIG=$PWD/target/test-core/zig/zig
+          HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core
+          cargo test -p hc-tui --test real_stage --
+          --ignored --test-threads=1

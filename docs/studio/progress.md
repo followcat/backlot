@@ -1,5 +1,33 @@
 # Studio progress
 
+## S2: The stage process (2026-11-09)
+
+- Done: `backlot stage start` launches a `backlot-stage` terminal whose child runs
+  `backlot stage run` — a reconcile loop that watches ledgers and hc events (subscription with
+  polling fallback) and exits non-zero on connection loss. `crates/backlot-stage/src/reconcile.rs`
+  is a pure function from ledger state + live terminals to ordered actions (stops before starts so
+  a recast frees the name); `act.rs` executes them through the public `terminal.run`/`kill`/`rm`,
+  recording `role.started`/`role.lost`/`role.closed` around each. Desired roles: producer and
+  director always, the writer from a `plan` message until `dispatch`, and `actor-<task>-c<n>` per
+  open task's current cast under terminal name `bl-<studio>-<task>`. Stray `bl-<studio>-*`
+  terminals are removed, orphan live terminals are adopted. `runners.rs` maps cast identities to
+  launch plans — only the `fake` runner exists (`tools/fake-runner.sh`); anything else raises one
+  `attention.raised`. `backlot-model` gained `role.closed`, keeping actor and session ID after a
+  deliberate stop, and `summary.rs` — the pure, versioned `backlot` document schema — which
+  `doc.rs` publishes with change-sensitive CAS writes at most once every two seconds. Default
+  state dirs key on `hello().core.id` (`--session`/`--remote` resolve the core once;
+  `BACKLOT_STATE_DIR` still wins and needs no core). hc core is untouched.
+- Measured: 41 model + 33 stage tests cover reconciliation rules (loss, deliberate stop, recast,
+  adoption, strays), `role.closed` semantics, summary shape/caps/drop-off, write throttling on an
+  injected clock, state-dir selection and CLI refusals. `cargo fmt --check`,
+  `cargo clippy --all-targets -- -D warnings` and `cargo test` green on every commit.
+  `real_stage.rs` exercises the whole loop on a scratch core: idempotent `stage start`, labelled
+  role terminals, writer across request/dispatch, actor close with no `role.lost`, session ID
+  surviving the close, and the document's throttled writes.
+- Not verified: no stall/restart recovery (S6 — a lost role is never relaunched), no real runners
+  (S3), and `stage run`'s polling fallback path is unit-tested only — the scratch core always
+  offers `events.subscribe`.
+
 ## S1: Ledger and recording commands (2026-11-09)
 
 - Done: `crates/backlot-model` holds the ledger's pure model — serde event types, `apply`/`replay`
