@@ -12,14 +12,22 @@ impl Pane {
     /// screen, no mouse reporting, and not the bare application-cursor
     /// mode a pager uses — bracketed paste marks a line editor, where
     /// the reference still pages its own scrollback. Unknown mode
-    /// state fails closed so the key forwards like it did before.
+    /// state fails closed like the reference's `.ok()?` chain, so the
+    /// key forwards like it did before.
     pub(crate) fn plain_page_keys_use_host_scrollback(&self) -> bool {
         let Some(vt) = self.vt.as_ref() else {
             return false;
         };
-        !vt.alt_screen().unwrap_or(false)
-            && !vt.mouse_tracking()
-            && (!vt.mode(1).unwrap_or(false) || vt.mode(2004).unwrap_or(false))
+        let Ok(alternate_screen) = vt.alt_screen() else {
+            return false;
+        };
+        let Ok(application_cursor) = vt.mode(1) else {
+            return false;
+        };
+        let Ok(bracketed_paste) = vt.mode(2004) else {
+            return false;
+        };
+        !alternate_screen && !vt.mouse_tracking() && (!application_cursor || bracketed_paste)
     }
 
     /// A pane-bound key the reference converts to host scrollback:

@@ -702,10 +702,12 @@ Everything else on the compared surfaces still diffs normally.
   parity owner's scratch root is a separate `mkdtemp`, so the `cwd` path
   differs in its random segment (`/tmp/hctui-parity-<seed>/acme-shop`).
   Those cells differ on checkpoints where a pane row (id + path) or a
-  workspace row (path) is selected — twelve and eight cells at the
-  documented capture, fewer when a run's random segment is shorter;
-  every other navigator checkpoint — each filter, search-without-results,
-  movement and close — is cell-identical. The row list, search, filters,
+  workspace row (path) is selected — the two runs' random path segments
+  have the same length, so the count varies with how many positions
+  happen to share a character between them (twelve and eight at the
+  documented capture, eleven and seven at a later one); every other
+  navigator checkpoint — each filter, search-without-results, movement
+  and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.
 
 ## Slice 5 — popups, peek and custom commands
