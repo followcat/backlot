@@ -171,6 +171,10 @@ pub struct WatchParams {
     pub subscribe: SubscribeParams,
     /// Document names to watch on this core and every added machine.
     pub documents: Vec<String>,
+    /// Document names read only on this core (`machine: None`) — never
+    /// fetched on added machines. A `doc` event for one counts only when
+    /// the event itself is machine-less.
+    pub local_documents: Vec<String>,
     /// First reconnect delay; doubles each failure to `reconnect_max`.
     pub reconnect_initial: Duration,
     /// The backoff ceiling (core's `reconnect_max` is 30 s).
@@ -192,6 +196,7 @@ impl Default for WatchParams {
         WatchParams {
             subscribe: SubscribeParams::default(),
             documents: vec!["herdr-app".into(), "hc-tui".into()],
+            local_documents: Vec::new(),
             reconnect_initial: Duration::from_millis(250),
             reconnect_max: Duration::from_secs(30),
             doc_timeout: Duration::from_secs(10),

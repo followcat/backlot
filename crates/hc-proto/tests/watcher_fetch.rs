@@ -239,6 +239,112 @@ async fn a_machine_doc_error_is_isolated_to_its_source() {
     fake.abort();
 }
 
+/// `local_documents` are fetched on this core only: never on added
+/// machines, and a machine `doc` event for one never refetches.
+#[tokio::test]
+async fn local_documents_fetch_here_only() {
+    let mut params = reconnect_params();
+    params.local_documents = vec!["backlot".into()];
+    let (watcher, accepted) = watcher_with(vec!["hc-tui".into()], params);
+    let (held_tx, mut held) = mpsc::channel::<Value>(16);
+    let (replies_tx, replies_rx) = mpsc::channel(16);
+    let (events_tx, events_rx) = mpsc::channel::<(String, Value)>(16);
+    let machines = Arc::new(Mutex::new(vec![machine("host-b")]));
+    let mut replies_rx = Some(replies_rx);
+    let mut events_rx = Some(events_rx);
+    let fake = {
+        let machines = Arc::clone(&machines);
+        spawn_fake(accepted, move |core, framed| {
+            if framed {
+                let held_tx = held_tx.clone();
+                let machines = Arc::clone(&machines);
+                let replies = replies_rx.take().expect("one rpc conn");
+                Box::pin(async move {
+                    // Every `backlot` fetch parks; it must only ever
+                    // arrive for the local (machine-less) key.
+                    serve_held(core, held_tx, replies, machines, &|p: &Value| {
+                        p["name"] == "backlot"
+                    })
+                    .await;
+                })
+            } else {
+                let mut events_rx = events_rx.take().expect("one sub conn");
+                Box::pin(async move {
+                    let mut core = core;
+                    serve_subscribe(&mut core, METHODS, json!({"seq": 1, "terminals": []})).await;
+                    while let Some((method, params)) = events_rx.recv().await {
+                        core.notify(&method, params).await;
+                    }
+                })
+            }
+        })
+    };
+
+    // The initial refresh requests the local key only — the machine's
+    // hc-tui fetch answers inline while backlot parks.
+    let req = timeout(DEADLINE, held.recv()).await.unwrap().unwrap();
+    assert_eq!(req["params"]["name"], "backlot");
+    assert!(req["params"]["on"].is_null(), "{req}");
+    await_view(&watcher, |v| {
+        v.documents
+            .get(&key(Some("host-b"), "hc-tui"))
+            .is_some_and(|d| !d.value.is_null())
+    })
+    .await;
+    assert!(
+        !watcher
+            .view()
+            .documents
+            .contains_key(&key(Some("host-b"), "backlot")),
+        "a machine key was created for a local-only document"
+    );
+
+    // A machine-scoped doc event for backlot is not a watched key.
+    events_tx
+        .send((
+            "event".into(),
+            json!({"seq": 2, "type": "doc", "machine": "host-b",
+                   "data": {"name": "backlot", "version": 9}}),
+        ))
+        .await
+        .unwrap();
+    await_view(&watcher, |v| v.inventory.seq() == 2).await;
+    assert!(
+        timeout(Duration::from_millis(300), held.recv())
+            .await
+            .is_err(),
+        "a machine doc event refetched a local-only document"
+    );
+
+    // A machine-less doc event does refetch it.
+    events_tx
+        .send((
+            "event".into(),
+            json!({"seq": 3, "type": "doc",
+                   "data": {"name": "backlot", "version": 10}}),
+        ))
+        .await
+        .unwrap();
+    let req2 = timeout(DEADLINE, held.recv()).await.unwrap().unwrap();
+    assert!(req2["params"]["on"].is_null(), "{req2}");
+    replies_tx
+        .send(reply(&req2, json!({"value": {"fresh": 1}, "version": 10})))
+        .await
+        .unwrap();
+    await_view(&watcher, |v| {
+        v.documents
+            .get(&key(None, "backlot"))
+            .is_some_and(|d| !d.fetching && d.value["fresh"] == 1)
+    })
+    .await;
+    replies_tx
+        .send(reply(&req, json!({"value": {"stale": 1}, "version": 1})))
+        .await
+        .unwrap();
+    watcher.stop();
+    fake.abort();
+}
+
 /// A configured `doc_timeout` bounds a parked fetch: the slot frees,
 /// the error lands on that document, and event processing is
 /// unaffected — a following event still reaches the view and a fresh

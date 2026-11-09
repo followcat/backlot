@@ -28,7 +28,10 @@ impl Actor {
                     self.kill_sub("event stream requires resync");
                 }
                 for doc in &effect.docs {
-                    if self.params.documents.contains(&doc.name) {
+                    let watched = self.params.documents.contains(&doc.name)
+                        || (doc.machine.is_none()
+                            && self.params.local_documents.contains(&doc.name));
+                    if watched {
                         self.request_doc(DocKey {
                             machine: doc.machine.clone(),
                             name: doc.name.clone(),
@@ -366,6 +369,12 @@ impl Actor {
                     name: name.clone(),
                 });
             }
+        }
+        for name in self.params.local_documents.clone() {
+            self.request_doc(DocKey {
+                machine: None,
+                name,
+            });
         }
     }
 
