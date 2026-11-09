@@ -48,6 +48,12 @@
   of an undeliverable `to: user`. Producer and director prompts name `<studio dir>/req/` as the
   requirement's place instead of rendering an empty file at v0 (`backlot status` already shows
   the version). Devin's approval keys are mapped — `enter`/`esc`, observed on 3000.12.32.
+- Rework 2 (2026-11-09): paths through a symlink, found by main's red macOS CI. `worktree_listed`
+  now resolves the looked-for dir before comparing — git prints resolved paths, so a state dir
+  under a symlinked parent no longer retries `worktree add` on an existing worktree — and the
+  stage resolves its state base once at startup, so role dirs, prompts and `BACKLOT_STATE_DIR`
+  all compare equal to the OS-resolved `term.cwd` the trust check sees. `err_line` prefers the
+  `fatal:`/`error:` line over progress noise like `Preparing worktree`.
 
 ## S4b: The studio panel (2026-11-09)
 
