@@ -3,7 +3,12 @@ use std::process::ExitCode;
 use hc_tui::cli::{Action, help_text, parse, run_options, version_text};
 
 fn main() -> ExitCode {
-    match parse(std::env::args().skip(1)) {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    // Studio commands are handled before any TUI parsing.
+    if let Some(code) = backlot_stage::maybe_run(&args) {
+        return code;
+    }
+    match parse(args) {
         Ok(Action::Help) => {
             println!("{}", help_text());
             ExitCode::SUCCESS

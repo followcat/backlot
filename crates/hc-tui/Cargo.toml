@@ -12,6 +12,7 @@ name = "backlot"
 path = "src/main.rs"
 
 [dependencies]
+backlot-stage.workspace = true
 hc-proto.workspace = true
 hc-vt.workspace = true
 crossterm = { version = "0.29", features = ["event-stream"] }
