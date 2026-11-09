@@ -347,12 +347,12 @@ async fn real_stage_loop() {
         producer.argv
     );
     // The producer's `model = "trust"` puts the fake runner behind
-    // Claude Code's folder-trust dialog: the stage reads the screen,
-    // sees it is the role's own folder, and sends the one key the
-    // `❯` cursor calls for per tick — Down while it sits on "No,
-    // exit", Enter once it is on the trust option. The fake's picker
-    // holds each frame, so the cursor's move is observable: `❯ No`,
-    // then `❯ Yes`, and only then does the runner announce itself.
+    // Claude Code's folder-trust dialog — with the real dialog's
+    // unsafe first second: a Down that arrives inside it is dropped
+    // (and logged where the test can see), an early Enter would end
+    // the runner outright. The stage's pacing means nothing goes out
+    // inside that window: `❯ No` sits past the settle, `❯ Yes` past
+    // the key gap, and only then does the runner announce itself.
     // The answer is a terminal interaction only: no ledger event
     // comes of it.
     let screen = wait_read(&client, "bl-acme-shop-producer", "❯ No, exit").await;
@@ -369,6 +369,13 @@ async fn real_stage_loop() {
         "fake runner: producer of acme-shop",
     )
     .await;
+    // Nothing was sent inside the dialog's unsafe first second —
+    // the fake logs any early byte it drains.
+    assert!(
+        !state.join("fake-early-keys").exists(),
+        "a key reached the dialog inside its unsafe first second: {}",
+        fs::read_to_string(state.join("fake-early-keys")).unwrap_or_default()
+    );
     let events_then = ledger(&state).len();
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert_eq!(

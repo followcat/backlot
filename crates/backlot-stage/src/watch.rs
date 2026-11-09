@@ -31,6 +31,12 @@ pub(crate) const DISCOVERY_EVERY_MS: u64 = 5_000;
 pub(crate) const DISCOVERY_STOP_MS: u64 = 600_000;
 /// The folder-trust dialog is answered only this early in a role.
 pub(crate) const TRUST_WINDOW_MS: u64 = 60_000;
+/// How long the dialog must be on screen before any key goes out:
+/// measured on Claude Code 2.1.319 — a `down` sent as the dialog
+/// first paints is lost, and an `enter` that early ends the runner.
+pub(crate) const TRUST_SETTLE_MS: u64 = 2_000;
+/// The least time between two keys, whatever they are.
+pub(crate) const TRUST_KEY_GAP_MS: u64 = 1_500;
 /// The attention reason a missing session id raises.
 pub(crate) const SESSION_NOT_FOUND: &str = "session id not found";
 
@@ -63,6 +69,56 @@ pub(crate) fn trust_key(text: &str) -> Option<&'static str> {
         }
     }
     None
+}
+
+/// One role's trust exchange so far: when the dialog was first
+/// seen and when the last key went out. Missing state means the
+/// dialog is not up (or was never seen).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TrustPace {
+    pub seen_ms: u64,
+    pub sent_ms: Option<u64>,
+}
+
+/// The pacing of the answer, pure so the injected clock tests it:
+/// `key` is [`trust_key`]'s read of the current screen. No key on
+/// screen resets the exchange — a dialog that comes back settles
+/// again. The first key waits for [`TRUST_SETTLE_MS`] of settled
+/// screen time; every later key waits [`TRUST_KEY_GAP_MS`] after
+/// the previous one. Enter still needs the cursor on Yes —
+/// `trust_key` decides that, this only decides when.
+pub(crate) fn trust_step(
+    prev: Option<TrustPace>,
+    key: Option<&'static str>,
+    now_ms: u64,
+) -> (Option<TrustPace>, Option<&'static str>) {
+    let Some(key) = key else {
+        return (None, None);
+    };
+    let Some(pace) = prev else {
+        return (
+            Some(TrustPace {
+                seen_ms: now_ms,
+                sent_ms: None,
+            }),
+            None,
+        );
+    };
+    let due = match pace.sent_ms {
+        None => now_ms.saturating_sub(pace.seen_ms) >= TRUST_SETTLE_MS,
+        Some(sent) => now_ms.saturating_sub(sent) >= TRUST_KEY_GAP_MS,
+    };
+    if due {
+        (
+            Some(TrustPace {
+                seen_ms: pace.seen_ms,
+                sent_ms: Some(now_ms),
+            }),
+            Some(key),
+        )
+    } else {
+        (Some(pace), None)
+    }
 }
 
 /// Whether the role might show the trust dialog at all: claude, or
@@ -208,11 +264,11 @@ impl Stage {
             };
             let age_ms = now_ms.saturating_sub(role.since_ms);
 
-            // The first-use folder-trust dialog: one key per tick,
-            // in the role's first minute only — the window bounds
-            // the exchange.
+            // The first-use folder-trust dialog: paced keys, in the
+            // role's first minute only — the window bounds the
+            // exchange.
             if can_show_trust(actor) && age_ms < TRUST_WINDOW_MS {
-                self.answer_trust(key, term, &repo).await?;
+                self.answer_trust(studio, key, term, &repo, now_ms).await?;
             }
 
             if role.session_id.is_some() {
@@ -252,11 +308,17 @@ impl Stage {
     }
 
     /// Read the role's screen and, when the trust dialog shows in
-    /// the role's own working directory, send the one key the
-    /// cursor position calls for. One key per tick: the dialog
-    /// needs the redraw between them, and [`trust_key`] never sends
-    /// Enter while the cursor is off the trust option.
-    async fn answer_trust(&self, role: &str, term: &LiveTerminal, repo: &str) -> Result<(), Fail> {
+    /// the role's own working directory, send the key [`trust_step`]
+    /// paces — never before the dialog has settled, never inside
+    /// the gap after the previous key.
+    async fn answer_trust(
+        &self,
+        studio: &str,
+        role: &str,
+        term: &LiveTerminal,
+        repo: &str,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
         if term.cwd != repo {
             return Ok(());
         }
@@ -274,7 +336,14 @@ impl Stage {
             Err(CallError::Rpc(_)) => return Ok(()),
             Err(e) => return Err(Fail::refused(format!("core call failed: {e}"))),
         };
-        let Some(key) = trust_key(&text) else {
+        let pair = (studio.to_string(), role.to_string());
+        let prev = self.trust_pace.borrow().get(&pair).copied();
+        let (pace, key) = trust_step(prev, trust_key(&text), now_ms);
+        match pace {
+            Some(p) => self.trust_pace.borrow_mut().insert(pair, p),
+            None => self.trust_pace.borrow_mut().remove(&pair),
+        };
+        let Some(key) = key else {
             return Ok(());
         };
         let sent = self

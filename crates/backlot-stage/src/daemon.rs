@@ -106,6 +106,9 @@ pub(crate) struct Stage {
     /// `(studio, role)` → when discovery last looked for the
     /// session id — the watch's five-second throttle.
     pub(crate) discover_looked: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → the trust exchange's pace: the dialog's
+    /// first sighting and the last key sent.
+    pub(crate) trust_pace: std::cell::RefCell<BTreeMap<(String, String), watch::TrustPace>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -215,6 +218,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         discover_looked: std::cell::RefCell::new(BTreeMap::new()),
+        trust_pace: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

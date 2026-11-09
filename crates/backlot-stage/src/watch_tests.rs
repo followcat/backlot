@@ -7,8 +7,9 @@ use backlot_model::state::{Attention, RoleState, StudioConfig, StudioState};
 use std::collections::BTreeSet;
 
 use crate::watch::{
-    DISCOVERY_STOP_MS, SESSION_NOT_FOUND, SESSION_WAIT_MS, discovery_blocked, discovery_due,
-    session_event, taken_ids, trust_dialog, trust_key,
+    DISCOVERY_STOP_MS, SESSION_NOT_FOUND, SESSION_WAIT_MS, TRUST_KEY_GAP_MS, TRUST_SETTLE_MS,
+    TrustPace, discovery_blocked, discovery_due, session_event, taken_ids, trust_dialog, trust_key,
+    trust_step,
 };
 
 fn actor(runner: &str) -> ActorIdentity {
@@ -194,6 +195,48 @@ fn trust_key_follows_the_cursor() {
     // Not the dialog at all.
     assert_eq!(trust_key("❯ allow edit? [y/n]\n"), None);
     assert_eq!(trust_key(""), None);
+}
+
+/// The exchange's clock: nothing goes out before the dialog has
+/// been seen for two seconds — an early `down` is lost on the real
+/// runner — the first key sends at the settle, the next only after
+/// the key gap; the state resets when the dialog leaves the screen
+/// and a returning dialog settles again.
+#[test]
+fn trust_step_paces_the_exchange() {
+    // First sighting records the clock, sends nothing.
+    let (pace, key) = trust_step(None, Some("down"), 1_000);
+    assert_eq!(key, None);
+    let pace = pace.unwrap();
+    assert_eq!(
+        pace,
+        TrustPace {
+            seen_ms: 1_000,
+            sent_ms: None
+        }
+    );
+    // Inside the settle: nothing.
+    let (p, key) = trust_step(Some(pace), Some("down"), 1_999);
+    assert_eq!(key, None);
+    assert_eq!(p, Some(pace));
+    // At the settle the first key goes out.
+    let (p, key) = trust_step(Some(pace), Some("down"), 1_000 + TRUST_SETTLE_MS);
+    assert_eq!(key, Some("down"));
+    let sent = p.unwrap().sent_ms.unwrap();
+    assert_eq!(sent, 1_000 + TRUST_SETTLE_MS);
+    // A key inside the gap waits; after it, whatever the screen asks.
+    let (p, key) = trust_step(p, Some("enter"), sent + TRUST_KEY_GAP_MS - 1);
+    assert_eq!(key, None);
+    assert!(p.is_some());
+    let (_, key) = trust_step(p, Some("enter"), sent + TRUST_KEY_GAP_MS);
+    assert_eq!(key, Some("enter"));
+    // The dialog gone resets the exchange.
+    let (pace, key) = trust_step(p, None, sent + 9_999);
+    assert_eq!((pace, key), (None, None));
+    // And a returning dialog settles again from scratch.
+    let (pace, key) = trust_step(None, Some("down"), sent + 10_000);
+    assert_eq!(key, None);
+    assert!(pace.is_some());
 }
 
 /// A found id records `role.session`; under the wait nothing

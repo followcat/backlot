@@ -12,11 +12,28 @@ if [ "$1" = "--version" ]; then
 fi
 if [ "${FAKE_MODEL:-}" = "trust" ]; then
     saved=$(stty -g 2>/dev/null)
-    stty -icanon -echo 2>/dev/null
-    # A real two-option picker, one byte at a time: Escape starts a
-    # cursor key (Down moves the cursor onto the trust option, Up
-    # back to "No, exit"), CR/LF accepts whatever the cursor is on.
-    # Each frame holds a moment so a watcher can see the cursor move.
+    stty -icanon -echo min 0 time 0 2>/dev/null
+    # The first paint, then the measured unsafe second: any byte
+    # that arrives inside it is judged early — drained, logged for
+    # the test, never queued. An early Enter kills the runner with
+    # the dialog still up; an early Down is just lost.
+    printf '\033[2J\033[H'
+    printf 'Quick safety check\nDo you trust the files in this folder?\n\n'
+    printf '\342\235\257 No, exit\n  Yes, I trust this folder\n'
+    sleep 1
+    early=$(dd bs=1 count=64 2>/dev/null | od -An -tx1 | tr -d ' \n')
+    if [ -n "$early" ]; then
+        [ -n "${BACKLOT_STATE_DIR:-}" ] &&
+            printf '%s\n' "$early" >>"$BACKLOT_STATE_DIR/fake-early-keys"
+        case "$early" in
+            *0d* | *0a*) exit 1 ;;
+        esac
+    fi
+    stty min 1 time 0 2>/dev/null
+    # Past the unsafe second the picker is robust: one byte at a
+    # time, Escape starts a cursor key (Down moves the cursor onto
+    # the trust option, Up back to "No, exit"), CR/LF accepts
+    # whatever the cursor is on.
     cursor=no
     while :; do
         printf '\033[2J\033[H'
@@ -26,7 +43,6 @@ if [ "${FAKE_MODEL:-}" = "trust" ]; then
         else
             printf '  No, exit\n\342\235\257 Yes, I trust this folder\n'
         fi
-        sleep 1
         b=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
         case "$b" in
             1b)
