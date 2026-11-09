@@ -71,6 +71,12 @@ pub enum Cmd {
     Priority {
         level: Priority,
     },
+    Reopen {
+        person: String,
+    },
+    Close {
+        person: String,
+    },
     Deliver {
         commits: String,
         report: PathBuf,
@@ -122,6 +128,8 @@ pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> 
 pub(crate) const U_CAST: &str =
     "usage: backlot cast --task <id> --actor <name> [--reason <r>] [--priority low|normal|high]";
 pub(crate) const U_PRIORITY: &str = "usage: backlot priority --task <id> --level low|normal|high";
+pub(crate) const U_REOPEN: &str = "usage: backlot reopen --person <role key>";
+pub(crate) const U_CLOSE: &str = "usage: backlot close --person <role key>";
 pub(crate) const U_DELIVER: &str =
     "usage: backlot deliver --commits A..B --report <f> [--check name=pass|fail...]";
 pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
@@ -297,6 +305,12 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "tell" => args_studio::tell(&mut common, &mut it),
         "cast" => args_task::cast(&mut common, &mut it),
         "priority" => args_task::priority(&mut common, &mut it),
+        "reopen" => args_task::person(&mut common, &mut it, U_REOPEN, |person| Cmd::Reopen {
+            person,
+        }),
+        "close" => args_task::person(&mut common, &mut it, U_CLOSE, |person| Cmd::Close {
+            person,
+        }),
         "deliver" => args_task::deliver(&mut common, &mut it),
         "block" => args_task::block(&mut common, &mut it),
         "review" => args_task::review(&mut common, &mut it),

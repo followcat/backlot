@@ -33,6 +33,8 @@ mod discover_tests;
 #[cfg(test)]
 mod priority_cmd_tests;
 #[cfg(test)]
+mod reopen_cmd_tests;
+#[cfg(test)]
 mod store_tests;
 #[cfg(test)]
 mod watch_tests;

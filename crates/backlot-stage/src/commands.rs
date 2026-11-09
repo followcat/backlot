@@ -292,6 +292,28 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
+        Cmd::Reopen { person } => {
+            person_gate(caller)?;
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::RoleReopen { role: person },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
+        // `close` releases the hold: a live held person stops being
+        // desired and the stage's Stop path records `role.closed`.
+        Cmd::Close { person } => {
+            person_gate(caller)?;
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::RoleRelease { role: person },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         Cmd::Deliver {
             commits,
             report,

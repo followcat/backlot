@@ -238,6 +238,9 @@ pub fn confirm(event: &backlot_model::Event) -> String {
             task, candidate, ..
         } => format!(" {task} {candidate}"),
         EventKind::TaskPriority { task, priority } => format!(" {task} {priority}"),
+        EventKind::RoleReopen { role } | EventKind::RoleRelease { role } => {
+            format!(" {role}")
+        }
         EventKind::TaskDelivered { task, delivery, .. } => format!(" {task} d{delivery}"),
         EventKind::TaskReviewed {
             task,

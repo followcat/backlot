@@ -121,6 +121,33 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     ))
 }
 
+/// `reopen`/`close --person <role key>`: common flags plus the key.
+pub(crate) fn person(
+    common: &mut Common,
+    it: &mut It,
+    u: &'static str,
+    make: impl FnOnce(String) -> Cmd,
+) -> Result<(Common, Cmd), Fail> {
+    let mut person = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(u)));
+        }
+        if common_flag(it, common, &arg, u)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--person" => person = Some(it.value("--person", u)?),
+            _ if eq(&arg, "--person").is_some() => person = eq(&arg, "--person").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), u)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        make(person.ok_or_else(|| usage("missing --person", u))?),
+    ))
+}
+
 /// `priority --level`: the task is the common `--task`.
 pub(crate) fn priority(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut level = None;
