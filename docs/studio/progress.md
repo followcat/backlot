@@ -11,12 +11,23 @@
   `BACKLOT_*`/`--studio`/`--as`/`--task` caller resolution and 0/1/2 exit codes. `main` dispatches
   studio command words to `backlot_stage::maybe_run` before TUI parsing; help points at them. hc
   core is untouched.
-- Measured: 28 model tests cover each validation rule accepted and refused, every "Evaluation rules"
-  bullet, and replay-equals-apply at every prefix. 12 stage tests cover torn tails, corrupt lines,
-  state-dir resolution and in-process concurrency; 3 binary tests cover the scripted studio loop
-  (new → req → plan → task → cast → deliver → changes → deliver → accepted), 8 processes appending
-  200 events with unique increasing seqs, and unchanged `--version`/`--session`/unknown-arg behavior.
-  `status`/`records` output verified on the compiled binary. All gates green on every commit.
+- Rework (2026-11-09): studio names are `[a-z0-9_-]{1,16}` checked before any path is built, and
+  only `studio new` may create a studio directory — other commands on a studio with no log are
+  refused without touching the disk. `task.finding` records defects on any existing delivery,
+  including on closed tasks, without changing status; `later_defects` counts only those and is
+  attributed to the delivery's actor, while review-first-seen defects moved to `new_in_rework`.
+  `wall_time_ms` follows each actor's cast interval instead of the whole task span. At the cap,
+  `review` accepts only `accepted`/`partially-accepted` on the latest delivery (a recast restarts
+  the budget; `rework_rounds` keeps the task's total), and `backlot task
+  pause|resume|abandon|takeover` record the matching `task.state` changes.
+- Measured: 32 model tests cover each validation rule accepted and refused, every "Evaluation rules"
+  bullet, replay-equals-apply at every prefix, cap exits and findings attribution across a recast.
+  16 stage tests cover torn tails, corrupt lines, state-dir resolution, in-process concurrency, the
+  name rule, `finding`, the four task-state commands and an at-cap review end to end; 4 binary tests
+  cover the scripted studio loop, 8 processes appending 200 events with unique increasing seqs,
+  traversal/uppercase/over-length names exiting 2 with nothing on disk, and unchanged
+  `--version`/`--session`/unknown-arg behavior. `status`/`records` output verified on the compiled
+  binary. All gates green on every commit.
 - Not verified: no real stage loop exists yet — messages and reports are recorded, not delivered.
   Role lifecycle events (`role.*`, `message.delivered`, `attention.*`) are modelled and validated but
   nothing appends them until S2's stage. The hc connection, runner launching and the summary
