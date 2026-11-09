@@ -100,10 +100,14 @@ fn render_fills_every_placeholder() {
         let text = fs::read_to_string(&file).unwrap();
         assert!(!text.contains('{'), "{role} left a placeholder: {text}");
         assert!(text.contains("`acme-shop`"), "{role} misses the studio");
-        if !matches!(kind, RoleKind::Producer) {
+        if matches!(kind, RoleKind::Writer | RoleKind::Actor) {
             let req = dir.join("req/v2.md").to_string_lossy().into_owned();
             assert!(text.contains(&req), "{role} misses the requirement file");
             assert!(text.contains("v2"), "{role} misses the version");
+        }
+        if matches!(kind, RoleKind::Producer | RoleKind::Director) {
+            let req = dir.join("req").to_string_lossy().into_owned();
+            assert!(text.contains(&req), "{role} misses the req folder");
         }
     }
     // The actor's copy carries its task, title, acceptance and branch.
@@ -124,6 +128,28 @@ fn render_fills_every_placeholder() {
     let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
     let text = fs::read_to_string(&file).unwrap();
     assert!(text.contains("backlot/acme-shop/integration"), "{text}");
+}
+
+/// Producer and director start before any requirement exists: the
+/// rendered prompt names the req folder and shows neither an empty
+/// file nor a version zero — writer and actor, who start after a
+/// requirement exists, keep the concrete file and version.
+#[test]
+fn pre_requirement_prompt_names_the_req_folder() {
+    let dir = tmp();
+    let state = StudioState::default();
+    let req_dir = dir.join("req").to_string_lossy().into_owned();
+    for kind in [RoleKind::Producer, RoleKind::Director] {
+        let st = start(kind, kind.name(), None);
+        let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+        let text = fs::read_to_string(&file).unwrap();
+        assert!(!text.contains("``"), "{kind:?} has empty backticks: {text}");
+        assert!(!text.contains("v0"), "{kind:?} shows v0: {text}");
+        assert!(
+            text.contains(&req_dir),
+            "{kind:?} misses the req folder: {text}"
+        );
+    }
 }
 
 /// Every `backlot ...` span the four prompts name goes through the

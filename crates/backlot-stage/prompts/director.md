@@ -42,7 +42,9 @@ the work area, goes to the user.
 
 ## The requirement
 
-`{req_file}` (v{req_version}). A revision arrives as `[backlot]`
-naming the tasks now behind; you decide per task to continue, pause
-or redo — `backlot task pause --task <task> --reason <reason>` — and
-nothing is killed for you.
+Requirement versions live in `{studio_dir}/req/` as `v<N>.md` — the
+highest number is the current one; `backlot status` shows it. A
+revision arrives as `[backlot]` naming the tasks now behind; you
+decide per task to continue, pause or redo —
+`backlot task pause --task <task> --reason <reason>` — and nothing
+is killed for you.

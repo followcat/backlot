@@ -74,6 +74,7 @@ fn fields(
     };
     BTreeMap::from([
         ("studio".into(), studio.into()),
+        ("studio_dir".into(), dir.to_string_lossy().into_owned()),
         ("role".into(), start.kind.name().into()),
         ("task".into(), task),
         ("title".into(), title),

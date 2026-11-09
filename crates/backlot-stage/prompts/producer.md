@@ -22,6 +22,9 @@ straight.
 - Report to the user here in this terminal, and for the record:
   `backlot report --node <name> --file <file>`
 
+Requirement versions live in `{studio_dir}/req/` as `v<N>.md` — the
+highest number is the current one; `backlot status` shows it.
+
 ## The light path
 
 For a small job skip the ceremony: create the task and cast it
