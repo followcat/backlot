@@ -581,15 +581,18 @@
 - Every job that builds `hc-vt` (`checks`, `macos`, `integration` in
   ci.yml and the release matrix) now restores
   `vendor/ghostty/zig-pkg` through the composite action
-  `.github/actions/zig-deps`, keyed on the Ghostty zon files and
-  tools/install-zig.sh. On a miss, `tools/fetch-zig-deps.sh` runs
-  `zig build --fetch=needed` with the same `-D` flags as
-  crates/hc-vt/build.rs, so only the packages the build really needs
-  are fetched (about 33 MB, lazy dependencies included), with up to 5
-  attempts, a per-attempt timeout and linear backoff. The directory is
-  saved right after the fetch, before the build can fail for other
-  reasons. tools/build-test-core.sh warms the inner tree the same way
-  before its cargo build.
+  `.github/actions/zig-deps`, keyed on the Ghostty zon files,
+  tools/install-zig.sh and tools/fetch-zig-deps.sh. On a miss,
+  `tools/fetch-zig-deps.sh` runs a real `zig build` with the same `-D`
+  flags as crates/hc-vt/build.rs (prefix and local cache in temp), so
+  the lazy dependencies the build requests while build.zig runs are
+  fetched too (about 33 MB; `zig build --fetch=needed` covers only the
+  eager set and leaves a partial cache). Up to 5 attempts, a
+  per-attempt timeout and linear backoff; on success it logs the
+  package count and size. The directory is saved right after the
+  fetch, before the build can fail for other reasons.
+  tools/build-test-core.sh warms the inner tree the same way before
+  its cargo build.
 - A populated zig-pkg alone builds offline: `zig build -Demit-lib-vt
   -Doptimize=ReleaseFast -Dcpu=baseline` succeeded under `unshare -rn`
   with an empty global cache and a fresh `--cache-dir` for the native,

@@ -57,7 +57,7 @@ esac
 EOF
 chmod 755 "$BIN/zig"
 
-# run MODE [VAR=val ...] — the fetcher under the stub env: tiny retry
+# run MODE [VAR=val ...] - the fetcher under the stub env: tiny retry
 # knobs keep the test fast.
 run() {
     mode=$1
@@ -75,17 +75,21 @@ out=$(run ok)
 st=$?
 [ $st -eq 0 ] && [ -d "$GDIR/zig-pkg/pkg-a" ] \
     && ok "clean fetch populates zig-pkg" \
-    || bad "clean fetch — exit $st: $out"
+    || bad "clean fetch - exit $st: $out"
 [ "$(cat "$work/count")" = 1 ] \
     && ok "clean fetch takes one attempt" \
     || bad "clean fetch attempt count: $(cat "$work/count")"
+case "$out" in
+    *"1 packages"*) ok "success reports the package count" ;;
+    *) bad "missing package count in: $out" ;;
+esac
 
 # --- retries through failures ------------------------------------------------
 out=$(run flaky FAKE_FAILS=2)
 st=$?
 [ $st -eq 0 ] && [ "$(cat "$work/count")" = 3 ] \
     && ok "flaky fetch succeeds on attempt 3" \
-    || bad "flaky fetch — exit $st, count $(cat "$work/count" 2>/dev/null): $out"
+    || bad "flaky fetch - exit $st, count $(cat "$work/count" 2>/dev/null): $out"
 case "$out" in
     *"attempt 1 of 4"*"attempt 3 of 4"*) ok "retries are announced" ;;
     *) bad "missing attempt log: $out" ;;
@@ -96,7 +100,7 @@ out=$(run dead)
 st=$?
 [ $st -ne 0 ] && [ "$(cat "$work/count")" = 4 ] \
     && ok "dead fetch gives up after all attempts" \
-    || bad "dead fetch — exit $st, count $(cat "$work/count" 2>/dev/null): $out"
+    || bad "dead fetch - exit $st, count $(cat "$work/count" 2>/dev/null): $out"
 case "$out" in
     *"failed after 4 attempts"*) ok "final failure says so" ;;
     *) bad "missing final failure message: $out" ;;
@@ -109,7 +113,7 @@ st=$?
 elapsed=$(( $(date +%s) - start ))
 [ $st -ne 0 ] && [ "$(cat "$work/count")" = 4 ] \
     && ok "hung fetch fails after all attempts" \
-    || bad "hung fetch — exit $st, count $(cat "$work/count" 2>/dev/null): $out"
+    || bad "hung fetch - exit $st, count $(cat "$work/count" 2>/dev/null): $out"
 # Each attempt ends near FETCH_TIMEOUT=3s, never near the stub's hour.
 [ "$elapsed" -lt 60 ] \
     && ok "hung fetch is bounded (${elapsed}s)" \
@@ -120,16 +124,20 @@ case "$out" in
 esac
 
 # --- the zig command line mirrors crates/hc-vt/build.rs ------------------------
-# The stub records one argument per line, so checks are line-exact.
+# A real build, not --fetch: lazy dependencies are only requested while
+# build.zig runs. The stub records one argument per line.
 run ok >/dev/null
-want_args="--fetch=needed -Demit-lib-vt -Doptimize=ReleaseFast -Dcpu=baseline"
+want_args="build -Demit-lib-vt -Doptimize=ReleaseFast -Dcpu=baseline --prefix --cache-dir"
 miss=
 for flag in $want_args; do
     grep -qx -- "$flag" "$work/args" || miss="$miss $flag"
 done
 [ -z "$miss" ] \
-    && ok "fetch uses build.rs flags" \
+    && ok "fetch runs a real build with build.rs flags" \
     || bad "missing flags:$miss in: $(cat "$work/args")"
+grep -q '^--fetch' "$work/args" \
+    && bad "fetch should not use --fetch: $(cat "$work/args")" \
+    || ok "fetch does not use --fetch"
 grep -q '^-Dtarget' "$work/args" \
     && bad "native fetch got an unexpected -Dtarget: $(cat "$work/args")" \
     || ok "native fetch passes no -Dtarget"
