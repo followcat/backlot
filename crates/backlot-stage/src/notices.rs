@@ -6,7 +6,9 @@
 //!
 //! Owed today: a delivery to the task's reviewer — `producer` when
 //! the producer cast it, the director otherwise — a
-//! `changes_requested` review to the task's actor, a blocked task
+//! `changes_requested` review to the task's actor — except the
+//! one that takes the task to `at_cap`, which is the producer's
+//! call to make with the user — a blocked task
 //! to its reviewer, a requirement revision above v1 to the
 //! director naming the tasks now behind, an actor's
 //! `permission prompt` attention to the director — a non-actor's
@@ -52,10 +54,28 @@ fn actor_key(task: &backlot_model::state::Task) -> String {
     format!("actor-{}-c{}", task.id, task.casts.len())
 }
 
+/// The changes-requested round `r` was for the task's latest cast —
+/// the producer's cap budget counts from the latest cast, so a
+/// count past `cap` marks the review that took the task `at_cap`.
+fn cap_round(t: &backlot_model::state::Task, r: &backlot_model::state::ReviewRecord) -> u32 {
+    let last_cast = t
+        .casts
+        .iter()
+        .filter(|c| c.seq < r.seq)
+        .map(|c| c.seq)
+        .max()
+        .unwrap_or(0);
+    t.reviews
+        .iter()
+        .filter(|o| o.verdict == Verdict::ChangesRequested && o.seq > last_cast && o.seq <= r.seq)
+        .count() as u32
+}
+
 /// Every notice the state owes — one per source event, deduped on
 /// `source_seq` so the list is stable until the events land.
 pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
     let sent: BTreeSet<u64> = state.messages.iter().filter_map(|m| m.source_seq).collect();
+    let cap = state.rework_cap();
     let mut out = Vec::new();
     for t in state.tasks.values() {
         for d in &t.deliveries {
@@ -96,6 +116,30 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
         }
         for r in &t.reviews {
             if sent.contains(&r.seq) || r.verdict != Verdict::ChangesRequested {
+                continue;
+            }
+            if cap_round(t, r) > cap {
+                // The review that took the task past the cap owes
+                // the actor nothing — `deliver` needs `running` —
+                // and the producer the call that is theirs to make
+                // with the user.
+                out.push(Notice {
+                    source_seq: r.seq,
+                    to: "producer".into(),
+                    label: "at-cap",
+                    body: format!(
+                        "# {} at the rework cap\n\nThe review of delivery {} asked for changes — round {} past the rework cap of {}, so the task is `at_cap`. The producer decides this with the user.\n\nConclusion: {}\n\nWays on:\n\n- accept it with the gaps documented: `backlot review --task {} --delivery {} --verdict partially-accepted --conclusion <text>`\n- rescope it: `backlot task abandon --task {} --reason <reason>` and a new task\n- recast it: `backlot cast --task {} --actor <name> --reason <reason>`\n",
+                        t.id,
+                        r.delivery,
+                        cap + 1,
+                        cap,
+                        r.conclusion,
+                        t.id,
+                        r.delivery,
+                        t.id,
+                        t.id,
+                    ),
+                });
                 continue;
             }
             let findings = if r.findings.is_empty() {

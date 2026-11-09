@@ -44,6 +44,8 @@ mod discover_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
 #[cfg(test)]
+mod notices_tests;
+#[cfg(test)]
 mod permit_tests;
 #[cfg(test)]
 mod priority_cmd_tests;
