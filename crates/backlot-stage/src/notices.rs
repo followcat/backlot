@@ -10,7 +10,8 @@
 //! to its reviewer, a requirement revision above v1 to the
 //! director naming the tasks now behind, an actor's
 //! `permission prompt` attention to the director — a non-actor's
-//! episode is the user's, and gets no notice — and a `deny`
+//! episode is the user's, and gets no notice — a `stalled`
+//! attention to the role's reviewer — and a `deny`
 //! approval to the denied role, which the esc interruption left
 //! waiting.
 
@@ -138,20 +139,35 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
         }
     }
     for a in &state.attention {
-        if sent.contains(&a.seq) || a.reason != backlot_model::event::PERMISSION_PROMPT {
+        if sent.contains(&a.seq) {
             continue;
         }
         let file = dir
             .join(format!("attention/{}.txt", a.seq))
             .display()
             .to_string();
-        if let Some(body) = crate::permit::director_notice(a, &file) {
-            out.push(Notice {
-                source_seq: a.seq,
-                to: "director".into(),
-                label: "attention",
-                body,
-            });
+        match a.reason.as_str() {
+            backlot_model::event::PERMISSION_PROMPT => {
+                if let Some(body) = crate::permit::director_notice(a, &file) {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to: "director".into(),
+                        label: "attention",
+                        body,
+                    });
+                }
+            }
+            backlot_model::event::STALLED => {
+                if let Some(to) = crate::stall::notice_to(state, a) {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to,
+                        label: "stalled",
+                        body: crate::stall::notice_body(a, &file),
+                    });
+                }
+            }
+            _ => {}
         }
     }
     // A deny sends esc and the role lands on an interrupted screen

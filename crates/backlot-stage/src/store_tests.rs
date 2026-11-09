@@ -54,6 +54,7 @@ fn seed_studio(dir: &Path) {
             permission_profile: "standard".into(),
         }],
         rework_cap: 2,
+        stall_limit_s: 600,
     };
     append::<(), _>(dir, |_, _| {
         Ok(Pending {

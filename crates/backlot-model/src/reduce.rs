@@ -22,6 +22,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             roles,
             candidates,
             rework_cap,
+            stall_limit_s,
         } => {
             state.studio = Some(StudioConfig {
                 title: title.clone(),
@@ -30,6 +31,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 roles: roles.as_ref().clone(),
                 candidates: candidates.clone(),
                 rework_cap: *rework_cap,
+                stall_limit_s: *stall_limit_s,
             });
             state.targets.insert(seq, SeqTarget::Studio);
         }

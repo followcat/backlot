@@ -21,6 +21,8 @@ pub struct StudioConfig {
     pub roles: RoleConfigs,
     pub candidates: Vec<Candidate>,
     pub rework_cap: u32,
+    /// Seconds a live role's unchanged screen counts as a stall.
+    pub stall_limit_s: u32,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the
@@ -344,6 +346,13 @@ impl StudioState {
             .as_ref()
             .map(|s| s.rework_cap)
             .unwrap_or_else(default_rework_cap)
+    }
+
+    pub fn stall_limit_s(&self) -> u32 {
+        self.studio
+            .as_ref()
+            .map(|s| s.stall_limit_s)
+            .unwrap_or_else(default_stall_limit_s)
     }
 
     pub fn open_attention(&self) -> impl Iterator<Item = &Attention> {

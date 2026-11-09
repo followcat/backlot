@@ -1053,3 +1053,98 @@ async fn real_stage_closed_loop() {
     drop(client);
     scratch.finish().expect("scratch teardown");
 }
+
+/// The S6a watch on the fake runner with a small `stall_limit_s`: a
+/// `work:working` actor's frozen screen raises `stalled`, the notice
+/// queues for the task's reviewer — the director — and a changed
+/// screen clears the episode.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_watch() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = state.join("studios/acme-shop");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    // A small stall limit: a frozen screen trips it in seconds.
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("stall_limit_s = 5\n{CAST_TOML}"),
+    );
+    let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+    wait_terminal(&client, "bl-acme-shop-producer").await;
+    wait_terminal(&client, "bl-acme-shop-director").await;
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "task new --title cart --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "cast --task t1 --actor actor-a --reason first --as director",
+    );
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    // The working screen held past the limit raises `stalled` once:
+    // the notice queues for the task's reviewer — the director —
+    // and the frozen screen is saved beside the ledger.
+    send_text(&client, &actor.address, "work:working").await;
+    let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised["reason"], "stalled", "{raised}");
+    let screen_file = studio.join(format!("attention/{}.txt", raised["seq"]));
+    assert!(
+        fs::read_to_string(&screen_file)
+            .unwrap_or_default()
+            .contains("fake-work: working"),
+        "the saved screen: {}",
+        screen_file.display()
+    );
+    wait_inbox(&state, "fake-inbox-director", "-stalled.md");
+
+    // A changed screen clears the episode.
+    send_text(&client, &actor.address, "work:waiting").await;
+    wait_kind(&state, "attention.cleared", 1);
+    let cleared = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared")
+        .expect("attention.cleared");
+    assert_eq!(cleared["target"], raised["seq"], "{cleared}");
+    assert_eq!(cleared["reason"], "screen changed", "{cleared}");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}

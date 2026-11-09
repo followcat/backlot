@@ -22,6 +22,7 @@ pub mod render;
 mod runners;
 mod sample;
 mod stage;
+mod stall;
 pub mod store;
 mod watch;
 mod workareas;
@@ -52,6 +53,8 @@ mod prompts_tests;
 mod reopen_cmd_tests;
 #[cfg(test)]
 mod sample_tests;
+#[cfg(test)]
+mod stall_tests;
 #[cfg(test)]
 mod store_tests;
 #[cfg(test)]

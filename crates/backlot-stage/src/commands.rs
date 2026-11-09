@@ -69,6 +69,8 @@ struct CastFile {
     mode: Option<StudioMode>,
     #[serde(default)]
     rework_cap: Option<u32>,
+    #[serde(default)]
+    stall_limit_s: Option<u32>,
     producer: ActorIdentity,
     director: ActorIdentity,
     writer: ActorIdentity,
@@ -152,6 +154,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         }),
                         candidates: cast.candidates,
                         rework_cap: cast.rework_cap.unwrap_or_else(default_rework_cap),
+                        stall_limit_s: cast.stall_limit_s.unwrap_or_else(default_stall_limit_s),
                     },
                     by,
                     Vec::new(),

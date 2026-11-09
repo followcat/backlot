@@ -83,6 +83,7 @@ pub fn status(name: &str, state: &StudioState) -> String {
         let _ = writeln!(out, "  requirement: none recorded");
     }
     let _ = writeln!(out, "  rework cap {}", studio.rework_cap);
+    let _ = writeln!(out, "  stall limit {}s", studio.stall_limit_s);
     let _ = writeln!(out, "  roles:");
     for (role, cfg, live) in [
         (

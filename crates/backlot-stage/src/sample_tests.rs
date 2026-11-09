@@ -174,6 +174,12 @@ fn approve(dir: &Path, role: &str, by: &str, decision: ApprovalDecision) {
 }
 
 fn studio(dir: &Path) {
+    studio_with_limit(dir, 600);
+}
+
+/// A studio with `stall_limit_s` seconds and one `actor-a`
+/// candidate, so a seeded `task.cast` validates.
+fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
     store::append(dir, |_, _| {
         Ok::<_, std::convert::Infallible>(Pending {
             event: NewEvent::new(
@@ -187,14 +193,57 @@ fn studio(dir: &Path) {
                         director: actor(),
                         writer: actor(),
                     }),
-                    candidates: Vec::new(),
+                    candidates: vec![backlot_model::event::Candidate {
+                        name: "actor-a".into(),
+                        runner: "fake".into(),
+                        runner_version: None,
+                        model: "plain".into(),
+                        effort: "high".into(),
+                        permission_profile: "standard".into(),
+                    }],
                     rework_cap: 2,
+                    stall_limit_s,
                 },
             ),
             files: Vec::new(),
         })
     })
     .unwrap();
+}
+
+/// Requirement v1 plus task `t1` cast to `actor-a`: the ledger
+/// replays it `running` under `actor-t1-c1`.
+fn running_task(dir: &Path) {
+    for kind in [
+        EventKind::ReqVersion {
+            version: 1,
+            file: "req/v1.md".into(),
+            summary: "first".into(),
+        },
+        EventKind::TaskCreated {
+            task: "t1".into(),
+            title: "front".into(),
+            task_kind: "feature".into(),
+            requirement_version: 1,
+            acceptance: "plan/a.md".into(),
+            dependencies: Vec::new(),
+        },
+        EventKind::TaskCast {
+            task: "t1".into(),
+            candidate: "actor-a".into(),
+            actor: actor(),
+            reason: "picked".into(),
+            priority: None,
+        },
+    ] {
+        store::append(dir, move |_, _| {
+            Ok::<_, std::convert::Infallible>(Pending {
+                event: NewEvent::new(EventBy::role("director"), kind),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    }
 }
 
 fn actor() -> backlot_model::event::ActorIdentity {
@@ -269,4 +318,91 @@ async fn a_prompt_after_an_answered_one_raises_its_own_attention() {
     assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
     let state = store::load_state(&dir).unwrap();
     assert_eq!(open_attentions(&state, "actor-t1-c1"), 1);
+}
+
+/// A screen frozen past `stall_limit_s` raises one `stalled`
+/// attention per episode — the screen saved beside it — a changed
+/// screen clears it, and a later freeze raises its own: raised
+/// once per episode, cleared on change, re-raised after.
+#[tokio::test]
+async fn a_frozen_screen_raises_stalls_once_and_clears_on_change() {
+    let dir = tmp();
+    studio_with_limit(&dir, 4); // 4 s of one screen is a stall
+    running_task(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    fake.lock().unwrap().screen =
+        "fake runner: actor-t1-c1 of acme-shop\nfake-work: working\n".into();
+    let t0 = now_ms();
+
+    // The same_since track starts at the first sample, so the
+    // raise lands exactly at the limit.
+    for k in 0..4 {
+        sample(&stage, &dir, &term, "actor-t1-c1", t0 + k * 1_000).await;
+        assert!(
+            events(&dir, "attention.raised").is_empty(),
+            "raised before the limit at +{k}s"
+        );
+    }
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 4_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1, "the freeze raised nothing");
+    let seq = match &raised[0].kind {
+        EventKind::AttentionRaised {
+            role,
+            reason,
+            detail,
+        } => {
+            assert_eq!(role, "actor-t1-c1");
+            assert_eq!(reason, backlot_model::event::STALLED);
+            assert!(detail.contains("screen unchanged for 4s"), "{detail}");
+            assert!(
+                detail.contains(&format!("attention/{}.txt", raised[0].seq)),
+                "{detail}"
+            );
+            raised[0].seq
+        }
+        _ => unreachable!(),
+    };
+    let saved = dir.join(format!("attention/{seq}.txt"));
+    assert!(
+        fs::read_to_string(&saved)
+            .unwrap()
+            .contains("fake-work: working"),
+        "{saved:?} lacks the screen"
+    );
+
+    // Two more frozen samples raise nothing — one open attention
+    // per role and reason.
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 5_000).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 6_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // A changed screen clears the episode.
+    fake.lock().unwrap().screen =
+        "fake runner: actor-t1-c1 of acme-shop\nfake-work: waiting\n".into();
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 7_000).await;
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { target, reason } => {
+            assert_eq!(*target, seq);
+            assert_eq!(reason.as_deref(), Some("screen changed"));
+        }
+        _ => unreachable!(),
+    }
+
+    // The new screen freezes too: one limit later it raises its
+    // own attention — a lost in-memory track (restart) behaves the
+    // same way.
+    for k in 8..11 {
+        sample(&stage, &dir, &term, "actor-t1-c1", t0 + k * 1_000).await;
+        assert_eq!(
+            events(&dir, "attention.raised").len(),
+            1,
+            "re-raised before the new screen's limit at +{k}s"
+        );
+    }
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 11_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 2);
 }

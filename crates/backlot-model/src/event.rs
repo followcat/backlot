@@ -98,6 +98,10 @@ pub enum ApprovalDecision {
 /// sampled `blocked` for two samples raises one per blocked episode.
 pub const PERMISSION_PROMPT: &str = "permission prompt";
 
+/// The `attention` reason a stalled role raises (S6): a live role's
+/// screen unchanged for the studio's `stall_limit_s`.
+pub const STALLED: &str = "stalled";
+
 /// A task's display priority (R20, D11): it orders people in the
 /// panel and nothing else — scheduling never reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -231,6 +235,9 @@ pub enum EventKind {
         candidates: Vec<Candidate>,
         #[serde(default = "default_rework_cap")]
         rework_cap: u32,
+        /// Seconds a live role's unchanged screen counts as a stall.
+        #[serde(default = "default_stall_limit_s")]
+        stall_limit_s: u32,
     },
     #[serde(rename = "role.started")]
     RoleStarted {
@@ -434,6 +441,11 @@ pub enum EventKind {
 /// Default rework cap per task (design.md "Stop conditions").
 pub fn default_rework_cap() -> u32 {
     2
+}
+
+/// Default stall limit in seconds (design.md "Watching agents").
+pub fn default_stall_limit_s() -> u32 {
+    600
 }
 
 impl EventKind {
