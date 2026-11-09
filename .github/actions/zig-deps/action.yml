@@ -23,7 +23,7 @@ runs:
       id: zig-pkg
       with:
         path: vendor/ghostty/zig-pkg
-        key: zig-pkg-${{ hashFiles('vendor/ghostty/build.zig.zon', 'vendor/ghostty/pkg/**/build.zig.zon', 'tools/install-zig.sh') }}
+        key: zig-pkg-${{ hashFiles('vendor/ghostty/build.zig.zon', 'vendor/ghostty/pkg/**/build.zig.zon', 'tools/install-zig.sh', 'tools/fetch-zig-deps.sh') }}
     - name: Fetch Zig packages
       if: steps.zig-pkg.outputs.cache-hit != 'true'
       shell: bash
@@ -34,4 +34,4 @@ runs:
       if: steps.zig-pkg.outputs.cache-hit != 'true'
       with:
         path: vendor/ghostty/zig-pkg
-        key: zig-pkg-${{ hashFiles('vendor/ghostty/build.zig.zon', 'vendor/ghostty/pkg/**/build.zig.zon', 'tools/install-zig.sh') }}
+        key: zig-pkg-${{ hashFiles('vendor/ghostty/build.zig.zon', 'vendor/ghostty/pkg/**/build.zig.zon', 'tools/install-zig.sh', 'tools/fetch-zig-deps.sh') }}

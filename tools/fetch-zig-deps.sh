@@ -27,10 +27,12 @@ rm -f "$TIMEDOUT"
 trap 'rm -f "$TIMEDOUT"' EXIT
 trap 'exit 1' INT TERM
 
-# --fetch=needed resolves the dependency set the real build needs, lazy
-# dependencies included, so the -D flags mirror crates/hc-vt/build.rs.
-# The local cache goes to temp: the vendored tree only gains zig-pkg.
-set -- build --fetch=needed -Demit-lib-vt -Doptimize=ReleaseFast -Dcpu=baseline \
+# A real `zig build` with the flags crates/hc-vt/build.rs uses: lazy
+# dependencies are only requested while build.zig runs, which --fetch
+# alone never does. Prefix and local cache go to temp so the vendored
+# tree only gains zig-pkg.
+set -- build -Demit-lib-vt -Doptimize=ReleaseFast -Dcpu=baseline \
+    --prefix "${TMPDIR:-/tmp}/hc-tui-zig-fetch-out" \
     --cache-dir "${TMPDIR:-/tmp}/hc-tui-zig-fetch"
 if [ "${ZIG_TARGET:-}" ]; then
     set -- "$@" "-Dtarget=$ZIG_TARGET"
@@ -98,7 +100,9 @@ while [ "$n" -le "$ATTEMPTS" ]; do
             echo "fetch-zig-deps: fetch succeeded but $DIR/zig-pkg is missing" >&2
             exit 1
         }
-        echo "fetch-zig-deps: zig packages ready in $DIR/zig-pkg"
+        count=$(ls zig-pkg | wc -l | tr -d ' ')
+        size=$(du -sh zig-pkg | cut -f1)
+        echo "fetch-zig-deps: $count packages, $size in $DIR/zig-pkg"
         exit 0
     fi
     if [ "$n" -lt "$ATTEMPTS" ]; then
