@@ -389,7 +389,7 @@ impl Stage {
             Ok(r) => r.text,
             // A refused read (the terminal raced away) is nothing.
             Err(CallError::Rpc(_)) => return Ok(()),
-            Err(e) => return Err(Fail::core(format!("core call failed: {e}"))),
+            Err(e) => return Err(Fail::call(e)),
         };
         let pair = (studio.to_string(), role.to_string());
         let prev = self.trust_pace.borrow().get(&pair).copied();
@@ -414,7 +414,7 @@ impl Stage {
         match sent {
             Ok(_) => eprintln!("stage: answered folder trust for {role} ({key})"),
             Err(CallError::Rpc(_)) => {}
-            Err(e) => return Err(Fail::core(format!("core call failed: {e}"))),
+            Err(e) => return Err(Fail::call(e)),
         }
         Ok(())
     }

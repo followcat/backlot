@@ -266,7 +266,7 @@ impl Stage {
                     eprintln!("stage: send to {} refused, still queued", pair.1);
                 }
                 Ok(Err(e)) => {
-                    return Err(Fail::core(format!("core call failed: {e}")));
+                    return Err(Fail::call(e));
                 }
                 Err(e) => {
                     eprintln!("stage: send to {} lost: {e}", pair.1);

@@ -9,6 +9,7 @@ use std::process::ExitCode;
 
 use backlot_model::EventBy;
 use backlot_model::state::StudioState;
+use hc_proto::client::CallError;
 
 use crate::args::{Cmd, Common, parse};
 use crate::commands;
@@ -49,6 +50,19 @@ impl Fail {
     pub fn message(&self) -> &str {
         match self {
             Fail::Usage(m) | Fail::Refused(m) | Fail::Core(m) => m,
+        }
+    }
+    /// A failed core call into the right failure: a dead wire —
+    /// `Closed` or `Protocol` — is `Core`, the one error a stage tick
+    /// must not walk past; anything else is one studio's `Refused`,
+    /// logged once and retried on a later pass. `Rpc` verdicts are
+    /// usually filtered before this and mean `Refused` here too.
+    pub fn call(e: CallError) -> Self {
+        match e {
+            CallError::Closed | CallError::Protocol(_) => {
+                Fail::core(format!("core call failed: {e}"))
+            }
+            _ => Fail::refused(format!("core call failed: {e}")),
         }
     }
 }

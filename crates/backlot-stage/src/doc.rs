@@ -69,7 +69,7 @@ pub async fn publish(client: &Client, throttle: &mut Throttle, now_ms: u64) -> R
             on: None,
         })
         .await
-        .map_err(|e| Fail::refused(format!("doc.get failed: {e}")))?;
+        .map_err(Fail::call)?;
     let value = serde_json::to_value(&summary)
         .map_err(|e| Fail::refused(format!("summary does not serialize: {e}")))?;
     match client
@@ -90,7 +90,7 @@ pub async fn publish(client: &Client, throttle: &mut Throttle, now_ms: u64) -> R
             eprintln!("stage: doc.set conflict: {e}");
             Ok(false)
         }
-        Err(e) => Err(Fail::refused(format!("doc.set failed: {e}"))),
+        Err(e) => Err(Fail::call(e)),
     }
 }
 

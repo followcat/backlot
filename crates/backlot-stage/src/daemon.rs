@@ -50,7 +50,7 @@ async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
     let list = client
         .terminal_list(ListParams::default())
         .await
-        .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
+        .map_err(Fail::call)?;
     let mut inv = Inventory {
         terms: Vec::new(),
         doing: BTreeMap::new(),
@@ -77,6 +77,34 @@ async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
         }
     }
     Ok(inv)
+}
+
+/// The loop's refresh decision, split for tests: a dead wire
+/// (`Fail::Core`) exits the stage; any other failed refresh keeps
+/// the last inventory — `live_terminals` is tried again on the next
+/// pass, and its message is logged once by the caller.
+pub(crate) fn keep_or_fail(r: Result<Inventory, Fail>, last: Inventory) -> Result<Inventory, Fail> {
+    match r {
+        Err(e @ Fail::Core(_)) => Err(e),
+        Err(_) => Ok(last),
+        ok => ok,
+    }
+}
+
+/// The refresh itself: the non-core failure's message is logged
+/// once here, then the last view carries on.
+async fn refresh_inventory(
+    client: &Client,
+    stage: &mut Stage,
+    last: Inventory,
+) -> Result<Inventory, Fail> {
+    let r = live_terminals(client).await;
+    if let Err(e) = &r
+        && !matches!(e, Fail::Core(_))
+    {
+        stage.log_once("core", e.message());
+    }
+    keep_or_fail(r, last)
 }
 
 /// What one ledger file looked like when its state was loaded.
@@ -378,20 +406,25 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        if doc::publish(&link.client, &mut throttle, now_ms).await? {
-            eprintln!("stage: summary written");
+        // A non-core publish failure leaves the summary to the next
+        // tick, logged once; a dead wire exits.
+        match doc::publish(&link.client, &mut throttle, now_ms).await {
+            Ok(true) => eprintln!("stage: summary written"),
+            Ok(false) => {}
+            Err(e @ Fail::Core(_)) => return Err(e),
+            Err(e) => stage.log_once("core", e.message()),
         }
         live = match sub.as_mut() {
             Some(sub) => match tokio::time::timeout(TICK, sub.recv()).await {
                 // A terminal event or the cadence: refetch the view.
-                Ok(Ok(_)) | Err(_) => live_terminals(&link.client).await?,
+                Ok(Ok(_)) | Err(_) => refresh_inventory(&link.client, &mut stage, live).await?,
                 Ok(Err(e)) => {
-                    return Err(Fail::refused(format!("lost the core event stream: {e}")));
+                    return Err(Fail::core(format!("lost the core event stream: {e}")));
                 }
             },
             None => {
                 tokio::time::sleep(TICK).await;
-                live_terminals(&link.client).await?
+                refresh_inventory(&link.client, &mut stage, live).await?
             }
         };
     }
