@@ -1,9 +1,8 @@
 # What has and has not been tried
 
-The studio layer's every claim here is measured in the ledger's own tests or in a run against a
-real core. This page is the honest version: what real agents have done, what only the fake runner
-has done, and what nobody has done. `progress.md` is the entry-by-entry record behind it;
-`runners.md` has the per-runner measurements.
+This page covers what real agents have run, what only the test runner has run, and what nobody
+has tried. `progress.md` is the entry-by-entry record behind it; `runners.md` has the per-runner
+measurements.
 
 ## What real agents have run
 
@@ -30,7 +29,6 @@ exactly what was measured for each. Per runner:
 - **OpenCode 2.2.5** — launched; its replies were not confirmed. Its working marker is guessed,
   not measured, and a recorded approval sends it **no key at all** — there is none mapped, so
   the attention stays open for the user regardless of the decision.
-- **Kimi** — not measured.
 
 Stall detection and restart recovery have only run on the fake runner. No real agent has been
 resumed after a restart, and whether a real runner picks a stopped core's session back up is
