@@ -24,6 +24,14 @@
   `real_stage.rs` exercises the whole loop on a scratch core: idempotent `stage start`, labelled
   role terminals, writer across request/dispatch, actor close with no `role.lost`, session ID
   surviving the close, and the document's throttled writes.
+- Rework (2026-11-09): three defect fixes. A closed role now finishes a crashed stop only at its
+  own recorded terminal address — a recast no longer kills the new actor under the shared name.
+  Terminal ownership comes from the `backlot.studio` label (`reconcile::studio_view`), never the
+  `bl-<studio>-` name prefix, so one studio cannot stop another's roles or a user's lookalike
+  terminal; an unlabelled terminal is never stopped, adopted or dropped. The summary drops the
+  role cap: fixed roles list first, then actors by key, every recorded person stays while the
+  studio is live (R19), and only finished studios are dropped for size — a live one is written
+  even over the 64 KiB target (the hard limit is 1 MiB).
 - Not verified: no stall/restart recovery (S6 — a lost role is never relaunched), no real runners
   (S3), and `stage run`'s polling fallback path is unit-tested only — the scratch core always
   offers `events.subscribe`.
