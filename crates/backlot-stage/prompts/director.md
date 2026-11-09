@@ -31,6 +31,9 @@ A `[backlot]` dispatch from the producer is your cue.
   (`--priority high` when it matters)
 - A paused task refuses a cast — resume it first:
   `backlot task resume --task <task> --reason <reason>`
+- A blocked task goes on with the same actor once what blocked it
+  is dealt with:
+  `backlot task resume --task <task> --reason <reason>`
 - Review every delivery against the acceptance list, with a written
   conclusion:
   `backlot review --task <task> --delivery 1 --verdict accepted --conclusion <text>`
@@ -40,6 +43,8 @@ A `[backlot]` dispatch from the producer is your cue.
   `git diff <a> <b>` — no `-C`, no `cd` — and read its report
   with your file-reading tool.
 - Keep to the rework cap; at the cap the call goes to the producer.
+- A `stalled` notice means look at the screen file it names before
+  acting.
 - Merge accepted work into your branch and run the project's checks
   here, in `{work}` — one command at a time.
 - Report at the nodes:

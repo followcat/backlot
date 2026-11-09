@@ -38,7 +38,8 @@ The published plan and acceptance list live in
 branch, not in the user's checkout — the checkout not showing it
 is expected. An actor's permission prompt is the director's to
 answer: do not relay it to the user, and never offer to change a
-permission mode.
+permission mode. An `at-cap` notice is yours to decide with the
+user — the notice lists the ways on.
 
 ## The light path
 
