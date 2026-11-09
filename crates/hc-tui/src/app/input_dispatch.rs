@@ -33,35 +33,40 @@ impl App {
                 self.pane.focused(focused);
             }
             UiEvent::Paste(text) => {
-                // Paste is never parsed as UI keys.
-                if self.insert_dialog_text(&String::from_utf8_lossy(&text)) {
-                } else if self.help {
-                    if self.help_state.search_focused
-                        && self
-                            .help_state
-                            .query
-                            .insert(&String::from_utf8_lossy(&text))
-                    {
-                        self.help_state.scroll = 0;
+                // Paste is never parsed as UI keys. The image bridge
+                // claims an empty paste (image-only Ctrl+Shift+V) or a
+                // single dropped image path on remote-capable targets;
+                // anything else stays text exactly as before.
+                if !self.try_image_paste_bridge(&text) {
+                    if self.insert_dialog_text(&String::from_utf8_lossy(&text)) {
+                    } else if self.help {
+                        if self.help_state.search_focused
+                            && self
+                                .help_state
+                                .query
+                                .insert(&String::from_utf8_lossy(&text))
+                        {
+                            self.help_state.scroll = 0;
+                        }
+                    } else if let Some(navigator) = self.navigator.as_mut() {
+                        // `insert_overlay_text`: the focused search takes
+                        // paste as query text; unfocused, the overlay eats it.
+                        if navigator.search_focused
+                            && navigator.query.insert(&String::from_utf8_lossy(&text))
+                        {
+                            navigator.filter = None;
+                            navigator.selected = None;
+                        }
+                    } else if self.settings.is_some() {
+                        // The Settings overlay has no text field — eat it.
+                    } else if self.popup_text(text.clone()) {
+                        // The popup terminal owns paste while open.
+                    } else if self.peek.is_some() {
+                        // Peek is observe-only — eat it.
+                    } else if self.mode == Mode::Normal && !self.prefix.armed() {
+                        self.reset_displayed_scroll();
+                        self.pane.paste(&text);
                     }
-                } else if let Some(navigator) = self.navigator.as_mut() {
-                    // `insert_overlay_text`: the focused search takes
-                    // paste as query text; unfocused, the overlay eats it.
-                    if navigator.search_focused
-                        && navigator.query.insert(&String::from_utf8_lossy(&text))
-                    {
-                        navigator.filter = None;
-                        navigator.selected = None;
-                    }
-                } else if self.settings.is_some() {
-                    // The Settings overlay has no text field — eat it.
-                } else if self.popup_text(text.clone()) {
-                    // The popup terminal owns paste while open.
-                } else if self.peek.is_some() {
-                    // Peek is observe-only — eat it.
-                } else if self.mode == Mode::Normal && !self.prefix.armed() {
-                    self.reset_displayed_scroll();
-                    self.pane.paste(&text);
                 }
             }
             UiEvent::Key(key) => self.on_key(key, width),

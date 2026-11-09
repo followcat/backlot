@@ -192,6 +192,13 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     );
 
     app.set_operations(operations);
+    // `endpoint_accepts_local_images` client arms: a `--remote`
+    // endpoint, or this client itself running inside an SSH session.
+    app.set_image_paste_context(
+        matches!(endpoint, Endpoint::Remote(_)),
+        env.get(std::ffi::OsStr::new("SSH_CONNECTION")).is_some()
+            || env.get(std::ffi::OsStr::new("SSH_TTY")).is_some(),
+    );
 
     // Guard declared before the terminal: the terminal drops first,
     // the guard restores raw mode/modes/cursor last — on success,

@@ -9,6 +9,8 @@
 pub mod app;
 pub mod chrome;
 pub mod cli;
+mod clipboard;
+mod clipdrop;
 pub mod config;
 pub mod core_start;
 pub mod host;

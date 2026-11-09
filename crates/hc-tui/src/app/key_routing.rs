@@ -92,7 +92,12 @@ impl App {
                 self.execute_repeat(lease_key, key, plan, width);
             }
             Action::Release => {
-                if let Some(popup) = self.popup.as_mut() {
+                // The release of a press the image bridge consumed never
+                // reaches a program — including the popup, which eats
+                // releases unconditionally while open.
+                if !self.image_paste_suppress.remove(&key.identity())
+                    && let Some(popup) = self.popup.as_mut()
+                {
                     popup.pane.key(&key);
                 }
                 self.release_pane_lease(&key);
@@ -115,6 +120,14 @@ impl App {
         // Reprocessed repeats enter the same binding dispatcher. Only the key
         // sent to the program retains Repeat; routing itself tests the chord.
         let press = key.clone().with_action(Action::Press);
+        // The clipboard-image trigger precedes every consumer, popup
+        // included: a matching press either starts an upload (consumed)
+        // or, with no image on the clipboard, continues into normal
+        // routing byte-for-byte. Re-dispatched repeats of a consumed
+        // press stop here.
+        if self.route_image_paste_key(key).is_some() {
+            return None;
+        }
         // The floating popup eats every key while open — the reference
         // routes raw input to it before UI bindings (`popup.rs`).
         if self.popup_key(&press) {

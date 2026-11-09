@@ -118,6 +118,15 @@ pub enum Action {
         terminal: String,
         created_ms: u64,
     },
+    /// `terminal.put` — the R9 image-paste upload: write the image next
+    /// to the terminal so the returned path can be pasted into it.
+    /// `data` is base64; the incarnation check matches `Kill`/`SendLine`.
+    PutImage {
+        terminal: String,
+        created_ms: u64,
+        name: String,
+        data: String,
+    },
 }
 
 /// What a store request produced. `Written` carries the confirmed layout
@@ -126,6 +135,12 @@ pub enum Outcome {
     Written(Box<Written>),
     Ran(String),
     Done,
+    /// A `terminal.put` landed: the terminal it wrote beside plus the
+    /// path the core returned.
+    Put {
+        terminal: String,
+        path: String,
+    },
 }
 
 #[cfg(test)]

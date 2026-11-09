@@ -17,6 +17,7 @@ mod draw;
 mod endpoint_navigation;
 mod help;
 mod host;
+mod image_paste;
 mod init;
 pub(crate) mod input;
 mod input_dispatch;
@@ -247,6 +248,16 @@ pub struct App {
     interaction_core: Option<String>,
     /// For the divider's double-click reset.
     last_divider_click: Option<Instant>,
+    /// Image-paste bridge context (`endpoint_accepts_local_images`):
+    /// the endpoint is `--remote`, or this client itself runs over SSH.
+    image_paste_remote: bool,
+    image_paste_over_ssh: bool,
+    /// Kitty releases of presses the image bridge consumed: the release
+    /// arm consults this before the popup's unconditional release leg.
+    image_paste_suppress: std::collections::HashSet<hc_vt::Key>,
+    /// The clipboard-image read — a field so tests never touch a real
+    /// clipboard.
+    image_paste_reader: fn() -> Option<crate::clipboard::ClipboardImage>,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
     /// The host was told to report every key as an escape code —

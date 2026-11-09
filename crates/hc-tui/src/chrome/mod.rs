@@ -95,6 +95,10 @@ pub struct ClientShellConfig {
     pub show_agent_labels_on_pane_borders: bool,
     pub startup_config_diagnostic: Option<String>,
     pub local_config_path: PathBuf,
+    /// `keys.remote_image_paste` resolved once — `None` disables the
+    /// image-paste key trigger (empty or invalid value, diagnosed at
+    /// load).
+    pub remote_image_paste_key: Option<crate::config::KeyCombo>,
 }
 
 impl ClientShellConfig {
@@ -179,6 +183,7 @@ impl ClientShellConfig {
             show_agent_labels_on_pane_borders: ui.show_agent_labels_on_pane_borders,
             startup_config_diagnostic: diagnostic,
             local_config_path,
+            remote_image_paste_key: config.remote_image_paste_key().ok().flatten(),
         }
     }
 }

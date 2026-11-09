@@ -58,6 +58,7 @@ impl App {
         self.pending_actions = self.pending_actions.saturating_sub(1);
         match result {
             Some(Ok(Outcome::Ran(terminal))) => self.on_popup_spawned(terminal),
+            Some(Ok(Outcome::Put { terminal, path })) => self.on_image_put(&terminal, &path),
             Some(Ok(Outcome::Done)) => {}
             Some(Ok(Outcome::Written(written)))
                 if self

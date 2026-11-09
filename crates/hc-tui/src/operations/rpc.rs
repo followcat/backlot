@@ -116,6 +116,7 @@ pub(super) async fn run(
         Action::Kill { .. } => &["terminal.get", "terminal.kill"],
         Action::Exec { .. } => &["machine.exec"],
         Action::RunPopup { .. } => &["terminal.run"],
+        Action::PutImage { .. } => &["terminal.get", "terminal.put"],
         Action::PeekKeep { .. } => &[
             "terminal.get",
             "terminal.label",
@@ -461,6 +462,26 @@ pub(super) async fn run(
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(Outcome::Written(Box::new(written)))
+        }
+        Action::PutImage {
+            terminal,
+            created_ms,
+            name,
+            data,
+        } => {
+            verify_incarnation(client, &terminal, created_ms, "Image paste").await?;
+            let result = client
+                .call(
+                    "terminal.put",
+                    Some(json!({"terminal":terminal,"name":name,"data":data})),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let path = result["path"]
+                .as_str()
+                .ok_or("terminal.put replied without a path")?
+                .to_owned();
+            Ok(Outcome::Put { terminal, path })
         }
     }
 }
