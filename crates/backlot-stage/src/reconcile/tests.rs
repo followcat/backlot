@@ -9,6 +9,8 @@ use backlot_model::testkit::*;
 use super::*;
 
 const STUDIO: &str = "acme-shop";
+/// The clock these tests hand the resume guard.
+const NOW: u64 = 0;
 
 fn log(events: Vec<Event>) -> StudioState {
     replay(&events)
@@ -126,7 +128,7 @@ fn stops(actions: &[Action]) -> Vec<(&str, &str, bool)> {
 /// A fresh studio wants producer and director, nothing else.
 #[test]
 fn a_new_studio_wants_producer_and_director() {
-    let actions = reconcile(STUDIO, &log(studio()), &live(&[]));
+    let actions = reconcile(STUDIO, &log(studio()), &live(&[]), NOW);
     let starts = starts(&actions);
     let names: Vec<&str> = starts.iter().map(|s| s.terminal.as_str()).collect();
     assert_eq!(starts.len(), 2, "{names:?}");
@@ -141,7 +143,7 @@ fn a_new_studio_wants_producer_and_director() {
 fn the_writer_is_wanted_between_plan_and_dispatch() {
     let mut events = studio();
     events.push(plan_request(3));
-    let actions = reconcile(STUDIO, &log(events.clone()), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events.clone()), &live(&[]), NOW);
     assert!(
         starts(&actions).iter().any(|s| s.role == "writer"),
         "{actions:?}"
@@ -153,6 +155,7 @@ fn the_writer_is_wanted_between_plan_and_dispatch() {
         STUDIO,
         &log(events.clone()),
         &live(&[("bl-acme-shop-writer", "t3")]),
+        NOW,
     );
     assert!(
         !actions.iter().any(|a| matches!(a,
@@ -167,13 +170,14 @@ fn the_writer_is_wanted_between_plan_and_dispatch() {
         STUDIO,
         &log(events.clone()),
         &live(&[("bl-acme-shop-writer", "t3")]),
+        NOW,
     );
     assert_eq!(stops(&actions), [("writer", "bl-acme-shop-writer", true)]);
 
     // Closed and gone: the writer is not relaunched while undesired.
     events.push(closed(6, "writer"));
     let state = log(events.clone());
-    let actions = reconcile(STUDIO, &state, &live(&[]));
+    let actions = reconcile(STUDIO, &state, &live(&[]), NOW);
     assert!(
         !actions.iter().any(|a| matches!(a,
             Action::Start(Start { role, .. })
@@ -185,7 +189,7 @@ fn the_writer_is_wanted_between_plan_and_dispatch() {
 
     // A new plan request starts it fresh.
     events.push(plan_request(7));
-    let actions = reconcile(STUDIO, &log(events), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
     assert!(
         starts(&actions).iter().any(|s| s.role == "writer"),
         "a closed writer comes back on the next plan request: {actions:?}"
@@ -193,12 +197,12 @@ fn the_writer_is_wanted_between_plan_and_dispatch() {
 }
 
 /// A live role whose terminal vanished is `role.lost`, never a stop —
-/// and a lost role is not relaunched.
+/// and a lost role is not relaunched as a fresh `role.started`.
 #[test]
-fn a_gone_terminal_records_lost_once_and_never_relaunches() {
+fn a_gone_terminal_records_lost_once() {
     let mut events = studio();
     events.push(started(2, "producer", "t9", "s"));
-    let actions = reconcile(STUDIO, &log(events.clone()), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events.clone()), &live(&[]), NOW);
     assert!(
         actions
             .iter()
@@ -206,11 +210,12 @@ fn a_gone_terminal_records_lost_once_and_never_relaunches() {
         "{actions:?}"
     );
     events.push(lost(3, "producer"));
-    let actions = reconcile(STUDIO, &log(events), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
     assert!(
-        !actions.iter().any(|a| matches!(a,
-            Action::Lost { role, .. } | Action::Start(Start { role, .. }) if role == "producer")),
-        "lost roles are not relaunched: {actions:?}"
+        !actions
+            .iter()
+            .any(|a| matches!(a, Action::Lost { role, .. } if role == "producer")),
+        "a recorded loss never repeats: {actions:?}"
     );
 }
 
@@ -224,7 +229,7 @@ fn a_deliberate_stop_is_never_a_loss() {
     events.push(closed(6, "writer"));
     let state = log(events);
     // Terminal still up: finish the stop, no role.closed again.
-    let actions = reconcile(STUDIO, &state, &live(&[("bl-acme-shop-writer", "t3")]));
+    let actions = reconcile(STUDIO, &state, &live(&[("bl-acme-shop-writer", "t3")]), NOW);
     assert_eq!(
         stops(&actions),
         [("writer", "bl-acme-shop-writer", false)],
@@ -235,7 +240,7 @@ fn a_deliberate_stop_is_never_a_loss() {
         "{actions:?}"
     );
     // Terminal already gone: nothing at all for the writer.
-    let actions = reconcile(STUDIO, &state, &live(&[]));
+    let actions = reconcile(STUDIO, &state, &live(&[]), NOW);
     assert!(
         !actions.iter().any(|a| matches!(a,
             Action::Lost { role, .. } | Action::Stop { role, .. } if role == "writer")),
@@ -251,7 +256,7 @@ fn closing_a_task_stops_its_actor() {
     events.push(dispatch(3));
     events.push(ev(4, "director", task_created("t1", "feature", 1)));
     events.push(ev(5, "director", cast("t1", "actor-a", "a")));
-    let actions = reconcile(STUDIO, &log(events.clone()), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events.clone()), &live(&[]), NOW);
     let start = starts(&actions)
         .into_iter()
         .find(|s| s.role == "actor-t1-c1")
@@ -267,6 +272,7 @@ fn closing_a_task_stops_its_actor() {
         STUDIO,
         &log(events.clone()),
         &live(&[("bl-acme-shop-t1", "t7")]),
+        NOW,
     );
     assert!(
         !actions.iter().any(|a| matches!(a,
@@ -278,7 +284,12 @@ fn closing_a_task_stops_its_actor() {
         "director",
         reviewed("t1", 1, Verdict::Accepted, vec![]),
     ));
-    let actions = reconcile(STUDIO, &log(events), &live(&[("bl-acme-shop-t1", "t7")]));
+    let actions = reconcile(
+        STUDIO,
+        &log(events),
+        &live(&[("bl-acme-shop-t1", "t7")]),
+        NOW,
+    );
     assert_eq!(
         stops(&actions),
         [("actor-t1-c1", "bl-acme-shop-t1", true)],
@@ -298,7 +309,7 @@ fn a_recast_keeps_the_earlier_person() {
     events.push(started(6, "actor-t1-c1", "t7", "sess-1"));
     events.push(ev(7, "director", cast("t1", "actor-b", "b")));
     let state = log(events);
-    let actions = reconcile(STUDIO, &state, &live(&[("bl-acme-shop-t1", "t7")]));
+    let actions = reconcile(STUDIO, &state, &live(&[("bl-acme-shop-t1", "t7")]), NOW);
     // The stop precedes the start so the name is free.
     let on_t1: Vec<&'static str> = actions
         .iter()
@@ -341,7 +352,7 @@ fn a_closed_role_finishes_only_its_own_terminal() {
         ("bl-acme-shop-director", "t2x"),
         ("bl-acme-shop-t1", "t6"),
     ]);
-    let actions = reconcile(STUDIO, &state, &view);
+    let actions = reconcile(STUDIO, &state, &view, NOW);
     assert_eq!(actions, Vec::<Action>::new(), "{actions:?}");
     // At c1's own recorded address the crashed stop still finishes.
     let view = live(&[
@@ -349,7 +360,7 @@ fn a_closed_role_finishes_only_its_own_terminal() {
         ("bl-acme-shop-director", "t2x"),
         ("bl-acme-shop-t1", "t5"),
     ]);
-    let actions = reconcile(STUDIO, &state, &view);
+    let actions = reconcile(STUDIO, &state, &view, NOW);
     assert_eq!(
         stops(&actions),
         [("actor-t1-c1", "bl-acme-shop-t1", false)],
@@ -365,6 +376,7 @@ fn an_unrecorded_desired_terminal_is_adopted() {
         STUDIO,
         &log(studio()),
         &live(&[("bl-acme-shop-producer", "t2")]),
+        NOW,
     );
     assert!(
         actions.iter().any(|a| matches!(a, Action::Adopt {
@@ -416,6 +428,7 @@ fn stray_terminals_in_the_view_are_dropped() {
         STUDIO,
         &log(studio()),
         &live(&[("bl-acme-shop-ghost", "t9"), ("bl-acme-shop-old", "t8")]),
+        NOW,
     );
     let dropped: Vec<(&str, &str)> = actions
         .iter()

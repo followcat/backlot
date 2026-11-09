@@ -3,9 +3,10 @@
 //! the producer — not the actor — and a resume that returns a
 //! blocked task to `running` owes its actor.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
-use backlot_model::event::{TaskStateChange, Verdict};
+use backlot_model::event::{CANNOT_RESUME, EventKind, TaskStateChange, Verdict};
 use backlot_model::state::{Message, StudioState};
 use backlot_model::testkit::*;
 
@@ -90,6 +91,98 @@ fn the_cap_review_owes_the_producer_not_the_actor() {
     });
     let owed = notices::owed(&state, dir());
     assert!(owed.iter().all(|n| n.label != "at-cap"), "{owed:?}");
+}
+
+/// A `cannot resume` attention owes one `lost` notice routed like a
+/// stall: an actor's to its task reviewer, the writer's and the
+/// director's to the producer, the producer's to nobody. The actor's
+/// body names the role, why, and the ways on — abandon or recast.
+#[test]
+fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "stage",
+                EventKind::AttentionRaised {
+                    role: "actor-t1-c1".into(),
+                    reason: CANNOT_RESUME.into(),
+                    detail: "lost 3 times in 10 minutes".into(),
+                },
+            ),
+            (
+                "stage",
+                EventKind::AttentionRaised {
+                    role: "writer".into(),
+                    reason: CANNOT_RESUME.into(),
+                    detail: "no session id to resume".into(),
+                },
+            ),
+            (
+                "stage",
+                EventKind::AttentionRaised {
+                    role: "director".into(),
+                    reason: CANNOT_RESUME.into(),
+                    detail: "no session id to resume".into(),
+                },
+            ),
+            (
+                "stage",
+                EventKind::AttentionRaised {
+                    role: "producer".into(),
+                    reason: CANNOT_RESUME.into(),
+                    detail: "no session id to resume".into(),
+                },
+            ),
+        ],
+    );
+    let owed = notices::owed(&state, dir());
+    let lost: Vec<_> = owed.iter().filter(|n| n.label == "lost").collect();
+    assert_eq!(lost.len(), 3, "the producer tells nobody: {owed:?}");
+    let by_to: BTreeMap<&str, _> = lost.iter().map(|n| (n.to.as_str(), n)).collect();
+    // The actor's to its task reviewer — the director cast it.
+    let actor_notice = by_to["director"];
+    assert_eq!(actor_notice.source_seq, 5);
+    for want in [
+        "actor-t1-c1",
+        "lost 3 times in 10 minutes",
+        "backlot task abandon --task t1",
+        "backlot cast --task t1",
+    ] {
+        assert!(
+            actor_notice.body.contains(want),
+            "lost body misses {want}: {}",
+            actor_notice.body
+        );
+    }
+    // Writer's and director's to the producer, one each.
+    let producers: Vec<u64> = lost
+        .iter()
+        .filter(|n| n.to == "producer")
+        .map(|n| n.source_seq)
+        .collect();
+    assert_eq!(producers, [6, 7], "{owed:?}");
+    assert!(lost.iter().all(|n| n.to != "user"), "{owed:?}");
+
+    // Already queued once: nothing is owed again for any of them.
+    let mut state = state;
+    for seq in [5, 6, 7, 8] {
+        state.messages.push(Message {
+            seq: 40 + seq,
+            from: "stage".into(),
+            to: "x".into(),
+            file: Some(format!("messages/{seq}-lost.md")),
+            purpose: None,
+            source_seq: Some(seq),
+            delivered: false,
+        });
+    }
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "lost")
+    );
 }
 
 /// A `changes_requested` review below the cap still owes the actor

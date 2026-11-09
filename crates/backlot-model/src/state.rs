@@ -225,6 +225,10 @@ pub struct RoleState {
     pub actor: Option<ActorIdentity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// Every `role.lost` timestamp — the resume guard's crash-loop
+    /// history, kept so a stage restart does not lose the count.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub losses: Vec<u64>,
 }
 
 impl RoleState {

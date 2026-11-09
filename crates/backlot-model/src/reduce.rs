@@ -68,6 +68,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             if let Some(entry) = state.roles.get_mut(role) {
                 entry.live = false;
                 entry.since_ms = ts;
+                entry.losses.push(ts);
             }
         }
         EventKind::RoleClosed { role, .. } => {

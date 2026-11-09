@@ -102,6 +102,18 @@ pub const PERMISSION_PROMPT: &str = "permission prompt";
 /// screen unchanged for the studio's `stall_limit_s`.
 pub const STALLED: &str = "stalled";
 
+/// The `attention` reason for a lost role the stage cannot bring
+/// back (S6b): no recorded session id, or too many losses inside
+/// the guard window.
+pub const CANNOT_RESUME: &str = "cannot resume";
+
+/// `role.resumed` reason for a held person `role.reopen` asked back.
+pub const REOPENED: &str = "reopened";
+
+/// `role.resumed` reason for a lost role the stage resumed after a
+/// restart — and the notice label that tells it so.
+pub const RECOVERED: &str = "recovered";
+
 /// A task's display priority (R20, D11): it orders people in the
 /// panel and nothing else — scheduling never reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]

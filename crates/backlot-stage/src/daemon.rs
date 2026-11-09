@@ -177,7 +177,7 @@ impl Stage {
             let dir = store::studio_dir(&self.base, &name);
             let state = &self.cached[&name];
             let view = reconcile::studio_view(&name, &live.terms);
-            for action in reconcile::reconcile(&name, state, &view) {
+            for action in reconcile::reconcile(&name, state, &view, now_ms) {
                 self.act(&name, &dir, state, &action, &mut real_slot_free, &blocked)
                     .await?;
             }

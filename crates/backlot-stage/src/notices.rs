@@ -14,7 +14,8 @@
 //! director naming the tasks now behind, an actor's
 //! `permission prompt` attention to the director — a non-actor's
 //! episode is the user's, and gets no notice — a `stalled`
-//! attention to the role's reviewer — and a `deny`
+//! attention to the role's reviewer — a `cannot resume`
+//! attention routed like a stall — and a `deny`
 //! approval to the denied role, which the esc interruption left
 //! waiting.
 
@@ -53,6 +54,22 @@ pub fn reviewer_for(task: &backlot_model::state::Task) -> String {
 /// `desired` builds.
 fn actor_key(task: &backlot_model::state::Task) -> String {
     format!("actor-{}-c{}", task.id, task.casts.len())
+}
+
+/// The `lost` notice body for a `cannot resume` attention: the
+/// role, why it cannot come back, and for an actor the ways on —
+/// the reviewer abandons the task or recasts it.
+fn cannot_resume_body(a: &backlot_model::state::Attention) -> String {
+    let ways = match backlot_model::state::actor_task(&a.role) {
+        Some(id) => format!(
+            "\nWays on:\n\n- `backlot task abandon --task {id} --reason <reason>` and a new task\n- recast it with `backlot cast --task {id} --actor <name> --reason <reason>`\n"
+        ),
+        None => String::new(),
+    };
+    format!(
+        "# {} cannot resume\n\n`{}`'s terminal was lost and the stage could not resume it — {}.\n{ways}",
+        a.role, a.role, a.detail,
+    )
 }
 
 /// The changes-requested round `r` was for the task's latest cast —
@@ -238,6 +255,20 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                         to,
                         label: "stalled",
                         body: crate::stall::notice_body(a, &file),
+                    });
+                }
+            }
+            // A lost role that cannot come back gets one `lost`
+            // notice, routed like a stall — an actor's to its task
+            // reviewer, the writer's and director's to the producer,
+            // the producer's to nobody.
+            backlot_model::event::CANNOT_RESUME => {
+                if let Some(to) = crate::stall::notice_to(state, a) {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to,
+                        label: "lost",
+                        body: cannot_resume_body(a),
                     });
                 }
             }

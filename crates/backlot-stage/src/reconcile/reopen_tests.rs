@@ -10,6 +10,8 @@ use backlot_model::testkit::*;
 use super::*;
 
 const STUDIO: &str = "acme-shop";
+/// The clock these tests hand the resume guard.
+const NOW: u64 = 0;
 
 fn log(events: Vec<Event>) -> StudioState {
     replay(&events)
@@ -95,12 +97,18 @@ fn a_held_closed_role_is_desired_with_its_session() {
     ));
     events.push(closed(7, "actor-t1-c1"));
     events.push(reopen(8, "actor-t1-c1"));
-    let actions = reconcile(STUDIO, &log(events), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
     let start = starts(&actions)
         .into_iter()
         .find(|s| s.role == "actor-t1-c1")
         .expect("held actor desired");
-    assert_eq!(start.resume.as_deref(), Some("sess-1"));
+    assert_eq!(
+        start
+            .resume
+            .as_ref()
+            .map(|r| (r.session.as_str(), r.reason)),
+        Some(("sess-1", REOPENED))
+    );
     assert_eq!(start.terminal, "bl-acme-shop-t1");
     assert_eq!(start.kind, RoleKind::Actor);
     assert_eq!(start.task.as_deref(), Some("t1"));
@@ -116,13 +124,19 @@ fn a_desired_held_role_is_one_entry() {
     events.push(started(5, "actor-t1-c1", "t7", "sess-1"));
     events.push(closed(6, "actor-t1-c1"));
     events.push(reopen(7, "actor-t1-c1"));
-    let actions = reconcile(STUDIO, &log(events), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
     let found: Vec<&Start> = starts(&actions)
         .into_iter()
         .filter(|s| s.role == "actor-t1-c1")
         .collect();
     assert_eq!(found.len(), 1, "{actions:?}");
-    assert_eq!(found[0].resume.as_deref(), Some("sess-1"));
+    assert_eq!(
+        found[0]
+            .resume
+            .as_ref()
+            .map(|r| (r.session.as_str(), r.reason)),
+        Some(("sess-1", REOPENED))
+    );
 }
 
 /// A held role with no recorded actor has nothing to launch.
@@ -142,7 +156,7 @@ fn a_held_role_without_an_actor_is_skipped() {
     ));
     events.push(closed(5, "actor-t9-c1"));
     events.push(reopen(6, "actor-t9-c1"));
-    let actions = reconcile(STUDIO, &log(events), &live(&[]));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
     assert!(
         !starts(&actions).iter().any(|s| s.role == "actor-t9-c1"),
         "{actions:?}"
@@ -180,7 +194,7 @@ fn release_returns_a_live_role_to_the_stop_path() {
     ));
     // Live and held: desired through the hold — nothing for it.
     let view = live(&[("bl-acme-shop-t1", "t7")]);
-    let actions = reconcile(STUDIO, &log(events.clone()), &view);
+    let actions = reconcile(STUDIO, &log(events.clone()), &view, NOW);
     assert!(
         !actions.iter().any(|a| matches!(a,
             Action::Stop { role, .. } | Action::Lost { role, .. } | Action::Start(Start { role, .. })
@@ -196,7 +210,7 @@ fn release_returns_a_live_role_to_the_stop_path() {
             role: "actor-t1-c1".into(),
         },
     ));
-    let actions = reconcile(STUDIO, &log(events), &view);
+    let actions = reconcile(STUDIO, &log(events), &view, NOW);
     let stops: Vec<(&str, &str, bool)> = actions
         .iter()
         .filter_map(|a| match a {
@@ -237,7 +251,7 @@ fn finished_desires_nobody_but_a_held_reopen() {
     // Nobody desired — the live producer heads to Stop like any
     // unwanted role.
     let view = live(&[("bl-acme-shop-producer", "t1"), ("bl-acme-shop-t1", "t7")]);
-    let actions = reconcile(STUDIO, &log(events.clone()), &view);
+    let actions = reconcile(STUDIO, &log(events.clone()), &view, NOW);
     assert!(starts(&actions).is_empty(), "{actions:?}");
     assert!(
         actions
@@ -248,11 +262,17 @@ fn finished_desires_nobody_but_a_held_reopen() {
 
     // An explicit reopen still brings the person back, session set.
     events.push(reopen(9, "actor-t1-c1"));
-    let actions = reconcile(STUDIO, &log(events), &view);
+    let actions = reconcile(STUDIO, &log(events), &view, NOW);
     let start = starts(&actions)
         .into_iter()
         .find(|s| s.role == "actor-t1-c1")
         .expect("held actor desired after finish");
-    assert_eq!(start.resume.as_deref(), Some("sess-1"));
+    assert_eq!(
+        start
+            .resume
+            .as_ref()
+            .map(|r| (r.session.as_str(), r.reason)),
+        Some(("sess-1", REOPENED))
+    );
     assert_eq!(start.terminal, "bl-acme-shop-t1");
 }

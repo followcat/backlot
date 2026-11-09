@@ -120,17 +120,18 @@ pub(crate) fn attention_open(state: &StudioState, role: &str, reason: &str) -> b
 }
 
 /// The lifecycle event a successful `terminal.run` appends:
-/// `role.resumed` (reason `reopened`) for a held person's reopen —
-/// its session is the requested one, since post-launch runners
-/// report no id on a resume — and `role.started` otherwise.
+/// `role.resumed` with the start's reason — `reopened` for a held
+/// person's reopen, `recovered` for a lost role — its session the
+/// requested one, since post-launch runners report no id on a
+/// resume — and `role.started` otherwise.
 pub(crate) fn start_event(start: &Start, launch: &runners::Launch, address: &str) -> EventKind {
     match &start.resume {
-        Some(session) => EventKind::RoleResumed {
+        Some(resume) => EventKind::RoleResumed {
             role: start.role.clone(),
             terminal: Some(address.into()),
             actor: Some(start.actor.clone()),
-            session_id: Some(session.clone()),
-            reason: Some("reopened".into()),
+            session_id: Some(resume.session.clone()),
+            reason: Some(resume.reason.into()),
         },
         None => EventKind::RoleStarted {
             role: start.role.clone(),
@@ -289,6 +290,31 @@ impl Stage {
                 )?;
                 eprintln!("stage: lost {role}: {reason}");
             }
+            Action::Attention {
+                role,
+                reason,
+                detail,
+            } => {
+                if !attention_open(state, role, reason) {
+                    record(
+                        dir,
+                        EventKind::AttentionRaised {
+                            role: role.clone(),
+                            reason: reason.clone(),
+                            detail: detail.clone(),
+                        },
+                    )?;
+                }
+            }
+            Action::ClearAttention { target, reason } => {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: *target,
+                        reason: Some(reason.clone()),
+                    },
+                )?;
+            }
             Action::Stop {
                 role,
                 address,
@@ -390,7 +416,7 @@ impl Stage {
                     terminal: &start.terminal,
                     cwd: &cwd,
                     prompt: prompt.as_deref(),
-                    resume: start.resume.as_deref(),
+                    resume: start.resume.as_ref().map(|r| r.session.as_str()),
                     studio_dir: &studio_dir,
                     stage_env: &self.env_vars,
                 };

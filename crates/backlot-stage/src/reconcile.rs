@@ -6,8 +6,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use backlot_model::event::ActorIdentity;
+use backlot_model::event::{ActorIdentity, CANNOT_RESUME, RECOVERED, REOPENED};
 use backlot_model::state::{RoleLifecycle, StudioState, actor_task};
+
+mod recover;
 
 /// Which fixed role a terminal plays (actors key on the task).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +32,15 @@ impl RoleKind {
     }
 }
 
+/// A start into an existing runner session, and why — the reason
+/// lands on the `role.resumed` event (`reopened` for a held person,
+/// `recovered` for a lost role the stage brings back).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Resume {
+    pub session: String,
+    pub reason: &'static str,
+}
+
 /// A `terminal.run` plus a `role.started` record.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Start {
@@ -45,17 +56,25 @@ pub struct Start {
     pub actor: ActorIdentity,
     /// The studio repo — the terminal's working directory.
     pub repo: String,
-    /// The session a held person is reopened into; `None` for a
-    /// fresh start.
-    pub resume: Option<String>,
+    /// The session to resume and why; `None` for a fresh start.
+    pub resume: Option<Resume>,
 }
 
 /// One action the stage carries out, in order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     /// Append `role.lost`: a live role's terminal is gone with no
-    /// `role.closed`. Lost roles are not relaunched (S6 recovers).
+    /// `role.closed`.
     Lost { role: String, reason: String },
+    /// Append `attention.raised` — the stage dedups to one open
+    /// attention per role and reason at record time.
+    Attention {
+        role: String,
+        reason: String,
+        detail: String,
+    },
+    /// Append `attention.cleared` for the given open attention.
+    ClearAttention { target: u64, reason: String },
     /// Append `role.closed` (unless `closed` is already recorded —
     /// that is a crashed stop finishing), then `terminal.kill` and
     /// `terminal.rm`. An already-absent terminal is tolerated.
@@ -202,7 +221,10 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
         if let Some(r) = state.roles.get(&want.role)
             && r.held
         {
-            want.resume = r.session_id.clone();
+            want.resume = r.session_id.clone().map(|session| Resume {
+                session,
+                reason: REOPENED,
+            });
         }
     }
     for (key, r) in &state.roles {
@@ -221,7 +243,10 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
             terminal,
             actor: actor.clone(),
             repo: cfg.repo.clone(),
-            resume: Some(session.clone()),
+            resume: Some(Resume {
+                session: session.clone(),
+                reason: REOPENED,
+            }),
         });
     }
     out
@@ -230,11 +255,13 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
 /// The actions that move the live view toward the ledger's desired
 /// one. `live` is name → hc address for the terminals this studio
 /// owns — the caller builds it with [`studio_view`], so every name
-/// here is already the studio's by label.
+/// here is already the studio's by label. `now_ms` feeds the lost
+/// role's resume guard; the function stays pure.
 pub fn reconcile(
     studio: &str,
     state: &StudioState,
     live: &BTreeMap<String, String>,
+    now_ms: u64,
 ) -> Vec<Action> {
     let wanted = desired(studio, state);
     let wanted_keys: BTreeSet<&str> = wanted.iter().map(|w| w.role.as_str()).collect();
@@ -249,57 +276,98 @@ pub fn reconcile(
     let mut stops = Vec::new();
     let mut records = Vec::new();
     let mut starts = Vec::new();
+    // Attention seqs already given a clear this pass — one per pass.
+    let mut cleared = BTreeSet::new();
 
     // Existing role entries first.
     for (key, r) in &state.roles {
-        let Some(name) = terminal_name(studio, key) else {
-            continue;
-        };
-        let term = live.get(&name).cloned();
-        match r.lifecycle() {
-            RoleLifecycle::Live => {
-                if wanted_keys.contains(key.as_str()) {
-                    if term.is_none() {
+        if let Some(name) = terminal_name(studio, key) {
+            let term = live.get(&name).cloned();
+            match r.lifecycle() {
+                RoleLifecycle::Live => {
+                    if wanted_keys.contains(key.as_str()) {
+                        if term.is_none() {
+                            records.push(Action::Lost {
+                                role: key.clone(),
+                                reason: "terminal gone".into(),
+                            });
+                        }
+                    } else if let Some(address) = term {
+                        stops.push(Action::Stop {
+                            role: key.clone(),
+                            terminal: name,
+                            address,
+                            close: true,
+                            reason: "no longer desired".into(),
+                        });
+                    } else {
+                        // Undesired but recorded live with the terminal
+                        // already gone — a loss, not a stop.
                         records.push(Action::Lost {
                             role: key.clone(),
                             reason: "terminal gone".into(),
                         });
                     }
-                } else if let Some(address) = term {
-                    stops.push(Action::Stop {
-                        role: key.clone(),
-                        terminal: name,
-                        address,
-                        close: true,
-                        reason: "no longer desired".into(),
-                    });
-                } else {
-                    // Undesired but recorded live with the terminal
-                    // already gone — a loss, not a stop.
-                    records.push(Action::Lost {
-                        role: key.clone(),
-                        reason: "terminal gone".into(),
-                    });
+                }
+                RoleLifecycle::Closed => {
+                    // A crashed stop finishing — but only for this role's
+                    // own recorded terminal. The same name at another
+                    // address belongs to whoever came after (a recast
+                    // reuses the name): leave that terminal alone.
+                    if let Some(address) = term.filter(|a| r.terminal.as_ref() == Some(a)) {
+                        stops.push(Action::Stop {
+                            role: key.clone(),
+                            terminal: name,
+                            address,
+                            close: false,
+                            reason: String::new(),
+                        });
+                    }
+                }
+                // A wanted lost role comes back into its recorded
+                // session; without one — or once the loss guard trips —
+                // it gets a `cannot resume` attention instead. An
+                // unwanted lost role needs nothing.
+                RoleLifecycle::Lost => {
+                    if wanted_keys.contains(key.as_str()) {
+                        match recover::lost_step(r, now_ms) {
+                            recover::Lost::Resume(session) => {
+                                let mut want = wanted
+                                    .iter()
+                                    .find(|w| w.role == *key)
+                                    .expect("a wanted key has a Start")
+                                    .clone();
+                                want.resume = Some(Resume {
+                                    session,
+                                    reason: RECOVERED,
+                                });
+                                starts.push(Action::Start(want));
+                            }
+                            recover::Lost::Attention(detail) => {
+                                records.push(Action::Attention {
+                                    role: key.clone(),
+                                    reason: CANNOT_RESUME.into(),
+                                    detail,
+                                });
+                            }
+                        }
+                    }
                 }
             }
-            RoleLifecycle::Closed => {
-                // A crashed stop finishing — but only for this role's
-                // own recorded terminal. The same name at another
-                // address belongs to whoever came after (a recast
-                // reuses the name): leave that terminal alone.
-                if let Some(address) = term.filter(|a| r.terminal.as_ref() == Some(a)) {
-                    stops.push(Action::Stop {
-                        role: key.clone(),
-                        terminal: name,
-                        address,
-                        close: false,
-                        reason: String::new(),
-                    });
-                }
-            }
-            // Lost roles are not relaunched (S6) and their terminals,
-            // if any, are orphans handled below.
-            RoleLifecycle::Lost => {}
+        }
+        // An open `cannot resume` clears once the role is live again
+        // or no longer wanted — after any `role.lost` above took its
+        // own clears, so a seq clears once per pass.
+        if let Some(reason) = recover::cannot_resume_done(r, wanted_keys.contains(key.as_str()))
+            && let Some(a) = state
+                .open_attention()
+                .find(|a| a.role == *key && a.reason == CANNOT_RESUME)
+            && cleared.insert(a.seq)
+        {
+            records.push(Action::ClearAttention {
+                target: a.seq,
+                reason: reason.into(),
+            });
         }
     }
 
@@ -308,7 +376,8 @@ pub fn reconcile(
         match state.roles.get(&want.role) {
             // Live and its terminal is up: nothing to do.
             Some(r) if r.lifecycle() == RoleLifecycle::Live => {}
-            // Lost is not relaunched.
+            // A lost role's resume — or its `cannot resume` — was
+            // decided in the role pass above; no fresh start here.
             Some(r) if r.lifecycle() == RoleLifecycle::Lost => {}
             // Closed comes back when desired again (the writer on the
             // next `plan request`), as a new `role.started`.
@@ -357,6 +426,8 @@ pub fn reconcile(
     actions
 }
 
+#[cfg(test)]
+mod recover_tests;
 #[cfg(test)]
 mod reopen_tests;
 #[cfg(test)]

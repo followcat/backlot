@@ -120,7 +120,10 @@ fn attention_is_deduped_per_role_and_reason() {
 #[test]
 fn a_resume_launch_records_role_resumed_with_the_asked_session() {
     let mut held = start();
-    held.resume = Some("sess-1".into());
+    held.resume = Some(crate::reconcile::Resume {
+        session: "sess-1".into(),
+        reason: "reopened",
+    });
     let launch = Launch {
         argv: vec!["runner".into()],
         env: BTreeMap::new(),
