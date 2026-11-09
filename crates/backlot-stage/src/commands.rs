@@ -89,7 +89,14 @@ fn report_to(role: &str) -> Result<String, Fail> {
 }
 
 /// A role-to-role message with its body copied into `messages/`.
-fn message_cmd(by: EventBy, file: PathBuf, to: String) -> Result<PendingBuilder, Fail> {
+/// `purpose` tags the two command-sent messages the stage acts on:
+/// `plan` (writer wanted) and `dispatch` (writer released).
+fn message_cmd(
+    by: EventBy,
+    file: PathBuf,
+    to: String,
+    purpose: Option<&'static str>,
+) -> Result<PendingBuilder, Fail> {
     must_exist(&file, "--file")?;
     Ok(Box::new(move |_, seq| {
         let pf = copy_to("messages", seq, &file, None);
@@ -97,6 +104,7 @@ fn message_cmd(by: EventBy, file: PathBuf, to: String) -> Result<PendingBuilder,
             EventKind::MessageQueued {
                 to,
                 file: Some(pf.dest.clone()),
+                purpose: purpose.map(String::from),
             },
             by,
             vec![pf],
@@ -161,6 +169,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 EventKind::MessageQueued {
                     to: "writer".into(),
                     file: None,
+                    purpose: Some("plan".into()),
                 },
                 by,
                 Vec::new(),
@@ -185,9 +194,9 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
-        Cmd::Dispatch { file } => message_cmd(by, file, "director".into()),
-        Cmd::Ask { file } => message_cmd(by, file, "producer".into()),
-        Cmd::Tell { role, file } => message_cmd(by, file, role),
+        Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
+        Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
+        Cmd::Tell { role, file } => message_cmd(by, file, role, None),
         Cmd::Report { node, file } => {
             must_exist(&file, "--file")?;
             let to = report_to(&caller.role)?;

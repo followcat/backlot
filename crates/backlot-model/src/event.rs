@@ -299,6 +299,12 @@ pub enum EventKind {
         to: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         file: Option<String>,
+        /// What the message is for, when a command sends one with a
+        /// fixed meaning: `plan` for `plan request`, `dispatch` for
+        /// `dispatch`. Plain `tell`/`ask` leave it unset — the stage
+        /// reads it to know when the writer is wanted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        purpose: Option<String>,
     },
     /// `target` is the seq of the `message.queued` event.
     #[serde(rename = "message.delivered")]

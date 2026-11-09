@@ -27,6 +27,7 @@ fn msg(i: impl std::fmt::Display) -> NewEvent {
         EventKind::MessageQueued {
             to: "director".into(),
             file: Some(format!("messages/{i}.md")),
+            purpose: None,
         },
     )
 }

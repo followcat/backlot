@@ -220,6 +220,10 @@ pub struct Message {
     pub to: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    /// `plan` or `dispatch` when the command sent the message with a
+    /// fixed meaning; unset for `tell`/`ask`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
     pub delivered: bool,
 }
 

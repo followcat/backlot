@@ -43,6 +43,7 @@ fn script() -> Vec<Event> {
             EventKind::MessageQueued {
                 to: "director".into(),
                 file: Some("messages/10-note.md".into()),
+                purpose: None,
             },
         ),
         ev(11, "stage", EventKind::MessageDelivered { target: 10 }),

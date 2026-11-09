@@ -42,7 +42,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
-| `message.queued` / `message.delivered` | from, to, file |
+| `message.queued` / `message.delivered` | from, to, file, purpose |
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail |
 | `correction` | target event, changed fields, reason |
@@ -52,6 +52,10 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 replacement — so a deliberate stop is never mistaken for a loss, and a closed role keeps its actor
 identity and session ID: it stays resumable while its studio is live. A later `role.started` or
 `role.resumed` clears the closed state.
+
+Two `message.queued` events carry a `purpose` the stage acts on: `plan request` records `plan`
+(to the writer), `dispatch` records `dispatch` (to the director). The writer is wanted from a
+`plan` message until the next `dispatch`; plain `tell`/`ask` messages carry no purpose.
 
 ## Task states
 

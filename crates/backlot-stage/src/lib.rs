@@ -8,6 +8,7 @@ mod args_task;
 pub mod cli;
 pub mod commands;
 pub mod link;
+pub mod reconcile;
 pub mod render;
 pub mod store;
 

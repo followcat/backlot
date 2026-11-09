@@ -271,12 +271,13 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 reduce_task(t, cap);
             }
         }
-        EventKind::MessageQueued { to, file } => {
+        EventKind::MessageQueued { to, file, purpose } => {
             state.messages.push(Message {
                 seq,
                 from: event.by.role.clone(),
                 to: to.clone(),
                 file: file.clone(),
+                purpose: purpose.clone(),
                 delivered: false,
             });
             state

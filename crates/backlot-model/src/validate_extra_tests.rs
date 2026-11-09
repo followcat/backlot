@@ -65,6 +65,7 @@ fn delivered_and_cleared_links_validate() {
         EventKind::MessageQueued {
             to: "director".into(),
             file: None,
+            purpose: None,
         },
     ));
     base.push(ev(

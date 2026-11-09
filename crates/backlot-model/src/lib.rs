@@ -22,6 +22,11 @@ pub use records::{ActorRecord, StudioLog, records};
 pub use state::{StudioState, TaskStatus, apply, replay};
 pub use validate::{Refusal, validate};
 
+/// Pure event/state builders shared by this crate's tests and other
+/// crates' unit tests. Not part of the ledger surface.
+#[doc(hidden)]
+pub mod testkit;
+
 #[cfg(test)]
 mod cap_tests;
 #[cfg(test)]
@@ -30,8 +35,6 @@ mod records_extra_tests;
 mod records_tests;
 #[cfg(test)]
 mod state_tests;
-#[cfg(test)]
-mod testkit;
 #[cfg(test)]
 mod validate_extra_tests;
 #[cfg(test)]
