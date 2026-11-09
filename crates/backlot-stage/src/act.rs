@@ -214,7 +214,8 @@ impl Stage {
     /// One reconcile action. Ledger appends land before their terminal
     /// calls so a crash leaves a recoverable state. `real_slot_free`
     /// is the tick's one-real-launch allowance: a deferred start
-    /// waits for the next tick.
+    /// waits for the next tick. `blocked` is every `(runner, folder)`
+    /// with a live post-launch role still missing its session id.
     pub(crate) async fn act(
         &self,
         studio: &str,
@@ -222,6 +223,7 @@ impl Stage {
         state: &StudioState,
         action: &Action,
         real_slot_free: &mut bool,
+        blocked: &std::collections::BTreeSet<(String, String)>,
     ) -> Result<(), Fail> {
         match action {
             Action::Lost { role, reason } => {
@@ -290,6 +292,8 @@ impl Stage {
                     &start.actor.runner,
                     self.runner_env(&start.actor.runner),
                     real_slot_free,
+                    blocked,
+                    &start.repo,
                 ) {
                     // A refusal is an `attention.raised`, not a
                     // launch — one open attention per role and

@@ -25,6 +25,7 @@ use crate::doc;
 use crate::link;
 use crate::reconcile;
 use crate::store::{self, StoreError};
+use crate::watch;
 
 /// Poll cadence: ledgers grow-check and, without `events.subscribe`,
 /// the terminal inventory.
@@ -97,8 +98,11 @@ pub(crate) struct Stage {
     pub(crate) exec: Box<discover::Exec>,
     /// `<runner> --version` answers, asked once per runner per run.
     pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
+    /// Session ids the running pass recorded — `cached` cannot see
+    /// them until the ledgers reload, so the watch adds them itself.
+    pub(crate) found_sessions: std::cell::RefCell<std::collections::BTreeSet<String>>,
     /// Reduced state per studio, reloaded when its log grew.
-    cached: BTreeMap<String, StudioState>,
+    pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
     seen: BTreeMap<String, Seen>,
 }
@@ -127,6 +131,11 @@ impl Stage {
         }
         // At most one real runner launches per tick, across studios.
         let mut real_slot_free = true;
+        // And at most one live role still looking for its post-launch
+        // session id per (runner, folder) — a second start in the
+        // same pair would race it for the same session.
+        let blocked = watch::discovery_blocked(&self.cached);
+        self.found_sessions.borrow_mut().clear();
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -136,7 +145,7 @@ impl Stage {
             let state = &self.cached[&name];
             let view = reconcile::studio_view(&name, &live.terms);
             for action in reconcile::reconcile(&name, state, &view) {
-                self.act(&name, &dir, state, &action, &mut real_slot_free)
+                self.act(&name, &dir, state, &action, &mut real_slot_free, &blocked)
                     .await?;
             }
             self.watch(&name, &dir, state, &live.terms, now_ms).await?;
@@ -198,6 +207,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         env_vars: env.vars.clone(),
         exec: Box::new(discover::real_exec),
         versions: std::cell::RefCell::new(BTreeMap::new()),
+        found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

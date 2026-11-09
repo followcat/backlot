@@ -11,7 +11,7 @@ mod devin;
 mod fake;
 pub mod opencode;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use backlot_model::ActorIdentity;
@@ -109,8 +109,9 @@ impl PlanError {
 pub enum StartDecision {
     /// One attention record (the caller dedups open ones per role).
     Attention(PlanError),
-    /// A real launch already went out this tick; retry next tick —
-    /// reconcile re-derives the start.
+    /// A real launch already went out this tick — or this runner
+    /// already has a live role in the same folder still waiting on
+    /// its post-launch id; retry next tick, reconcile re-derives it.
     Defer,
     /// `terminal.run` with this argv and the merged runner env.
     Launch {
@@ -120,14 +121,27 @@ pub enum StartDecision {
     },
 }
 
+/// Whether the runner's session id is assigned after launch
+/// (`Session::PostLaunch` on a `Launch`; this answers the same
+/// question for a live role that only has its actor identity).
+pub fn post_launch_session(runner: &str) -> bool {
+    matches!(runner, "codex" | "devin")
+}
+
 /// The tick's decision for one pending start. Plan and config errors
 /// do not spend the launch slot — only a start that can actually run
-/// takes it, so a broken role never starves the others.
+/// takes it, so a broken role never starves the others. `blocked`
+/// holds every `(runner, working directory)` where a live role of a
+/// post-launch runner still has no session id and has not hit its
+/// attention: two such roles in one folder could claim the same
+/// session, so the second waits.
 pub fn decide_start(
     planned: Result<Launch, PlanError>,
     runner: &str,
     runner_env: Result<BTreeMap<String, String>, String>,
     real_slot_free: &mut bool,
+    blocked: &BTreeSet<(String, String)>,
+    cwd: &str,
 ) -> StartDecision {
     let launch = match planned {
         Ok(l) => l,
@@ -137,6 +151,11 @@ pub fn decide_start(
         Ok(env) => env,
         Err(detail) => return StartDecision::Attention(PlanError::config(detail)),
     };
+    if matches!(launch.session, Session::PostLaunch)
+        && blocked.contains(&(runner.to_string(), cwd.to_string()))
+    {
+        return StartDecision::Defer;
+    }
     if runner != "fake" {
         if !*real_slot_free {
             return StartDecision::Defer;
@@ -261,133 +280,4 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod argv_tests;
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn actor(runner: &str) -> ActorIdentity {
-        ActorIdentity {
-            runner: runner.into(),
-            runner_version: None,
-            model: "m".into(),
-            effort: "high".into(),
-            permission_profile: "standard".into(),
-        }
-    }
-
-    fn ctx<'a>(terminal: &'a str, env: &'a BTreeMap<String, String>) -> LaunchCtx<'a> {
-        LaunchCtx {
-            terminal,
-            cwd: "/home/user/acme-shop",
-            prompt: None,
-            resume: None,
-            stage_env: env,
-        }
-    }
-
-    /// `fake` runs the shipped script and reports a derivable session.
-    #[test]
-    fn fake_plans_the_script_and_a_session() {
-        let env = BTreeMap::new();
-        let launch = plan(&actor("fake"), &ctx("bl-s-t1", &env)).unwrap();
-        assert_eq!(launch.argv.len(), 1);
-        assert!(launch.argv[0].ends_with("tools/fake-runner.sh"));
-        assert!(
-            std::path::Path::new(&launch.argv[0]).is_file(),
-            "{}",
-            launch.argv[0]
-        );
-        assert_eq!(launch.session_id().as_deref(), Some("fake-bl-s-t1"));
-        assert_eq!(
-            session_id(&actor("fake"), "bl-s-t1").as_deref(),
-            Some("fake-bl-s-t1")
-        );
-    }
-
-    /// Anything else explains itself instead of running.
-    #[test]
-    fn an_unknown_runner_is_a_plan_error() {
-        let env = BTreeMap::new();
-        let err = plan(&actor("kimi"), &ctx("bl-s-t1", &env)).unwrap_err();
-        assert_eq!(err.reason, RUNNER_NOT_SUPPORTED);
-        assert!(err.detail.contains("kimi"), "{err:?}");
-        assert_eq!(session_id(&actor("kimi"), "bl-s-t1"), None);
-    }
-
-    fn launch_for(runner: &str) -> Result<Launch, PlanError> {
-        Ok(Launch {
-            argv: vec![runner.into()],
-            env: BTreeMap::new(),
-            session: Session::PostLaunch,
-        })
-    }
-
-    /// Two pending real starts give one launch: the slot is spent by
-    /// the first that can run. `fake` never spends it, and neither a
-    /// plan error nor a malformed config does — a broken role cannot
-    /// starve the others.
-    #[test]
-    fn one_real_runner_launches_per_tick() {
-        let env = BTreeMap::new();
-        let mut slot = true;
-        // fake is exempt and never spends the slot.
-        let first = plan(&actor("fake"), &ctx("bl-s-t1", &env));
-        assert!(matches!(
-            decide_start(first, "fake", Ok(BTreeMap::new()), &mut slot),
-            StartDecision::Launch { .. }
-        ));
-        assert!(slot);
-        // The first real runner takes the slot; the second defers.
-        let d1 = decide_start(
-            launch_for("claude"),
-            "claude",
-            Ok(BTreeMap::new()),
-            &mut slot,
-        );
-        assert!(matches!(d1, StartDecision::Launch { .. }));
-        assert!(!slot);
-        let d2 = decide_start(launch_for("codex"), "codex", Ok(BTreeMap::new()), &mut slot);
-        assert_eq!(d2, StartDecision::Defer);
-        // Next tick the slot is free again.
-        let mut slot = true;
-        let d3 = decide_start(launch_for("codex"), "codex", Ok(BTreeMap::new()), &mut slot);
-        assert!(matches!(d3, StartDecision::Launch { .. }));
-    }
-
-    /// Errors never spend the slot: a plan refusal and a malformed
-    /// config leave the launch for a later start in the same tick.
-    #[test]
-    fn a_broken_role_does_not_spend_the_slot() {
-        let mut slot = true;
-        let refused = decide_start(
-            Err(PlanError::profile("nowhere")),
-            "claude",
-            Ok(BTreeMap::new()),
-            &mut slot,
-        );
-        assert!(matches!(refused, StartDecision::Attention(_)));
-        assert!(slot);
-        let malformed = decide_start(
-            launch_for("claude"),
-            "claude",
-            Err("bad toml".into()),
-            &mut slot,
-        );
-        match malformed {
-            StartDecision::Attention(e) => assert_eq!(e.reason, CONFIG_MALFORMED),
-            other => panic!("expected attention, got {other:?}"),
-        }
-        assert!(slot);
-        let d = decide_start(launch_for("codex"), "codex", Ok(BTreeMap::new()), &mut slot);
-        assert!(matches!(d, StartDecision::Launch { .. }));
-    }
-
-    /// Generated ids are v4-shaped UUIDs.
-    #[test]
-    fn uuid_v4_shape() {
-        let u = uuid_v4();
-        assert_eq!(u.len(), 36, "{u}");
-        assert_eq!(&u[14..15], "4", "{u}");
-        assert!(matches!(&u[19..20], "8" | "9" | "a" | "b"), "{u}");
-        assert!(u.chars().all(|c| c.is_ascii_hexdigit() || c == '-'), "{u}");
-    }
-}
+mod decision_tests;

@@ -109,10 +109,12 @@ fn file_time_ms(path: &Path) -> Option<u64> {
     )
 }
 
-/// Codex's session files, newest day directory first: the first line
-/// of each `rollout-*.jsonl` is `{"payload": {"id", "cwd", ...}}`. A
-/// file counts when its cwd is the role's, it was created after the
-/// role started and no other role already claims the id.
+/// Codex's session files, oldest match first: day directories and
+/// their `rollout-*.jsonl` names sort chronologically, so the first
+/// candidate is the session the launch created — a person's own
+/// session opened later in the same folder never wins. A file
+/// counts when its cwd is the role's, it was created after the role
+/// started and no other role already claims the id.
 fn codex_session(
     home: &Path,
     cwd: &str,
@@ -123,7 +125,6 @@ fn codex_session(
     let sessions = home.join(".codex").join("sessions");
     collect_dirs(&sessions, 3, &mut days);
     days.sort();
-    days.reverse();
     for day in days {
         let Ok(entries) = fs::read_dir(&day) else {
             continue;
@@ -138,7 +139,6 @@ fn codex_session(
             })
             .collect();
         rollouts.sort();
-        rollouts.reverse();
         for f in rollouts {
             if file_time_ms(&f).is_none_or(|ms| ms < started_ms) {
                 continue;
@@ -185,8 +185,10 @@ fn collect_dirs(base: &Path, depth: u32, out: &mut Vec<PathBuf>) {
 }
 
 /// `devin list --format json` in the role's cwd: an array of
-/// `{"id", "last_activity_at"}` (seconds). The newest entry started
-/// at or after the role, unclaimed elsewhere, is the session.
+/// `{"id", "last_activity_at"}` (seconds). The oldest entry active
+/// at or after the role's start, unclaimed elsewhere, is the
+/// session — a session a person opened later in the same folder
+/// never wins.
 fn devin_session(
     exec: &Exec,
     cwd: &str,
@@ -214,7 +216,7 @@ fn devin_session(
         if at < started_s || taken.contains(id) {
             continue;
         }
-        if best.is_none_or(|(b, _)| at > b) {
+        if best.is_none_or(|(b, _)| at < b) {
             best = Some((at, id));
         }
     }

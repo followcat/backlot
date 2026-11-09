@@ -41,6 +41,31 @@ fn codex_finds_its_rollout() {
     );
 }
 
+/// The oldest matching rollout wins: a person's own codex session
+/// opened later in the same folder — a newer day directory, a later
+/// filename — can never take a role's id.
+#[test]
+fn codex_prefers_the_oldest_match() {
+    let home = tmp("codex-oldest");
+    // The role's file first, a person's later one second — the
+    // names sort the same way they were made.
+    rollout(&home, "2026/11/09", "rollout-a.jsonl", "sess-role", CWD);
+    rollout(&home, "2026/11/09", "rollout-z.jsonl", "sess-person", CWD);
+    rollout(&home, "2026/11/10", "rollout-b.jsonl", "sess-next-day", CWD);
+    let taken = BTreeSet::new();
+    assert_eq!(
+        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec).as_deref(),
+        Some("sess-role"),
+        "the earliest rollout in the folder is the role's own"
+    );
+    // With the role's id already claimed, the next-oldest serves.
+    let taken = BTreeSet::from(["sess-role".to_string()]);
+    assert_eq!(
+        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec).as_deref(),
+        Some("sess-person")
+    );
+}
+
 /// The newest day is scanned first; a wrong cwd or an already
 /// claimed id does not count, and a pre-start file never does.
 #[test]
@@ -81,8 +106,9 @@ fn codex_rejects_the_wrong_files() {
     );
 }
 
-/// `devin list` runs in the role's cwd; the freshest entry after
-/// the role started wins, claims and older entries lose.
+/// `devin list` runs in the role's cwd; the oldest entry active at
+/// or after the role's start wins — a session a person opened later
+/// in the same folder cannot.
 #[test]
 fn devin_finds_its_entry() {
     let calls = Arc::new(Mutex::new(Vec::new()));
@@ -93,6 +119,7 @@ fn devin_finds_its_entry() {
             .push((call.argv.clone(), call.cwd.clone()));
         Ok(r#"[
             {"id": "dev-old", "last_activity_at": 90},
+            {"id": "dev-person", "last_activity_at": 140},
             {"id": "dev-taken", "last_activity_at": 150},
             {"id": "dev-new", "last_activity_at": 120}
         ]"#
@@ -100,7 +127,7 @@ fn devin_finds_its_entry() {
     };
     let taken = BTreeSet::from(["dev-taken".to_string()]);
     // Role started at 100s: dev-old is pre-start, dev-taken is
-    // claimed, dev-new wins.
+    // claimed, dev-person came later — dev-new is the role's own.
     assert_eq!(
         find_session("devin", &[], CWD, 100_000, &taken, Path::new("/h"), &exec).as_deref(),
         Some("dev-new")

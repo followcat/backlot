@@ -18,6 +18,7 @@ use crate::cli::Fail;
 use crate::daemon::Stage;
 use crate::discover;
 use crate::reconcile::{self, LiveTerminal};
+use crate::runners;
 
 /// A live role may keep its session id hidden this long before the
 /// stage asks for attention.
@@ -62,6 +63,58 @@ pub(crate) fn trust_key(text: &str) -> Option<&'static str> {
 /// the fake runner's trust mode that exercises the same path.
 fn can_show_trust(actor: &backlot_model::ActorIdentity) -> bool {
     actor.runner == "claude" || (actor.runner == "fake" && actor.model == "trust")
+}
+
+/// Every `(runner, working directory)` a new start must wait on: a
+/// live role of a post-launch runner — in any studio — that has no
+/// session id yet and has not hit its 60 second attention. Two such
+/// roles in one folder could claim the same session, so the second
+/// defers until the first has its id or is given up on.
+pub(crate) fn discovery_blocked(
+    states: &std::collections::BTreeMap<String, StudioState>,
+) -> BTreeSet<(String, String)> {
+    let mut blocked = BTreeSet::new();
+    for s in states.values() {
+        let Some(repo) = s.studio.as_ref().map(|c| c.repo.as_str()) else {
+            continue;
+        };
+        for (key, r) in &s.roles {
+            let pending = r.live
+                && r.session_id.is_none()
+                && r.actor
+                    .as_ref()
+                    .is_some_and(|a| runners::post_launch_session(&a.runner))
+                && !s
+                    .attention
+                    .iter()
+                    .any(|a| a.role == *key && a.reason == SESSION_NOT_FOUND);
+            if pending {
+                let runner = r
+                    .actor
+                    .as_ref()
+                    .map(|a| a.runner.clone())
+                    .unwrap_or_default();
+                blocked.insert((runner, repo.to_string()));
+            }
+        }
+    }
+    blocked
+}
+
+/// Session ids already claimed, from every studio's roles — plus the
+/// ids this pass already found and recorded, which the loaded states
+/// cannot show yet. A `role.session` recorded this tick is never
+/// handed out twice.
+pub(crate) fn taken_ids(
+    states: &std::collections::BTreeMap<String, StudioState>,
+    found: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    states
+        .values()
+        .flat_map(|s| s.roles.values())
+        .filter_map(|r| r.session_id.clone())
+        .chain(found.iter().cloned())
+        .collect()
 }
 
 /// The ledger event a session-less live role's watch yields: a
@@ -137,12 +190,9 @@ impl Stage {
             if role.session_id.is_some() {
                 continue;
             }
-            let taken: BTreeSet<String> = state
-                .roles
-                .iter()
-                .filter(|(k, _)| *k != key)
-                .filter_map(|(_, r)| r.session_id.clone())
-                .collect();
+            // Claimed ids come from every studio, not just this one,
+            // and include anything found earlier in this same pass.
+            let taken = taken_ids(&self.cached, &self.found_sessions.borrow());
             let found = discover::find_session(
                 &actor.runner,
                 &term.argv,
@@ -154,6 +204,7 @@ impl Stage {
             );
             if let Some(kind) = session_event(key, &actor.runner, found, state, age_ms) {
                 if let EventKind::RoleSession { session_id, .. } = &kind {
+                    self.found_sessions.borrow_mut().insert(session_id.clone());
                     eprintln!("stage: {key} session is {session_id}");
                 }
                 record(dir, kind)?;
@@ -210,7 +261,134 @@ impl Stage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backlot_model::state::Attention;
+    use backlot_model::event::{ActorIdentity, RoleConfigs, StudioMode};
+    use backlot_model::state::{Attention, RoleState, StudioConfig};
+
+    fn actor(runner: &str) -> ActorIdentity {
+        ActorIdentity {
+            runner: runner.into(),
+            runner_version: None,
+            model: "m".into(),
+            effort: "high".into(),
+            permission_profile: "standard".into(),
+        }
+    }
+
+    /// A minimal studio whose roles only need a repo and entries.
+    fn studio(repo: &str) -> StudioState {
+        StudioState {
+            studio: Some(StudioConfig {
+                title: "t".into(),
+                repo: repo.into(),
+                mode: StudioMode::Standard,
+                roles: RoleConfigs {
+                    producer: actor("codex"),
+                    director: actor("codex"),
+                    writer: actor("codex"),
+                },
+                candidates: Vec::new(),
+                rework_cap: 2,
+            }),
+            ..StudioState::default()
+        }
+    }
+
+    fn live(runner: &str, session: Option<&str>) -> RoleState {
+        RoleState {
+            live: true,
+            actor: Some(actor(runner)),
+            session_id: session.map(str::to_string),
+            ..RoleState::default()
+        }
+    }
+
+    fn raised(role: &str) -> Attention {
+        Attention {
+            seq: 1,
+            role: role.into(),
+            reason: SESSION_NOT_FOUND.into(),
+            detail: String::new(),
+            open: true,
+        }
+    }
+
+    /// A live post-launch role with no id blocks its (runner,
+    /// folder) pair — across studios — until it has the id or hit
+    /// the attention; chosen-id runners and dead roles never block.
+    #[test]
+    fn discovery_blocked_while_an_id_is_outstanding() {
+        let mut states = std::collections::BTreeMap::new();
+        let mut one = studio("/repo");
+        one.roles.insert("producer".into(), live("codex", None));
+        states.insert("one".into(), one);
+        let blocked = discovery_blocked(&states);
+        assert!(
+            blocked.contains(&("codex".into(), "/repo".into())),
+            "{blocked:?}"
+        );
+        // A second studio's pending role blocks only its own pair.
+        let mut two = studio("/other");
+        two.roles.insert("director".into(), live("devin", None));
+        states.insert("two".into(), two);
+        let blocked = discovery_blocked(&states);
+        assert_eq!(blocked.len(), 2, "{blocked:?}");
+        assert!(blocked.contains(&("devin".into(), "/other".into())));
+        // The id arriving — or the attention giving up — frees it.
+        states
+            .get_mut("one")
+            .unwrap()
+            .roles
+            .get_mut("producer")
+            .unwrap()
+            .session_id = Some("s1".into());
+        let blocked = discovery_blocked(&states);
+        assert!(!blocked.contains(&("codex".into(), "/repo".into())));
+        states
+            .get_mut("one")
+            .unwrap()
+            .roles
+            .get_mut("producer")
+            .unwrap()
+            .session_id = None;
+        states
+            .get_mut("one")
+            .unwrap()
+            .attention
+            .push(raised("producer"));
+        let blocked = discovery_blocked(&states);
+        assert!(!blocked.contains(&("codex".into(), "/repo".into())));
+        // A chosen-id runner or a dead role blocks nothing.
+        let mut three = studio("/third");
+        three.roles.insert("writer".into(), live("claude", None));
+        let mut dead = live("codex", None);
+        dead.live = false;
+        three.roles.insert("actor-t1-c1".into(), dead);
+        states.insert("three".into(), three);
+        let blocked = discovery_blocked(&states);
+        assert_eq!(blocked.len(), 1, "{blocked:?}");
+    }
+
+    /// Claimed ids pool across every studio and the ids this pass
+    /// already recorded — a session found a second ago is never
+    /// handed out again.
+    #[test]
+    fn taken_ids_pool_every_studio_and_the_pass() {
+        let mut states = std::collections::BTreeMap::new();
+        let mut one = studio("/a");
+        one.roles
+            .insert("producer".into(), live("codex", Some("s1")));
+        states.insert("one".into(), one);
+        let mut two = studio("/b");
+        two.roles.insert("writer".into(), live("devin", Some("s2")));
+        two.roles.insert("actor-t1-c1".into(), live("codex", None));
+        states.insert("two".into(), two);
+        let found = BTreeSet::from(["s3".to_string()]);
+        let taken = taken_ids(&states, &found);
+        assert_eq!(
+            taken,
+            BTreeSet::from(["s1".into(), "s2".into(), "s3".into()])
+        );
+    }
 
     /// The dialog is its two marker lines together — either alone,
     /// and any other prompt, is left alone.
