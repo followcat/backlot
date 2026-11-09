@@ -38,6 +38,16 @@
   are convention not measurement (runners.md), the panel's behind-marker was drawn only in the
   row test, and worktree removal is out of scope — trees accumulate under `work/` until a later
   step.
+- Rework 1 (2026-11-09): six fixes from reading the code against real runners. The folder-trust
+  dialog no longer counts toward a permission episode — it neither raises nor holds one, and it
+  restarts the two-second clock for a prompt right after it. A `terminal.send` that answers
+  `sent: false` stays queued with its reason logged (a successful call's `SendResult` is the
+  delivery — this core has no `sent` field). Send collection drains only the calling studio's
+  finished sends, so `message.delivered` can no longer land in another studio's ledger. Task
+  notices follow `cast.by` only for `producer` — a `user` cast now reaches the director instead
+  of an undeliverable `to: user`. Producer and director prompts name `<studio dir>/req/` as the
+  requirement's place instead of rendering an empty file at v0 (`backlot status` already shows
+  the version). Devin's approval keys are mapped — `enter`/`esc`, observed on 3000.12.32.
 
 ## S4b: The studio panel (2026-11-09)
 
