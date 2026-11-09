@@ -1,0 +1,37 @@
+name: zig-deps
+description: >-
+  Restore the vendored Ghostty zig-pkg directory; on a miss, fetch it
+  with retries and save it before the cargo build runs, so a later
+  failure does not lose the download.
+inputs:
+  zig:
+    description: Zig binary to fetch with (a PATH name or an absolute path)
+    required: false
+    default: zig
+  zig-target:
+    description: Zig -Dtarget triple for cross builds (empty for native)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    # The needed package set follows the zon files only; the same
+    # zig-pkg serves every OS, arch and target we build for.
+    # install-zig.sh is in the key because the zig-pkg layout is
+    # Zig-version-specific.
+    - uses: actions/cache/restore@v4
+      id: zig-pkg
+      with:
+        path: vendor/ghostty/zig-pkg
+        key: zig-pkg-${{ hashFiles('vendor/ghostty/build.zig.zon', 'vendor/ghostty/pkg/**/build.zig.zon', 'tools/install-zig.sh') }}
+    - name: Fetch Zig packages
+      if: steps.zig-pkg.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ZIG_TARGET: ${{ inputs.zig-target }}
+      run: tools/fetch-zig-deps.sh "${{ inputs.zig }}"
+    - uses: actions/cache/save@v4
+      if: steps.zig-pkg.outputs.cache-hit != 'true'
+      with:
+        path: vendor/ghostty/zig-pkg
+        key: zig-pkg-${{ hashFiles('vendor/ghostty/build.zig.zon', 'vendor/ghostty/pkg/**/build.zig.zon', 'tools/install-zig.sh') }}

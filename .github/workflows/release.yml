@@ -21,13 +21,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          # ztarget is the Zig -Dtarget name build.rs passes for a
+          # cross build; the native leg stays empty.
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl, ztarget: x86_64-linux-musl }
           # Native arm runner: zig cc as linker fails on the erratum
           # flag CI's rustc adds (-Wl,--fix-cortex-a53-843419).
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
-          - { os: macos-latest, target: aarch64-apple-darwin }
-          - { os: macos-latest, target: x86_64-apple-darwin }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, ztarget: aarch64-linux-musl }
+          - { os: macos-latest, target: aarch64-apple-darwin, ztarget: "" }
+          - { os: macos-latest, target: x86_64-apple-darwin, ztarget: x86_64-macos }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +50,9 @@ jobs:
         run: echo "${{ runner.temp }}/hc-tui-zig-0.16.0" >> "$GITHUB_PATH"
       - name: Check Zig version
         run: test "$(zig version)" = "0.16.0"
+      - uses: ./.github/actions/zig-deps
+        with:
+          zig-target: ${{ matrix.ztarget }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --target ${{ matrix.target }} -p hc-tui
       # Static proof for musl, a run where the runner executes the
@@ -95,6 +101,7 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
