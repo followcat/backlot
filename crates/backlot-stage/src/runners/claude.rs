@@ -11,12 +11,26 @@ use backlot_model::ActorIdentity;
 
 use super::{Launch, LaunchCtx, PlanError, Session, uuid_v4};
 
-/// The marker names a parent Claude Code leaves in its environment.
+/// The marker names a parent Claude Code leaves in its
+/// environment — exactly these: a `CLAUDE_CODE_*` prefix would also
+/// cover settings a user sets on purpose, like
+/// `CLAUDE_CODE_OAUTH_TOKEN`, and those stay.
+const MARKERS: &[&str] = &[
+    "CLAUDECODE",
+    "CLAUDE_EFFORT",
+    "CLAUDE_PID",
+    "AI_AGENT",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_SESSION_ID",
+];
+
 fn is_marker(name: &str) -> bool {
-    matches!(
-        name,
-        "CLAUDECODE" | "CLAUDE_EFFORT" | "CLAUDE_PID" | "AI_AGENT"
-    ) || name.starts_with("CLAUDE_CODE_")
+    MARKERS.contains(&name)
 }
 
 /// `--permission-mode`'s value for the profile.

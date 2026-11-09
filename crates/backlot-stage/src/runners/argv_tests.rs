@@ -99,18 +99,30 @@ fn claude_scrubs_inherited_markers() {
     for k in [
         "AI_AGENT",
         "CLAUDE_CODE_CHILD_SESSION",
-        "CLAUDE_CODE_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_EXECPATH",
+        "CLAUDE_CODE_MESSAGING_SOCKET",
+        "CLAUDE_CODE_MESSAGING_TOKEN",
+        "CLAUDE_CODE_SESSION_ATTENDED",
+        "CLAUDE_CODE_SESSION_ID",
         "CLAUDE_EFFORT",
         "CLAUDE_PID",
         "CLAUDECODE",
+        // Settings a user sets on purpose stay — only the marker
+        // names a parent Claude Code leaves are scrubbed.
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_CODE_SESSION",
         "HC_SESSION",
         "UNRELATED",
     ] {
         env.insert(k.to_string(), "1".into());
     }
     let l = plan(&actor("claude", "standard"), &ctx(&env, None, None)).unwrap();
-    // BTreeMap order: AI_AGENT, CLAUDECODE, CLAUDE_CODE_CHILD_SESSION,
-    // CLAUDE_CODE_SESSION, CLAUDE_EFFORT, CLAUDE_PID.
+    // BTreeMap order, exact list: AI_AGENT, CLAUDECODE,
+    // CLAUDE_CODE_CHILD_SESSION, CLAUDE_CODE_ENTRYPOINT,
+    // CLAUDE_CODE_EXECPATH, CLAUDE_CODE_MESSAGING_SOCKET,
+    // CLAUDE_CODE_MESSAGING_TOKEN, CLAUDE_CODE_SESSION_ATTENDED,
+    // CLAUDE_CODE_SESSION_ID, CLAUDE_EFFORT, CLAUDE_PID.
     let prefix = [
         "env",
         "-u",
@@ -120,16 +132,31 @@ fn claude_scrubs_inherited_markers() {
         "-u",
         "CLAUDE_CODE_CHILD_SESSION",
         "-u",
-        "CLAUDE_CODE_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "-u",
+        "CLAUDE_CODE_EXECPATH",
+        "-u",
+        "CLAUDE_CODE_MESSAGING_SOCKET",
+        "-u",
+        "CLAUDE_CODE_MESSAGING_TOKEN",
+        "-u",
+        "CLAUDE_CODE_SESSION_ATTENDED",
+        "-u",
+        "CLAUDE_CODE_SESSION_ID",
         "-u",
         "CLAUDE_EFFORT",
         "-u",
         "CLAUDE_PID",
         "claude",
     ];
-    assert_eq!(l.argv[..14], prefix);
-    // A clean environment leaves argv unprefixed.
-    let env = BTreeMap::new();
+    assert_eq!(l.argv[..24], prefix);
+    // No `-u` ever names an intentional setting.
+    assert!(!l.argv.iter().any(|a| a == "CLAUDE_CODE_OAUTH_TOKEN"));
+    assert!(!l.argv.iter().any(|a| a == "CLAUDE_CODE_SESSION"));
+    // A clean environment — or only intentional settings — leaves
+    // argv unprefixed.
+    let mut env = BTreeMap::new();
+    env.insert("CLAUDE_CODE_OAUTH_TOKEN".to_string(), "1".into());
     let l = plan(&actor("claude", "standard"), &ctx(&env, None, None)).unwrap();
     assert_eq!(l.argv[0], "claude");
 }
