@@ -15,6 +15,7 @@ mod discover;
 mod doc;
 pub mod link;
 mod notices;
+mod permit;
 mod prompts;
 pub mod reconcile;
 pub mod render;
@@ -38,6 +39,8 @@ mod deliver_tests;
 mod discover_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
+#[cfg(test)]
+mod permit_tests;
 #[cfg(test)]
 mod priority_cmd_tests;
 #[cfg(test)]

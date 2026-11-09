@@ -144,18 +144,20 @@ fn writer_wanted(state: &StudioState) -> bool {
         .is_some_and(|m| m.purpose.as_deref() == Some("plan"))
 }
 
-/// Roles the ledger wants live right now.
+/// Roles the ledger wants live right now. A finished studio wants
+/// nobody on its own — the held pass below still re-launches a
+/// person an explicit `role.reopen` held.
 fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
     let Some(cfg) = &state.studio else {
         return Vec::new();
     };
-    let fixed = [
-        ("producer", RoleKind::Producer, &cfg.roles.producer),
-        ("director", RoleKind::Director, &cfg.roles.director),
-    ];
-    let mut out: Vec<Start> = fixed
-        .into_iter()
-        .map(|(role, kind, actor)| Start {
+    let mut out: Vec<Start> = Vec::new();
+    if state.finished.is_none() {
+        let fixed = [
+            ("producer", RoleKind::Producer, &cfg.roles.producer),
+            ("director", RoleKind::Director, &cfg.roles.director),
+        ];
+        out.extend(fixed.into_iter().map(|(role, kind, actor)| Start {
             role: role.into(),
             kind,
             task: None,
@@ -163,34 +165,34 @@ fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
             actor: actor.clone(),
             repo: cfg.repo.clone(),
             resume: None,
-        })
-        .collect();
-    if writer_wanted(state) {
-        out.push(Start {
-            role: "writer".into(),
-            kind: RoleKind::Writer,
-            task: None,
-            terminal: format!("bl-{studio}-writer"),
-            actor: cfg.roles.writer.clone(),
-            repo: cfg.repo.clone(),
-            resume: None,
-        });
-    }
-    for t in state.tasks.values() {
-        // Cast and not closed: running, delivered or awaiting rework
-        // all keep their person until the task closes.
-        if let Some(cast) = &t.cast
-            && !t.status.is_terminal()
-        {
+        }));
+        if writer_wanted(state) {
             out.push(Start {
-                role: format!("actor-{}-c{}", t.id, t.casts.len()),
-                kind: RoleKind::Actor,
-                task: Some(t.id.clone()),
-                terminal: format!("bl-{studio}-{}", t.id),
-                actor: cast.actor.clone(),
+                role: "writer".into(),
+                kind: RoleKind::Writer,
+                task: None,
+                terminal: format!("bl-{studio}-writer"),
+                actor: cfg.roles.writer.clone(),
                 repo: cfg.repo.clone(),
                 resume: None,
             });
+        }
+        for t in state.tasks.values() {
+            // Cast and not closed: running, delivered or awaiting rework
+            // all keep their person until the task closes.
+            if let Some(cast) = &t.cast
+                && !t.status.is_terminal()
+            {
+                out.push(Start {
+                    role: format!("actor-{}-c{}", t.id, t.casts.len()),
+                    kind: RoleKind::Actor,
+                    task: Some(t.id.clone()),
+                    terminal: format!("bl-{studio}-{}", t.id),
+                    actor: cast.actor.clone(),
+                    repo: cfg.repo.clone(),
+                    resume: None,
+                });
+            }
         }
     }
     // A held person joins the desired set with its recorded session

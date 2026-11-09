@@ -130,6 +130,9 @@ pub(crate) struct Stage {
     /// `(studio, role)` → the one in-flight `terminal.send`, spawned
     /// off the loop and collected on a later tick.
     pub(crate) sending: std::cell::RefCell<BTreeMap<(String, String), deliver::InFlight>>,
+    /// `(studio, role)` → when the current blocked episode started;
+    /// the D9 attention dedups per episode, not per sample.
+    pub(crate) blocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -249,6 +252,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         screens: std::cell::RefCell::new(BTreeMap::new()),
         sent_ms: std::cell::RefCell::new(BTreeMap::new()),
         sending: std::cell::RefCell::new(BTreeMap::new()),
+        blocked_since: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
     };

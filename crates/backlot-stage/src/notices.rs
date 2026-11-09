@@ -6,9 +6,10 @@
 //!
 //! Owed today: a delivery to the director (or, on the light path,
 //! whoever cast the task), a `changes_requested` review to the
-//! task's actor, a blocked task to the director, and a requirement
-//! revision above v1 to the director naming the tasks now behind.
-//! The permission-prompt notice is the D9 episode's own concern.
+//! task's actor, a blocked task to the director, a requirement
+//! revision above v1 to the director naming the tasks now behind,
+//! and an actor's `permission prompt` attention to the director —
+//! a non-actor's episode is the user's, and gets no notice.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -131,6 +132,23 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                         format!(": {}", ch.reason)
                     },
                 ),
+            });
+        }
+    }
+    for a in &state.attention {
+        if sent.contains(&a.seq) || a.reason != backlot_model::event::PERMISSION_PROMPT {
+            continue;
+        }
+        let file = dir
+            .join(format!("attention/{}.txt", a.seq))
+            .display()
+            .to_string();
+        if let Some(body) = crate::permit::director_notice(a, &file) {
+            out.push(Notice {
+                source_seq: a.seq,
+                to: "director".into(),
+                label: "attention",
+                body,
             });
         }
     }

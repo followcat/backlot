@@ -211,3 +211,48 @@ fn release_returns_a_live_role_to_the_stop_path() {
         .collect();
     assert_eq!(stops, [("actor-t1-c1", "bl-acme-shop-t1", true)]);
 }
+
+/// A finished studio wants nobody on its own: producer, director
+/// and every task actor leave the desired set, while an explicit
+/// reopen still brings its person back with the recorded session.
+#[test]
+fn finished_desires_nobody_but_a_held_reopen() {
+    let mut events = studio();
+    events.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    events.push(started(5, "actor-t1-c1", "t7", "sess-1"));
+    events.push(ev(
+        6,
+        "director",
+        reviewed("t1", 1, Verdict::Accepted, vec![]),
+    ));
+    events.push(closed(7, "actor-t1-c1"));
+    events.push(ev(
+        8,
+        "producer",
+        EventKind::StudioFinished {
+            reason: "accepted".into(),
+        },
+    ));
+
+    // Nobody desired — the live producer heads to Stop like any
+    // unwanted role.
+    let view = live(&[("bl-acme-shop-producer", "t1"), ("bl-acme-shop-t1", "t7")]);
+    let actions = reconcile(STUDIO, &log(events.clone()), &view);
+    assert!(starts(&actions).is_empty(), "{actions:?}");
+    assert!(
+        actions
+            .iter()
+            .any(|a| matches!(a, Action::DropTerminal { terminal, .. } if terminal == "bl-acme-shop-producer")),
+        "{actions:?}"
+    );
+
+    // An explicit reopen still brings the person back, session set.
+    events.push(reopen(9, "actor-t1-c1"));
+    let actions = reconcile(STUDIO, &log(events), &view);
+    let start = starts(&actions)
+        .into_iter()
+        .find(|s| s.role == "actor-t1-c1")
+        .expect("held actor desired after finish");
+    assert_eq!(start.resume.as_deref(), Some("sess-1"));
+    assert_eq!(start.terminal, "bl-acme-shop-t1");
+}
