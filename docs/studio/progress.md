@@ -1,5 +1,42 @@
 # Studio progress
 
+## S7: user docs, known limits, a clean-machine install check (2026-11-10)
+
+- Done: `docs/studio/guide.md` walks one studio start to finish — what you need, the cast
+  file (one complete example and every key), starting, talking to roles, the task flow, permission
+  prompts, a midway requirement revision, every attention reason with its way on, restart
+  recovery, finishing and cleanup, the state layout and the panel's config. `docs/studio/limits.md`
+  says plainly what real agents ran (two recorded runs on Claude Code; launch and session-id
+  capture only for the rest), what is fork-only, and the detection, timing and cleanup limits.
+  The README describes the studio, gains a "Run a studio" section and links both docs; `backlot
+  --help` points at the guide and `docs/keys.md` lists `prefix+y` and the panel's keys. The
+  attention reasons now live in `src/reasons.rs` — `launch refused`, `not a git repository` and
+  `work area failed` became constants beside the existing ones — and `docs_tests.rs` checks the
+  docs against the code: every fenced `backlot` line in the guide and the README's "Run a studio"
+  parses through the real argument parser (neutral values for `<...>`), the guide's cast file
+  goes through the `studio new` build, and every reason in `ALL` is in the guide's table.
+  `release.yml` gains `workflow_dispatch` and an `install-check` job on ubuntu-latest and
+  macos-latest for each native target: the built archive is served from a local mirror in
+  install.sh's layout, the real installer runs with its official-core step on, `backlot --version`
+  and `hc --version` come from the install dir, and a stub `claude` (answers `--version`, stays
+  alive reading input otherwise) stands in while `studio new` and `stage start` run under an
+  empty HOME — then the job waits for the producer's and director's terminals and for `backlot
+  status` to show them live, prints the stage screen and status whatever happens, and stops the
+  core. A platform the official installer has no build for is reported and its studio step
+  skipped rather than faked.
+- Measured: the four docs tests are green; `cargo fmt --check`, `cargo clippy --all-targets --
+  -D warnings` and `cargo test` (1227) pass; `scripts/test-install.sh` still passes (29 checks);
+  the workflow parses through `yaml.safe_load`. Corrections the check made to the supplied
+  limits list: the record shows two real runs, not three (the exact model id and effort are not
+  in it either); OpenCode gets no approval key at all by design, which is stronger than "partly
+  unmeasured"; `git` calls on the stage's loop have no timeout at all (the `--version` and
+  session probes do, at 5 s and 10 s); the panel reads only the local core's document, so a
+  remote studio shows nothing; and a held role's restart after terminal loss is unmeasured on a
+  real core.
+- Not verified: the install-check job has not run — the maintainer runs the workflow for real
+  after the merge; no real agent ran anywhere in it (the stub is the point); `docs/studio/plan.md`'s
+  S7 row stands unchanged.
+
 ## S7a: merge hc-tui main at 2c85e84 (2026-11-10)
 
 - Done: upstream's 35 commits landed as merge `d05843b` — keyboard copy mode, PgUp/PgDn
