@@ -13,9 +13,12 @@ desktop, and want the Herdr TUI on top of `hc`:
 - local use, or remote use over plain SSH — where `Ctrl+V` pastes an image from your local clipboard
   into the agent's machine — with the session staying on the server.
 
-The studio layer is not implemented yet — see [docs/studio/](docs/studio/). backlot started as a fork
-of [hc-tui](https://github.com/followcat/hc-tui), which stays a plain terminal client. Unofficial
-project, not affiliated with or endorsed by the Herdr project.
+The studio layer directs coding agents on one requirement: you talk to a producer, a director
+casts agents onto tasks in their own git worktrees, deliveries, reviews and rework go on the
+record, and a panel inside backlot shows who is working. Roles are ordinary `hc` terminals.
+
+backlot started as a fork of [hc-tui](https://github.com/followcat/hc-tui), which stays a plain
+terminal client. Unofficial project, not affiliated with or endorsed by the Herdr project.
 
 ![backlot showing a sidebar and a split pane](docs/images/hc-tui.png)
 
@@ -36,10 +39,27 @@ The script verifies the archive against the release's `sha256sums.txt` and insta
 running the script again; uninstall by deleting the binary. Details: [docs/install.md](docs/install.md).
 The first tagged release is pending — if the Releases page is still empty, build from source below.
 
+## Run a studio
+
+You need `hc` running, a git repository with at least one commit, and an agent CLI installed and
+logged in. A cast file says who plays each role — then:
+
+```sh
+backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml
+backlot stage start
+```
+
+Run `backlot` to open the client and press `Ctrl+B y` for the studio panel. The full walkthrough
+— cast file, task flow, permission prompts, recovery, cleanup — is
+[docs/studio/guide.md](docs/studio/guide.md).
+
 ## Status
 
 Early, and the first tagged release is pending:
 
+- **The studio layer works**, and two recorded real-agent runs closed the loop on Claude Code;
+  everything else ran on the test runner. [docs/studio/limits.md](docs/studio/limits.md) says
+  plainly what has and has not been tried.
 - **It runs on official `hc`.** CI builds a pinned official herdr-core from source and drives the real
   UI against it: sidebar, attach, switching, tabs, splits, status and detach. Day-to-day use is still
   mostly on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so
@@ -76,6 +96,8 @@ The default prefix is Ctrl+B: `q` detaches, `w` opens workspace navigation, `b` 
 
 ## Docs
 
+- [Run a studio](docs/studio/guide.md)
+- [Studio: what has and has not been tried](docs/studio/limits.md)
 - [Install, upgrade, uninstall](docs/install.md)
 - [Keys](docs/keys.md)
 - [Remote use over SSH](docs/remote.md)
