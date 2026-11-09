@@ -21,6 +21,22 @@ Screen detection exists only on the followcat core and covers each agent partial
 On official hc, an agent that does not report status has none, so the stage's own screen sampling matters there. Running
 backlot on official hc is intended but has not been verified.
 
+## Work states
+
+The stage's watch pass reads each live role's visible screen (`terminal.read`, `lines: 0`, at most
+once a second per role) and classifies it `working`, `waiting` or `blocked` for the summary. A
+prompt is checked before the working marker — a prompt can sit on a screen that still shows the
+working line — and anything unmatched is `waiting`, the role answering to nothing. The ledger never
+sees it.
+
+| Runner | `blocked` | `working` |
+|---|---|---|
+| Claude Code | a line containing `Do you want to` and a line trimmed to `❯ 1.`; or the folder-trust dialog | `esc to interrupt` |
+| Codex | a line containing `Would you like to` and a line trimmed to `› 1.` | `esc to interrupt` |
+| Devin | a line trimmed to `Allow` containing `Once`, plus a line trimmed to `Deny` | `to interrupt` |
+| OpenCode | `Permission required` and `Allow once` | `esc interrupt` — guessed from the permission card, not measured yet |
+| `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` |
+
 ## Rules for adapters
 
 - **Per-session flags only.** Interactive model switchers such as `/model` can change the account default. An adapter

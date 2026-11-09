@@ -1,5 +1,38 @@
 # Studio progress
 
+## S4a: The data behind the panel (2026-11-09)
+
+- Done: tasks carry a `priority` (`low`/`normal`/`high`, default `normal`) — `task.cast` gains an
+  optional `priority` (absent keeps the current one, old logs load) and `task.priority` changes it
+  on an existing task; it orders the panel's display only and nothing in reconcile reads it. A
+  closed person can be held: `role.reopen`/`role.release` set and clear `RoleState.held`, and the
+  stage wants every held role back — desired with `Start.resume = <its session>`, merged into one
+  entry when the role is already desired — so `act` resumes it and records `role.resumed` (reason
+  `reopened`, original session ID) rather than `role.started`. New commands `backlot cast
+  --priority`, `backlot priority`, `backlot reopen` and `backlot close --person`, all gated to the
+  user and the director. `runners::work_state` classifies a visible screen per runner — each
+  adapter's blocked prompt before its mid-turn marker, else `waiting` — and the watch samples one
+  `terminal.read` (`lines: 0`) at most once a second per live role into a `Stage` `(studio, role)`
+  map, keeping the last value on a refused read and dropping the entry when the role stops being
+  live; it never reaches the ledger. The summary (schema still `backlot/1`) gained `work`, `task`,
+  `priority` and `resumable` on roles — session IDs stay out — and actors sort open-first, then by
+  priority high-first, then role key. `backlot status --json` shows `priority` and `held`. The fake
+  runner answers `work:<state>` lines for the whole path.
+- Measured: 58 model + 91 stage tests cover priority reduction/validation/old logs/commands,
+  every reopen refusal, held roles in `desired` (resume set, no duplicate, actorless skipped),
+  `role.resumed` on resume (including post-launch runners), release into `Stop`, the `work_state`
+  table per runner with blocked beating working, the summary's new fields and ordering with no
+  session IDs, and the one-second sample throttle. `real_stage.rs` passes on a scratch core: an
+  actor's `work` walks waiting → working → blocked on `work:` lines, `task abandon` closes it as
+  `resumable`, `backlot reopen` resumes it in the same session ID under `role.resumed`, and
+  `backlot close` closes it again. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`
+  and `cargo test` green on every commit; clippy also green on the CI-pinned 1.99.0 toolchain.
+- Not verified: OpenCode's blocked and working markers are guessed, not measured (marked in
+  `runners.md`); every other runner's markers come from captured screens but have not been watched
+  live. Reopen/resume ran only on the fake runner — real adapters' resume-on-reopen is S6
+  territory alongside lost roles. A held role's terminal loss restarts it through the same
+  desired entry, unmeasured on a real core.
+
 ## S3: Runner adapters (2026-11-09)
 
 - Done: `runners.rs` is now a `runners/` module, one adapter file per runner plus `fake`. `plan`

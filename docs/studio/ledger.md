@@ -34,11 +34,13 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 |---|---|
 | `studio.created` | title, repo, mode, candidates, role configurations |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
+| `role.reopen` / `role.release` | role |
 | `role.session` | role, session ID |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
-| `task.cast` | task, actor identity, reason |
+| `task.cast` | task, actor identity, reason, optional priority |
+| `task.priority` | task, priority |
 | `task.delivered` | task, delivery number, actor identity, commit range, report file, requirement version, checks run |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
 | `task.finding` | task, delivery number, findings, by |
@@ -53,6 +55,17 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 replacement — so a deliberate stop is never mistaken for a loss, and a closed role keeps its actor
 identity and session ID: it stays resumable while its studio is live. A later `role.started` or
 `role.resumed` clears the closed state.
+
+`role.reopen` marks a closed person `held` on its reduced state: the stage wants it back and starts
+it with the session it closed with — the launch lands as `role.resumed` (reason `reopened`), not
+`role.started`. `held` clears on `role.release` or `role.closed`; a released role stops being
+desired, so the usual stop closes it. `role.reopen` is refused unless the role is closed, has a
+session ID, is not already held and no other live role uses its terminal name; `role.release` is
+refused unless held. Both are user- and director-facing events.
+
+Tasks carry a `priority` — `low`, `normal` (the default) or `high`. `task.cast` may set it, and
+`task.priority` changes it on an existing task. It orders the panel's display only (R20): nothing in
+reconcile or scheduling reads it.
 
 Adapters that choose the session ID at launch record it in `role.started`. Ones the runner assigns
 itself — found by a file scan or a CLI query after the terminal is up — land in `role.session`, which
