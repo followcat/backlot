@@ -428,3 +428,18 @@
   a core started by hc-tui (`hc 0.1.18-followcat.1`, `serve` pid
   1013562) still answered `hc server status` after detach and was
   stopped with `{"stopped":true}`.
+
+## Hidden panes keep their size (branch fix/keep-hidden-size)
+
+- A pane's silent size lease now lasts as long as its observer stays
+  cached (user decision, 2026-11-09), so switching away and back no
+  longer resizes the program. Peek panes stay strictly observe.
+- Gates: formatting, all-target Clippy and the full suite (855 passed,
+  7 ignored). On an owned scratch session, 30 switches between three
+  stand-in agents painted no intermediate screen, and each agent was
+  resized at most twice in the whole run.
+- An inline stand-in with a footer shows the layout side of this. The
+  build from before the lease fix gave two of the three an 80x24 size on
+  about 17 of 30 switches, and one was left with blank rows under its
+  footer. With this build they were only ever given the pane's size
+  after the first attach, and no blank rows remained.

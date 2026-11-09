@@ -145,7 +145,9 @@ Visible current-tab panes also hold silent size leases, including the focused
 pane, so focus switches have no gap without a visible size owner. These
 controllers send size and measured display facts, consume credit, allocate no
 VT and send neither human input, focus nor automatic replies. Leaving the tab
-closes the controller; off-tab LRU connections remain strictly observe-only.
+keeps the controller for as long as the pane's observer stays in the LRU, so
+the program keeps its size while hidden, as it does under Herdr, instead of
+falling back to the core's headless size and redrawing on every switch.
 A visible controller recovers with passive `resumed`; it never claims focus
 or sends input. Transport recovery alone does not reclaim another viewer's size.
 This user-approved rule supersedes the earlier blanket observe-only rule for
@@ -417,7 +419,9 @@ reconnect with `resumed: true`, without focus or human-input activity. Merely
 recovering the desktop transport does not displace the phone. When the phone
 detaches, the remaining passive desktop viewers restore the desktop allocation.
 
-Entering or revisiting a tab creates fresh size holders. Moving focus opens
+Entering a tab creates size holders for panes that have none; a revisit reuses
+the ones still cached, and a reused holder doesn't reclaim size from another
+client by itself. Moving focus opens
 that pane's active input wire, and a real allocation change sends a resize.
 Those local activities, input and explicit take-control may reclaim sizing;
 unchanged allocation or a mismatching core grid does not trigger a reclaim loop.

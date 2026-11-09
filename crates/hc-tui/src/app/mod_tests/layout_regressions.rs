@@ -183,7 +183,7 @@ async fn cached_observer_shutdown_shares_one_deadline() {
 }
 
 #[tokio::test]
-async fn visible_size_leases_survive_focus_and_leave_only_observers_off_tab() {
+async fn size_leases_stay_as_long_as_their_observer_is_cached() {
     let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work"), ("t3", "other")]);
     app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
     app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
@@ -204,15 +204,23 @@ async fn visible_size_leases_survive_focus_and_leave_only_observers_off_tab() {
     draw(&mut app, "t2", 1);
     assert_eq!(app.size_leases["t1"].generation(), first);
     assert_eq!(app.size_leases["t2"].generation(), second);
+    // Off the tab the program keeps its size, so coming back resizes nothing.
     draw(&mut app, "t3", 2);
-    assert_eq!(
+    let leases = |app: &App| {
         app.size_leases
             .keys()
-            .map(String::as_str)
-            .collect::<Vec<_>>(),
-        ["t3"]
-    );
+            .map(String::to_owned)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(leases(&app), ["t1", "t2", "t3"]);
+    assert_eq!(app.size_leases["t1"].generation(), first);
     assert_eq!(app.observers.len(), 3);
+
+    // Once the pane falls out of the cache, its lease goes too.
+    app.observer_mru.retain(|id| id != "t1");
+    app.observers.remove("t1");
+    draw(&mut app, "t3", 3);
+    assert_eq!(leases(&app), ["t2", "t3"]);
 }
 
 /// While the cached observer repaints for a new size, the attach that just

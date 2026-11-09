@@ -1,10 +1,11 @@
-//! Persistent observers retain appearance; visible panes also hold silent size leases.
+//! Persistent observers retain appearance. A pane that has been visible also
+//! holds a silent size lease for as long as its observer stays cached.
 //! The focused pane keeps
 //! its existing original-wire input leases, including across focus changes.
 use super::*;
 
 /// The current tab is pinned; retain at most this many off-tab VTs. Every
-/// cached wire is observe-only. Scrollback remains bounded per Pane.
+/// cached VT wire is observe-only. Scrollback remains bounded per Pane.
 pub(super) const RECENT_PANES: usize = 32;
 
 impl App {

@@ -43,10 +43,14 @@ impl App {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        // A lease outlives its tab for as long as the pane's observer is cached:
+        // the program keeps its size while hidden, so coming back resizes nothing.
         self.size_leases.retain(|id, _| {
             !id.is_empty()
                 && self.view.inventory.get(id).is_some()
-                && (infos.iter().any(|info| &info.id == id) || covered.contains(id))
+                && (infos.iter().any(|info| &info.id == id)
+                    || covered.contains(id)
+                    || self.observers.contains_key(id))
         });
         // While a layout write is in flight, inventory can publish a new
         // member before the CAS lands — a transient un-zoomed split that
@@ -86,12 +90,9 @@ impl App {
             if !settling {
                 lease.allocated(inner.width.max(1), inner.height.max(1));
             }
-            lease.on_view(&self.view);
         }
-        for id in covered {
-            if let Some(lease) = self.size_leases.get_mut(&id) {
-                lease.on_view(&self.view);
-            }
+        for lease in self.size_leases.values_mut() {
+            lease.on_view(&self.view);
         }
         term.draw(|frame| draw::draw(self, frame, now))?;
         self.apply_cursor();
