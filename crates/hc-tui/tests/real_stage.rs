@@ -251,7 +251,7 @@ fn wait_event(state: &Path, kind: &str, role: &str) -> serde_json::Value {
 const CAST_TOML: &str = r#"
 [producer]
 runner = "fake"
-model = "model-p"
+model = "trust"
 effort = "high"
 permission_profile = "standard"
 
@@ -346,12 +346,27 @@ async fn real_stage_loop() {
         "{:?}",
         producer.argv
     );
+    // The producer's `model = "trust"` puts the fake runner behind
+    // Claude Code's folder-trust dialog: the stage reads the screen,
+    // sees it is the role's own folder, sends Down then Enter — once —
+    // and the runner announces itself. The answer is a terminal
+    // interaction only: no ledger event comes of it.
+    wait_read(&client, "bl-acme-shop-producer", "Quick safety check").await;
+    wait_read(&client, "bl-acme-shop-producer", "Yes, I trust this folder").await;
     wait_read(
         &client,
         "bl-acme-shop-producer",
         "fake runner: producer of acme-shop",
     )
     .await;
+    let events_then = ledger(&state).len();
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(
+        ledger(&state).len(),
+        events_then,
+        "the trust answer changed the ledger: {:?}",
+        ledger(&state)
+    );
 
     // The writer is wanted between plan request and dispatch.
     bl(
