@@ -406,3 +406,23 @@
 - Docs: README leads with Install; new `docs/install.md`,
   `docs/remote.md` and `docs/troubleshooting.md`. The first tag/release
   publication is pending — the user decides when it goes out.
+
+## v0.1.1: one-command install and start (branch feat/one-command)
+
+- `hc-tui` starts a local core itself when the resolved socket answers
+  nothing (missing or refused), once per run, after terminal setup and
+  without blocking the UI. It never starts one for `--remote` or a set
+  `HC_SOCKET`; the watcher reconnect picks the new core up. Failures
+  show a notice: `hc isn't installed` with the official install
+  command, or `Core start failed` with the first error line.
+- `scripts/install.sh` now runs the official `hc` installer when no
+  `hc` is found on `PATH`, in the install dir or in `~/.local/bin`.
+  `HC_TUI_SKIP_CORE=1` skips it; a failed core install warns and keeps
+  hc-tui.
+- `.github/workflows/pages.yml` publishes `scripts/install.sh` from a
+  published release tag to Pages, with a minimal index; the short URL
+  is not documented until a release ships.
+- Gates: formatting, all-target Clippy, the full suite (8 `core_start`
+  unit tests, 6 PTY tests driving a fake `hc`), 28 offline installer
+  tests and parsed workflow YAML all pass. The scratch-session check
+  that a started core outlives detach is pending.

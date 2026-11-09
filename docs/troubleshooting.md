@@ -16,12 +16,19 @@ Common messages and what usually causes them. Messages are quoted exactly as hc-
 
 ## Starting
 
+hc-tui starts a core itself when the session is local and nothing answers on its socket: the socket file is
+missing, or a stale one refuses the connection. It runs `hc server start` once and the usual reconnect picks the
+core up. It never starts a core for `--remote`, and never when `HC_SOCKET` is set: a set `HC_SOCKET` names a
+specific core that you manage yourself.
+
 | Message or state | Cause and fix |
 |---|---|
 | `error: terminal setup: No such device or address (os error 6)` | hc-tui has no terminal: it was piped, run from cron, or started over `ssh` without `-t`. |
 | `error: unexpected argument '…'` or `--session needs a value` | A typo on the command line. `hc-tui --help` lists the options. |
 | `error: endpoint: session name "…" can't be a folder name` | `--session` and `HC_SESSION` can't contain a path separator. |
-| The sidebar loads but machines show offline or `◐ reconnecting` | No core is answering on the socket. Check `--session`, `HC_SESSION` and `HC_SOCKET`, and that `hc` is running (`hc server status`, `hc server start`). hc-tui keeps retrying, so a core that starts later will appear. |
+| `hc isn't installed` / `install it: curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` | The socket answers nothing and there's no `hc` on `PATH`. Run the command the notice shows. |
+| `Core start failed` / `<first error line>` | `hc server start` ran but failed. The notice shows the first line of its output; run `hc server start` in a shell to see the rest. |
+| The sidebar loads but machines show offline or `◐ reconnecting` | No core is answering on the socket yet. If hc-tui started a core it appears on its own. For `--remote` or a set `HC_SOCKET`, start or fix that core yourself: `hc server status`, `hc server start`. |
 
 ## Remote
 

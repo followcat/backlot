@@ -1,6 +1,6 @@
 # Install, upgrade, uninstall
 
-hc-tui is a single binary. You also need the `hc` core: see
+hc-tui is a single binary. It talks to the `hc` core: see
 [herdr-core](https://github.com/herdrdev/herdr-core).
 
 | Platform | Archive target |
@@ -22,10 +22,17 @@ The script (`scripts/install.sh`):
 2. finds the latest release, or uses the one in `HC_TUI_VERSION` (`v0.1.0` or `0.1.0`);
 3. downloads `hc-tui-<version>-<target>.tar.gz` and `sha256sums.txt` over HTTPS;
 4. checks the archive's checksum, and installs nothing if it doesn't match;
-5. moves the binary into `${HC_TUI_INSTALL_DIR:-$HOME/.local/bin}`. It doesn't use sudo.
+5. moves the binary into `${HC_TUI_INSTALL_DIR:-$HOME/.local/bin}`. It doesn't use sudo;
+6. looks for `hc` on `PATH`, in the install dir and in `~/.local/bin`. When it's missing everywhere, the script
+   runs the official core installer: `curl -fsSL https://releases.herdr.dev/core/install.sh | sh`. Set
+   `HC_TUI_SKIP_CORE=1` to skip this step. If the core installer fails, hc-tui stays installed and the script
+   prints the command to run later.
 
 It tells you if the install directory isn't on your `PATH`. The checksum uses `sha256sum`, `shasum` or `openssl`,
 whichever is available.
+
+Once `hc` is installed you don't start it yourself: `hc-tui` starts a local core when it needs one. See
+[troubleshooting](troubleshooting.md) for when it does and doesn't.
 
 ## Manual install
 

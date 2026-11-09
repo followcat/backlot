@@ -21,15 +21,14 @@ terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
 
 ## Install
 
-You need `hc` first: see [herdr-core](https://github.com/herdrdev/herdr-core). Then:
-
 ```sh
 curl -fsSL https://github.com/followcat/hc-tui/releases/latest/download/install.sh | sh
 ```
 
-This puts a single binary in `~/.local/bin`, without sudo, after checking it against the release's `sha256sums.txt`.
-There are builds for Linux (x86_64 and aarch64) and macOS (arm64 and Intel). To pin a version, upgrade or uninstall,
-see [docs/install.md](docs/install.md).
+This installs hc-tui and, when it's missing, the `hc` core it talks to. hc-tui goes into `~/.local/bin`, without
+sudo, after a check against the release's `sha256sums.txt`. There are builds for Linux (x86_64 and aarch64) and
+macOS (arm64 and Intel). To pin a version, skip the core install, upgrade or uninstall, see
+[docs/install.md](docs/install.md).
 
 ## Usage
 
@@ -38,6 +37,9 @@ hc-tui                                  # the default session
 hc-tui --session work
 hc-tui --remote host-a --session work   # over SSH
 ```
+
+hc-tui starts the `hc` core itself when nothing answers on the session socket. `Ctrl+B q` detaches and leaves the
+core and your terminals running; run `hc-tui` again to reattach.
 
 The prefix is `Ctrl+B`, as in Herdr:
 
@@ -50,7 +52,7 @@ The prefix is `Ctrl+B`, as in Herdr:
 | `Ctrl+B z` | Zoom the pane |
 | `Ctrl+B b` | Show or hide the sidebar |
 | `Ctrl+B ?` | Search the key bindings |
-| `Ctrl+B q` | Detach (`hc` keeps running) |
+| `Ctrl+B q` | Detach (the core and your terminals keep running) |
 
 If you've changed these in your Herdr config, your bindings apply instead.
 

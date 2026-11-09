@@ -24,7 +24,7 @@ attributes, and the same key/mouse scripts must have the same effects.
 | M3b | Completion chronology and dependent attention/recency after C3 approval | Per-record completion markers; comparable batch order and reference ingestion receipts before coalescing, including delayed A10 > B > A20; client-local render acknowledgement; multi-tab completion/visit/restart/mobile native parity and M2/M2.2/M3a regressions; epoch display rebuilding and corrected handoff oracles remain separate gates; stop at M3b review, no M4 |
 | M4 | Actions: new terminal or agent with labels, split, close, rename, seen, keep, send, interrupt, worker peek, machines add/connect/rename/remove; notifications | Each action covered by a fake-core test; manual run on a real core |
 | M5 | Copy mode and selection ported from herdr (OSC 52), popup selection, clipboard image paste through `terminal.put` | Copy/paste work locally and over SSH in kitty and one other terminal; copy-mode visuals/input pass parity harness |
-| M6 | Release: musl builds, checksummed install script, docs (install, keys, remote, troubleshooting) | Tagged release with binaries; install script verifies the sha256 — **tooling done, first tag pending** |
+| M6 | Release: musl builds, checksummed install script, one-command install and start, docs (install, keys, remote, troubleshooting) | Tagged release with binaries; install script verifies the sha256 — **tooling done, first tag pending** |
 
 ## Testing rules
 - Integration tests use an `hc` built from the herdr-core source tree at a pinned commit:
