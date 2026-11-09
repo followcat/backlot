@@ -45,9 +45,13 @@ You need `hc` running, a git repository with at least one commit, and an agent C
 logged in. A cast file says who plays each role — then:
 
 ```sh
+hc server start
 backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml
 backlot stage start
 ```
+
+The TUI starts a core itself when none answers, so `hc server start` is only needed for the
+studio commands before it opens.
 
 Run `backlot` to open the client and press `Ctrl+B y` for the studio panel. The full walkthrough
 — cast file, task flow, permission prompts, recovery, cleanup — is

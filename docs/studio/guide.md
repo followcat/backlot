@@ -85,10 +85,14 @@ anyone else.
 ## Starting
 
 ```sh
+hc server start
 backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml
 backlot stage start
 backlot
 ```
+
+`hc server start` brings a core up first — the studio commands need one. `backlot` (the TUI)
+would also start one itself, so the last line alone covers it if you skip the first.
 
 `backlot studio new` records `studio.created` in the studio's ledger and prints it back.
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
