@@ -252,6 +252,51 @@ fn real_exec_drains_a_full_pipe() {
     assert_eq!(out.len(), 200_000, "the whole file came back");
 }
 
+/// A grandchild that keeps the pipe open must not hang the join:
+/// the child's own exit is the end, the reader gets a short grace
+/// for what is already written, and the call returns it — a runner
+/// that backgrounds a service would otherwise stop the stage loop.
+#[cfg(unix)]
+#[test]
+fn real_exec_returns_despite_a_pipe_holding_grandchild() {
+    use std::time::{Duration, Instant};
+    let call = ExecCall {
+        // `sleep 30` inherits stdout and holds it long past `echo`.
+        argv: vec!["sh".into(), "-c".into(), "sleep 30 & echo hi".into()],
+        cwd: ".".into(),
+        timeout: Duration::from_secs(10),
+    };
+    let started = Instant::now();
+    let out = real_exec(&call).unwrap();
+    assert_eq!(out.trim(), "hi");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "took {:?} — the grandchild's pipe held the join",
+        started.elapsed()
+    );
+}
+
+/// The timeout path never joins either: a killed child whose
+/// grandchild keeps the pipe returns its error at once.
+#[cfg(unix)]
+#[test]
+fn real_exec_timeout_returns_without_the_reader() {
+    use std::time::{Duration, Instant};
+    let call = ExecCall {
+        argv: vec!["sh".into(), "-c".into(), "sleep 30 & sleep 30".into()],
+        cwd: ".".into(),
+        timeout: Duration::from_millis(200),
+    };
+    let started = Instant::now();
+    let err = real_exec(&call).unwrap_err();
+    assert!(err.contains("timed out"), "{err}");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "took {:?} — the kill path waited on the reader",
+        started.elapsed()
+    );
+}
+
 /// The version probe takes the first line; failure and empty
 /// output leave it unset.
 #[test]

@@ -24,11 +24,19 @@ pub struct ExecCall {
 /// the failure string out. Injected so tests never spawn a real CLI.
 pub type Exec = dyn Fn(&ExecCall) -> Result<String, String> + Send + Sync;
 
-/// The real [`Exec`]: spawn, drain stdout on its own thread — a
-/// child writing more than the pipe holds would otherwise block
-/// forever, since nobody reads while it runs — then poll and kill
-/// past the timeout.
+/// The real [`Exec`]: spawn, drain stdout on its own thread into a
+/// shared buffer — a child writing more than the pipe holds would
+/// block forever with nobody reading — then poll and kill past the
+/// timeout. The join is never unbounded: a grandchild that keeps
+/// the pipe open (a runner's background service) would otherwise
+/// stop the stage loop with it. After the child exits the reader
+/// gets a short grace to reach end of file, and whatever was read
+/// is the answer; after a timeout kill the reader is left running —
+/// it ends when the pipe finally closes.
 pub fn real_exec(call: &ExecCall) -> Result<String, String> {
+    use std::io::Read;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
     let Some((program, args)) = call.argv.split_first() else {
         return Err("empty argv".into());
     };
@@ -41,19 +49,34 @@ pub fn real_exec(call: &ExecCall) -> Result<String, String> {
         .spawn()
         .map_err(|e| format!("{program}: {e}"))?;
     let stdout = child.stdout.take();
-    let reader = std::thread::spawn(move || {
-        let mut out = Vec::new();
-        if let Some(mut pipe) = stdout {
-            use std::io::Read;
-            let _ = pipe.read_to_end(&mut out);
-        }
-        out
-    });
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let done = Arc::new(AtomicBool::new(false));
+    let reader = {
+        let buf = buf.clone();
+        let done = done.clone();
+        std::thread::spawn(move || {
+            if let Some(mut pipe) = stdout {
+                let mut chunk = [0u8; 8192];
+                loop {
+                    match pipe.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => buf.lock().unwrap().extend_from_slice(&chunk[..n]),
+                    }
+                }
+            }
+            done.store(true, Ordering::Relaxed);
+        })
+    };
+    let _ = reader; // never joined — see the doc comment
     let deadline = std::time::Instant::now() + call.timeout;
     loop {
         match child.try_wait() {
             Ok(Some(_)) => {
-                let out = reader.join().unwrap_or_default();
+                let grace = std::time::Instant::now() + Duration::from_millis(200);
+                while !done.load(Ordering::Relaxed) && std::time::Instant::now() < grace {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                let out = std::mem::take(&mut *buf.lock().unwrap());
                 return Ok(String::from_utf8_lossy(&out).into_owned());
             }
             Ok(None) if std::time::Instant::now() < deadline => {
@@ -62,7 +85,6 @@ pub fn real_exec(call: &ExecCall) -> Result<String, String> {
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                let _ = reader.join();
                 return Err(format!("{program}: timed out"));
             }
             Err(e) => return Err(format!("{program}: {e}")),
