@@ -11,11 +11,21 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::event::StudioMode;
-use crate::state::{RoleLifecycle, StudioState, TaskStatus};
+use crate::event::{Priority, StudioMode};
+use crate::state::{RoleLifecycle, StudioState, TaskStatus, actor_task};
 
 /// The `schema` value this generation writes.
 pub const SUMMARY_SCHEMA: &str = "backlot/1";
+
+/// A live role's screen-classified work state (R17): the stage's
+/// watch pass samples it into the summary — the ledger never sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Work {
+    Working,
+    Waiting,
+    Blocked,
+}
 
 /// Most studios shown; older finished ones drop off first.
 pub const MAX_STUDIOS: usize = 12;
@@ -64,6 +74,21 @@ pub struct RoleSummary {
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub doing: Option<String>,
+    /// `working`, `waiting` or `blocked` — only while live and the
+    /// watch pass has classified the screen (R17).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work: Option<Work>,
+    /// The task an actor works on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// The task's display priority — actors only (D11).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Priority>,
+    /// A closed person `role.reopen` could take: it kept a session
+    /// id and is not already held. Session ids never reach the
+    /// document — this is the flag the panel reads instead.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub resumable: bool,
     #[serde(default)]
     pub since_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -94,6 +119,10 @@ fn cap(s: &str) -> String {
     s.chars().take(CAP).collect()
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 /// A studio is finished when every task it knows is terminal and no
 /// recorded role is still live.
 fn finished(state: &StudioState) -> bool {
@@ -105,22 +134,40 @@ fn finished(state: &StudioState) -> bool {
             .all(|r| r.lifecycle() != RoleLifecycle::Live)
 }
 
-/// Role keys in panel order: the fixed roles first, then the actors
-/// by ledger key. Every recorded role is listed — a closed person
-/// stays while the studio is live (R19), so there is no count cap.
+/// Role keys in panel order: the fixed roles first, then the actors —
+/// open people (live or lost) before closed, each group sorted by
+/// the task's priority high-first and then by role key. Every
+/// recorded role is listed — a closed person stays while the studio
+/// is live (R19), so there is no count cap.
 fn role_keys(state: &StudioState) -> Vec<&str> {
     const FIXED: [&str; 3] = ["producer", "director", "writer"];
+    let mut actors: Vec<&str> = state
+        .roles
+        .keys()
+        .map(String::as_str)
+        .filter(|k| !FIXED.contains(k))
+        .collect();
+    actors.sort_by(|a, b| {
+        let closed = |k: &str| state.roles[k].lifecycle() == RoleLifecycle::Closed;
+        closed(a)
+            .cmp(&closed(b))
+            .then(role_priority(state, b).cmp(&role_priority(state, a)))
+            .then(a.cmp(b))
+    });
     FIXED
         .into_iter()
         .filter(|k| state.roles.contains_key(*k))
-        .chain(
-            state
-                .roles
-                .keys()
-                .map(String::as_str)
-                .filter(|k| !FIXED.contains(k)),
-        )
+        .chain(actors)
         .collect()
+}
+
+/// An actor's task priority for ordering — `normal` when the key
+/// names no task.
+fn role_priority(state: &StudioState, role: &str) -> Priority {
+    actor_task(role)
+        .and_then(|t| state.tasks.get(t))
+        .map(|t| t.priority)
+        .unwrap_or_default()
 }
 
 /// The candidate name for `actor-<task>-c<n>` keys, else the key.
@@ -152,11 +199,14 @@ fn role_attention(state: &StudioState, role: &str) -> Option<String> {
 }
 
 /// One role's summary. `live` maps a terminal address to what the
-/// program there reports doing.
+/// program there reports doing; `work` the watch pass's per-role
+/// screen classification, keyed `(studio, role)`.
 fn role_summary(
+    studio: &str,
     state: &StudioState,
     role: &str,
     live: &BTreeMap<String, String>,
+    work: &BTreeMap<(String, String), Work>,
 ) -> Option<RoleSummary> {
     let r = state.roles.get(role)?;
     let lifecycle = r.lifecycle();
@@ -168,13 +218,20 @@ fn role_summary(
             .as_ref()
             .and_then(|t| live.get(t))
             .map(|d| cap(d))
-            .or_else(|| {
-                role.strip_prefix("actor-")
-                    .and_then(|rest| rest.rsplit_once("-c").map(|(t, _)| t))
-                    .map(|t| format!("task {}", cap(t)))
-            }),
+            .or_else(|| actor_task(role).map(|t| format!("task {}", cap(t)))),
         _ => None,
     };
+    // Work is a live screen's read — a stale sample for a role that
+    // stopped being live is dropped here, never shown.
+    let work = (lifecycle == RoleLifecycle::Live)
+        .then(|| work.get(&(studio.to_string(), role.to_string())))
+        .flatten()
+        .copied();
+    let task = actor_task(role).map(String::from);
+    let priority = task
+        .as_deref()
+        .and_then(|t| state.tasks.get(t))
+        .map(|t| t.priority);
     let actor = r.actor.as_ref();
     Some(RoleSummary {
         role: cap(role),
@@ -190,6 +247,10 @@ fn role_summary(
         }
         .into(),
         doing,
+        work,
+        task: task.map(|t| cap(&t)),
+        priority,
+        resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
         since_ms: r.since_ms,
         attention: role_attention(state, role),
     })
@@ -201,9 +262,12 @@ fn role_summary(
 /// ledger mtime): live studios always keep their slot, and finished
 /// ones fill what remains — so old finished studios drop off.
 /// `live` maps a live terminal's address to what it reports doing.
+/// `work` maps `(studio, role)` to the watch pass's latest screen
+/// classification — the summary stays pure; the stage owns the map.
 pub fn summary(
     studios: &[(String, StudioState)],
     live: &BTreeMap<String, String>,
+    work: &BTreeMap<(String, String), Work>,
     updated_ms: u64,
 ) -> Summary {
     let mut live_studios = Vec::new();
@@ -215,7 +279,7 @@ pub fn summary(
         let done = finished(state);
         let roles: Vec<RoleSummary> = role_keys(state)
             .into_iter()
-            .filter_map(|role| role_summary(state, role, live))
+            .filter_map(|role| role_summary(name, state, role, live, work))
             .collect();
         let entry = StudioSummary {
             id: cap(name),

@@ -173,7 +173,9 @@ impl Stage {
             .into_iter()
             .map(|(n, s)| (n.clone(), s.clone()))
             .collect();
-        summary::summary(&owned, doing, 0)
+        // No work samples yet — the watch's screen reads land with
+        // its sampling pass.
+        summary::summary(&owned, doing, &BTreeMap::new(), 0)
     }
 }
 

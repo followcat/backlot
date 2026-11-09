@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::event::{Event, EventKind, Verdict};
+use crate::event::{Event, EventKind, Priority, Verdict};
 use crate::state::replay;
 use crate::summary::*;
 use crate::testkit::*;
@@ -42,7 +42,12 @@ fn summary_shape_and_live_doing() {
             ("stage", started("director", "t2", "dir")),
         ],
     );
-    let s = summary(&[("acme-shop".into(), state)], &live_view(), 42);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &live_view(),
+        &BTreeMap::new(),
+        42,
+    );
     assert_eq!(s.schema, SUMMARY_SCHEMA);
     assert_eq!(s.updated_ms, 42);
     assert_eq!(s.studios.len(), 1);
@@ -75,7 +80,12 @@ fn a_closed_role_stays_listed_without_doing() {
             ("stage", closed("writer")),
         ],
     );
-    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     let w = s.studios[0]
         .roles
         .iter()
@@ -96,7 +106,12 @@ fn an_actor_names_its_candidate_and_task() {
     let mut base = base_events();
     base.push(ev(4, "director", cast("t1", "actor-a", "a")));
     let state = state_with(&base, vec![("stage", started("actor-t1-c1", "t7", "a"))]);
-    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     let a = s.studios[0]
         .roles
         .iter()
@@ -125,7 +140,12 @@ fn counters_follow_the_ledger() {
             ),
         ],
     );
-    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     assert_eq!(s.studios[0].open_reviews, 1);
     assert_eq!(s.studios[0].waiting, 1);
 }
@@ -164,7 +184,12 @@ fn fixed_roles_come_first_and_every_role_is_listed() {
     }
     closed_actors(&mut events, "many", 40);
     let state = replay(&events);
-    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     let roles = &s.studios[0].roles;
     assert_eq!(roles.len(), 42, "{roles:?}");
     assert_eq!(roles[0].role, "producer");
@@ -200,7 +225,7 @@ fn finished_studios_drop_for_size_but_live_stay() {
         studios.push((format!("done-{i}"), big_finished(&format!("d{i}"))));
     }
     let total = studios.len();
-    let s = summary(&studios, &BTreeMap::new(), 1);
+    let s = summary(&studios, &BTreeMap::new(), &BTreeMap::new(), 1);
     assert!(s.studios.iter().any(|st| st.id == "live-0"), "{s:?}");
     assert!(s.studios.len() < total, "{}", s.studios.len());
     assert!(
@@ -212,7 +237,12 @@ fn finished_studios_drop_for_size_but_live_stay() {
     // One live studio far over the target is written anyway.
     let mut events = base_events();
     closed_actors(&mut events, "huge", 350);
-    let s = summary(&[("big-live".into(), replay(&events))], &BTreeMap::new(), 1);
+    let s = summary(
+        &[("big-live".into(), replay(&events))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     assert_eq!(s.studios.len(), 1);
     assert_eq!(s.studios[0].id, "big-live");
     assert_eq!(s.studios[0].roles.len(), 350);
@@ -238,7 +268,7 @@ fn finished_studios_drop_off_after_live_ones() {
         );
         studios.push((format!("done-{i}"), state));
     }
-    let s = summary(&studios, &BTreeMap::new(), 1);
+    let s = summary(&studios, &BTreeMap::new(), &BTreeMap::new(), 1);
     assert_eq!(s.studios.len(), MAX_STUDIOS);
     assert_eq!(s.studios[0].id, "live-0");
     assert_eq!(s.studios[1].id, "live-1");
@@ -247,13 +277,189 @@ fn finished_studios_drop_off_after_live_ones() {
     assert_eq!(s.studios[2].open_reviews, 0);
 }
 
+/// The watch pass's `(studio, role)` sample shows only on a live
+/// role — a stale entry for a closed one is dropped.
+#[test]
+fn work_is_sampled_into_live_roles_only() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("stage", started("producer", "t1", "prod")),
+            ("stage", started("writer", "t9", "wri")),
+            ("stage", closed("writer")),
+        ],
+    );
+    let work = BTreeMap::from([
+        (("acme-shop".into(), "producer".into()), Work::Working),
+        (("acme-shop".into(), "writer".into()), Work::Blocked),
+    ]);
+    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), &work, 1);
+    let find = |role: &str| s.studios[0].roles.iter().find(|r| r.role == role).unwrap();
+    assert_eq!(find("producer").work, Some(Work::Working));
+    assert_eq!(find("writer").work, None);
+    // Serialization is `working`/`waiting`/`blocked`.
+    let json = serde_json::to_string(&s).unwrap();
+    assert!(json.contains("\"work\":\"working\""), "{json}");
+}
+
+/// An actor carries its task and the task's priority; fixed roles
+/// carry neither.
+#[test]
+fn actors_carry_task_and_priority() {
+    let mut base = base_events();
+    base.push(ev(
+        4,
+        "user",
+        EventKind::TaskPriority {
+            task: "t1".into(),
+            priority: Priority::High,
+        },
+    ));
+    base.push(ev(5, "director", cast("t1", "actor-a", "a")));
+    let state = state_with(
+        &base,
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            ("stage", started("producer", "t1", "prod")),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let find = |role: &str| s.studios[0].roles.iter().find(|r| r.role == role).unwrap();
+    let a = find("actor-t1-c1");
+    assert_eq!(a.task.as_deref(), Some("t1"));
+    assert_eq!(a.priority, Some(Priority::High));
+    let p = find("producer");
+    assert_eq!(p.task, None);
+    assert_eq!(p.priority, None);
+}
+
+/// `resumable` is a closed person with a session id that nothing
+/// holds — live people are not it, session-less closed people are
+/// not it, and a held person is already taken.
+#[test]
+fn resumable_is_a_closed_person_with_a_session_and_no_hold() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("stage", started("writer", "t9", "wri")),
+            ("stage", closed("writer")),
+            (
+                "stage",
+                EventKind::RoleStarted {
+                    role: "director".into(),
+                    terminal: Some("t2".into()),
+                    actor: Some(actor("dir")),
+                    session_id: None,
+                    reason: None,
+                },
+            ),
+            ("stage", closed("director")),
+            ("stage", started("producer", "t8", "prod")),
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            ("stage", closed("actor-t1-c1")),
+            (
+                "user",
+                EventKind::RoleReopen {
+                    role: "actor-t1-c1".into(),
+                },
+            ),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let find = |role: &str| s.studios[0].roles.iter().find(|r| r.role == role).unwrap();
+    assert!(find("writer").resumable); // closed with a session id
+    assert!(!find("director").resumable); // closed without one
+    assert!(!find("actor-t1-c1").resumable); // held — already taken
+    assert!(!find("producer").resumable); // live
+    // And no session id reaches the document at all.
+    let json = serde_json::to_string(&s).unwrap();
+    assert!(!json.contains("sess-"), "{json}");
+    assert!(!json.contains("session"), "{json}");
+}
+
+/// Open actors sort by priority high-first, then role key; closed
+/// people follow, ordered the same way. Fixed roles still lead.
+#[test]
+fn actors_order_by_priority_then_key_with_closed_last() {
+    let mut events = base_events();
+    for (seq, t) in [(4, "t2"), (5, "t3"), (6, "t4")] {
+        events.push(ev(seq, "director", task_created(t, "fix", 1)));
+    }
+    let state = state_with(
+        &events,
+        vec![
+            (
+                "user",
+                EventKind::TaskPriority {
+                    task: "t2".into(),
+                    priority: Priority::High,
+                },
+            ),
+            (
+                "user",
+                EventKind::TaskPriority {
+                    task: "t3".into(),
+                    priority: Priority::Low,
+                },
+            ),
+            ("director", cast("t1", "actor-a", "a")), // t1 normal
+            ("director", cast("t2", "actor-b", "b")), // t2 high
+            ("director", cast("t3", "actor-a", "a")), // t3 low, c1
+            ("director", cast("t3", "actor-b", "b")), // t3 low, c2
+            ("director", cast("t4", "actor-b", "b")), // t4 normal
+            ("stage", started("actor-t3-c1", "t7", "a")),
+            ("stage", started("actor-t1-c1", "t8", "a")),
+            ("stage", started("actor-t2-c1", "t9", "b")),
+            ("stage", started("producer", "t1", "prod")),
+            ("stage", started("actor-t4-c1", "t10", "b")),
+            ("stage", closed("actor-t4-c1")),
+            ("stage", started("actor-t3-c2", "t11", "a")),
+            ("stage", closed("actor-t3-c2")),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let order: Vec<&str> = s.studios[0].roles.iter().map(|r| r.role.as_str()).collect();
+    assert_eq!(
+        order,
+        [
+            "producer",
+            "actor-t2-c1", // open, high
+            "actor-t1-c1", // open, normal
+            "actor-t3-c1", // open, low
+            "actor-t4-c1", // closed, normal
+            "actor-t3-c2", // closed, low
+        ],
+        "{order:?}"
+    );
+}
+
 /// Long fields are capped and the document stays small.
 #[test]
 fn strings_are_capped() {
     let long = "x".repeat(500);
     let mut state = base_state();
     state.studio.as_mut().unwrap().title = long.clone();
-    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
     assert!(s.studios[0].title.len() <= 96);
     let bytes = serde_json::to_vec(&s).unwrap().len();
     assert!(bytes < 64 * 1024, "{bytes}");
