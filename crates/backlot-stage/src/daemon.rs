@@ -213,6 +213,16 @@ fn load_studio(dir: &Path, name: &str) -> Result<StudioState, Fail> {
     })
 }
 
+/// The stage's state base, created when missing and resolved once —
+/// studio dirs, role dirs, prompts and `BACKLOT_STATE_DIR` for roles
+/// all see the real path from then on, matching what the OS reports
+/// to terminals (`term.cwd`) and git (`worktree list`). A base that
+/// cannot resolve keeps the path as given.
+pub(crate) fn resolved_base(base: PathBuf) -> PathBuf {
+    let _ = fs::create_dir_all(&base);
+    base.canonicalize().unwrap_or(base)
+}
+
 /// `stage run`: connect, then tick on every hc event and once a
 /// second on the ledger lengths.
 pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
@@ -222,10 +232,10 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         common.remote.as_deref(),
     )
     .await?;
-    let base = match env.get("BACKLOT_STATE_DIR") {
+    let base = resolved_base(match env.get("BACKLOT_STATE_DIR") {
         Some(d) => PathBuf::from(d),
         None => store::base_dir(&env.vars, &link.core_id),
-    };
+    });
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))

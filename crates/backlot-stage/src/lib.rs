@@ -35,6 +35,8 @@ mod cli_testkit;
 #[cfg(test)]
 mod cli_tests;
 #[cfg(test)]
+mod daemon_tests;
+#[cfg(test)]
 mod deliver_tests;
 #[cfg(test)]
 mod discover_tests;
