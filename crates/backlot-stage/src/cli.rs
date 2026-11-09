@@ -21,7 +21,7 @@ use crate::store::{self, StoreError};
 const COMMANDS: &[&str] = &[
     "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "deliver",
     "block", "review", "correct", "status", "records", "finding", "stage", "priority", "reopen",
-    "close",
+    "close", "approve",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused` → 1.

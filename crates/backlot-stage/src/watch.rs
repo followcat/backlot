@@ -432,10 +432,10 @@ impl Stage {
         } else {
             self.blocked_since.borrow_mut().remove(&pair);
         }
-        let (Some(attn), Some(appr)) = (
-            permit::open_episode(state, role),
-            permit::pending_approval(state, role),
-        ) else {
+        let Some(attn) = permit::open_episode(state, role) else {
+            return Ok(());
+        };
+        let Some(appr) = permit::pending_approval(state, role, attn.ts_ms) else {
             return Ok(());
         };
         if work != Work::Blocked {

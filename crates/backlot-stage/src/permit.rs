@@ -39,10 +39,20 @@ pub fn open_episode<'s>(state: &'s StudioState, role: &str) -> Option<&'s Attent
         .find(|a| a.role == role && a.reason == PERMISSION_PROMPT)
 }
 
-/// The latest decision a role has recorded — the one the stage
-/// acts on.
-pub fn pending_approval<'s>(state: &'s StudioState, role: &str) -> Option<&'s ApprovalRecord> {
-    state.approvals.iter().rev().find(|a| a.role == role)
+/// The latest decision a role recorded at or after the open
+/// attention — the one answering *this* prompt. An approval from an
+/// earlier episode is spent: the stage must never send a key for a
+/// decision that pre-dates the prompt on screen.
+pub fn pending_approval<'s>(
+    state: &'s StudioState,
+    role: &str,
+    attention_ts_ms: u64,
+) -> Option<&'s ApprovalRecord> {
+    state
+        .approvals
+        .iter()
+        .rev()
+        .find(|a| a.role == role && a.ts_ms >= attention_ts_ms)
 }
 
 /// Whether the role's current blocked episode already produced an

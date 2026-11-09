@@ -64,9 +64,9 @@ fn bl_env(scratch: &ScratchCore, state: &Path) -> Vec<(String, String)> {
     ]
 }
 
-/// `backlot <args>` under the fixture env; assert exit 0 within the
-/// deadline and return stdout.
-fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
+/// `backlot <args>` under the fixture env, returned raw — `bl` and
+/// `bl_fail` assert on the exit from here.
+fn bl_run(scratch: &ScratchCore, state: &Path, args: &str) -> std::process::Output {
     let mut child = Command::new(tui_bin())
         .args(args.split(' '))
         .env_clear()
@@ -79,18 +79,36 @@ fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
     let deadline = Instant::now() + DEADLINE;
     loop {
         if child.try_wait().expect("try_wait").is_some() {
-            let out = child.wait_with_output().expect("output");
-            assert!(
-                out.status.success(),
-                "backlot {args} exited {}; stderr: {}",
-                out.status,
-                String::from_utf8_lossy(&out.stderr)
-            );
-            return String::from_utf8_lossy(&out.stdout).into_owned();
+            return child.wait_with_output().expect("output");
         }
         assert!(Instant::now() < deadline, "backlot {args} timed out");
         std::thread::sleep(POLL);
     }
+}
+
+/// `backlot <args>` under the fixture env; assert exit 0 and return
+/// stdout.
+fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
+    let out = bl_run(scratch, state, args);
+    assert!(
+        out.status.success(),
+        "backlot {args} exited {}; stderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// `backlot <args>` expected to refuse; assert a non-zero exit and
+/// return stderr.
+fn bl_fail(scratch: &ScratchCore, state: &Path, args: &str) -> String {
+    let out = bl_run(scratch, state, args);
+    assert!(
+        !out.status.success(),
+        "backlot {args} should refuse, got: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
 async fn connect(scratch: &ScratchCore) -> Client {
@@ -375,6 +393,15 @@ async fn real_stage_loop() {
     let scratch = ScratchCore::spawn().await;
     let client = connect(&scratch).await;
     let state = scratch.root.join("bl-state");
+    // D10: a studio repo is a git work tree — the stage starts the
+    // director's integration worktree off it.
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&scratch.work)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&scratch.work, &["commit", "--allow-empty", "-m", "init"]);
     let cast = fixture(&scratch, "cast.toml", CAST_TOML);
     let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
     let acc = fixture(&scratch, "acc.md", "# acceptance\n");
@@ -543,9 +570,9 @@ async fn real_stage_loop() {
     // `blocked` — the summary carries the classification, never
     // the ledger.
     wait_role(&client, "actor-t1-c2", |r| r["work"] == "waiting").await;
-    send_text(&client, &second.address, "work:working\n").await;
+    send_text(&client, &second.address, "work:working").await;
     wait_role(&client, "actor-t1-c2", |r| r["work"] == "working").await;
-    send_text(&client, &second.address, "work:blocked\n").await;
+    send_text(&client, &second.address, "work:blocked").await;
     let c2 = wait_role(&client, "actor-t1-c2", |r| r["work"] == "blocked").await;
     assert_eq!(c2["task"], "t1", "{c2}");
     assert_eq!(c2["priority"], "normal", "{c2}");
@@ -705,6 +732,297 @@ async fn real_stage_loop() {
         .and_then(|ss| ss.iter().find(|s| s["id"] == "acme-shop"))
         .expect("acme-shop in the doc");
     assert_eq!(shop["requirement_version"], 2, "{doc}");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// The ledger reaches `n` events of `kind` regardless of role —
+/// for kinds like `attention.cleared` that carry no `role` field.
+fn wait_kind(state: &Path, kind: &str, n: usize) {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let count = ledger(state).iter().filter(|e| e["kind"] == kind).count();
+        if count >= n {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "wanted {n} {kind} events in the ledger"
+        );
+        std::thread::sleep(POLL);
+    }
+}
+
+/// `git` in the fixture repo — the work-area assertions run real
+/// git against it; commits get a fixture identity through the env.
+fn git(repo: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .env("GIT_AUTHOR_NAME", "alice")
+        .env("GIT_AUTHOR_EMAIL", "alice@example.com")
+        .env("GIT_COMMITTER_NAME", "alice")
+        .env("GIT_COMMITTER_EMAIL", "alice@example.com")
+        .output()
+        .unwrap_or_else(|e| panic!("cannot run git {args:?}: {e}"));
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// The fake runner logs every line it is sent into
+/// `fake-inbox-<role>` under the state dir — wait until `needle`
+/// shows in the file `name`.
+fn wait_inbox(state: &Path, name: &str, needle: &str) -> String {
+    let file = state.join(name);
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let text = fs::read_to_string(&file).unwrap_or_default();
+        if text.contains(needle) {
+            return text;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{name} never contained {needle:?}; inbox: {text:?}"
+        );
+        std::thread::sleep(POLL);
+    }
+}
+
+/// The S5 closed loop on the fake runner: a requirement comes in,
+/// the writer is summoned and told, the director is dispatched, an
+/// actor works its own worktree, a delivery notices the director, a
+/// rework review notices the actor, a midway revision notices the
+/// director, a permission prompt is answered through `backlot
+/// approve`, the accepted actor closes resumable — and `studio
+/// finish` ends the studio.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_closed_loop() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = state.join("studios/acme-shop");
+    // D10: the studio repo is a real git work tree.
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
+    let req2 = fixture(&scratch, "req2.md", "# requirement v2\nbigger shop\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let note = fixture(&scratch, "note.md", "director: go\n");
+    let report = fixture(&scratch, "report.md", "# delivery report\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+
+    // Producer runs in the repo itself; the director's terminal is
+    // in the integration worktree on the integration branch.
+    wait_terminal(&client, "bl-acme-shop-producer").await;
+    let director = wait_terminal(&client, "bl-acme-shop-director").await;
+    assert_eq!(
+        director.cwd.as_str(),
+        studio.join("work/integration").to_str().unwrap()
+    );
+    assert!(
+        git(
+            &repo,
+            &["branch", "--list", "backlot/acme-shop/integration"]
+        )
+        .contains("integration"),
+        "no integration branch"
+    );
+
+    // Requirement in, then the plan request: the writer starts and
+    // the stage sends it the file-less `[backlot]` line.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(&scratch, &state, "plan request --as producer");
+    let writer = wait_terminal(&client, "bl-acme-shop-writer").await;
+    check_labels(&writer, "acme-shop", "writer", None);
+    wait_inbox(
+        &state,
+        "fake-inbox-writer",
+        "a plan and an acceptance list are wanted",
+    );
+
+    // Dispatch: the director gets the producer's file; the writer
+    // is no longer wanted.
+    bl(
+        &scratch,
+        &state,
+        &format!("dispatch --file {} --as producer", note.display()),
+    );
+    let inbox = wait_inbox(
+        &state,
+        "fake-inbox-director",
+        "[backlot] producer → director: read ",
+    );
+    assert!(inbox.contains("-note.md"), "{inbox}");
+    wait_absent(&client, "bl-acme-shop-writer").await;
+
+    // A task and a cast: the actor lands in its own worktree on its
+    // own branch, branched off the integration tip.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "task new --title cart --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "cast --task t1 --actor actor-a --reason first --as director",
+    );
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+    check_labels(&actor, "acme-shop", "actor-t1-c1", Some("t1"));
+    assert_eq!(actor.cwd.as_str(), studio.join("work/t1").to_str().unwrap());
+    assert!(
+        git(&repo, &["branch", "--list", "backlot/acme-shop/t1"]).contains("t1"),
+        "no task branch"
+    );
+
+    // The first delivery owes the director a notice naming the
+    // generated body file.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "deliver --commits a..b --report {} --check build=pass --as actor --task t1",
+            report.display()
+        ),
+    );
+    wait_inbox(&state, "fake-inbox-director", "-delivered.md");
+
+    // A review asking for changes owes the actor a rework notice.
+    bl(
+        &scratch,
+        &state,
+        "review --task t1 --delivery 1 --verdict changes-requested --conclusion fix-it --as director",
+    );
+    wait_inbox(&state, "fake-inbox-actor-t1", "-rework.md");
+
+    // The requirement moves mid-loop: the director is told which
+    // tasks are now behind.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v2 --as producer",
+            req2.display()
+        ),
+    );
+    wait_inbox(&state, "fake-inbox-director", "-req.md");
+
+    // A permission prompt: two blocked samples raise the attention
+    // with the screen saved under `attention/`; the recorded
+    // decision sends the key while the prompt still shows.
+    send_text(&client, &actor.address, "work:blocked").await;
+    let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised["reason"], "permission prompt", "{raised}");
+    let screen_file = studio.join(format!("attention/{}.txt", raised["seq"]));
+    wait_inbox(&state, "fake-inbox-director", "-attention.md");
+    assert!(
+        fs::read_to_string(&screen_file)
+            .unwrap_or_default()
+            .contains("fake-work: blocked"),
+        "the saved screen: {}",
+        screen_file.display()
+    );
+    // No key is sent before a decision is recorded; once it is,
+    // `enter` reaches the prompt and the attention clears.
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
+    wait_kind(&state, "attention.cleared", 1);
+
+    // A second blocked episode gets its own attention; `deny` sends
+    // esc. The doc's `work` field is the stage's own sample — it
+    // must see `waiting` between the episodes so the new blocked
+    // stretch counts as a new episode.
+    wait_role(&client, "actor-t1-c1", |r| r["work"] == "waiting").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    wait_events(&state, "attention.raised", "actor-t1-c1", 2);
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision deny --as director",
+    );
+    wait_read(&client, &actor.address, "fake-approved: esc").await;
+    wait_kind(&state, "attention.cleared", 2);
+
+    // `studio finish` names the tasks still open; once accepted the
+    // actor closes deliberately and stays resumable.
+    let refused = bl_fail(&scratch, &state, "studio finish --as producer");
+    assert!(refused.contains("t1"), "{refused}");
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "deliver --commits b..c --report {} --as actor --task t1",
+            report.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "review --task t1 --delivery 2 --verdict accepted --conclusion done --as director",
+    );
+    wait_absent(&client, "bl-acme-shop-t1").await;
+    let closed = wait_role(&client, "actor-t1-c1", |r| {
+        r["state"] == "closed" && r["resumable"] == true
+    })
+    .await;
+    assert_eq!(closed["task"], "t1", "{closed}");
+
+    // Finishing ends the usual scheduling: producer and director
+    // close; `studio.finished` is in the ledger.
+    bl(
+        &scratch,
+        &state,
+        "studio finish --reason accepted --as producer",
+    );
+    wait_kind(&state, "studio.finished", 1);
+    wait_absent(&client, "bl-acme-shop-producer").await;
+    wait_absent(&client, "bl-acme-shop-director").await;
+
+    // Reopen still works after finish: the closed actor resumes its
+    // session in the same worktree.
+    bl(&scratch, &state, "reopen --person actor-t1-c1 --as user");
+    wait_event(&state, "role.resumed", "actor-t1-c1");
+    let back = wait_terminal(&client, "bl-acme-shop-t1").await;
+    assert_eq!(back.cwd.as_str(), studio.join("work/t1").to_str().unwrap());
 
     drop(client);
     scratch.finish().expect("scratch teardown");

@@ -68,11 +68,46 @@ if [ "${FAKE_MODEL:-}" = "trust" ]; then
     fi
 fi
 echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of ${BACKLOT_STUDIO:-studio}"
-# Read lines like the old `cat >/dev/null`: a `work:<state>` line
-# echoes `fake-work: <state>` for the stage's work sample; anything
-# else is ignored. The loop stays alive until killed.
-while IFS= read -r line; do
-    case "$line" in
-        work:*) printf 'fake-work: %s\n' "${line#work:}" ;;
-    esac
+# The input loop. `work:<state>` echoes `fake-work: <state>` for the
+# stage's work sample and becomes the runner's state; every other
+# whole line — a `[backlot]` message, a prompt — lands in the
+# role's inbox under the state dir when one is set. While `blocked`
+# the runner reads single bytes like a real permission prompt: CR
+# or LF is the allow key, ESC the deny, and either prints a
+# `fake-approved` marker and returns the runner to `waiting`.
+state=waiting
+saved=$(stty -g 2>/dev/null)
+while :; do
+    if [ "$state" = blocked ]; then
+        stty -icanon -echo min 1 time 0 2>/dev/null
+        b=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
+        case "$b" in
+            0d | 0a)
+                [ -n "$saved" ] && stty "$saved" 2>/dev/null
+                printf 'fake-approved: enter\nfake-work: waiting\n'
+                state=waiting
+                ;;
+            1b)
+                [ -n "$saved" ] && stty "$saved" 2>/dev/null
+                printf 'fake-approved: esc\nfake-work: waiting\n'
+                state=waiting
+                ;;
+            "") break ;;
+        esac
+    else
+        IFS= read -r line || break
+        case "$line" in
+            work:*)
+                state="${line#work:}"
+                printf 'fake-work: %s\n' "$state"
+                ;;
+            "")
+                ;; # a send's own trailing CR, not a message
+            *)
+                [ -n "${BACKLOT_STATE_DIR:-}" ] &&
+                    printf '%s\n' "$line" \
+                        >>"$BACKLOT_STATE_DIR/fake-inbox-${BACKLOT_ROLE:-role}${BACKLOT_TASK:+-$BACKLOT_TASK}"
+                ;;
+        esac
+    fi
 done

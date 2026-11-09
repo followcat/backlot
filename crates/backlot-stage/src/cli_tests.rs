@@ -369,3 +369,21 @@ fn cast_toml_needs_all_roles() {
     );
     assert!(matches!(err, Err(Fail::Usage(_))), "{err:?}");
 }
+
+/// Every first word the parser accepts is registered in `COMMANDS` —
+/// a missing one falls through `maybe_run` into the TUI's own
+/// parser, where it dies as an unexpected argument. `maybe_run` on
+/// the bare word is a usage refusal, never a `None`.
+#[test]
+fn every_command_word_is_registered() {
+    for word in [
+        "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "priority",
+        "reopen", "close", "approve", "deliver", "block", "review", "finding", "correct", "status",
+        "records", "stage",
+    ] {
+        assert!(
+            crate::cli::maybe_run(&[word.to_string()]).is_some(),
+            "{word} is missing from COMMANDS"
+        );
+    }
+}

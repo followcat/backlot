@@ -71,11 +71,13 @@ fn open_episode_is_open_and_reasoned() {
     assert!(open_episode(&state, "writer").is_none());
 }
 
-/// The latest recorded decision is the one the stage acts on.
+/// The latest recorded decision at or after the open attention is
+/// the one the stage acts on; an approval from an earlier episode
+/// is spent and never answers a new prompt.
 #[test]
-fn pending_approval_is_latest() {
+fn pending_approval_is_latest_and_current() {
     let mut state = StudioState::default();
-    assert!(pending_approval(&state, "actor-t1-c1").is_none());
+    assert!(pending_approval(&state, "actor-t1-c1", 0).is_none());
     state.approvals.push(ApprovalRecord {
         seq: 3,
         role: "actor-t1-c1".into(),
@@ -89,10 +91,13 @@ fn pending_approval_is_latest() {
         ts_ms: 2,
     });
     assert_eq!(
-        pending_approval(&state, "actor-t1-c1").unwrap().decision,
+        pending_approval(&state, "actor-t1-c1", 1).unwrap().decision,
         ApprovalDecision::Deny
     );
-    assert!(pending_approval(&state, "writer").is_none());
+    // A prompt raised at t=10 has no answer yet: both approvals are
+    // from the earlier episode.
+    assert!(pending_approval(&state, "actor-t1-c1", 10).is_none());
+    assert!(pending_approval(&state, "writer", 0).is_none());
 }
 
 /// An episode is raised once: an attention at or after the episode
