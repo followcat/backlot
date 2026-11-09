@@ -17,6 +17,7 @@ pub mod link;
 mod notices;
 mod permit;
 mod prompts;
+mod reasons;
 pub mod reconcile;
 pub mod render;
 mod runners;
@@ -41,6 +42,8 @@ mod daemon_tests;
 mod deliver_tests;
 #[cfg(test)]
 mod discover_tests;
+#[cfg(test)]
+mod docs_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
 #[cfg(test)]

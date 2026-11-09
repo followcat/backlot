@@ -18,6 +18,7 @@ use crate::config;
 use crate::daemon::Stage;
 use crate::discover;
 use crate::prompts;
+use crate::reasons;
 use crate::reconcile::{Action, Start};
 use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
@@ -223,12 +224,12 @@ impl Stage {
             Ok(r) => r.terminal.address,
             Err(CallError::Rpc(e)) => {
                 eprintln!("stage: terminal.run {} refused: {e}", start.terminal);
-                if !attention_open(state, &start.role, "launch refused") {
+                if !attention_open(state, &start.role, reasons::LAUNCH_REFUSED) {
                     record(
                         dir,
                         EventKind::AttentionRaised {
                             role: start.role.clone(),
-                            reason: "launch refused".into(),
+                            reason: reasons::LAUNCH_REFUSED.into(),
                             detail: format!("terminal.run: {e}"),
                         },
                     )?;
@@ -394,10 +395,10 @@ impl Stage {
                     Err(fail) => {
                         let (reason, detail) = match fail {
                             AreaFail::NotGit => (
-                                "not a git repository",
+                                reasons::NOT_A_GIT_REPO,
                                 format!("{} is not a git work tree", start.repo),
                             ),
-                            AreaFail::Git(detail) => ("work area failed", detail),
+                            AreaFail::Git(detail) => (reasons::WORK_AREA_FAILED, detail),
                         };
                         if !attention_open(state, &start.role, reason) {
                             record(
