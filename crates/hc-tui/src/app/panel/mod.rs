@@ -65,7 +65,15 @@ impl App {
         rows: u16,
     ) -> crate::chrome::snapshot::ClientShellLayout {
         let reserve = u16::from(self.panel_beside(cols)) * self.panel_width();
-        self.shell.layout_config().layout(
+        let mut config = self.shell.layout_config();
+        if reserve > 0 {
+            // The mobile/desktop decision belongs to the whole window.
+            // Beside already means `cols > mobile_width_threshold`, so
+            // the leftover columns must never flip the chrome to the
+            // mobile layout just because they dip under it.
+            config.mobile_width_threshold = 0;
+        }
+        config.layout(
             cols.saturating_sub(reserve),
             rows,
             self.shell_state.sidebar_collapsed,
