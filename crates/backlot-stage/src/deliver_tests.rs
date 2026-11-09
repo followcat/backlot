@@ -12,7 +12,9 @@ use backlot_model::state::{
 };
 use backlot_model::summary::Work;
 
-use crate::deliver::{Gate, MIN_UP_MS, SCREEN_STABLE_MS, SEND_GAP_MS, Screen, gate_open, outbox};
+use crate::deliver::{
+    Gate, MIN_UP_MS, SCREEN_STABLE_MS, SEND_GAP_MS, Screen, gate_open, outbox, send_outcome,
+};
 use crate::notices;
 
 const DIR: &str = "/state/studios/acme-shop";
@@ -177,6 +179,20 @@ fn every_gate_on_its_own() {
     assert!(!gate_open(&g, now), "the send gap holds");
     g.sent_ms = Some(now - SEND_GAP_MS);
     assert!(gate_open(&g, now));
+}
+
+/// Only `sent: true` records the delivery: `sent: false` and an
+/// answer with no `sent` field stay queued, the reason (when the
+/// core gave one) surfacing for the stage's log.
+#[test]
+fn only_sent_true_delivers() {
+    assert!(send_outcome(&serde_json::json!({"sent": true})).is_ok());
+    assert_eq!(
+        send_outcome(&serde_json::json!({"sent": false, "reason": "no person"})).unwrap_err(),
+        Some("no person".to_string())
+    );
+    assert_eq!(send_outcome(&serde_json::json!({})).unwrap_err(), None);
+    assert_eq!(send_outcome(&serde_json::json!(null)).unwrap_err(), None);
 }
 
 fn task(id: &str) -> Task {

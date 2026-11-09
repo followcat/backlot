@@ -155,6 +155,20 @@ pub fn gate_open(g: &Gate, now_ms: u64) -> bool {
             .is_none_or(|t| now_ms.saturating_sub(t) >= SEND_GAP_MS)
 }
 
+/// What a finished `terminal.send` answer means: `sent: true`
+/// records the delivery. Anything else — `sent: false` or no
+/// `sent` field at all — is a refusal that leaves the message
+/// queued, the answer's `reason` (when given) for the stage's log.
+pub fn send_outcome(answer: &serde_json::Value) -> Result<(), Option<String>> {
+    match answer.get("sent").and_then(|s| s.as_bool()) {
+        Some(true) => Ok(()),
+        _ => Err(answer
+            .get("reason")
+            .and_then(|r| r.as_str())
+            .map(String::from)),
+    }
+}
+
 /// An in-flight `terminal.send`: the seq it carries and the handle
 /// the tick collects on a later pass.
 pub struct InFlight {
@@ -214,12 +228,23 @@ impl Stage {
             let f = self.sending.borrow_mut().remove(&pair).unwrap();
             self.sent_ms.borrow_mut().insert(pair.clone(), now_ms);
             match f.handle.await {
-                Ok(Ok(_)) => {
-                    // Already-recorded duplicates are tolerated —
-                    // a crash after the send can send twice.
-                    let _ = record(dir, EventKind::MessageDelivered { target: f.seq });
-                    eprintln!("stage: delivered message {} to {}", f.seq, pair.1);
-                }
+                Ok(Ok(v)) => match send_outcome(&v) {
+                    Ok(()) => {
+                        // Already-recorded duplicates are tolerated —
+                        // a crash after the send can send twice.
+                        let _ = record(dir, EventKind::MessageDelivered { target: f.seq });
+                        eprintln!("stage: delivered message {} to {}", f.seq, pair.1);
+                    }
+                    // `sent: false` (or no `sent`) is a refusal —
+                    // queued for a later tick, send gap applies.
+                    Err(reason) => {
+                        eprintln!(
+                            "stage: send to {} not sent{}, still queued",
+                            pair.1,
+                            reason.map(|r| format!(" ({r})")).unwrap_or_default()
+                        );
+                    }
+                },
                 // A refusal leaves it queued for a later tick — the
                 // send gap still applies. A timeout is ambiguous:
                 // the text may have gone in, so it stays queued and
