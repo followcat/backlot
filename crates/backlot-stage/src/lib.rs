@@ -2,12 +2,14 @@
 //! directory, the append-only ledger store, the `backlot` studio
 //! commands and the stage process that schedules role terminals.
 
+mod act;
 pub mod args;
 mod args_studio;
 mod args_task;
 pub mod cli;
 pub mod commands;
 mod daemon;
+mod doc;
 pub mod link;
 pub mod reconcile;
 pub mod render;

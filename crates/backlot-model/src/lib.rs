@@ -14,6 +14,7 @@ pub mod records;
 pub mod reduce;
 pub mod refusal;
 pub mod state;
+pub mod summary;
 pub mod task_reduce;
 pub mod validate;
 
@@ -35,6 +36,8 @@ mod records_extra_tests;
 mod records_tests;
 #[cfg(test)]
 mod state_tests;
+#[cfg(test)]
+mod summary_tests;
 #[cfg(test)]
 mod validate_extra_tests;
 #[cfg(test)]
