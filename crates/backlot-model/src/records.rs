@@ -65,8 +65,12 @@ pub struct ActorRecord {
     /// Findings on this actor's reviews whose defect id was already
     /// seen earlier in the same task — repeated rework.
     pub defect_repeats: usize,
-    /// Findings whose defect id first surfaced on a delivery after
-    /// the task's first — e.g. regressions introduced by fixes.
+    /// Review findings whose defect id first surfaced on a delivery
+    /// after the task's first — e.g. regressions introduced by fixes.
+    pub new_in_rework: usize,
+    /// Findings recorded by `task.finding` events on this actor's
+    /// deliveries — defects found after the review loop, e.g. during
+    /// integration or real use.
     pub later_defects: usize,
     /// Fixes the director made itself on this actor's deliveries.
     pub upstream_changes: usize,
@@ -90,6 +94,7 @@ struct Acc {
     defects_closed: usize,
     defects_open: usize,
     defect_repeats: usize,
+    new_in_rework: usize,
     later_defects: usize,
     upstream_changes: usize,
     takeovers: usize,
@@ -111,6 +116,7 @@ impl Acc {
             defects_closed: self.defects_closed,
             defects_open: self.defects_open,
             defect_repeats: self.defect_repeats,
+            new_in_rework: self.new_in_rework,
             later_defects: self.later_defects,
             upstream_changes: self.upstream_changes,
             takeovers: self.takeovers,
@@ -216,7 +222,7 @@ fn fold_task(accs: &mut BTreeMap<(ActorIdentity, String), Acc>, task: &Task, stu
                     acc.defect_repeats += 1;
                 }
                 if r.delivery > 1 && first_seen.get(f.id.as_str()) == Some(&r.delivery) {
-                    acc.later_defects += 1;
+                    acc.new_in_rework += 1;
                 }
                 if counted.insert(f.id.as_str()) {
                     if open_defects.contains(f.id.as_str()) {
@@ -225,6 +231,13 @@ fn fold_task(accs: &mut BTreeMap<(ActorIdentity, String), Acc>, task: &Task, stu
                         acc.defects_closed += 1;
                     }
                 }
+            }
+        }
+        // `task.finding` findings land on the delivery they name:
+        // the actor who made it carries them as later defects.
+        for fr in &task.finding_reports {
+            if mine.contains(&fr.delivery) {
+                acc.later_defects += fr.findings.len();
             }
         }
     }

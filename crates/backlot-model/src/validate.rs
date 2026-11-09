@@ -36,6 +36,10 @@ pub enum Refusal {
         latest: u32,
         got: u32,
     },
+    NoDelivery {
+        task: String,
+        delivery: u32,
+    },
     UnknownCandidate(String),
     CandidateMismatch {
         candidate: String,
@@ -112,6 +116,9 @@ impl fmt::Display for Refusal {
             }
             Refusal::NotLatestDelivery { task, latest, got } => {
                 write!(f, "task '{task}' latest delivery is {latest}, got {got}")
+            }
+            Refusal::NoDelivery { task, delivery } => {
+                write!(f, "task '{task}' has no delivery {delivery}")
             }
             Refusal::UnknownCandidate(c) => write!(f, "'{c}' is not a studio candidate"),
             Refusal::CandidateMismatch { candidate } => {
@@ -335,6 +342,19 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     task: task.clone(),
                     latest,
                     got: *delivery,
+                });
+            }
+            Ok(())
+        }
+        // A finding may be recorded on any task that has that
+        // delivery, including closed tasks; it never changes status.
+        EventKind::TaskFinding { task, delivery, .. } => {
+            require_studio(state)?;
+            let t = require_task(state, task)?;
+            if !t.deliveries.iter().any(|d| d.n == *delivery) {
+                return Err(Refusal::NoDelivery {
+                    task: task.clone(),
+                    delivery: *delivery,
                 });
             }
             Ok(())

@@ -267,6 +267,15 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         upstream_changes: Vec<UpstreamChange>,
     },
+    /// A defect found outside the review loop — integration, real
+    /// use — attributed to whoever made `delivery`. Never changes the
+    /// task's status. `by` on the envelope is who recorded it.
+    #[serde(rename = "task.finding")]
+    TaskFinding {
+        task: String,
+        delivery: u32,
+        findings: Vec<Finding>,
+    },
     #[serde(rename = "task.state")]
     TaskState {
         task: String,
@@ -332,6 +341,7 @@ impl EventKind {
             EventKind::TaskCast { .. } => "task.cast",
             EventKind::TaskDelivered { .. } => "task.delivered",
             EventKind::TaskReviewed { .. } => "task.reviewed",
+            EventKind::TaskFinding { .. } => "task.finding",
             EventKind::TaskState { .. } => "task.state",
             EventKind::MessageQueued { .. } => "message.queued",
             EventKind::MessageDelivered { .. } => "message.delivered",

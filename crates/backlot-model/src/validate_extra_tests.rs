@@ -163,6 +163,53 @@ fn delivered_and_cleared_links_validate() {
     );
 }
 
+/// `task.finding` records on any task that has the delivery —
+/// delivered, running or already closed — and never touches status.
+#[test]
+fn task_finding_rules() {
+    // Delivered task takes the finding.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor", delivered("t1", 1, "a", 1)),
+        ],
+    );
+    let f = task_finding("t1", 1, vec![finding("D1", Cause::DeliveryDefect)]);
+    assert_eq!(validate(&state, &new_ev("producer", f.clone())), Ok(()));
+    // A delivery the task does not have is refused.
+    let bad = task_finding("t1", 9, vec![finding("D2", Cause::DeliveryDefect)]);
+    assert_eq!(
+        validate(&state, &new_ev("producer", bad)),
+        Err(Refusal::NoDelivery {
+            task: "t1".into(),
+            delivery: 9
+        })
+    );
+    // An unknown task is refused.
+    let gone = task_finding("t9", 1, vec![finding("D3", Cause::DeliveryDefect)]);
+    assert_eq!(
+        validate(&state, &new_ev("producer", gone)),
+        Err(Refusal::NoTask("t9".into()))
+    );
+    // After acceptance the finding still records — and the status
+    // does not move.
+    let mut closed = state;
+    apply(
+        &mut closed,
+        &ev(9, "director", reviewed("t1", 1, Verdict::Accepted, vec![])),
+    );
+    assert_eq!(closed.tasks["t1"].status, TaskStatus::Accepted);
+    assert_eq!(validate(&closed, &new_ev("producer", f.clone())), Ok(()));
+    apply(&mut closed, &ev(10, "producer", f));
+    let t = &closed.tasks["t1"];
+    assert_eq!(t.status, TaskStatus::Accepted);
+    assert_eq!(t.finding_reports.len(), 1);
+    assert_eq!(t.finding_reports[0].delivery, 1);
+    assert_eq!(t.finding_reports[0].by, "producer");
+    assert_eq!(t.finding_reports[0].findings[0].id, "D1");
+}
+
 #[test]
 fn correction_needs_a_known_target_and_field() {
     let state = running_state();

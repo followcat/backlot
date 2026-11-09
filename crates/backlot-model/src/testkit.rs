@@ -102,6 +102,15 @@ pub fn reviewed(task: &str, n: u32, verdict: Verdict, findings: Vec<Finding>) ->
     }
 }
 
+/// A `task.finding` event reporting `findings` on delivery `n`.
+pub fn task_finding(task: &str, n: u32, findings: Vec<Finding>) -> EventKind {
+    EventKind::TaskFinding {
+        task: task.into(),
+        delivery: n,
+        findings,
+    }
+}
+
 pub fn finding(id: &str, cause: Cause) -> Finding {
     Finding {
         id: id.into(),

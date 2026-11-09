@@ -40,6 +40,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `task.cast` | task, actor identity, reason |
 | `task.delivered` | task, delivery number, actor identity, commit range, report file, requirement version, checks run |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
+| `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
 | `message.queued` / `message.delivered` | from, to, file |
 | `report.sent` | from, to, node, file |
@@ -86,6 +87,8 @@ numeric score or grade.
 
 **Review findings.** Each finding has a stable defect ID, a summary, a severity and a cause. A defect that survives a
 rework keeps its ID, which is what shows repeated rework. One defect is one record, even when several roles comment on it.
+A defect found outside the review loop — during integration or real use, even after the task closed — is recorded as
+`task.finding` on the delivery it belongs to; it changes no task state.
 
 | Cause | Meaning |
 |---|---|

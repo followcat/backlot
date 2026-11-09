@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::event::*;
 use crate::records::{StudioLog, records};
-use crate::state::replay;
+use crate::state::{TaskStatus, replay};
 use crate::testkit::*;
 
 /// Studio "s1": t1 reworked twice then accepted; t2 recast mid-task;
@@ -186,7 +186,7 @@ fn surviving_defect_keeps_its_id_as_repeat() {
     let recs = s1_records();
     let a = rec(&recs, "a", "feature");
     assert_eq!(a.defect_repeats, 1); // D1 listed again on delivery 2
-    assert_eq!(a.later_defects, 1); // D2 first seen on delivery 2
+    assert_eq!(a.new_in_rework, 1); // D2 first seen on delivery 2
     // Latest review of t1 lists nothing: D1 and D2 closed by rework.
     assert_eq!(a.defects_closed, 3);
     // t4's D5 sits in the latest review of that task — still open.
@@ -288,6 +288,61 @@ fn fewer_than_five_tasks_is_not_enough_data() {
     let a = rec(&all, "a", "feature");
     assert_eq!(a.tasks, 2);
     assert_eq!(a.studios, vec!["s1".to_string()]);
+}
+
+/// `task.finding` findings become `later_defects` on the actor who
+/// made the named delivery — each side of a recast gets its own.
+#[test]
+fn later_defects_come_from_task_finding_on_the_delivery() {
+    let mut log = base_events();
+    let mut seq = log.len() as u64;
+    let mut push = |role: &str, kind: EventKind| {
+        seq += 1;
+        log.push(ev(seq, role, kind));
+    };
+    // t1: actor-a delivers 1 (changes), recast to actor-b who delivers
+    // 2 and is accepted.
+    push("director", cast("t1", "actor-a", "a"));
+    push("actor", delivered("t1", 1, "a", 1));
+    push(
+        "director",
+        reviewed("t1", 1, Verdict::ChangesRequested, vec![]),
+    );
+    push("director", cast("t1", "actor-b", "b"));
+    push("actor", delivered("t1", 2, "b", 1));
+    push("director", reviewed("t1", 2, Verdict::Accepted, vec![]));
+    // Integration finds one defect on each delivery, after closure;
+    // a re-found defect keeps its id.
+    push(
+        "producer",
+        task_finding("t1", 1, vec![finding("D8", Cause::DeliveryDefect)]),
+    );
+    push(
+        "producer",
+        task_finding(
+            "t1",
+            2,
+            vec![
+                finding("D9", Cause::RegressionFromFix),
+                finding("D8", Cause::DeliveryDefect),
+            ],
+        ),
+    );
+    let state = replay(&log);
+    assert_eq!(state.tasks["t1"].status, TaskStatus::Accepted);
+    assert_eq!(state.tasks["t1"].finding_reports.len(), 2);
+    let recs = records(&[StudioLog {
+        studio: "s1".into(),
+        events: log,
+    }]);
+    let a = rec(&recs, "a", "feature");
+    let b = rec(&recs, "b", "feature");
+    // D8 on delivery 1 is a's; D9 + the repeated D8 on delivery 2 are b's.
+    assert_eq!(a.later_defects, 1);
+    assert_eq!(b.later_defects, 2);
+    // And they are not review findings: the defect counts stay put.
+    assert_eq!(a.defects, 0);
+    assert_eq!(b.defects, 0);
 }
 
 /// Upstream changes and takeovers land on the actor's record.

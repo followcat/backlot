@@ -109,6 +109,19 @@ pub struct StateChangeRecord {
     pub ts_ms: u64,
 }
 
+/// A `task.finding` record: defects reported outside the review loop,
+/// attributed to whoever made `delivery`. A defect id already seen on
+/// the task keeps its id.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FindingRecord {
+    pub delivery: u32,
+    /// Role that recorded it (the event's `by`).
+    pub by: String,
+    pub findings: Vec<Finding>,
+    pub seq: u64,
+    pub ts_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
@@ -132,6 +145,9 @@ pub struct Task {
     pub deliveries: Vec<DeliveryRecord>,
     #[serde(default)]
     pub reviews: Vec<ReviewRecord>,
+    /// Defects reported by `task.finding` events, in log order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub finding_reports: Vec<FindingRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub state_changes: Vec<StateChangeRecord>,
     pub created_seq: u64,

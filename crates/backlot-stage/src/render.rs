@@ -194,12 +194,13 @@ pub fn records(recs: &[ActorRecord]) -> String {
         );
         let _ = writeln!(
             out,
-            "    defects: {} ({} actor-fault), {} closed, {} open, {} repeats, {} later",
+            "    defects: {} ({} actor-fault), {} closed, {} open, {} repeats, {} new-in-rework, {} later",
             r.defects,
             r.actor_fault_defects,
             r.defects_closed,
             r.defects_open,
             r.defect_repeats,
+            r.new_in_rework,
             r.later_defects
         );
         let _ = writeln!(

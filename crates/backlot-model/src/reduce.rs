@@ -201,6 +201,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     casts: Vec::new(),
                     deliveries: Vec::new(),
                     reviews: Vec::new(),
+                    finding_reports: Vec::new(),
                     state_changes: Vec::new(),
                     created_seq: seq,
                     created_ts_ms: ts,
@@ -298,6 +299,22 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     },
                 );
                 reduce_task(t, cap);
+            }
+        }
+        EventKind::TaskFinding {
+            task,
+            delivery,
+            findings,
+        } => {
+            if let Some(t) = state.tasks.get_mut(task) {
+                t.finding_reports.push(FindingRecord {
+                    delivery: *delivery,
+                    by: event.by.role.clone(),
+                    findings: findings.clone(),
+                    seq,
+                    ts_ms: ts,
+                });
+                t.last_ts_ms = ts;
             }
         }
         EventKind::TaskState {
