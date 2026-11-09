@@ -23,3 +23,8 @@ Read `docs/requirements.md` and `docs/plan.md` first. Work on one milestone task
   Add the project to NOTICE if it is not there yet.
 - **File size:** keep source files under about 400 lines. Split by responsibility.
 - **No network access at run time** except the hc connection and the user's own SSH.
+
+## Studio work
+
+For `docs/studio/` milestones, read `docs/studio/requirements.md`, `docs/studio/design.md` and
+`docs/studio/plan.md` first. The hc core is off limits: its public API only.
