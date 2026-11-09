@@ -8,6 +8,7 @@ mod args_studio;
 mod args_task;
 pub mod cli;
 pub mod commands;
+mod config;
 mod daemon;
 mod discover;
 mod doc;

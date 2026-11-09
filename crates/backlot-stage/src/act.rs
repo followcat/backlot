@@ -14,6 +14,7 @@ use hc_proto::client::CallError;
 use hc_proto::terminal::{RunParams, TerminalParams};
 
 use crate::cli::Fail;
+use crate::config;
 use crate::daemon::Stage;
 use crate::discover;
 use crate::reconcile::{Action, Start};
@@ -185,10 +186,18 @@ impl Stage {
         Ok(())
     }
 
-    /// The `[runner_env.<runner>]` map — empty until config.toml
-    /// parsing lands with the watch pass.
-    fn runner_env(&self, _runner: &str) -> Result<BTreeMap<String, String>, String> {
-        Ok(BTreeMap::new())
+    /// The `[runner_env.<runner>]` map from `<base>/config.toml` —
+    /// secrets the terminal gets through `terminal.run` env only. A
+    /// missing file is no extra env; a malformed one is the caller's
+    /// `attention.raised` detail, so the role starts nothing.
+    fn runner_env(&self, runner: &str) -> Result<BTreeMap<String, String>, String> {
+        let path = Path::new(&self.state_dir).join("config.toml");
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        };
+        config::runner_env_in(&text, runner)
     }
 
     /// `<runner> --version`'s first line, asked once per runner per
@@ -313,5 +322,60 @@ impl Stage {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reconcile::RoleKind;
+
+    fn start() -> Start {
+        Start {
+            role: "producer".into(),
+            kind: RoleKind::Producer,
+            task: None,
+            terminal: "bl-acme-producer".into(),
+            actor: ActorIdentity {
+                runner: "devin".into(),
+                runner_version: None,
+                model: "m".into(),
+                effort: "high".into(),
+                permission_profile: "standard".into(),
+            },
+            repo: "/home/user/acme-shop".into(),
+        }
+    }
+
+    /// `runner_env` values reach the terminal env — and nothing
+    /// else: not the labels, which are all the ledger and summary
+    /// could ever see.
+    #[test]
+    fn runner_env_reaches_env_and_nothing_else() {
+        let start = start();
+        let runner_env = BTreeMap::from([("HTTPS_PROXY".into(), "http://proxy:8080".into())]);
+        let env = role_env(
+            "acme",
+            &start,
+            "/state",
+            "/bin",
+            BTreeMap::from([("ADAPTER".into(), "1".into())]),
+            runner_env,
+        );
+        assert_eq!(env["HTTPS_PROXY"], "http://proxy:8080");
+        assert_eq!(env["BACKLOT_ROLE"], "producer");
+        // Structural variables still win over the runner's map.
+        let runner_env = BTreeMap::from([("BACKLOT_ROLE".into(), "evil".into())]);
+        let env = role_env(
+            "acme",
+            &start,
+            "/state",
+            "/bin",
+            BTreeMap::new(),
+            runner_env,
+        );
+        assert_eq!(env["BACKLOT_ROLE"], "producer");
+        let labels = serde_json::to_string(&labels("acme", &start)).unwrap();
+        assert!(!labels.contains("proxy"), "{labels}");
     }
 }
