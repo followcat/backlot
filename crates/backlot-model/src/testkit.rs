@@ -17,7 +17,6 @@ pub fn ev(seq: u64, role: &str, kind: EventKind) -> Event {
     }
 }
 
-#[allow(dead_code)] // used by the validation tests added with `validate`
 pub fn new_ev(role: &str, kind: EventKind) -> NewEvent {
     NewEvent::new(by(role), kind)
 }
@@ -129,13 +128,11 @@ pub fn base_events() -> Vec<Event> {
     ]
 }
 
-#[allow(dead_code)] // used by the validation/record tests added later
 pub fn base_state() -> StudioState {
     replay(&base_events())
 }
 
 /// Extend `base` with `kinds`, applied in order with rising seqs.
-#[allow(dead_code)]
 pub fn state_with(base: &[Event], kinds: Vec<(&str, EventKind)>) -> StudioState {
     let mut state = replay(base);
     let mut seq = base.len() as u64;
@@ -147,7 +144,6 @@ pub fn state_with(base: &[Event], kinds: Vec<(&str, EventKind)>) -> StudioState 
 }
 
 /// A state where t1 is running under actor-a and t2 is created.
-#[allow(dead_code)]
 pub fn running_state() -> StudioState {
     let mut base = base_events();
     base.push(ev(4, "director", task_created("t2", "fix", 1)));
