@@ -4,8 +4,9 @@
 use std::collections::BTreeMap;
 
 use backlot_model::event::ActorIdentity;
+use backlot_model::state::{Attention, StudioState};
 
-use crate::act::{labels, role_env};
+use crate::act::{attention_open, labels, role_env};
 use crate::reconcile::{RoleKind, Start};
 
 fn start() -> Start {
@@ -86,4 +87,25 @@ fn runner_env_path_leads_but_keeps_the_exe_dir() {
         BTreeMap::new(),
     );
     assert_eq!(env["PATH"], "/exe:/usr/bin");
+}
+
+/// `launch refused` and every other raiser share the one open
+/// attention per role and reason: a second identical raise is
+/// suppressed, a different role or reason is not, and a cleared
+/// attention never blocks the next raise.
+#[test]
+fn attention_is_deduped_per_role_and_reason() {
+    let mut state = StudioState::default();
+    state.attention.push(Attention {
+        seq: 1,
+        role: "producer".into(),
+        reason: "launch refused".into(),
+        detail: "terminal.run: taken: bl-acme-producer".into(),
+        open: true,
+    });
+    assert!(attention_open(&state, "producer", "launch refused"));
+    assert!(!attention_open(&state, "director", "launch refused"));
+    assert!(!attention_open(&state, "producer", "unknown runner"));
+    state.attention[0].open = false;
+    assert!(!attention_open(&state, "producer", "launch refused"));
 }

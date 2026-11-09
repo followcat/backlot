@@ -108,6 +108,15 @@ pub(crate) fn role_env(
     env
 }
 
+/// `true` when `reason` attention is already open for `role` — the
+/// one-open-per-role-and-reason rule every raiser shares. Only an
+/// explicit resolve closes attention; nothing here clears it.
+pub(crate) fn attention_open(state: &StudioState, role: &str, reason: &str) -> bool {
+    state
+        .open_attention()
+        .any(|a| a.role == role && a.reason == reason)
+}
+
 /// The labels a role terminal carries (design.md "Role terminals").
 pub(crate) fn labels(studio: &str, start: &Start) -> BTreeMap<String, String> {
     let mut labels = BTreeMap::from([
@@ -146,12 +155,15 @@ impl Stage {
     }
 
     /// `terminal.run` a role, then record `role.started` with its
-    /// address. A method-level failure (a name taken in a race) is
-    /// logged and retried next tick; a dead wire is fatal.
+    /// address. A method-level refusal (a name taken in a race, a
+    /// argv the core rejects) raises `launch refused` attention —
+    /// once per role and reason — and the start is retried next
+    /// tick. A dead wire is fatal.
     async fn launch(
         &self,
         studio: &str,
         dir: &Path,
+        state: &StudioState,
         start: &Start,
         launch: &runners::Launch,
         runner_env: BTreeMap<String, String>,
@@ -179,8 +191,18 @@ impl Stage {
             .await;
         let address = match run {
             Ok(r) => r.terminal.address,
-            Err(e @ CallError::Rpc(_)) => {
+            Err(CallError::Rpc(e)) => {
                 eprintln!("stage: terminal.run {} refused: {e}", start.terminal);
+                if !attention_open(state, &start.role, "launch refused") {
+                    record(
+                        dir,
+                        EventKind::AttentionRaised {
+                            role: start.role.clone(),
+                            reason: "launch refused".into(),
+                            detail: format!("terminal.run: {e}"),
+                        },
+                    )?;
+                }
                 return Ok(());
             }
             Err(e) => return Err(fatal(e)),
@@ -312,10 +334,7 @@ impl Stage {
                     // launch — one open attention per role and
                     // reason, re-checked each tick.
                     StartDecision::Attention(e) => {
-                        let open = state
-                            .open_attention()
-                            .any(|a| a.role == start.role && a.reason == e.reason);
-                        if !open {
+                        if !attention_open(state, &start.role, &e.reason) {
                             record(
                                 dir,
                                 EventKind::AttentionRaised {
@@ -332,7 +351,7 @@ impl Stage {
                         // when `--version` answered.
                         let mut start = start.clone();
                         start.actor.runner_version = self.runner_version(&start.actor.runner);
-                        self.launch(studio, dir, &start, &launch, runner_env)
+                        self.launch(studio, dir, state, &start, &launch, runner_env)
                             .await?
                     }
                 }
