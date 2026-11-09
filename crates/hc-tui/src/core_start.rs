@@ -282,14 +282,14 @@ mod tests {
     }
 
     /// Missing and refused sockets are both dead ends a fresh core
-    /// fixes; an existing non-socket file refuses connects the same
-    /// way a stale socket does.
+    /// fixes: a socket left behind with nothing listening refuses
+    /// connects.
     #[tokio::test]
     async fn missing_or_refused_sockets_are_dead() {
         let scratch = Scratch::new();
         let missing = scratch.0.join("missing.sock");
         assert!(dead(&missing).await);
-        std::fs::write(&missing, "stale").unwrap();
+        drop(std::os::unix::net::UnixListener::bind(&missing).unwrap());
         assert!(dead(&missing).await);
     }
 

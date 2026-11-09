@@ -191,11 +191,14 @@ fn until_screen(pty: &Pty, vt: &mut Vt, pred: impl Fn(&str) -> bool, what: &str)
     }
 }
 
-/// `Ctrl+B q` detach, then a bounded wait for the child's exit.
-fn detach_and_wait(pty: &mut Pty) -> std::process::ExitStatus {
+/// `Ctrl+B q` detach, then a bounded wait for the child's exit. Keeps
+/// draining the master: a child blocked writing to a full PTY never
+/// reaches its exit, and macOS PTY buffers are small.
+fn detach_and_wait(pty: &mut Pty, vt: &mut Vt) -> std::process::ExitStatus {
     pty.type_keys(b"\x02q");
     let deadline = Instant::now() + DEADLINE;
     loop {
+        pty.pump(vt);
         match pty.child.try_wait().expect("try_wait") {
             Some(status) => return status,
             None => {
@@ -246,7 +249,7 @@ fn a_dead_local_socket_starts_the_core_once() {
         "hc server start session=arg-session",
         "the fake ran more than once"
     );
-    assert!(detach_and_wait(&mut pty).success());
+    assert!(detach_and_wait(&mut pty, &mut vt).success());
 }
 
 /// `--remote` resolves a remote endpoint: the local core start never
@@ -259,7 +262,7 @@ fn a_remote_run_never_starts_a_local_core() {
     let mut pty = spawn_tui(&scratch, &["--remote", "host-a"], "hctui-test-scratch", &[]);
     let mut vt = Vt::new(COLS, ROWS, 4096);
     settle(&pty, &mut vt, SETTLE);
-    assert!(detach_and_wait(&mut pty).success());
+    assert!(detach_and_wait(&mut pty, &mut vt).success());
     assert!(!record.exists(), "remote ran the local fake: {record:?}");
 }
 
@@ -278,7 +281,7 @@ fn a_set_hc_socket_never_starts_a_core() {
     );
     let mut vt = Vt::new(COLS, ROWS, 4096);
     settle(&pty, &mut vt, SETTLE);
-    assert!(detach_and_wait(&mut pty).success());
+    assert!(detach_and_wait(&mut pty, &mut vt).success());
     assert!(!record.exists(), "HC_SOCKET set yet the fake ran");
 }
 
@@ -295,7 +298,7 @@ fn an_answering_socket_never_starts_a_core() {
     let mut pty = spawn_tui(&scratch, &[], session, &[]);
     let mut vt = Vt::new(COLS, ROWS, 4096);
     settle(&pty, &mut vt, SETTLE);
-    assert!(detach_and_wait(&mut pty).success());
+    assert!(detach_and_wait(&mut pty, &mut vt).success());
     assert!(!record.exists(), "a live socket still started the fake");
 }
 
@@ -312,7 +315,7 @@ fn a_missing_hc_shows_the_install_notice() {
         |text| text.contains("releases.herdr.dev"),
         "the missing-hc notice",
     );
-    assert!(detach_and_wait(&mut pty).success());
+    assert!(detach_and_wait(&mut pty, &mut vt).success());
 }
 
 /// `hc server start` failing shows its first error line.
@@ -333,5 +336,5 @@ fn a_failed_start_shows_its_first_error_line() {
         |text| text.contains("fake: first failure line"),
         "the failed-start notice",
     );
-    assert!(detach_and_wait(&mut pty).success());
+    assert!(detach_and_wait(&mut pty, &mut vt).success());
 }
