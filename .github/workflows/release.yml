@@ -11,6 +11,7 @@ on:
       - tools/**
       - scripts/install.sh
       - dist/**
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -96,6 +97,181 @@ jobs:
           name: dist-${{ matrix.target }}
           path: backlot-*.tar.gz
           if-no-files-found: error
+
+  # A clean-machine install of what `build` packaged: a local mirror in
+  # the layout scripts/install.sh fetches, the official-core step left
+  # on, and a stub `claude` standing in for the agent so no real one
+  # ever launches. Runs on every trigger this workflow has.
+  install-check:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-musl }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      HC_SESSION: backlot-install-check
+      XDG_STATE_HOME: ${{ runner.temp }}/install-home/.local/state
+      XDG_CONFIG_HOME: ${{ runner.temp }}/install-home/.config
+      XDG_RUNTIME_DIR: ${{ runner.temp }}/install-home/.run
+      TERM: xterm-256color
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist
+      # install.sh fetches $BASE_URL/download/<tag>/<archive> and the
+      # sibling sha256sums.txt — the mirror serves exactly that.
+      - name: Serve a local release mirror
+        run: |
+          set -eu
+          archive=$(basename dist/backlot-*-${{ matrix.target }}.tar.gz)
+          ver=${archive#backlot-}
+          ver=${ver%-${{ matrix.target }}.tar.gz}
+          tag=v$ver
+          mkdir -p "mirror/download/$tag"
+          cp "dist/$archive" "mirror/download/$tag/"
+          (
+            cd "mirror/download/$tag"
+            for f in backlot-*.tar.gz; do
+              if command -v sha256sum >/dev/null 2>&1; then sha256sum "$f"
+              elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$f"
+              else openssl dgst -sha256 -r "$f"; fi
+            done > sha256sums.txt
+          )
+          python3 -m http.server 8777 --bind 127.0.0.1 --directory mirror \
+            > mirror.log 2>&1 &
+          echo $! > mirror.pid
+          for _ in $(seq 50); do
+            curl -fsS "http://127.0.0.1:8777/download/$tag/sha256sums.txt" \
+              -o /dev/null 2>&1 && break
+            sleep 0.2
+          done
+          curl -fsS "http://127.0.0.1:8777/download/$tag/sha256sums.txt"
+          echo "BACKLOT_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Install with scripts/install.sh
+        env:
+          HOME: ${{ runner.temp }}/install-home
+          BACKLOT_BASE_URL: http://127.0.0.1:8777
+          BACKLOT_VERSION: ${{ env.BACKLOT_TAG }}
+        run: |
+          set -eu
+          mkdir -p "$HOME" "$XDG_STATE_HOME" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          sh scripts/install.sh
+      - name: Check the installed binaries
+        id: check
+        env:
+          HOME: ${{ runner.temp }}/install-home
+        run: |
+          set -eu
+          bin="$HOME/.local/bin"
+          "$bin/backlot" --version
+          # The official installer may have no build for this platform —
+          # report it and skip the studio step rather than pretend.
+          if "$bin/hc" --version 2>/dev/null || hc --version 2>/dev/null; then
+            echo "hc=ok" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::official hc has no usable build for ${{ matrix.os }} — skipping the studio check"
+            echo "hc=missing" >> "$GITHUB_OUTPUT"
+          fi
+      # Follows the guide end to end: a one-commit repo, a claude cast,
+      # `studio new`, `stage start` — with a stub `claude` that answers
+      # --version and otherwise stays alive reading input.
+      - name: Run a studio on a stub claude
+        if: steps.check.outputs.hc == 'ok'
+        env:
+          HOME: ${{ runner.temp }}/install-home
+        run: |
+          set -u
+          bin="$HOME/.local/bin"
+          hc="$bin/hc"; [ -x "$hc" ] || hc=$(command -v hc)
+          stub="$HOME/stub-bin"
+          mkdir -p "$stub"
+          cat > "$stub/claude" <<'STUB'
+          #!/bin/sh
+          if [ "$1" = "--version" ]; then echo "claude-stub 0.0.0"; exit 0; fi
+          while IFS= read -r _line; do :; done
+          STUB
+          chmod +x "$stub/claude"
+          export PATH="$bin:$stub:$PATH"
+
+          repo="$HOME/acme-shop"
+          mkdir -p "$repo"
+          git -C "$repo" init -q
+          GIT_AUTHOR_NAME=ci GIT_AUTHOR_EMAIL=ci@example.invalid \
+          GIT_COMMITTER_NAME=ci GIT_COMMITTER_EMAIL=ci@example.invalid \
+            git -C "$repo" commit -q --allow-empty -m init
+
+          cat > "$HOME/cast.toml" <<'CAST'
+          [producer]
+          runner = "claude"
+          model = "claude-haiku-4-5"
+          effort = "low"
+          permission_profile = "standard"
+
+          [director]
+          runner = "claude"
+          model = "claude-haiku-4-5"
+          effort = "low"
+          permission_profile = "standard"
+
+          [writer]
+          runner = "claude"
+          model = "claude-haiku-4-5"
+          effort = "low"
+          permission_profile = "standard"
+          CAST
+
+          "$hc" server start
+          "$bin/backlot" studio new --studio acme-shop --title "Shop" \
+            --repo "$repo" --cast "$HOME/cast.toml"
+          "$bin/backlot" stage start
+
+          ok=0
+          end=$(( $(date +%s) + 240 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            ls_out=$("$hc" ls 2>/dev/null || true)
+            status_out=$("$bin/backlot" status --studio acme-shop 2>/dev/null || true)
+            if echo "$ls_out" | grep -q bl-acme-shop-producer \
+               && echo "$ls_out" | grep -q bl-acme-shop-director \
+               && echo "$status_out" | grep -q 'producer.*(live)' \
+               && echo "$status_out" | grep -q 'director.*(live)'; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          echo "$ls_out"
+          echo "$status_out"
+          [ "$ok" = 1 ]
+      - name: Print the stage screen and status
+        if: always() && steps.check.outputs.hc == 'ok'
+        env:
+          HOME: ${{ runner.temp }}/install-home
+        run: |
+          set -u
+          bin="$HOME/.local/bin"
+          hc="$bin/hc"; [ -x "$hc" ] || hc=$(command -v hc || true)
+          "$bin/backlot" status --studio acme-shop || true
+          "$hc" ls || true
+          "$hc" read backlot-stage || true
+          "$hc" read bl-acme-shop-producer || true
+          "$hc" read bl-acme-shop-director || true
+      - name: Stop the core
+        if: always() && steps.check.outputs.hc == 'ok'
+        env:
+          HOME: ${{ runner.temp }}/install-home
+        run: |
+          hc="$HOME/.local/bin/hc"; [ -x "$hc" ] || hc=$(command -v hc || true)
+          "$hc" server stop || true
+      - name: Stop the mirror
+        if: always()
+        run: if [ -f mirror.pid ]; then kill "$(cat mirror.pid)" || true; fi
 
   release:
     needs: build
