@@ -964,7 +964,13 @@ async fn real_stage_closed_loop() {
     // A permission prompt: two blocked samples raise the attention
     // with the screen saved under `attention/`; the recorded
     // decision sends the key while the prompt still shows.
-    send_text(&client, &actor.address, "work:blocked").await;
+    // `work:blocked:2` makes the fake answer the first approval
+    // with a new `fake-work: blocked` — a second prompt already up,
+    // no unblocked sample between the two. Its attention needs the
+    // whole window counted from the first key, not the first
+    // episode's start: before the fix the second count never
+    // began.
+    send_text(&client, &actor.address, "work:blocked:2").await;
     let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
     assert_eq!(raised["reason"], "permission prompt", "{raised}");
     let screen_file = studio.join(format!("attention/{}.txt", raised["seq"]));
@@ -977,7 +983,9 @@ async fn real_stage_closed_loop() {
         screen_file.display()
     );
     // No key is sent before a decision is recorded; once it is,
-    // `enter` reaches the prompt and the attention clears.
+    // `enter` reaches the prompt and the attention clears. The
+    // role's work doc never shows `waiting` after the key: the next
+    // prompt's blocked screen is already there.
     bl(
         &scratch,
         &state,
@@ -986,12 +994,8 @@ async fn real_stage_closed_loop() {
     wait_read(&client, &actor.address, "fake-approved: enter").await;
     wait_kind(&state, "attention.cleared", 1);
 
-    // A second blocked episode gets its own attention; `deny` sends
-    // esc. The doc's `work` field is the stage's own sample — it
-    // must see `waiting` between the episodes so the new blocked
-    // stretch counts as a new episode.
-    wait_role(&client, "actor-t1-c1", |r| r["work"] == "waiting").await;
-    send_text(&client, &actor.address, "work:blocked").await;
+    // The second, already-open prompt raises its own attention on
+    // the still-blocked screen; `deny` sends esc.
     wait_events(&state, "attention.raised", "actor-t1-c1", 2);
     bl(
         &scratch,

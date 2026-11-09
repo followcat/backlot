@@ -75,30 +75,42 @@ echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of 
 # the runner reads single bytes like a real permission prompt: CR
 # or LF is the allow key, ESC the deny, and either prints a
 # `fake-approved` marker and returns the runner to `waiting`.
+# `work:blocked:<n>` chains <n> prompts back to back: the first
+# <n>-1 approvals print a new `fake-work: blocked` — the next
+# prompt already up, no unblocked screen in between — and only the
+# last one returns to `waiting`.
 state=waiting
+prompts=0
 saved=$(stty -g 2>/dev/null)
 while :; do
     if [ "$state" = blocked ]; then
         stty -icanon -echo min 1 time 0 2>/dev/null
         b=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \n')
         case "$b" in
-            0d | 0a)
-                [ -n "$saved" ] && stty "$saved" 2>/dev/null
-                printf 'fake-approved: enter\nfake-work: waiting\n'
-                state=waiting
-                ;;
-            1b)
-                [ -n "$saved" ] && stty "$saved" 2>/dev/null
-                printf 'fake-approved: esc\nfake-work: waiting\n'
-                state=waiting
+            0d | 0a | 1b)
+                if [ "$b" = 1b ]; then key=esc; else key=enter; fi
+                prompts=$((prompts - 1))
+                if [ "$prompts" -gt 0 ]; then
+                    printf 'fake-approved: %s\nfake-work: blocked\n' "$key"
+                else
+                    [ -n "$saved" ] && stty "$saved" 2>/dev/null
+                    printf 'fake-approved: %s\nfake-work: waiting\n' "$key"
+                    state=waiting
+                fi
                 ;;
             "") break ;;
         esac
     else
         IFS= read -r line || break
         case "$line" in
+            work:blocked:*)
+                state=blocked
+                prompts="${line##*:}"
+                printf 'fake-work: blocked\n'
+                ;;
             work:*)
                 state="${line#work:}"
+                prompts=1
                 printf 'fake-work: %s\n' "$state"
                 ;;
             "")

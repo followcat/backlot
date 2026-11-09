@@ -204,6 +204,36 @@ impl Stage {
     }
 }
 
+#[cfg(test)]
+impl Stage {
+    /// A stage for unit tests: the given client, every track empty.
+    /// `sample_work`/`deliver` need no base or state dir.
+    pub(crate) fn for_test(client: Client) -> Stage {
+        Stage {
+            client,
+            base: PathBuf::new(),
+            path_env: String::new(),
+            exe_dir: String::new(),
+            state_dir: String::new(),
+            env_vars: BTreeMap::new(),
+            exec: Box::new(discover::real_exec),
+            git: std::cell::RefCell::new(Box::new(workareas::real_git)),
+            versions: std::cell::RefCell::new(BTreeMap::new()),
+            found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
+            discover_looked: std::cell::RefCell::new(BTreeMap::new()),
+            trust_pace: std::cell::RefCell::new(BTreeMap::new()),
+            work: std::cell::RefCell::new(BTreeMap::new()),
+            work_looked: std::cell::RefCell::new(BTreeMap::new()),
+            screens: std::cell::RefCell::new(BTreeMap::new()),
+            sent_ms: std::cell::RefCell::new(BTreeMap::new()),
+            sending: std::cell::RefCell::new(BTreeMap::new()),
+            blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+            cached: BTreeMap::new(),
+            seen: BTreeMap::new(),
+        }
+    }
+}
+
 /// One studio's state read for `tick`, errors saying which studio.
 fn load_studio(dir: &Path, name: &str) -> Result<StudioState, Fail> {
     store::load_state(dir).map_err(|e| match e {

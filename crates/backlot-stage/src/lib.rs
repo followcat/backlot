@@ -51,6 +51,8 @@ mod prompts_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
 #[cfg(test)]
+mod sample_tests;
+#[cfg(test)]
 mod store_tests;
 #[cfg(test)]
 mod watch_tests;

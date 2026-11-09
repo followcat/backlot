@@ -151,6 +151,11 @@ impl Stage {
                         reason: Some(format!("sent {key}")),
                     },
                 )?;
+                // The episode ends with the answer: whatever the
+                // screen shows next — the next prompt already up,
+                // or this one still unanswered — starts its own
+                // count instead of riding on the cleared episode's.
+                self.blocked_since.borrow_mut().remove(&pair);
             }
             // A terminal that raced away keeps the attention; the
             // role's loss is reconciled elsewhere.
