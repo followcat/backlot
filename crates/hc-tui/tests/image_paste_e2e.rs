@@ -45,6 +45,36 @@ fn tui_bin() -> &'static str {
     env!("CARGO_BIN_EXE_hc-tui")
 }
 
+/// Write a PATH stub and probe-exec it until the file is reliably
+/// executable: a fork elsewhere in the process can briefly pin the
+/// just-written script's writer fd and a racing `exec` fails with
+/// ETXTBSY. The `STUB_PROBE` line makes each probe run a no-op.
+fn write_executable(path: &std::path::Path, body: &str) {
+    fs::write(
+        path,
+        format!("#!/bin/sh\n[ -n \"$STUB_PROBE\" ] && exit 0\n{body}"),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    for _ in 0..200 {
+        match Command::new(path)
+            .env("STUB_PROBE", "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+        {
+            Ok(_) => return,
+            Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(e) => panic!("cannot exec stub {}: {e}", path.display()),
+        }
+    }
+    panic!("stub {} never became executable", path.display());
+}
+
 /// The environment `hc-tui --remote` sees: the scratch fixture's own
 /// plus the stub dir ahead of PATH and a Wayland display so the
 /// `wl-paste` reader arm is selected.
@@ -236,25 +266,19 @@ async fn ctrl_v_uploads_the_clipboard_image_over_remote() {
     std::os::unix::fs::symlink(scratch::core_binary(), stub.join("hc")).unwrap();
     // The fake `ssh`: run the remote command (its last argument)
     // locally, with the protocol stream passing straight through.
-    fs::write(
-        stub.join("ssh"),
-        "#!/bin/sh\nfor last; do :; done\nexec sh -c \"$last\"\n",
-    )
-    .unwrap();
+    write_executable(
+        &stub.join("ssh"),
+        "for last; do :; done\nexec sh -c \"$last\"\n",
+    );
     let png_path = scratch.root.join("clip.png");
     fs::write(&png_path, PNG).unwrap();
-    fs::write(
-        stub.join("wl-paste"),
-        format!(
-            "#!/bin/sh\ncase \"$2\" in image/png) cat \"{}\" ;; *) exit 1 ;; esac\n",
+    write_executable(
+        &stub.join("wl-paste"),
+        &format!(
+            "case \"$2\" in image/png) cat \"{}\" ;; *) exit 1 ;; esac\n",
             png_path.display()
         ),
-    )
-    .unwrap();
-    for tool in ["ssh", "wl-paste"] {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(stub.join(tool), fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    );
 
     // The stand-in program: writes its stdin to a file so the pasted
     // path lands somewhere checkable.
