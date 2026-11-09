@@ -48,6 +48,17 @@
   being overwritten. A `terminal.run` refusal raises `launch refused` attention (deduped per
   role and reason, retry kept). `studio new` refuses a relative `--repo` (exit 2) and
   canonicalizes an existing one.
+- Rework 2: the real launch in a git folder showed the trust answer needs pacing, and review
+  found two more defects. Keys now wait for the dialog's measured unsafe start — first key only
+  after the screen has held two seconds, then one per 1.5 seconds — because a key at first
+  paint is lost and an early Enter ended the real runner; the fake models that window. Probe
+  output is read into a shared buffer with a bounded post-exit grace, so a grandchild holding
+  the pipe (a runner's background service) can no longer stop the stage loop. A refused
+  `terminal.run` hands the tick's real-launch slot back, so a role whose spawn always fails
+  cannot starve the roles behind it. Session discovery also ends the moment the 60 second
+  attention is raised — a role can never claim a file from one that starts after it — which
+  makes the ten-minute stop only a backstop; a runner that first writes its session later than
+  that stays without an ID.
 
 ## S2: The stage process (2026-11-09)
 
