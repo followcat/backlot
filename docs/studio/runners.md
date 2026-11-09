@@ -14,7 +14,7 @@ been measured.
 | Resume by ID | `-r <id>`, prompt positional, context kept | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered |
 | Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` |
 | Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used |
-| Folder trust | Dialog on first use, cursor on "No, exit": Down, then Enter. The answer is saved in the user's Claude config | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen |
+| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter. The answer is saved in the user's Claude config | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen |
 | hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen |
 
 Screen detection exists only on the followcat core and covers each agent partially (`docs/screen-status.md` in that core).
@@ -37,7 +37,7 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 
 | Runner | Screen shows | Meaning | Response |
 |---|---|---|---|
-| Claude Code | `Quick safety check` with `Yes, I trust this folder`, cursor on `No, exit` | First use of a folder | Down then Enter, once, only when the terminal's cwd is the role's own folder |
+| Claude Code | `Quick safety check` with `Yes, I trust this folder`, cursor on `❯ No, exit` | First use of a folder that is a git repository | One key per tick from the cursor's line: Down on `No`, Enter on `Yes`, only when the terminal's cwd is the role's own folder |
 | Codex | Workspace trust prompt | First run in a folder | Launch-time `-c 'projects={"<cwd>"={trust_level="trusted"}}'` keeps it away; if seen, answer for the actor's own work area only |
 | Devin | `Connection error` | Stopped until it gets a message | One short continue message |
 | Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | Wait, then a short retry. Do not change model |

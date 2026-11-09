@@ -33,6 +33,21 @@
   and injected output; `devin list`'s exact field names are as specified, not re-measured. The
   trust answer is verified through the fake's trust mode, not a real Claude Code screen. Running
   on official hc remains unverified.
+- Rework 1: nine fixes, all found reviewing the first real Claude Code launch or auditing the
+  new code. The trust answer now sends one key per tick chosen from the cursor's screen line —
+  the two-key burst raced the real dialog — with the once-only latch gone (the 60s window still
+  bounds it); the fake's trust mode models the redraw for real. Post-launch runners defer a
+  start while a live role in the same `(runner, folder)` pair still lacks its session id,
+  across studios, and codex takes the oldest matching rollout so a person's later file cannot
+  win a role's claim. Discovery is throttled to once per 5s per role, stops after ten minutes,
+  and codex opens only `YYYY/MM/DD` day directories from the day before the role's start.
+  `real_exec` drains probe stdout on a thread so a chatty `--version` cannot deadlock. A
+  malformed `config.toml` records only line and column — never the secret-bearing line. Claude's
+  `env -u` list is the exact set of inherited markers, so `CLAUDE_CODE_OAUTH_TOKEN` and friends
+  survive. A configured `[runner_env] PATH` now leads after the exe's own directory instead of
+  being overwritten. A `terminal.run` refusal raises `launch refused` attention (deduped per
+  role and reason, retry kept). `studio new` refuses a relative `--repo` (exit 2) and
+  canonicalizes an existing one.
 
 ## S2: The stage process (2026-11-09)
 
