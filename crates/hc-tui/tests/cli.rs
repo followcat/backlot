@@ -1,4 +1,4 @@
-//! Integration tests for the compiled `hc-tui` binary.
+//! Integration tests for the compiled `backlot` binary.
 //!
 //! Every run clears the inherited environment, then gets an owned scratch
 //! HOME/XDG tree plus an explicit `HC_SOCKET`/`HC_SESSION` endpoint that
@@ -64,11 +64,11 @@ fn scratch_parent() -> PathBuf {
     std::env::temp_dir()
 }
 
-/// A `Command` for the compiled hc-tui binary with nothing inherited and
+/// A `Command` for the compiled backlot binary with nothing inherited and
 /// only owned scratch context: HOME, the XDG dirs, `HC_SOCKET`/`HC_SESSION`
 /// aimed inside the scratch tree, and PATH led by the empty scratch `bin/`.
 fn command(scratch: &ScratchEnv, args: &[&str]) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_hc-tui"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_backlot"));
     cmd.args(args)
         .env_clear()
         // PATH is literal: scratch bin/ (a --remote test must install a
@@ -91,7 +91,7 @@ fn command(scratch: &ScratchEnv, args: &[&str]) -> Command {
     cmd
 }
 
-/// Runs hc-tui to completion under the isolated scratch environment.
+/// Runs backlot to completion under the isolated scratch environment.
 fn run_hc_tui(scratch: &ScratchEnv, args: &[&str]) -> Output {
     command(scratch, args).output().unwrap()
 }
@@ -130,7 +130,7 @@ fn version_prints_name_and_package_version() {
     assert!(output.status.success());
     assert_eq!(
         stdout(&output).trim(),
-        format!("hc-tui {}", env!("CARGO_PKG_VERSION")),
+        format!("backlot {}", env!("CARGO_PKG_VERSION")),
     );
 }
 

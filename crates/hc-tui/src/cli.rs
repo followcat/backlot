@@ -66,17 +66,17 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
 
 /// Version line for `--version`.
 pub fn version_text() -> String {
-    format!("hc-tui {}", env!("CARGO_PKG_VERSION"))
+    format!("backlot {}", env!("CARGO_PKG_VERSION"))
 }
 
 /// Long help for `--help`.
 pub fn help_text() -> String {
     format!(
         "\
-hc-tui {}
+backlot {}
 Terminal UI for herdr-core (hc) — shared layout and terminal client.
 
-Usage: hc-tui [OPTIONS]
+Usage: backlot [OPTIONS]
 
 Options:
       --session <NAME>   Use session NAME (default: $HC_SESSION or \"default\")

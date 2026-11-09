@@ -9,10 +9,10 @@ keep this manifest and captures outside this repository.
 Build the candidate and shared native cell decoder:
 
 ```sh
-cargo build -p hc-tui --bin hc-tui --example parity_cells
+cargo build -p hc-tui --bin backlot --example parity_cells
 python3 scripts/parity/run.py \
   --hc /path/to/pinned/hc \
-  --hc-tui target/debug/hc-tui \
+  --hc-tui target/debug/backlot \
   --decoder target/debug/examples/parity_cells \
   --reference-manifest /path/to/reference-build.json \
   --config /path/to/herdr/config.toml \
@@ -20,7 +20,7 @@ python3 scripts/parity/run.py \
 python3 scripts/parity/vectors.py \
   --hc /path/to/pinned/hc \
   --decoder target/debug/examples/parity_cells \
-  --hc-tui target/debug/hc-tui \
+  --hc-tui target/debug/backlot \
   --config /path/to/herdr/config.toml \
   --reference-manifest /path/to/reference-build.json \
   --out /path/outside/repository/input-run

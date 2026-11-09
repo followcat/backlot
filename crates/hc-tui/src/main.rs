@@ -36,7 +36,7 @@ fn main() -> ExitCode {
         }
         Err(message) => {
             eprintln!("error: {message}");
-            eprintln!("Try 'hc-tui --help' for more information.");
+            eprintln!("Try 'backlot --help' for more information.");
             ExitCode::from(2)
         }
     }

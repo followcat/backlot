@@ -4,6 +4,12 @@ description = "Terminal UI client for herdr-core (hc)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+# The binary is `backlot`; the package and crate directory stay hc-tui.
+autobins = false
+
+[[bin]]
+name = "backlot"
+path = "src/main.rs"
 
 [dependencies]
 hc-proto.workspace = true

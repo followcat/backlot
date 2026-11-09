@@ -1,4 +1,4 @@
-//! Opt-in real-core PTY smoke: the actual `hc-tui` binary hosted in a
+//! Opt-in real-core PTY smoke: the actual `backlot` binary hosted in a
 //! PTY against the core at `HC_TUI_TEST_CORE`, in a `ScratchCore`-style
 //! isolated session. Assertions read the emulated screen (`hc-vt`), so
 //! they hold on any generation-1 core — fork and official alike.
@@ -41,12 +41,12 @@ const DEADLINE: Duration = Duration::from_secs(20);
 /// Read pump cadence while waiting on a screen predicate.
 const POLL: Duration = Duration::from_millis(40);
 
-/// The `hc-tui` binary under test — cargo exports it for this target.
+/// The `backlot` binary under test — cargo exports it for this target.
 fn tui_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_hc-tui")
+    env!("CARGO_BIN_EXE_backlot")
 }
 
-/// The environment `hc-tui` sees: the scratch fixture's own, nothing
+/// The environment `backlot` sees: the scratch fixture's own, nothing
 /// inherited — a real user session can never leak in.
 fn tui_env(scratch: &ScratchCore) -> Vec<(String, String)> {
     let root = |dir: &str| scratch.root.join(dir).to_string_lossy().into_owned();
@@ -105,7 +105,7 @@ fn openpty(cols: u16, rows: u16) -> (OwnedFd, OwnedFd) {
     }
 }
 
-/// `hc-tui` hosted in a PTY: own session, controlling terminal, the
+/// `backlot` hosted in a PTY: own session, controlling terminal, the
 /// slave's initial modes captured for the restore check.
 struct Tui {
     master: OwnedFd,
@@ -444,13 +444,13 @@ async fn real_core_smoke() {
             None => {
                 assert!(
                     Instant::now() < deadline,
-                    "hc-tui did not exit after detach"
+                    "backlot did not exit after detach"
                 );
                 tokio::time::sleep(POLL).await;
             }
         }
     };
-    assert!(status.success(), "hc-tui exited with {status}");
+    assert!(status.success(), "backlot exited with {status}");
     let mut modes: libc::termios = unsafe { std::mem::zeroed() };
     unsafe {
         assert_eq!(libc::tcgetattr(tui.slave.as_raw_fd(), &mut modes), 0);
