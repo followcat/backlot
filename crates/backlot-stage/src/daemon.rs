@@ -171,6 +171,11 @@ pub(crate) struct Stage {
     /// Studio → the last load error while its ledger stays unreadable:
     /// the tick skips it and the summary shows it.
     broken: BTreeMap<String, String>,
+    /// Studio → the last pass failure — logged once, shown in the
+    /// summary, but the studio still runs next tick. A good pass
+    /// clears it; a broken ledger's error shows instead while both
+    /// stand.
+    pub(crate) failed: BTreeMap<String, String>,
     /// Every error line already printed — each distinct message logs
     /// once, whatever its studio.
     logged: BTreeSet<String>,
@@ -244,8 +249,13 @@ impl Stage {
                 .await
             {
                 Err(e @ Fail::Core(_)) => return Err(e),
-                Err(e) => self.log_once(&name, e.message()),
-                Ok(()) => {}
+                Err(e) => {
+                    self.failed.insert(name.clone(), e.message().to_string());
+                    self.log_once(&name, e.message());
+                }
+                Ok(()) => {
+                    self.failed.remove(&name);
+                }
             }
         }
         Ok(())
@@ -290,7 +300,10 @@ impl Stage {
                 owned.push((name.clone(), StudioState::default()));
             }
         }
-        summary::summary(&owned, doing, &self.work.borrow(), &self.broken, 0)
+        // The ledger error first, otherwise the last pass failure.
+        let mut errors = self.failed.clone();
+        errors.extend(self.broken.iter().map(|(k, v)| (k.clone(), v.clone())));
+        summary::summary(&owned, doing, &self.work.borrow(), &errors, 0)
     }
 }
 
@@ -321,6 +334,7 @@ impl Stage {
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
             broken: BTreeMap::new(),
+            failed: BTreeMap::new(),
             logged: BTreeSet::new(),
         }
     }
@@ -388,6 +402,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
         broken: BTreeMap::new(),
+        failed: BTreeMap::new(),
         logged: BTreeSet::new(),
     };
     // A core without `events.subscribe` still works, polled on TICK.

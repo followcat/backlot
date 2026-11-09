@@ -144,8 +144,24 @@ async fn serve_drop(stream: DuplexStream) {
     // `write` drops when this returns — the client's next call is Closed.
 }
 
-/// A connected stage on a duplex wire to the refusing fake core.
-async fn stage_on<F, Fut>(serve: F) -> Stage
+/// `hello` offering only `terminal.list` — every `terminal.run` is
+/// `Unsupported`, a refused pass that never touches the ledger.
+async fn serve_no_run(stream: DuplexStream) {
+    let (read, mut write) = tokio::io::split(stream);
+    let mut reader = Reader::new(read);
+    let hello = reader.read_line().await.unwrap().unwrap();
+    let request: Value = serde_json::from_slice(&hello).unwrap();
+    assert_eq!(request["method"], "hello");
+    write
+        .write_all(&hello_reply(&["terminal.list"]))
+        .await
+        .unwrap();
+    write.write_all(b"\n").await.unwrap();
+    while let Ok(Some(_)) = reader.read_frame().await {}
+}
+
+/// A client on a duplex wire to `serve`.
+async fn client_on<F, Fut>(serve: F) -> Client
 where
     F: FnOnce(DuplexStream) -> Fut + Send + 'static,
     Fut: std::future::Future<Output = ()> + Send + 'static,
@@ -153,10 +169,18 @@ where
     let (core_side, client_side) = tokio::io::duplex(64 * 1024);
     tokio::spawn(async move { serve(core_side).await });
     let (read, write) = tokio::io::split(client_side);
-    let client = Client::open(Box::pin(read), Box::pin(write), None)
+    Client::open(Box::pin(read), Box::pin(write), None)
         .await
-        .unwrap();
-    Stage::for_test(client)
+        .unwrap()
+}
+
+/// A connected stage on a duplex wire to the fake core `serve` runs.
+async fn stage_on<F, Fut>(serve: F) -> Stage
+where
+    F: FnOnce(DuplexStream) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    Stage::for_test(client_on(serve).await)
 }
 
 async fn stage() -> Stage {
@@ -428,4 +452,41 @@ async fn a_dead_wire_ends_the_tick() {
     };
     let err = stage.tick(&live).await.unwrap_err();
     assert!(matches!(err, Fail::Core(_)), "{err:?}");
+}
+
+/// A refused pass shows in the summary's `error` until a pass
+/// succeeds — then the slot clears.
+#[tokio::test]
+async fn a_failing_pass_shows_then_clears() {
+    let base = tmp();
+    studio(&base, "acme");
+    let live = Inventory {
+        terms: Vec::new(),
+        doing: BTreeMap::new(),
+    };
+    let mut stage = stage_on(serve_no_run).await;
+    stage.base = base;
+    stage.tick(&live).await.unwrap();
+    let error = stage
+        .summary_view(&BTreeMap::new())
+        .studios
+        .iter()
+        .find(|st| st.id == "acme")
+        .and_then(|st| st.error.clone());
+    assert!(
+        error.as_deref().unwrap_or("").contains("terminal.run"),
+        "{error:?}"
+    );
+
+    // The wire heals: `terminal.run` gets a refusal answer now and
+    // the pass succeeds — the stale error clears.
+    stage.client = client_on(serve).await;
+    stage.tick(&live).await.unwrap();
+    let error = stage
+        .summary_view(&BTreeMap::new())
+        .studios
+        .iter()
+        .find(|st| st.id == "acme")
+        .and_then(|st| st.error.clone());
+    assert_eq!(error, None);
 }
