@@ -45,8 +45,8 @@ allow option, `deny` dismisses it.
 | Runner | `allow` | `deny` | Markers from |
 |---|---|---|---|
 | `fake` | `enter` | `esc` | The script itself — byte-verified in `real_stage_closed_loop` |
-| Claude Code | `enter` | `esc` | From its `❯ 1.` picker — still to be measured in S5b |
-| Codex | `enter` | `esc` | From its `› 1.` picker — still to be measured in S5b |
+| Claude Code | `enter` | `esc` | `allow` measured on 2.1.319 — the real run's prompts took `enter`; `deny` from its picker, not exercised |
+| Codex | `enter` | `esc` | From its `› 1.` picker — still to be measured |
 | Devin | `enter` | `esc` | Observed on 3000.12.32 — `enter` takes the highlighted `Once`, `esc` cancels |
 | OpenCode | none sent | none sent | Not measured — the attention stays open for the user |
 | Anything else | none sent | none sent | — |
@@ -75,14 +75,14 @@ permission mode is unchanged — any other command still prompts and D9 answers 
 In the `Read` rule `//` is the rule syntax's absolute-path marker; a single leading `/` given on the
 command line anchors at the primary working directory per the permissions documentation — it is not
 an absolute path — so the studio dir's leading `/` is dropped and the `//` is written instead. The
-rule syntax comes from Claude Code's permissions documentation and is still to be measured on
-2.1.319 in S5b.
+pair is measured on 2.1.319: the first real run's plain `backlot` calls and studio-dir reads ran
+without prompting.
 
 Two edges keep the `Bash` rule narrow. A role cannot change its identity: a `--as`, `--studio` or
 `--task` flag that disagrees with the terminal's `BACKLOT_ROLE`, `BACKLOT_STUDIO` or `BACKLOT_TASK`
-is refused before the command runs. And a command prefixed with an environment assignment or a
-wrapper does not match `Bash(backlot *)` — per the same documentation, to be measured in S5b — so it
-still prompts.
+is refused before the command runs. And a chained, env-prefixed or wrapped command does not match
+`Bash(backlot *)` — measured in the same run, every one prompted — so the role prompts demand one
+plain command per shell call.
 
 ## Screen patterns
 

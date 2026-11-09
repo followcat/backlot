@@ -180,6 +180,41 @@ fn every_command_in_the_prompts_parses() {
     }
 }
 
+/// All four prompts carry the shared one-command rule verbatim —
+/// a chained command falls outside `Bash(backlot *)` and waits on
+/// a person — and nothing outside that rule instructs a chained
+/// shell, an automatic permission mode or a bypass flag.
+#[test]
+fn prompts_share_the_one_command_rule() {
+    const SHARED_RULE: &str = concat!(
+        "- Run `backlot` commands one per shell call, exactly as written:\n",
+        "  no `&&`, `;`, pipes, `cd` or shell variables around them.\n",
+        "  These run without asking; anything chained stops at a\n",
+        "  permission prompt and waits for a person. Write any file\n",
+        "  with your file-writing tool first, then pass its absolute\n",
+        "  path. Read files with your file-reading tool, not `cat`."
+    );
+    for (kind, name) in [
+        (RoleKind::Producer, "producer"),
+        (RoleKind::Writer, "writer"),
+        (RoleKind::Director, "director"),
+        (RoleKind::Actor, "actor"),
+    ] {
+        let text = template(kind);
+        assert!(
+            text.contains(SHARED_RULE),
+            "{name}.md misses the shared one-command rule"
+        );
+        let rest = text.replace(SHARED_RULE, "");
+        for bad in ["&&", "auto mode", "skip-permissions"] {
+            assert!(
+                !rest.contains(bad),
+                "{name}.md instructs `{bad}` outside the shared rule"
+            );
+        }
+    }
+}
+
 /// The first prompt is one line pointing at the rendered file; for
 /// `devin` the line itself lands in a file the argv names.
 #[test]

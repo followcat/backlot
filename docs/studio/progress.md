@@ -1,5 +1,25 @@
 # Studio progress
 
+## S5b: the role prompts after the first real run (2026-11-09)
+
+- Done: all four role prompts carry the same one-command rule — a `backlot` command runs one per
+  shell call with no `&&`, `;`, pipes, `cd` or shell variables around it, since anything chained
+  falls outside `Bash(backlot *)` and waits on a person; files are written by the file-writing
+  tool and passed by absolute path, and read by the file-reading tool. The producer learned where
+  the published plan and acceptance list live, that accepted work sits on the integration branch
+  rather than the user's checkout, and that an actor's permission prompt is the director's —
+  never relayed to the user, never a mode change. The director learned `task resume` before
+  casting a paused task, shared-branch inspection from its own area (`git show`/`git diff`, no
+  `-C`, no `cd`), and one-command merging; the actor learned one-command `git` and tool-based
+  reading. A new test pins the shared rule in all four and bars `&&`, `auto mode` and
+  `skip-permissions` outside it.
+- Measured (first real run: 5 Haiku-class Claude Code roles, one full loop, 2.1.319):
+  `--allowedTools` works, Claude's `allow` key is `enter`, a chained command does not match
+  `Bash(backlot *)`, and the closed loop ran end to end on real agents. The run needed 33
+  permission prompts — 20 from the producer, director and writer — which this tuning addresses.
+- Not verified: the tuned prompts have not run on real agents; Codex's approval keys remain
+  unmeasured.
+
 ## S5b prep: pre-allowed pair and pinned identities (2026-11-09)
 
 - Done: `LaunchCtx` carries the studio's resolved state directory; the Claude Code adapter adds one
