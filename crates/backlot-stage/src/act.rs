@@ -334,7 +334,7 @@ impl Stage {
                     // launch — one open attention per role and
                     // reason, re-checked each tick.
                     StartDecision::Attention(e) => {
-                        if !attention_open(state, &start.role, &e.reason) {
+                        if !attention_open(state, &start.role, e.reason) {
                             record(
                                 dir,
                                 EventKind::AttentionRaised {
