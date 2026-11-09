@@ -253,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "hc-proto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "libc",
  "serde",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "hc-tui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crossterm",
  "futures-lite",
@@ -285,7 +285,7 @@ dependencies = [
 
 [[package]]
 name = "hc-vt"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "heck"
