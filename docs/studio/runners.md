@@ -61,6 +61,23 @@ allow option, `deny` dismisses it.
 - **Rate limits are per account.** Some runners share one limit across all sessions, so casting needs account-level limits
   (`max_concurrent` per runner account).
 
+## Pre-allowed tools (Claude Code)
+
+Every Claude Code launch — fresh or resumed — carries one `--allowedTools` pair before `--model`:
+`Bash(backlot *)` and `Read(//<studio state dir>/**)` joined into one comma-separated value. The list
+is variadic, so another `--flag` must follow the value or the positional prompt is swallowed as a
+tool name. The pair is the minimum a role needs: its first step is a `backlot` command or reading its
+prompt or a message file, and those live in the studio's state directory, outside its work folder —
+without the rules every one prompts and the producer's and director's prompts reach the user. Nothing
+else is pre-allowed: no `Bash(*)`, no bypass flag or mode, no `--add-dir`, no `Edit`/`Write`, and the
+permission mode is unchanged — any other command still prompts and D9 answers it.
+
+In the `Read` rule `//` is the rule syntax's absolute-path marker; a single leading `/` given on the
+command line anchors at the primary working directory per the permissions documentation — it is not
+an absolute path — so the studio dir's leading `/` is dropped and the `//` is written instead. The
+rule syntax comes from Claude Code's permissions documentation and is still to be measured on
+2.1.319 in S5b.
+
 ## Screen patterns
 
 Observed on real runs. These are the first entries for each adapter's pattern table and need captured fixtures.

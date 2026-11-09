@@ -24,6 +24,7 @@ fn ctx<'a>(
         cwd: "/home/user/acme-shop",
         prompt,
         resume,
+        studio_dir: "/home/user/state/studios/acme-shop",
         stage_env,
     }
 }
@@ -47,9 +48,11 @@ fn claude_new_argv() {
     let env = BTreeMap::new();
     let l = plan(&actor("claude", "standard"), &ctx(&env, None, None)).unwrap();
     assert_eq!(
-        normalized(&l.argv)[..7],
+        normalized(&l.argv)[..9],
         [
             "claude",
+            "--allowedTools",
+            "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)",
             "--model",
             "m",
             "--effort",
@@ -58,16 +61,16 @@ fn claude_new_argv() {
             "manual"
         ]
     );
-    assert_eq!(l.argv[7], "--session-id");
+    assert_eq!(l.argv[9], "--session-id");
     let id = l.session_id().unwrap();
-    assert_eq!(l.argv[8], id);
-    assert_eq!(l.argv.len(), 9);
+    assert_eq!(l.argv[10], id);
+    assert_eq!(l.argv.len(), 11);
     // With a prompt it lands last.
     let l = plan(&actor("claude", "standard"), &ctx(&env, Some("hi"), None)).unwrap();
-    assert_eq!(l.argv[9], "hi");
+    assert_eq!(l.argv[11], "hi");
     // Worktree edits are auto-accepted.
     let l = plan(&actor("claude", "worktree"), &ctx(&env, None, None)).unwrap();
-    assert_eq!(l.argv[6], "acceptEdits");
+    assert_eq!(l.argv[8], "acceptEdits");
 }
 
 #[test]
@@ -81,6 +84,8 @@ fn claude_resume_argv() {
             "claude",
             "-r",
             "ses-9",
+            "--allowedTools",
+            "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)",
             "--model",
             "m",
             "--effort",
@@ -91,6 +96,71 @@ fn claude_resume_argv() {
         ]
     );
     assert_eq!(l.session_id().as_deref(), Some("ses-9"));
+}
+
+/// The `--allowedTools` pair is one flag and one comma-joined value
+/// of exactly the two rules, on fresh launches and resumes alike —
+/// and the value is always followed by another `--flag`, since the
+/// variadic list would otherwise swallow the positional prompt.
+#[test]
+fn claude_allowed_tools_pair() {
+    let env = BTreeMap::new();
+    for c in [
+        ctx(&env, None, None),
+        ctx(&env, Some("hi"), None),
+        ctx(&env, None, Some("ses-9")),
+        ctx(&env, Some("go"), Some("ses-9")),
+    ] {
+        let l = plan(&actor("claude", "standard"), &c).unwrap();
+        let at: Vec<usize> = l
+            .argv
+            .iter()
+            .enumerate()
+            .filter_map(|(i, a)| (a == "--allowedTools").then_some(i))
+            .collect();
+        assert_eq!(at.len(), 1, "{:?}", l.argv);
+        let at = at[0];
+        let rules: Vec<&str> = l.argv[at + 1].split(',').collect();
+        assert_eq!(rules.len(), 2, "{}", l.argv[at + 1]);
+        assert_eq!(rules[0], "Bash(backlot *)");
+        assert_eq!(rules[1], "Read(//home/user/state/studios/acme-shop/**)");
+        assert!(l.argv[at + 2].starts_with("--"), "{}", l.argv[at + 2]);
+    }
+    // The positional prompt is still the fresh launch's last element.
+    let l = plan(&actor("claude", "standard"), &ctx(&env, Some("hi"), None)).unwrap();
+    assert_eq!(l.argv.last().unwrap(), "hi");
+}
+
+/// Nothing broader is pre-allowed — no `Bash(*)`, no bare `Bash`, no
+/// bypass flag or mode, no `--add-dir`, and no `Edit`/`Write` rules —
+/// on either permission profile.
+#[test]
+fn claude_allows_nothing_broader() {
+    let env = BTreeMap::new();
+    for profile in ["standard", "worktree"] {
+        for c in [ctx(&env, Some("hi"), None), ctx(&env, None, Some("ses-1"))] {
+            let l = plan(&actor("claude", profile), &c).unwrap();
+            for bad in [
+                "Bash(*)",
+                "skip-permissions",
+                "bypassPermissions",
+                "--add-dir",
+            ] {
+                assert!(
+                    !l.argv.iter().any(|a| a.contains(bad)),
+                    "{profile}: {bad} in {:?}",
+                    l.argv
+                );
+            }
+            for bad in ["Bash", "Edit", "Write"] {
+                assert!(
+                    !l.argv.iter().any(|a| a == bad),
+                    "{profile}: {bad} in {:?}",
+                    l.argv
+                );
+            }
+        }
+    }
 }
 
 #[test]

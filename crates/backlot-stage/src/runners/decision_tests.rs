@@ -19,6 +19,7 @@ fn ctx<'a>(terminal: &'a str, env: &'a BTreeMap<String, String>) -> LaunchCtx<'a
         cwd: "/home/user/acme-shop",
         prompt: None,
         resume: None,
+        studio_dir: "/home/user/state/studios/acme-shop",
         stage_env: env,
     }
 }

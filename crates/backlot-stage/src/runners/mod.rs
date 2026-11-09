@@ -60,6 +60,11 @@ pub struct LaunchCtx<'a> {
     pub prompt: Option<&'a str>,
     /// A session id to resume instead of starting fresh.
     pub resume: Option<&'a str>,
+    /// The studio's state directory, resolved with the base
+    /// ([`crate::daemon::resolved_base`]) — prompts, messages and
+    /// requirement files live under it. Only claude's `Read` rule
+    /// uses it today.
+    pub studio_dir: &'a str,
     /// The stage's own environment, for adapters that scrub
     /// inherited markers.
     pub stage_env: &'a BTreeMap<String, String>,

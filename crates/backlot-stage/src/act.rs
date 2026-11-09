@@ -385,11 +385,13 @@ impl Stage {
                         }
                     }
                 };
+                let studio_dir = dir.to_string_lossy();
                 let ctx = LaunchCtx {
                     terminal: &start.terminal,
                     cwd: &cwd,
                     prompt: prompt.as_deref(),
                     resume: start.resume.as_deref(),
+                    studio_dir: &studio_dir,
                     stage_env: &self.env_vars,
                 };
                 match runners::decide_start(

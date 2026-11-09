@@ -42,6 +42,16 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     }
 }
 
+/// The per-session `--allowedTools` value: `backlot` commands and
+/// reads under the studio's state directory, where the prompts,
+/// messages and requirement files live — nothing broader. `//` is
+/// Claude Code's rule syntax for an absolute path; a single leading
+/// `/` would anchor at the working directory and match nothing.
+fn allowed_tools(studio_dir: &str) -> String {
+    let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
+    format!("Bash(backlot *),Read(//{dir}/**)")
+}
+
 /// The session id a live claude terminal's argv chose: the value
 /// after `--session-id`, or after `-r` when it was a resume.
 pub fn session_in_argv(argv: &[String]) -> Option<String> {
@@ -68,6 +78,10 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         }
         None => uuid_v4(),
     };
+    // The `--allowedTools` list is variadic, so the pair goes before
+    // `--model`: a `--flag` must follow the value or the positional
+    // prompt would be swallowed as a tool name.
+    argv.extend(["--allowedTools".into(), allowed_tools(ctx.studio_dir)]);
     argv.extend([
         "--model".into(),
         identity.model.clone(),
