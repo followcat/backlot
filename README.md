@@ -54,6 +54,21 @@ The prefix is `Ctrl+B`, as in Herdr:
 
 If you've changed these in your Herdr config, your bindings apply instead.
 
+### Alt shortcuts
+
+With a few lines in your Herdr config, you can switch without the prefix and open a floating shell. They aren't bound
+by default: [docs/keys.md](docs/keys.md#alt-shortcuts) has the config to copy.
+
+| Keys | Action |
+|---|---|
+| `Alt+Left`, `Alt+Right` | Previous or next tab |
+| `Alt+Up`, `Alt+Down` | Previous or next agent, across tabs, workspaces and machines |
+| `Alt+F` | A floating shell over the current tab |
+
+| Switching with `Alt` and the arrow keys | A floating shell with `Alt+F` |
+|---|---|
+| ![Switching tabs and agents with Alt and the arrow keys](docs/images/alt-arrows.gif) | ![A floating shell opened with Alt+F](docs/images/alt-f.gif) |
+
 ## Status
 
 hc-tui is early.
