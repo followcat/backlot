@@ -27,6 +27,8 @@ mod cli_testkit;
 #[cfg(test)]
 mod cli_tests;
 #[cfg(test)]
+mod discover_tests;
+#[cfg(test)]
 mod store_tests;
 
 pub use cli::{Env, Fail, maybe_run};
