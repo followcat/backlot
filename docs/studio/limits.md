@@ -7,11 +7,15 @@ has done, and what nobody has done. `progress.md` is the entry-by-entry record b
 
 ## What real agents have run
 
-Claude Code is the only runner that has been through the whole loop. Two recorded real runs —
-"first real run" and "second real run" in `progress.md` — put five Haiku-class Claude Code roles
-on a small sample repository on Claude Code 2.1.319, on `hc` built from the followcat fork. The
-first run closed the loop end to end and exposed what `progress.md` S5b lists; the fixes from it
-have not run on real agents again.
+Claude Code is the only runner that has been through the whole loop. It ran three times on a
+small sample repository — `claude-haiku-5-5` at low effort, Claude Code 2.1.319, on `hc` from
+the followcat fork, five or six sessions each. The first and third runs finished the loop, from
+the requirement through plan, tasks, deliveries and reviews to an integration branch; the
+second stopped on a stage bug, fixed before the third. Between them the runs covered permission
+prompts answered by the director and by the person, a denied command, two actors at once, and
+merging two task branches into the integration branch. What has not run on real agents is
+everything built after the third run: stall detection, the at-cap notice, going on after a
+block, and restart recovery.
 
 Codex, Devin and OpenCode were launched and their session IDs captured — `runners.md` says
 exactly what was measured for each. Per runner:
