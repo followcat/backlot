@@ -1,5 +1,22 @@
 # Studio progress
 
+## S5b prep: pre-allowed pair and pinned identities (2026-11-09)
+
+- Done: `LaunchCtx` carries the studio's resolved state directory; the Claude Code adapter adds one
+  `--allowedTools` pair — `Bash(backlot *)` and `Read(//<studio dir>/**)` — before `--model` on fresh
+  launches and resumes, so a role can run `backlot` and read its prompt and message files without a
+  permission prompt. Nothing broader is allowed and the permission modes are unchanged; other
+  adapters ignore the field. A pinned role terminal can no longer claim another identity:
+  `--as`/`--studio`/`--task` flags disagreeing with `BACKLOT_ROLE`/`BACKLOT_STUDIO`/`BACKLOT_TASK`
+  are refused before the command runs, `studio new` included.
+- Measured: argv tests assert the exact pair on fresh launches and resumes, a `--flag` after the
+  variadic value, the prompt last, and the absent bypass rules on both profiles; CLI tests cover the
+  pin refusals (both values named, nothing appended), equal flags and the unpinned case. fmt, clippy
+  (stable and 1.99.0), `cargo test` (1102) and `real_stage` (2) green.
+- Not verified: the `--allowedTools` rule syntax is from Claude Code's permissions documentation —
+  still to be measured on 2.1.319 in S5b — as is an env-prefixed or wrapped `backlot` command not
+  matching `Bash(backlot *)`.
+
 ## S5a: The closed loop's mechanics (2026-11-09)
 
 - Done: the stage closes the loop end to end on the fake runner. Role launches ensure git work

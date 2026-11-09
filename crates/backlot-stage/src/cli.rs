@@ -96,6 +96,29 @@ impl Caller {
     }
 }
 
+/// A pinned identity cannot be claimed away: once `BACKLOT_ROLE`,
+/// `BACKLOT_STUDIO` or `BACKLOT_TASK` is set — every role terminal
+/// gets its own — the matching `--as`, `--studio` or `--task` flag
+/// must be absent or equal. With the variable unset the flag works
+/// as it always has: the user's own shell and the panel pass `--as`
+/// with no `BACKLOT_ROLE`.
+fn check_identity(common: &Common, env: &Env) -> Result<(), Fail> {
+    for (flag, arg, var) in [
+        ("--as", &common.role, "BACKLOT_ROLE"),
+        ("--studio", &common.studio, "BACKLOT_STUDIO"),
+        ("--task", &common.task, "BACKLOT_TASK"),
+    ] {
+        if let (Some(flag_value), Some(pinned)) = (arg.as_deref(), env.get(var))
+            && flag_value != pinned
+        {
+            return Err(Fail::refused(format!(
+                "{flag} '{flag_value}' disagrees with {var} '{pinned}'"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
     let studio = check_studio_name(
         &common
@@ -174,6 +197,7 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     if let Cmd::Help(u) = cmd {
         return Ok(format!("{u}\n{}", crate::args::COMMON));
     }
+    check_identity(&common, env)?;
     match cmd {
         // The stage connects itself; no ledger command needs it here.
         Cmd::StageStart => return crate::stage::start(&common, env),

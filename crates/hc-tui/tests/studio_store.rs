@@ -4,7 +4,7 @@
 mod studio_kit;
 
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Output};
 
 use studio_kit::*;
 
@@ -76,16 +76,26 @@ fn concurrent_appends_across_processes() {
     assert_eq!(seqs, (1..=total).collect::<Vec<_>>());
 }
 
+/// `run` without the `BACKLOT_STUDIO` pin: a flag may name another
+/// studio only where the pin is absent — the unpinned user shell.
+fn run_unpinned(scratch: &Scratch, args: &[&str]) -> Output {
+    let mut c = command(scratch, args);
+    c.env_remove("BACKLOT_STUDIO");
+    c.output().unwrap()
+}
+
 /// Studio names are `[a-z0-9_-]{1,16}`: bad names exit 2 before any
 /// path is built, and an append on a missing studio exits 1 without
 /// creating anything — `../../escape` can never leave the state dir.
+/// A pinned env would refuse a differing `--studio` first, so these
+/// run unpinned.
 #[test]
 fn studio_names_are_checked_before_paths() {
     let s = Scratch::new();
     for bad in ["../x", "../../escape", "Upper", "seventeen_charname"] {
-        let o = run(&s, &["status", "--studio", bad]);
+        let o = run_unpinned(&s, &["status", "--studio", bad]);
         assert_eq!(o.status.code(), Some(2), "{bad}: {}", stderr(&o));
-        let o = run(
+        let o = run_unpinned(
             &s,
             &["plan", "request", "--studio", bad, "--as", "producer"],
         );
@@ -95,7 +105,7 @@ fn studio_names_are_checked_before_paths() {
     assert!(!studios.exists() || fs::read_dir(studios).unwrap().next().is_none());
     assert!(!s.root.join("escape").exists());
 
-    let o = run(
+    let o = run_unpinned(
         &s,
         &["plan", "request", "--studio", "nosuch", "--as", "producer"],
     );

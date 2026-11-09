@@ -78,6 +78,12 @@ an absolute path — so the studio dir's leading `/` is dropped and the `//` is 
 rule syntax comes from Claude Code's permissions documentation and is still to be measured on
 2.1.319 in S5b.
 
+Two edges keep the `Bash` rule narrow. A role cannot change its identity: a `--as`, `--studio` or
+`--task` flag that disagrees with the terminal's `BACKLOT_ROLE`, `BACKLOT_STUDIO` or `BACKLOT_TASK`
+is refused before the command runs. And a command prefixed with an environment assignment or a
+wrapper does not match `Bash(backlot *)` — per the same documentation, to be measured in S5b — so it
+still prompts.
+
 ## Screen patterns
 
 Observed on real runs. These are the first entries for each adapter's pattern table and need captured fixtures.

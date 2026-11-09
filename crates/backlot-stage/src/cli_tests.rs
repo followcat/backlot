@@ -280,7 +280,15 @@ fn exit_kinds_usage_vs_refused() {
         )
         .contains("has no cast")
     );
-    assert!(refused(&env, "status --studio missing").contains("no studio 'missing'"));
+    // A `--studio` away from the pin is refused by the identity
+    // check before the studio is even looked up — the missing-studio
+    // refusal needs an unpinned env.
+    let mut vars = env.vars.clone();
+    vars.remove("BACKLOT_STUDIO");
+    assert!(
+        refused(&crate::cli::Env { vars }, "status --studio missing")
+            .contains("no studio 'missing'")
+    );
 }
 
 #[test]
@@ -292,6 +300,59 @@ fn missing_caller_values_are_usage_errors() {
     assert!(usage(&env, "block --reason x").contains("BACKLOT_ROLE"));
     env.vars.insert("BACKLOT_ROLE".into(), "actor".into());
     assert!(usage(&env, "block --reason x").contains("BACKLOT_TASK"));
+}
+
+/// A pinned role terminal cannot claim another identity: `--as`,
+/// `--studio` and `--task` must equal their `BACKLOT_*` variable or
+/// be absent — a disagreeing flag refuses before anything is
+/// appended. Equal is fine, and unset the flag works as it always
+/// has (the user's shell and the panel pass `--as` unpinned).
+#[test]
+fn a_pinned_terminal_cannot_claim_another_identity() {
+    let (scratch, mut env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let events = || {
+        crate::store::load_events(&crate::store::studio_dir(&scratch.dir, "acme-shop"))
+            .unwrap()
+            .0
+            .len()
+    };
+    env.vars.insert("BACKLOT_ROLE".into(), "actor-t1-c1".into());
+    // Another `--as` names both values and appends nothing — the
+    // approval it tried to answer never lands.
+    for (args, claimed) in [
+        (
+            "approve --person actor-t1-c2 --decision allow --as director",
+            "director",
+        ),
+        (
+            "approve --person actor-t1-c2 --decision allow --as user",
+            "user",
+        ),
+    ] {
+        let m = refused(&env, args);
+        assert!(m.contains("actor-t1-c1"), "{args}: {m}");
+        assert!(m.contains(claimed), "{args}: {m}");
+    }
+    // `--studio` and `--task` against their pins refuse the same way.
+    let m = refused(&env, "status --studio other --as actor-t1-c1");
+    assert!(m.contains("acme-shop") && m.contains("other"), "{m}");
+    env.vars.insert("BACKLOT_TASK".into(), "t1".into());
+    let m = refused(&env, "task pause --task t2 --reason r --as actor-t1-c1");
+    assert!(m.contains("t1") && m.contains("t2"), "{m}");
+    assert_eq!(events(), 1, "a refused flag appends nothing");
+    // A flag equal to its variable is fine — the command still runs.
+    ok(&env, "status --studio acme-shop --as actor-t1-c1 --task t1");
+    // Unset, the same flags work exactly as before.
+    env.vars.remove("BACKLOT_ROLE");
+    env.vars.remove("BACKLOT_TASK");
+    ok(&env, "status --as director");
+    env.vars.remove("BACKLOT_STUDIO");
+    ok(&env, "status --studio acme-shop --as user");
 }
 /// Without `BACKLOT_STATE_DIR` a command needs the core for its id;
 /// an unreachable one refuses with a clear message. Every pointer is

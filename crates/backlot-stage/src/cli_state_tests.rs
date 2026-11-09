@@ -11,7 +11,10 @@ use crate::cli_testkit::*;
 /// studio with no log are refused without touching the disk.
 #[test]
 fn studio_names_are_checked_and_missing_studios_refused() {
-    let (scratch, env) = scratch();
+    // An unpinned shell: with `BACKLOT_STUDIO` set a differing
+    // `--studio` is refused before the name is ever checked.
+    let (scratch, mut env) = scratch();
+    env.vars.remove("BACKLOT_STUDIO");
     let studios_dir = scratch.dir.join("studios");
     let nothing_on_disk =
         || !studios_dir.exists() || fs::read_dir(&studios_dir).unwrap().next().is_none();

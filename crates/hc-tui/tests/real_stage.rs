@@ -64,13 +64,13 @@ fn bl_env(scratch: &ScratchCore, state: &Path) -> Vec<(String, String)> {
     ]
 }
 
-/// `backlot <args>` under the fixture env, returned raw — `bl` and
+/// `backlot <args>` under the given env, returned raw — `bl` and
 /// `bl_fail` assert on the exit from here.
-fn bl_run(scratch: &ScratchCore, state: &Path, args: &str) -> std::process::Output {
+fn bl_run(env: Vec<(String, String)>, args: &str) -> std::process::Output {
     let mut child = Command::new(tui_bin())
         .args(args.split(' '))
         .env_clear()
-        .envs(bl_env(scratch, state))
+        .envs(env)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -89,7 +89,25 @@ fn bl_run(scratch: &ScratchCore, state: &Path, args: &str) -> std::process::Outp
 /// `backlot <args>` under the fixture env; assert exit 0 and return
 /// stdout.
 fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
-    let out = bl_run(scratch, state, args);
+    let out = bl_run(bl_env(scratch, state), args);
+    assert!(
+        out.status.success(),
+        "backlot {args} exited {}; stderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// `bl` without the `BACKLOT_STUDIO` pin — the fixture pins every
+/// call to `acme-shop`, but only an unpinned shell may `--studio`
+/// another studio.
+fn bl_unpinned(scratch: &ScratchCore, state: &Path, args: &str) -> String {
+    let env = bl_env(scratch, state)
+        .into_iter()
+        .filter(|(k, _)| k != "BACKLOT_STUDIO")
+        .collect();
+    let out = bl_run(env, args);
     assert!(
         out.status.success(),
         "backlot {args} exited {}; stderr: {}",
@@ -102,7 +120,7 @@ fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
 /// `backlot <args>` expected to refuse; assert a non-zero exit and
 /// return stderr.
 fn bl_fail(scratch: &ScratchCore, state: &Path, args: &str) -> String {
-    let out = bl_run(scratch, state, args);
+    let out = bl_run(bl_env(scratch, state), args);
     assert!(
         !out.status.success(),
         "backlot {args} should refuse, got: {}",
@@ -492,8 +510,9 @@ async fn real_stage_loop() {
 
     // A second studio beside acme-shop: `acme`'s names share a
     // prefix with `acme-shop`'s, and all four role terminals must
-    // stay live — ownership is the label, not the name.
-    bl(
+    // stay live — ownership is the label, not the name. Naming
+    // another studio needs an unpinned shell.
+    bl_unpinned(
         &scratch,
         &state,
         &format!(
