@@ -243,6 +243,26 @@ impl ScratchCore {
         }
     }
 
+    /// A deliberate mid-test `server stop`: the graceful core shutdown —
+    /// every terminal ends with it, so a later [`respawn`](Self::respawn)
+    /// on the same session starts a world the stage must recover. The
+    /// child is reaped; the root and session state stay put.
+    pub fn shutdown(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            assert!(
+                run_stop(&self.root, &self.session, &self.socket()) && wait_for(&mut child, STOP),
+                "the scratch core did not stop cleanly"
+            );
+        }
+    }
+
+    /// The serve's `hello` answered — a respawned core is up.
+    pub async fn ready(&self) {
+        wait_ready(&self.endpoint)
+            .await
+            .expect("respawned scratch core did not become ready");
+    }
+
     /// Spawns a fresh `serve` over the same scratch state (same session,
     /// socket path and `host-a` identity) after [`kill`](Self::kill).
     pub fn respawn(&mut self) {

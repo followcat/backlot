@@ -21,7 +21,7 @@ use scratch::ScratchCore;
 use hc_proto::client::Client;
 use hc_proto::doc::DocGetParams;
 use hc_proto::endpoint::Endpoint;
-use hc_proto::terminal::{ListParams, ReadParams, Terminal};
+use hc_proto::terminal::{ListParams, ReadParams, Terminal, TerminalParams};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1170,6 +1170,308 @@ async fn real_stage_watch() {
         ),
     );
     wait_inbox(&state, "fake-inbox-director", "-delivered.md");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// The S6b restart on the fake runner: a `server stop` ends the core,
+/// every role terminal and the stage itself. A fresh serve on the same
+/// session plus `stage start` must recover the studio from its ledger
+/// alone: each wanted role records `role.lost` then `role.resumed`
+/// `recovered` on the same session, the stale permission attention
+/// clears, the `recovered` notices and a message queued while the core
+/// was down are delivered, a delivery still lands — and a role closed
+/// before the restart stays closed.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_restart() {
+    let mut scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let note = fixture(&scratch, "note.md", "director: hold this\n");
+    let report = fixture(&scratch, "report.md", "# delivery report\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+    wait_terminal(&client, "bl-acme-shop-producer").await;
+    wait_terminal(&client, "bl-acme-shop-director").await;
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    for (task, actor) in [("t1", "actor-a"), ("t2", "actor-b"), ("t3", "actor-a")] {
+        bl(
+            &scratch,
+            &state,
+            &format!(
+                "task new --title work-{task} --kind feature --acceptance-file {} --as director",
+                acc.display()
+            ),
+        );
+        bl(
+            &scratch,
+            &state,
+            &format!("cast --task {task} --actor {actor} --reason cast --as director"),
+        );
+    }
+    wait_terminal(&client, "bl-acme-shop-t1").await;
+    wait_terminal(&client, "bl-acme-shop-t2").await;
+    wait_terminal(&client, "bl-acme-shop-t3").await;
+
+    // t3's actor closes deliberately before the restart: not wanted,
+    // so recovery must leave it closed.
+    bl(
+        &scratch,
+        &state,
+        "task abandon --task t3 --reason done --as director",
+    );
+    wait_absent(&client, "bl-acme-shop-t3").await;
+    wait_event(&state, "role.closed", "actor-t3-c1");
+
+    // t1's actor holds an open permission attention when the core dies.
+    let t1 = wait_terminal(&client, "bl-acme-shop-t1").await;
+    send_text(&client, &t1.address, "work:blocked").await;
+    let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised["reason"], "permission prompt", "{raised}");
+
+    // The core stops — every terminal, including the stage's, is gone.
+    // A `tell` lands on the ledger while the world is down; the fresh
+    // stage owes t2's actor that message after recovery.
+    scratch.shutdown();
+    bl(
+        &scratch,
+        &state,
+        &format!("tell actor-t2-c1 --file {} --as director", note.display()),
+    );
+    drop(client);
+    scratch.respawn();
+    scratch.ready().await;
+    let client = connect(&scratch).await;
+    bl(&scratch, &state, "stage start");
+
+    // Every wanted role: lost, then resumed `recovered` on its recorded
+    // session, exactly one live terminal each.
+    let wanted = [
+        ("producer", "bl-acme-shop-producer"),
+        ("director", "bl-acme-shop-director"),
+        ("actor-t1-c1", "bl-acme-shop-t1"),
+        ("actor-t2-c1", "bl-acme-shop-t2"),
+    ];
+    for (role, _) in wanted {
+        wait_event(&state, "role.lost", role);
+        wait_event(&state, "role.resumed", role);
+    }
+    let events = ledger(&state);
+    let find = |kind: &str, role: &str| -> &serde_json::Value {
+        events
+            .iter()
+            .find(|e| e["kind"] == kind && e["role"] == role)
+            .unwrap_or_else(|| panic!("no {kind} for {role}: {events:?}"))
+    };
+    for (role, name) in wanted {
+        let (started, lost, resumed) = (
+            find("role.started", role),
+            find("role.lost", role),
+            find("role.resumed", role),
+        );
+        assert!(
+            lost["seq"].as_u64().unwrap() > started["seq"].as_u64().unwrap()
+                && resumed["seq"].as_u64().unwrap() > lost["seq"].as_u64().unwrap(),
+            "{role}: started/lost/resumed out of order: {events:?}"
+        );
+        assert_eq!(resumed["reason"], "recovered", "{resumed}");
+        assert_eq!(
+            resumed["session_id"], started["session_id"],
+            "{role} resumed on a different session: {events:?}"
+        );
+        let t = wait_terminal(&client, name).await;
+        assert_eq!(
+            resumed["terminal"].as_str(),
+            Some(t.address.as_str()),
+            "{resumed}"
+        );
+    }
+    let live = client
+        .terminal_list(ListParams::default())
+        .await
+        .expect("terminal.list")
+        .terminals;
+    for (_, name) in wanted {
+        assert_eq!(
+            live.iter()
+                .filter(|t| t.name.as_deref() == Some(name))
+                .count(),
+            1,
+            "{name} does not have exactly one live terminal"
+        );
+    }
+
+    // The stale permission attention clears `role lost`; the closed
+    // actor stays closed — never lost, never resumed, no terminal.
+    let cleared = events
+        .iter()
+        .find(|e| e["kind"] == "attention.cleared" && e["target"] == raised["seq"])
+        .unwrap_or_else(|| panic!("no attention.cleared for the prompt: {events:?}"));
+    assert_eq!(cleared["reason"], "role lost", "{cleared}");
+    assert!(
+        !events.iter().any(|e| {
+            e["role"] == "actor-t3-c1" && (e["kind"] == "role.lost" || e["kind"] == "role.resumed")
+        }),
+        "the closed actor was lost or resumed: {events:?}"
+    );
+    assert!(
+        terminal_named(&client, "bl-acme-shop-t3").await.is_none(),
+        "the closed actor's terminal came back"
+    );
+
+    // The recovered notices reach each role; the queued tell and a new
+    // delivery land through the normal gate.
+    for inbox in [
+        "fake-inbox-producer",
+        "fake-inbox-director",
+        "fake-inbox-actor-t1",
+        "fake-inbox-actor-t2",
+    ] {
+        wait_inbox(&state, inbox, "-recovered.md");
+    }
+    wait_inbox(&state, "fake-inbox-actor-t2", "-note.md");
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "deliver --commits a..b --report {} --check build=pass --as actor --task t1",
+            report.display()
+        ),
+    );
+    wait_inbox(&state, "fake-inbox-director", "-delivered.md");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// Killing only the `backlot-stage` terminal leaves the roles live on
+/// the core: a new `stage start` adopts them — no `role.lost`, no
+/// second terminal per role.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_restart_stage_only() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+    let stage = wait_terminal(&client, "backlot-stage").await;
+    let producer = wait_terminal(&client, "bl-acme-shop-producer").await;
+    let director = wait_terminal(&client, "bl-acme-shop-director").await;
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "task new --title cart --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "cast --task t1 --actor actor-a --reason first --as director",
+    );
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    // The stage terminal dies alone; a fresh stage start adopts the
+    // live roles — nobody is lost and nobody is relaunched.
+    client
+        .terminal_kill(TerminalParams {
+            terminal: stage.address.clone(),
+            caller: None,
+        })
+        .await
+        .expect("terminal.kill backlot-stage");
+    while terminal_named(&client, "backlot-stage").await.is_some() {
+        tokio::time::sleep(POLL).await;
+    }
+    bl(&scratch, &state, "stage start");
+    let new_stage = wait_terminal(&client, "backlot-stage").await;
+    assert_ne!(
+        new_stage.address, stage.address,
+        "the stage did not restart"
+    );
+
+    // A few ticks in, the ledger holds no loss and every role keeps
+    // the terminal it had.
+    tokio::time::sleep(Duration::from_secs(4)).await;
+    let events = ledger(&state);
+    assert!(
+        !events
+            .iter()
+            .any(|e| e["kind"] == "role.lost" || e["kind"] == "role.resumed"),
+        "a stage-only restart recorded lifecycle loss: {events:?}"
+    );
+    for (name, old) in [
+        ("bl-acme-shop-producer", &producer.address),
+        ("bl-acme-shop-director", &director.address),
+        ("bl-acme-shop-t1", &actor.address),
+    ] {
+        let t = terminal_named(&client, name)
+            .await
+            .unwrap_or_else(|| panic!("{name} is gone"));
+        assert_eq!(&t.address, old, "{name} was relaunched");
+    }
 
     drop(client);
     scratch.finish().expect("scratch teardown");
