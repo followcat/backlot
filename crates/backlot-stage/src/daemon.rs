@@ -169,7 +169,10 @@ impl Stage {
             let dir = store::studio_dir(&self.base, &name);
             let meta = fs::metadata(dir.join("events.jsonl"));
             let len = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-            if self.seen.get(&name).map(|s| s.len) != Some(len) {
+            // A broken studio retries every tick — a repair that keeps
+            // the length, or a transient read error, must not leave it
+            // skipped until something appends.
+            if self.seen.get(&name).map(|s| s.len) != Some(len) || self.broken.contains_key(&name) {
                 match load_studio(&dir, &name) {
                     Ok(state) => {
                         self.cached.insert(name.clone(), state);

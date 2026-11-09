@@ -211,6 +211,48 @@ async fn a_corrupt_ledger_is_skipped_until_it_loads() {
     assert!(reconciled(&bad), "the repaired studio never reconciled");
 }
 
+/// A broken ledger is retried every tick: corrupting then repairing
+/// its first byte in place — the file's length never changes —
+/// still brings the studio back on the next pass.
+#[tokio::test]
+async fn a_repaired_ledger_recovers_at_the_same_length() {
+    let base = tmp();
+    let bad = studio(&base, "bad");
+    let file = bad.join("events.jsonl");
+    let good_bytes = fs::read(&file).unwrap();
+    let mut corrupt = good_bytes.clone();
+    corrupt[0] = b'x';
+    fs::write(&file, &corrupt).unwrap();
+    let mut stage = stage().await;
+    stage.base = base.clone();
+    let live = Inventory {
+        terms: Vec::new(),
+        doing: BTreeMap::new(),
+    };
+
+    stage.tick(&live).await.unwrap();
+    let error = stage
+        .summary_view(&live.doing)
+        .studios
+        .into_iter()
+        .find(|st| st.id == "bad")
+        .and_then(|st| st.error);
+    assert!(error.is_some(), "the broken studio shows no error");
+
+    // Same length, byte for byte except the repair: without the
+    // broken retry this studio would stay skipped until an append.
+    fs::write(&file, &good_bytes).unwrap();
+    stage.tick(&live).await.unwrap();
+    let entry = stage
+        .summary_view(&live.doing)
+        .studios
+        .into_iter()
+        .find(|st| st.id == "bad")
+        .unwrap();
+    assert_eq!(entry.error, None, "{entry:?}");
+    assert!(reconciled(&bad), "the repaired studio never reconciled");
+}
+
 /// A studio whose pass fails mid-tick — its ledger replays but the
 /// append an action owes is refused — logs once and the tick moves
 /// on to the next studio.
