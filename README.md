@@ -57,9 +57,10 @@ Run `backlot` to open the client and press `Ctrl+B y` for the studio panel. The 
 
 Early, and the first tagged release is pending:
 
-- **The studio layer works**, and two recorded real-agent runs closed the loop on Claude Code;
-  everything else ran on the test runner. [docs/studio/limits.md](docs/studio/limits.md) says
-  plainly what has and has not been tried.
+- **The studio layer works** — Claude Code ran the full loop three times on a sample repository,
+  the first and third runs finishing it end to end; everything built after those runs ran only
+  on the test runner. [docs/studio/limits.md](docs/studio/limits.md) says plainly what has and
+  has not been tried.
 - **It runs on official `hc`.** CI builds a pinned official herdr-core from source and drives the real
   UI against it: sidebar, attach, switching, tabs, splits, status and detach. Day-to-day use is still
   mostly on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so
