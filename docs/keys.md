@@ -22,12 +22,36 @@ The defaults you'll use most:
 | `Ctrl+B z` | Zoom the pane |
 | `Ctrl+B r` | Resize mode |
 | `Ctrl+B x` | Close the pane |
+| `Ctrl+B y` | Toggle the studio panel |
 | `Ctrl+G` | Lock the keyboard, so every key goes to the program. Press again to unlock. |
 
 `Ctrl+B Ctrl+B` sends a literal `Ctrl+B` to the program. Custom commands bound in your Herdr config work here too.
 
 Settings changed with `Ctrl+B s` (theme, status indicators, sound, toast delivery) are saved to your Herdr config.
 Nothing else in that file changes. [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
+
+## The studio panel
+
+`Ctrl+B y` — the prefix, then `y` — opens the studio panel. Pressing the chord again while it is
+focused closes it; while it is open but unfocused the chord focuses it. A Herdr binding on `y`
+still wins whenever the panel does not own the keys. The chord's tail is `panel.key` in
+`~/.config/backlot/config.toml`.
+
+The panel has three modes: closed (the default — zero width, no keys), a 16-column collapsed
+strip, and an expanded column (`[panel] width`, default 30, clamped to 24–60). While it is
+focused it owns these keys:
+
+| Keys | Action |
+|---|---|
+| `j`/`k`, arrows | Move the selection |
+| `PageUp`/`PageDown` | Scroll |
+| `Enter` | Act on the row (focus a terminal, collapse a group, reopen a closed person) |
+| `Space` | Collapse the selected group |
+| `c` | Switch collapsed and expanded |
+| `+`/`-` | Raise or lower a task's priority |
+| `Esc` | Unfocus the panel (close it when it covers the whole frame) |
+
+[docs/studio/guide.md](studio/guide.md) explains what the panel's marks mean.
 
 ## Scrolling a pane
 
