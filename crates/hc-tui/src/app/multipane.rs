@@ -50,6 +50,20 @@ impl App {
             vt.scroll_to_row(scroll.total.saturating_sub(scroll.len) as usize);
         }
     }
+
+    /// A pane-bound page key pages the *displayed* pane's scrollback —
+    /// the reference applies its PageKey rule to whatever the pane
+    /// shows, so the scroll must land on the same surface
+    /// `reset_displayed_scroll` and wheel scrolling use: a
+    /// fresh-painted observer can hold the screen during reattach.
+    /// `true` once scrolled: the key is UI-consumed and never forwards.
+    pub(super) fn pane_page_scroll(&mut self, key: &input::TerminalKey) -> bool {
+        let Some(id) = self.pane.target().map(str::to_owned) else {
+            return false;
+        };
+        self.displayed_pane_mut(&id)
+            .is_some_and(|pane| pane.page_scroll(key))
+    }
     pub(super) fn follow_shared_focus(&mut self) {
         if self.pending_actions > 0 {
             return;

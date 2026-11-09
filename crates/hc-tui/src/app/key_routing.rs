@@ -68,6 +68,12 @@ impl App {
             Action::Press => {
                 let initial = self.key_context();
                 let mut target = self.route_key_press(&key, width);
+                if target.is_some() && self.pane_page_scroll(&key) {
+                    // A plain page key paged the pane's own scrollback
+                    // instead of reaching the program; its release is
+                    // swallowed with the press's consumed lease.
+                    target = None;
+                }
                 if target.is_some() {
                     self.reset_displayed_scroll();
                 }
@@ -266,7 +272,7 @@ impl App {
                     .forwarded_for(&lease_key)
                     .map(|lease| self.lease_route(lease))
                     .unwrap_or(target);
-                if self.pane.accepts_route(route) {
+                if self.pane.accepts_route(route) && !self.pane_page_scroll(&key) {
                     self.reset_displayed_scroll();
                     self.pane.key(&key);
                 }
@@ -287,7 +293,9 @@ impl App {
                         break;
                     }
                     let repeated = key.clone().with_action(Action::Repeat);
-                    if self.route_key_press(&repeated, width).is_some() {
+                    if self.route_key_press(&repeated, width).is_some()
+                        && !self.pane_page_scroll(&repeated)
+                    {
                         self.reset_displayed_scroll();
                         self.pane.key(&repeated);
                     }

@@ -701,10 +701,11 @@ Everything else on the compared surfaces still diffs normally.
   panes `t<N>` where the reference core names them `w<W>:p<P>`, and each
   parity owner's scratch root is a separate `mkdtemp`, so the `cwd` path
   differs in its random segment (`/tmp/hctui-parity-<seed>/acme-shop`).
-  Those cells differ on checkpoints where a pane row (id + path, 12
-  cells) or a workspace row (path, 8 cells) is selected; every other
-  navigator checkpoint — each filter, search-without-results, movement
-  and close — is cell-identical. The row list, search, filters,
+  Those cells differ on checkpoints where a pane row (id + path) or a
+  workspace row (path) is selected — twelve and eight cells at the
+  documented capture, fewer when a run's random segment is shorter;
+  every other navigator checkpoint — each filter, search-without-results,
+  movement and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.
 
 ## Slice 5 — popups, peek and custom commands

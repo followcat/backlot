@@ -128,6 +128,26 @@
       "name": "generated-shifted-slash",
       "outer_hex": "1b5b35353b323b343775",
       "received_hex": "1b5b35353a34373b323b343775"
+    },
+    {
+      "name": "kitty-page-up",
+      "outer_hex": "1b5b35373432313b31751b5b35373432313b313a3375",
+      "received_hex": ""
+    },
+    {
+      "name": "kitty-page-down",
+      "outer_hex": "1b5b35373432323b31751b5b35373432323b313a3375",
+      "received_hex": ""
+    },
+    {
+      "name": "kitty-ctrl-page-up",
+      "outer_hex": "1b5b35373432313b35751b5b35373432313b353a3375",
+      "received_hex": "1b5b353b357e1b5b353b353a337e"
+    },
+    {
+      "name": "kitty-ctrl-page-down",
+      "outer_hex": "1b5b35373432323b35751b5b35373432323b353a3375",
+      "received_hex": "1b5b363b357e1b5b363b353a337e"
     }
   ],
   "host_keyboard_flags_reply": 7,

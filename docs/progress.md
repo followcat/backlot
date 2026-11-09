@@ -500,3 +500,24 @@
   running `hc connect` locally and a fake `wl-paste` serving a PNG, the
   ignored end-to-end test uploaded through the real `terminal.put` and
   the pasted path landed in the program's stdin.
+
+## PgUp and PgDown page panes (branch fix/page-keys)
+
+- Plain `PageUp` and `PageDown` reached the program as `ESC [ 5 ~` and
+  `ESC [ 6 ~` and never moved the pane's own scrollback. The reference
+  pages its scrollback by one pane height for those keys in a normal
+  pane: main screen, no mouse reporting, and not a bare application
+  cursor program without bracketed paste.
+- hc-tui now applies the same rule per key event at the pane route.
+  Presses and repeats page the displayed pane's scrollback by its own
+  height, their releases stay swallowed, and every other case falls
+  through to encode and forward. The scroll lands on whatever surface
+  holds the screen, so a fresh-painted observer during reattach pages
+  too. A key the program receives still jumps the view back to the
+  bottom. Popup terminals are unchanged: their programs get every key.
+- Gates: formatting, all-target Clippy, the full suite (867 passed, 7
+  ignored), 29 installer tests, all 13 reference vectors including 14
+  new page-key cases captured from the pinned binary, and the 80x24
+  native parity run (only the documented navigator identity cells
+  differ). On an owned scratch session both clients paged the same
+  scrollback region while the fixture program received nothing.

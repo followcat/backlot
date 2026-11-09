@@ -376,6 +376,7 @@ impl Drop for Pane {
 mod events;
 pub(crate) mod input;
 mod lifecycle;
+mod page_keys;
 mod state;
 
 #[cfg(test)]

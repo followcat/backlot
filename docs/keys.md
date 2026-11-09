@@ -29,6 +29,18 @@ The defaults you'll use most:
 Settings changed with `Ctrl+B s` (theme, status indicators, sound, toast delivery) are saved to your Herdr config.
 Nothing else in that file changes. [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
 
+## Scrolling a pane
+
+`PageUp` and `PageDown` page the focused pane's scrollback by one pane height when the program does
+not use them itself: a shell or a line editor on the normal screen, like a prompt that takes pasted
+text. A program on the alternate screen, one reporting the mouse, or a pager in application cursor
+mode gets the keys instead, so `less`, `vim` and similar apps keep their own paging. Modified page
+keys such as `Ctrl+PageUp` always reach the program, and any key the program does get jumps the view
+back to the bottom. The mouse wheel scrolls the pane the same way.
+
+Inside a floating terminal (`type = "popup"`), every key goes to the popup's program, so `PageUp` and
+`PageDown` do not page the pane behind it.
+
 ## Alt shortcuts
 
 None of these are bound by default. Add the ones you want to `~/.config/herdr/config.toml`, then press `Ctrl+B Shift+R`
