@@ -19,6 +19,8 @@ impl Pane {
     pub(crate) fn notice(&self) -> Option<PaneNotice> {
         let (title, body, take_control) = if let Some(error) = &self.close_error {
             ("Input drain failed", error.clone(), false)
+        } else if let Some(dropped) = &self.dropped_drain {
+            ("Input drain failed", dropped.clone(), false)
         } else {
             match &self.state {
                 State::Live(live) if live.await_paint => (

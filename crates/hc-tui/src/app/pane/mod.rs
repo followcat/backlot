@@ -215,6 +215,11 @@ impl Drop for Closing {
 pub struct Pane {
     state: State,
     close_error: Option<String>,
+    /// A drain the close budget evicted loses its queued tail: that is
+    /// route-local loss like the reference's revoked connection, so it
+    /// shows the same "Input drain failed" notice but must never reach
+    /// `close_failure` and end the client.
+    dropped_drain: Option<String>,
     input_rejection: Option<String>,
     /// Swapped attaches still draining held-key releases (max a few).
     parked: Vec<Parked>,
@@ -303,6 +308,7 @@ impl Pane {
         Pane {
             state: State::Idle,
             close_error: None,
+            dropped_drain: None,
             input_rejection: None,
             parked: Vec::new(),
             closing: Vec::new(),

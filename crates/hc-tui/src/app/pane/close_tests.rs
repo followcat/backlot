@@ -155,12 +155,58 @@ async fn repeated_stalled_closes_are_count_bounded_and_visible() {
         pane.notice()
             .is_some_and(|notice| notice.title == "Input drain failed")
     );
+    assert_eq!(
+        pane.close_failure(),
+        None,
+        "an evicted drain loses queued input; it never fails the client"
+    );
     rx.close();
     timeout(Duration::from_secs(15), pane.shutdown())
         .await
         .unwrap();
     assert!(pane.closing.is_empty());
     drop(peers);
+}
+
+#[tokio::test]
+async fn many_parked_routes_at_detach_evict_a_drain_without_failing() {
+    // Held keys pin every visited wire, so detach starts one drain per
+    // parked route back to back: the ninth exceeds the close budget and
+    // the oldest is dropped. That is route-local loss, not a failure —
+    // the client exits clean (herdr revokes and recovers the same way).
+    let (mut pane, mut rx, mut accept) = rig();
+    let mut peers = Vec::new();
+    for _ in 0..9 {
+        pane.want(Some(spec(Role::Active)));
+        let mut core = serve(&mut accept, true).await;
+        timeout(T, async {
+            while !matches!(pane.state, State::Live(_)) {
+                step(&mut pane, &mut rx).await;
+            }
+        })
+        .await
+        .unwrap();
+        paint(&mut pane, &mut rx, &mut core, b"ready").await;
+        pane.park_outgoing().unwrap();
+        peers.push(core);
+    }
+    rx.close();
+    for mut core in peers {
+        tokio::spawn(async move {
+            loop {
+                let frame = core.read_stream(CH).await;
+                if frame.kind == Kind::Close {
+                    core.send_stream(CH, Kind::Close, b"").await;
+                    break;
+                }
+            }
+        });
+    }
+    timeout(Duration::from_secs(15), pane.shutdown())
+        .await
+        .unwrap();
+    assert!(pane.closing.is_empty());
+    assert_eq!(pane.close_failure(), None);
 }
 
 #[tokio::test]

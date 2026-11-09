@@ -106,6 +106,13 @@ impl Pty {
     /// Everything the child wrote since the last pump, fed to `vt`;
     /// replies the emulated terminal owes (queries, reports) go back.
     pub fn pump(&self, vt: &mut Vt) {
+        self.pump_log(vt, &mut Vec::new());
+    }
+
+    /// [`pump`](Self::pump) that also appends raw bytes to `log` — for
+    /// grepping output that bypasses the screen, like a stderr error
+    /// printed after the host terminal is restored.
+    pub fn pump_log(&self, vt: &mut Vt, log: &mut Vec<u8>) {
         let mut buf = [0u8; 65536];
         loop {
             let n =
@@ -113,6 +120,7 @@ impl Pty {
             if n <= 0 {
                 break;
             }
+            log.extend_from_slice(&buf[..n as usize]);
             vt.feed(&buf[..n as usize]);
         }
         let replies = vt.take_replies().unwrap_or_default();

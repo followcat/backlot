@@ -521,3 +521,32 @@
   native parity run (only the documented navigator identity cells
   differ). On an owned scratch session both clients paged the same
   scrollback region while the fixture program received nothing.
+## Input drain budget no longer ends the client (branch fix/input-drain)
+
+- hc-tui could exit with `error: Input drain limit exceeded; an older
+  route was closed`. The pane keeps at most eight in-flight route
+  drains; when a burst of parked-route closes pushed a ninth, the
+  oldest drain was dropped and the pane latched `close_error`. That
+  field doubles as the "Input drain failed" notice and the failure the
+  client reports at exit, so a routine budget eviction became a fatal
+  process exit. The burst is easy to reach: held keys pin every visited
+  wire, and detach (or losing outer-terminal focus, which releases all
+  forwarded leases) starts one drain per parked route back to back.
+- The eviction now records a sibling `dropped_drain` notice instead.
+  The pane still shows "Input drain failed" because queued input can be
+  lost, but `close_failure` never sees it, so the client keeps running
+  and exits cleanly. The route itself was already retiring, which is
+  the reference behavior at the same point: herdr revokes the congested
+  connection and recovers through the normal lifecycle, it never fails
+  the client. Reproduced end to end through `--remote` on an owned
+  scratch core with ten one-tab terminals and held F-keys; the binary
+  built before image paste fails identically, so this is not an
+  image-paste regression.
+- Gates: formatting, all-target Clippy and the full suite. The pane
+  test `many_parked_routes_at_detach_evict_a_drain_without_failing`
+  fails before the fix, and the new ignored end-to-end
+  `input_drain_e2e` drives the real `hc-tui --remote` through a fake
+  `ssh` and exits with the error before the fix. The 80x24 parity run
+  matched on every checkpoint except the documented navigator
+  footer-identity cells, and the installer and reference-vector gates
+  are unchanged.
