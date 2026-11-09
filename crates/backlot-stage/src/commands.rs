@@ -344,6 +344,22 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
+        Cmd::Finding { delivery, findings } => {
+            let findings_data: Vec<Finding> = read_json(&findings, "--findings")?;
+            let task = caller.task.clone().unwrap_or_default();
+            Ok(Box::new(move |_, seq| {
+                let pf = copy_to("reports", seq, &findings, Some("finding"));
+                Ok(pending(
+                    EventKind::TaskFinding {
+                        task,
+                        delivery,
+                        findings: findings_data,
+                    },
+                    by,
+                    vec![pf],
+                ))
+            }))
+        }
         Cmd::Correct { event, reason, set } => Ok(Box::new(move |_, _| {
             Ok(pending(
                 EventKind::Correction {
@@ -375,6 +391,7 @@ pub fn confirm(event: &backlot_model::Event) -> String {
             verdict,
             ..
         } => format!(" {task} d{delivery} {verdict:?}"),
+        EventKind::TaskFinding { task, delivery, .. } => format!(" {task} d{delivery}"),
         EventKind::TaskState { task, state, .. } => format!(" {task} {state:?}"),
         EventKind::MessageQueued { to, .. } => format!(" → {to}"),
         EventKind::ReportSent { node, to, .. } => format!(" {node} → {to}"),

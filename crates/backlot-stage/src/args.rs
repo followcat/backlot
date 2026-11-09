@@ -73,6 +73,10 @@ pub enum Cmd {
         findings: Option<PathBuf>,
         upstream_changes: Option<PathBuf>,
     },
+    Finding {
+        delivery: u32,
+        findings: PathBuf,
+    },
     Correct {
         event: u64,
         reason: String,
@@ -107,6 +111,8 @@ pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
 pub(crate) const U_REVIEW: &str = "usage: backlot review --task <id> --delivery <n> --verdict \
 accepted|partially-accepted|changes-requested|blocked --conclusion <text> \
 [--findings <f.json>] [--upstream-changes <f.json>]";
+pub(crate) const U_FINDING: &str =
+    "usage: backlot finding --task <id> --delivery <n> --findings <file.json>";
 pub(crate) const U_CORRECT: &str =
     "usage: backlot correct --event <seq> --reason <r> --set <key=value> [--set ...]";
 pub(crate) const U_STATUS: &str = "usage: backlot status [--json]";
@@ -264,6 +270,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "deliver" => args_task::deliver(&mut common, &mut it),
         "block" => args_task::block(&mut common, &mut it),
         "review" => args_task::review(&mut common, &mut it),
+        "finding" => args_task::finding(&mut common, &mut it),
         "correct" => args_task::correct(&mut common, &mut it),
         "status" => {
             args_task::flags_only(&mut common, &mut it, U_STATUS, |json| Cmd::Status { json })

@@ -378,6 +378,77 @@ fn studio_names_are_checked_and_missing_studios_refused() {
     );
 }
 
+/// `backlot finding` records defects on open and closed tasks and
+/// never moves the status; a delivery the task does not have refuses.
+#[test]
+fn finding_records_on_open_and_closed_tasks() {
+    let (scratch, env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let req = fixture(&scratch, "req.md", "# req\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary s --as producer"),
+    );
+    let acc = fixture(&scratch, "acc.md", "# acc\n");
+    ok(
+        &env,
+        &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
+    );
+    ok(&env, "cast --task t1 --actor actor-a --as director");
+    let rep = fixture(&scratch, "r.md", "report\n");
+    ok(
+        &env,
+        &format!("deliver --commits a..b --report {rep} --as actor --task t1"),
+    );
+
+    // --task is required; a delivery the task never had is refused.
+    assert!(
+        usage(&env, "finding --delivery 1 --findings x.json --as producer")
+            .contains("missing task")
+    );
+    let f = fixture(
+        &scratch,
+        "f.json",
+        r#"[{"id":"D9","summary":"found in integration","severity":"high"}]"#,
+    );
+    let out = ok(
+        &env,
+        &format!("finding --task t1 --delivery 1 --findings {f} --as producer"),
+    );
+    assert!(out.contains("task.finding t1 d1"), "{out}");
+    assert!(
+        refused(
+            &env,
+            &format!("finding --task t1 --delivery 9 --findings {f} --as producer")
+        )
+        .contains("no delivery 9")
+    );
+
+    // After acceptance the task still takes findings — status unchanged.
+    ok(
+        &env,
+        "review --task t1 --delivery 1 --verdict accepted --conclusion done --as director",
+    );
+    ok(
+        &env,
+        &format!("finding --task t1 --delivery 1 --findings {f} --as producer"),
+    );
+    let json = ok(&env, "status --json");
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["tasks"]["t1"]["status"], "accepted");
+    assert_eq!(
+        v["tasks"]["t1"]["finding_reports"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
 #[test]
 fn cast_toml_needs_all_roles() {
     let (scratch, env) = scratch();

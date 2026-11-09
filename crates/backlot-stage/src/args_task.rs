@@ -207,6 +207,51 @@ pub(crate) fn review(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), 
     ))
 }
 
+/// `--delivery <n>` flag shared by `review` and `finding`.
+fn parse_delivery(it: &mut It, u: &'static str, arg: &str) -> Result<Option<u32>, Fail> {
+    let v = if arg == "--delivery" {
+        Some(it.value("--delivery", u)?)
+    } else {
+        eq(arg, "--delivery").map(String::from)
+    };
+    v.map(|v| {
+        v.parse::<u32>()
+            .map_err(|_| usage(format!("bad --delivery '{v}'"), u))
+    })
+    .transpose()
+}
+
+pub(crate) fn finding(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut delivery = None;
+    let mut findings = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_FINDING)));
+        }
+        if common_flag(it, common, &arg, U_FINDING)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--delivery" => delivery = parse_delivery(it, U_FINDING, &arg)?,
+            _ if eq(&arg, "--delivery").is_some() => {
+                delivery = parse_delivery(it, U_FINDING, &arg)?
+            }
+            "--findings" => findings = Some(PathBuf::from(it.value("--findings", U_FINDING)?)),
+            _ if eq(&arg, "--findings").is_some() => {
+                findings = eq(&arg, "--findings").map(PathBuf::from)
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_FINDING)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Finding {
+            delivery: delivery.ok_or_else(|| usage("missing --delivery", U_FINDING))?,
+            findings: findings.ok_or_else(|| usage("missing --findings", U_FINDING))?,
+        },
+    ))
+}
+
 pub(crate) fn correct(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut event = None;
     let mut reason = None;

@@ -19,7 +19,7 @@ use crate::store::{self, StoreError};
 /// left for the TUI's own argument parsing.
 const COMMANDS: &[&str] = &[
     "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "deliver",
-    "block", "review", "correct", "status", "records",
+    "block", "review", "correct", "status", "records", "finding",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused` → 1.
@@ -208,7 +208,11 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
 fn exec_event(common: Common, cmd: Cmd, env: &Env, base: &Path) -> Result<String, Fail> {
     let needs_task = matches!(
         cmd,
-        Cmd::Deliver { .. } | Cmd::Block { .. } | Cmd::Cast { .. } | Cmd::Review { .. }
+        Cmd::Deliver { .. }
+            | Cmd::Block { .. }
+            | Cmd::Cast { .. }
+            | Cmd::Review { .. }
+            | Cmd::Finding { .. }
     );
     let caller = match &cmd {
         // `studio new` runs before any role terminal exists; the user
