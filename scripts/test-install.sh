@@ -325,6 +325,16 @@ want "failed core warns" "$out" "core installer failed"
 want "failed core prints the manual command" "$out" \
     "curl -fsSL https://releases.herdr.dev/core/install.sh | sh"
 
+# HOME is optional once the install dir is given.
+out=$(env -i PATH="$BIN:$SYSBIN" FAKE_SYS=Linux FAKE_MACH=x86_64 \
+    HC_TUI_BASE_URL="file://$FIX" HC_TUI_INSTALL_DIR="$work/core-nohome" \
+    HC_TUI_CORE_URL="file://$FIX/core-install.sh" HC_TUI_VERSION=v0.1.0 \
+    sh "$INSTALLER" 2>&1)
+st=$?
+[ $st -eq 0 ] \
+    && want "no HOME still reaches the core step" "$out" "installing the hc core" \
+    || bad "no HOME — exit $st: $out"
+
 echo "---"
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

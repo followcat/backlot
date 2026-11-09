@@ -145,7 +145,7 @@ esac
 have_hc() {
     command -v hc >/dev/null 2>&1 \
         || [ -x "$INSTALL_DIR/hc" ] \
-        || [ -x "$HOME/.local/bin/hc" ]
+        || [ -x "${HOME:-}/.local/bin/hc" ]
 }
 if [ "${HC_TUI_SKIP_CORE:-}" != "1" ] && ! have_hc; then
     echo "installing the hc core with the official installer"
