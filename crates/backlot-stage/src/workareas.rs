@@ -98,12 +98,16 @@ pub fn role_dir(dir: &Path, repo: &str, role: &str) -> PathBuf {
     }
 }
 
-/// stderr's first non-blank line — the attention's detail.
-fn err_line(out: &GitOut) -> String {
+/// stderr's most useful line — the `fatal:`/`error:` when git
+/// prints one (progress noise like `Preparing worktree` comes
+/// first), else the first non-blank line as before.
+pub(crate) fn err_line(out: &GitOut) -> String {
     out.stderr
         .lines()
-        .find(|l| !l.trim().is_empty())
-        .map(|l| l.trim().to_string())
+        .map(str::trim)
+        .find(|l| l.starts_with("fatal:") || l.starts_with("error:"))
+        .or_else(|| out.stderr.lines().map(str::trim).find(|l| !l.is_empty()))
+        .map(String::from)
         .unwrap_or_else(|| format!("exit {}", out.code))
 }
 
@@ -117,7 +121,13 @@ fn fail_on(out: &GitOut) -> Result<(), AreaFail> {
 /// `worktree list --porcelain` holds a block per worktree: the
 /// `worktree <dir>` head then `branch refs/heads/<name>`. Reuse asks
 /// for both — a dir checked out on another branch is not this area.
+/// git prints the dir resolved, so the looked-for path resolves too
+/// — a state dir reached through a symlink still matches; a dir
+/// that does not exist yet cannot be listed.
 pub fn worktree_listed(list: &str, dir: &Path, branch: &str) -> bool {
+    let Ok(dir) = dir.canonicalize() else {
+        return false;
+    };
     let want = format!("worktree {}", dir.display());
     let want_branch = format!("branch refs/heads/{branch}");
     let mut at = false;

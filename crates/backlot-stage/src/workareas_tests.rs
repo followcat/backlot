@@ -82,14 +82,20 @@ impl FakeGit {
                         return out(0, s, String::new());
                     }
                     Some(&"add") => {
-                        if argv[4] == "-b" {
-                            let (branch, dir) = (argv[5], argv[6]);
-                            self.branches.insert(branch.into());
-                            self.worktrees.push((dir.into(), branch.into()));
+                        let (dir, branch) = if argv[4] == "-b" {
+                            self.branches.insert(argv[5].into());
+                            (argv[6], argv[5])
                         } else {
-                            let (dir, branch) = (argv[4], argv[5]);
-                            self.worktrees.push((dir.into(), branch.into()));
-                        }
+                            (argv[4], argv[5])
+                        };
+                        // Real git creates the dir and `worktree list`
+                        // reports its resolved path.
+                        let _ = fs::create_dir_all(dir);
+                        let real = Path::new(dir)
+                            .canonicalize()
+                            .unwrap_or_else(|_| PathBuf::from(dir));
+                        self.worktrees
+                            .push((real.to_string_lossy().into_owned(), branch.into()));
                         return out(0, String::new(), "Preparing worktree\n".into());
                     }
                     _ => {}
@@ -171,14 +177,20 @@ fn an_existing_area_is_reused() {
     let dir = tmp();
     let integ = dir.join("work").join("integration");
     let t1 = dir.join("work").join("t1");
+    // `worktree list` reports resolved paths of real dirs.
+    fs::create_dir_all(&integ).unwrap();
+    fs::create_dir_all(&t1).unwrap();
     let mut fake = FakeGit {
         inside: true,
         worktrees: vec![
             (
-                integ.display().to_string(),
+                integ.canonicalize().unwrap().display().to_string(),
                 "backlot/acme-shop/integration".into(),
             ),
-            (t1.display().to_string(), "backlot/acme-shop/t1".into()),
+            (
+                t1.canonicalize().unwrap().display().to_string(),
+                "backlot/acme-shop/t1".into(),
+            ),
         ],
         branches: BTreeSet::from([
             "backlot/acme-shop/integration".to_string(),
@@ -225,6 +237,32 @@ fn an_existing_branch_is_reattached() {
         "{:?}",
         fake.calls
     );
+}
+
+/// git's progress noise prints before its error — the attention
+/// detail prefers the `fatal:`/`error:` line, else the first
+/// non-blank line.
+#[test]
+fn err_line_prefers_the_fatal_line() {
+    let noisy = GitOut {
+        code: 128,
+        stdout: String::new(),
+        stderr: "Preparing worktree (checking out 'b/x')\nfatal: 'b/x' is already checked out\n"
+            .into(),
+    };
+    assert_eq!(err_line(&noisy), "fatal: 'b/x' is already checked out");
+    let plain = GitOut {
+        code: 1,
+        stdout: String::new(),
+        stderr: "\n  \nsomething odd happened\nnext line\n".into(),
+    };
+    assert_eq!(err_line(&plain), "something odd happened");
+    let none = GitOut {
+        code: 2,
+        stdout: String::new(),
+        stderr: String::new(),
+    };
+    assert_eq!(err_line(&none), "exit 2");
 }
 
 /// A failing git reports its first stderr line — the retry issues
@@ -386,5 +424,72 @@ fn real_git_creates_real_worktrees() {
             &Area::Integration
         ),
         Err(AreaFail::NotGit)
+    );
+}
+
+/// The same run with the state directory reached through a symlink
+/// — macOS's `/var/folders` temp tree: `worktree list` prints the
+/// resolved path, and reuse still sees it, so a second `ensure`
+/// attaches nothing again.
+#[test]
+#[cfg(unix)]
+fn real_git_through_a_symlinked_state_dir() {
+    if std::process::Command::new("git")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+    let root = tmp();
+    let repo = root.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    git(
+        &repo,
+        &[
+            "-c",
+            "user.name=alice",
+            "-c",
+            "user.email=alice@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "start",
+        ],
+    );
+    let real = root.join("state-real");
+    fs::create_dir_all(&real).unwrap();
+    std::os::unix::fs::symlink(&real, root.join("state")).unwrap();
+    let dir = root.join("state");
+    let repo_s = repo.to_string_lossy().into_owned();
+    let mut git_run = real_git;
+    let integ = ensure(&mut git_run, "acme-shop", &repo_s, &dir, &Area::Integration).unwrap();
+    assert_eq!(integ, dir.join("work").join("integration"));
+    let t1 = ensure(
+        &mut git_run,
+        "acme-shop",
+        &repo_s,
+        &dir,
+        &Area::Task("t1".into()),
+    )
+    .unwrap();
+    assert_eq!(t1, dir.join("work").join("t1"));
+    assert!(real.join("work").join("integration").is_dir());
+    assert!(real.join("work").join("t1").is_dir());
+    // A rerun reuses both through the same symlinked path.
+    assert_eq!(
+        ensure(
+            &mut git_run,
+            "acme-shop",
+            &repo_s,
+            &dir,
+            &Area::Task("t1".into())
+        ),
+        Ok(t1)
+    );
+    assert_eq!(
+        ensure(&mut git_run, "acme-shop", &repo_s, &dir, &Area::Integration),
+        Ok(integ)
     );
 }
