@@ -1,7 +1,8 @@
-# hc-tui
+# backlot
 
-An unofficial terminal UI for [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`). It is for
-people who work in a terminal or on a headless machine and want the Herdr TUI experience on top of `hc`:
+An unofficial terminal client for [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`), with a
+studio layer for directing coding agents. It is for people who work in a terminal or on a headless
+machine and want the Herdr TUI experience on top of `hc`:
 
 - a sidebar of spaces and agents with live status, including machines added with `hc machine add`;
 - tabs, split panes, zoom and keyboard lock;
@@ -10,21 +11,25 @@ people who work in a terminal or on a headless machine and want the Herdr TUI ex
 - spaces and tabs read from the same `herdr-app` document the desktop app uses;
 - local use, or remote use over plain SSH, with the session staying on the server.
 
-![hc-tui showing a sidebar and a split pane](docs/images/hc-tui.png)
+The studio layer is not implemented yet — see [docs/studio/](docs/studio/). backlot started as a fork
+of [hc-tui](https://github.com/followcat/hc-tui), which stays a plain terminal client. Unofficial
+project, not affiliated with or endorsed by the Herdr project.
+
+![backlot showing a sidebar and a split pane](docs/images/hc-tui.png)
 
 ## Install
 
-hc-tui is one static binary. It needs the `hc` core itself installed —
+backlot is one static binary. It needs the `hc` core itself installed —
 see [herdr-core](https://github.com/herdrdev/herdr-core). Prebuilt archives cover Linux
 (x86_64 and aarch64, static musl) and macOS (arm64 and Intel).
 
 ```sh
-curl -fsSL https://github.com/followcat/hc-tui/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | sh
 ```
 
 The script verifies the archive against the release's `sha256sums.txt` and installs to
-`~/.local/bin` without sudo. Pin a release with `HC_TUI_VERSION=v…`, or fetch an archive from the
-[Releases page](https://github.com/followcat/hc-tui/releases) and check it yourself. Upgrade by
+`~/.local/bin` without sudo. Pin a release with `BACKLOT_VERSION=v…`, or fetch an archive from the
+[Releases page](https://github.com/followcat/backlot/releases) and check it yourself. Upgrade by
 running the script again; uninstall by deleting the binary. Details: [docs/install.md](docs/install.md).
 The first tagged release is pending — if the Releases page is still empty, build from source below.
 
@@ -42,26 +47,23 @@ Early, and the first tagged release is pending:
 - **Not implemented yet:** keyboard copy mode and clipboard image paste. Text a program copies itself
   through OSC 52 doesn't reach your clipboard yet.
 
-hc-tui stays a plain terminal client for `hc`. Multi-agent coordination is being built as a separate
-project.
-
 ## Build from source
 
 Requires a stable Rust toolchain (edition 2024) and Zig **0.16.0** on `PATH` (or via `ZIG=`): the `hc-vt`
 crate builds `libghostty-vt` from the pinned `vendor/ghostty` submodule.
 
 ```sh
-git clone --recursive https://github.com/followcat/hc-tui
-cd hc-tui
+git clone --recursive https://github.com/followcat/backlot
+cd backlot
 cargo build --release -p hc-tui
-./target/release/hc-tui --help
+./target/release/backlot --help
 ```
 
 Run it against a local core, or a remote one over SSH:
 
 ```sh
-hc-tui --session <name>
-hc-tui --remote <ssh-target> --session <name>
+backlot --session <name>
+backlot --remote <ssh-target> --session <name>
 ```
 
 The default prefix is Ctrl+B: `q` detaches, `w` opens workspace navigation, `b` toggles the sidebar and
