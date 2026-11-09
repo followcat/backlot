@@ -169,15 +169,48 @@ impl Task {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Where a recorded role stands: `live` while its terminal should be
+/// up, `lost` when it vanished unexpectedly, `closed` after the stage
+/// released it on purpose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleLifecycle {
+    Live,
+    Lost,
+    Closed,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RoleState {
+    /// True while the role should have a live terminal.
     pub live: bool,
+    /// The stage released this role on purpose (`role.closed`); the
+    /// person stays listed and resumable — `actor` and `session_id`
+    /// are kept. A later `role.started`/`role.resumed` clears it.
+    #[serde(default)]
+    pub closed: bool,
+    /// When the current lifecycle state began.
+    #[serde(default)]
+    pub since_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<ActorIdentity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+}
+
+impl RoleState {
+    /// Live, lost or closed — never more than one.
+    pub fn lifecycle(&self) -> RoleLifecycle {
+        if self.live {
+            RoleLifecycle::Live
+        } else if self.closed {
+            RoleLifecycle::Closed
+        } else {
+            RoleLifecycle::Lost
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

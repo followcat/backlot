@@ -47,13 +47,10 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             actor,
             ..
         } => {
-            let entry = state.roles.entry(role.clone()).or_insert(RoleState {
-                live: false,
-                terminal: None,
-                actor: None,
-                session_id: None,
-            });
+            let entry = state.roles.entry(role.clone()).or_default();
             entry.live = true;
+            entry.closed = false;
+            entry.since_ms = ts;
             if terminal.is_some() {
                 entry.terminal = terminal.clone();
             }
@@ -68,7 +65,17 @@ pub fn apply(state: &mut StudioState, event: &Event) {
         EventKind::RoleLost { role, .. } => {
             if let Some(entry) = state.roles.get_mut(role) {
                 entry.live = false;
+                entry.since_ms = ts;
             }
+        }
+        EventKind::RoleClosed { role, .. } => {
+            // A deliberate release keeps `actor` and `session_id`: the
+            // person stays resumable while their studio is live.
+            let entry = state.roles.entry(role.clone()).or_default();
+            entry.live = false;
+            entry.closed = true;
+            entry.since_ms = ts;
+            state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
         EventKind::ReqVersion {
             version,

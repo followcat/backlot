@@ -46,6 +46,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         EventKind::RoleStarted { .. }
         | EventKind::RoleLost { .. }
         | EventKind::RoleResumed { .. }
+        | EventKind::RoleClosed { .. }
         | EventKind::ReportSent { .. }
         | EventKind::AttentionRaised { .. }
         | EventKind::MessageQueued { .. } => {

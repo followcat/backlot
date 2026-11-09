@@ -214,6 +214,17 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// The stage released the role on purpose (no longer desired, a
+    /// recast replacement, an orphan). Distinct from `role.lost`: the
+    /// role did not vanish unexpectedly, so the reduced state keeps
+    /// `actor` and `session_id` — a closed role stays resumable. A
+    /// later `role.started` or `role.resumed` clears the closed state.
+    #[serde(rename = "role.closed")]
+    RoleClosed {
+        role: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
     #[serde(rename = "req.version")]
     ReqVersion {
         version: u32,
@@ -335,6 +346,7 @@ impl EventKind {
             EventKind::RoleStarted { .. } => "role.started",
             EventKind::RoleLost { .. } => "role.lost",
             EventKind::RoleResumed { .. } => "role.resumed",
+            EventKind::RoleClosed { .. } => "role.closed",
             EventKind::ReqVersion { .. } => "req.version",
             EventKind::PlanPublished { .. } => "plan.published",
             EventKind::TaskCreated { .. } => "task.created",

@@ -33,7 +33,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | Kind | Main fields |
 |---|---|
 | `studio.created` | title, repo, mode, candidates, role configurations |
-| `role.started` / `role.lost` / `role.resumed` | role, terminal, actor identity, session ID, reason |
+| `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `req.version` | version, file, summary |
 | `plan.published` | kind (plan, acceptance), file, requirement version |
 | `task.created` | id, title, requirement version, acceptance, dependencies |
@@ -46,6 +46,12 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail |
 | `correction` | target event, changed fields, reason |
+
+`role.lost` means a role recorded as live vanished unexpectedly (its terminal is gone with no
+`role.closed`). `role.closed` means the stage released the role on purpose — a stop or a recast
+replacement — so a deliberate stop is never mistaken for a loss, and a closed role keeps its actor
+identity and session ID: it stays resumable while its studio is live. A later `role.started` or
+`role.resumed` clears the closed state.
 
 ## Task states
 

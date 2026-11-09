@@ -99,6 +99,7 @@ pub fn status(name: &str, state: &StudioState) -> String {
     ] {
         let live = match live {
             Some(r) if r.live => "live",
+            Some(r) if r.closed => "closed",
             Some(_) => "lost",
             None => "not started",
         };

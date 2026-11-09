@@ -223,6 +223,80 @@ fn corrected_verdict_recomputes_status() {
     assert_eq!(s.tasks["t1"].reviews[0].verdict, Verdict::ChangesRequested);
 }
 
+fn started(role: &str, terminal: &str, session: &str) -> EventKind {
+    EventKind::RoleStarted {
+        role: role.into(),
+        terminal: Some(terminal.into()),
+        actor: Some(actor("a")),
+        session_id: Some(session.into()),
+        reason: None,
+    }
+}
+
+/// `role.closed` flips live off but keeps the actor identity and the
+/// session ID — a closed person stays resumable.
+#[test]
+fn role_closed_keeps_identity_and_session() {
+    let mut log = base_events();
+    log.push(ev(4, "stage", started("producer", "t3", "sess-1")));
+    log.push(ev(
+        5,
+        "stage",
+        EventKind::RoleClosed {
+            role: "producer".into(),
+            reason: Some("no longer desired".into()),
+        },
+    ));
+    let r = &replay(&log).roles["producer"];
+    assert_eq!(r.lifecycle(), RoleLifecycle::Closed);
+    assert!(!r.live && r.closed);
+    assert_eq!(r.actor, Some(actor("a")));
+    assert_eq!(r.session_id.as_deref(), Some("sess-1"));
+    assert_eq!(r.terminal.as_deref(), Some("t3"));
+    assert_eq!(r.since_ms, 5000);
+}
+
+/// A lost role reads `lost`, a closed one `closed` — a deliberate stop
+/// is never mistaken for a loss.
+#[test]
+fn lost_and_closed_are_distinct() {
+    let mut log = base_events();
+    log.push(ev(4, "stage", started("writer", "t4", "sess-w")));
+    log.push(ev(
+        5,
+        "stage",
+        EventKind::RoleLost {
+            role: "writer".into(),
+            reason: None,
+        },
+    ));
+    let r = &replay(&log).roles["writer"];
+    assert_eq!(r.lifecycle(), RoleLifecycle::Lost);
+    assert!(!r.live && !r.closed);
+}
+
+/// A later `role.started` (or `role.resumed`) clears the closed state.
+#[test]
+fn a_later_start_clears_the_closed_state() {
+    let mut log = base_events();
+    log.push(ev(4, "stage", started("actor-t1-c1", "t5", "sess-1")));
+    log.push(ev(
+        5,
+        "stage",
+        EventKind::RoleClosed {
+            role: "actor-t1-c1".into(),
+            reason: Some("recast".into()),
+        },
+    ));
+    log.push(ev(6, "stage", started("actor-t1-c1", "t7", "sess-2")));
+    let r = &replay(&log).roles["actor-t1-c1"];
+    assert_eq!(r.lifecycle(), RoleLifecycle::Live);
+    assert!(r.live && !r.closed);
+    assert_eq!(r.terminal.as_deref(), Some("t7"));
+    assert_eq!(r.session_id.as_deref(), Some("sess-2"));
+    assert_eq!(r.since_ms, 6000);
+}
+
 /// Events serialize as one JSON object per line with the `kind` tag.
 #[test]
 fn event_json_shape_is_flat() {
