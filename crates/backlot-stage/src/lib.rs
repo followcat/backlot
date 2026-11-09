@@ -32,5 +32,7 @@ mod cli_tests;
 mod discover_tests;
 #[cfg(test)]
 mod store_tests;
+#[cfg(test)]
+mod watch_tests;
 
 pub use cli::{Env, Fail, maybe_run};
