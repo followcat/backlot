@@ -21,6 +21,8 @@ pub mod store;
 mod watch;
 
 #[cfg(test)]
+mod act_tests;
+#[cfg(test)]
 mod cli_state_tests;
 #[cfg(test)]
 mod cli_testkit;

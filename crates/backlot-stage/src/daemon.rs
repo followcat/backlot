@@ -88,6 +88,8 @@ pub(crate) struct Stage {
     base: PathBuf,
     /// `PATH` for role terminals: this exe's directory first.
     pub(crate) path_env: String,
+    /// This exe's own directory: it leads a configured `PATH` too.
+    pub(crate) exe_dir: String,
     /// `BACKLOT_STATE_DIR` for role terminals.
     pub(crate) state_dir: String,
     /// The stage's own environment: adapters scrub inherited markers
@@ -206,6 +208,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         client: link.client.clone(),
         base: base.clone(),
         path_env,
+        exe_dir: exe_dir.to_string_lossy().into_owned(),
         state_dir: base.to_string_lossy().into_owned(),
         env_vars: env.vars.clone(),
         exec: Box::new(discover::real_exec),

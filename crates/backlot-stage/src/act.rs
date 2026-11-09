@@ -75,16 +75,22 @@ fn desired_actor<'s>(state: &'s StudioState, role: &str) -> Option<&'s ActorIden
 
 /// The env a role terminal gets: the adapter's, then the runner's own
 /// config map, then the role's structural variables on top — the
-/// launch's working set never overrides `BACKLOT_*` or `PATH`.
-fn role_env(
+/// launch's working set never overrides `BACKLOT_*`. `PATH` is the
+/// one structural variable a config may bend: a configured value
+/// replaces the inherited PATH (a runner installed under nvm, say)
+/// but this exe's directory still leads, so `backlot` and the
+/// shipped tools stay reachable.
+pub(crate) fn role_env(
     studio: &str,
     start: &Start,
     state_dir: &str,
+    exe_dir: &str,
     path_env: &str,
     adapter_env: BTreeMap<String, String>,
     runner_env: BTreeMap<String, String>,
 ) -> BTreeMap<String, String> {
     let mut env = adapter_env;
+    let configured_path = runner_env.get("PATH").cloned();
     env.extend(runner_env);
     env.insert("BACKLOT_STUDIO".into(), studio.into());
     env.insert("BACKLOT_ROLE".into(), start.kind.name().into());
@@ -92,12 +98,18 @@ fn role_env(
         env.insert("BACKLOT_TASK".into(), task.clone());
     }
     env.insert("BACKLOT_STATE_DIR".into(), state_dir.into());
-    env.insert("PATH".into(), path_env.into());
+    env.insert(
+        "PATH".into(),
+        match configured_path {
+            Some(p) => format!("{exe_dir}:{p}"),
+            None => path_env.into(),
+        },
+    );
     env
 }
 
 /// The labels a role terminal carries (design.md "Role terminals").
-fn labels(studio: &str, start: &Start) -> BTreeMap<String, String> {
+pub(crate) fn labels(studio: &str, start: &Start) -> BTreeMap<String, String> {
     let mut labels = BTreeMap::from([
         ("backlot.studio".to_string(), studio.to_string()),
         ("backlot.role".to_string(), start.role.clone()),
@@ -154,6 +166,7 @@ impl Stage {
                     studio,
                     start,
                     &self.state_dir,
+                    &self.exe_dir,
                     &self.path_env,
                     launch.env.clone(),
                     runner_env,
@@ -326,60 +339,5 @@ impl Stage {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::reconcile::RoleKind;
-
-    fn start() -> Start {
-        Start {
-            role: "producer".into(),
-            kind: RoleKind::Producer,
-            task: None,
-            terminal: "bl-acme-producer".into(),
-            actor: ActorIdentity {
-                runner: "devin".into(),
-                runner_version: None,
-                model: "m".into(),
-                effort: "high".into(),
-                permission_profile: "standard".into(),
-            },
-            repo: "/home/user/acme-shop".into(),
-        }
-    }
-
-    /// `runner_env` values reach the terminal env — and nothing
-    /// else: not the labels, which are all the ledger and summary
-    /// could ever see.
-    #[test]
-    fn runner_env_reaches_env_and_nothing_else() {
-        let start = start();
-        let runner_env = BTreeMap::from([("HTTPS_PROXY".into(), "http://proxy:8080".into())]);
-        let env = role_env(
-            "acme",
-            &start,
-            "/state",
-            "/bin",
-            BTreeMap::from([("ADAPTER".into(), "1".into())]),
-            runner_env,
-        );
-        assert_eq!(env["HTTPS_PROXY"], "http://proxy:8080");
-        assert_eq!(env["BACKLOT_ROLE"], "producer");
-        // Structural variables still win over the runner's map.
-        let runner_env = BTreeMap::from([("BACKLOT_ROLE".into(), "evil".into())]);
-        let env = role_env(
-            "acme",
-            &start,
-            "/state",
-            "/bin",
-            BTreeMap::new(),
-            runner_env,
-        );
-        assert_eq!(env["BACKLOT_ROLE"], "producer");
-        let labels = serde_json::to_string(&labels("acme", &start)).unwrap();
-        assert!(!labels.contains("proxy"), "{labels}");
     }
 }
