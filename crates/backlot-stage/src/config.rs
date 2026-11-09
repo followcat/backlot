@@ -5,11 +5,29 @@
 
 use std::collections::BTreeMap;
 
+/// `line L column C` for a byte offset — the only part of a parse
+/// error that may be reported: the parser's message quotes the
+/// offending line, and a config file may hold secrets (a proxy URL
+/// with credentials, say) that must never reach the ledger.
+fn line_col(text: &str, pos: usize) -> String {
+    let upto = &text[..pos.min(text.len())];
+    let line = upto.bytes().filter(|b| *b == b'\n').count() + 1;
+    let col = upto
+        .rsplit('\n')
+        .next()
+        .map_or(1, |l| l.chars().count() + 1);
+    format!("line {line} column {col}")
+}
+
 /// The `[runner_env.<runner>]` map inside `text`. A missing section
 /// is an empty map; malformed TOML or a non-string value is the
-/// error detail a `config malformed` attention carries.
+/// error detail a `config malformed` attention carries — position
+/// only, never any of the file's text.
 pub fn runner_env_in(text: &str, runner: &str) -> Result<BTreeMap<String, String>, String> {
-    let parsed: toml::Value = toml::from_str(text).map_err(|e| format!("config.toml: {e}"))?;
+    let parsed: toml::Value = toml::from_str(text).map_err(|e| match e.span() {
+        Some(span) => format!("config.toml: malformed at {}", line_col(text, span.start)),
+        None => "config.toml: malformed".to_string(),
+    })?;
     let Some(section) = parsed.get("runner_env").and_then(|t| t.get(runner)) else {
         return Ok(BTreeMap::new());
     };
@@ -65,5 +83,19 @@ mod tests {
         assert!(runner_env_in("[runner_env.devin\n", "devin").is_err());
         assert!(runner_env_in("[runner_env]\ndevin = 3\n", "devin").is_err());
         assert!(runner_env_in("[runner_env.devin]\nPORT = 8080\n", "devin").is_err());
+    }
+
+    /// The malformed detail is the position only: the parser's own
+    /// message quotes the offending line, and a secret in it must
+    /// not reach the ledger.
+    #[test]
+    fn malformed_detail_is_position_only() {
+        let text = "[runner_env.devin]\nHTTPS_PROXY = http://user:pw@host\n";
+        let err = runner_env_in(text, "devin").unwrap_err();
+        assert!(err.contains("line 2"), "{err}");
+        assert!(err.contains("column"), "{err}");
+        assert!(!err.contains("pw"), "{err}");
+        assert!(!err.contains("user"), "{err}");
+        assert!(!err.contains("http"), "{err}");
     }
 }
