@@ -1,10 +1,32 @@
-// Derived from herdr src/client/shell/mouse.rs `request_selection_copy` and
-// src/pane/terminal.rs `extract_selection` (Apache-2.0).
-//! Copying a finished selection through OSC 52.
+// Derived from herdr src/client/shell/mouse.rs `request_selection_copy`,
+// src/pane/terminal.rs `extract_selection` and
+// src/client/clipboard_forwarding.rs (Apache-2.0).
+//! Copying through OSC 52: a finished selection, and what programs copy.
 
 use super::App;
 
 impl App {
+    /// Write what programs in panes copied to the host terminal. The focused
+    /// pane's input wire carries the same bytes as its observer, and a peek
+    /// only looks at a worker, so observers and popups are the ones that
+    /// count: each copy reaches the clipboard once.
+    pub(super) fn drain_clipboard_writes(&mut self) {
+        self.pane.take_clipboard_writes();
+        if let Some(peek) = self.peek.as_mut() {
+            peek.pane.take_clipboard_writes();
+        }
+        let writes: Vec<_> = self
+            .observers
+            .values_mut()
+            .chain(self.popup.as_mut().map(|popup| &mut popup.pane))
+            .flat_map(|pane| pane.take_clipboard_writes())
+            .collect();
+        for content in writes {
+            let sequence = crate::selection::osc52_sequence(&content);
+            let _ = (self.host_control)(sequence.as_bytes());
+        }
+    }
+
     /// Extract the selection's text from the pane's own displayed VT —
     /// atomic at release — and write it to the host terminal as OSC 52.
     /// Empty reads (a blank stretch, a pane without a VT) write nothing.

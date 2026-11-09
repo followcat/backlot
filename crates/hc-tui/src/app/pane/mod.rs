@@ -263,6 +263,9 @@ pub struct Pane {
     /// the VT's bell hook; the app writes them to the outer terminal.
     /// `pub(crate)` so the app-level byte test can seed a count.
     pub(crate) pending_bells: u64,
+    /// Text the program copied (OSC 52) since the app last drained.
+    /// `pub(crate)` so the app-level byte test can seed it.
+    pub(crate) pending_clipboard: Vec<Vec<u8>>,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -321,6 +324,7 @@ impl Pane {
             host: HostFacts::default(),
             initial: None,
             pending_bells: 0,
+            pending_clipboard: Vec::new(),
             attaches: 0,
         }
     }
@@ -331,6 +335,11 @@ impl Pane {
     /// counts at the emulator (docs/parity.md).
     pub fn take_bells(&mut self) -> u64 {
         std::mem::take(&mut self.pending_bells)
+    }
+
+    /// Drain the text the program copied on this pane's live wire.
+    pub fn take_clipboard_writes(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.pending_clipboard)
     }
 }
 

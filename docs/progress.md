@@ -456,3 +456,18 @@
 - Commit `be10620` blames a full PTY buffer. That guess was wrong:
   draining the PTY didn't change the result. The draining stays, since
   a test shouldn't leave the child blocked on output.
+
+## Programs can copy through hc-tui (branch fix/forward-osc52)
+
+- A program's OSC 52 write used to stop at the pane's VT. Codex selects
+  with the mouse and copies this way, so it reported a copy while the
+  clipboard stayed as it was. hc-tui now takes the write from the VT,
+  through the same library hook the reference uses, and re-emits it to
+  the host.
+- Each copy is written once: observers and popups count, the focused
+  pane's input wire doesn't, since it carries the same bytes. Writes
+  inside a paint are dropped.
+- Gates: formatting, all-target Clippy, the full suite (858 passed, 7
+  ignored) and 29 installer tests. On an owned scratch session, three
+  copies from two stand-in agents, with switches between them, reached
+  the outer terminal once each. The build before this change wrote none.

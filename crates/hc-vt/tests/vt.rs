@@ -212,3 +212,20 @@ fn bells_are_counted_and_drained() {
     assert_eq!(vt.take_bell_count(), 3);
     assert_eq!(vt.take_bell_count(), 0);
 }
+
+// Derived from herdr crates/ghostty-vt/src/lib.rs (Apache-2.0).
+#[test]
+fn clipboard_writes_complete_once_and_queries_disclose_nothing() {
+    for suffix in [b"\x07".as_slice(), b"\x1b\\".as_slice()] {
+        let bytes = [b"\x1b]52;c;YQBi".as_slice(), suffix].concat();
+        for split in 0..=bytes.len() {
+            let mut vt = hc_vt::Vt::new(10, 3, 0);
+            vt.feed(&bytes[..split]);
+            vt.feed(&bytes[split..]);
+            assert_eq!(vt.take_clipboard_writes(), vec![b"a\0b".to_vec()]);
+            vt.feed(b"\x1b]52;c;?\x07\x1b]52;p;YQBi\x07");
+            assert!(vt.take_clipboard_writes().is_empty());
+            assert!(vt.take_replies().unwrap().is_empty());
+        }
+    }
+}

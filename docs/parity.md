@@ -646,12 +646,12 @@ Everything else on the compared surfaces still diffs normally.
   host in 64-byte chunks. The wire effect is identical to the reference's
   server-counted `ServerMessage::TerminalBell` fanout; the counting point
   moved client-side.
-- **Pane-emitted OSC 52 is swallowed.** The reference's core detects OSC 52
-  writes inside a pane and relays them as `ServerMessage::Clipboard`, which
-  `client/clipboard_forwarding.rs` decodes and re-emits to the host. hc's
-  wire has no clipboard message and pane paint feeds only the local VT —
-  a program writing OSC 52 inside a pane sets no host clipboard. Forwarding
-  remains M5 work.
+- **Pane-emitted OSC 52 is forwarded by every attached hc-tui.** The
+  reference's core detects OSC 52 writes inside a pane and sends
+  `ServerMessage::Clipboard` to the foreground client only. hc's wire has
+  no clipboard message, so hc-tui takes the write from the pane's own VT
+  and re-emits it to the host. With two hc-tui clients on one core, both
+  write. Only panes with a cached observer, and popups, are covered.
 - **`system` delivery falls back to terminal.** hc-tui has no desktop
   notification integration, so `delivery = "system"` writes the same OSC
   9/99 sequence as `terminal`. `off` still synthesizes (and suppresses

@@ -253,6 +253,7 @@ impl App {
                 self.sched.mark_dirty(now);
             }
             self.drain_bells();
+            self.drain_clipboard_writes();
             self.share_seen();
             self.update_window_title();
             if self.next_tab_status.is_some_and(|due| now >= due) {

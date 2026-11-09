@@ -74,6 +74,19 @@ async fn observer_drains_replies_without_sending() {
     assert!(!pane.status_label(Instant::now()).contains("replies"));
 }
 #[tokio::test]
+async fn only_live_output_counts_as_a_program_copy() {
+    let (mut pane, mut rx, mut accept) = rig();
+    pane.want(Some(spec(Role::Active)));
+    let mut core = serve(&mut accept, true).await;
+    step(&mut pane, &mut rx).await;
+    // Still inside the paint: the mode barrier hasn't arrived.
+    raw_paint(&mut pane, &mut rx, &mut core, b"\x1b]52;c;b2xk\x07").await;
+    assert!(pane.take_clipboard_writes().is_empty());
+    paint(&mut pane, &mut rx, &mut core, b"x").await;
+    raw_paint(&mut pane, &mut rx, &mut core, b"\x1b]52;c;aGVsbG8=\x07").await;
+    assert_eq!(pane.take_clipboard_writes(), vec![b"hello".to_vec()]);
+}
+#[tokio::test]
 async fn stale_generation_events_are_ignored() {
     let (mut pane, mut rx, mut accept) = rig();
     pane.want(Some(spec(Role::Active)));

@@ -26,6 +26,7 @@ pub const OPT_USERDATA: i32 = 0;
 pub const OPT_WRITE_PTY: i32 = 1;
 pub const OPT_BELL: i32 = 2;
 pub const OPT_SIZE: i32 = 6;
+pub const OPT_CLIPBOARD_WRITE: i32 = 26;
 // GHOSTTY_TERMINAL_OPT_COLOR_* — vendor/ghostty/include/ghostty/vt/terminal.h.
 pub const OPT_COLOR_FOREGROUND: i32 = 11;
 pub const OPT_COLOR_BACKGROUND: i32 = 12;
@@ -238,6 +239,48 @@ pub type WritePtyFn = unsafe extern "C" fn(Terminal, *mut c_void, *const u8, usi
 pub type SizeFn = unsafe extern "C" fn(Terminal, *mut c_void, *mut SizeReport) -> bool;
 /// `GhosttyTerminalBellFn` — BEL (0x07) notifications, no payload.
 pub type BellFn = unsafe extern "C" fn(Terminal, *mut c_void);
+
+// GhosttyClipboardLocation and GhosttyClipboardWriteResult —
+// vendor/ghostty/include/ghostty/vt/terminal.h.
+pub const CLIPBOARD_LOCATION_STANDARD: i32 = 0;
+pub const CLIPBOARD_WRITE_SUCCESS: i32 = 0;
+pub const CLIPBOARD_WRITE_UNSUPPORTED: i32 = 2;
+pub const CLIPBOARD_WRITE_INVALID_DATA: i32 = 4;
+
+/// `GhosttyClipboardContent`. Borrowed for the callback only.
+#[repr(C)]
+pub struct ClipboardContent {
+    pub mime: StringView,
+    pub data: StringView,
+}
+
+/// `GhosttyClipboardWriteReply`.
+#[repr(C)]
+pub struct ClipboardWriteReply {
+    pub size: usize,
+    pub result: i32,
+    pub remember: bool,
+}
+
+pub type ClipboardWriteReplyFn =
+    unsafe extern "C" fn(*const ClipboardWrite, *const ClipboardWriteReply);
+
+/// `GhosttyClipboardWrite`. A sized struct, borrowed for the callback only.
+#[repr(C)]
+pub struct ClipboardWrite {
+    pub size: usize,
+    pub location: i32,
+    pub contents: *const ClipboardContent,
+    pub contents_len: usize,
+    pub name: StringView,
+    pub granted: bool,
+    pub can_remember: bool,
+    pub ctx: *const c_void,
+    pub reply: Option<ClipboardWriteReplyFn>,
+}
+
+/// `GhosttyTerminalClipboardWriteFn`.
+pub type ClipboardWriteFn = unsafe extern "C" fn(Terminal, *mut c_void, *const ClipboardWrite);
 
 pub type Formatter = *mut c_void;
 

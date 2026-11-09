@@ -396,6 +396,24 @@ async fn drained_pane_bells_reach_the_outer_terminal() {
 }
 
 #[tokio::test]
+async fn a_program_copy_reaches_the_outer_terminal_once() {
+    let mut app = app_alerts();
+    let (bytes, sink) = captured();
+    app.set_host_control(sink);
+    // The focused pane's input wire and its observer see the same output.
+    app.pane.pending_clipboard.push(b"hello".to_vec());
+    let mut observer = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    observer.pending_clipboard.push(b"hello".to_vec());
+    app.observers.insert("t1".into(), observer);
+    app.drain_clipboard_writes();
+    assert_eq!(
+        bytes.lock().unwrap().as_slice(),
+        &[b"\x1b]52;c;aGVsbG8=\x07".to_vec()]
+    );
+    assert!(app.pane.take_clipboard_writes().is_empty());
+}
+
+#[tokio::test]
 async fn seen_writes_the_turn_once_per_turn_and_retries_a_failure() {
     let mut app = app_alerts();
     app.focused = Some("t1".into());
