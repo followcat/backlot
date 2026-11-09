@@ -160,12 +160,24 @@ liveness signal costs no document writes.
 
 ## Recovery
 
-An hc server restart ends every terminal, including the stage. `--keep` does not help, because hc never re-runs the
-original command.
+An hc server restart ends every terminal, including the stage; the person starts it again with
+`backlot stage start` — hc never re-runs the original command, and `--keep` does not help.
 
-When the stage starts, it replays the ledger and lists terminals by label. A role that should be live and is still there
-is adopted. One that is gone is recorded as lost and resumed with its runner's resume flag and recorded session ID, then
-told it was resumed. A role that cannot be resumed is reported to the director or producer.
+When the stage starts, it replays each ledger and lists terminals by label. A role that should be live and is still
+there is adopted. One that is gone is recorded `role.lost`, and the same pass clears the role's open attention — the
+prompt or stall it named is gone with the terminal. A lost role that is still wanted is resumed with its runner's
+resume flag into the recorded session ID as `role.resumed` with reason `recovered`, then told once, through the usual
+notice path, that its terminal was lost, the session was resumed, anything running then has stopped and a
+permission-prompted command must be run again.
+
+A crash loop is bounded: the reducer keeps every `role.lost` time, so the guard survives the restart, and a third loss
+inside ten minutes — or a lost role with no recorded session — raises a `cannot resume` attention instead of starting,
+routed to the role's reviewer like a stalled one. Session discovery for a post-launch runner keeps looking past the
+60-second `session id not found` attention until the discovery stop, so a slow first start still gets an id.
+
+A studio whose ledger cannot be loaded, or whose act, watch or deliver pass fails, is skipped and shown with an
+`error` line in the summary while the other studios carry on; the stage picks it up again when it loads. Only losing
+the core ends the stage.
 
 The panel shows a one-line "stage not running" while keeping the last document on screen. Starting
 the stage from the panel is not implemented — the stage runs as its own process.

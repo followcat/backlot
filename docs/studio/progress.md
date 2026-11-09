@@ -1,5 +1,30 @@
 # Studio progress
 
+## S6b: recover after a restart (2026-11-10)
+
+- Done: a `backlot stage start` after an hc restart brings the studio back from the ledger alone. A
+  wanted role whose terminal is gone is recorded `role.lost`, its open permission or stall
+  attention clears in the same pass, and the role starts again resuming its recorded session as
+  `role.resumed` with reason `recovered` — deduped by a crash-loop guard of three losses in ten
+  minutes kept in `RoleState`, so the count survives replay. A lost role with no session, or past
+  the guard, raises one `cannot resume` attention routed to its reviewer like a stall. The resumed
+  role gets one `recovered` notice through the usual outbox and send gate. A corrupt ledger or a
+  failing act, watch or deliver now skips that one studio — logged once, shown as an `error` line
+  in the summary and the panel — while only a lost core still ends the stage. Session discovery
+  keeps looking past the 60-second not-found attention until the ten-minute stop, scoped to the
+  role's current life, and `studio new` refuses `stall_limit_s = 0`.
+- Measured: reconcile covers resume, guard window, unwant and held-reopen cases; notices cover the
+  `lost` routing and the single `recovered`; tick tests run a corrupt ledger beside a good studio
+  and a failing pass on a duplex fake core. `real_stage_restart` on the fake runner stops the core
+  with an open attention and a queued tell mid-flight, restarts it on the same session and asserts
+  every wanted role is lost then `recovered` on the same session with one terminal each, the stale
+  attention cleared, notices and the tell delivered, a closed role untouched;
+  `real_stage_restart_stage_only` kills only `backlot-stage` and asserts nothing is lost or
+  relaunched. fmt, clippy and `cargo test` green on every commit; `real_stage` (2) green against
+  the pinned core.
+- Not verified: no real agents ran a recovered session — the resume flag is the fake runner's, and
+  whether a real runner picks a stopped core's session back up is untested.
+
 ## S6a: stalls, the rework cap, going on after a block (2026-11-10)
 
 - Done: three real rounds found four gaps and all four are closed. A live role whose screen is
