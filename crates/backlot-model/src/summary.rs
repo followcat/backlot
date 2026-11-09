@@ -19,11 +19,10 @@ pub const SUMMARY_SCHEMA: &str = "backlot/1";
 
 /// Most studios shown; older finished ones drop off first.
 pub const MAX_STUDIOS: usize = 12;
-/// Most roles shown per studio.
-pub const MAX_ROLES: usize = 16;
 /// Per-string cap so nothing can bloat the document.
 const CAP: usize = 96;
-/// Serialized size the builder stays under (the design target is 64 KiB).
+/// Serialized size the builder aims for (the design target is 64 KiB;
+/// the store's hard limit is 1 MiB).
 const TARGET_BYTES: usize = 60_000;
 
 /// One studio's roles + counters as the panel needs them.
@@ -104,6 +103,24 @@ fn finished(state: &StudioState) -> bool {
             .roles
             .values()
             .all(|r| r.lifecycle() != RoleLifecycle::Live)
+}
+
+/// Role keys in panel order: the fixed roles first, then the actors
+/// by ledger key. Every recorded role is listed — a closed person
+/// stays while the studio is live (R19), so there is no count cap.
+fn role_keys(state: &StudioState) -> Vec<&str> {
+    const FIXED: [&str; 3] = ["producer", "director", "writer"];
+    FIXED
+        .into_iter()
+        .filter(|k| state.roles.contains_key(*k))
+        .chain(
+            state
+                .roles
+                .keys()
+                .map(String::as_str)
+                .filter(|k| !FIXED.contains(k)),
+        )
+        .collect()
 }
 
 /// The candidate name for `actor-<task>-c<n>` keys, else the key.
@@ -196,11 +213,9 @@ pub fn summary(
             continue;
         };
         let done = finished(state);
-        let roles: Vec<RoleSummary> = state
-            .roles
-            .keys()
+        let roles: Vec<RoleSummary> = role_keys(state)
+            .into_iter()
             .filter_map(|role| role_summary(state, role, live))
-            .take(MAX_ROLES)
             .collect();
         let entry = StudioSummary {
             id: cap(name),
@@ -229,12 +244,14 @@ pub fn summary(
         }
         out.push(s);
     }
-    // The target size is a promise: drop trailing studios until the
-    // serialized body fits.
-    while serde_json::to_vec(&out)
-        .map(|b| b.len() > TARGET_BYTES)
-        .unwrap_or(false)
-        && out.len() > 1
+    // Shrink toward the target by dropping finished studios — they
+    // sit at the tail. A live studio is never dropped: if the body
+    // is still over, it is written anyway (64 KiB is the target,
+    // 1 MiB the hard limit).
+    while out.last().is_some_and(|s| s.state == "finished")
+        && serde_json::to_vec(&out)
+            .map(|b| b.len() > TARGET_BYTES)
+            .unwrap_or(false)
     {
         out.pop();
     }

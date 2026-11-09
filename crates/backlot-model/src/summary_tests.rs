@@ -3,7 +3,8 @@
 
 use std::collections::BTreeMap;
 
-use crate::event::{EventKind, Verdict};
+use crate::event::{Event, EventKind, Verdict};
+use crate::state::replay;
 use crate::summary::*;
 use crate::testkit::*;
 
@@ -127,6 +128,94 @@ fn counters_follow_the_ledger() {
     let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
     assert_eq!(s.studios[0].open_reviews, 1);
     assert_eq!(s.studios[0].waiting, 1);
+}
+
+/// `n` casts on t1, each started then closed: `actor-t1-c1..cN` all
+/// end up recorded closed people. Appends to `events` in seq order.
+fn closed_actors(events: &mut Vec<Event>, tag: &str, n: usize) {
+    let mut seq = events.len() as u64;
+    for i in 1..=n {
+        let role = format!("actor-t1-c{i}");
+        seq += 1;
+        events.push(ev(
+            seq,
+            "director",
+            cast("t1", &format!("{tag}-cand-{i}"), "a"),
+        ));
+        seq += 1;
+        events.push(ev(seq, "stage", started(&role, "t9", "a")));
+        seq += 1;
+        events.push(ev(seq, "stage", closed(&role)));
+    }
+}
+
+/// Fixed roles lead the panel list and every recorded person is in
+/// it — forty closed actors do not push the producer out.
+#[test]
+fn fixed_roles_come_first_and_every_role_is_listed() {
+    let mut events = base_events();
+    let mut seq = events.len() as u64;
+    for kind in [
+        started("producer", "t1", "prod"),
+        started("director", "t2", "dir"),
+    ] {
+        seq += 1;
+        events.push(ev(seq, "stage", kind));
+    }
+    closed_actors(&mut events, "many", 40);
+    let state = replay(&events);
+    let s = summary(&[("acme-shop".into(), state)], &BTreeMap::new(), 1);
+    let roles = &s.studios[0].roles;
+    assert_eq!(roles.len(), 42, "{roles:?}");
+    assert_eq!(roles[0].role, "producer");
+    assert_eq!(roles[1].role, "director");
+    assert!(roles[2].role.starts_with("actor-"), "{roles:?}");
+    for i in 1..=40 {
+        let role = format!("actor-t1-c{i}");
+        assert!(roles.iter().any(|r| r.role == role), "missing {role}");
+    }
+}
+
+/// Over the size target, finished studios drop; a live studio stays
+/// — and stays even when it alone is over the target.
+#[test]
+fn finished_studios_drop_for_size_but_live_stay() {
+    let big_finished = |tag: &str| {
+        let mut events = base_events();
+        closed_actors(&mut events, tag, 80);
+        let seq = events.len() as u64 + 1;
+        events.push(ev(
+            seq,
+            "director",
+            EventKind::TaskState {
+                task: "t1".into(),
+                state: crate::event::TaskStateChange::Abandoned,
+                reason: "done".into(),
+            },
+        ));
+        replay(&events)
+    };
+    let mut studios = vec![("live-0".to_string(), base_state())];
+    for i in 0..6 {
+        studios.push((format!("done-{i}"), big_finished(&format!("d{i}"))));
+    }
+    let total = studios.len();
+    let s = summary(&studios, &BTreeMap::new(), 1);
+    assert!(s.studios.iter().any(|st| st.id == "live-0"), "{s:?}");
+    assert!(s.studios.len() < total, "{}", s.studios.len());
+    assert!(
+        serde_json::to_vec(&s.studios).unwrap().len() <= 60_000,
+        "{}",
+        serde_json::to_vec(&s.studios).unwrap().len()
+    );
+
+    // One live studio far over the target is written anyway.
+    let mut events = base_events();
+    closed_actors(&mut events, "huge", 350);
+    let s = summary(&[("big-live".into(), replay(&events))], &BTreeMap::new(), 1);
+    assert_eq!(s.studios.len(), 1);
+    assert_eq!(s.studios[0].id, "big-live");
+    assert_eq!(s.studios[0].roles.len(), 350);
 }
 
 /// Finished studios fill only the slots live ones leave.
