@@ -340,6 +340,8 @@ fn notices_are_owed_once_per_source_event() {
     t.state_changes.push(StateChangeRecord {
         state: TaskStateChange::Blocked,
         reason: "needs an answer".into(),
+        by: "actor".into(),
+        resumed_to: None,
         seq: 13,
         ts_ms: 0,
     });
@@ -423,6 +425,8 @@ fn a_producer_cast_routes_the_delivery_notice() {
     t.state_changes.push(StateChangeRecord {
         state: TaskStateChange::Blocked,
         reason: "needs an answer".into(),
+        by: "actor".into(),
+        resumed_to: None,
         seq: 13,
         ts_ms: 0,
     });

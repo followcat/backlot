@@ -351,7 +351,10 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     }
                 }
                 TaskStateChange::Resumed => {
-                    if t.status == TaskStatus::Paused {
+                    // A paused task returns to what it was doing; a
+                    // blocked one goes back to running with the same
+                    // actor — nothing is relaunched.
+                    if matches!(t.status, TaskStatus::Paused | TaskStatus::Blocked) {
                         Ok(())
                     } else {
                         Err(Refusal::BadPauseResume {

@@ -9,7 +9,8 @@
 //! `changes_requested` review to the task's actor — except the
 //! one that takes the task to `at_cap`, which is the producer's
 //! call to make with the user — a blocked task
-//! to its reviewer, a requirement revision above v1 to the
+//! to its reviewer, a resume that returns the task to `running`
+//! to its actor, a requirement revision above v1 to the
 //! director naming the tasks now behind, an actor's
 //! `permission prompt` attention to the director — a non-actor's
 //! episode is the user's, and gets no notice — a `stalled`
@@ -21,7 +22,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use backlot_model::event::{ApprovalDecision, TaskStateChange, Verdict};
-use backlot_model::state::StudioState;
+use backlot_model::state::{StudioState, TaskStatus};
 
 /// A notice the ledger owes: a generated body file and the queued
 /// message that names it.
@@ -162,24 +163,53 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
             });
         }
         for ch in &t.state_changes {
-            if sent.contains(&ch.seq) || ch.state != TaskStateChange::Blocked {
+            if sent.contains(&ch.seq) {
                 continue;
             }
-            out.push(Notice {
-                source_seq: ch.seq,
-                to: reviewer_for(t),
-                label: "blocked",
-                body: format!(
-                    "# {} blocked\n\nTask `{}` is blocked{}\n",
-                    t.id,
-                    t.id,
-                    if ch.reason.is_empty() {
-                        ".".to_string()
-                    } else {
-                        format!(": {}", ch.reason)
-                    },
-                ),
-            });
+            match ch.state {
+                TaskStateChange::Blocked => {
+                    out.push(Notice {
+                        source_seq: ch.seq,
+                        to: reviewer_for(t),
+                        label: "blocked",
+                        body: format!(
+                            "# {} blocked\n\nTask `{}` is blocked{}\n",
+                            t.id,
+                            t.id,
+                            if ch.reason.is_empty() {
+                                ".".to_string()
+                            } else {
+                                format!(": {}", ch.reason)
+                            },
+                        ),
+                    });
+                }
+                // A resume that returns the task to `running` — a
+                // straight unblock, or a pause of running work —
+                // owes the actor the word to carry on. Any other
+                // restore is bookkeeping nobody acts on.
+                TaskStateChange::Resumed
+                    if ch.resumed_to == Some(TaskStatus::Running) && t.cast.is_some() =>
+                {
+                    out.push(Notice {
+                        source_seq: ch.seq,
+                        to: actor_key(t),
+                        label: "resumed",
+                        body: format!(
+                            "# {} resumed\n\n`{}` resumed task `{}`{} — carry on from where it stopped.\n",
+                            t.id,
+                            ch.by,
+                            t.id,
+                            if ch.reason.is_empty() {
+                                ".".to_string()
+                            } else {
+                                format!(": {}", ch.reason)
+                            },
+                        ),
+                    });
+                }
+                _ => {}
+            }
         }
     }
     for a in &state.attention {

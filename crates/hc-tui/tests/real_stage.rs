@@ -1082,6 +1082,7 @@ async fn real_stage_watch() {
     );
     let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
     let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let report = fixture(&scratch, "report.md", "# delivery report\n");
 
     bl(
         &scratch,
@@ -1144,6 +1145,31 @@ async fn real_stage_watch() {
         .expect("attention.cleared");
     assert_eq!(cleared["target"], raised["seq"], "{cleared}");
     assert_eq!(cleared["reason"], "screen changed", "{cleared}");
+
+    // A blocked task goes on with the same actor: `task resume`
+    // returns it to running, the actor hears the `resumed` notice,
+    // and the delivery it then makes lands and reviews normally.
+    bl(
+        &scratch,
+        &state,
+        "block --reason needs-an-answer --as actor --task t1",
+    );
+    wait_inbox(&state, "fake-inbox-director", "-blocked.md");
+    bl(
+        &scratch,
+        &state,
+        "task resume --task t1 --reason answered --as director",
+    );
+    wait_inbox(&state, "fake-inbox-actor-t1", "-resumed.md");
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "deliver --commits a..b --report {} --as actor --task t1",
+            report.display()
+        ),
+    );
+    wait_inbox(&state, "fake-inbox-director", "-delivered.md");
 
     drop(client);
     scratch.finish().expect("scratch teardown");

@@ -104,6 +104,15 @@ pub fn reviewed(task: &str, n: u32, verdict: Verdict, findings: Vec<Finding>) ->
     }
 }
 
+/// A `task.state` event — pause, resume, block, abandon, takeover.
+pub fn task_state(task: &str, state: TaskStateChange, reason: &str) -> EventKind {
+    EventKind::TaskState {
+        task: task.into(),
+        state,
+        reason: reason.into(),
+    }
+}
+
 /// A `task.finding` event reporting `findings` on delivery `n`.
 pub fn task_finding(task: &str, n: u32, findings: Vec<Finding>) -> EventKind {
     EventKind::TaskFinding {

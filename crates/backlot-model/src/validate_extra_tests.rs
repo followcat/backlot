@@ -56,6 +56,104 @@ fn task_state_transition_rules() {
     );
 }
 
+/// `task resume` on a `blocked` task is valid and replays to
+/// `running` with the same cast — the actor was never lost — so a
+/// delivery validates right after. A pause of a blocked task still
+/// restores `blocked`, and a resume of anything that is neither
+/// paused nor blocked stays refused.
+#[test]
+fn a_blocked_task_resumes_to_running() {
+    let blocked = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "actor",
+                task_state("t1", TaskStateChange::Blocked, "needs an answer"),
+            ),
+        ],
+    );
+    let resume = task_state("t1", TaskStateChange::Resumed, "answered");
+    assert_eq!(
+        validate(&blocked, &new_ev("director", resume.clone())),
+        Ok(())
+    );
+    let mut state = blocked;
+    apply(&mut state, &ev(6, "director", resume));
+    let t = &state.tasks["t1"];
+    assert_eq!(t.status, TaskStatus::Running);
+    assert_eq!(t.cast.as_ref().unwrap().candidate, "actor-a");
+    // The change knows who resumed it and what it restored.
+    let ch = t.state_changes.last().unwrap();
+    assert_eq!(ch.by, "director");
+    assert_eq!(ch.resumed_to, Some(TaskStatus::Running));
+    // `deliver` validates now that the task runs again.
+    let d = delivered("t1", 1, "a", 1);
+    assert_eq!(validate(&state, &new_ev("actor", d)), Ok(()));
+
+    // A pause of a blocked task restores `blocked`, not `running`.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "actor",
+                task_state("t1", TaskStateChange::Blocked, "needs an answer"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Paused, "hold"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Resumed, "still waiting"),
+            ),
+        ],
+    );
+    let t = &state.tasks["t1"];
+    assert_eq!(t.status, TaskStatus::Blocked);
+    assert_eq!(
+        t.state_changes.last().unwrap().resumed_to,
+        Some(TaskStatus::Blocked)
+    );
+
+    // A task paused from `delivered` resumes to `delivered` — the
+    // review, not the actor, picks back up.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor", delivered("t1", 1, "a", 1)),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Paused, "hold"),
+            ),
+            ("director", task_state("t1", TaskStateChange::Resumed, "go")),
+        ],
+    );
+    let t = &state.tasks["t1"];
+    assert_eq!(t.status, TaskStatus::Delivered);
+    assert_eq!(
+        t.state_changes.last().unwrap().resumed_to,
+        Some(TaskStatus::Delivered)
+    );
+
+    // A task that is neither paused nor blocked still refuses.
+    let running = state_with(
+        &base_events(),
+        vec![("director", cast("t1", "actor-a", "a"))],
+    );
+    let resume = task_state("t1", TaskStateChange::Resumed, "go");
+    assert_eq!(
+        validate(&running, &new_ev("director", resume)),
+        Err(Refusal::BadPauseResume {
+            task: "t1".into(),
+            state: "resumed",
+            status: TaskStatus::Running
+        })
+    );
+}
+
 #[test]
 fn delivered_and_cleared_links_validate() {
     let mut base = base_events();

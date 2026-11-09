@@ -116,6 +116,14 @@ pub struct ReviewRecord {
 pub struct StateChangeRecord {
     pub state: TaskStateChange,
     pub reason: String,
+    /// Role that recorded it (the event's `by`).
+    #[serde(default)]
+    pub by: String,
+    /// The status a `resumed` restored — `Running` when the actor
+    /// should carry on. `reduce_task` fills it during replay, so
+    /// `None` only ever marks a non-resume change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_to: Option<TaskStatus>,
     pub seq: u64,
     pub ts_ms: u64,
 }

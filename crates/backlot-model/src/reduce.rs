@@ -297,6 +297,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 t.state_changes.push(StateChangeRecord {
                     state: *s,
                     reason: reason.clone(),
+                    by: event.by.role.clone(),
+                    resumed_to: None,
                     seq,
                     ts_ms: ts,
                 });

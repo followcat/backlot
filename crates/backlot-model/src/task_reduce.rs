@@ -38,6 +38,10 @@ pub fn reduce_task(task: &mut Task, cap: u32) {
     let mut rounds = 0u32;
     let mut cap_rounds = 0u32;
     let mut closed = None;
+    // Each `resumed`'s outcome, for the record annotations below:
+    // `running` means the actor should carry on, anything else is
+    // only bookkeeping.
+    let mut resumed_to: Vec<(u64, TaskStatus)> = Vec::new();
     for (seq, step) in steps {
         let next = match step {
             Step::Cast => {
@@ -64,7 +68,11 @@ pub fn reduce_task(task: &mut Task, cap: u32) {
                     paused_from = Some(status);
                     TaskStatus::Paused
                 }
-                TaskStateChange::Resumed => paused_from.take().unwrap_or(TaskStatus::Running),
+                TaskStateChange::Resumed => {
+                    let next = paused_from.take().unwrap_or(TaskStatus::Running);
+                    resumed_to.push((seq, next));
+                    next
+                }
                 TaskStateChange::Abandoned => TaskStatus::Abandoned,
                 TaskStateChange::TakenOver => TaskStatus::TakenOver,
                 TaskStateChange::Blocked => TaskStatus::Blocked,
@@ -87,4 +95,12 @@ pub fn reduce_task(task: &mut Task, cap: u32) {
     task.paused_from = paused_from;
     task.rework_rounds = rounds;
     task.closed_ts_ms = if status.is_terminal() { closed } else { None };
+    for change in &mut task.state_changes {
+        if change.state == TaskStateChange::Resumed {
+            change.resumed_to = resumed_to
+                .iter()
+                .find(|(s, _)| *s == change.seq)
+                .map(|(_, st)| *st);
+        }
+    }
 }

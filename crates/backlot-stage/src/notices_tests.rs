@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use backlot_model::event::Verdict;
+use backlot_model::event::{TaskStateChange, Verdict};
 use backlot_model::state::{Message, StudioState};
 use backlot_model::testkit::*;
 
@@ -119,4 +119,123 @@ fn below_the_cap_the_rework_notice_is_unchanged() {
         rework.body
     );
     assert!(owed.iter().all(|n| n.label != "at-cap"));
+}
+
+/// A resume that returns the task to `running` — straight out of
+/// `blocked`, or a pause of running work — owes the current actor
+/// exactly one `resumed` notice naming who resumed it and the
+/// reason. A resume that only restores `delivered` or `blocked`
+/// owes none, and a task with no cast owes none either.
+#[test]
+fn a_resume_to_running_owes_the_actor() {
+    // blocked -> running: the resume the S6 loop needs.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "actor",
+                task_state("t1", TaskStateChange::Blocked, "needs an answer"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Resumed, "answered"),
+            ),
+        ],
+    );
+    let owed = notices::owed(&state, dir());
+    let resumed: Vec<_> = owed.iter().filter(|n| n.label == "resumed").collect();
+    assert_eq!(resumed.len(), 1, "{owed:?}");
+    let n = resumed[0];
+    assert_eq!(n.to, "actor-t1-c1");
+    assert_eq!(n.source_seq, 6);
+    for want in ["director", "answered", "carry on"] {
+        assert!(
+            n.body.contains(want),
+            "resumed body misses {want}: {}",
+            n.body
+        );
+    }
+
+    // Paused from running -> running: owed the same way.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Paused, "hold"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Resumed, "go on"),
+            ),
+        ],
+    );
+    let owed = notices::owed(&state, dir());
+    let resumed: Vec<_> = owed.iter().filter(|n| n.label == "resumed").collect();
+    assert_eq!(resumed.len(), 1, "{owed:?}");
+    assert_eq!(resumed[0].to, "actor-t1-c1");
+
+    // Paused from delivered -> delivered: the review picks back
+    // up, the actor has nothing to carry on.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor", delivered("t1", 1, "a", 1)),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Paused, "hold"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Resumed, "go on"),
+            ),
+        ],
+    );
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "resumed")
+    );
+
+    // Paused from blocked -> blocked: still waiting.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "actor",
+                task_state("t1", TaskStateChange::Blocked, "needs an answer"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Paused, "hold"),
+            ),
+            (
+                "director",
+                task_state("t1", TaskStateChange::Resumed, "still waiting"),
+            ),
+        ],
+    );
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "resumed")
+    );
+
+    // No cast: nobody to tell.
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("actor", task_state("t1", TaskStateChange::Blocked, "stuck")),
+            ("director", task_state("t1", TaskStateChange::Resumed, "go")),
+        ],
+    );
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "resumed")
+    );
 }
