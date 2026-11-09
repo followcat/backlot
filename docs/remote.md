@@ -26,17 +26,17 @@ on the core. [Runtime](runtime.md) has the details.
 
 ## Pasting text and images
 
-`Ctrl+Shift+V` pastes text — the program receives it as a bracketed paste, unchanged.
+`Ctrl+Shift+V` pastes text. The program receives it as a bracketed paste, unchanged.
 
-`Ctrl+V` pastes a clipboard image: hc-tui reads your local clipboard, uploads the image to the remote core with
+`Ctrl+V` pastes a clipboard image. hc-tui reads your local clipboard, uploads the image to the remote core with
 `terminal.put`, and the program receives the path of the uploaded file. The same applies to a focused terminal on
 another machine (`machine/tN`) and to hc-tui itself running inside an SSH session. On a plain local endpoint `Ctrl+V`
-is left alone — local programs read the clipboard themselves.
+is left alone. Local programs read the clipboard themselves.
 
-On Linux the clipboard read needs `wl-paste` under Wayland or `xclip` under X11; a missing tool counts as no image.
+On Linux the clipboard read needs `wl-paste` under Wayland or `xclip` under X11. A missing tool counts as no image.
 PNG, JPEG, GIF, WebP and BMP are recognized, up to the 8 MB `terminal.put` limit. The key is
-`keys.remote_image_paste` (default `"ctrl+v"`); set it to `""` to disable the trigger. [Keys](keys.md#pasting-text-and-images)
-covers the trigger config and the other gestures.
+`keys.remote_image_paste` (default `"ctrl+v"`). Set it to `""` to disable the trigger.
+[Keys](keys.md#pasting-text-and-images) covers the trigger config and the other gestures.
 
 ## More machines with `hc machine add`
 

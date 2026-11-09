@@ -14,6 +14,8 @@ terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
 - Your Herdr key bindings, theme and other settings carry over from your existing Herdr config.
 - Spaces and tabs come from the same `herdr-app` document the desktop app uses.
 - Works locally or over plain SSH. Your terminals stay on the server when you detach.
+- Over SSH, `Ctrl+V` pastes an image from your local clipboard into the agent's machine. `Ctrl+Shift+V` stays the
+  text paste.
 
 | Mouse selection | Settings |
 |---|---|

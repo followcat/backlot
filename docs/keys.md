@@ -78,17 +78,17 @@ program.
 
 ## Pasting text and images
 
-`Ctrl+Shift+V` pastes text — that's your terminal's own shortcut, and the program receives it as a bracketed paste,
+`Ctrl+Shift+V` pastes text. That is your terminal's own shortcut, and the program receives it as a bracketed paste,
 unchanged.
 
-On a remote endpoint `Ctrl+V` pastes a clipboard image instead: hc-tui reads your local clipboard, uploads the image
+On a remote endpoint `Ctrl+V` pastes a clipboard image instead. hc-tui reads your local clipboard, uploads the image
 to the program's machine with `terminal.put`, and the program receives the path of the uploaded file. This applies to
 `hc-tui --remote`, to hc-tui running inside an SSH session, and to a focused terminal on another machine
-(`machine/tN`). On a plain local endpoint `Ctrl+V` goes to the program unchanged, because local programs read the
-clipboard themselves — Vim needs it for block-visual, too.
+(`machine/tN`). On a plain local endpoint `Ctrl+V` goes to the program unchanged. Local programs read the clipboard
+themselves, and Vim needs it for block-visual.
 
 The trigger is `keys.remote_image_paste` in `~/.config/herdr/config.toml`, default `"ctrl+v"`. Set it to `""` to
 disable the key. Two other gestures do the same thing wherever it applies: dropping an image file on the window, and
-an empty bracketed paste (what a terminal sends for `Ctrl+Shift+V` when the clipboard holds only an image). PNG, JPEG,
-GIF, WebP and BMP are recognized, up to the 8 MB `terminal.put` limit. On Linux the read needs `wl-paste` under
-Wayland or `xclip` under X11; a missing tool counts as no image.
+an empty bracketed paste. An empty paste is what a terminal sends for `Ctrl+Shift+V` when the clipboard holds only an
+image. PNG, JPEG, GIF, WebP and BMP are recognized, up to the 8 MB `terminal.put` limit. On Linux the read needs
+`wl-paste` under Wayland or `xclip` under X11. A missing tool counts as no image.
