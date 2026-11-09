@@ -25,9 +25,9 @@ HC_TUI_TEST_CORE=$PWD/target/test-core/herdr-core \
 ```
 
 `crates/hc-tui/tests/real_core_smoke.rs` drives the real `hc-tui` binary in
-a PTY over the same scratch isolation — idle start, sidebar rows, attach and
-echo, pane cycling, tab and split creation, an OSC 7501 report, and a clean
-detach with restored terminal modes. It asserts only facts both cores
+a PTY over the same scratch isolation. It covers idle start, sidebar rows,
+attach and echo, pane cycling, tab and split creation, an OSC 7501 report, and
+a clean detach with restored terminal modes. It asserts only facts both cores
 share, so the same suite covers fork and official builds:
 
 ```sh
@@ -35,11 +35,10 @@ HC_TUI_TEST_CORE=$(command -v hc) \
     cargo test -p hc-tui --test real_core_smoke -- --ignored --test-threads=1
 ```
 
-A missing `HC_TUI_TEST_CORE` fails the explicit run — it never silently
-counts as skipped. `--test-threads=1` keeps the real cores serial; each
-test could run in parallel but serial runs are easier to debug. A second
-pinned build (for fork-compat checks) is run the same way by pointing the
-variable at it — the suite itself is identical.
+A missing `HC_TUI_TEST_CORE` fails the explicit run instead of counting as
+skipped. `--test-threads=1` keeps the real cores serial; each test could run
+in parallel but serial runs are easier to debug. To test a second pinned
+build, point the variable at it. The suite is the same.
 
 ## Scratch isolation
 
@@ -47,15 +46,15 @@ Every test owns a fresh `ScratchCore` (`tests/common/scratch.rs`):
 
 - session `hctui-test-<random>` with `HC_SESSION` + explicit short `HC_SOCKET`;
 - temporary `HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`
-  under one `/tmp/hctui-*` root; `env_clear()` — no inherited `HC_*` leaks in;
+  under one `/tmp/hctui-*` root, with `env_clear()` so no `HC_*` is inherited;
 - `core.json` pre-seeded with the neutral identity `host-a`;
 - a foreground `serve` in its own process group (never an existing service);
 - logs under the owned root; finite deadlines on every step.
 
 Teardown runs `hc --json server stop` under the identical fixture env and
-requires `stopped:true` — the only path that stops the detached holders
-and their programs (they `setsid` away and survive a killed core; no
-signal to the serve reaches them). After a deliberate mid-test kill or a
+requires `stopped:true`. Nothing else stops the detached holders and their
+programs: they `setsid` away and survive a killed core, and no signal to the
+serve reaches them. After a deliberate mid-test kill or a
 failed stop, a replacement `serve` adopts the holders, then stops
 normally. Every wait is bounded; on verified failure the root is
 preserved and reported instead of removed.

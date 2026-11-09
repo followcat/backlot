@@ -1,7 +1,7 @@
 # Install, upgrade, uninstall
 
-hc-tui is one binary. It needs the `hc` core installed separately —
-[herdr-core](https://github.com/herdrdev/herdr-core). Prebuilt archives:
+hc-tui is a single binary. You also need the `hc` core: see
+[herdr-core](https://github.com/herdrdev/herdr-core).
 
 | Platform | Archive target |
 |---|---|
@@ -16,19 +16,16 @@ hc-tui is one binary. It needs the `hc` core installed separately —
 curl -fsSL https://github.com/followcat/hc-tui/releases/latest/download/install.sh | sh
 ```
 
-The script (`scripts/install.sh`, plain POSIX sh):
+The script (`scripts/install.sh`):
 
-1. detects OS and architecture and picks the matching archive — an unsupported platform gets a
-   clear message instead of a guess;
-2. resolves the latest release tag — `HC_TUI_VERSION=v0.1.0` pins one instead (a bare `0.1.0`
-   works too);
+1. picks the archive for your OS and architecture, and stops with a message if there isn't one;
+2. finds the latest release, or uses the one in `HC_TUI_VERSION` (`v0.1.0` or `0.1.0`);
 3. downloads `hc-tui-<version>-<target>.tar.gz` and `sha256sums.txt` over HTTPS;
-4. verifies the archive's checksum and stops with nothing installed on a mismatch;
-5. writes the binary to `${HC_TUI_INSTALL_DIR:-$HOME/.local/bin}` via a rename inside that
-   directory, so a running `hc-tui` is never half-replaced. No sudo.
+4. checks the archive's checksum, and installs nothing if it doesn't match;
+5. moves the binary into `${HC_TUI_INSTALL_DIR:-$HOME/.local/bin}`. It doesn't use sudo.
 
-It prints a note if the install dir is not on your `PATH`, and a reminder that `hc` must be
-installed. `sha256` is computed with `sha256sum`, `shasum` or `openssl` — whichever the system has.
+It tells you if the install directory isn't on your `PATH`. The checksum uses `sha256sum`, `shasum` or `openssl`,
+whichever is available.
 
 ## Manual install
 
@@ -45,8 +42,8 @@ The archive also contains `LICENSE`, `NOTICE` and a short `README.md`.
 
 ## Upgrade
 
-Re-run the install script. `HC_TUI_VERSION=v<new>` moves to a specific release, up or down.
-The binary is replaced atomically; running clients keep their own in-memory copy until restart.
+Run the install script again. Set `HC_TUI_VERSION=v<version>` to move to a specific release, newer or older. Clients
+that are already running keep the old version until you restart them.
 
 ## Uninstall
 
@@ -54,8 +51,10 @@ The binary is replaced atomically; running clients keep their own in-memory copy
 rm ~/.local/bin/hc-tui
 ```
 
-hc-tui keeps its footprint small: your Herdr config is only written when you save a setting in
-the Settings overlay (theme, status indicators, sound, toast delivery) — unrelated content is
-preserved — and the SSH control socket under `$XDG_RUNTIME_DIR/hc-tui-ssh` (or
-`/tmp/hc-tui-ssh-<uid>`) expires on its own — remove it too if you like. The `hc-tui` layout
-document lives on the core, not here.
+hc-tui leaves little else behind:
+
+- If you changed the theme, status indicators, sound or toast delivery in Settings, those are saved in your Herdr
+  config. Other content in that file isn't touched.
+- The SSH control socket lives in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>`. It expires by itself, and
+  you can delete the directory.
+- The `hc-tui` layout document is stored on the core.

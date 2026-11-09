@@ -1,54 +1,87 @@
 # hc-tui
 
-An unofficial terminal UI for [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`). It is for
-people who work in a terminal or on a headless machine and want the Herdr TUI experience on top of `hc`:
+An unofficial terminal UI for [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`). Use it if you work in a
+terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
 
-- a sidebar of spaces and agents with live status, including machines added with `hc machine add`;
-- tabs, split panes, zoom and keyboard lock;
-- mouse selection that copies on release (through OSC 52, so your terminal has to allow it);
-- Herdr's key bindings and configuration, read from your existing Herdr config;
-- spaces and tabs read from the same `herdr-app` document the desktop app uses;
-- local use, or remote use over plain SSH, with the session staying on the server.
+![hc-tui with a sidebar of projects and agents, and three panes](docs/images/hc-tui.png)
 
-![hc-tui showing a sidebar and a split pane](docs/images/hc-tui.png)
+## Features
+
+- A sidebar of spaces and agents. Each agent shows whether it's working, blocked, done or idle. Machines added with
+  `hc machine add` appear there too.
+- Tabs, split panes and zoom. `Ctrl+G` locks the keyboard, so every key goes to the program.
+- Select text with the mouse and it's copied when you let go. This uses OSC 52, so your terminal has to allow it.
+- Your Herdr key bindings, theme and other settings carry over from your existing Herdr config.
+- Spaces and tabs come from the same `herdr-app` document the desktop app uses.
+- Works locally or over plain SSH. Your terminals stay on the server when you detach.
+
+| Mouse selection | Settings |
+|---|---|
+| ![Text selected with the mouse in a pane](docs/images/selection.png) | ![The settings overlay with its list of themes](docs/images/settings.png) |
 
 ## Install
 
-hc-tui is one static binary. It needs the `hc` core itself installed —
-see [herdr-core](https://github.com/herdrdev/herdr-core). Prebuilt archives cover Linux
-(x86_64 and aarch64, static musl) and macOS (arm64 and Intel).
+You need `hc` first: see [herdr-core](https://github.com/herdrdev/herdr-core). Then:
 
 ```sh
 curl -fsSL https://github.com/followcat/hc-tui/releases/latest/download/install.sh | sh
 ```
 
-The script verifies the archive against the release's `sha256sums.txt` and installs to
-`~/.local/bin` without sudo. Pin a release with `HC_TUI_VERSION=v…`, or fetch an archive from the
-[Releases page](https://github.com/followcat/hc-tui/releases) and check it yourself. Upgrade by
-running the script again; uninstall by deleting the binary. Details: [docs/install.md](docs/install.md).
-The first tagged release is pending — if the Releases page is still empty, build from source below.
+This puts a single binary in `~/.local/bin`, without sudo, after checking it against the release's `sha256sums.txt`.
+There are builds for Linux (x86_64 and aarch64) and macOS (arm64 and Intel). To pin a version, upgrade or uninstall,
+see [docs/install.md](docs/install.md).
+
+If the [Releases page](https://github.com/followcat/hc-tui/releases) is still empty, the first release isn't out yet,
+so [build from source](#build-from-source).
+
+## Usage
+
+```sh
+hc-tui                                  # the default session
+hc-tui --session work
+hc-tui --remote host-a --session work   # over SSH
+```
+
+The prefix is `Ctrl+B`, as in Herdr:
+
+| Keys | Action |
+|---|---|
+| `Ctrl+B w` | Navigate workspaces |
+| `Ctrl+B c` | New tab |
+| `Ctrl+B v`, `Ctrl+B -` | Split right, split down |
+| `Ctrl+B h/j/k/l` | Move focus |
+| `Ctrl+B z` | Zoom the pane |
+| `Ctrl+B b` | Show or hide the sidebar |
+| `Ctrl+B ?` | Search the key bindings |
+| `Ctrl+B q` | Detach (`hc` keeps running) |
+
+If you've changed these in your Herdr config, your bindings apply instead.
 
 ## Status
 
-Early, and the first tagged release is pending:
+hc-tui is early.
 
-- **It runs on official `hc`.** CI builds a pinned official herdr-core from source and drives the real
-  UI against it: sidebar, attach, switching, tabs, splits, status and detach. Day-to-day use is still mostly
-  on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so reports from
-  official `hc` are especially welcome.
-- **On official `hc`**, agents appear with a status only if they report it themselves (OSC 7501), and the
-  sidebar's Git and hostname details are unavailable, because those facts exist only in the fork. See
-  [Core compatibility](docs/compatibility.md) for the full per-core picture.
-- **Not implemented yet:** keyboard copy mode and clipboard image paste. Text a program copies itself
-  through OSC 52 doesn't reach your clipboard yet.
+It runs on official `hc`. CI builds a pinned herdr-core from source and drives the real UI against it. Most day-to-day
+use so far has been on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so reports from
+official `hc` are especially welcome.
 
-hc-tui stays a plain terminal client for `hc`. Multi-agent coordination is being built as a separate
-project.
+On official `hc`, agents only show a status if they report it themselves (OSC 7501), and the sidebar has no Git or
+hostname details. See [Core compatibility](docs/compatibility.md).
+
+The macOS builds pass CI but haven't been tried on a real Mac yet.
+
+Not done yet:
+
+- keyboard copy mode
+- clipboard image paste
+- passing on text that a program copies itself through OSC 52
+
+hc-tui will stay a plain terminal client for `hc`. Multi-agent coordination is being built as a separate project.
 
 ## Build from source
 
-Requires a stable Rust toolchain (edition 2024) and Zig **0.16.0** on `PATH` (or via `ZIG=`): the `hc-vt`
-crate builds `libghostty-vt` from the pinned `vendor/ghostty` submodule.
+You need stable Rust (edition 2024) and Zig **0.16.0** on `PATH`, or set `ZIG=`. Zig builds `libghostty-vt` from the
+pinned `vendor/ghostty` submodule.
 
 ```sh
 git clone --recursive https://github.com/followcat/hc-tui
@@ -57,26 +90,20 @@ cargo build --release -p hc-tui
 ./target/release/hc-tui --help
 ```
 
-Run it against a local core, or a remote one over SSH:
+To run the tests: `git submodule update --init --depth 1`, then `cargo test`.
 
-```sh
-hc-tui --session <name>
-hc-tui --remote <ssh-target> --session <name>
-```
+## Docs
 
-The default prefix is Ctrl+B: `q` detaches, `w` opens workspace navigation, `b` toggles the sidebar and
-`?` opens searchable help.
-
-## More
-
-- [Install, upgrade, uninstall](docs/install.md) · [Keys](docs/keys.md) ·
-  [Remote use over SSH](docs/remote.md) · [Troubleshooting](docs/troubleshooting.md)
+- [Install, upgrade, uninstall](docs/install.md)
+- [Keys](docs/keys.md)
+- [Remote use over SSH](docs/remote.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Core compatibility](docs/compatibility.md)
 - [Runtime behaviour](docs/runtime.md)
-- [Requirements](docs/requirements.md), [plan](docs/plan.md) and [progress](docs/progress.md)
-- [Parity with Herdr](docs/parity.md) and the [owned-session parity harness](scripts/parity/README.md)
 
-To run the tests: `git submodule update --init --depth 1`, then `cargo test`. The pinned revisions live in
-`.gitmodules` and `NOTICE`.
+For development: [requirements](docs/requirements.md), [plan](docs/plan.md), [progress](docs/progress.md),
+[parity with Herdr](docs/parity.md) and the [parity harness](scripts/parity/README.md).
 
-Unofficial project, not affiliated with or endorsed by the Herdr project. Licensed under the
-[Apache License 2.0](LICENSE).
+## License
+
+[Apache License 2.0](LICENSE). Not affiliated with or endorsed by the Herdr project.

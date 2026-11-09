@@ -1,45 +1,35 @@
 # Remote use
 
-hc-tui is built for the remote-first setup: an always-on box runs `hc` and every agent; you reach
-it over SSH from anywhere, including a phone.
+You can run `hc` and your agents on a server and connect to it over SSH.
 
 ## `hc-tui --remote`
 
 ```sh
-hc-tui --remote host-a              # hc's default session on host-a
+hc-tui --remote host-a              # the default session on host-a
 hc-tui --remote host-a --session work
 ```
 
-`--remote` takes anything your `ssh` accepts: a `~/.ssh/config` host alias, `user@host`,
-`host:port` through your ssh config. hc-tui runs `ssh <target> hc connect --session <s>` — the
-remote machine needs `hc` on its non-interactive command path (check with `ssh host-a hc -V`).
+`--remote` takes anything your `ssh` accepts, such as a host alias from `~/.ssh/config` or `user@host`. hc-tui runs
+`ssh <target> hc connect --session <s>`, so `hc` has to be on the remote machine's non-interactive `PATH`. Check with
+`ssh host-a hc -V`.
 
-Authentication is your SSH's: keys, agent, `ProxyJump`, MFA — hc-tui never asks for or stores a
-password, and it runs ssh with prompting disabled, so a broken login fails instead of hanging.
+Logins use your normal SSH setup, including keys, your agent and `ProxyJump`. hc-tui never asks for or stores a
+password. It runs ssh with prompts turned off, so a login that needs one fails right away.
 
-Connection costs stay low:
+All connections to a target share one SSH login, through a control socket in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or
+`/tmp/hc-tui-ssh-<uid>` if that variable isn't set. The login stays open for 10 minutes after the last connection
+closes.
 
-- on Unix, all streams to one target share a single SSH login through hc-tui's control socket
-  (`$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>` without it, kept 10 minutes past the
-  last stream);
-- every attach on a remote endpoint multiplexes onto one framed `hc connect` channel each —
-  one transport, one handshake.
+Terminals and agents stay on the server. If you detach (`Ctrl+B q`) or lose the connection, they keep running and you
+can attach again later, from any client. Clients on the same core share tabs and splits, because the layout is stored
+on the core. [Runtime](runtime.md) has the details.
 
-The session and the terminals stay on the server. Detach (`Ctrl+B q`), lose your connection, or
-close your laptop — the core and agents keep running; attach again later from the same or another
-client. Two hc-tui clients on the same core even share splits and tabs: layout state lives in the
-core's `hc-tui` document. See [runtime.md](runtime.md) for the full behaviour.
+## More machines with `hc machine add`
 
-## `hc machine add` — more machines on one core
+`hc machine add` connects a core to other machines over SSH. Their terminals appear in the same sidebar, grouped by
+machine. Manage them on the core with `hc machine add|ls|login|rename|rm`. hc-tui doesn't do this for you.
 
-`hc machine add` teaches an existing core about *other* machines over SSH. Those machines' terminals
-appear in the same hc-tui sidebar, grouped under their machine — you drive one core and see all of
-them. Manage machines on the core itself (`hc machine add|ls|login|rename|rm`), not from hc-tui.
+`--remote` chooses which core your client connects to. `hc machine add` chooses which machines that core can reach.
 
-So the two axes are:
-
-- `--remote` picks **which core** your client talks to;
-- `hc machine add` decides **which machines that core knows about**.
-
-The [compatibility table](compatibility.md) applies per machine: a sidebar can mix fork and official
-cores, each with its own capabilities.
+A sidebar can mix fork and official cores. The [compatibility table](compatibility.md) applies to each machine
+separately.
