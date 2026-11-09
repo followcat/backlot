@@ -17,6 +17,7 @@ use crate::cli::Fail;
 use crate::config;
 use crate::daemon::Stage;
 use crate::discover;
+use crate::prompts;
 use crate::reconcile::{Action, Start};
 use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
@@ -366,10 +367,28 @@ impl Stage {
                         return Ok(());
                     }
                 };
+                // A fresh start renders the role's prompt file and
+                // gets the one line pointing at it (a file path for
+                // `devin`); a resume gets no first prompt.
+                let prompt = match &start.resume {
+                    Some(_) => None,
+                    None => {
+                        let file = prompts::prepare(dir, studio, start, state)
+                            .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
+                        let line = prompts::first_line(&file);
+                        if start.actor.runner == "devin" {
+                            let f = prompts::first_file(dir, &start.role, &line)
+                                .map_err(|e| Fail::refused(format!("prompt: {e}")))?;
+                            Some(f.to_string_lossy().into_owned())
+                        } else {
+                            Some(line)
+                        }
+                    }
+                };
                 let ctx = LaunchCtx {
                     terminal: &start.terminal,
                     cwd: &cwd,
-                    prompt: None,
+                    prompt: prompt.as_deref(),
                     resume: start.resume.as_deref(),
                     stage_env: &self.env_vars,
                 };

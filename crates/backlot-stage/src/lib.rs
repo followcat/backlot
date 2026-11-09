@@ -13,6 +13,7 @@ mod daemon;
 mod discover;
 mod doc;
 pub mod link;
+mod prompts;
 pub mod reconcile;
 pub mod render;
 mod runners;
@@ -35,6 +36,8 @@ mod discover_tests;
 mod loop_cmd_tests;
 #[cfg(test)]
 mod priority_cmd_tests;
+#[cfg(test)]
+mod prompts_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
 #[cfg(test)]
