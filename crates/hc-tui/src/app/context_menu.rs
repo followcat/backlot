@@ -246,7 +246,7 @@ impl App {
                 ContextMenuAction::Close => self.close_workspace(workspace_id),
                 _ => self.show_notice(
                     "Unavailable",
-                    "Worktree groups aren't available in hc-tui yet",
+                    "Worktree groups aren't available in backlot yet",
                 ),
             },
             ContextMenuTarget::Tab {
