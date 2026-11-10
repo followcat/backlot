@@ -114,11 +114,17 @@ jobs:
     timeout-minutes: 30
     env:
       HC_SESSION: backlot-install-check
-      XDG_STATE_HOME: ${{ runner.temp }}/install-home/.local/state
-      XDG_CONFIG_HOME: ${{ runner.temp }}/install-home/.config
-      XDG_RUNTIME_DIR: ${{ runner.temp }}/install-home/.run
       TERM: xterm-256color
     steps:
+      # The runner context does not exist in a job-level env, so the
+      # paths under the runner's temp directory are set here.
+      - name: Point the XDG directories at an empty home
+        run: |
+          {
+            echo "XDG_STATE_HOME=$RUNNER_TEMP/install-home/.local/state"
+            echo "XDG_CONFIG_HOME=$RUNNER_TEMP/install-home/.config"
+            echo "XDG_RUNTIME_DIR=$RUNNER_TEMP/install-home/.run"
+          } >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
