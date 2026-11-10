@@ -140,12 +140,12 @@ impl Stage {
         };
         let signal = self.last_signal.borrow().get(&pair).cloned();
         if let Some(attn) = stall::open_stall(state, role) {
-            // The screen moved or a newer signal landed since the
-            // raise: the episode is over.
-            let cleared = if screen.same_since_ms > attn.ts_ms {
-                Some("screen changed")
-            } else if signal.as_ref().is_some_and(|s| s.ts_ms > attn.ts_ms) {
+            // A newer signal — the turn demonstrably alive — or the
+            // screen having moved since the raise ends the episode.
+            let cleared = if signal.as_ref().is_some_and(|s| s.ts_ms > attn.ts_ms) {
                 Some("new hook signal")
+            } else if screen.same_since_ms > attn.ts_ms {
+                Some("screen changed")
             } else {
                 None
             };
