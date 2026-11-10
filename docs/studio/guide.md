@@ -225,9 +225,14 @@ Answer with `backlot approve`, naming the role's key — `producer`, `director`,
 backlot approve --person actor-t1-c1 --decision allow --studio acme-shop --as user
 ```
 
-`--decision deny` answers no. The stage sends the runner's approval key only while the prompt
-still shows, never without your recorded decision; a prompt already gone clears itself. A denied
-role gets a notice telling it the command did not run.
+`--decision deny` answers no. The stage sends the runner's approval key only while the prompt your
+attention saved is still the one on screen, never without your recorded decision. If the screen
+moved to a different prompt before the key went out — an earlier prompt was answered in the
+terminal itself and the next was already up — nothing is sent: the stale attention closes
+`prompt changed before the decision was sent` and the prompt on show raises its own attention, so
+you approve what is actually there. A prompt answered in the terminal itself closes
+`prompt answered elsewhere` a couple of seconds later, so the next prompt raises fresh either way.
+A denied role gets a notice telling it the command did not run.
 
 ## Changing the requirement midway
 

@@ -1,5 +1,39 @@
 # Studio progress
 
+## S9c: approvals land on the prompt they were made for (2026-11-10)
+
+- Done: `permit::prompt_block` gives each runner a whitespace-normalised region that names the
+  prompt on screen — claude's from the last full-width `─` rule above `Do you want to proceed?`
+  with spinner lines dropped, fake's from the last `fake-work: blocked` (with a `prompt:<text>`
+  input echoing `fake-prompt:` so two prompts differ), codex's and devin's best-effort from their
+  own markers. Before a recorded `role.approval`'s key goes out the live screen's block is
+  compared with the saved `attention/<seq>.txt`'s: a mismatch sends nothing, clears the stale
+  attention `prompt changed before the decision was sent` and raises a fresh one on the screen on
+  show — `needs_user` computed on it — and a screen with no comparable block refuses the same
+  way, while a runner with no approval keys is unchanged. Separately, a role out of its blocked
+  episode for a whole window with no decision pending clears `prompt answered elsewhere`, so a
+  prompt answered in the terminal itself can no longer hold its attention over the next prompt.
+  The stage now tracks an `unblocked_since` clock beside `blocked_since`.
+- Done: claude launches pre-allow per role, argv only — actors `git add`, `git commit`,
+  `git status`, `git diff`, `git log`, `git show` (each bare and starred) plus every declared
+  check's `run` verbatim; the director `git merge` plus the checks; producer and writer keep the
+  base pair. A `run` with a parenthesis or comma is not expressible and never becomes a rule, and
+  `studio new` refuses a `run` reaching for `BACKLOT_*`, `env -i` or `--ignore-environment` — the
+  same words `touches_env` flags — so no pre-allow ever covers one.
+- Measured: three duplex-core tests — the answered-on-terminal race (no key to the new prompt,
+  `prompt changed` clear, fresh attention with its own saved screen and its own approval landing),
+  the `needs_user` recompute on a `BACKLOT_`-reaching replacement prompt, and the
+  answered-elsewhere clear plus next-prompt raise; `prompt_block` unit tests cover the spinner
+  timer, a changed command, whitespace moves and every runner's markers; argv tests pin the exact
+  `--allowedTools` value per role with and without checks and skip the parenthesised `run`;
+  `studio new` refuses all three unsafe `run` shapes and accepts a parenthesised one. On a real
+  core: the same race and flag recompute (`real_stage_approve_lands_on_the_prompt_it_was_made_for`,
+  `real_stage_approve_recomputes_needs_user`) and `real_stage_prompt_answered_elsewhere_clears`
+  all pass on the fake runner.
+- Not verified: whether Claude Code matches the new `Bash` rules as it did the `backlot` one, and
+  whether a wrapped `X=y git commit …` slips past them — recorded in `limits.md` for the S9f
+  real-session run. The codex and devin prompt blocks are unmeasured.
+
 ## S10: merge hc-tui main at 4e8731c — v0.1.2 (2026-11-10)
 
 - Done: upstream's nine commits landed as merge `f0691c2` — one synchronized write per frame,

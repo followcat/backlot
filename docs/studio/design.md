@@ -302,9 +302,18 @@ Each role starts with a permission profile from `runners.md`. A live role sample
 apart raises one `permission prompt` attention per blocked episode, with the visible screen saved to
 `attention/<seq>.txt`. An actor's episode notices the director, who may approve it when it stays inside the actor's own
 work area; `backlot approve --person <role> --decision allow|deny` records `role.approval` and the stage sends the
-runner's approval key while the prompt still shows — never without a recorded decision — then clears the attention. A
-prompt that touches real sessions, production, accounts or global settings, or is destructive outside the work area,
-goes to the user and shows in the panel; so does a prompt on any role that is not an actor.
+runner's approval key — never without a recorded decision — then clears the attention. A prompt that touches real
+sessions, production, accounts or global settings, or is destructive outside the work area, goes to the user and shows
+in the panel; so does a prompt on any role that is not an actor.
+
+The key lands only on the prompt it was made for: before it is sent, the screen on show is compared with the saved
+`attention/<seq>.txt` through a per-runner *prompt block* — the whitespace-normalised region that names the prompt
+(`runners.md` lists each). A prompt that changed under the recorded decision — an earlier prompt answered in the
+terminal itself, the next one already up — is a different prompt: nothing is sent, the stale attention clears `prompt
+changed before the decision was sent`, and the screen on show raises its own attention with `needs_user` computed on
+it, noticed like any new prompt. A screen with no comparable block refuses the same way; a runner with no approval
+keys is untouched. A prompt answered in the terminal itself — no decision recorded and the role out of its blocked
+episode for a whole episode window — clears `prompt answered elsewhere`, so the next prompt always raises fresh.
 
 Two prompts are the user's outright (S9b), and the director's `role.approval` on either is refused: a prompt on a role
 that is not an actor — the director answers only an actor's — and a prompt whose saved screen reaches for the

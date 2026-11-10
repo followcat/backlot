@@ -20,8 +20,10 @@ at-cap notice and going on after a block.
 Codex, Devin and OpenCode were launched and their session IDs captured — `runners.md` says
 exactly what was measured for each. Per runner:
 
-- **Claude Code** — launch, resume, the `--allowedTools` pair, the approval keys (`enter`/`esc`)
-  and the work-state markers all measured on 2.1.319.
+- **Claude Code** — launch, resume, the base `--allowedTools` pair, the approval keys (`enter`/`esc`)
+  and the work-state markers all measured on 2.1.319. The per-role git and check `Bash` rules added
+  to `--allowedTools` since — and whether a wrapped `X=y git commit …` slips past them — are argv-only
+  and not yet verified on a real session; that waits for the S9f run.
 - **Codex 0.166.0** — launched; the launch arguments were checked. Its work-state markers come
   from an older capture and its approval keys are mapped from its picker, unmeasured.
 - **Devin 3000.12.32** — launched; its permission prompt and `enter`/`esc` keys were observed
@@ -82,6 +84,14 @@ re-raise one `stall_limit_s` later.
   screen to hold still two, and a five-second gap since the last send to it — a notice can land
   after what it names has moved on. A crash between `terminal.send` and the ledger write can
   send the same notice twice.
+- **The approval race is closed on the fake runner only.** Before a recorded decision's key goes out,
+  the screen on show is compared with the attention's saved screen through a per-runner prompt block
+  (`runners.md`); a changed prompt sends nothing, clears `prompt changed before the decision was
+  sent` and raises its own attention, and a prompt answered in the terminal itself clears `prompt
+  answered elsewhere` once the role has been out of the episode for a whole window. Both fixes ran
+  on a real core against `fake`; the claude block is built from the measured 2.1.319 layout and
+  codex's and devin's are unmeasured — a region that misses a moving part of a real screen could
+  refuse a legitimate send, in which case the fresh attention waits for the person.
 - **A question on a role's own screen reaches nobody.** Only the producer's terminal is read by
   the person. In the fourth run the director asked there which report node to use and waited
   about four minutes; its prompt now names the `integration` node and sends questions through

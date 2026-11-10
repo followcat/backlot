@@ -37,10 +37,26 @@ sees it.
 | OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
+## Prompt blocks
+
+Before a recorded approval's key goes out, the screen on show is compared with the screen the
+attention saved — through a *prompt block*, the whitespace-normalised region that names the prompt.
+A mismatch sends nothing; so does a screen with no block on either side, for a runner the stage can
+answer. Lines that move while the prompt waits are dropped first.
+
+| Runner | Block | Status |
+|---|---|---|
+| Claude Code | From the last full-width `─` rule above `Do you want to proceed?` to the end of the screen — the ` Bash command` header, the description, the command between `╌` rules and the picker; spinner lines dropped | Built from the measured 2.1.319 layout; the comparison itself ran on `fake` only |
+| `fake` | From the last `fake-work: blocked` line to the end — a `prompt:<text>` input echoes `fake-prompt: <text>` under it so two prompts differ | The script itself |
+| Codex | From the last `Would you like to` line to the end | Unmeasured — best effort from its `blocked` markers |
+| Devin | From the last `Allow … Once` line to the end | Unmeasured — best effort from its `blocked` markers |
+| OpenCode | none | No approval key is ever sent, so no block is mapped |
+| Anything else | none | — |
+
 ## Approval keys
 
-A recorded `role.approval` sends one key while the prompt still shows — `allow` takes the highlighted
-allow option, `deny` dismisses it.
+A recorded `role.approval` sends one key while the saved prompt block is still the one on show —
+`allow` takes the highlighted allow option, `deny` dismisses it.
 
 | Runner | `allow` | `deny` | Markers from |
 |---|---|---|---|
@@ -63,19 +79,32 @@ allow option, `deny` dismisses it.
 
 ## Pre-allowed tools (Claude Code)
 
-Every Claude Code launch — fresh or resumed — carries one `--allowedTools` pair before `--model`:
-`Bash(backlot *)` and `Read(//<studio state dir>/**)` joined into one comma-separated value. The list
-is variadic, so another `--flag` must follow the value or the positional prompt is swallowed as a
-tool name. The pair is the minimum a role needs: its first step is a `backlot` command or reading its
-prompt or a message file, and those live in the studio's state directory, outside its work folder —
-without the rules every one prompts and the producer's and director's prompts reach the user. Nothing
-else is pre-allowed: no `Bash(*)`, no bypass flag or mode, no `--add-dir`, no `Edit`/`Write`, and the
-permission mode is unchanged — any other command still prompts and D9 answers it.
+Every Claude Code launch — fresh or resumed — carries one `--allowedTools` pair before `--model`: one
+comma-separated value, so another `--flag` must follow it or the positional prompt is swallowed as a
+tool name. The base pair is `Bash(backlot *)` and `Read(//<studio state dir>/**)` — the minimum a role
+needs: its first step is a `backlot` command or reading its prompt or a message file, and those live
+in the studio's state directory, outside its work folder — without the rules every one prompts and the
+producer's and director's prompts reach the user.
+
+Per role, on top of the base pair, and only in the argv — nothing is written to any settings file:
+
+- An **actor** gets the git commands its loop drives — `git add`, `git commit`, `git status`,
+  `git diff`, `git log`, `git show`, each bare (`Bash(git add)`) and with arguments
+  (`Bash(git add *)`) — plus every declared check's `run` verbatim as `Bash(<run>)`.
+- The **director** gets `git merge` the same way, plus the declared checks.
+- The **producer** and **writer** keep the base pair; anything else still prompts and D9 answers it.
+
+Nothing broader is pre-allowed: no `Bash(*)`, no bypass flag or mode, no `--add-dir`, no
+`Edit`/`Write`, and the permission mode is unchanged. A `run` the rule syntax cannot hold — a
+parenthesis or a comma — is never pre-allowed, though `studio new` accepts the cast; a `run`
+reaching for `BACKLOT_*`, `env -i` or `--ignore-environment` is refused there outright. Whether
+Claude Code actually matches these rules — and whether a wrapped `X=y git commit …` slips past them —
+is not yet verified; `limits.md` keeps it for the S9f real-session run.
 
 In the `Read` rule `//` is the rule syntax's absolute-path marker; a single leading `/` given on the
 command line anchors at the primary working directory per the permissions documentation — it is not
 an absolute path — so the studio dir's leading `/` is dropped and the `//` is written instead. The
-pair is measured on 2.1.319: the first real run's plain `backlot` calls and studio-dir reads ran
+base pair is measured on 2.1.319: the first real run's plain `backlot` calls and studio-dir reads ran
 without prompting.
 
 Two edges keep the `Bash` rule narrow. A role cannot change its identity: a `--as`, `--studio` or
