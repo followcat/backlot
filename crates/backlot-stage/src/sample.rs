@@ -144,6 +144,7 @@ impl Stage {
         match since {
             Some(since) => {
                 self.blocked_since.borrow_mut().insert(pair.clone(), since);
+                self.unblocked_since.borrow_mut().remove(&pair);
                 if due
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
@@ -153,12 +154,37 @@ impl Stage {
             }
             None => {
                 self.blocked_since.borrow_mut().remove(&pair);
+                self.unblocked_since
+                    .borrow_mut()
+                    .entry(pair.clone())
+                    .or_insert(now_ms);
             }
         }
         let Some(attn) = permit::open_episode(state, role) else {
             return Ok(());
         };
         let Some(appr) = permit::pending_approval(state, role, attn.ts_ms) else {
+            // No decision recorded: a role out of its blocked episode
+            // for the whole window answered the prompt somewhere else
+            // — the stale attention clears so the next prompt raises
+            // its own instead of inheriting this one's flag.
+            if !ep {
+                let gone = self
+                    .unblocked_since
+                    .borrow()
+                    .get(&pair)
+                    .copied()
+                    .unwrap_or(now_ms);
+                if now_ms.saturating_sub(gone) >= permit::EPISODE_MIN_MS {
+                    record(
+                        dir,
+                        EventKind::AttentionCleared {
+                            target: attn.seq,
+                            reason: Some("prompt answered elsewhere".into()),
+                        },
+                    )?;
+                }
+            }
             return Ok(());
         };
         if !ep {

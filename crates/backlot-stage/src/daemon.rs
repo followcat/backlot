@@ -176,6 +176,10 @@ pub(crate) struct Stage {
     /// `(studio, role)` → when the current blocked episode started;
     /// the D9 attention dedups per episode, not per sample.
     pub(crate) blocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → when the role was first seen out of its
+    /// blocked episode — a permission prompt answered elsewhere gets
+    /// one window before its stale attention clears.
+    pub(crate) unblocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// `(studio, role)` → when the current idle stretch began — the
     /// nudge pass's clock. In-memory: a restart starts it over.
     pub(crate) idle_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
@@ -414,6 +418,7 @@ impl Stage {
             sent_ms: std::cell::RefCell::new(BTreeMap::new()),
             sending: std::cell::RefCell::new(BTreeMap::new()),
             blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+            unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
@@ -488,6 +493,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         sent_ms: std::cell::RefCell::new(BTreeMap::new()),
         sending: std::cell::RefCell::new(BTreeMap::new()),
         blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+        unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),

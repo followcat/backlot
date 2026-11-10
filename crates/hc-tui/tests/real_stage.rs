@@ -1269,6 +1269,42 @@ async fn real_stage_approve_recomputes_needs_user() {
     wait_count(&client, &actor.address, "fake-approved: enter", 2).await;
 }
 
+/// A prompt answered in the terminal itself: with no decision
+/// pending, its attention stays stale only until the role has been
+/// out of the blocked episode for a whole window — then it clears
+/// `prompt answered elsewhere`, and the next prompt raises an
+/// attention of its own.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_prompt_answered_elsewhere_clears() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    checks_studio(&scratch, &state, "", "");
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    send_text(&client, &actor.address, "work:blocked").await;
+    wait_event(&state, "attention.raised", "actor-t1-c1");
+
+    // The person answers the prompt in the terminal — no approval
+    // is ever recorded. After a window out of the episode the stale
+    // attention clears.
+    send_keys(&client, &actor.address, &["enter"]).await;
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
+    wait_kind(&state, "attention.cleared", 1);
+    let cleared = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared")
+        .expect("cleared event");
+    assert_eq!(cleared["reason"], "prompt answered elsewhere", "{cleared}");
+
+    // The next prompt raises its own attention — not swallowed by
+    // the cleared one's still-open record.
+    send_text(&client, &actor.address, "prompt:cargo test --lib").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    wait_events(&state, "attention.raised", "actor-t1-c1", 2);
+}
+
 /// The S9a nudge on the fake runner with short limits: the plan and
 /// acceptance list are published and nobody answers — the owed
 /// `dispatch` step shows in `backlot status`, the idle producer's

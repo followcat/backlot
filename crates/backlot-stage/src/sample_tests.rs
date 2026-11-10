@@ -504,6 +504,58 @@ async fn a_replaced_prompt_recomputes_needs_user() {
     assert!(refused.is_err(), "the director answered the user's prompt");
 }
 
+/// S9c: a prompt answered in the terminal itself must not hold its
+/// attention open — a stale attention swallows the next prompt's
+/// raise and lets a later approval fly at it. Once the role has been
+/// out of its blocked episode for a full window with no decision
+/// pending, the attention clears `prompt answered elsewhere` and the
+/// next prompt raises its own.
+#[tokio::test]
+async fn a_prompt_answered_elsewhere_clears_and_the_next_raises_its_own() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    let screen = |tail: &str| format!("fake runner: actor-t1-c1 of acme-shop\n{tail}");
+    fake.lock().unwrap().screen = screen("fake-work: blocked\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // Answered directly — the screen is no longer blocked. The stale
+    // attention survives less than a full window out of the episode,
+    // then clears `prompt answered elsewhere`.
+    fake.lock().unwrap().screen = screen("fake-approved: enter\nfake-work: waiting\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 3_000).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 4_000).await;
+    assert_eq!(
+        events(&dir, "attention.cleared").len(),
+        0,
+        "cleared before the window ran out"
+    );
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 5_000).await;
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { reason, .. } => {
+            assert_eq!(reason.as_deref(), Some("prompt answered elsewhere"));
+        }
+        _ => unreachable!(),
+    }
+
+    // The next prompt raises its own attention — not swallowed by
+    // the stale one — with its own saved screen.
+    fake.lock().unwrap().screen = screen("fake-work: blocked\nfake-prompt: cargo test --lib\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 6_000).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 8_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 2, "the next prompt raised no attention");
+    let seq = raised[1].seq;
+    let saved = fs::read_to_string(dir.join(format!("attention/{seq}.txt"))).unwrap();
+    assert!(saved.contains("fake-prompt: cargo test --lib"), "{saved}");
+}
+
 /// A screen frozen past `stall_limit_s` raises one `stalled`
 /// attention per episode — the screen saved beside it — a changed
 /// screen clears it, and a later freeze raises its own: raised
