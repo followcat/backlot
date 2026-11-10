@@ -288,6 +288,7 @@ fn attention_notice_owed_once() {
         purpose: None,
         source_seq: Some(7),
         delivered: false,
+        dropped: false,
         ts_ms: 0,
         delivered_ms: None,
     });
@@ -562,6 +563,7 @@ fn deny_notice_owed_once() {
         purpose: None,
         source_seq: Some(4),
         delivered: false,
+        dropped: false,
         ts_ms: 0,
         delivered_ms: None,
     });

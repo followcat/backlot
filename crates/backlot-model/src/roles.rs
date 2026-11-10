@@ -98,6 +98,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::RoleClosed { .. }
         | EventKind::RoleSession { .. }
         | EventKind::MessageDelivered { .. }
+        | EventKind::MessageDropped { .. }
         | EventKind::AttentionRaised { .. }
         | EventKind::AttentionCleared { .. }
         | EventKind::TaskChecked { .. } => "the stage",

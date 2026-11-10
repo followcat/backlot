@@ -101,6 +101,7 @@ pub enum Refusal {
     },
     NoMessage(u64),
     MessageDone(u64),
+    MessageDropped(u64),
     NoAttention(u64),
     AttentionDone(u64),
     NoPermissionPrompt(String),
@@ -246,6 +247,7 @@ impl fmt::Display for Refusal {
             ),
             Refusal::NoMessage(seq) => write!(f, "event {seq} is not a queued message"),
             Refusal::MessageDone(seq) => write!(f, "message at {seq} is already delivered"),
+            Refusal::MessageDropped(seq) => write!(f, "message at {seq} is already dropped"),
             Refusal::NoAttention(seq) => write!(f, "event {seq} is not an attention raise"),
             Refusal::AttentionDone(seq) => write!(f, "attention at {seq} is already cleared"),
             Refusal::NoPermissionPrompt(role) => {

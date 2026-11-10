@@ -450,6 +450,11 @@ pub enum EventKind {
     /// `target` is the seq of the `message.queued` event.
     #[serde(rename = "message.delivered")]
     MessageDelivered { target: u64 },
+    /// `message.dropped` (S9d): a queued notice's source no longer
+    /// stands — recorded instead of sent, with `reason` naming the
+    /// rule that caught it. `target` is the `message.queued` seq.
+    #[serde(rename = "message.dropped")]
+    MessageDropped { target: u64, reason: String },
     #[serde(rename = "report.sent")]
     ReportSent {
         to: String,
@@ -553,6 +558,7 @@ impl EventKind {
             EventKind::TaskState { .. } => "task.state",
             EventKind::MessageQueued { .. } => "message.queued",
             EventKind::MessageDelivered { .. } => "message.delivered",
+            EventKind::MessageDropped { .. } => "message.dropped",
             EventKind::ReportSent { .. } => "report.sent",
             EventKind::AttentionRaised { .. } => "attention.raised",
             EventKind::AttentionCleared { .. } => "attention.cleared",

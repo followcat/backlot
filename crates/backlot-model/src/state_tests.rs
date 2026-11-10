@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use crate::event::*;
 use crate::state::*;
 use crate::testkit::*;
+use crate::validate::{Refusal, validate};
 
 /// A scripted studio run covering most event kinds.
 fn script() -> Vec<Event> {
@@ -224,6 +225,69 @@ fn corrected_verdict_recomputes_status() {
     let s = replay(&log);
     assert_eq!(s.tasks["t1"].status, TaskStatus::Running);
     assert_eq!(s.tasks["t1"].reviews[0].verdict, Verdict::ChangesRequested);
+}
+
+/// `message.dropped` marks a still-queued message dropped: it is
+/// neither pending nor delivered — recorded, never sent. Validation
+/// requires the target be a `message.queued` that is still open: a
+/// report, a missing seq, a delivered message and an already-dropped
+/// one all refuse.
+#[test]
+fn message_dropped_marks_the_message() {
+    let drop = |target: u64| EventKind::MessageDropped {
+        target,
+        reason: "attention cleared".into(),
+    };
+    let state = state_with(
+        &base_events(),
+        vec![
+            (
+                "stage",
+                EventKind::MessageQueued {
+                    to: "director".into(),
+                    file: Some("messages/3-attention.md".into()),
+                    purpose: None,
+                    source_seq: Some(3),
+                },
+            ),
+            (
+                "director",
+                EventKind::ReportSent {
+                    to: "producer".into(),
+                    node: "integration".into(),
+                    file: "reports/5-r.md".into(),
+                },
+            ),
+        ],
+    );
+    assert_eq!(validate(&state, &new_ev("stage", drop(4))), Ok(()));
+    let mut s = state.clone();
+    apply(&mut s, &ev(6, "stage", drop(4)));
+    assert!(s.messages[0].dropped);
+    assert!(!s.messages[0].delivered);
+    // A report is not a message; nothing lives at 99.
+    assert_eq!(
+        validate(&s, &new_ev("stage", drop(5))),
+        Err(Refusal::NoMessage(5))
+    );
+    assert_eq!(
+        validate(&s, &new_ev("stage", drop(99))),
+        Err(Refusal::NoMessage(99))
+    );
+    // Dropped once is done; delivered is done too.
+    assert_eq!(
+        validate(&s, &new_ev("stage", drop(4))),
+        Err(Refusal::MessageDropped(4))
+    );
+    apply(
+        &mut s,
+        &ev(7, "stage", EventKind::MessageDelivered { target: 4 }),
+    );
+    assert!(s.messages[0].delivered);
+    assert_eq!(
+        validate(&s, &new_ev("stage", drop(4))),
+        Err(Refusal::MessageDone(4))
+    );
 }
 
 fn started(role: &str, terminal: &str, session: &str) -> EventKind {

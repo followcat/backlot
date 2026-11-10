@@ -357,6 +357,10 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_seq: Option<u64>,
     pub delivered: bool,
+    /// `message.dropped` landed: a queued notice skipped at send time
+    /// because its source no longer stood — never pending again.
+    #[serde(default, skip_serializing_if = "crate::event::is_false")]
+    pub dropped: bool,
     /// The `message.queued` event's time — the obligation it can
     /// create owes from then.
     #[serde(default)]

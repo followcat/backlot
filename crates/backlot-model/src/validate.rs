@@ -133,6 +133,25 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 None => Err(Refusal::NoMessage(*target)),
             }
         }
+        // `message.dropped` marks a still-queued message skipped at
+        // send time — the target must be an open `message.queued`;
+        // a report is never dropped.
+        EventKind::MessageDropped { target, .. } => {
+            require_studio(state)?;
+            match state.targets.get(target) {
+                Some(SeqTarget::Message(idx)) => {
+                    let m = &state.messages[*idx];
+                    if m.delivered {
+                        Err(Refusal::MessageDone(*target))
+                    } else if m.dropped {
+                        Err(Refusal::MessageDropped(*target))
+                    } else {
+                        Ok(())
+                    }
+                }
+                _ => Err(Refusal::NoMessage(*target)),
+            }
+        }
         EventKind::AttentionCleared { target, .. } => {
             require_studio(state)?;
             match state.targets.get(target) {

@@ -34,6 +34,7 @@ fn message(seq: u64, to: &str, delivered: bool) -> Message {
         purpose: None,
         source_seq: None,
         delivered,
+        dropped: false,
         ts_ms: 0,
         delivered_ms: None,
     }
@@ -102,6 +103,7 @@ fn the_plan_request_says_what_is_wanted() {
         purpose: Some("plan".into()),
         source_seq: None,
         delivered: false,
+        dropped: false,
         ts_ms: 0,
         delivered_ms: None,
     });
@@ -394,6 +396,7 @@ fn notices_are_owed_once_per_source_event() {
             purpose: None,
             source_seq: Some(n.source_seq),
             delivered: false,
+            dropped: false,
             ts_ms: 0,
             delivered_ms: None,
         });
