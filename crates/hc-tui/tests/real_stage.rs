@@ -794,6 +794,13 @@ fn git(repo: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// An empty commit on the current branch of `dir` — a work area of
+/// the fixture repo — answering the new HEAD sha.
+fn commit_in(dir: &Path, msg: &str) -> String {
+    git(dir, &["commit", "--allow-empty", "-m", msg]);
+    git(dir, &["rev-parse", "HEAD"]).trim().to_string()
+}
+
 /// The fake runner logs every line it is sent into
 /// `fake-inbox-<role>` under the state dir — wait until `needle`
 /// shows in the file `name`.
@@ -931,11 +938,14 @@ async fn real_stage_closed_loop() {
 
     // The first delivery owes the director a notice naming the
     // generated body file.
+    let work = studio.join("work/t1");
+    let a = commit_in(&work, "a");
+    let b = commit_in(&work, "b");
     bl(
         &scratch,
         &state,
         &format!(
-            "deliver --commits a..b --report {} --check build=pass --as actor --task t1",
+            "deliver --commits {a}..{b} --report {} --check build=pass --as actor-t1-c1 --task t1",
             report.display()
         ),
     );
@@ -1012,11 +1022,12 @@ async fn real_stage_closed_loop() {
     // actor closes deliberately and stays resumable.
     let refused = bl_fail(&scratch, &state, "studio finish --as producer");
     assert!(refused.contains("t1"), "{refused}");
+    let c = commit_in(&work, "c");
     bl(
         &scratch,
         &state,
         &format!(
-            "deliver --commits b..c --report {} --as actor --task t1",
+            "deliver --commits {b}..{c} --report {} --as actor-t1-c1 --task t1",
             report.display()
         ),
     );
@@ -1266,11 +1277,14 @@ async fn real_stage_watch() {
         "task resume --task t1 --reason answered --as director",
     );
     wait_inbox(&state, "fake-inbox-actor-t1", "-resumed.md");
+    let work = studio.join("work/t1");
+    let a = commit_in(&work, "a");
+    let b = commit_in(&work, "b");
     bl(
         &scratch,
         &state,
         &format!(
-            "deliver --commits a..b --report {} --as actor --task t1",
+            "deliver --commits {a}..{b} --report {} --as actor-t1-c1 --task t1",
             report.display()
         ),
     );
@@ -1466,11 +1480,14 @@ async fn real_stage_restart() {
         wait_inbox(&state, inbox, "-recovered.md");
     }
     wait_inbox(&state, "fake-inbox-actor-t2", "-note.md");
+    let work = state.join("studios/acme-shop/work/t1");
+    let a = commit_in(&work, "a");
+    let b = commit_in(&work, "b");
     bl(
         &scratch,
         &state,
         &format!(
-            "deliver --commits a..b --report {} --check build=pass --as actor --task t1",
+            "deliver --commits {a}..{b} --report {} --check build=pass --as actor-t1-c1 --task t1",
             report.display()
         ),
     );
