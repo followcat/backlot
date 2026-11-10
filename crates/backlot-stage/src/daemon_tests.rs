@@ -672,26 +672,32 @@ async fn the_first_check_pass_prunes_stale_run_trees() {
         .unwrap();
     }
     // A dead stage's leftovers: a stale tree with a process still
-    // parked in it, and the owed delivery's own tree.
+    // parked in it, and the owed delivery's own tree. Only Linux
+    // can watch a tree's processes (`/proc`), so the sleeper —
+    // and asserting the prune kills it — exists only there.
     let stale = dir.join("checks/run-99");
     let owed_run = dir.join("checks/run-5");
     fs::create_dir_all(&stale).unwrap();
     fs::create_dir_all(&owed_run).unwrap();
-    let mut sleeper = std::process::Command::new("sleep")
-        .arg("300")
-        .current_dir(&stale)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .unwrap();
-    for _ in 0..200 {
-        if !crate::checkwork::cwd_pids(&stale).is_empty() {
-            break;
+    #[cfg(target_os = "linux")]
+    let mut sleeper = {
+        let s = std::process::Command::new("sleep")
+            .arg("300")
+            .current_dir(&stale)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        for _ in 0..200 {
+            if !crate::checkwork::cwd_pids(&stale).is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    assert!(!crate::checkwork::cwd_pids(&stale).is_empty());
+        assert!(!crate::checkwork::cwd_pids(&stale).is_empty());
+        s
+    };
 
     let state = store::load_state(&dir).unwrap();
     let mut stage = stage().await;
@@ -713,19 +719,19 @@ async fn the_first_check_pass_prunes_stale_run_trees() {
     stage.check("acme", &dir, &state, 10_000).unwrap();
 
     assert!(!stale.exists(), "the stale run tree survived");
-    for _ in 0..200 {
-        if sleeper.try_wait().unwrap().is_some() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    let status = sleeper.wait().unwrap();
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
+        for _ in 0..200 {
+            if sleeper.try_wait().unwrap().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let status = sleeper.wait().unwrap();
         use std::os::unix::process::ExitStatusExt;
         assert_eq!(status.signal(), Some(libc::SIGKILL), "{status}");
+        assert!(!status.success(), "{status}");
     }
-    assert!(!status.success(), "{status}");
     assert!(
         stage.checking.borrow().contains_key("acme"),
         "the owed check never started"

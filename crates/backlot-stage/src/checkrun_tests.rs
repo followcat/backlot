@@ -207,10 +207,11 @@ fn poll_done(child: &mut dyn CheckChild) -> PollOut {
 
 /// A run that exits the moment it finishes writing still gets its
 /// tail in the log: the readers drain the pipes the shell left.
+/// Builtins only — more bytes than a pipe buffer, under the cap.
 #[test]
 fn a_final_burst_reaches_the_log() {
     let mut child = checkrun::real_spawn(&CheckSpawn {
-        run: "seq 1 100000".into(),
+        run: "i=0; while [ $i -lt 50000 ]; do echo line-$i; i=$((i+1)); done".into(),
         dir: std::env::temp_dir(),
         env: vec![("PATH".into(), "/usr/bin:/bin".into())],
     })
@@ -218,18 +219,23 @@ fn a_final_burst_reaches_the_log() {
     let out = poll_done(child.as_mut());
     assert_eq!(out.code, Some(0));
     assert!(
-        out.output.ends_with(b"100000\n"),
+        out.output.ends_with(b"line-49999\n"),
         "the log lost its end: {} bytes",
         out.output.len()
     );
-    assert!(out.output.starts_with(b"1\n2\n"), "the log lost its start");
+    assert!(
+        out.output.starts_with(b"line-0\nline-1\n"),
+        "the log lost its start"
+    );
 }
 
 /// A process that escapes the group (`setsid`) and holds a pipe
 /// open keeps its reader from EOF; the log says its end was cut.
 /// The escapee touches `ready` only after it has left the group
 /// and the shell waits for it — so the group KILL always misses
-/// it and the drain deadline, not the reader, decides.
+/// it and the drain deadline, not the reader, decides. Linux
+/// only: `setsid` and fractional `sleep` are GNU.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_pipe_held_open_marks_the_log_cut() {
     let work = std::env::temp_dir().join(format!(

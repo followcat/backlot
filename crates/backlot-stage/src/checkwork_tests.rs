@@ -3,11 +3,16 @@
 //! a `Running` kills the group, and a leftover `checks/run-*` tree
 //! loses every process parked inside before it is reused or
 //! removed — including one whose cwd the delete already took.
-//! The first pass prunes the trees no owed check needs.
+//! The first pass prunes the trees no owed check needs. The
+//! `/proc` cwd sweep only exists on Linux, so the tests that park
+//! or count processes are `cfg(target_os = "linux")`; the kill
+//! itself and the prune run everywhere.
 
+#[cfg(target_os = "linux")]
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
+#[cfg(target_os = "linux")]
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -17,7 +22,9 @@ use backlot_model::state::StudioState;
 use backlot_model::testkit as tk;
 use backlot_model::{Event, EventBy, EventKind as K, NewEvent};
 
-use crate::checkrun::{self, CheckChild, CheckSpawn, PollOut};
+use crate::checkrun::{self, CheckSpawn};
+#[cfg(target_os = "linux")]
+use crate::checkrun::{CheckChild, PollOut};
 use crate::checks;
 use crate::checkwork::{self, Running};
 use crate::cli_testkit::*;
@@ -91,6 +98,7 @@ fn fake_git(
 }
 
 /// `sleep N` parked in `dir` with no inherited pipes.
+#[cfg(target_os = "linux")]
 fn sleeper(dir: &Path, secs: u64) -> std::process::Child {
     std::process::Command::new("sleep")
         .arg(secs.to_string())
@@ -104,6 +112,8 @@ fn sleeper(dir: &Path, secs: u64) -> std::process::Child {
 
 /// Until `f` holds or two seconds pass — SIGKILL delivery is
 /// prompt but not synchronous with the caller's next line.
+/// Only the Linux tests can observe a process this way.
+#[cfg(target_os = "linux")]
 fn until(mut f: impl FnMut() -> bool) -> bool {
     for _ in 0..200 {
         if f() {
@@ -114,9 +124,9 @@ fn until(mut f: impl FnMut() -> bool) -> bool {
     false
 }
 
-/// The signal a killed child reports (unix), so the assertions
-/// name KILL rather than any nonzero exit.
-#[cfg(unix)]
+/// The signal a killed child reports, so the assertions name
+/// KILL rather than any nonzero exit.
+#[cfg(target_os = "linux")]
 fn sig(child: &mut std::process::Child) -> Option<i32> {
     use std::os::unix::process::ExitStatusExt;
     until(|| child.try_wait().unwrap().is_some())
@@ -130,12 +140,15 @@ fn env_path() -> Vec<(String, String)> {
         .collect()
 }
 
+#[cfg(target_os = "linux")]
 fn stage_env() -> BTreeMap<String, String> {
     env_path().into_iter().collect()
 }
 
 /// A scripted child that exits 0 at once.
+#[cfg(target_os = "linux")]
 struct Done;
+#[cfg(target_os = "linux")]
 impl CheckChild for Done {
     fn poll(&mut self) -> Option<PollOut> {
         Some(PollOut {
@@ -170,6 +183,8 @@ fn a_backgrounded_check_process_dies_with_the_shell() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(out.expect("the run finished").exit_code, Some(0));
+    // The group KILL is POSIX; only Linux can count the dead.
+    #[cfg(target_os = "linux")]
     assert!(
         until(|| checkwork::cwd_pids(&work).is_empty()),
         "a leftover process still lives in {work:?}"
@@ -193,6 +208,7 @@ fn a_dropped_run_kills_its_group() {
     // Let the shell start its sleep, then the stage dies.
     std::thread::sleep(Duration::from_millis(100));
     drop(run);
+    #[cfg(target_os = "linux")]
     assert!(
         until(|| checkwork::cwd_pids(&work).is_empty()),
         "a dropped run left a process in {work:?}"
@@ -201,7 +217,8 @@ fn a_dropped_run_kills_its_group() {
 
 /// A dead stage left both its tree and a live process in it:
 /// `start` kills the process before the tree comes down for the
-/// fresh run.
+/// fresh run. The sweep reads `/proc` — Linux only.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_leftover_tree_loses_its_processes_before_the_rerun() {
     let (scratch, _) = scratch();
