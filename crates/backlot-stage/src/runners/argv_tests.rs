@@ -587,3 +587,24 @@ fn session_ids_read_back_from_argv() {
     // Runners that do not choose give nothing.
     assert_eq!(session_in_argv("codex", &["codex".into()]), None);
 }
+
+/// A binary replaced under the running process reports
+/// `<path> (deleted)` — the marker comes off when the path without
+/// it exists, and stays when nothing is there either.
+#[test]
+fn a_replaced_binary_names_the_live_path() {
+    use std::path::{Path, PathBuf};
+    let exists = |p: &Path| p == Path::new("/usr/bin/backlot");
+    assert_eq!(
+        claude::live_exe(PathBuf::from("/usr/bin/backlot (deleted)"), exists),
+        PathBuf::from("/usr/bin/backlot")
+    );
+    assert_eq!(
+        claude::live_exe(PathBuf::from("/gone/backlot (deleted)"), exists),
+        PathBuf::from("/gone/backlot (deleted)")
+    );
+    assert_eq!(
+        claude::live_exe(PathBuf::from("/usr/bin/backlot"), exists),
+        PathBuf::from("/usr/bin/backlot")
+    );
+}

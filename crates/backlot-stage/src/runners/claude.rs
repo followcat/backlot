@@ -127,7 +127,7 @@ pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
     let settings = role_dir.join("claude-settings.json");
     let signals = role_dir.join("signals.jsonl");
     let exe = std::env::current_exe()
-        .map(|p| p.to_string_lossy().into_owned())
+        .map(|p| live_exe(p, |q| q.exists()).to_string_lossy().into_owned())
         .unwrap_or_else(|_| "backlot".into());
     let command = format!(
         "{} hook --file {}",
@@ -153,6 +153,27 @@ pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
         content,
         command,
     }
+}
+
+/// `current_exe` names the file the process was exec'd from — a
+/// binary replaced on disk while it runs (a rebuild, an upgrade)
+/// reads `<path> (deleted)` on Linux, and a hook command built on
+/// that points nowhere: the role's hooks go quiet and the screen
+/// takes over. The name without the marker is the replacement —
+/// use it when it exists.
+pub(crate) fn live_exe(
+    path: std::path::PathBuf,
+    exists: impl Fn(&std::path::Path) -> bool,
+) -> std::path::PathBuf {
+    const DELETED: &str = " (deleted)";
+    let Some(s) = path.to_str() else {
+        return path;
+    };
+    let Some(base) = s.strip_suffix(DELETED) else {
+        return path;
+    };
+    let stripped = std::path::PathBuf::from(base);
+    if exists(&stripped) { stripped } else { path }
 }
 
 /// The session id a live claude terminal's argv chose: the value
