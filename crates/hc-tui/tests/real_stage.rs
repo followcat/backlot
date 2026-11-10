@@ -1054,6 +1054,111 @@ async fn real_stage_closed_loop() {
     scratch.finish().expect("scratch teardown");
 }
 
+/// The S9a nudge on the fake runner with short limits: the plan and
+/// acceptance list are published and nobody answers — the owed
+/// `dispatch` step shows in `backlot status`, the idle producer's
+/// terminal gets the one `nudge` message, and a `dispatch` makes the
+/// step disappear again.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_nudge() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    // Seconds, not minutes: the idle stretch passes inside a test.
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("nudge_after_s = 2\nescalate_after_s = 4\n{CAST_TOML}"),
+    );
+    let req = fixture(&scratch, "req.md", "# requirement\nbuild the shop\n");
+    let plan = fixture(&scratch, "plan.md", "# plan\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let note = fixture(&scratch, "note.md", "director: go\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+    wait_read(
+        &client,
+        "bl-acme-shop-producer",
+        "fake runner: producer of acme-shop",
+    )
+    .await;
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(&scratch, &state, "plan request --as producer");
+    wait_terminal(&client, "bl-acme-shop-writer").await;
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "plan publish --kind plan --file {} --as writer",
+            plan.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "plan publish --kind acceptance --file {} --as writer",
+            acc.display()
+        ),
+    );
+
+    // The producer owes the dispatch — status says so, and after
+    // `nudge_after_s` of its idle stretch the nudge lands in its
+    // terminal inbox, exactly once.
+    let status = bl(&scratch, &state, "status");
+    assert!(status.contains("next: dispatch — producer"), "{status}");
+    wait_inbox(&state, "fake-inbox-producer", "-nudge.md");
+    assert_eq!(
+        ledger(&state)
+            .iter()
+            .filter(|e| e["kind"] == "message.queued" && e["purpose"] == "nudge")
+            .count(),
+        1,
+        "a second nudge queued: {:?}",
+        ledger(&state)
+    );
+
+    // Dispatch answers the step: the `next: dispatch` line is gone
+    // from status (the director's `tasks` step may follow once the
+    // dispatch is delivered).
+    bl(
+        &scratch,
+        &state,
+        &format!("dispatch --file {} --as producer", note.display()),
+    );
+    let status = bl(&scratch, &state, "status");
+    assert!(!status.contains("next: dispatch"), "{status}");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
 /// The S6a watch on the fake runner with a small `stall_limit_s`: a
 /// `work:working` actor's frozen screen raises `stalled`, the notice
 /// queues for the task's reviewer — the director — and a changed
