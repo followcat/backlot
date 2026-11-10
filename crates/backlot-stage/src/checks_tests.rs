@@ -510,8 +510,9 @@ fn finish_logs_appends_and_drops_the_tree_when_done() {
 // stage checks" section only while such a task exists.
 
 /// `backlot status` marks each declared check on the latest
-/// delivery: `running` while the record is owed, `pass` or `fail`
-/// when it lands — and `-` when it never will.
+/// delivery: `pending` while the record is owed — the CLI cannot
+/// see which check the stage is running — `pass`, `fail` or
+/// `timeout` when it lands, and `-` when it never will.
 #[test]
 fn status_marks_each_check_on_the_task_line() {
     let (mut events, state) = checked_state();
@@ -523,14 +524,14 @@ fn status_marks_each_check_on_the_task_line() {
             .to_string()
     };
     assert!(
-        line(&state).contains("checks unit:running lint:running"),
+        line(&state).contains("checks unit:pending lint:pending"),
         "{}",
         line(&state)
     );
     events.push(checked_ev(6, "unit"));
     let state = backlot_model::state::replay(&events);
     assert!(
-        line(&state).contains("checks unit:pass lint:running"),
+        line(&state).contains("checks unit:pass lint:pending"),
         "{}",
         line(&state)
     );
@@ -543,6 +544,28 @@ fn status_marks_each_check_on_the_task_line() {
     let state = backlot_model::state::replay(&events);
     assert!(
         line(&state).contains("checks unit:pass lint:fail"),
+        "{}",
+        line(&state)
+    );
+    // A timed-out check reads `timeout`, matching the notice's
+    // "timed out".
+    let mut lint_timeout = checked_ev(7, "lint");
+    let K::TaskChecked {
+        exit_code,
+        timed_out,
+        ..
+    } = &mut lint_timeout.kind
+    else {
+        unreachable!()
+    };
+    *exit_code = None;
+    *timed_out = true;
+    let (mut events, _) = checked_state();
+    events.push(checked_ev(6, "unit"));
+    events.push(lint_timeout);
+    let state = backlot_model::state::replay(&events);
+    assert!(
+        line(&state).contains("checks unit:pass lint:timeout"),
         "{}",
         line(&state)
     );

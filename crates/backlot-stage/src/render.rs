@@ -53,8 +53,9 @@ fn task_line(t: &Task, declared: &[CheckDecl], current_req: u32, cap: u32) -> St
         t.rework_rounds,
         cap
     );
-    // The stage's own results on the latest delivery: `running` is
-    // a record still owed, `-` one that never landed.
+    // The stage's own results on the latest delivery: `pending` is
+    // a record still owed — the CLI cannot see what the stage is
+    // running — `-` one that never landed, `timeout` the timed-out.
     if !declared.is_empty()
         && let Some(d) = t.deliveries.last()
     {
@@ -64,8 +65,9 @@ fn task_line(t: &Task, declared: &[CheckDecl], current_req: u32, cap: u32) -> St
             .map(|c| {
                 let mark = match t.checked_of(d.n).find(|r| r.name == c.name) {
                     Some(r) if r.passed() => "pass",
+                    Some(r) if r.timed_out => "timeout",
                     Some(_) => "fail",
-                    None if live => "running",
+                    None if live => "pending",
                     None => "-",
                 };
                 format!("{}:{mark}", c.name)
