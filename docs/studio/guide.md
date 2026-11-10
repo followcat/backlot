@@ -27,8 +27,10 @@ The cast file says who plays each role. One complete example:
 
 ```toml
 # cast.toml — a studio's cast.
-rework_cap = 2        # optional, default 2
-stall_limit_s = 600   # optional, default 600
+rework_cap = 2          # optional, default 2
+stall_limit_s = 600     # optional, default 600
+nudge_after_s = 180     # optional, default 180
+escalate_after_s = 600  # optional, default 600
 
 [producer]
 runner = "claude"
@@ -71,6 +73,8 @@ permission_profile = "worktree"
 | `[[candidates]]` | One table per actor the director may cast. `name` is what `backlot cast --actor` takes. Optional — but with none, `cast` refuses everyone and no task can run; only the fixed roles start. |
 | `rework_cap` | Rework rounds the director may ask for per task before the call goes to you via the producer. Optional; default 2. |
 | `stall_limit_s` | Seconds a live role's screen may stay unchanged while it counts as working before a `stalled` attention raises. Optional; default 600. Must be at least 1. |
+| `nudge_after_s` | Seconds an owed step's owner may sit idle — live, waiting, nothing queued or in flight — before the stage queues it one `nudge` message (counted from the later of the step becoming owed and the idle stretch starting). Optional; default 180. Must be at least 1. |
+| `escalate_after_s` | Seconds after that nudge was delivered during which the step may stay owed and the owner idle before an `owed` attention raises. Optional; default 600. Must be at least 1. |
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin` or `opencode`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. |
 | `effort` | Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; Devin takes it as part of the model id; OpenCode has no flag). |

@@ -71,6 +71,10 @@ struct CastFile {
     rework_cap: Option<u32>,
     #[serde(default)]
     stall_limit_s: Option<u32>,
+    #[serde(default)]
+    nudge_after_s: Option<u32>,
+    #[serde(default)]
+    escalate_after_s: Option<u32>,
     producer: ActorIdentity,
     director: ActorIdentity,
     writer: ActorIdentity,
@@ -87,6 +91,13 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     // real number like every other cast value.
     if cast.stall_limit_s == Some(0) {
         return Err(Fail::usage("stall_limit_s must be at least 1"));
+    }
+    // A zero delay nudges or escalates on the same tick it measures.
+    if cast.nudge_after_s == Some(0) {
+        return Err(Fail::usage("nudge_after_s must be at least 1"));
+    }
+    if cast.escalate_after_s == Some(0) {
+        return Err(Fail::usage("escalate_after_s must be at least 1"));
     }
     Ok(cast)
 }
@@ -162,8 +173,10 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         candidates: cast.candidates,
                         rework_cap: cast.rework_cap.unwrap_or_else(default_rework_cap),
                         stall_limit_s: cast.stall_limit_s.unwrap_or_else(default_stall_limit_s),
-                        nudge_after_s: default_nudge_after_s(),
-                        escalate_after_s: default_escalate_after_s(),
+                        nudge_after_s: cast.nudge_after_s.unwrap_or_else(default_nudge_after_s),
+                        escalate_after_s: cast
+                            .escalate_after_s
+                            .unwrap_or_else(default_escalate_after_s),
                     },
                     by,
                     Vec::new(),

@@ -312,6 +312,61 @@ fn exit_kinds_usage_vs_refused() {
     );
 }
 
+/// Zero nudge and escalate delays are usage errors like
+/// `stall_limit_s = 0` — and they create nothing.
+#[test]
+fn zero_nudge_delays_are_usage_errors() {
+    let (scratch, env) = scratch();
+    for (key, name) in [("nudge_after_s", "z-nudge"), ("escalate_after_s", "z-esc")] {
+        let cast = fixture(
+            &scratch,
+            &format!("cast-{name}.toml"),
+            &CAST_TOML.replacen("rework_cap = 2", &format!("{key} = 0"), 1),
+        );
+        let mut vars = env.vars.clone();
+        vars.insert("BACKLOT_STUDIO".into(), name.into());
+        let env_zero = crate::cli::Env { vars };
+        assert!(
+            usage(
+                &env_zero,
+                &format!("studio new --title Zero --repo /home/user/acme-shop --cast {cast}")
+            )
+            .contains(key)
+        );
+        assert!(
+            !crate::store::studio_dir(&scratch.dir, name).exists(),
+            "the refused studio was still created"
+        );
+    }
+    // Set numbers reach the ledger unchanged.
+    let cast = fixture(
+        &scratch,
+        "cast-timing.toml",
+        &CAST_TOML.replacen(
+            "rework_cap = 2",
+            "nudge_after_s = 5\nescalate_after_s = 9",
+            1,
+        ),
+    );
+    ok(
+        &env,
+        &format!("studio new --title Timed --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let (events, _) =
+        crate::store::load_events(&crate::store::studio_dir(&scratch.dir, "acme-shop")).unwrap();
+    match &events[0].kind {
+        backlot_model::EventKind::StudioCreated {
+            nudge_after_s,
+            escalate_after_s,
+            ..
+        } => {
+            assert_eq!(*nudge_after_s, 5);
+            assert_eq!(*escalate_after_s, 9);
+        }
+        other => panic!("wrong event: {other:?}"),
+    }
+}
+
 #[test]
 fn missing_caller_values_are_usage_errors() {
     let (_scratch, mut env) = scratch();
