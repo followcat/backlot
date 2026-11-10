@@ -1,7 +1,7 @@
 //! The paste matrix, part 2 — a smoke run against the real agent CLIs
 //! (Claude Code, Codex, Devin, OpenCode) instead of the fakes. Each
 //! agent runs in its own tab on an owned scratch core with the real
-//! HOME (real logins) and the company proxy in its environment; the
+//! HOME (real logins) and the caller's proxy in its environment; the
 //! harness never submits anything: pastes land, the screen is dumped,
 //! the input is cleared with Ctrl+C, and the agent is quit with
 //! Ctrl+C twice, falling back to `terminal.kill` only for the record.
@@ -11,6 +11,8 @@
 //! left in place for review.
 //!
 //! Ignored by default: needs `HC_TUI_TEST_CORE` and `HC_TUI_REAL_AGENTS=1`.
+//! Agents inherit the proxy variables of the test process; set
+//! `HC_TUI_PROXY_ENV` to an env file to take them from there instead.
 //!
 //! ```sh
 //! HC_TUI_TEST_CORE=/path/to/pinned/herdr-core HC_TUI_REAL_AGENTS=1 \
@@ -46,13 +48,34 @@ const AGENTS: &[(&str, &str)] = &[
     ("opencode", "opencode"),
 ];
 
-/// Parses `~/.config/secrets/http-proxy.env` without ever printing a
-/// value; asserts the proxy variables are set and URL-shaped (masked
-/// check only).
+/// Proxy variables passed through from this process's environment.
+const PROXY_KEYS: &[&str] = &[
+    "http_proxy",
+    "https_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "no_proxy",
+    "NO_PROXY",
+    "all_proxy",
+    "ALL_PROXY",
+];
+
+/// The agents' proxy. With `HC_TUI_PROXY_ENV` set, parses that env file
+/// (`KEY=value` lines) without ever printing a value and asserts the
+/// proxy variables are set and URL-shaped (masked check only). Without
+/// it, the proxy variables of this process pass through unchanged.
 fn proxy_env() -> BTreeMap<String, String> {
-    let home = std::env::var("HOME").expect("HOME");
-    let path = Path::new(&home).join(".config/secrets/http-proxy.env");
-    let text = fs::read_to_string(&path).expect("read proxy env");
+    let Some(path) = std::env::var_os("HC_TUI_PROXY_ENV") else {
+        return PROXY_KEYS
+            .iter()
+            .filter_map(|key| {
+                std::env::var(key)
+                    .ok()
+                    .map(|value| (key.to_string(), value))
+            })
+            .collect();
+    };
+    let text = fs::read_to_string(Path::new(&path)).expect("read HC_TUI_PROXY_ENV");
     let mut env = BTreeMap::new();
     for line in text.lines() {
         let line = line.trim();
@@ -81,7 +104,7 @@ fn proxy_env() -> BTreeMap<String, String> {
 }
 
 /// The agent's environment: real login (HOME, XDG, PATH) plus the
-/// company proxy. The stub dir leads PATH so an agent's own clipboard
+/// proxy from [`proxy_env`]. The stub dir leads PATH so an agent's own clipboard
 /// tool lookups hit the owned stub, never the real clipboard.
 fn agent_env(stub: &Path) -> BTreeMap<String, String> {
     let home = std::env::var("HOME").expect("HOME");

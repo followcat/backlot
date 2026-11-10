@@ -666,7 +666,11 @@
   `\n` verbatim; canonical programs see identical input.
 - Gates: fmt, all-target clippy, the full suite, the 29 installer
   tests, parity vectors and the 80x24 parity run (navigator footer
-  exceptions only). Details in `~/AIcontrol/hc-tui-work/briefs/paste-matrix.report.md`.
+  exceptions only).
+- `real_agent_smoke_e2e` (ignored, `HC_TUI_REAL_AGENTS=1`) pastes into
+  the real Claude Code, Codex, Devin and OpenCode without submitting.
+  All four show pasted text in their input; over a remote endpoint
+  Claude Code turns the uploaded image path into an image chip.
 
 ## Image paste over remote: file copies and visible misses (branch fix/remote-image-paste)
 
