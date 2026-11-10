@@ -7,8 +7,12 @@
 //! message queued for a later tick with no second attention. A
 //! crash between send and record can send twice — harmless, and
 //! noted in the docs.
+//!
+//! S9d: a queued notice is checked against its source before the
+//! send — when the source no longer stands `message.dropped` is
+//! recorded and the message leaves the outbox without being sent.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Duration;
 
@@ -24,6 +28,7 @@ use crate::cli::Fail;
 use crate::daemon::Stage;
 use crate::notices;
 use crate::reconcile::{self, LiveTerminal};
+use crate::stale;
 
 /// The role must be up this long before anything is sent.
 pub const MIN_UP_MS: u64 = 5_000;
@@ -74,7 +79,7 @@ pub fn outbox(state: &StudioState, dir: &Path) -> Vec<Outbound> {
             .or_insert((seq, text));
     };
     for m in &state.messages {
-        if !m.delivered {
+        if !m.delivered && !m.dropped {
             offer(
                 &m.to,
                 m.seq,
@@ -236,12 +241,40 @@ impl Stage {
             grew = true;
         }
 
+        // A queued notice whose source no longer stands is recorded
+        // dropped — the ledger keeps the skip, nobody is told. A send
+        // already in flight is exempt: it cannot be un-sent.
+        let in_flight: BTreeSet<u64> = self
+            .sending
+            .borrow()
+            .iter()
+            .filter(|(k, _)| k.0 == studio)
+            .map(|(_, f)| f.seq)
+            .collect();
+        let dropped: Vec<(u64, &'static str)> = state
+            .messages
+            .iter()
+            .filter(|m| !m.delivered && !m.dropped && !in_flight.contains(&m.seq))
+            .filter_map(|m| stale::stale_reason(state, m).map(|r| (m.seq, r)))
+            .collect();
+        for (seq, reason) in &dropped {
+            record(
+                dir,
+                EventKind::MessageDropped {
+                    target: *seq,
+                    reason: (*reason).into(),
+                },
+            )?;
+            eprintln!("stage: message {seq} dropped: {reason}");
+        }
+
         // Owed steps the idle owner has not run: nudge once, then
         // escalate — the messages join the same outbox below. When
-        // this pass queued mail, reload so it counts as undelivered
-        // and keeps its owner off the idle list.
+        // this pass queued mail or dropped any, reload so the drops
+        // count as gone and the queues as undelivered — both keep
+        // their owner off the idle list.
         let fresh;
-        let state = if grew {
+        let state = if grew || !dropped.is_empty() {
             fresh = crate::daemon::load_studio(dir)?;
             &fresh
         } else {

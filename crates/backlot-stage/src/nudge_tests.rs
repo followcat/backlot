@@ -570,6 +570,46 @@ async fn the_owed_attention_follows_its_step_not_the_role() {
     assert!(open[0].detail.contains("cast t1"), "{}", open[0].detail);
 }
 
+/// A dropped message is not pending for the idle rule: `queued_for`
+/// reads only what the outbox would send, so a role whose queued
+/// notice was dropped reads idle again.
+#[test]
+fn a_dropped_message_does_not_count_as_queued() {
+    let mut state = base_state();
+    apply(
+        &mut state,
+        &ev(
+            4,
+            "stage",
+            EventKind::MessageQueued {
+                to: "director".into(),
+                file: Some("messages/3-attention.md".into()),
+                purpose: None,
+                source_seq: Some(3),
+            },
+        ),
+    );
+    assert!(
+        nudge::queued_for(&state, "director"),
+        "a queued item counts"
+    );
+    apply(
+        &mut state,
+        &ev(
+            5,
+            "stage",
+            EventKind::MessageDropped {
+                target: 4,
+                reason: "attention cleared".into(),
+            },
+        ),
+    );
+    assert!(
+        !nudge::queued_for(&state, "director"),
+        "a dropped one does not"
+    );
+}
+
 /// A nudge and an ordinary notice share a `source_seq` without
 /// suppressing each other: the delivered-task step's key is the
 /// delivery's seq — the same seq the delivery notice claims.

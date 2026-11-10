@@ -90,6 +90,23 @@ fn outbox_is_oldest_first_per_role() {
     );
 }
 
+/// A dropped message is never pending: it skips the outbox entirely,
+/// and a role with only drops left is sent nothing.
+#[test]
+fn the_outbox_skips_dropped_messages() {
+    let mut state = StudioState::default();
+    let mut m = message(3, "writer", false);
+    m.dropped = true;
+    state.messages.push(m);
+    state.messages.push(message(4, "writer", false));
+    let out = outbox(&state, dir());
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].seq, 4, "the live item still goes");
+
+    state.messages[1].dropped = true;
+    assert!(outbox(&state, dir()).is_empty());
+}
+
 /// A file-less `plan` message says what is wanted instead of
 /// naming a file.
 #[test]

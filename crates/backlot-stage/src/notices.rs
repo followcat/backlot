@@ -24,7 +24,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use backlot_model::event::{ApprovalDecision, TaskStateChange, Verdict};
-use backlot_model::state::{StudioState, TaskStatus};
+use backlot_model::state::{Message, StudioState, TaskStatus};
 
 /// A notice the ledger owes: a generated body file and the queued
 /// message that names it.
@@ -52,6 +52,16 @@ pub fn reviewer_for(task: &backlot_model::state::Task) -> String {
 /// `desired` builds.
 fn actor_key(task: &backlot_model::state::Task) -> String {
     format!("actor-{}-c{}", task.id, task.casts.len())
+}
+
+/// The label a stage-written message's file carries: the body lands
+/// at `messages/<source_seq>-<label>.md`, so the leaf between the seq
+/// and `.md` is the label `owed` chose. `None` when the file does not
+/// match — which a generated notice never does.
+pub(crate) fn label(m: &Message) -> Option<&str> {
+    let seq = m.source_seq?;
+    let rest = m.file.as_deref()?.strip_prefix("messages/")?;
+    rest.strip_prefix(&format!("{seq}-"))?.strip_suffix(".md")
 }
 
 /// The `lost` notice body for a `cannot resume` attention: the

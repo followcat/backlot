@@ -1305,6 +1305,82 @@ async fn real_stage_prompt_answered_elsewhere_clears() {
     wait_events(&state, "attention.raised", "actor-t1-c1", 2);
 }
 
+/// S9d — the S8 bug: the director is `work:working` while the actor's
+/// prompt raises its attention and queues the notice; the user's
+/// approval clears the attention, and when the director goes
+/// `work:waiting` the ledger holds `message.dropped` with `attention
+/// cleared` — the director's inbox gets nothing.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_stale_notice_drops() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    checks_studio(&scratch, &state, "", "");
+    let director = wait_terminal(&client, "bl-acme-shop-director").await;
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    // The director is busy while the actor hits a permission prompt:
+    // the notice queues but the send gate never opens.
+    send_text(&client, &director.address, "work:working").await;
+    wait_role(&client, "director", |r| r["work"] == "working").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised["reason"], "permission prompt", "{raised}");
+    let queued = {
+        let deadline = Instant::now() + DEADLINE;
+        loop {
+            if let Some(e) = ledger(&state)
+                .into_iter()
+                .find(|e| e["kind"] == "message.queued" && e["source_seq"] == raised["seq"])
+            {
+                break e;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the director's notice never queued"
+            );
+            std::thread::sleep(POLL);
+        }
+    };
+
+    // The user approves: the prompt's key goes in, the attention
+    // clears — and the queued notice's source is gone.
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as user",
+    );
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
+    wait_kind(&state, "attention.cleared", 1);
+
+    // The director goes waiting: the drop lands instead of any send.
+    send_text(&client, &director.address, "work:waiting").await;
+    wait_kind(&state, "message.dropped", 1);
+    let dropped = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "message.dropped")
+        .expect("message.dropped");
+    assert_eq!(dropped["target"], queued["seq"], "{dropped}");
+    assert_eq!(dropped["reason"], "attention cleared", "{dropped}");
+    assert_eq!(dropped["by"]["role"], "stage", "{dropped}");
+
+    // Past every send gate: the notice never reached the director —
+    // no `message.delivered` targets it either.
+    std::thread::sleep(Duration::from_secs(7));
+    let inbox = fs::read_to_string(state.join("fake-inbox-director")).unwrap_or_default();
+    assert!(!inbox.contains("attention"), "{inbox}");
+    assert!(
+        !ledger(&state)
+            .iter()
+            .any(|e| e["kind"] == "message.delivered" && e["target"] == queued["seq"]),
+        "the dropped notice must not be marked delivered"
+    );
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
 /// The S9a nudge on the fake runner with short limits: the plan and
 /// acceptance list are published and nobody answers — the owed
 /// `dispatch` step shows in `backlot status`, the idle producer's

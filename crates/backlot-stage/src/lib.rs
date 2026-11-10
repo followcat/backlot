@@ -28,6 +28,7 @@ pub mod render;
 mod runners;
 mod sample;
 mod stage;
+mod stale;
 mod stall;
 pub mod store;
 mod watch;
@@ -79,6 +80,8 @@ mod reopen_cmd_tests;
 mod role_cmd_tests;
 #[cfg(test)]
 mod sample_tests;
+#[cfg(test)]
+mod stale_tests;
 #[cfg(test)]
 mod stall_tests;
 #[cfg(test)]

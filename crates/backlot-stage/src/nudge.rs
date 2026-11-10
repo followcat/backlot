@@ -39,9 +39,13 @@ pub(crate) enum Move {
 }
 
 /// An undelivered message or report aimed at the role — the idle
-/// rule's "nothing queued for it".
-fn queued_for(state: &StudioState, role: &str) -> bool {
-    state.messages.iter().any(|m| m.to == role && !m.delivered)
+/// rule's "nothing queued for it". A dropped message is done, not
+/// pending: it stays out.
+pub(crate) fn queued_for(state: &StudioState, role: &str) -> bool {
+    state
+        .messages
+        .iter()
+        .any(|m| m.to == role && !m.delivered && !m.dropped)
         || state.reports.iter().any(|r| r.to == role && !r.delivered)
 }
 

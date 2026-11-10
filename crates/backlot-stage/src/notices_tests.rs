@@ -574,3 +574,37 @@ fn a_resume_to_running_owes_the_actor() {
             .all(|n| n.label != "resumed")
     );
 }
+
+/// A dropped notice still counts as handled: `owed`'s `sent` set
+/// reads every queued message's `source_seq`, dropped or not, so a
+/// dropped notice is never re-queued — the drop is what stops it,
+/// not a delete.
+#[test]
+fn a_dropped_notice_still_counts_as_handled() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor-t1-c1", delivered("t1", 1, "a", 1)), // seq 5
+            (
+                "stage",
+                EventKind::MessageQueued {
+                    to: "director".into(),
+                    file: Some("messages/5-delivered.md".into()),
+                    purpose: None,
+                    source_seq: Some(5),
+                },
+            ),
+            (
+                "stage",
+                EventKind::MessageDropped {
+                    target: 6,
+                    reason: "superseded".into(),
+                },
+            ),
+        ],
+    );
+    assert!(state.messages[0].dropped, "the drop landed");
+    let owed = notices::owed(&state, dir());
+    assert!(owed.iter().all(|n| n.source_seq != 5), "{owed:?}");
+}
