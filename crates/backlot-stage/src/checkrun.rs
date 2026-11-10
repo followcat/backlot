@@ -1,14 +1,17 @@
 //! The check process runner (S9b part 2): `sh -c <run>` in the
 //! delivery's detached worktree, its own process group, stdin on
 //! `/dev/null`, stdout and stderr merged into one bounded capture.
-//! The stage polls it with `try_wait` from the tick — nothing here
-//! blocks the loop. `Spawn` is the injection seam: production runs
-//! [`real_spawn`], tests drive scripted children.
+//! The stage polls it with `try_wait` from the tick; the only wait
+//! is a bounded drain of an exited shell's last bytes. `Spawn` is
+//! the injection seam: production runs [`real_spawn`], tests drive
+//! scripted children.
 
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// The log cap: one MiB, keeping the end.
 pub const LOG_CAP: usize = 1 << 20;
@@ -57,23 +60,57 @@ impl CappedBuf {
     }
 }
 
-/// The real child: a piped `sh` drained by a reader thread into the
-/// shared capped buffer, so the tick's `try_wait` never blocks on
-/// output either.
+/// The real child: a piped `sh` drained by a reader thread per
+/// pipe into the shared capped buffer, so the tick's `try_wait`
+/// never blocks on output either. Each reader reports its EOF on a
+/// channel, so an exiting shell's last bytes still make the log.
 struct RealChild {
     child: Child,
     out: Arc<Mutex<CappedBuf>>,
+    readers: Vec<Receiver<()>>,
+}
+
+impl RealChild {
+    /// Each reader reports EOF on its channel; the log waits at
+    /// most two seconds for both. `true` when one was still blocked
+    /// — what it had captured by then is all the log gets.
+    fn drain_readers(&mut self) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut cut = false;
+        for rx in self.readers.drain(..) {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if rx.recv_timeout(left).is_err() {
+                cut = true;
+            }
+        }
+        cut
+    }
 }
 
 impl CheckChild for RealChild {
     fn poll(&mut self) -> Option<PollOut> {
-        match self.child.try_wait() {
-            Ok(Some(status)) => Some(PollOut {
-                code: status.code(),
-                output: std::mem::take(&mut self.out.lock().unwrap().0),
-            }),
-            _ => None,
+        let status = match self.child.try_wait() {
+            Ok(Some(status)) => status,
+            _ => return None,
+        };
+        // The shell is out: anything it left in its group (a
+        // `server &`) would hold the pipes open — KILL the group,
+        // then give the readers a bounded moment to drain.
+        self.kill();
+        let cut = self.drain_readers();
+        let mut output = std::mem::take(&mut self.out.lock().unwrap().0);
+        if cut {
+            if !output.ends_with(b"\n") && !output.is_empty() {
+                output.push(b'\n');
+            }
+            output.extend_from_slice(
+                b"backlot: check output cut: a pipe reader did not drain in 2s\n",
+            );
         }
+        Some(PollOut {
+            code: status.code(),
+            output,
+        })
     }
 
     fn term(&mut self) {
@@ -94,8 +131,10 @@ fn signal_group(pid: u32, sig: libc::c_int) {
 }
 
 /// Drain `pipe` into `sink` until EOF — one reader per end of the
-/// child's output, both sharing the capped buffer.
-fn drain(mut pipe: impl Read + Send + 'static, sink: Arc<Mutex<CappedBuf>>) {
+/// child's output, both sharing the capped buffer. The returned
+/// channel gets the reader's `()` at EOF.
+fn drain(mut pipe: impl Read + Send + 'static, sink: Arc<Mutex<CappedBuf>>) -> Receiver<()> {
+    let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         loop {
@@ -104,7 +143,9 @@ fn drain(mut pipe: impl Read + Send + 'static, sink: Arc<Mutex<CappedBuf>>) {
                 Ok(n) => sink.lock().unwrap().push(&buf[..n]),
             }
         }
+        let _ = tx.send(());
     });
+    rx
 }
 
 /// Production [`Spawn`]: `sh -c run` under the stripped environment,
@@ -125,13 +166,19 @@ pub fn real_spawn(req: &CheckSpawn) -> Result<Box<dyn CheckChild>, String> {
         .process_group(0);
     let mut child = cmd.spawn().map_err(|e| format!("spawn sh -c: {e}"))?;
     let out = Arc::new(Mutex::new(CappedBuf(Vec::new())));
-    drain(
-        child.stdout.take().expect("stdout is piped"),
-        Arc::clone(&out),
-    );
-    drain(
-        child.stderr.take().expect("stderr is piped"),
-        Arc::clone(&out),
-    );
-    Ok(Box::new(RealChild { child, out }))
+    let readers = vec![
+        drain(
+            child.stdout.take().expect("stdout is piped"),
+            Arc::clone(&out),
+        ),
+        drain(
+            child.stderr.take().expect("stderr is piped"),
+            Arc::clone(&out),
+        ),
+    ];
+    Ok(Box::new(RealChild {
+        child,
+        out,
+        readers,
+    }))
 }

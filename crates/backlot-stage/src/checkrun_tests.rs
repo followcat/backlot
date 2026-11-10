@@ -193,6 +193,54 @@ fn the_environment_is_the_short_list() {
     );
 }
 
+/// Poll a real child until it exits — five seconds of headroom so
+/// the two-second drain deadline fits inside.
+fn poll_done(child: &mut dyn CheckChild) -> PollOut {
+    for _ in 0..500 {
+        if let Some(o) = child.poll() {
+            return o;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the run did not finish");
+}
+
+/// A run that exits the moment it finishes writing still gets its
+/// tail in the log: the readers drain the pipes the shell left.
+#[test]
+fn a_final_burst_reaches_the_log() {
+    let mut child = checkrun::real_spawn(&CheckSpawn {
+        run: "seq 1 100000".into(),
+        dir: std::env::temp_dir(),
+        env: vec![("PATH".into(), "/usr/bin:/bin".into())],
+    })
+    .expect("spawn");
+    let out = poll_done(child.as_mut());
+    assert_eq!(out.code, Some(0));
+    assert!(
+        out.output.ends_with(b"100000\n"),
+        "the log lost its end: {} bytes",
+        out.output.len()
+    );
+    assert!(out.output.starts_with(b"1\n2\n"), "the log lost its start");
+}
+
+/// A process that escapes the group (`setsid`) and holds a pipe
+/// open keeps its reader from EOF; the log says its end was cut.
+#[test]
+fn a_pipe_held_open_marks_the_log_cut() {
+    let mut child = checkrun::real_spawn(&CheckSpawn {
+        run: "setsid sleep 3 </dev/null & echo hi".into(),
+        dir: std::env::temp_dir(),
+        env: vec![("PATH".into(), "/usr/bin:/bin".into())],
+    })
+    .expect("spawn");
+    let out = poll_done(child.as_mut());
+    let text = String::from_utf8_lossy(&out.output);
+    assert!(text.contains("hi"), "{text}");
+    assert!(text.contains("output cut"), "{text}");
+}
+
 /// The real spawn: `sh -c` under the given env, both pipes into the
 /// capture, exit code out of `poll`.
 #[test]
