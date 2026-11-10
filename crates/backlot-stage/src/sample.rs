@@ -76,18 +76,27 @@ impl Stage {
             Err(CallError::Rpc(_)) => return Ok(()),
             Err(e) => return Err(Fail::call(e)),
         };
-        // Signals first (S9f): the last line the role's own session
-        // sent is its state; the screen answers when the session
-        // sent nothing — every other runner, and any session with
-        // no signal yet.
+        // Signals first (S9f): the last state-mapping line the
+        // role's own session sent is its state; the screen answers
+        // when the session sent nothing — every other runner, and
+        // any session with no signal yet. The pending request is
+        // the same tail's first non-Notification line — a
+        // `permission_prompt` notification is the same prompt's
+        // six-second chime, never a new prompt.
         let session = w
             .state
             .roles
             .get(w.role)
             .and_then(|r| r.session_id.as_deref());
-        let signal = session.and_then(|sid| {
-            signals::last(&signals::tail(&signals::signals_path(w.dir, w.role)), sid)
-        });
+        let (signal, request) = session
+            .map(|sid| {
+                let tail = signals::tail(&signals::signals_path(w.dir, w.role));
+                (
+                    signals::last_work(&tail, sid),
+                    signals::pending_request(&tail, sid),
+                )
+            })
+            .unwrap_or((None, None));
         match &signal {
             Some(s) => self
                 .last_signal
@@ -107,7 +116,7 @@ impl Stage {
             pair.clone(),
             crate::deliver::Screen::note(prev.as_ref(), text.clone(), now_ms),
         );
-        self.permission(studio, w, work, &text, signal.as_ref(), now_ms)
+        self.permission(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
         self.stall(studio, w, work, now_ms).await
     }
@@ -220,7 +229,7 @@ impl Stage {
         w: &Watched<'_>,
         work: Work,
         text: &str,
-        signal: Option<&signals::Signal>,
+        request: Option<&signals::Signal>,
         now_ms: u64,
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
@@ -238,7 +247,7 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
-                    self.raise_permission(dir, role, w.runner, text, signal)
+                    self.raise_permission(dir, role, w.runner, text, request)
                         .await?;
                 }
             }
@@ -295,8 +304,9 @@ impl Stage {
         // The key answers the prompt the attention saved — the
         // pending prompt must be that same one. An attention raised
         // from a `PermissionRequest` signal carries the request in
-        // `<seq>.signal` (S9f): the compare is that the last signal
-        // is still that request — the same `ts_ms` and `tool_input`.
+        // `<seq>.signal` (S9f): the compare is that the pending
+        // request is still that request — the same `ts_ms` and
+        // `tool_input` — `Notification` chimes skipped.
         // Anything else keeps the S9c screen compare — the saved
         // screen's prompt block must still be the one on show. A
         // prompt that changed under the recorded decision (an
@@ -310,7 +320,7 @@ impl Stage {
             std::fs::read_to_string(dir.join("attention").join(format!("{}.signal", attn.seq)))
         {
             let was: Option<signals::Signal> = serde_json::from_str(&bound).ok();
-            match (was, signal) {
+            match (was, request) {
                 (Some(w), Some(n)) => w.ts_ms == n.ts_ms && w.tool_input == n.tool_input,
                 _ => false,
             }
@@ -334,7 +344,7 @@ impl Stage {
                     reason: Some("prompt changed before the decision was sent".into()),
                 },
             )?;
-            self.raise_permission(dir, role, w.runner, text, signal)
+            self.raise_permission(dir, role, w.runner, text, request)
                 .await?;
             return Ok(());
         }
@@ -374,7 +384,7 @@ impl Stage {
 
     /// `attention.raised` for a blocked episode: the screen lands at
     /// `attention/<seq>.txt` via the append's own file copy. When the
-    /// episode's last signal is a `PermissionRequest` (S9f), the
+    /// tail's pending request is a `PermissionRequest` (S9f), the
     /// detail names the request's tool and trimmed command or path
     /// instead of only pointing at the screen, and the request itself
     /// rides with the raise as `attention/<seq>.signal` — the
@@ -391,9 +401,8 @@ impl Stage {
         role: &str,
         runner: &str,
         text: &str,
-        signal: Option<&signals::Signal>,
+        request: Option<&signals::Signal>,
     ) -> Result<(), Fail> {
-        let request = signal.filter(|s| s.event == "PermissionRequest");
         let command = request.and_then(|s| s.tool_target());
         let user_owned = permit::needs_user(role, runner, text, command);
         // The bound request: `backlot approve` refuses a key when

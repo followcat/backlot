@@ -99,32 +99,57 @@ pub fn tail(path: &Path) -> String {
     }
 }
 
-/// The last line `session_id` sent in `tail` — `None` when the
-/// session sent nothing. Lines that do not parse or carry another
-/// session id are ignored; `ts_ms` and the fields default where
-/// absent.
-pub fn last(tail: &str, session_id: &str) -> Option<Signal> {
-    tail.lines().rev().find_map(|line| {
-        let v: serde_json::Value = serde_json::from_str(line).ok()?;
-        (v.get("session_id").and_then(|s| s.as_str()) == Some(session_id)).then(|| Signal {
-            ts_ms: v.get("ts_ms").and_then(|t| t.as_u64()).unwrap_or(0),
-            event: v
-                .get("event")
-                .and_then(|e| e.as_str())
-                .unwrap_or_default()
-                .into(),
-            notification_type: v
-                .get("notification_type")
-                .and_then(|n| n.as_str())
-                .map(String::from),
-            error: v.get("error").and_then(|e| e.as_str()).map(String::from),
-            tool_name: v
-                .get("tool_name")
-                .and_then(|n| n.as_str())
-                .map(String::from),
-            tool_input: v.get("tool_input").cloned(),
-        })
+/// One line as a [`Signal`], when it parses and names `session_id`
+/// — `None` for another session's line or an unparseable one.
+fn parse(line: &str, session_id: &str) -> Option<Signal> {
+    let v: serde_json::Value = serde_json::from_str(line).ok()?;
+    (v.get("session_id").and_then(|s| s.as_str()) == Some(session_id)).then(|| Signal {
+        ts_ms: v.get("ts_ms").and_then(|t| t.as_u64()).unwrap_or(0),
+        event: v
+            .get("event")
+            .and_then(|e| e.as_str())
+            .unwrap_or_default()
+            .into(),
+        notification_type: v
+            .get("notification_type")
+            .and_then(|n| n.as_str())
+            .map(String::from),
+        error: v.get("error").and_then(|e| e.as_str()).map(String::from),
+        tool_name: v
+            .get("tool_name")
+            .and_then(|n| n.as_str())
+            .map(String::from),
+        tool_input: v.get("tool_input").cloned(),
     })
+}
+
+/// The last line `session_id` sent in `tail` that maps to a work
+/// state — `None` when the session sent none. An event that maps
+/// to nothing, such as an `auth_success` notification, is skipped:
+/// it is not a reason to hand the role back to the screen.
+pub fn last_work(tail: &str, session_id: &str) -> Option<Signal> {
+    tail.lines()
+        .rev()
+        .filter_map(|line| parse(line, session_id))
+        .find(|s| s.work().is_some())
+}
+
+/// The request the role is still waiting on: the first
+/// non-`Notification` line back from the end, when it is a
+/// `PermissionRequest`. A `permission_prompt` notification is the
+/// same prompt's six-second chime, not a change of prompt — any
+/// other event ends the request.
+pub fn pending_request(tail: &str, session_id: &str) -> Option<Signal> {
+    for line in tail.lines().rev() {
+        let Some(s) = parse(line, session_id) else {
+            continue;
+        };
+        if s.event == "Notification" {
+            continue;
+        }
+        return (s.event == "PermissionRequest").then_some(s);
+    }
+    None
 }
 
 /// Signals first, the screen as fallback (S9f): `Blocked` wins from
@@ -147,7 +172,7 @@ pub fn failed_roles(dir: &Path, state: &StudioState) -> BTreeMap<String, String>
         .iter()
         .filter_map(|(role, r)| {
             let sid = r.session_id.as_deref()?;
-            let s = last(&tail(&signals_path(dir, role)), sid)?;
+            let s = last_work(&tail(&signals_path(dir, role)), sid)?;
             (s.event == "StopFailure").then(|| {
                 (
                     role.clone(),

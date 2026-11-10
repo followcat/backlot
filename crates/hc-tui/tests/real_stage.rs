@@ -1310,7 +1310,8 @@ async fn real_stage_prompt_answered_elsewhere_clears() {
 /// with the screen untouched, a `PermissionRequest` raises a
 /// bound attention that names the tool and command, a second
 /// request refuses the first decision, and the second request's
-/// own approval sends the key.
+/// own approval still sends the key though a `permission_prompt`
+/// chime came in between.
 #[tokio::test]
 #[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
 async fn real_stage_hooks() {
@@ -1391,8 +1392,15 @@ async fn real_stage_hooks() {
         raised[1]
     );
 
-    // B's own approval sends the key — the byte-mode prompt shows
-    // the answer.
+    // Six seconds on, Claude Code chimes the same prompt — the
+    // notification is not a new request, so B's own approval still
+    // sends the key.
+    send_text(
+        &client,
+        &actor.address,
+        "hook:Notification:permission_prompt",
+    )
+    .await;
     bl(
         &scratch,
         &state,

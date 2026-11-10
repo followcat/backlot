@@ -117,13 +117,13 @@ fn last_ignores_other_sessions_and_bad_lines() {
         "{\"ts_ms\":3,\"event\":\"Stop\",\"session_id\":\"a\"}\n",
         "{\"event\":\"PreToolUse\",\"session_id\":\"b\"}\n",
     );
-    let a = signals::last(tail, "a").unwrap();
+    let a = signals::last_work(tail, "a").unwrap();
     assert_eq!(a.event, "Stop");
     assert_eq!(a.ts_ms, 3);
-    let b = signals::last(tail, "b").unwrap();
+    let b = signals::last_work(tail, "b").unwrap();
     assert_eq!(b.event, "PreToolUse");
-    assert!(signals::last(tail, "c").is_none());
-    assert!(signals::last("", "a").is_none());
+    assert!(signals::last_work(tail, "c").is_none());
+    assert!(signals::last_work("", "a").is_none());
 }
 
 /// The combine: Blocked wins from either side, otherwise the
@@ -762,4 +762,179 @@ fn status_shows_the_last_turn_failure() {
         out.contains("producer  last turn failed: overloaded"),
         "{out}"
     );
+}
+
+/// `last_work` skips a line that maps to no state: an `auth_success`
+/// chime does not hand the role back to the screen.
+#[test]
+fn last_work_skips_unmapped_events() {
+    let tail = concat!(
+        "{\"ts_ms\":1,\"event\":\"PermissionRequest\",\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cargo test\"}}\n",
+        "{\"ts_ms\":2,\"event\":\"Notification\",\"session_id\":\"s\",\"notification_type\":\"auth_success\"}\n",
+    );
+    let s = signals::last_work(tail, "s").unwrap();
+    assert_eq!(s.event, "PermissionRequest");
+}
+
+/// `pending_request` reads the tail's first non-`Notification` line:
+/// the request still pending under its six-second chime, gone when
+/// any other event landed after it.
+#[test]
+fn pending_request_skips_only_notifications() {
+    let request = "{\"ts_ms\":1,\"event\":\"PermissionRequest\",\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cargo test\"}}";
+    let chime = "{\"ts_ms\":2,\"event\":\"Notification\",\"session_id\":\"s\",\"notification_type\":\"permission_prompt\"}";
+    let tail = format!("{request}\n{chime}\n");
+    let p = signals::pending_request(&tail, "s").unwrap();
+    assert_eq!(p.ts_ms, 1);
+    assert_eq!(p.tool_target(), Some("cargo test"));
+    // Any non-Notification event after the request ends it.
+    let tail = format!(
+        "{request}\n{chime}\n{{\"ts_ms\":3,\"event\":\"PostToolUse\",\"session_id\":\"s\"}}\n"
+    );
+    assert!(signals::pending_request(&tail, "s").is_none());
+    // Another session's request is not this session's.
+    let tail = "{\"ts_ms\":1,\"event\":\"PermissionRequest\",\"session_id\":\"other\"}\n";
+    assert!(signals::pending_request(tail, "s").is_none());
+    assert!(signals::pending_request("", "s").is_none());
+}
+
+/// A `permission_prompt` notification six seconds after its
+/// request is the same prompt's chime: the approve-time compare
+/// reads the pending request, and the decision's key still sends.
+#[tokio::test]
+async fn a_notification_keeps_the_request_pending() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    sample(&stage, &dir, &term, "producer", t0 + 2_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // Six seconds later Claude Code chimes the same prompt; the
+    // decision taken on the bound request still sends.
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 6_000, "event": "Notification", "session_id": "s-1",
+               "notification_type": "permission_prompt"}),
+    );
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&stage, &dir, &term, "producer", t0 + 7_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+}
+
+/// A tool event after the request means the prompt already ended:
+/// the decision lands on nothing — the attention clears `prompt
+/// gone`, and no key sends.
+#[tokio::test]
+async fn a_tool_event_ends_the_request() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    sample(&stage, &dir, &term, "producer", t0 + 2_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 3_000, "event": "PostToolUse", "session_id": "s-1"}),
+    );
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&stage, &dir, &term, "producer", t0 + 4_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), Vec::<String>::new());
+    match &events(&dir, "attention.cleared")[0].kind {
+        EventKind::AttentionCleared { reason, .. } => {
+            assert_eq!(
+                reason.as_deref(),
+                Some("prompt gone before the decision was sent")
+            );
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// A notification that maps to no state keeps the role on its last
+/// real signal: `auth_success` after a request stays Blocked.
+#[tokio::test]
+async fn an_unmapped_notification_keeps_the_role_blocked() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, _fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 1, "event": "Notification", "session_id": "s-1",
+               "notification_type": "auth_success"}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    assert_eq!(work_of(&stage, "producer"), Some(Work::Blocked));
+}
+
+/// A notification does not restart the signal-silence clock: a
+/// Working signal 61 s old still stalls though an unmapped chime
+/// came in between.
+#[tokio::test]
+async fn a_notification_does_not_restart_a_stalled_turn() {
+    let dir = tmp();
+    studio_with_limit(&dir, 60);
+    let term = term();
+    let (stage, _fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "UserPromptSubmit", "session_id": "s-1"}),
+    );
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 30_000, "event": "Notification", "session_id": "s-1",
+               "notification_type": "auth_success"}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    sample(&stage, &dir, &term, "producer", t0 + 61_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { reason, detail, .. } => {
+            assert_eq!(reason.as_str(), STALLED);
+            assert!(detail.contains("no hook signal for 61s"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
 }
