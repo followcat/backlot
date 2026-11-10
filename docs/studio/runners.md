@@ -33,7 +33,7 @@ sees it.
 |---|---|---|---|
 | Claude Code | a line containing `Do you want to` and a line trimmed to `❯ 1.`; or the folder-trust dialog | `esc to interrupt`, or a spinner line: a trimmed line of one glyph from `·✢✳✶✻✽*`, a space, a word ending in `…` | Measured on 2.1.319 — trust dialog, permission prompt, spinner line |
 | Codex | a line containing `Would you like to` and a line trimmed to `› 1.` | `esc to interrupt` | An older capture — not measured on 0.166.0 |
-| Devin | a line trimmed to `Allow` containing `Once`, plus a line trimmed to `Deny` | `to interrupt` | Live 3000.12.32 screens — `esc twice to interrupt`, the `Allow … Once`/`Deny` prompt |
+| Devin | an `Allow` picker line — an optional `❭` cursor, `← ◼◼◼◼ →` and any scope word after the arrows — plus a `Deny` option line, cursor optional on both | `to interrupt` | Live 3000.12.32 screens — `esc twice to interrupt`, the `❭ Allow ← ◼◼◼◼ → Once`/`Deny` prompt with the cursor on `Allow` |
 | OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
@@ -49,7 +49,7 @@ answer. Lines that move while the prompt waits are dropped first.
 | Claude Code | From the last full-width `─` rule above `Do you want to proceed?` to the end of the screen — the ` Bash command` header, the description, the command between `╌` rules and the picker; spinner lines dropped | Built from the measured 2.1.319 layout; the comparison itself ran on `fake` only |
 | `fake` | From the last `fake-work: blocked` line to the end — a `prompt:<text>` input echoes `fake-prompt: <text>` under it so two prompts differ | The script itself |
 | Codex | From the last `Would you like to` line to the end | Unmeasured — best effort from its `blocked` markers |
-| Devin | From the last `Allow … Once` line to the end | Unmeasured — best effort from its `blocked` markers |
+| Devin | From the last `●` line above `Approval required` to the end — the command block, the judge's sentence and the picker with its `❭` cursor and scope word | Built from a live 3000.12.32 prompt read; Devin has not yet run as a studio role — only Claude has |
 | OpenCode | none | No approval key is ever sent, so no block is mapped |
 | Anything else | none | — |
 

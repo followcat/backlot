@@ -70,20 +70,38 @@ fn codex_working_and_blocked() {
     );
 }
 
-/// Devin's `Allow … Once` / `Deny` pair; working is any
-/// `to interrupt` line.
+/// Devin's picker: `Allow` carries a `❭` cursor, the arrows hold the
+/// scope (`Once`, `Session`, …) and `Deny` sits under it — the shape
+/// read off a live 3000.12.32 prompt. Working is any `to interrupt`
+/// line.
 #[test]
 fn devin_working_and_blocked() {
     assert_eq!(
         work_state("devin", "Thinking · 2s (esc twice to interrupt)\n"),
         Work::Working
     );
-    let blocked = "Allow ← ◼◼◼ → Once     Exec(flock)\n  Deny\n";
+    let blocked = " ● Running command\n\
+                   │ $ cd /home/user/acme-shop && cargo test\n\
+                   ▲ Approval required\n\
+                     This action requires your approval.\n\
+                   ❭ Allow ← ◼◼◼◼ → Once     Exec(flock)\n\
+                     Deny\n\
+                   ↑↓ select · ←→ 1-4 scope · e edit · ↵ confirm · esc cancel\n";
     assert_eq!(work_state("devin", blocked), Work::Blocked);
+    // A `Session` scope is the same prompt; a `Bypass mode` third
+    // option and the cursor moved to `Deny` read blocked too.
+    let session = blocked.replace("→ Once", "→ Session");
+    assert_eq!(work_state("devin", &session), Work::Blocked);
+    let bypass = blocked.replace("  Deny", "  Bypass mode\n  Deny");
+    assert_eq!(work_state("devin", &bypass), Work::Blocked);
+    let cursor_on_deny = blocked
+        .replace("❭ Allow", "  Allow")
+        .replace("  Deny", "❭ Deny");
+    assert_eq!(work_state("devin", &cursor_on_deny), Work::Blocked);
     // Only half the pair is not a prompt.
     assert_eq!(work_state("devin", "  Deny\n"), Work::Waiting);
     assert_eq!(
-        work_state("devin", "Allow ← ◼◼◼ → Once     Exec(flock)\n"),
+        work_state("devin", "❭ Allow ← ◼◼◼◼ → Once     Exec(flock)\n"),
         Work::Waiting
     );
 }

@@ -29,6 +29,30 @@ fn has_line_starting(screen: &str, prefix: &str) -> bool {
     screen.lines().any(|l| l.trim_start().starts_with(prefix))
 }
 
+/// A Devin option line without its selection cursor: the `❭` marks
+/// the highlighted option (`❭ Allow` by default) and can sit on
+/// `Deny` or `Bypass mode` instead.
+fn devin_option(l: &str) -> &str {
+    let t = l.trim();
+    t.strip_prefix('❭').map_or(t, str::trim_start)
+}
+
+/// Devin's picker line as read on 3000.12.32: `Allow` — after an
+/// optional `❭` cursor — then `← ◼◼◼◼ →` and a scope word. Any
+/// scope counts (`Once`, `Session`, …): it is the same prompt.
+fn devin_picker_line(l: &str) -> bool {
+    let Some(rest) = devin_option(l).strip_prefix("Allow") else {
+        return false;
+    };
+    let Some(i) = rest.find('←') else {
+        return false;
+    };
+    let Some(j) = rest[i..].find('→') else {
+        return false;
+    };
+    !rest[i + j + '→'.len_utf8()..].trim().is_empty()
+}
+
 /// The runner's screen reads as an unanswered permission or trust
 /// prompt.
 fn blocked(runner: &str, screen: &str) -> bool {
@@ -42,10 +66,8 @@ fn blocked(runner: &str, screen: &str) -> bool {
             has_line_containing(screen, "Would you like to") && has_line_starting(screen, "› 1.")
         }
         "devin" => {
-            screen
-                .lines()
-                .any(|l| l.trim_start().starts_with("Allow") && l.contains("Once"))
-                && screen.lines().any(|l| l.trim() == "Deny")
+            screen.lines().any(devin_picker_line)
+                && screen.lines().any(|l| devin_option(l) == "Deny")
         }
         // The OpenCode permission screen is not measured yet — see
         // docs/studio/runners.md.

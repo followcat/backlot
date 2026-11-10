@@ -90,7 +90,8 @@ re-raise one `stall_limit_s` later.
   sent` and raises its own attention, and a prompt answered in the terminal itself clears `prompt
   answered elsewhere` once the role has been out of the episode for a whole window. Both fixes ran
   on a real core against `fake`; the claude block is built from the measured 2.1.319 layout and
-  codex's and devin's are unmeasured — a region that misses a moving part of a real screen could
+  devin's from a live 3000.12.32 prompt read, while codex's is unmeasured and neither codex's nor
+  devin's has run as a studio role — a region that misses a moving part of a real screen could
   refuse a legitimate send, in which case the fresh attention waits for the person.
 - **A question on a role's own screen reaches nobody.** Only the producer's terminal is read by
   the person. In the fourth run the director asked there which report node to use and waited

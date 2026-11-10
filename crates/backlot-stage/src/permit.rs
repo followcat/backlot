@@ -87,9 +87,20 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         "codex" => lines
             .iter()
             .rposition(|l| l.contains("Would you like to"))?,
-        "devin" => lines
-            .iter()
-            .rposition(|l| l.trim_start().starts_with("Allow") && l.contains("Once"))?,
+        // From the last `●` line above `Approval required` to the
+        // end — the `●` block holds the command the picker asks
+        // about, and the judge's sentence, the `❭` cursor and the
+        // scope word (`Once`, `Session`, …) stay in the block: a
+        // cursor or scope that moved under a recorded decision
+        // refuses the send instead of answering a shifted picker.
+        "devin" => {
+            let ask = lines
+                .iter()
+                .rposition(|l| l.contains("Approval required"))?;
+            lines[..ask]
+                .iter()
+                .rposition(|l| l.trim_start().starts_with('●'))?
+        }
         _ => return None,
     };
     let block = lines[start..]

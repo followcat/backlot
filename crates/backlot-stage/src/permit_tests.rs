@@ -363,11 +363,11 @@ fn prompt_block_on_fake() {
     );
 }
 
-/// Codex and Devin blocks come from their own prompt markers —
-/// unmeasured, but enough to tell two prompts apart. A runner with
-/// no block markers — or none mapped — yields no block.
+/// Codex blocks come from their own prompt marker — unmeasured, but
+/// enough to tell two prompts apart. A runner with no block markers
+/// — or none mapped — yields no block.
 #[test]
-fn prompt_block_on_codex_devin_and_others() {
+fn prompt_block_on_codex_and_others() {
     let codex_a = "some output\nWould you like to run `rm -rf build`?\n› 1. Yes, proceed\n";
     let codex_b = "some output\nWould you like to run `cargo test`?\n› 1. Yes, proceed\n";
     assert_ne!(
@@ -375,13 +375,6 @@ fn prompt_block_on_codex_devin_and_others() {
         prompt_block("codex", codex_b).unwrap()
     );
     assert_eq!(prompt_block("codex", "plain output\n"), None);
-    let devin_a = "earlier\n Allow Once\n Allow Always\n Deny\n";
-    let devin_b = "earlier\n Allow Once\n Deny\n";
-    assert_ne!(
-        prompt_block("devin", devin_a).expect("devin block"),
-        prompt_block("devin", devin_b).unwrap()
-    );
-    assert_eq!(prompt_block("devin", "plain output\n"), None);
     for runner in ["opencode", "unknown"] {
         assert_eq!(
             prompt_block(runner, "Permission required\nAllow once\n"),
@@ -389,6 +382,83 @@ fn prompt_block_on_codex_devin_and_others() {
             "{runner}"
         );
     }
+}
+
+/// A Devin prompt screen as read on 3000.12.32: the `●` block holds
+/// the command, `▲ Approval required` introduces the judge line and
+/// the `❭ Allow` picker carries its scope after the arrows.
+fn devin_screen(command: &str, judge: &str, scope: &str) -> String {
+    format!(
+        " Thinking · 2s (esc twice to interrupt)\n\
+         \u{0020}● Running command\n\
+         │ $ {command}\n\
+         ▲ Approval required\n\
+         \u{0020} {judge}\n\
+         ❭ Allow ← ◼◼◼◼ → {scope}     Exec(flock)\n\
+         \u{0020} Deny\n\
+         ↑↓ select · ←→ 1-4 scope · e edit · ↵ confirm · esc cancel\n"
+    )
+}
+
+/// Devin's block starts at the `●` line above `Approval required`,
+/// so the command is inside it — two commands differ, and so do the
+/// judge's sentence and the scope word. A spinner line above `●`
+/// stays out of the block.
+#[test]
+fn prompt_block_on_devin() {
+    let a = devin_screen(
+        "cd /home/user/acme-shop && cargo test -p shop",
+        "This action requires your approval.",
+        "Once",
+    );
+    let block = prompt_block("devin", &a).expect("devin block");
+    assert!(block.contains("cargo test -p shop"), "{block}");
+    assert!(!block.contains("esc twice to interrupt"), "{block}");
+    assert_ne!(
+        block,
+        prompt_block(
+            "devin",
+            &devin_screen(
+                "flock /tmp/x.lock make",
+                "This action requires your approval.",
+                "Once",
+            ),
+        )
+        .unwrap(),
+        "a different command must be a different block"
+    );
+    assert_ne!(
+        block,
+        prompt_block(
+            "devin",
+            &devin_screen(
+                "cd /home/user/acme-shop && cargo test -p shop",
+                "This writes outside the workspace.",
+                "Once",
+            ),
+        )
+        .unwrap(),
+        "a different judge line must be a different block"
+    );
+    assert_ne!(
+        block,
+        prompt_block(
+            "devin",
+            &devin_screen(
+                "cd /home/user/acme-shop && cargo test -p shop",
+                "This action requires your approval.",
+                "Session",
+            ),
+        )
+        .unwrap(),
+        "a different scope must be a different block"
+    );
+    assert_eq!(prompt_block("devin", "plain output\n"), None);
+    // No `●` above `Approval required` — nothing comparable.
+    assert_eq!(
+        prompt_block("devin", "▲ Approval required\n❭ Allow ← ◼ → Once\n  Deny\n"),
+        None
+    );
 }
 
 fn approval(seq: u64, role: &str, by: &str, decision: ApprovalDecision) -> ApprovalRecord {
