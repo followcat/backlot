@@ -298,12 +298,23 @@ impl Stage {
     /// The check pass: poll the in-flight run to its `task.checked`
     /// append, or start the ledger's next owed check — at most one
     /// process per studio and never a wait that blocks the tick.
-    fn check(&self, name: &str, dir: &Path, state: &StudioState, now_ms: u64) -> Result<(), Fail> {
-        if let Some(run) = self.checking.borrow_mut().get_mut(name) {
-            let Some(out) = run.poll(now_ms) else {
-                return Ok(());
-            };
-            let run = self.checking.borrow_mut().remove(name).expect("polled run");
+    pub(crate) fn check(
+        &self,
+        name: &str,
+        dir: &Path,
+        state: &StudioState,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        let done = {
+            let mut map = self.checking.borrow_mut();
+            match map.get_mut(name) {
+                Some(run) => run
+                    .poll(now_ms)
+                    .map(|out| (map.remove(name).expect("polled run"), out)),
+                None => None,
+            }
+        };
+        if let Some((run, out)) = done {
             return checkwork::finish(&mut *self.git.borrow_mut(), dir, state, run, out);
         }
         if let Some(owed) = checks::owed(state) {

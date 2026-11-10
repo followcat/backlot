@@ -502,6 +502,68 @@ async fn a_failing_pass_shows_then_clears() {
     assert_eq!(error, None);
 }
 
+/// A completed check goes through `check`'s finish branch: the run
+/// leaves `checking` and `task.checked` lands. The borrow pattern
+/// there once removed the run while its `RefMut` was still held.
+#[tokio::test]
+async fn a_finished_check_is_recorded_through_the_pass() {
+    use backlot_model::testkit as tk;
+
+    /// A child that has already exited 0.
+    struct Done;
+    impl crate::checkrun::CheckChild for Done {
+        fn poll(&mut self) -> Option<crate::checkrun::PollOut> {
+            Some(crate::checkrun::PollOut {
+                code: Some(0),
+                output: b"clean".to_vec(),
+            })
+        }
+        fn term(&mut self) {}
+        fn kill(&mut self) {}
+    }
+
+    let base = tmp();
+    let dir = store::studio_dir(&base, "acme");
+    fs::create_dir_all(&dir).unwrap();
+    // The cast declares `unit`; t1 is cast and delivered at seq 5.
+    let mut created = tk::studio_kind();
+    let EventKind::StudioCreated { checks, .. } = &mut created else {
+        unreachable!()
+    };
+    *checks = vec![tk::check_decl("unit", "true", 60)];
+    for (role, kind) in [
+        ("user", created),
+        (
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ("director", tk::task_created("t1", "feature", 1)),
+        ("director", tk::cast("t1", "actor-a", "a")),
+        ("actor-t1-c1", tk::delivered("t1", 1, "a", 1)),
+    ] {
+        store::append(&dir, |_, _| {
+            Ok::<_, std::convert::Infallible>(Pending {
+                event: NewEvent::new(EventBy::role(role), kind),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    }
+    let state = store::load_state(&dir).unwrap();
+    let stage = stage().await;
+    let run = crate::checkwork::Running::for_test(Box::new(Done), 60_000, dir.join("gone"));
+    stage.checking.borrow_mut().insert("acme".into(), run);
+    stage.check("acme", &dir, &state, 10_000).unwrap();
+    assert!(stage.checking.borrow().is_empty(), "the run is spent");
+    let state = store::load_state(&dir).unwrap();
+    let r = &state.tasks["t1"].checked[0];
+    assert_eq!((r.name.as_str(), r.passed()), ("unit", true));
+}
+
 /// `Action::Resumed` records `role.resumed` with the live
 /// terminal's address and the recorded session — a record only,
 /// no `terminal.run`.
