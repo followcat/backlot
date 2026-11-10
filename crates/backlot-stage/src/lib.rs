@@ -60,6 +60,8 @@ mod prompts_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
 #[cfg(test)]
+mod role_cmd_tests;
+#[cfg(test)]
 mod sample_tests;
 #[cfg(test)]
 mod stall_tests;

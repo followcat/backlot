@@ -189,6 +189,23 @@ fn refused<E: ToString>(e: E) -> Fail {
     Fail::refused(e.to_string())
 }
 
+/// `stage start` and `stage run` are a person's: an actor or writer
+/// key never launches or is the stage (S9b).
+fn check_stage_caller(common: &Common, env: &Env) -> Result<(), Fail> {
+    let role = common
+        .role
+        .clone()
+        .or_else(|| env.get("BACKLOT_ROLE").map(String::from));
+    if let Some(role) = role
+        && (role == "writer" || backlot_model::state::actor_task(&role).is_some())
+    {
+        return Err(Fail::refused(format!(
+            "role '{role}' cannot do this; the user, the producer or the director can"
+        )));
+    }
+    Ok(())
+}
+
 impl From<StoreError<Fail>> for Fail {
     fn from(e: StoreError<Fail>) -> Fail {
         match e {
@@ -227,8 +244,14 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     check_identity(&common, env)?;
     match cmd {
         // The stage connects itself; no ledger command needs it here.
-        Cmd::StageStart => return crate::stage::start(&common, env),
-        Cmd::StageRun => return crate::stage::run(&common, env),
+        Cmd::StageStart => {
+            check_stage_caller(&common, env)?;
+            return crate::stage::start(&common, env);
+        }
+        Cmd::StageRun => {
+            check_stage_caller(&common, env)?;
+            return crate::stage::run(&common, env);
+        }
         _ => {}
     }
     let base = base(env, &common)?;

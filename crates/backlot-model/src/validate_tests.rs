@@ -157,7 +157,7 @@ fn deliver_only_on_running_task_in_order() {
     let state = running_state();
     // t2 is only created, not running.
     assert_eq!(
-        validate(&state, &new_ev("actor", delivered("t2", 1, "b", 1))),
+        validate(&state, &new_ev("user", delivered("t2", 1, "b", 1))),
         Err(Refusal::NotRunning {
             task: "t2".into(),
             status: TaskStatus::Created
@@ -165,7 +165,7 @@ fn deliver_only_on_running_task_in_order() {
     );
     // First delivery must be number 1.
     assert_eq!(
-        validate(&state, &new_ev("actor", delivered("t1", 2, "a", 1))),
+        validate(&state, &new_ev("actor-t1-c1", delivered("t1", 2, "a", 1))),
         Err(Refusal::BadDeliveryNumber {
             task: "t1".into(),
             expected: 1,
@@ -173,7 +173,7 @@ fn deliver_only_on_running_task_in_order() {
         })
     );
     assert_eq!(
-        validate(&state, &new_ev("actor", delivered("t1", 1, "a", 1))),
+        validate(&state, &new_ev("actor-t1-c1", delivered("t1", 1, "a", 1))),
         Ok(())
     );
 
@@ -188,7 +188,7 @@ fn deliver_only_on_running_task_in_order() {
     assert_eq!(
         validate(
             &delivered_state,
-            &new_ev("actor", delivered("t1", 2, "a", 1))
+            &new_ev("actor-t1-c1", delivered("t1", 2, "a", 1))
         ),
         Err(Refusal::NotRunning {
             task: "t1".into(),
@@ -208,7 +208,7 @@ fn deliver_only_on_running_task_in_order() {
         ],
     );
     assert_eq!(
-        validate(&rework, &new_ev("actor", delivered("t1", 2, "a", 1))),
+        validate(&rework, &new_ev("actor-t1-c1", delivered("t1", 2, "a", 1))),
         Ok(())
     );
 }
@@ -218,7 +218,7 @@ fn deliver_only_on_running_task_in_order() {
 fn delivery_carries_the_pinned_req_version() {
     let state = running_state();
     assert_eq!(
-        validate(&state, &new_ev("actor", delivered("t1", 1, "a", 2))),
+        validate(&state, &new_ev("actor-t1-c1", delivered("t1", 1, "a", 2))),
         Err(Refusal::ReqPinMismatch {
             task: "t1".into(),
             pinned: 1,

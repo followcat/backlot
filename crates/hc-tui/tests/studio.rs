@@ -85,7 +85,7 @@ fn scripted_studio_loop() {
             "--task",
             "t1",
             "--as",
-            "actor",
+            "actor-t1-c1",
         ],
     );
     assert!(o.contains("task.delivered t1 d1"), "{o}");
@@ -124,7 +124,7 @@ fn scripted_studio_loop() {
             "--task",
             "t1",
             "--as",
-            "actor",
+            "actor-t1-c1",
         ],
     );
     ok(
@@ -189,7 +189,7 @@ fn scripted_studio_loop() {
             "--task",
             "t1",
             "--as",
-            "actor",
+            "actor-t1-c1",
         ],
     );
     assert_eq!(o.status.code(), Some(2));

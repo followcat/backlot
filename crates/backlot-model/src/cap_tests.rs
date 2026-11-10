@@ -49,7 +49,7 @@ fn cap_crossing_review_is_recorded_and_caps() {
     assert_eq!(validate(&s, &new_ev("producer", abandon)), Ok(()));
     // No delivery is possible at cap, and a review only accepts.
     assert_eq!(
-        validate(&s, &new_ev("actor", delivered("t1", 4, "b", 1))),
+        validate(&s, &new_ev("actor-t1-c1", delivered("t1", 4, "b", 1))),
         Err(Refusal::NotRunning {
             task: "t1".into(),
             status: TaskStatus::AtCap

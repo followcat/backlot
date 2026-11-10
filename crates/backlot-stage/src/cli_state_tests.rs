@@ -76,7 +76,7 @@ fn finding_records_on_open_and_closed_tasks() {
     let rep = fixture(&scratch, "r.md", "report\n");
     ok(
         &env,
-        &format!("deliver --commits a..b --report {rep} --as actor --task t1"),
+        &format!("deliver --commits a..b --report {rep} --as actor-t1-c1 --task t1"),
     );
 
     // --task is required; a delivery the task never had is refused.
@@ -193,7 +193,7 @@ fn task_state_commands() {
     let rep = fixture(&scratch, "r.md", "report\n");
     ok(
         &env,
-        &format!("deliver --commits a..b --report {rep} --as actor --task t4"),
+        &format!("deliver --commits a..b --report {rep} --as actor-t4-c1 --task t4"),
     );
     ok(
         &env,
@@ -235,7 +235,7 @@ fn review_at_cap_accepts_or_recasts() {
     for d in 1..=3 {
         ok(
             &env,
-            &format!("deliver --commits a..b --report {rep} --as actor --task t1"),
+            &format!("deliver --commits a..b --report {rep} --as actor-t1-c1 --task t1"),
         );
         ok(
             &env,

@@ -14,6 +14,7 @@ pub mod event;
 pub mod records;
 pub mod reduce;
 pub mod refusal;
+pub mod roles;
 pub mod state;
 pub mod steps;
 pub mod summary;
@@ -42,6 +43,8 @@ mod records_extra_tests;
 mod records_tests;
 #[cfg(test)]
 mod reopen_tests;
+#[cfg(test)]
+mod roles_tests;
 #[cfg(test)]
 mod state_tests;
 #[cfg(test)]

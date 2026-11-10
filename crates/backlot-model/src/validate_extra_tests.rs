@@ -89,7 +89,7 @@ fn a_blocked_task_resumes_to_running() {
     assert_eq!(ch.resumed_to, Some(TaskStatus::Running));
     // `deliver` validates now that the task runs again.
     let d = delivered("t1", 1, "a", 1);
-    assert_eq!(validate(&state, &new_ev("actor", d)), Ok(()));
+    assert_eq!(validate(&state, &new_ev("actor-t1-c1", d)), Ok(()));
 
     // A pause of a blocked task restores `blocked`, not `running`.
     let state = state_with(

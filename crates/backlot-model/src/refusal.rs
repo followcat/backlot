@@ -93,6 +93,12 @@ pub enum Refusal {
         key: String,
         value: String,
     },
+    /// A role tried to record an event outside its whitelist (S9b);
+    /// `who` names who may.
+    RoleBound {
+        role: String,
+        who: &'static str,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -201,6 +207,9 @@ impl fmt::Display for Refusal {
             }
             Refusal::BadCorrectionValue { target, key, value } => {
                 write!(f, "event {target}: bad value '{value}' for '{key}'")
+            }
+            Refusal::RoleBound { role, who } => {
+                write!(f, "role '{role}' cannot do this; {who} can")
             }
         }
     }

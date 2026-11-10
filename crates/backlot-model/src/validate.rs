@@ -42,7 +42,13 @@ fn check_task_open(task: &crate::state::Task, allow_paused: bool) -> Result<(), 
 /// Validate a not-yet-written event against the reduced state.
 /// Corrections past the rework cap are not refused: the review is
 /// recorded and the task moves to `at_cap` for the producer.
+///
+/// The role gate (`roles::check`) runs first — who may record what
+/// is keyed on `by.role` and answers "cannot do this" ahead of any
+/// state check. It never runs on replay: an old log loads whatever
+/// it holds.
 pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
+    crate::roles::check(state, new)?;
     match &new.kind {
         EventKind::StudioCreated { .. } => {
             if state.studio.is_some() {
