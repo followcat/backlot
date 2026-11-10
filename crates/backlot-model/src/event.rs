@@ -276,6 +276,11 @@ pub enum EventKind {
         /// order. Absent on logs that predate the field.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         checks: Vec<CheckDecl>,
+        /// The optional per-task running budget in seconds (S9e): a
+        /// running or delivered task past it raises one `over
+        /// budget` attention. Absent means no budget.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task_budget_s: Option<u32>,
     },
     #[serde(rename = "role.started")]
     RoleStarted {

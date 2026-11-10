@@ -35,6 +35,9 @@ pub struct StudioConfig {
     /// The checks the stage runs on each delivery, in declared order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<CheckDecl>,
+    /// The optional per-task running budget in seconds (S9e).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_budget_s: Option<u32>,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the

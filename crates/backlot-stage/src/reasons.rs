@@ -18,6 +18,9 @@ pub const WORK_AREA_FAILED: &str = "work area failed";
 /// A nudge went unanswered: the step is still owed and the owner
 /// still idle `escalate_after_s` after the nudge was delivered (S9a).
 pub const OWED: &str = "owed";
+/// A running or delivered task passed `task_budget_s` (S9e) — one
+/// per task ever; it clears `done` when the task is terminal.
+pub const OVER_BUDGET: &str = "over budget";
 
 /// Every attention reason the stage raises — the docs test's copy of
 /// the guide's table.
@@ -34,4 +37,5 @@ pub const ALL: &[&str] = &[
     PROFILE_NOT_SUPPORTED,
     CONFIG_MALFORMED,
     OWED,
+    OVER_BUDGET,
 ];

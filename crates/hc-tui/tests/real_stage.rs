@@ -2387,3 +2387,121 @@ async fn real_stage_restart_stage_only() {
     drop(client);
     scratch.finish().expect("scratch teardown");
 }
+
+/// S9e — `task_budget_s = 2` on the cast: the running task passes
+/// its budget in seconds, the one `over budget` attention lands on
+/// the actor key, the director AND the producer each get the
+/// notice, and accepting the task clears the raise `done`.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_over_budget_notice_and_clear() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = state.join("studios/acme-shop");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &format!("task_budget_s = 2\n{CAST_TOML}"),
+    );
+    let req = fixture(&scratch, "req.md", "# requirement\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let report = fixture(&scratch, "report.md", "# delivery report\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+    wait_terminal(&client, "bl-acme-shop-producer").await;
+    wait_terminal(&client, "bl-acme-shop-director").await;
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "task new --title cart --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "cast --task t1 --actor actor-a --reason first --as director",
+    );
+    wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    // Two seconds of budget from the cast — the raise lands within
+    // a tick or two of it passing, on the task's actor key.
+    let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised["reason"], "over budget", "{raised}");
+    for needle in ["t1", "2s"] {
+        assert!(
+            raised["detail"].as_str().unwrap_or("").contains(needle),
+            "detail misses {needle}: {raised}"
+        );
+    }
+    // The director and the producer each get the notice.
+    wait_inbox(&state, "fake-inbox-director", "-over budget.md");
+    wait_inbox(&state, "fake-inbox-producer", "-over budget.md");
+    // One raise per task, ever.
+    let raises = ledger(&state)
+        .iter()
+        .filter(|e| {
+            e["kind"] == "attention.raised"
+                && e["role"] == "actor-t1-c1"
+                && e["reason"] == "over budget"
+        })
+        .count();
+    assert_eq!(raises, 1, "the raise repeated");
+
+    // Accepting the task makes it terminal; the raise clears `done`.
+    let work = studio.join("work/t1");
+    let a = commit_in(&work, "a");
+    let b = commit_in(&work, "b");
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "deliver --commits {a}..{b} --report {} --as actor-t1-c1 --task t1",
+            report.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "review --task t1 --delivery 1 --verdict accepted --conclusion done --as director",
+    );
+    wait_kind(&state, "attention.cleared", 1);
+    let cleared = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared")
+        .expect("the clear landed");
+    assert_eq!(cleared["target"], raised["seq"], "{cleared}");
+    assert_eq!(cleared["reason"], "done", "{cleared}");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}

@@ -217,6 +217,7 @@ fn studio(base: &Path, name: &str) -> PathBuf {
                     escalate_after_s: 600,
                     check_env: Vec::new(),
                     checks: Vec::new(),
+                    task_budget_s: None,
                 },
             ),
             files: Vec::new(),

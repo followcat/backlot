@@ -59,6 +59,7 @@ fn seed_studio(dir: &Path) {
         escalate_after_s: 600,
         check_env: Vec::new(),
         checks: Vec::new(),
+        task_budget_s: None,
     };
     append::<(), _>(dir, |_, _| {
         Ok(Pending {

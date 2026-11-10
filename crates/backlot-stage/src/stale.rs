@@ -45,7 +45,7 @@ pub(crate) fn stale_reason(state: &StudioState, m: &Message) -> Option<&'static 
     match notices::label(m)? {
         // The attention family all die the same death: the raise
         // they point at cleared.
-        "attention" | "stalled" | "lost" | "owed" => state
+        "attention" | "stalled" | "lost" | "owed" | "over budget" => state
             .attention
             .iter()
             .any(|a| a.seq == seq && !a.open)

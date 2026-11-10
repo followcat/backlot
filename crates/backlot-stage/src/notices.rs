@@ -16,7 +16,8 @@
 //! episode is the user's, and gets no notice — a `stalled`
 //! attention to the role's reviewer — a `cannot resume`
 //! attention routed like a stall — a `recovered` resume to
-//! the role itself — and a `deny`
+//! the role itself — an `over budget` attention to the
+//! director and the producer both — and a `deny`
 //! approval to the denied role, which the esc interruption left
 //! waiting.
 
@@ -356,6 +357,24 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                         a.role, a.role, a.detail,
                     ),
                 });
+            }
+            // An over-budget task tells the director and the producer
+            // both (S9e): nothing was stopped or paused — the call to
+            // pause, recast or let it run is theirs. Both notices ride
+            // the one `source_seq`, queued the same pass.
+            crate::reasons::OVER_BUDGET => {
+                let task = backlot_model::state::actor_task(&a.role).unwrap_or("?");
+                for to in ["director", "producer"] {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to: to.into(),
+                        label: "over budget",
+                        body: format!(
+                            "# {task} over budget\n\n`{}` raised `over budget` on task `{task}`: {}.\n\nNothing was stopped or paused. Let it run, pause it with `backlot task pause --task {task} --reason <reason>`, or recast it — the attention clears `done` when the task is terminal.\n",
+                            a.role, a.detail,
+                        ),
+                    });
+                }
             }
             _ => {}
         }

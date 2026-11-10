@@ -9,6 +9,7 @@
 //! - [`records`]: per-actor records across studios (D4, D8).
 //! - [`steps`]: the next steps each role owes, derived from state (S9a).
 
+pub mod budget;
 pub mod correct;
 pub mod event;
 pub mod records;
@@ -31,6 +32,8 @@ pub use validate::{Refusal, validate};
 #[doc(hidden)]
 pub mod testkit;
 
+#[cfg(test)]
+mod budget_tests;
 #[cfg(test)]
 mod cap_tests;
 #[cfg(test)]

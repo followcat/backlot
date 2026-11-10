@@ -608,3 +608,36 @@ fn a_dropped_notice_still_counts_as_handled() {
     let owed = notices::owed(&state, dir());
     assert!(owed.iter().all(|n| n.source_seq != 5), "{owed:?}");
 }
+
+/// An `over budget` raise owes the director AND the producer one
+/// notice each on the same `source_seq` — both queued in the one
+/// pass, each naming the task, the role and the ways on.
+#[test]
+fn an_over_budget_raise_notices_director_and_producer() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            (
+                "stage",
+                EventKind::AttentionRaised {
+                    role: "actor-t1-c1".into(),
+                    reason: "over budget".into(),
+                    detail: "task t1 is over budget: 3s used of 2s".into(),
+                    needs_user: false,
+                },
+            ),
+        ],
+    );
+    let owed = notices::owed(&state, dir());
+    let over: Vec<_> = owed.iter().filter(|n| n.label == "over budget").collect();
+    let mut tos: Vec<&str> = over.iter().map(|n| n.to.as_str()).collect();
+    tos.sort();
+    assert_eq!(tos, ["director", "producer"], "{owed:?}");
+    assert!(over.iter().all(|n| n.source_seq == 5), "{owed:?}");
+    for n in &over {
+        for want in ["t1", "actor-t1-c1", "3s used of 2s"] {
+            assert!(n.body.contains(want), "body misses {want}: {}", n.body);
+        }
+    }
+}

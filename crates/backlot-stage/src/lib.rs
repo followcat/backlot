@@ -38,6 +38,8 @@ mod workareas;
 #[cfg(test)]
 mod act_tests;
 #[cfg(test)]
+mod budget_cmd_tests;
+#[cfg(test)]
 mod checkrun_tests;
 #[cfg(test)]
 mod checks_tests;

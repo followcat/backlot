@@ -55,12 +55,12 @@ pub fn file_name(items: &[OutItem]) -> String {
 /// lives (design.md lists it too): the notices that need a hand
 /// first — `blocked`, `at-cap`, `delivered`, `rework`, then the
 /// attention family `attention`, `denied`, `stalled`, `lost`,
-/// `owed` — then what roles wrote each other and reports, in seq
-/// order, then the bookkeeping `req`, `nudge`, `resumed`,
-/// `recovered`. The outbox sorts on `(rank, seq)`.
+/// `owed`, `over budget` — then what roles wrote each other and
+/// reports, in seq order, then the bookkeeping `req`, `nudge`,
+/// `resumed`, `recovered`. The outbox sorts on `(rank, seq)`.
 pub(crate) fn rank(it: &OutItem) -> u8 {
     match it {
-        OutItem::Report(_) => 10,
+        OutItem::Report(_) => 11,
         OutItem::Message(m) => match notices::label(m).or(m.purpose.as_deref()).unwrap_or("") {
             "blocked" => 1,
             "at-cap" => 2,
@@ -71,13 +71,14 @@ pub(crate) fn rank(it: &OutItem) -> u8 {
             "stalled" => 7,
             "lost" => 8,
             "owed" => 9,
-            "req" => 11,
-            "nudge" => 12,
-            "resumed" => 13,
-            "recovered" => 14,
+            "over budget" => 10,
+            "req" => 12,
+            "nudge" => 13,
+            "resumed" => 14,
+            "recovered" => 15,
             // A person's message (`tell`/`ask`/`dispatch`, `plan`)
             // or an unlabelled source — after the notices.
-            _ => 10,
+            _ => 11,
         },
     }
 }

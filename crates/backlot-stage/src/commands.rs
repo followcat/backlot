@@ -76,6 +76,9 @@ struct CastFile {
     nudge_after_s: Option<u32>,
     #[serde(default)]
     escalate_after_s: Option<u32>,
+    /// S9e: the per-task running budget in seconds; unset means none.
+    #[serde(default)]
+    task_budget_s: Option<u32>,
     producer: ActorIdentity,
     director: ActorIdentity,
     writer: ActorIdentity,
@@ -103,6 +106,10 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     }
     if cast.escalate_after_s == Some(0) {
         return Err(Fail::usage("escalate_after_s must be at least 1"));
+    }
+    // A zero budget flags every cast the tick it lands.
+    if cast.task_budget_s == Some(0) {
+        return Err(Fail::usage("task_budget_s must be at least 1"));
     }
     Ok(cast)
 }
@@ -185,6 +192,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                             .unwrap_or_else(default_escalate_after_s),
                         check_env,
                         checks,
+                        task_budget_s: cast.task_budget_s,
                     },
                     by,
                     Vec::new(),

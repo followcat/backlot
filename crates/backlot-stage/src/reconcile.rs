@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use backlot_model::event::ActorIdentity;
 use backlot_model::state::{RoleLifecycle, StudioState};
 
+mod budget;
 mod desired;
 mod recover;
 
@@ -296,6 +297,10 @@ pub fn reconcile(
         }
     }
 
+    // Task budgets: an over-budget task raises once; a terminal one
+    // clears its raise `done`.
+    budget::actions(state, now_ms, &mut records, &mut cleared);
+
     // Strays: terminals in this studio's view that no role entry
     // explains and nothing adopted this round.
     for (name, address) in live {
@@ -318,6 +323,8 @@ pub fn reconcile(
     actions
 }
 
+#[cfg(test)]
+mod budget_tests;
 #[cfg(test)]
 mod recover_tests;
 #[cfg(test)]
