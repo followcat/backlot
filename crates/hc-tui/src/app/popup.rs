@@ -278,14 +278,30 @@ impl App {
         true
     }
 
-    /// Paste/IME text goes to the popup while it is open — the
-    /// reference clears the popup selection on the same arm.
+    /// IME text goes to the popup while it is open — the reference's
+    /// `ClientPaneInputEvent::TextCommit`; the popup selection clears on
+    /// the same arm.
     pub(super) fn popup_text(&mut self, bytes: Vec<u8>) -> bool {
         if self.popup.is_some() {
             self.clear_popup_selection();
         }
         if let Some(popup) = self.popup.as_mut() {
             popup.pane.input_encoded(bytes);
+            return true;
+        }
+        false
+    }
+
+    /// Host paste goes to the popup as a semantic paste — the
+    /// reference's `ClientPaneInputEvent::Paste` — so the wire encodes
+    /// it under the popup terminal's bracketed-paste mode instead of
+    /// landing verbatim.
+    pub(super) fn popup_paste(&mut self, text: &[u8]) -> bool {
+        if self.popup.is_some() {
+            self.clear_popup_selection();
+        }
+        if let Some(popup) = self.popup.as_mut() {
+            popup.pane.paste(text);
             return true;
         }
         false
