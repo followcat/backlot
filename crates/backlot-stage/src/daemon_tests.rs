@@ -634,6 +634,111 @@ async fn a_running_check_is_polled_not_respawned() {
     assert_eq!(map["acme"].name, "unit", "the live run was replaced");
 }
 
+/// The studio's first `check` pass sweeps the run trees a dead
+/// stage left — process included — while the owed delivery's tree
+/// stays for the run about to start.
+#[tokio::test]
+async fn the_first_check_pass_prunes_stale_run_trees() {
+    use backlot_model::testkit as tk;
+
+    let base = tmp();
+    let dir = store::studio_dir(&base, "acme");
+    fs::create_dir_all(&dir).unwrap();
+    let mut created = tk::studio_kind();
+    let EventKind::StudioCreated { checks, .. } = &mut created else {
+        unreachable!()
+    };
+    *checks = vec![tk::check_decl("unit", "true", 60)];
+    for (role, kind) in [
+        ("user", created),
+        (
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ("director", tk::task_created("t1", "feature", 1)),
+        ("director", tk::cast("t1", "actor-a", "a")),
+        ("actor-t1-c1", tk::delivered("t1", 1, "a", 1)),
+    ] {
+        store::append(&dir, |_, _| {
+            Ok::<_, std::convert::Infallible>(Pending {
+                event: NewEvent::new(EventBy::role(role), kind),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    }
+    // A dead stage's leftovers: a stale tree with a process still
+    // parked in it, and the owed delivery's own tree.
+    let stale = dir.join("checks/run-99");
+    let owed_run = dir.join("checks/run-5");
+    fs::create_dir_all(&stale).unwrap();
+    fs::create_dir_all(&owed_run).unwrap();
+    let mut sleeper = std::process::Command::new("sleep")
+        .arg("300")
+        .current_dir(&stale)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    for _ in 0..200 {
+        if !crate::checkwork::cwd_pids(&stale).is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(!crate::checkwork::cwd_pids(&stale).is_empty());
+
+    let state = store::load_state(&dir).unwrap();
+    let mut stage = stage().await;
+    // `worktree remove` declines: the fallback delete is real.
+    *stage.git.borrow_mut() = Box::new(|argv, _cwd| crate::workareas::GitOut {
+        code: if argv.contains(&"remove") { 1 } else { 0 },
+        stdout: String::new(),
+        stderr: "git declined".into(),
+    });
+    struct Hang;
+    impl crate::checkrun::CheckChild for Hang {
+        fn poll(&mut self) -> Option<crate::checkrun::PollOut> {
+            None
+        }
+        fn term(&mut self) {}
+        fn kill(&mut self) {}
+    }
+    stage.spawn_check = Box::new(|_| Ok(Box::new(Hang)));
+    stage.check("acme", &dir, &state, 10_000).unwrap();
+
+    assert!(!stale.exists(), "the stale run tree survived");
+    for _ in 0..200 {
+        if sleeper.try_wait().unwrap().is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let status = sleeper.wait().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(libc::SIGKILL), "{status}");
+    }
+    assert!(!status.success(), "{status}");
+    assert!(
+        stage.checking.borrow().contains_key("acme"),
+        "the owed check never started"
+    );
+    // Pruning is once per studio: with the slot free again a new
+    // stale tree survives the next pass untouched.
+    stage.checking.borrow_mut().remove("acme");
+    fs::create_dir_all(&stale).unwrap();
+    stage.check("acme", &dir, &state, 11_000).unwrap();
+    assert!(stale.exists(), "a later pass re-pruned");
+    assert!(stage.checking.borrow().contains_key("acme"));
+}
+
 /// `Action::Resumed` records `role.resumed` with the live
 /// terminal's address and the recorded session — a record only,
 /// no `terminal.run`.

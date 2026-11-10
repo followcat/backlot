@@ -123,7 +123,9 @@ re-raise one `stall_limit_s` later.
   correction is gated the same. `--check name=pass` on `deliver` stays the actor's own claim,
   kept apart from the stage's records in notices, `status` and `records`. A check is
   actor-written code run as the user with a stripped environment and a timeout — it is not a
-  sandbox. A permission prompt whose screen reaches for
+  sandbox. Processes a check leaves behind are killed by their group or, when their tree is
+  swept, by a `/proc/<pid>/cwd` scan of the user's own processes; on a platform without
+  `/proc` that sweep is skipped. A permission prompt whose screen reaches for
   `BACKLOT_*`, `env -i` or `--ignore-environment` is the user's: the director gets no notice and
   cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets

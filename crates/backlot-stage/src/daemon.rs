@@ -143,6 +143,9 @@ pub(crate) struct Stage {
     /// `studio` → the one check process in flight for it; a restart
     /// re-derives what is owed from the ledger.
     pub(crate) checking: std::cell::RefCell<BTreeMap<String, checkwork::Running>>,
+    /// Studios whose leftover `checks/run-*` trees the first pass
+    /// already swept.
+    pruned: std::cell::RefCell<BTreeSet<String>>,
     /// `<runner> --version` answers, asked once per runner per run.
     pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
     /// Session ids the running pass recorded — `cached` cannot see
@@ -323,6 +326,11 @@ impl Stage {
         if self.checking.borrow().contains_key(name) {
             return Ok(());
         }
+        // The first pass sweeps the run trees a dead stage left —
+        // but the ones a still-owed delivery needs.
+        if self.pruned.borrow_mut().insert(name.to_string()) {
+            checkwork::prune_run_trees(&mut *self.git.borrow_mut(), dir, state);
+        }
         if let Some(owed) = checks::owed(state) {
             let run = checkwork::start(
                 &mut *self.git.borrow_mut(),
@@ -379,6 +387,7 @@ impl Stage {
             git: std::cell::RefCell::new(Box::new(workareas::real_git)),
             spawn_check: Box::new(checkrun::real_spawn),
             checking: std::cell::RefCell::new(BTreeMap::new()),
+            pruned: std::cell::RefCell::new(BTreeSet::new()),
             versions: std::cell::RefCell::new(BTreeMap::new()),
             found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
             discover_looked: std::cell::RefCell::new(BTreeMap::new()),
@@ -452,6 +461,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         git: std::cell::RefCell::new(Box::new(workareas::real_git)),
         spawn_check: Box::new(checkrun::real_spawn),
         checking: std::cell::RefCell::new(BTreeMap::new()),
+        pruned: std::cell::RefCell::new(BTreeSet::new()),
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         discover_looked: std::cell::RefCell::new(BTreeMap::new()),

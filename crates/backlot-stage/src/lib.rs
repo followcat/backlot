@@ -40,6 +40,8 @@ mod checkrun_tests;
 #[cfg(test)]
 mod checks_tests;
 #[cfg(test)]
+mod checkwork_tests;
+#[cfg(test)]
 mod cli_state_tests;
 #[cfg(test)]
 mod cli_testkit;

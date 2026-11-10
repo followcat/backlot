@@ -5,7 +5,7 @@
 //! `env_for`, the paths) is [`crate::checks`]; process mechanics
 //! are [`crate::checkrun`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -27,10 +27,75 @@ fn git_fail(out: &GitOut) -> String {
         .to_string()
 }
 
-/// Remove a check worktree: `worktree remove` first, a plain
-/// directory delete plus `worktree prune` when git cannot — a
-/// half-created tree counts too.
-fn remove_tree(git: &mut GitRun<'_>, repo: &str, work: &Path) {
+/// `work` as the canonical absolute path `/proc/<pid>/cwd` reports
+/// — the parent canonicalized so a deleted tree still resolves to
+/// its last live path.
+fn canon_root(work: &Path) -> PathBuf {
+    if let Ok(p) = work.canonicalize() {
+        return p;
+    }
+    match work
+        .parent()
+        .and_then(|p| p.canonicalize().ok())
+        .zip(work.file_name())
+    {
+        Some((parent, name)) => parent.join(name),
+        None => work.to_path_buf(),
+    }
+}
+
+/// Our own processes whose cwd is inside `root` — a `server &` a
+/// check left in its tree, or one still parked in a tree since
+/// deleted (`/proc/<pid>/cwd` then reads `<path> (deleted)`).
+/// Linux `/proc` only; anywhere else there is nothing to sweep.
+#[cfg(target_os = "linux")]
+pub(crate) fn cwd_pids(root: &Path) -> Vec<u32> {
+    use std::os::unix::fs::MetadataExt;
+    let root = canon_root(root);
+    let me = unsafe { libc::geteuid() };
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return out;
+    };
+    for e in entries.flatten() {
+        let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
+            continue;
+        };
+        if e.metadata().map(|m| m.uid()).unwrap_or(u32::MAX) != me {
+            continue;
+        }
+        let Ok(cwd) = fs::read_link(e.path().join("cwd")) else {
+            continue;
+        };
+        let cwd = cwd.to_string_lossy();
+        let cwd = Path::new(cwd.strip_suffix(" (deleted)").unwrap_or(&cwd));
+        if cwd.starts_with(&root) {
+            out.push(pid);
+        }
+    }
+    out
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn cwd_pids(_root: &Path) -> Vec<u32> {
+    Vec::new()
+}
+
+/// KILL each of our processes parked inside `root` — whatever a
+/// check left behind dies before its tree is reused or removed.
+fn kill_cwd(root: &Path) {
+    for pid in cwd_pids(root) {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGKILL);
+        }
+    }
+}
+
+/// Remove a check worktree: every process still parked inside dies
+/// first, then `worktree remove`, a plain directory delete plus
+/// `worktree prune` when git cannot — a half-created tree counts.
+pub(crate) fn remove_tree(git: &mut GitRun<'_>, repo: &str, work: &Path) {
+    kill_cwd(work);
     let work_s = work.to_string_lossy().into_owned();
     let out = git(
         &["-C", repo, "worktree", "remove", "--force", &work_s],
@@ -125,6 +190,57 @@ impl Running {
             timeout_ms,
             term_ms: None,
             killed: false,
+        }
+    }
+}
+
+impl Drop for Running {
+    /// A run the stage never finished — the stage stopped mid-check
+    /// — still dies, its whole group, not just the shell.
+    fn drop(&mut self) {
+        self.child.kill();
+    }
+}
+
+/// The `checks/run-<seq>` names still owed work: the last delivery
+/// of a task still `delivered`, with a declared check unrecorded.
+fn needed_run_dirs(state: &StudioState) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let Some(studio) = state.studio.as_ref() else {
+        return out;
+    };
+    for t in state.tasks.values() {
+        if t.status != TaskStatus::Delivered {
+            continue;
+        }
+        let Some(d) = t.deliveries.last() else {
+            continue;
+        };
+        if !t.checks_missing(d.n, &studio.checks).is_empty() {
+            out.insert(format!("run-{}", d.seq));
+        }
+    }
+    out
+}
+
+/// The stage's first pass sweeps `checks/run-*` trees a dead stage
+/// left behind — anything parked inside is KILL'd first — except a
+/// tree a still-owed delivery needs.
+pub fn prune_run_trees(git: &mut GitRun<'_>, dir: &Path, state: &StudioState) {
+    let needed = needed_run_dirs(state);
+    let Some(repo) = state.studio.as_ref().map(|s| s.repo.as_str()) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(dir.join("checks")) else {
+        return;
+    };
+    for e in entries.flatten() {
+        let name = e.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name.starts_with("run-") && !needed.contains(name) {
+            remove_tree(git, repo, &e.path());
         }
     }
 }
