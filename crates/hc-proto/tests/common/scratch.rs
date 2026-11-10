@@ -181,6 +181,13 @@ impl ScratchCore {
     /// framed RPC `hello` succeeds. A construction guard removes the root
     /// on any failure before this returns.
     pub async fn spawn() -> ScratchCore {
+        Self::spawn_identity("scratch-core", "host-a").await
+    }
+
+    /// [`spawn`](Self::spawn) with an explicit pre-seeded core identity —
+    /// a second core in the same test needs its own id/name or the
+    /// `machine.add` same-id check rejects it as a copy.
+    pub async fn spawn_identity(core_id: &str, core_name: &str) -> ScratchCore {
         let root = std::env::temp_dir().join(format!("hctui-{}-{:x}", std::process::id(), nanos()));
         // Claim a new root atomically; never adopt an existing directory.
         fs::create_dir(&root).unwrap();
@@ -199,7 +206,7 @@ impl ScratchCore {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join("core.json"),
-            r#"{"id":"scratch-core","name":"host-a"}"#,
+            format!(r#"{{"id":"{core_id}","name":"{core_name}"}}"#),
         )
         .unwrap();
 
