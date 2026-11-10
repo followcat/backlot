@@ -37,7 +37,6 @@ The script verifies the archive against the release's `sha256sums.txt` and insta
 `BACKLOT_SKIP_CORE=1`, or fetch an archive from the
 [Releases page](https://github.com/followcat/backlot/releases) and check it yourself. Upgrade by
 running the script again; uninstall by deleting the binary. Details: [docs/install.md](docs/install.md).
-The first tagged release is pending — if the Releases page is still empty, build from source below.
 
 ## Run a studio
 
@@ -59,12 +58,13 @@ Run `backlot` to open the client and press `Ctrl+B y` for the studio panel. The 
 
 ## Status
 
-Early, and the first tagged release is pending:
+Early:
 
-- **The studio layer has run on real agents only with Claude Code**: three runs on a sample
-  repository, two of which finished the whole loop, while the second stopped on a bug that was
-  fixed before the third. Everything built after those runs, including restart recovery, has only
-  run on the test runner. [docs/studio/limits.md](docs/studio/limits.md) has the details.
+- **The studio layer has run on real agents only with Claude Code**: four runs on a sample
+  repository. Three finished the whole loop; the second stopped on a bug that was fixed before the
+  third. The fourth stopped the hc core twice mid-run, and every live role resumed its own session
+  and carried on to the end. Stall detection, the at-cap notice and going on after a block have
+  only run on the test runner. [docs/studio/limits.md](docs/studio/limits.md) has the details.
 - **It runs on official `hc`.** CI builds a pinned official herdr-core from source and drives the real
   UI against it: sidebar, attach, switching, tabs, splits, status and detach. Day-to-day use is still
   mostly on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so
