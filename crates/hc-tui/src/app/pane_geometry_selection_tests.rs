@@ -25,7 +25,6 @@ fn app_with(term: CoreTerminal) -> App {
         config.live_keybinds(),
         shell,
         Arc::new(Probe::default()),
-        Box::new(|_, _| {}),
     );
     app.view = view(vec![term], vec![]);
     app.refresh_projection();

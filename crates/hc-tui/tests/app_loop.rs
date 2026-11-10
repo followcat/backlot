@@ -31,7 +31,6 @@ fn app_with_config(config: &hc_tui::config::Config) -> (App, Arc<Probe>) {
         config.live_keybinds(),
         shell,
         probe.clone(),
-        Box::new(|_, _| {}),
     );
     (app, probe)
 }

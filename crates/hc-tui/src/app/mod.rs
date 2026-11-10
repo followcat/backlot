@@ -106,12 +106,11 @@ pub struct Probe {
     pub timers: std::sync::atomic::AtomicU64,
 }
 
-/// Where program cursor-shape wishes go: the outer terminal's cursor
-/// style in production, a test recorder otherwise. A plain boxed
-/// `FnMut` keeps the app free of crossterm/global-IO calls.
+/// Where host-mode control writes go (keyboard push/pop, mouse modes,
+/// notifications): the outer terminal in production, a test recorder
+/// otherwise. A plain boxed `FnMut` keeps the app free of
+/// crossterm/global-IO calls.
 pub type HostControlSink = Box<dyn FnMut(&[u8]) -> std::io::Result<()>>;
-
-pub type CursorSink = Box<dyn FnMut(hc_vt::CursorShape, bool) + Send>;
 
 /// The mutable chrome state `ShellRenderState` borrows each frame —
 /// scroll offsets, collapse sets, reveal flags and the sidebar split.
@@ -349,16 +348,10 @@ pub struct App {
     seen: u64,
     /// The area the pane was last allocated (for spec sizing).
     area: (u16, u16),
-    /// The cursor the last frame asked for (position set during draw;
-    /// shape applied to the backend on change).
+    /// The cursor the last frame asked for — resolved into the
+    /// host-cursor state the backend emits inside the frame.
     pub(crate) want_cursor: draw::CursorWish,
-    /// The (shape, blinking) last applied to the outer cursor.
-    applied_cursor: (hc_vt::CursorShape, bool),
     last_visible_cursor: Option<(u16, u16)>,
-    /// Where cursor-shape changes go — the real outer terminal in
-    /// production (`term::cursor_sink`), a recorder in tests. Drawing
-    /// never writes to global stdout itself.
-    cursor_sink: CursorSink,
     /// Set by Detach or when the input source ends.
     quitting: bool,
     /// Probed host-terminal facts (colors, cell pitch) — late replies

@@ -60,7 +60,7 @@ impl App {
                         // The Settings overlay has no text field — eat it.
                     } else if self.panel_focused() {
                         // The panel has no text field — eat it.
-                    } else if self.popup_text(text.clone()) {
+                    } else if self.popup_paste(&text) {
                         // The popup terminal owns paste while open.
                     } else if self.peek.is_some() {
                         // Peek is observe-only — eat it.

@@ -184,7 +184,7 @@ fn wsl_powershell_is_tried_first() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn missing_tool_is_no_image() {
+fn missing_tool_is_unavailable_not_no_image() {
     let dir = StubDir::new();
     let env = ClipboardEnv {
         wayland: true,
@@ -193,13 +193,25 @@ fn missing_tool_is_no_image() {
     };
     assert!(matches!(
         linux::read(&env, Duration::from_secs(1)),
-        ClipboardRead::None
+        ClipboardRead::Unavailable(_)
     ));
 }
 
 #[cfg(target_os = "linux")]
 #[test]
-fn hung_tool_is_killed_and_counts_as_no_image() {
+fn no_display_is_unavailable_not_no_image() {
+    let dir = StubDir::new();
+    // No WAYLAND_DISPLAY, no DISPLAY, no WSL: nothing can even try.
+    let env = dir.env();
+    assert!(matches!(
+        linux::read(&env, Duration::from_secs(1)),
+        ClipboardRead::Unavailable(_)
+    ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn hung_tool_is_killed_and_is_unavailable() {
     let dir = StubDir::new();
     dir.stub("wl-paste", "sleep 30");
     let env = ClipboardEnv {
@@ -209,7 +221,7 @@ fn hung_tool_is_killed_and_counts_as_no_image() {
     let start = Instant::now();
     assert!(matches!(
         linux::read(&env, Duration::from_millis(150)),
-        ClipboardRead::None
+        ClipboardRead::Unavailable(_)
     ));
     assert!(start.elapsed() < Duration::from_secs(5));
 }
@@ -300,6 +312,164 @@ fn paste_path_rejects_non_images() {
         "/home/user/.hidden",
     ] {
         assert!(image_path_from_paste(text).is_none(), "{text:?}");
+    }
+}
+
+/// A file manager's copy offers `x-special/gnome-copied-files`, not an
+/// image MIME: the read resolves the named local file and uploads its
+/// bytes, exactly like a drop.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_copied_image_file_uploads_through_gnome_uri_list() {
+    let dir = StubDir::new();
+    let image = dir.write("shot one.png", PNG);
+    dir.stub(
+        "wl-paste",
+        &format!(
+            "case \"$2\" in x-special/gnome-copied-files) printf 'copy\\nfile://%s\\n' \"{}\" ;; *) exit 1 ;; esac",
+            image.display()
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        ..dir.env()
+    };
+    let image_read = linux_image(&env);
+    assert_eq!(image_read.extension, "png");
+    assert_eq!(image_read.bytes, PNG);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_copied_image_file_uploads_through_uri_list() {
+    let dir = StubDir::new();
+    let image = dir.write("shot.jpg", JPEG);
+    dir.stub(
+        "wl-paste",
+        &format!(
+            "case \"$2\" in text/uri-list) printf 'file://%s\\n' \"{}\" ;; *) exit 1 ;; esac",
+            image.display()
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        ..dir.env()
+    };
+    let image_read = linux_image(&env);
+    assert_eq!(image_read.extension, "jpg");
+    assert_eq!(image_read.bytes, JPEG);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn percent_encoded_uri_paths_decode() {
+    let dir = StubDir::new();
+    let image = dir.write("shot two.png", PNG);
+    dir.stub(
+        "wl-paste",
+        &format!(
+            "case \"$2\" in text/uri-list) printf 'file://%s\\n' \"{}\" ;; *) exit 1 ;; esac",
+            image.display().to_string().replace(' ', "%20")
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        ..dir.env()
+    };
+    assert_eq!(linux_image(&env).bytes, PNG);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_text_clipboard_offering_a_path_uploads_the_file() {
+    let dir = StubDir::new();
+    let image = dir.write("shot.png", PNG);
+    dir.stub(
+        "wl-paste",
+        &format!(
+            "case \"$2\" in text/plain) printf '%s\\n' \"{}\" ;; *) exit 1 ;; esac",
+            image.display()
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        ..dir.env()
+    };
+    assert_eq!(linux_image(&env).bytes, PNG);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn uri_lists_that_name_no_image_stay_no_image() {
+    let dir = StubDir::new();
+    dir.stub(
+        "wl-paste",
+        "case \"$2\" in text/uri-list) printf 'file:///etc/hostname\\nfile://otherhost/a.png\\n' ;; *) exit 1 ;; esac",
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        ..dir.env()
+    };
+    assert!(matches!(
+        linux::read(&env, Duration::from_secs(5)),
+        ClipboardRead::None
+    ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn an_image_mime_beats_a_uri_list_offer() {
+    let dir = StubDir::new();
+    let payload = dir.write("payload", PNG);
+    let decoy = dir.write("decoy.png", JPEG);
+    dir.stub(
+        "wl-paste",
+        &format!(
+            "case \"$2\" in image/png) cat \"{}\" ;; text/uri-list) printf 'file://%s\\n' \"{}\" ;; *) exit 1 ;; esac",
+            payload.display(),
+            decoy.display()
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        ..dir.env()
+    };
+    assert_eq!(linux_image(&env).bytes, PNG);
+}
+
+#[test]
+fn image_paths_from_clipboard_text_covers_the_forms() {
+    let cases: &[(&str, &str)] = &[
+        ("file:///home/user/a.png\n", "/home/user/a.png"),
+        ("copy\nfile:///home/user/a.png\n", "/home/user/a.png"),
+        ("cut\nfile:///home/user/a.png\n", "/home/user/a.png"),
+        (
+            "# comment\nfile:///home/user/a%20b.png\r\n",
+            "/home/user/a b.png",
+        ),
+        ("file://localhost/home/user/a.png\n", "/home/user/a.png"),
+        ("file:///a.jpeg\nfile:///b.txt\n", "/a.jpeg"),
+    ];
+    for (text, expected) in cases {
+        let paths = crate::clipdrop::image_paths_from_clipboard_text(text);
+        assert_eq!(
+            paths.first().map(|(path, _)| path.as_path()),
+            Some(Path::new(expected)),
+            "{text:?}"
+        );
+    }
+    for text in [
+        "file://otherhost/a.png\n",
+        "file:///a.txt\n",
+        "file:///a.png%\n",
+        "relative/a.png\n",
+        "https://host-a/a.png\n",
+        "just text\n",
+    ] {
+        assert!(
+            crate::clipdrop::image_paths_from_clipboard_text(text).is_empty(),
+            "{text:?}"
+        );
     }
 }
 

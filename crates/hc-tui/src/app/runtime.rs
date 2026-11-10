@@ -5,7 +5,7 @@ impl App {
     /// Draw once the scheduler permits. Backend errors propagate so the
     /// caller's RAII restores the terminal instead of silently
     /// continuing a broken frame loop.
-    pub(super) fn maybe_draw<B: Backend>(
+    pub(super) fn maybe_draw<B: Backend + crate::ansi::FrameCursor>(
         &mut self,
         term: &mut Terminal<B>,
         now: Instant,
@@ -88,57 +88,78 @@ impl App {
         for lease in self.size_leases.values_mut() {
             lease.on_view(&self.view);
         }
-        term.draw(|frame| draw::draw(self, frame, now))?;
-        self.apply_cursor();
-        self.sched.drew(now);
-        self.probe
-            .draws
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        // The same lifecycle ratatui's `try_draw` runs, except the
+        // resolved host cursor is handed to the backend between compose
+        // and apply, so `flush` can emit it inside the synchronized
+        // block — `term.draw` would expose no hook between them.
+        term.autoresize()?;
+        {
+            let mut frame = term.get_frame();
+            draw::draw(self, &mut frame, now);
+        }
+        term.backend_mut()
+            .set_frame_cursor(self.resolve_host_cursor());
+        term.apply_buffer_with_cursor(None)?;
+        if term.backend().emitted() {
+            self.sched.drew(now);
+            self.probe
+                .draws
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            self.sched.unarm();
+        }
         Ok(())
     }
 
-    /// Applies the frame's cursor wish to the outer terminal: position
-    /// was already set during draw; the style (shape + blink) is a
-    /// backend cursor style, emitted only on change. `TermGuard`
-    /// restores the terminal's own cursor on exit.
-    pub(super) fn apply_cursor(&mut self) {
+    /// Resolves the frame's cursor wish into the host-cursor state the
+    /// backend emits inside the synchronized block — the reference's
+    /// `resolve_host_cursor_state` (protocol/render_ansi.rs): a visible
+    /// position updates the hidden-cursor memory, an explicit anchor
+    /// keeps it, and with neither the memory (or bottom-right) applies
+    /// with the terminal's own shape.
+    pub(super) fn resolve_host_cursor(&mut self) -> crate::ansi::HostCursor {
         let wish = self.want_cursor;
-        // Source HostCursorState: explicit hidden anchor, else last visible
-        // position, else bottom-right. Clamp memory after a resize.
-        if let Some(position) = wish.pos {
-            self.last_visible_cursor = Some(position);
-        }
         let (width, height) = self.area;
-        let (x, y) = wish
-            .anchor
-            .or(wish.pos)
-            .or(self.last_visible_cursor)
-            .unwrap_or((width.saturating_sub(1), height.saturating_sub(1)));
-        let position = format!(
-            "\x1b[{};{}H",
-            y.min(height.saturating_sub(1)) + 1,
-            x.min(width.saturating_sub(1)) + 1
-        );
-        let _ = (self.host_control)(position.as_bytes());
-        let want = (
-            wish.shape,
-            wish.shape == hc_vt::CursorShape::Default || wish.blinking,
-        );
-        if want != self.applied_cursor {
-            (self.cursor_sink)(wish.shape, wish.blinking);
-            self.applied_cursor = want;
+        let clamp = |(x, y): (u16, u16)| {
+            (
+                x.min(width.saturating_sub(1)),
+                y.min(height.saturating_sub(1)),
+            )
+        };
+        let shape = || crate::ansi::cursor_shape_param(wish.shape, wish.blinking);
+        if let Some(position) = wish.pos.map(clamp) {
+            self.last_visible_cursor = Some(position);
+            return crate::ansi::HostCursor {
+                x: position.0,
+                y: position.1,
+                visible: true,
+                shape: shape(),
+            };
         }
-        let _ = (self.host_control)(if wish.pos.is_some() {
-            b"\x1b[?25h"
-        } else {
-            b"\x1b[?25l"
-        });
+        if let Some(position) = wish.anchor.map(clamp) {
+            return crate::ansi::HostCursor {
+                x: position.0,
+                y: position.1,
+                visible: false,
+                shape: shape(),
+            };
+        }
+        let (x, y) = self
+            .last_visible_cursor
+            .map(clamp)
+            .unwrap_or((width.saturating_sub(1), height.saturating_sub(1)));
+        crate::ansi::HostCursor {
+            x,
+            y,
+            visible: false,
+            shape: 0,
+        }
     }
 
     /// The loop: await input, watcher publishes, pane events and the
     /// one-shot deadline — nothing else wakes it. A draw backend error
     /// ends the run so the caller's RAII restores the terminal.
-    pub async fn run<B: Backend>(
+    pub async fn run<B: Backend + crate::ansi::FrameCursor>(
         &mut self,
         term: &mut Terminal<B>,
         events: &mut mpsc::Receiver<UiEvent>,

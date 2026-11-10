@@ -8,18 +8,28 @@ async fn draw_error_propagates() {
     assert!(app.maybe_draw(&mut term, Instant::now()).is_err());
 }
 #[tokio::test]
-async fn draw_ok_records_cursor_shape() {
-    let (tx, rx) = std::sync::mpsc::channel();
+async fn draw_ok_resolves_cursor_shape_param() {
     let mut app = app();
-    app.cursor_sink = Box::new(move |shape, _blinking| {
-        let _ = tx.send(shape);
-    });
     app.sched.mark_dirty(Instant::now());
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
     app.maybe_draw(&mut term, Instant::now()).unwrap();
+    app.want_cursor.pos = Some((3, 5));
     app.want_cursor.shape = hc_vt::CursorShape::Bar;
-    app.apply_cursor();
-    assert_eq!(rx.try_recv().unwrap(), hc_vt::CursorShape::Bar);
+    app.want_cursor.blinking = true;
+    let cursor = app.resolve_host_cursor();
+    assert_eq!(
+        (cursor.x, cursor.y, cursor.visible, cursor.shape),
+        (3, 5, true, 5)
+    );
+}
+#[tokio::test]
+async fn an_unemitted_draw_unarms_the_deadline_and_counts_no_draw() {
+    let mut app = app();
+    app.sched.mark_dirty(Instant::now());
+    let mut term = Terminal::new(QuietBackend).unwrap();
+    app.maybe_draw(&mut term, Instant::now()).unwrap();
+    assert_eq!(app.sched.deadline(), None);
+    assert_eq!(app.sched.draws, 0);
 }
 #[tokio::test]
 async fn navigate_unknown_press_release_is_swallowed() {

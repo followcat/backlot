@@ -149,7 +149,8 @@ program.
 ## Pasting text and images
 
 `Ctrl+Shift+V` pastes text. That is your terminal's own shortcut, and the program receives it as a bracketed paste,
-unchanged.
+unchanged. While a popup is open the paste goes to the popup's program, wrapped only when that program asked for
+bracketed paste, just like a pane.
 
 On a remote endpoint `Ctrl+V` pastes a clipboard image instead. backlot reads your local clipboard, uploads the image
 to the program's machine with `terminal.put`, and the program receives the path of the uploaded file. This applies to
@@ -161,4 +162,12 @@ The trigger is `keys.remote_image_paste` in `~/.config/herdr/config.toml`, defau
 disable the key. Two other gestures do the same thing wherever it applies: dropping an image file on the window, and
 an empty bracketed paste. An empty paste is what a terminal sends for `Ctrl+Shift+V` when the clipboard holds only an
 image. PNG, JPEG, GIF, WebP and BMP are recognized, up to the 8 MB `terminal.put` limit. On Linux the read needs
-`wl-paste` under Wayland or `xclip` under X11. A missing tool counts as no image.
+`wl-paste` under Wayland or `xclip` under X11.
+
+A copied image file works too. A file manager puts `x-special/gnome-copied-files` or `text/uri-list` on the
+clipboard, and some tools put one absolute image path in `text/plain`. backlot resolves the local file and uploads its
+bytes, the same way as a drop.
+
+A paste that cannot work never fails silently. When the clipboard holds no image and no readable image file, `Ctrl+V`
+still reaches the program, and a notice says so. When nothing can read the clipboard at all (no display, no tool, or a
+clipboard owner that stopped answering), the notice says why.

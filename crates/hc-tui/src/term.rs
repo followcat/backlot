@@ -187,24 +187,3 @@ impl Drop for TermGuard {
         let _ = self.out.flush();
     }
 }
-
-/// The production cursor sink: applies the inner program's cursor
-/// shape to the real outer terminal. Injected into `App` so tests and
-/// headless draws never write to global stdout.
-pub fn cursor_sink() -> crate::app::CursorSink {
-    use hc_vt::CursorShape;
-    Box::new(|shape, blinking| {
-        let style = match (shape, blinking) {
-            (CursorShape::Default, _) => SetCursorStyle::DefaultUserShape,
-            (CursorShape::Bar, true) => SetCursorStyle::BlinkingBar,
-            (CursorShape::Bar, false) => SetCursorStyle::SteadyBar,
-            (CursorShape::Block | CursorShape::BlockHollow, true) => SetCursorStyle::BlinkingBlock,
-            // A hollow block only exists unfocused — the steady block
-            // is its closest honest outer shape.
-            (CursorShape::Block | CursorShape::BlockHollow, false) => SetCursorStyle::SteadyBlock,
-            (CursorShape::Underline, true) => SetCursorStyle::BlinkingUnderScore,
-            (CursorShape::Underline, false) => SetCursorStyle::SteadyUnderScore,
-        };
-        let _ = execute!(io::stdout(), style);
-    })
-}
