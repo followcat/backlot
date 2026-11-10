@@ -289,6 +289,7 @@ fn task(id: &str) -> Task {
             ts_ms: 0,
         }],
         deliveries: Vec::new(),
+        checked: Vec::new(),
         reviews: Vec::new(),
         finding_reports: Vec::new(),
         state_changes: Vec::new(),

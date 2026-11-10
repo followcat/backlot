@@ -38,6 +38,17 @@ pub enum Refusal {
         task: String,
         delivery: u32,
     },
+    /// The stage ran a check the cast never declared.
+    UnknownCheck {
+        name: String,
+    },
+    /// A `task.checked` for a (delivery, name) already recorded —
+    /// a stage restart reruns only what has no record.
+    CheckDone {
+        task: String,
+        delivery: u32,
+        name: String,
+    },
     AtCapVerdict {
         task: String,
     },
@@ -147,6 +158,19 @@ impl fmt::Display for Refusal {
             }
             Refusal::NoDelivery { task, delivery } => {
                 write!(f, "task '{task}' has no delivery {delivery}")
+            }
+            Refusal::UnknownCheck { name } => {
+                write!(f, "the cast declares no check '{name}'")
+            }
+            Refusal::CheckDone {
+                task,
+                delivery,
+                name,
+            } => {
+                write!(
+                    f,
+                    "task '{task}' delivery {delivery} check '{name}' is already recorded"
+                )
             }
             Refusal::AtCapVerdict { task } => {
                 write!(

@@ -177,6 +177,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     cast: None,
                     casts: Vec::new(),
                     deliveries: Vec::new(),
+                    checked: Vec::new(),
                     reviews: Vec::new(),
                     finding_reports: Vec::new(),
                     state_changes: Vec::new(),
@@ -260,6 +261,29 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     },
                 );
                 reduce_task(t, cap);
+            }
+        }
+        EventKind::TaskChecked {
+            task,
+            delivery,
+            name,
+            exit_code,
+            timed_out,
+            output,
+            duration_ms,
+        } => {
+            if let Some(t) = state.tasks.get_mut(task) {
+                t.checked.push(CheckedRecord {
+                    delivery: *delivery,
+                    name: name.clone(),
+                    exit_code: *exit_code,
+                    timed_out: *timed_out,
+                    output: output.clone(),
+                    duration_ms: *duration_ms,
+                    seq,
+                    ts_ms: ts,
+                });
+                t.last_ts_ms = ts;
             }
         }
         EventKind::TaskReviewed {

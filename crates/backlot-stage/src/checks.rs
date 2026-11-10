@@ -1,11 +1,15 @@
 //! The stage's own checks (S9b part 2). The cast declares them
 //! (`[[checks]]`, `check_env`); `studio new` vets the declaration so
 //! a bad name or a dangerous environment variable never reaches the
-//! ledger.
+//! ledger. On the tick the stage runs each declared check once per
+//! delivery — detached worktree, stripped environment, one process
+//! at a time — and records `task.checked` with the capped log.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 
 use backlot_model::event::CheckDecl;
+use backlot_model::state::{StudioState, TaskStatus};
 use serde::Deserialize;
 
 use crate::cli::Fail;
@@ -98,4 +102,88 @@ pub fn declarations(
             })
             .collect(),
     ))
+}
+
+/// A check the ledger still owes: the next unrecorded declared
+/// check on the latest delivery of a `delivered` task.
+pub struct Owed {
+    pub task: String,
+    pub delivery: u32,
+    /// The `task.delivered` event's seq — it keys the run dir and
+    /// the log names, so two deliveries never share either.
+    pub delivery_seq: u64,
+    pub check: CheckDecl,
+}
+
+/// The next check to run, in task order then declared order. Only
+/// the latest delivery of a task still `delivered` owes checks —
+/// once it moves on nothing new starts, though a check already
+/// running finishes and is recorded. Restarting the stage re-derives
+/// this from the ledger, so a check with no `task.checked` reruns.
+pub fn owed(state: &StudioState) -> Option<Owed> {
+    let checks = &state.studio.as_ref()?.checks;
+    if checks.is_empty() {
+        return None;
+    }
+    for t in state.tasks.values() {
+        if t.status != TaskStatus::Delivered {
+            continue;
+        }
+        let Some(d) = t.deliveries.last() else {
+            continue;
+        };
+        for c in checks {
+            if !t.checked_of(d.n).any(|r| r.name == c.name) {
+                return Some(Owed {
+                    task: t.id.clone(),
+                    delivery: d.n,
+                    delivery_seq: d.seq,
+                    check: c.clone(),
+                });
+            }
+        }
+    }
+    None
+}
+
+/// Stage-owned environment names a check may see — only when the
+/// stage has them set. Nothing `HC_*`, `BACKLOT_*` or proxy-shaped
+/// ever crosses: the cast's `check_env` was vetted for those, and
+/// this list never carries them.
+const PASSTHROUGH: &[&str] = &[
+    "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "LOGNAME", "TMPDIR",
+];
+
+/// The exact environment a check runs under: the passthrough list
+/// plus the declared `check_env` names, valued from the stage's own
+/// environment. A name the stage does not have is simply absent.
+pub fn env_for(
+    stage_env: &BTreeMap<String, String>,
+    check_env: &[String],
+) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut seen = BTreeSet::new();
+    for name in PASSTHROUGH
+        .iter()
+        .copied()
+        .chain(check_env.iter().map(|s| s.as_str()))
+    {
+        if seen.insert(name)
+            && let Some(v) = stage_env.get(name)
+        {
+            out.push((name.to_string(), v.clone()));
+        }
+    }
+    out
+}
+
+/// The detached worktree a delivery's checks run in.
+pub fn run_dir(dir: &Path, delivery_seq: u64) -> PathBuf {
+    dir.join("checks").join(format!("run-{delivery_seq}"))
+}
+
+/// The check's log path relative to the studio dir — the `output`
+/// the `task.checked` event records.
+pub fn log_rel(delivery_seq: u64, name: &str) -> String {
+    format!("checks/{delivery_seq}-{name}.log")
 }

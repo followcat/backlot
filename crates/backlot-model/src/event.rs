@@ -395,6 +395,24 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         upstream_changes: Vec<UpstreamChange>,
     },
+    /// `task.checked`: the stage's own run of one declared check on
+    /// one delivery — never the actor's say-so (S9b part 2).
+    #[serde(rename = "task.checked")]
+    TaskChecked {
+        task: String,
+        /// The delivery it ran on (`task.delivered`'s `delivery`).
+        delivery: u32,
+        /// The declared check's name.
+        name: String,
+        /// The exit code; `None` when a signal killed the run.
+        exit_code: Option<i32>,
+        /// The run hit its `timeout_s` and the stage killed it.
+        #[serde(default, skip_serializing_if = "is_false")]
+        timed_out: bool,
+        /// The capped log under `checks/` in the studio dir.
+        output: String,
+        duration_ms: u64,
+    },
     /// A defect found outside the review loop — integration, real
     /// use — attributed to whoever made `delivery`. Never changes the
     /// task's status. `by` on the envelope is who recorded it.
@@ -529,6 +547,7 @@ impl EventKind {
             EventKind::TaskPriority { .. } => "task.priority",
             EventKind::TaskDelivered { .. } => "task.delivered",
             EventKind::TaskReviewed { .. } => "task.reviewed",
+            EventKind::TaskChecked { .. } => "task.checked",
             EventKind::TaskFinding { .. } => "task.finding",
             EventKind::TaskState { .. } => "task.state",
             EventKind::MessageQueued { .. } => "message.queued",

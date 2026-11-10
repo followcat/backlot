@@ -114,6 +114,32 @@ pub struct DeliveryRecord {
     pub ts_ms: u64,
 }
 
+/// A `task.checked` record: one stage run of one declared check on
+/// one delivery — kept apart from the actor-reported `checks` the
+/// delivery itself carries (S9b part 2).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CheckedRecord {
+    pub delivery: u32,
+    pub name: String,
+    /// The exit code; `None` when a signal killed the run.
+    pub exit_code: Option<i32>,
+    #[serde(default, skip_serializing_if = "crate::event::is_false")]
+    pub timed_out: bool,
+    /// The capped log under `checks/` in the studio dir.
+    pub output: String,
+    pub duration_ms: u64,
+    pub seq: u64,
+    pub ts_ms: u64,
+}
+
+impl CheckedRecord {
+    /// A check passes only on a clean exit — a signal or a timeout
+    /// never does.
+    pub fn passed(&self) -> bool {
+        self.exit_code == Some(0) && !self.timed_out
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReviewRecord {
     pub delivery: u32,
@@ -179,6 +205,10 @@ pub struct Task {
     pub casts: Vec<CastRecord>,
     #[serde(default)]
     pub deliveries: Vec<DeliveryRecord>,
+    /// `task.checked` records, in log order — the stage's results,
+    /// separate from each delivery's actor-reported `checks`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checked: Vec<CheckedRecord>,
     #[serde(default)]
     pub reviews: Vec<ReviewRecord>,
     /// Defects reported by `task.finding` events, in log order.
@@ -210,6 +240,11 @@ impl Task {
 
     pub fn review_of(&self, delivery: u32) -> Option<&ReviewRecord> {
         self.reviews.iter().find(|r| r.delivery == delivery)
+    }
+
+    /// The stage-check records on `delivery`, in log order.
+    pub fn checked_of(&self, delivery: u32) -> impl Iterator<Item = &CheckedRecord> {
+        self.checked.iter().filter(move |c| c.delivery == delivery)
     }
 
     /// Who the task's review-side obligations go to: `producer`

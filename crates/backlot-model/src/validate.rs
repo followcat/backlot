@@ -286,6 +286,39 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+        // `task.checked` answers for a delivery that exists, on a
+        // check the cast declared, once — and may land after the
+        // task moved on: a check already running finishes and is
+        // recorded whatever the task's status now is.
+        EventKind::TaskChecked {
+            task,
+            delivery,
+            name,
+            ..
+        } => {
+            let studio = require_studio(state)?;
+            let t = require_task(state, task)?;
+            if !t.deliveries.iter().any(|d| d.n == *delivery) {
+                return Err(Refusal::NoDelivery {
+                    task: task.clone(),
+                    delivery: *delivery,
+                });
+            }
+            if !studio.checks.iter().any(|c| c.name == *name) {
+                return Err(Refusal::UnknownCheck { name: name.clone() });
+            }
+            if t.checked
+                .iter()
+                .any(|c| c.delivery == *delivery && c.name == *name)
+            {
+                return Err(Refusal::CheckDone {
+                    task: task.clone(),
+                    delivery: *delivery,
+                    name: name.clone(),
+                });
+            }
+            Ok(())
+        }
         EventKind::TaskReviewed {
             task,
             delivery,

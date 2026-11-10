@@ -71,6 +71,7 @@ fn state_with_task() -> StudioState {
             cast: None,
             casts: Vec::new(),
             deliveries: Vec::new(),
+            checked: Vec::new(),
             reviews: Vec::new(),
             finding_reports: Vec::new(),
             state_changes: Vec::new(),

@@ -22,6 +22,9 @@ use hc_proto::subscribe::Subscription;
 use hc_proto::terminal::ListParams;
 
 use crate::args::Common;
+use crate::checkrun;
+use crate::checks;
+use crate::checkwork;
 use crate::cli::{Env, Fail};
 use crate::deliver;
 use crate::discover;
@@ -134,6 +137,12 @@ pub(crate) struct Stage {
     /// How git runs for work areas — `workareas::real_git` live, a
     /// fake in tests.
     pub(crate) git: std::cell::RefCell<Box<workareas::GitRun<'static>>>,
+    /// How a stage check spawns — `checkrun::real_spawn` live, a
+    /// fake in tests.
+    pub(crate) spawn_check: Box<checkrun::Spawn>,
+    /// `studio` → the one check process in flight for it; a restart
+    /// re-derives what is owed from the ledger.
+    pub(crate) checking: std::cell::RefCell<BTreeMap<String, checkwork::Running>>,
     /// `<runner> --version` answers, asked once per runner per run.
     pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
     /// Session ids the running pass recorded — `cached` cannot see
@@ -282,7 +291,34 @@ impl Stage {
                 .await?;
         }
         self.watch(name, &dir, state, &live.terms, now_ms).await?;
-        self.deliver(name, &dir, state, &live.terms, now_ms).await
+        self.deliver(name, &dir, state, &live.terms, now_ms).await?;
+        self.check(name, &dir, state, now_ms)
+    }
+
+    /// The check pass: poll the in-flight run to its `task.checked`
+    /// append, or start the ledger's next owed check — at most one
+    /// process per studio and never a wait that blocks the tick.
+    fn check(&self, name: &str, dir: &Path, state: &StudioState, now_ms: u64) -> Result<(), Fail> {
+        if let Some(run) = self.checking.borrow_mut().get_mut(name) {
+            let Some(out) = run.poll(now_ms) else {
+                return Ok(());
+            };
+            let run = self.checking.borrow_mut().remove(name).expect("polled run");
+            return checkwork::finish(&mut *self.git.borrow_mut(), dir, state, run, out);
+        }
+        if let Some(owed) = checks::owed(state) {
+            let run = checkwork::start(
+                &mut *self.git.borrow_mut(),
+                &*self.spawn_check,
+                state,
+                dir,
+                &self.env_vars,
+                &owed,
+                now_ms,
+            )?;
+            self.checking.borrow_mut().insert(name.into(), run);
+        }
+        Ok(())
     }
 
     /// The `backlot` document's view: cached states, most recently
@@ -324,6 +360,8 @@ impl Stage {
             env_vars: BTreeMap::new(),
             exec: Box::new(discover::real_exec),
             git: std::cell::RefCell::new(Box::new(workareas::real_git)),
+            spawn_check: Box::new(checkrun::real_spawn),
+            checking: std::cell::RefCell::new(BTreeMap::new()),
             versions: std::cell::RefCell::new(BTreeMap::new()),
             found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
             discover_looked: std::cell::RefCell::new(BTreeMap::new()),
@@ -395,6 +433,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         env_vars: env.vars.clone(),
         exec: Box::new(discover::real_exec),
         git: std::cell::RefCell::new(Box::new(workareas::real_git)),
+        spawn_check: Box::new(checkrun::real_spawn),
+        checking: std::cell::RefCell::new(BTreeMap::new()),
         versions: std::cell::RefCell::new(BTreeMap::new()),
         found_sessions: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         discover_looked: std::cell::RefCell::new(BTreeMap::new()),

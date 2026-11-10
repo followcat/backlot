@@ -6,7 +6,9 @@ mod act;
 pub mod args;
 mod args_studio;
 mod args_task;
+mod checkrun;
 mod checks;
+mod checkwork;
 pub mod cli;
 pub mod commands;
 mod config;
@@ -33,6 +35,8 @@ mod workareas;
 
 #[cfg(test)]
 mod act_tests;
+#[cfg(test)]
+mod checkrun_tests;
 #[cfg(test)]
 mod checks_tests;
 #[cfg(test)]

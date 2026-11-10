@@ -71,6 +71,15 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Err(cannot(role, who_can(&new.kind)))
         };
     }
+    // `task.checked` is the stage's own word — the actor's `--check`
+    // stays actor-reported on `task.delivered`, never here.
+    if let EventKind::TaskChecked { .. } = &new.kind {
+        return if role == "stage" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the stage"))
+        };
+    }
     if let EventKind::TaskDelivered { task, .. } = &new.kind {
         return may_deliver(state, role, task);
     }
@@ -90,7 +99,8 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::RoleSession { .. }
         | EventKind::MessageDelivered { .. }
         | EventKind::AttentionRaised { .. }
-        | EventKind::AttentionCleared { .. } => "the stage",
+        | EventKind::AttentionCleared { .. }
+        | EventKind::TaskChecked { .. } => "the stage",
         EventKind::RoleReopen { .. }
         | EventKind::RoleRelease { .. }
         | EventKind::RoleApproval { .. }
