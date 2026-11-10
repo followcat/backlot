@@ -564,6 +564,76 @@ async fn a_finished_check_is_recorded_through_the_pass() {
     assert_eq!((r.name.as_str(), r.passed()), ("unit", true));
 }
 
+/// A check still in flight keeps the studio's slot: the pass
+/// polls it and leaves it alone — the same owed check is not
+/// spawned again every tick with the live run orphaned.
+#[tokio::test]
+async fn a_running_check_is_polled_not_respawned() {
+    use backlot_model::testkit as tk;
+    use std::sync::{Arc, Mutex};
+
+    /// A child that never exits.
+    struct Hang;
+    impl crate::checkrun::CheckChild for Hang {
+        fn poll(&mut self) -> Option<crate::checkrun::PollOut> {
+            None
+        }
+        fn term(&mut self) {}
+        fn kill(&mut self) {}
+    }
+
+    let base = tmp();
+    let dir = store::studio_dir(&base, "acme");
+    fs::create_dir_all(&dir).unwrap();
+    let mut created = tk::studio_kind();
+    let EventKind::StudioCreated { checks, .. } = &mut created else {
+        unreachable!()
+    };
+    *checks = vec![tk::check_decl("unit", "sleep 60", 60)];
+    for (role, kind) in [
+        ("user", created),
+        (
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ("director", tk::task_created("t1", "feature", 1)),
+        ("director", tk::cast("t1", "actor-a", "a")),
+        ("actor-t1-c1", tk::delivered("t1", 1, "a", 1)),
+    ] {
+        store::append(&dir, |_, _| {
+            Ok::<_, std::convert::Infallible>(Pending {
+                event: NewEvent::new(EventBy::role(role), kind),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    }
+    let state = store::load_state(&dir).unwrap();
+    let spawns = Arc::new(Mutex::new(0usize));
+    let mut stage = stage().await;
+    {
+        let spawns = Arc::clone(&spawns);
+        stage.spawn_check = Box::new(move |_| {
+            *spawns.lock().unwrap() += 1;
+            Ok(Box::new(Hang))
+        });
+    }
+    // The slot is already taken by a live run — three ticks must
+    // not spawn or replace it.
+    let run = crate::checkwork::Running::for_test(Box::new(Hang), 60_000, dir.join("gone"));
+    stage.checking.borrow_mut().insert("acme".into(), run);
+    for now in [10_000, 11_000, 12_000] {
+        stage.check("acme", &dir, &state, now).unwrap();
+    }
+    assert_eq!(*spawns.lock().unwrap(), 0, "a live run was respawned");
+    let map = stage.checking.borrow();
+    assert_eq!(map["acme"].name, "unit", "the live run was replaced");
+}
+
 /// `Action::Resumed` records `role.resumed` with the live
 /// terminal's address and the recorded session — a record only,
 /// no `terminal.run`.

@@ -317,6 +317,12 @@ impl Stage {
         if let Some((run, out)) = done {
             return checkwork::finish(&mut *self.git.borrow_mut(), dir, state, run, out);
         }
+        // One run per studio: a live run owns the slot — owed starts
+        // only when the slot is empty, or the same check would be
+        // spawned again every tick.
+        if self.checking.borrow().contains_key(name) {
+            return Ok(());
+        }
         if let Some(owed) = checks::owed(state) {
             let run = checkwork::start(
                 &mut *self.git.borrow_mut(),
