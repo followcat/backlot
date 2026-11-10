@@ -39,6 +39,8 @@ const PANES: &[(&str, &str, &str, &str)] = &[
     ("ws-alpha", "tab-two", "codex", "2004"),
     ("ws-beta", "tab-main", "devin", "2004"),
     ("ws-remote", "tab-b", "opencode", "2004"),
+    ("ws-alpha", "tab-three", "copycat", "2004"),
+    ("ws-remote", "tab-copy", "copyb", "2004"),
 ];
 
 /// Opens the Alt+F popup and waits for its marker.
@@ -88,6 +90,7 @@ async fn setup() -> (
     fixture::write_ssh_stub(&stub, &[("host-a", &a, &stub), ("host-b", &b, &stub)]);
 
     let fake = fixture::write_fake_agent(&agents);
+    let copy_fake = fixture::write_copy_agent(&agents);
     let popup_fake = fixture::write_popup_agent(&agents);
     for (scratch, cfg_root) in [(&a, a.root.join("config")), (&b, b.root.join("config"))] {
         let _ = scratch;
@@ -114,6 +117,19 @@ async fn setup() -> (
         )
         .await;
     }
+    fixture::run_copy_fake(
+        &ca,
+        &copy_fake,
+        fixture::CopyPane {
+            out: &out.join("copycat.bin"),
+            flag: &out.join("copycat.flag"),
+            b64: "Y29weS1mcm9tLXJlbW90ZS1wYW5l",
+            space: "ws-alpha",
+            tab: "tab-three",
+            tag: "copycat",
+        },
+    )
+    .await;
     fixture::run_fake(
         &cb,
         &fake,
@@ -122,6 +138,19 @@ async fn setup() -> (
         "ws-remote",
         "tab-b",
         "opencode",
+    )
+    .await;
+    fixture::run_copy_fake(
+        &cb,
+        &copy_fake,
+        fixture::CopyPane {
+            out: &out.join("copyb.bin"),
+            flag: &out.join("copyb.flag"),
+            b64: "Y29weS1mcm9tLW1hY2hpbmUtcGFuZQ==",
+            space: "ws-remote",
+            tab: "tab-copy",
+            tag: "copyb",
+        },
     )
     .await;
 
@@ -178,6 +207,25 @@ async fn paste_matrix_remote_and_machine() {
     cell!(ctx, "remote: sys-paste multiline -> shell", async {
         ctx.focus("shell").await?;
         ctx.assert_paste("shell", "r-one\nr-two", false).await
+    });
+    cell!(ctx, "remote: program OSC52 copy -> host clipboard", async {
+        ctx.assert_program_copy(
+            "copycat",
+            &out.join("copycat.flag"),
+            "copy-from-remote-pane",
+        )
+        .await
+    });
+    cell!(ctx, "remote: copy in one tab -> paste in another", async {
+        ctx.assert_program_copy(
+            "copycat",
+            &out.join("copycat.flag"),
+            "copy-from-remote-pane",
+        )
+        .await?;
+        switch_via_sidebar(&mut ctx.tui, "tab-two", "codex").await?;
+        ctx.assert_paste("codex", "copy-from-remote-pane", true)
+            .await
     });
     cell!(ctx, "remote: mouse-select -> switch tab -> paste", async {
         ctx.focus("shell").await?;
@@ -284,6 +332,14 @@ async fn paste_matrix_remote_and_machine() {
         ctx.focus("opencode").await?;
         ctx.assert_paste("opencode", "remote-b-text", true).await
     });
+    cell!(
+        ctx,
+        "remote-b: program OSC52 copy -> host clipboard",
+        async {
+            ctx.assert_program_copy("copyb", &out.join("copyb.flag"), "copy-from-machine-pane")
+                .await
+        }
+    );
     cell!(ctx, "remote-b: ctrl+v png -> opencode", async {
         pty::clipboard_set(&ctx.clip, "image/png", pty::PNG);
         ctx.focus("opencode").await?;
@@ -341,6 +397,15 @@ async fn paste_matrix_remote_and_machine() {
             ctx.focus("claude").await?;
             switch_via_sidebar(&mut ctx.tui, "ws-remote", "opencode").await?;
             ctx.assert_image_paste("opencode", pty::PNG).await
+        }
+    );
+    cell!(
+        ctx,
+        "local: machine pane program OSC52 copy -> host clipboard",
+        async {
+            ctx.focus("claude").await?;
+            ctx.assert_program_copy("copyb", &out.join("copyb.flag"), "copy-from-machine-pane")
+                .await
         }
     );
     let failures_c = matrix::report(&ctx.results, "paste matrix (local + machine sidebar)");

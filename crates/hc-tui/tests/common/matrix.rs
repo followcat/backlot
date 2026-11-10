@@ -154,6 +154,34 @@ impl Ctx {
         ))
     }
 
+    /// A copy-agent's program write: create its flag file, then assert
+    /// the host terminal gains an OSC 52 whose payload decodes to
+    /// `text` — the Codex 0.166 headless-copy path end to end.
+    pub async fn assert_program_copy(
+        &mut self,
+        tag: &str,
+        flag: &Path,
+        text: &str,
+    ) -> Result<(), String> {
+        self.focus(tag).await?;
+        let _ = self.tui.take_osc52();
+        fs::write(flag, b"go").map_err(|e| format!("flag write: {e}"))?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(6);
+        loop {
+            for copy in self.tui.take_osc52() {
+                if copy == text.as_bytes() {
+                    return Ok(());
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(format!(
+                    "no OSC52 payload {text:?} from {tag} reached the host terminal"
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(60)).await;
+        }
+    }
+
     /// The Ctrl+V image-paste path: the bridge uploads the clipboard
     /// image and pastes the returned remote path into the focused pane.
     /// Asserts a `/…/clipboard-…` path lands in `tag`'s file, the file

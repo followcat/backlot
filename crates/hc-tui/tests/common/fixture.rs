@@ -80,6 +80,69 @@ pub fn write_popup_agent(dir: &Path) -> PathBuf {
     path
 }
 
+/// The copy variant: like `fake-agent`, plus a background watcher that
+/// writes a Codex-style OSC 52 (`ESC ] 52 ; c ; <b64> BEL`) to `/dev/tty`
+/// each time `$5`'s flag file appears — Codex 0.166's headless copy is a
+/// program-initiated clipboard write the terminal must forward, and its
+/// own "copy" key is exactly such a write.
+/// `copy-agent <spec> <outfile> <tag> <flag> <b64>`.
+pub fn write_copy_agent(dir: &Path) -> PathBuf {
+    let path = dir.join("copy-agent");
+    pty::write_executable(
+        &path,
+        "spec=\"$1\"; out=\"$2\"; tag=\"$3\"; flag=\"$4\"; b64=\"$5\"\n\
+         case \",$spec,\" in *,2004,*) printf '\\033[?2004h' ;; esac\n\
+         case \",$spec,\" in *,kitty1,*) printf '\\033[>1u' ;; esac\n\
+         printf '\\033]7501;state=idle\\033\\\\'\n\
+         printf 'FAKE %s\\n' \"$tag\"\n\
+         printf 'MARK %s abcdefgh\\n' \"$tag\"\n\
+         stty raw -echo\n\
+         ( while :; do\n\
+             [ -f \"$flag\" ] || { sleep 0.05; continue; }\n\
+             rm -f \"$flag\"\n\
+             printf '\\033]52;c;%s\\007' \"$b64\" > /dev/tty 2>/dev/null \\\n\
+               || printf '\\033]52;c;%s\\007' \"$b64\"\n\
+           done ) &\n\
+         exec cat >> \"$out\"\n",
+    );
+    path
+}
+
+/// Where the copy fake records input and what it copies once flagged.
+pub struct CopyPane<'a> {
+    pub out: &'a Path,
+    pub flag: &'a Path,
+    pub b64: &'a str,
+    pub space: &'a str,
+    pub tab: &'a str,
+    pub tag: &'a str,
+}
+
+/// `copy-agent` on `client`, labelled like [`run_fake`]. The flag file
+/// must not exist yet — the watcher clears it before each copy.
+pub async fn run_copy_fake(client: &Client, fake: &Path, pane: CopyPane<'_>) {
+    client
+        .terminal_run(RunParams {
+            argv: vec![
+                "sh".into(),
+                fake.to_string_lossy().into_owned(),
+                "2004".into(),
+                pane.out.to_string_lossy().into_owned(),
+                pane.tag.into(),
+                pane.flag.to_string_lossy().into_owned(),
+                pane.b64.into(),
+            ],
+            name: Some(format!("{}-{}", pane.space, pane.tag)),
+            labels: BTreeMap::from([
+                ("herdr.space".into(), pane.space.into()),
+                ("herdr.tab".into(), pane.tab.into()),
+            ]),
+            ..RunParams::default()
+        })
+        .await
+        .expect("terminal.run copy fake");
+}
+
 /// Runs one fake agent terminal on `client`, labelled into space/tab.
 pub async fn run_fake(
     client: &Client,
