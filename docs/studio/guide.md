@@ -214,7 +214,7 @@ in the state directory.
 - A prompt touching **real sessions, production, accounts or global settings**, or destructive
   outside the work area, is yours — and so is any prompt on a role that is not an actor (the
   producer, the director, the writer).
-- A prompt whose screen reaches for **the role-identity variables or environment-clearing flags**
+- A prompt reaching for **the role-identity variables or environment-clearing flags**
   — `BACKLOT_*`, `env -i`, `--ignore-environment` — is yours outright: the stage marks it
   `needs the user`, the director gets no notice and its `backlot approve` refuses.
 

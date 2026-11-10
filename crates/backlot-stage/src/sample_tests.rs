@@ -504,6 +504,65 @@ async fn a_replaced_prompt_recomputes_needs_user() {
     assert!(refused.is_err(), "the director answered the user's prompt");
 }
 
+/// S9c: the `needs_user` flag reads the prompt's own block, not the
+/// whole screen — an earlier prompt's `BACKLOT_*` line still
+/// scrolling above the new prompt must not flag it. B's own reach
+/// flags B; once the user's `allow` has answered B, C raises
+/// unflagged although B's line is still on screen.
+#[tokio::test]
+async fn a_prompts_flag_comes_from_its_own_block() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    let screen = |tail: &str| format!("fake runner: actor-t1-c1 of acme-shop\n{tail}");
+    fake.lock().unwrap().screen =
+        screen("fake-work: blocked\nfake-prompt: BACKLOT_ROLE=director backlot review --task t1\n");
+
+    // B's own reach makes B the user's prompt.
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { needs_user, .. } => {
+            assert!(*needs_user, "B's own BACKLOT_* reach did not flag");
+        }
+        _ => unreachable!(),
+    }
+
+    // The user answers B; the key goes out against B's block.
+    approve(&dir, "actor-t1-c1", "user", ApprovalDecision::Allow);
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 3_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+
+    // C blocks with B's prompt line still scrolling above it — the
+    // whole screen still carries `BACKLOT_*`, but C's own block is
+    // clean.
+    fake.lock().unwrap().screen = screen(
+        "fake-work: blocked\n\
+         fake-prompt: BACKLOT_ROLE=director backlot review --task t1\n\
+         fake-approved: enter\n\
+         fake-work: waiting\n\
+         fake-work: blocked\n\
+         fake-prompt: cargo test --lib\n",
+    );
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 4_000).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 6_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 2, "C's prompt raised no attention");
+    match &raised[1].kind {
+        EventKind::AttentionRaised {
+            needs_user, detail, ..
+        } => {
+            assert!(!needs_user, "B's leftover line flagged C");
+            assert!(!detail.contains("needs the user"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+}
+
 /// S9c: a prompt answered in the terminal itself must not hold its
 /// attention open — a stale attention swallows the next prompt's
 /// raise and lets a later approval fly at it. Once the role has been

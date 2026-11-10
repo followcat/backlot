@@ -10,7 +10,7 @@ use backlot_model::summary::Work;
 
 use crate::notices;
 use crate::permit::{
-    approval_keys, director_notice, episode_due, episode_raised, in_episode, is_actor,
+    approval_keys, director_notice, episode_due, episode_raised, in_episode, is_actor, needs_user,
     open_episode, pending_approval, prompt_block, touches_env,
 };
 
@@ -226,6 +226,31 @@ fn touches_env_sees_through_a_wrapped_box() {
                         │   status                  │\n\
                         └─────────────────────────┘";
     assert!(touches_env(wrapped_flag));
+}
+
+/// The `needs_user` flag reads the prompt's own block, not the
+/// whole screen: a `BACKLOT_*` line left scrolling above a Claude
+/// prompt's rule is an earlier prompt's tail, not this prompt's —
+/// while a reach inside the block still flags, and a runner with no
+/// block falls back to the whole screen.
+#[test]
+fn needs_user_reads_the_prompt_block() {
+    let clean = claude_screen("cargo test --lib", "✻ Orbiting… (4s · ↓ 9 tokens)");
+    assert!(!needs_user("actor-t1-c1", "claude", &clean));
+    // `BACKLOT_*` above the rule is not in the block.
+    let scrolled = format!("BACKLOT_ROLE=director backlot review --task t1\n{clean}");
+    assert!(!needs_user("actor-t1-c1", "claude", &scrolled));
+    // Inside the block it still flags.
+    let reached = claude_screen(
+        "BACKLOT_ROLE=director backlot review --task t1",
+        "✻ Orbiting… (4s · ↓ 9 tokens)",
+    );
+    assert!(needs_user("actor-t1-c1", "claude", &reached));
+    // No block mapped: the whole screen decides.
+    assert!(needs_user("actor-t1-c1", "opencode", &scrolled));
+    assert!(!needs_user("actor-t1-c1", "opencode", "plain output\n"));
+    // A non-actor is the user's regardless.
+    assert!(needs_user("writer", "claude", &clean));
 }
 
 /// A flagged attention owes the director no notice — the user owns

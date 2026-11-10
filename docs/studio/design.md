@@ -316,11 +316,12 @@ keys is untouched. A prompt answered in the terminal itself — no decision reco
 episode for a whole episode window — clears `prompt answered elsewhere`, so the next prompt always raises fresh.
 
 Two prompts are the user's outright (S9b), and the director's `role.approval` on either is refused: a prompt on a role
-that is not an actor — the director answers only an actor's — and a prompt whose saved screen reaches for the
-role-identity variables or the environment-clearing env flags. The stage reads the screen with whitespace and
-box-drawing characters removed, so a wrapped prompt box cannot hide a mid-word `BACKLOT_`, `env -i` or
-`--ignore-environment`, and flags the attention `needs_user`: no notice to the director, `backlot status` and the
-panel mark it as the user's.
+that is not an actor — the director answers only an actor's — and a prompt whose own block reaches for the
+role-identity variables or the environment-clearing env flags. The stage reads the block — the whole screen when the
+runner maps none — with whitespace and box-drawing characters removed, so a wrapped prompt box cannot hide a mid-word
+`BACKLOT_`, `env -i` or `--ignore-environment`, and an earlier prompt's line still scrolling above cannot flag the new
+prompt. It flags the attention `needs_user`: no notice to the director, `backlot status` and the panel mark it as the
+user's.
 
 ## Defaults that can still change
 

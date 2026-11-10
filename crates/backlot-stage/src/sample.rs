@@ -149,7 +149,7 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
-                    self.raise_permission(dir, role, text).await?;
+                    self.raise_permission(dir, role, w.runner, text).await?;
                 }
             }
             None => {
@@ -229,7 +229,7 @@ impl Stage {
                     reason: Some("prompt changed before the decision was sent".into()),
                 },
             )?;
-            self.raise_permission(dir, role, text).await?;
+            self.raise_permission(dir, role, w.runner, text).await?;
             return Ok(());
         }
         let sent = self
@@ -268,12 +268,20 @@ impl Stage {
 
     /// `attention.raised` for a blocked episode: the screen lands at
     /// `attention/<seq>.txt` via the append's own file copy. A
-    /// screen reaching for `BACKLOT_*` or an environment-clearing
+    /// prompt reaching for `BACKLOT_*` or an environment-clearing
     /// flag is flagged `needs_user` — the director never sees the
-    /// notice and may not answer it. An actor's ordinary prompt gets
-    /// the director's detail; anything else says it needs the user.
-    async fn raise_permission(&self, dir: &Path, role: &str, text: &str) -> Result<(), Fail> {
-        let user_owned = !permit::is_actor(role) || permit::touches_env(text);
+    /// notice and may not answer it; the flag reads the prompt's own
+    /// block, so an earlier prompt's line still scrolling above does
+    /// not flag this one. An actor's ordinary prompt gets the
+    /// director's detail; anything else says it needs the user.
+    async fn raise_permission(
+        &self,
+        dir: &Path,
+        role: &str,
+        runner: &str,
+        text: &str,
+    ) -> Result<(), Fail> {
+        let user_owned = permit::needs_user(role, runner, text);
         self.raise_attention(dir, role, PERMISSION_PROMPT, text, user_owned, move |seq| {
             if user_owned {
                 format!("needs the user; screen saved to attention/{seq}.txt")
