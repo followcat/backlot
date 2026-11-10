@@ -40,11 +40,13 @@ fn message(seq: u64, to: &str, delivered: bool) -> Message {
     }
 }
 
-/// Each role's oldest undelivered item wins, in seq order —
-/// messages and reports share the order, a `to: user` report is
-/// never sent, and what is already delivered is skipped.
+/// Each role's pending items gather into one send — two or more
+/// merge into a `messages/digest-<top>.md` line naming the count,
+/// a single item keeps its own `[backlot]` line, messages and
+/// reports share the queue, a `to: user` report is never sent,
+/// and what is already delivered is skipped.
 #[test]
-fn outbox_is_oldest_first_per_role() {
+fn outbox_gathers_each_roles_pending_items() {
     let mut state = StudioState::default();
     state.messages.push(message(5, "writer", false));
     state.messages.push(message(3, "writer", false));
@@ -73,20 +75,33 @@ fn outbox_is_oldest_first_per_role() {
     let out = outbox(&state, dir());
     assert_eq!(out.len(), 3, "{out:?}");
     let for_role = |r: &str| out.iter().find(|o| o.role == r).unwrap();
-    assert_eq!(for_role("writer").seq, 3, "oldest undelivered wins");
-    assert_eq!(for_role("director").seq, 4);
-    assert_eq!(for_role("producer").seq, 6, "reports join the queue");
-    assert!(
-        for_role("writer")
-            .text
-            .contains(&format!("{DIR}/messages/3-note.md")),
-        "{}",
-        for_role("writer").text
+
+    // Two pending items merge: one send names the digest file
+    // and the count, and covers both items oldest first.
+    let w = for_role("writer");
+    assert_eq!(w.digest.as_deref(), Some("messages/digest-5.md"));
+    assert_eq!(w.items.len(), 2);
+    assert_eq!(w.items[0].seq(), 3);
+    assert_eq!(w.items[1].seq(), 5);
+    assert_eq!(
+        w.text,
+        format!("[backlot] stage → writer: read {DIR}/messages/digest-5.md (2 items)")
     );
-    assert!(
-        for_role("writer")
-            .text
-            .starts_with("[backlot] producer → writer:")
+
+    // A single item keeps today's line.
+    let d = for_role("director");
+    assert_eq!(d.digest, None);
+    assert_eq!(d.items[0].seq(), 4);
+    assert_eq!(
+        d.text,
+        format!("[backlot] producer → director: read {DIR}/messages/4-note.md")
+    );
+
+    let p = for_role("producer");
+    assert_eq!(p.items[0].seq(), 6, "reports join the queue");
+    assert_eq!(
+        p.text,
+        format!("[backlot] director → producer: read {DIR}/reports/6-review.md")
     );
 }
 
@@ -101,7 +116,8 @@ fn the_outbox_skips_dropped_messages() {
     state.messages.push(message(4, "writer", false));
     let out = outbox(&state, dir());
     assert_eq!(out.len(), 1);
-    assert_eq!(out[0].seq, 4, "the live item still goes");
+    assert_eq!(out[0].items.len(), 1);
+    assert_eq!(out[0].items[0].seq(), 4, "the live item still goes");
 
     state.messages[1].dropped = true;
     assert!(outbox(&state, dir()).is_empty());
@@ -245,7 +261,7 @@ async fn only_this_studios_sends_are_collected() {
         sending.insert(
             (studio.to_string(), "director".to_string()),
             InFlight {
-                seq,
+                seqs: vec![seq],
                 handle: tokio::spawn(async move {
                     Ok::<_, hc_proto::client::CallError>(serde_json::json!({"sent": true}))
                 }),
@@ -256,7 +272,7 @@ async fn only_this_studios_sends_are_collected() {
     sending.insert(
         ("shop-a".to_string(), "writer".to_string()),
         InFlight {
-            seq: 9,
+            seqs: vec![9],
             handle: tokio::spawn(std::future::pending::<
                 Result<serde_json::Value, hc_proto::client::CallError>,
             >()),
@@ -264,7 +280,7 @@ async fn only_this_studios_sends_are_collected() {
     );
     while !sending
         .values()
-        .filter(|f| f.seq != 9)
+        .filter(|f| f.seqs != vec![9])
         .all(|f| f.handle.is_finished())
     {
         tokio::task::yield_now().await;
@@ -272,7 +288,7 @@ async fn only_this_studios_sends_are_collected() {
     let done = take_finished(&mut sending, "shop-a");
     assert_eq!(done.len(), 1);
     assert_eq!(done[0].0, ("shop-a".to_string(), "director".to_string()));
-    assert_eq!(done[0].1.seq, 3);
+    assert_eq!(done[0].1.seqs, vec![3]);
     assert!(sending.contains_key(&("shop-b".to_string(), "director".to_string())));
     assert!(sending.contains_key(&("shop-a".to_string(), "writer".to_string())));
 }

@@ -14,6 +14,7 @@ pub mod commands;
 mod config;
 mod daemon;
 mod deliver;
+mod digest;
 mod discover;
 mod doc;
 pub mod link;
@@ -52,6 +53,8 @@ mod cli_tests;
 mod daemon_tests;
 #[cfg(test)]
 mod deliver_tests;
+#[cfg(test)]
+mod digest_tests;
 #[cfg(test)]
 mod discover_tests;
 #[cfg(test)]

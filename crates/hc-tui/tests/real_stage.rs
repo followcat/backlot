@@ -1381,6 +1381,136 @@ async fn real_stage_stale_notice_drops() {
     scratch.finish().expect("scratch teardown");
 }
 
+/// S9d — several pending items go as one send: while the director
+/// is `work:working` two deliveries on different tasks and a `tell`
+/// queue for it; when it goes `work:waiting` a single `[backlot]`
+/// line names `messages/digest-<top>.md (3 items)`, the file lists
+/// both `delivered` notices ahead of the tell, and every item gets
+/// its `message.delivered`. Two tasks, not two deliveries on one —
+/// the second delivery on a task supersedes the first's notice.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_digest_sends_once() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(&scratch, &state, "", "");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let note = fixture(&scratch, "note.md", "director: go\n");
+    let report = fixture(&scratch, "report.md", "# delivery report\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "task new --title nav --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "cast --task t2 --actor actor-b --reason second --as director",
+    );
+    wait_path(&studio.join("work/t2"));
+
+    // The director is busy while all three items queue — the send
+    // gate never opens on `working`.
+    let director = wait_terminal(&client, "bl-acme-shop-director").await;
+    send_text(&client, &director.address, "work:working").await;
+    wait_role(&client, "director", |r| r["work"] == "working").await;
+
+    // Each delivery's `delivered` notice must queue before the next
+    // item lands, so the ledger order — and the digest's — is fixed.
+    let mut notices: Vec<u64> = Vec::new();
+    for (task, actor) in [("t1", "actor-t1-c1"), ("t2", "actor-t2-c1")] {
+        let work = studio.join(format!("work/{task}"));
+        let (a, b) = (commit_in(&work, "a"), commit_in(&work, "b"));
+        bl(
+            &scratch,
+            &state,
+            &format!(
+                "deliver --commits {a}..{b} --report {} --as {actor} --task {task}",
+                report.display()
+            ),
+        );
+        let deadline = Instant::now() + DEADLINE;
+        loop {
+            let evs = ledger(&state);
+            let src = evs
+                .iter()
+                .find(|e| e["kind"] == "task.delivered" && e["task"] == task)
+                .and_then(|e| e["seq"].as_u64());
+            let queued = src.and_then(|s| {
+                evs.iter()
+                    .find(|e| e["kind"] == "message.queued" && e["source_seq"] == s)
+            });
+            if let Some(q) = queued {
+                notices.push(q["seq"].as_u64().unwrap());
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "delivery {task}'s notice never queued"
+            );
+            std::thread::sleep(POLL);
+        }
+    }
+    bl(
+        &scratch,
+        &state,
+        &format!("tell director --file {} --as writer", note.display()),
+    );
+    // The `bl` call already appended — the tell is the director's
+    // queued message with no source_seq and no purpose.
+    let tell = ledger(&state)
+        .into_iter()
+        .find(|e| {
+            e["kind"] == "message.queued"
+                && e["to"] == "director"
+                && e["source_seq"].is_null()
+                && e["purpose"].is_null()
+        })
+        .and_then(|e| e["seq"].as_u64())
+        .expect("the tell's queued message");
+    let top = notices.iter().copied().chain([tell]).max().unwrap();
+
+    // Waiting opens the gate: one send, one line, one digest file.
+    send_text(&client, &director.address, "work:waiting").await;
+    let inbox = wait_inbox(&state, "fake-inbox-director", "digest-");
+    let sends: Vec<&str> = inbox.lines().filter(|l| l.contains("[backlot]")).collect();
+    assert_eq!(sends.len(), 1, "one send covered all three: {inbox}");
+    assert!(sends[0].contains("stage → director"), "{inbox}");
+    assert!(sends[0].contains("(3 items)"), "{inbox}");
+
+    // The digest lists the delivered notices ahead of the tell.
+    let body =
+        fs::read_to_string(studio.join(format!("messages/digest-{top}.md"))).expect("digest file");
+    let at = |s: String| {
+        body.find(&s)
+            .unwrap_or_else(|| panic!("{s} missing\n{body}"))
+    };
+    let (a, b, c) = (
+        at(format!("## delivered (seq {})", notices[0])),
+        at(format!("## delivered (seq {})", notices[1])),
+        at(format!("## tell (seq {tell})")),
+    );
+    assert!(a < b && b < c, "{body}");
+
+    // Every item the send covered is recorded delivered.
+    let wanted: std::collections::BTreeSet<u64> = notices.iter().copied().chain([tell]).collect();
+    wait_kind(&state, "message.delivered", 3);
+    let got: std::collections::BTreeSet<u64> = ledger(&state)
+        .iter()
+        .filter(|e| e["kind"] == "message.delivered")
+        .filter_map(|e| e["target"].as_u64())
+        .collect();
+    assert!(wanted.is_subset(&got), "{got:?} misses {wanted:?}");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
 /// The S9a nudge on the fake runner with short limits: the plan and
 /// acceptance list are published and nobody answers — the owed
 /// `dispatch` step shows in `backlot status`, the idle producer's
