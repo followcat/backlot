@@ -283,18 +283,16 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
             // step owes the producer one notice (S9a): the step's
             // owner is the user's problem now, but the producer
             // should hear its role is idle.
-            crate::reasons::OWED => {
-                if a.role != "producer" {
-                    out.push(Notice {
-                        source_seq: a.seq,
-                        to: "producer".into(),
-                        label: "owed",
-                        body: format!(
-                            "# {} owes a step\n\n`{}` was nudged and stayed idle — an `owed` attention is now open for the user: {}.\n",
-                            a.role, a.role, a.detail,
-                        ),
-                    });
-                }
+            crate::reasons::OWED if a.role != "producer" => {
+                out.push(Notice {
+                    source_seq: a.seq,
+                    to: "producer".into(),
+                    label: "owed",
+                    body: format!(
+                        "# {} owes a step\n\n`{}` was nudged and stayed idle — an `owed` attention is now open for the user: {}.\n",
+                        a.role, a.role, a.detail,
+                    ),
+                });
             }
             _ => {}
         }
