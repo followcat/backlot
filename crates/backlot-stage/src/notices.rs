@@ -96,7 +96,9 @@ fn outcome(r: &backlot_model::state::CheckedRecord) -> String {
     } else {
         match r.exit_code {
             Some(code) => format!("fail (exit {code})"),
-            None => "fail (signal)".into(),
+            // A signal or a run that never started — the log says
+            // which.
+            None => "fail (no exit)".into(),
         }
     }
 }

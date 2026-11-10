@@ -315,6 +315,49 @@ pub fn start(
     })
 }
 
+/// A check that could not start still gets its record — the log
+/// says why it never ran and `exit_code: null` counts as a
+/// failure — so the owed loop moves on instead of retrying the
+/// same failure every tick, and the reviewer's notice can land.
+pub fn fail_start(
+    git: &mut GitRun<'_>,
+    dir: &Path,
+    state: &StudioState,
+    owed: &Owed,
+    why: &str,
+) -> Result<(), Fail> {
+    // Whatever `start` managed to build comes down — a half-made
+    // worktree is swept like any leftover.
+    let work = checks::run_dir(dir, owed.delivery_seq);
+    if work.exists()
+        && let Some(repo) = state.studio.as_ref().map(|s| s.repo.as_str())
+    {
+        remove_tree(git, repo, &work);
+    }
+    let rel = checks::log_rel(owed.delivery_seq, &owed.check.name);
+    let path = dir.join(&rel);
+    fs::create_dir_all(path.parent().expect("checks/ has a parent"))
+        .map_err(|e| Fail::refused(format!("checks dir: {e}")))?;
+    fs::write(
+        &path,
+        format!("check '{}' could not start: {why}\n", owed.check.name),
+    )
+    .map_err(|e| Fail::refused(format!("check log: {e}")))?;
+    crate::act::record(
+        dir,
+        EventKind::TaskChecked {
+            task: owed.task.clone(),
+            delivery: owed.delivery,
+            name: owed.check.name.clone(),
+            exit_code: None,
+            timed_out: false,
+            output: rel,
+            duration_ms: 0,
+        },
+    )?;
+    Ok(())
+}
+
 /// Whether the delivery's worktree still has checks to serve: the
 /// task is still `delivered` on this delivery and some declared
 /// check other than `run`'s has no record yet (`run`'s lands just

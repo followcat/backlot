@@ -332,7 +332,9 @@ impl Stage {
             checkwork::prune_run_trees(&mut *self.git.borrow_mut(), dir, state);
         }
         if let Some(owed) = checks::owed(state) {
-            let run = checkwork::start(
+            // `start`'s borrow ends before the match — the fail
+            // path takes `git` again for its own cleanup.
+            let started = checkwork::start(
                 &mut *self.git.borrow_mut(),
                 &*self.spawn_check,
                 state,
@@ -340,8 +342,22 @@ impl Stage {
                 &self.env_vars,
                 &owed,
                 now_ms,
-            )?;
-            self.checking.borrow_mut().insert(name.into(), run);
+            );
+            match started {
+                Ok(run) => {
+                    self.checking.borrow_mut().insert(name.into(), run);
+                }
+                // A check that cannot start is still recorded —
+                // failed — so the owed loop does not retry it
+                // forever and the reviewer's notice can land.
+                Err(e) => checkwork::fail_start(
+                    &mut *self.git.borrow_mut(),
+                    dir,
+                    state,
+                    &owed,
+                    e.message(),
+                )?,
+            }
         }
         Ok(())
     }

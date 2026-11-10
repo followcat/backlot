@@ -121,7 +121,8 @@ pub struct DeliveryRecord {
 pub struct CheckedRecord {
     pub delivery: u32,
     pub name: String,
-    /// The exit code; `None` when a signal killed the run.
+    /// The exit code; `None` when a signal killed the run or it
+    /// never started — either way not a pass.
     pub exit_code: Option<i32>,
     #[serde(default, skip_serializing_if = "crate::event::is_false")]
     pub timed_out: bool,

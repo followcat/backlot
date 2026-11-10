@@ -404,7 +404,8 @@ pub enum EventKind {
         delivery: u32,
         /// The declared check's name.
         name: String,
-        /// The exit code; `None` when a signal killed the run.
+        /// The exit code; `None` when a signal killed the run or
+        /// it never started — either way not a pass.
         exit_code: Option<i32>,
         /// The run hit its `timeout_s` and the stage killed it.
         #[serde(default, skip_serializing_if = "is_false")]

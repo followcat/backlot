@@ -739,6 +739,83 @@ async fn the_first_check_pass_prunes_stale_run_trees() {
     assert!(stage.checking.borrow().contains_key("acme"));
 }
 
+/// A check that cannot start — the delivery's end sha is gone, so
+/// `worktree add` fails — is still recorded: `task.checked` with
+/// `exit_code: null` counts as a failure, its log says why, and
+/// the reviewer's notice is owed instead of the task waiting
+/// forever on a retry that can never succeed.
+#[tokio::test]
+async fn a_check_that_cannot_start_is_recorded_as_failed() {
+    use backlot_model::testkit as tk;
+
+    let base = tmp();
+    let dir = store::studio_dir(&base, "acme");
+    fs::create_dir_all(&dir).unwrap();
+    let mut created = tk::studio_kind();
+    let EventKind::StudioCreated { checks, .. } = &mut created else {
+        unreachable!()
+    };
+    *checks = vec![tk::check_decl("unit", "true", 60)];
+    for (role, kind) in [
+        ("user", created),
+        (
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ("director", tk::task_created("t1", "feature", 1)),
+        ("director", tk::cast("t1", "actor-a", "a")),
+        ("actor-t1-c1", tk::delivered("t1", 1, "a", 1)),
+    ] {
+        store::append(&dir, |_, _| {
+            Ok::<_, std::convert::Infallible>(Pending {
+                event: NewEvent::new(EventBy::role(role), kind),
+                files: Vec::new(),
+            })
+        })
+        .unwrap();
+    }
+    let state = store::load_state(&dir).unwrap();
+    let stage = stage().await;
+    // `worktree add --detach` on the recorded end sha fails: `b`
+    // is not a real revision in this scratch repo.
+    *stage.git.borrow_mut() = Box::new(|argv, _cwd| crate::workareas::GitOut {
+        code: if argv.contains(&"add") { 128 } else { 0 },
+        stdout: String::new(),
+        stderr: "fatal: invalid reference: b".into(),
+    });
+    stage.check("acme", &dir, &state, 10_000).unwrap();
+    assert!(stage.checking.borrow().is_empty(), "nothing runs");
+
+    let state = store::load_state(&dir).unwrap();
+    let records = &state.tasks["t1"].checked;
+    assert_eq!(records.len(), 1, "a second pass would double-record");
+    let r = &records[0];
+    assert_eq!(r.name, "unit");
+    assert_eq!(r.exit_code, None);
+    assert!(!r.timed_out);
+    assert!(!r.passed(), "a never-started check cannot pass");
+    let log = fs::read_to_string(dir.join(&r.output)).unwrap();
+    assert!(log.contains("could not start"), "{log}");
+    assert!(log.contains("invalid reference"), "{log}");
+    // Owed is empty: nothing retries. The reviewer's notice is
+    // finally owed, naming the failed check.
+    assert!(crate::checks::owed(&state).is_none());
+    let notices = crate::notices::owed(&state, &dir);
+    let n = notices
+        .iter()
+        .find(|n| n.to == "director" && n.label == "delivered")
+        .expect("the reviewer waits for nothing more");
+    assert!(n.body.contains("- unit: fail"), "{}", n.body);
+    // And a second pass does not write a second record.
+    stage.check("acme", &dir, &state, 11_000).unwrap();
+    let state = store::load_state(&dir).unwrap();
+    assert_eq!(state.tasks["t1"].checked.len(), 1);
+}
+
 /// `Action::Resumed` records `role.resumed` with the live
 /// terminal's address and the recorded session — a record only,
 /// no `terminal.run`.
