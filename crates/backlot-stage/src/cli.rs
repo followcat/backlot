@@ -243,7 +243,11 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
             Ok(if json {
                 serde_json::to_string_pretty(&state).map_err(refused)?
             } else {
-                render::status(&name, &state)
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                render::status(&name, &state, now_ms)
             })
         }
         Cmd::Records { json } => {

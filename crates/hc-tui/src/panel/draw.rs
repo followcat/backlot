@@ -182,14 +182,26 @@ pub(crate) fn render(
                     }
                 }
                 // The studio's stage error gets its own line, drawn
-                // like a person's attention line.
+                // like a person's attention line; the first owed
+                // step draws the same way under it.
+                let mut y = rect.y + 1;
                 if let Some(error) = &studio.error {
                     buf.set_stringn(
                         rect.x + 2,
-                        rect.y + 1,
+                        y,
                         format!("! {error}"),
                         (rect.x + rect.width).saturating_sub(rect.x + 2) as usize,
                         Style::default().fg(palette.red),
+                    );
+                    y += 1;
+                }
+                if let Some(next) = &studio.next {
+                    buf.set_stringn(
+                        rect.x + 2,
+                        y,
+                        format!("→ {next}"),
+                        (rect.x + rect.width).saturating_sub(rect.x + 2) as usize,
+                        Style::default().fg(palette.subtext0),
                     );
                 }
             }

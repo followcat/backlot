@@ -91,10 +91,12 @@ impl Row<'_> {
 
     /// Rendered lines: a person may carry a `doing` line, an attention
     /// line and the armed reopen hint; a studio may carry an `error`
-    /// line; every other row is one line.
+    /// line and a `next` step line; every other row is one line.
     pub fn height(&self) -> u16 {
         match self {
-            Row::Studio(studio) => 1 + u16::from(studio.error.is_some()),
+            Row::Studio(studio) => {
+                1 + u16::from(studio.error.is_some()) + u16::from(studio.next.is_some())
+            }
             Row::Person { role, confirm, .. } => {
                 1 + u16::from(role.doing.is_some())
                     + u16::from(role.attention.is_some())

@@ -64,8 +64,9 @@ fn fmt_status(s: TaskStatus) -> String {
     format!("{s:?}").to_lowercase()
 }
 
-/// The status view for one studio.
-pub fn status(name: &str, state: &StudioState) -> String {
+/// The status view for one studio. `now_ms` ages each owed step's
+/// `next:` line.
+pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
     let mut out = String::new();
     let Some(studio) = &state.studio else {
         return format!("studio {name}: no events yet\n");
@@ -148,6 +149,15 @@ pub fn status(name: &str, state: &StudioState) -> String {
         for r in &state.reports {
             let _ = writeln!(out, "    {} → {} ({}) {}", r.from, r.to, r.node, r.file);
         }
+    }
+    for s in backlot_model::steps::next_steps(state) {
+        let _ = writeln!(
+            out,
+            "  next: {} — {}, owed {}",
+            s.label,
+            s.owner,
+            fmt_ms(now_ms.saturating_sub(s.since_ms))
+        );
     }
     let open: Vec<_> = state.open_attention().collect();
     if open.is_empty() {

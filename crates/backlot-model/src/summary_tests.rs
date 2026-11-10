@@ -189,6 +189,93 @@ fn counters_follow_the_ledger() {
     assert_eq!(s.studios[0].waiting, 1);
 }
 
+/// The studio's `next` names the first owed step — label and owner —
+/// and stays `None` while the ledger owes nothing (S9a). It also
+/// keeps out of `same_as` churn: the text holds no clock.
+#[test]
+fn the_first_owed_step_names_label_and_owner() {
+    // base_events leaves t1 created and uncast — the director's step.
+    let state = state_with(&base_events(), vec![]);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(s.studios[0].next.as_deref(), Some("cast t1 — director"));
+
+    // Publish both plan documents and the owed step is the
+    // producer's dispatch — on its own the only step in this ledger.
+    let mut events = vec![
+        ev(1, "user", studio_kind()),
+        ev(
+            2,
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ev(
+            3,
+            "producer",
+            EventKind::MessageQueued {
+                to: "writer".into(),
+                file: None,
+                purpose: Some("plan".into()),
+                source_seq: None,
+            },
+        ),
+        ev(
+            4,
+            "writer",
+            EventKind::PlanPublished {
+                plan_kind: crate::event::PlanKind::Plan,
+                file: "plan/4-plan.md".into(),
+                requirement_version: 1,
+            },
+        ),
+        ev(
+            5,
+            "writer",
+            EventKind::PlanPublished {
+                plan_kind: crate::event::PlanKind::Acceptance,
+                file: "plan/5-acc.md".into(),
+                requirement_version: 1,
+            },
+        ),
+    ];
+    let s = summary(
+        &[("acme-shop".into(), state_with(&events, vec![]))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(s.studios[0].next.as_deref(), Some("dispatch — producer"));
+
+    // A finished studio owes nothing: `next` never serializes.
+    events.push(ev(
+        6,
+        "user",
+        EventKind::StudioFinished {
+            reason: "done".into(),
+        },
+    ));
+    let s = summary(
+        &[("acme-shop".into(), state_with(&events, vec![]))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(s.studios[0].next, None);
+    let json = serde_json::to_string(&s.studios[0]).unwrap();
+    assert!(!json.contains("\"next\""), "{json}");
+}
+
 /// `n` casts on t1, each started then closed: `actor-t1-c1..cN` all
 /// end up recorded closed people. Appends to `events` in seq order.
 fn closed_actors(events: &mut Vec<Event>, tag: &str, n: usize) {

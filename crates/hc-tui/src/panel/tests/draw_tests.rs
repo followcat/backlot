@@ -221,6 +221,52 @@ fn a_studio_error_draws_a_bang_line_under_the_studio() {
     assert_eq!(line.trim(), "! ledger unreadable", "{line:?}");
 }
 
+/// A studio with an owed step draws it on its own line under the
+/// studio row — after the `error` line when both stand.
+#[test]
+fn a_studio_next_draws_an_arrow_line_under_the_studio() {
+    let mut value = summary_json();
+    value["studios"][0]["next"] = serde_json::json!("dispatch — producer");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let mut buf = Buffer::empty(area);
+    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, crate::panel::Target::Studio(id) if id == "acme-shop"))
+        .map(|(rect, _)| rect.y)
+        .expect("the studio row drew");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, y + 1)].symbol())
+        .collect::<String>();
+    assert_eq!(line.trim(), "→ dispatch — producer", "{line:?}");
+
+    // With an error too the `next` line sits one row lower.
+    let mut value = summary_json();
+    value["studios"][0]["error"] = serde_json::json!("ledger unreadable");
+    value["studios"][0]["next"] = serde_json::json!("dispatch — producer");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let mut buf = Buffer::empty(area);
+    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let y = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, crate::panel::Target::Studio(id) if id == "acme-shop"))
+        .map(|(rect, _)| rect.y)
+        .expect("the studio row drew");
+    let lines: Vec<String> = (1..=2)
+        .map(|dy| {
+            (area.x..area.x + area.width)
+                .map(|x| buf[(x, y + dy)].symbol())
+                .collect::<String>()
+        })
+        .collect();
+    assert_eq!(lines[0].trim(), "! ledger unreadable", "{lines:?}");
+    assert_eq!(lines[1].trim(), "→ dispatch — producer", "{lines:?}");
+}
+
 #[test]
 fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
     let summary = summary();

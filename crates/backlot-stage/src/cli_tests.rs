@@ -189,12 +189,18 @@ fn full_loop_status_and_records() {
         "review --task t1 --delivery 2 --verdict accepted --conclusion done --as director",
     );
 
-    // Status shows the accepted task.
+    // Status shows the accepted task — and the step the ledger now
+    // owes: every task terminal, no node report yet, so the director
+    // holds it (S9a).
     let status = ok(&env, "status");
     assert!(status.contains("acme-shop"), "{status}");
     assert!(status.contains("t1"), "{status}");
     assert!(status.contains("accepted"), "{status}");
     assert!(status.contains("rework 1/2"), "{status}");
+    assert!(
+        status.contains("next: node report — director, owed"),
+        "{status}"
+    );
     // JSON view parses.
     let json = ok(&env, "status --json");
     let v: serde_json::Value = serde_json::from_str(&json).unwrap();

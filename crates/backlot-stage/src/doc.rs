@@ -113,6 +113,7 @@ mod tests {
                     open_reviews: 0,
                     waiting: 0,
                     error: None,
+                    next: None,
                     roles: Vec::new(),
                 })
                 .collect(),

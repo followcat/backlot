@@ -53,6 +53,10 @@ pub struct StudioSummary {
     /// or a failed pass — while it stays broken.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The first step the ledger still owes, as `"label — owner"`;
+    /// `None` while nothing is owed (S9a).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
 }
@@ -307,6 +311,7 @@ pub fn summary(
                     open_reviews: 0,
                     waiting: 0,
                     error: Some(error),
+                    next: None,
                     roles: Vec::new(),
                 });
             }
@@ -330,6 +335,9 @@ pub fn summary(
                 .count() as u32,
             waiting: state.open_attention().count() as u32,
             error,
+            next: crate::steps::next_steps(state)
+                .first()
+                .map(|s| cap(&format!("{} — {}", s.label, s.owner))),
             roles,
         };
         if done {
