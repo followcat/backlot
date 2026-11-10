@@ -31,7 +31,14 @@ rework_cap = 2          # optional, default 2
 stall_limit_s = 600     # optional, default 600
 nudge_after_s = 180     # optional, default 180
 escalate_after_s = 600  # optional, default 600
+task_budget_s = 7200    # optional running-time budget per task — unset means none
 check_env = ["CI"]      # stage env names a check may see — optional
+
+# Live-role cap per runner in this studio — optional; a runner with
+# no entry is unlimited.
+[limits]
+claude = 3
+devin = 1
 
 [producer]
 runner = "claude"
@@ -83,6 +90,8 @@ timeout_s = 120
 | `stall_limit_s` | Seconds a live role's screen may stay unchanged while it counts as working before a `stalled` attention raises. Optional; default 600. Must be at least 1. |
 | `nudge_after_s` | Seconds an owed step's owner may sit idle — live, waiting, nothing queued or in flight — before the stage queues it one `nudge` message (counted from the later of the step becoming owed and the idle stretch starting). Optional; default 180. Must be at least 1. |
 | `escalate_after_s` | Seconds after that nudge was delivered during which the step may stay owed and the owner idle before an `owed` attention raises. Optional; default 600. Must be at least 1. |
+| `task_budget_s` | Running-time budget per task in seconds, counted from the task's first cast to its close, leaving out paused stretches. A running or delivered task past it raises one `over budget` attention — the director and the producer are told; nothing is killed or paused. Optional; unset means no budget. Must be at least 1. |
+| `[limits]` | Live-role cap per runner in this studio — `claude = 3` starts no fourth live role on `claude` until a slot frees. Fixed roles and actors count alike, a role being started counts, and a runner with no entry is unlimited. Held starts go producer, director, writer, then actors by task priority and seq, and the waiting role shows `waiting for a <runner> slot`. Per studio: two studios on one account each count only their own roles. A `0` is refused — a runner is limited by a real number or absent. |
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin` or `opencode`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. |
 | `effort` | Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; Devin takes it as part of the model id; OpenCode has no flag). |
@@ -172,7 +181,7 @@ In the normal path the steps run in this order:
 |---|---|---|
 | plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
-| cast | director | `backlot task new` splits the plan into tasks; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. |
+| cast | director | `backlot task new` splits the plan into tasks — `--depends-on t1` makes a task wait for another; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. A cast on a task with an open dependency is refused, and an accepted dependency that is not merged yet refuses with `merge t1 into integration first`; `backlot status` shows `waits for t1` on the task's line. |
 | deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
 | review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. An accepting verdict waits for every declared check's stage record — only you may accept over pending ones — and names each failing check in the conclusion. |
 | rework | actor | A `changes-requested` review goes back to the actor as a `[backlot]` message; it fixes and delivers again. The rework cap counts the rounds. |
@@ -190,7 +199,7 @@ any attention text. The marks:
 | Mark | Meaning |
 |---|---|
 | spinning glyph | `working` — the role's screen shows its runner's working marker |
-| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting) |
+| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting). A wanted role a `[limits]` cap holds back shows the same mark with `waiting for a <runner> slot` as its doing line |
 | `×` | `blocked` — the role's screen shows a permission prompt |
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |

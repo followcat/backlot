@@ -115,6 +115,12 @@ re-raise one `stall_limit_s` later.
 - **One real runner starts per tick.** Casting several actors spreads the launches over several
   ticks; `fake` is exempt. A post-launch runner (`codex`, `devin`) also defers its start while a
   live role in the same runner-and-folder pair still lacks a session id.
+- **`[limits]` caps live roles per runner, per studio.** The cast table's `<runner> = <n>` holds a
+  wanted start back once `<n>` live roles — fixed and actor alike, a being-started one included —
+  sit on that runner. Held starts retry each tick in a fixed order (producer, director, writer,
+  then actors by task priority and seq) and the wait writes nothing to the ledger. The scope is
+  the studio: two studios on one account each count only their own roles, so a shared account's
+  real ceiling is the sum of the studios' caps, set by the person who writes the casts.
 - **The summary document is written at most once every two seconds** and only when it changed —
   `backlot status` reads the ledger, but the panel can be a couple of seconds behind it.
 - **The summary document has a 1 MiB hard limit.** A live studio is written even past the 64 KiB

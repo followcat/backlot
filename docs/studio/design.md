@@ -39,6 +39,14 @@ It carries out and records decisions; it does not make them. Judgement belongs t
 | Detects stalls and prompts | Decide how to respond when asked |
 | Writes the summary document | Review deliveries and write findings |
 
+The cast's `[limits]` table caps how many live roles one runner may carry — `claude = 3`, `devin = 1` — an account's
+rate limit is shared by every session on it. Every live role on the runner counts, fixed roles and actors alike, and a
+role being started counts too; a missing runner is unlimited. A wanted start that would pass the cap waits — held
+starts go in the order producer, director, writer, then actors by task priority and task seq — retried every tick
+until a slot frees, with nothing recorded for the wait. `backlot status` and the panel show
+`waiting for a <runner> slot` on the held role. The cap is per studio: two studios on one account each count only
+their own roles.
+
 It uses `hc-proto` directly, because `doc.get` and `doc.set` have no CLI verb.
 
 ## Role terminals
@@ -173,7 +181,11 @@ Agents reviewing agents can loop without end, so the stage enforces limits:
 
 - Rework rounds per task. Default 2. At the cap the task goes to the producer to accept with documented gaps, rescope or
   recast.
-- A running time budget per task, optional.
+- A running time budget per task, optional — `task_budget_s` in the cast file. The clock runs from the task's first
+  cast to its close or to now, leaving out `paused`→`resumed` stretches. A running or delivered task past it raises
+  one `over budget` attention on the task's current actor key — once ever, a recast does not re-raise — the director
+  and the producer each get the notice, nothing is killed or paused, and the attention clears `done` when the task
+  turns terminal.
 - A stall limit on a role's unchanged screen — `stall_limit_s` in the cast file, default 600 s — detailed under
   "Watching agents".
 
@@ -332,6 +344,13 @@ Each actor takes its own task, in its own git worktree on `backlot/<studio>/<tas
 branch's current tip — at `<studio dir>/work/<task>`. The director integrates accepted deliveries into
 `backlot/<studio>/integration` in `<studio dir>/work/integration` and runs the project's checks there. Producer and
 writer run in the studio repo itself. Merging into the user's own branches stays with the user.
+
+A task created with `--depends-on` may not be cast while a named dependency is open: the ledger refuses `task.cast`
+until every dependency is `accepted` or `partially-accepted`, and the command also checks that each dependency's
+accepted delivery end sha is already an ancestor of `backlot/<studio>/integration` — a task's worktree is cut from
+the integration tip, so an unmerged dependency would leave it working without the code it needs. The refusal names
+the open dependencies, or `merge t1 into integration first` for an accepted-but-unmerged one. While a task waits,
+`next_steps` owes nobody its cast and `backlot status` shows `waits for t1` on the task's line.
 
 A studio repo that is not a git work tree raises `not a git repository` and starts no actor or director. Every step is
 idempotent: an existing branch or worktree is reused, a failure raises `work area failed` once with git's first stderr

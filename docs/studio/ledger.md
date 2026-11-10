@@ -40,7 +40,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 
 | Kind | Main fields |
 |---|---|
-| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks` |
+| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks`, optional `task_budget_s`, `[limits]` runner caps |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
 | `role.session` | role, session ID |
