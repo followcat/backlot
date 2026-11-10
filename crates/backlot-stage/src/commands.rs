@@ -120,6 +120,31 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     if let Some((runner, _)) = cast.limits.iter().find(|(_, cap)| **cap == 0) {
         return Err(Fail::usage(format!("limits.{runner} must be at least 1")));
     }
+    // The producer and the director are always wanted: they keep
+    // their slots for the studio's whole run. A cap under their
+    // count seats no fixed role, and a cap at their count while the
+    // writer or a candidate shares the runner leaves everyone else
+    // waiting for a slot forever — refuse both at `studio new`.
+    for (runner, cap) in &cast.limits {
+        let fixed = [&cast.producer, &cast.director]
+            .into_iter()
+            .filter(|a| a.runner == *runner)
+            .count() as u32;
+        if *cap < fixed {
+            return Err(Fail::usage(format!(
+                "limits.{runner} = {cap} leaves a fixed role unseated: \
+                 the producer and the director stay live on {runner}"
+            )));
+        }
+        let someone_waits =
+            cast.writer.runner == *runner || cast.candidates.iter().any(|c| c.runner == *runner);
+        if *cap == fixed && someone_waits {
+            return Err(Fail::usage(format!(
+                "limits.{runner} = {cap} leaves no slot for the writer or an actor: \
+                 the producer and the director stay live on {runner}"
+            )));
+        }
+    }
     Ok(cast)
 }
 

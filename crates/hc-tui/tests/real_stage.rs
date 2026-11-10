@@ -2506,15 +2506,11 @@ async fn real_stage_over_budget_notice_and_clear() {
     scratch.finish().expect("scratch teardown");
 }
 
-/// S9e — `[limits] fake = 2`: the studio seats two live roles on the
-/// runner, a wanted actor past the cap waits — `waiting for a fake
-/// slot`, no `role.started`, no ledger noise — and the writer's slot
-/// freed by `dispatch` starts it next tick.
-///
-/// The director sits on an unsupported runner so it never takes a
-/// `fake` slot: under a cap the only slots that free are a live
-/// role's — the writer's on `dispatch` here — since a closed
-/// still-wanted role retakes its own slot in start order.
+/// S9e — `[limits] fake = 3` with all three fixed roles and one
+/// actor on `fake`: the writer and the actor share the third slot —
+/// the cast actor waits (`waiting for a fake slot`, no
+/// `role.started`, no ledger noise) and `dispatch` freeing the
+/// writer's seat starts it next tick.
 #[tokio::test]
 #[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
 async fn real_stage_runner_limit_holds_and_releases() {
@@ -2533,11 +2529,7 @@ async fn real_stage_runner_limit_holds_and_releases() {
     let cast = fixture(
         &scratch,
         "cast.toml",
-        &(CAST_TOML.replacen(
-            "[director]\nrunner = \"fake\"",
-            "[director]\nrunner = \"void\"",
-            1,
-        ) + "\n[limits]\nfake = 2\n"),
+        &format!("{CAST_TOML}\n[limits]\nfake = 3\n"),
     );
     let req = fixture(&scratch, "req.md", "# requirement\n");
     let acc = fixture(&scratch, "acc.md", "# acceptance\n");
@@ -2553,13 +2545,11 @@ async fn real_stage_runner_limit_holds_and_releases() {
         ),
     );
     bl(&scratch, &state, "stage start");
-    // Producer takes the first of two fake slots; the director's
-    // unsupported runner holds none and raises its own attention.
+    // Producer and director take the first two of three fake slots.
     wait_terminal(&client, "bl-acme-shop-producer").await;
-    let refused_runner = wait_event(&state, "attention.raised", "director");
-    assert_eq!(refused_runner["reason"], "runner not supported");
+    wait_terminal(&client, "bl-acme-shop-director").await;
 
-    // The writer takes the second slot on the plan request.
+    // The writer takes the third slot on the plan request.
     bl(
         &scratch,
         &state,

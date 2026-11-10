@@ -45,7 +45,9 @@ role being started counts too; a missing runner is unlimited. A wanted start tha
 starts go in the order producer, director, writer, then actors by task priority and task seq — retried every tick
 until a slot frees, with nothing recorded for the wait. `backlot status` and the panel show
 `waiting for a <runner> slot` on the held role. The cap is per studio: two studios on one account each count only
-their own roles.
+their own roles. `studio new` refuses a cap that can never sit its fixed roles — under the producer-and-director
+count on the runner, or at their count while the writer or a candidate shares it — because no seat could ever free
+for the rest.
 
 It uses `hc-proto` directly, because `doc.get` and `doc.set` have no CLI verb.
 

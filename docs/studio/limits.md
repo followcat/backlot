@@ -120,7 +120,9 @@ re-raise one `stall_limit_s` later.
   sit on that runner. Held starts retry each tick in a fixed order (producer, director, writer,
   then actors by task priority and seq) and the wait writes nothing to the ledger. The scope is
   the studio: two studios on one account each count only their own roles, so a shared account's
-  real ceiling is the sum of the studios' caps, set by the person who writes the casts.
+  real ceiling is the sum of the studios' caps, set by the person who writes the casts. `studio
+  new` refuses a cap that can never sit its fixed roles — under the producer-and-director count on
+  the runner, or at their count while the writer or a candidate shares it.
 - **The summary document is written at most once every two seconds** and only when it changed —
   `backlot status` reads the ledger, but the panel can be a couple of seconds behind it.
 - **The summary document has a 1 MiB hard limit.** A live studio is written even past the 64 KiB
