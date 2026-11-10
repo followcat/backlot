@@ -236,21 +236,54 @@ fn touches_env_sees_through_a_wrapped_box() {
 #[test]
 fn needs_user_reads_the_prompt_block() {
     let clean = claude_screen("cargo test --lib", "✻ Orbiting… (4s · ↓ 9 tokens)");
-    assert!(!needs_user("actor-t1-c1", "claude", &clean));
+    assert!(!needs_user("actor-t1-c1", "claude", &clean, None));
     // `BACKLOT_*` above the rule is not in the block.
     let scrolled = format!("BACKLOT_ROLE=director backlot review --task t1\n{clean}");
-    assert!(!needs_user("actor-t1-c1", "claude", &scrolled));
+    assert!(!needs_user("actor-t1-c1", "claude", &scrolled, None));
     // Inside the block it still flags.
     let reached = claude_screen(
         "BACKLOT_ROLE=director backlot review --task t1",
         "✻ Orbiting… (4s · ↓ 9 tokens)",
     );
-    assert!(needs_user("actor-t1-c1", "claude", &reached));
+    assert!(needs_user("actor-t1-c1", "claude", &reached, None));
     // No block mapped: the whole screen decides.
-    assert!(needs_user("actor-t1-c1", "opencode", &scrolled));
-    assert!(!needs_user("actor-t1-c1", "opencode", "plain output\n"));
+    assert!(needs_user("actor-t1-c1", "opencode", &scrolled, None));
+    assert!(!needs_user(
+        "actor-t1-c1",
+        "opencode",
+        "plain output\n",
+        None
+    ));
     // A non-actor is the user's regardless.
-    assert!(needs_user("writer", "claude", &clean));
+    assert!(needs_user("writer", "claude", &clean, None));
+}
+
+/// S9f: a `PermissionRequest` signal's own command is what the flag
+/// reads — the screen never shows the request's command, so a reach
+/// inside it flags while a plain command on a plain screen does not.
+#[test]
+fn needs_user_reads_the_request_command() {
+    let plain = "plain output\n";
+    assert!(!needs_user(
+        "actor-t1-c1",
+        "claude",
+        plain,
+        Some("cargo test --lib")
+    ));
+    assert!(needs_user(
+        "actor-t1-c1",
+        "claude",
+        plain,
+        Some("env -i BACKLOT_ROLE=director backlot review --task t1")
+    ));
+    // No command — a file-path request reads the path: it never
+    // reaches for the identity variables, so it does not flag.
+    assert!(!needs_user(
+        "actor-t1-c1",
+        "claude",
+        plain,
+        Some("/home/user/acme-shop/src/lib.rs")
+    ));
 }
 
 /// A flagged attention owes the director no notice — the user owns

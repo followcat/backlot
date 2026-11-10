@@ -163,13 +163,18 @@ pub fn is_actor(role: &str) -> bool {
 /// Whether this screen's prompt is the user's to answer (S9b): a
 /// role that is not an actor is always the user's, and an actor's
 /// prompt is the user's when its own block reaches for `BACKLOT_*`
-/// or an environment-clearing flag. The flag reads the prompt block
-/// when the runner maps one — an earlier prompt's line still
+/// or an environment-clearing flag. The flag reads a hook signal's
+/// command when the prompt came from one (S9f), else the prompt
+/// block when the runner maps one — an earlier prompt's line still
 /// scrolling above it must not flag the new prompt — and the whole
 /// screen when it maps none.
-pub fn needs_user(role: &str, runner: &str, screen: &str) -> bool {
+pub fn needs_user(role: &str, runner: &str, screen: &str, command: Option<&str>) -> bool {
     !is_actor(role)
-        || touches_env(&prompt_block(runner, screen).unwrap_or_else(|| screen.to_string()))
+        || touches_env(
+            &command.map(String::from).unwrap_or_else(|| {
+                prompt_block(runner, screen).unwrap_or_else(|| screen.to_string())
+            }),
+        )
 }
 
 /// Whether a saved prompt screen reaches for the role-identity

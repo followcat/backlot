@@ -35,6 +35,18 @@ pub(crate) struct Watched<'a> {
     pub term: &'a LiveTerminal,
 }
 
+/// What one `attention.raised` carries: the role and reason, the
+/// screen it saves, the S9b flag, and a `PermissionRequest`
+/// signal's JSON binding it (S9f) when the raise came from one.
+pub(crate) struct Raise<'a> {
+    pub dir: &'a Path,
+    pub role: &'a str,
+    pub reason: &'static str,
+    pub text: &'a str,
+    pub needs_user: bool,
+    pub bound: Option<String>,
+}
+
 impl Stage {
     /// Read one live role's visible screen into the `work` map, at
     /// most once a second per role. A refused read — the terminal
@@ -95,7 +107,8 @@ impl Stage {
             pair.clone(),
             crate::deliver::Screen::note(prev.as_ref(), text.clone(), now_ms),
         );
-        self.permission(studio, w, work, &text, now_ms).await?;
+        self.permission(studio, w, work, &text, signal.as_ref(), now_ms)
+            .await?;
         self.stall(studio, w, work, now_ms).await
     }
 
@@ -155,16 +168,36 @@ impl Stage {
             signal.filter(|s| stall::signal_stalled(role, task, work, s, limit_ms, now_ms))
         {
             let silent_s = now_ms.saturating_sub(sig.ts_ms) / 1000;
-            self.raise_attention(dir, role, STALLED, &screen.text, false, move |seq| {
-                format!("no hook signal for {silent_s}s; screen saved to attention/{seq}.txt")
-            })
+            self.raise_attention(
+                Raise {
+                    dir,
+                    role,
+                    reason: STALLED,
+                    text: &screen.text,
+                    needs_user: false,
+                    bound: None,
+                },
+                move |seq| {
+                    format!("no hook signal for {silent_s}s; screen saved to attention/{seq}.txt")
+                },
+            )
             .await?;
             eprintln!("stage: {role} stalled");
         } else if stall::stalled(role, task, work, &screen, limit_ms) {
             let held_s = screen.at_ms.saturating_sub(screen.same_since_ms) / 1000;
-            self.raise_attention(dir, role, STALLED, &screen.text, false, move |seq| {
-                format!("screen unchanged for {held_s}s; screen saved to attention/{seq}.txt")
-            })
+            self.raise_attention(
+                Raise {
+                    dir,
+                    role,
+                    reason: STALLED,
+                    text: &screen.text,
+                    needs_user: false,
+                    bound: None,
+                },
+                move |seq| {
+                    format!("screen unchanged for {held_s}s; screen saved to attention/{seq}.txt")
+                },
+            )
             .await?;
             eprintln!("stage: {role} stalled");
         }
@@ -174,17 +207,20 @@ impl Stage {
     /// The D9 pass on one fresh sample: a `blocked` screen held for
     /// [`permit::EPISODE_MIN_MS`] raises `permission prompt` once per
     /// episode with the screen saved under `attention/`; a recorded
-    /// `role.approval` sends the runner's key only while the saved
-    /// screen's prompt block is still the one on show — a prompt
-    /// that changed under the decision clears `prompt changed` and
-    /// raises its own attention, and a gone prompt clears with no
-    /// key sent.
+    /// `role.approval` sends the runner's key only while the prompt
+    /// the decision was made on is still the one pending — for a
+    /// signal-bound attention, that the last signal is still the
+    /// bound `PermissionRequest`; otherwise that the saved screen's
+    /// prompt block is still the one on show. A prompt that changed
+    /// under the decision clears `prompt changed` and raises its own
+    /// attention, and a gone prompt clears with no key sent.
     async fn permission(
         &self,
         studio: &str,
         w: &Watched<'_>,
         work: Work,
         text: &str,
+        signal: Option<&signals::Signal>,
         now_ms: u64,
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
@@ -202,7 +238,8 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
-                    self.raise_permission(dir, role, w.runner, text).await?;
+                    self.raise_permission(dir, role, w.runner, text, signal)
+                        .await?;
                 }
             }
             None => {
@@ -256,24 +293,39 @@ impl Stage {
             return Ok(());
         };
         // The key answers the prompt the attention saved — the
-        // screen on show must be that same prompt. A prompt that
-        // changed under the recorded decision (an earlier prompt
-        // answered in the terminal, the next one up) is a different
-        // prompt: nothing goes out, the stale attention clears, and
-        // this screen raises its own attention — `needs_user`
-        // computed on it, the director notified as for any new
-        // prompt. A screen with no comparable block refuses the
-        // same way.
-        let saved =
-            std::fs::read_to_string(dir.join("attention").join(format!("{}.txt", attn.seq)))
-                .unwrap_or_default();
-        let same_prompt = matches!(
-            (
-                permit::prompt_block(w.runner, &saved),
-                permit::prompt_block(w.runner, text),
-            ),
-            (Some(was), Some(now)) if was == now
-        );
+        // pending prompt must be that same one. An attention raised
+        // from a `PermissionRequest` signal carries the request in
+        // `<seq>.signal` (S9f): the compare is that the last signal
+        // is still that request — the same `ts_ms` and `tool_input`.
+        // Anything else keeps the S9c screen compare — the saved
+        // screen's prompt block must still be the one on show. A
+        // prompt that changed under the recorded decision (an
+        // earlier prompt answered in the terminal, the next one up)
+        // is a different prompt: nothing goes out, the stale
+        // attention clears, and this screen raises its own
+        // attention — `needs_user` computed on it, the director
+        // notified as for any new prompt. A screen with no
+        // comparable block refuses the same way.
+        let same_prompt = if let Ok(bound) =
+            std::fs::read_to_string(dir.join("attention").join(format!("{}.signal", attn.seq)))
+        {
+            let was: Option<signals::Signal> = serde_json::from_str(&bound).ok();
+            match (was, signal) {
+                (Some(w), Some(n)) => w.ts_ms == n.ts_ms && w.tool_input == n.tool_input,
+                _ => false,
+            }
+        } else {
+            let saved =
+                std::fs::read_to_string(dir.join("attention").join(format!("{}.txt", attn.seq)))
+                    .unwrap_or_default();
+            matches!(
+                (
+                    permit::prompt_block(w.runner, &saved),
+                    permit::prompt_block(w.runner, text),
+                ),
+                (Some(was), Some(now)) if was == now
+            )
+        };
         if !same_prompt {
             record(
                 dir,
@@ -282,7 +334,8 @@ impl Stage {
                     reason: Some("prompt changed before the decision was sent".into()),
                 },
             )?;
-            self.raise_permission(dir, role, w.runner, text).await?;
+            self.raise_permission(dir, role, w.runner, text, signal)
+                .await?;
             return Ok(());
         }
         let sent = self
@@ -320,28 +373,54 @@ impl Stage {
     }
 
     /// `attention.raised` for a blocked episode: the screen lands at
-    /// `attention/<seq>.txt` via the append's own file copy. A
-    /// prompt reaching for `BACKLOT_*` or an environment-clearing
-    /// flag is flagged `needs_user` — the director never sees the
-    /// notice and may not answer it; the flag reads the prompt's own
-    /// block, so an earlier prompt's line still scrolling above does
-    /// not flag this one. An actor's ordinary prompt gets the
-    /// director's detail; anything else says it needs the user.
+    /// `attention/<seq>.txt` via the append's own file copy. When the
+    /// episode's last signal is a `PermissionRequest` (S9f), the
+    /// detail names the request's tool and trimmed command or path
+    /// instead of only pointing at the screen, and the request itself
+    /// rides with the raise as `attention/<seq>.signal` — the
+    /// approve-time freshness compare runs on it. A prompt reaching
+    /// for `BACKLOT_*` or an environment-clearing flag is flagged
+    /// `needs_user` — the director never sees the notice and may not
+    /// answer it; the flag reads the signal's command when there is
+    /// one, else the prompt's own block. An actor's ordinary prompt
+    /// gets the director's detail; anything else says it needs the
+    /// user.
     async fn raise_permission(
         &self,
         dir: &Path,
         role: &str,
         runner: &str,
         text: &str,
+        signal: Option<&signals::Signal>,
     ) -> Result<(), Fail> {
-        let user_owned = permit::needs_user(role, runner, text);
-        self.raise_attention(dir, role, PERMISSION_PROMPT, text, user_owned, move |seq| {
-            if user_owned {
-                format!("needs the user; screen saved to attention/{seq}.txt")
-            } else {
-                format!("screen saved to attention/{seq}.txt")
-            }
-        })
+        let request = signal.filter(|s| s.event == "PermissionRequest");
+        let command = request.and_then(|s| s.tool_target());
+        let user_owned = permit::needs_user(role, runner, text, command);
+        // The bound request: `backlot approve` refuses a key when
+        // the last signal is no longer this one.
+        let bound = request.and_then(|s| serde_json::to_string(s).ok());
+        let tool = match (request.and_then(|s| s.tool_name.as_deref()), command) {
+            (Some(name), Some(target)) => format!("{name}: {target}; "),
+            (Some(name), None) => format!("{name}; "),
+            _ => String::new(),
+        };
+        self.raise_attention(
+            Raise {
+                dir,
+                role,
+                reason: PERMISSION_PROMPT,
+                text,
+                needs_user: user_owned,
+                bound,
+            },
+            move |seq| {
+                if user_owned {
+                    format!("{tool}needs the user; screen saved to attention/{seq}.txt")
+                } else {
+                    format!("{tool}screen saved to attention/{seq}.txt")
+                }
+            },
+        )
         .await?;
         eprintln!("stage: {role} at a permission prompt");
         Ok(())
@@ -350,25 +429,47 @@ impl Stage {
     /// `attention.raised` with the screen saved to
     /// `attention/<seq>.txt` via the append's own file copy — the
     /// seq is only known inside the lock, so `detail` builds from
-    /// it. `needs_user` marks a `permission prompt` the director may
-    /// not answer (S9b); stalls pass `false`.
+    /// it. `raise.bound` is a PermissionRequest signal's JSON,
+    /// saved to `attention/<seq>.signal` for the approve-time
+    /// compare (S9f); `raise.needs_user` marks a `permission
+    /// prompt` the director may not answer (S9b).
     async fn raise_attention(
         &self,
-        dir: &Path,
-        role: &str,
-        reason: &'static str,
-        text: &str,
-        needs_user: bool,
+        raise: Raise<'_>,
         detail: impl Fn(u64) -> String + 'static,
     ) -> Result<(), Fail> {
+        let (dir, role) = (raise.dir, raise.role);
         let scratch = dir.join("attention").join(format!(".new-{role}"));
         std::fs::create_dir_all(dir.join("attention"))
             .map_err(|e| Fail::refused(format!("attention file: {e}")))?;
-        std::fs::write(&scratch, text)
+        std::fs::write(&scratch, raise.text)
+            .map_err(|e| Fail::refused(format!("attention file: {e}")))?;
+        let bound_scratch = raise
+            .bound
+            .map(|b| {
+                let path = dir.join("attention").join(format!(".new-{role}.signal"));
+                std::fs::write(&path, b).map(|_| path)
+            })
+            .transpose()
             .map_err(|e| Fail::refused(format!("attention file: {e}")))?;
         let role_key = role.to_string();
         let pending_scratch = scratch.clone();
+        let pending_bound = bound_scratch.clone();
+        let needs_user = raise.needs_user;
+        let reason = raise.reason;
         let result = store::append(dir, move |_, seq| {
+            let mut files = vec![crate::store::PendingFile {
+                src: pending_scratch,
+                dest: format!("attention/{seq}.txt"),
+                append: None,
+            }];
+            if let Some(src) = pending_bound.clone() {
+                files.push(crate::store::PendingFile {
+                    src,
+                    dest: format!("attention/{seq}.signal"),
+                    append: None,
+                });
+            }
             Ok::<_, std::convert::Infallible>(crate::store::Pending {
                 event: backlot_model::NewEvent::new(
                     backlot_model::EventBy::role("stage"),
@@ -379,14 +480,13 @@ impl Stage {
                         needs_user,
                     },
                 ),
-                files: vec![crate::store::PendingFile {
-                    src: pending_scratch,
-                    dest: format!("attention/{seq}.txt"),
-                    append: None,
-                }],
+                files,
             })
         });
         let _ = std::fs::remove_file(&scratch);
+        if let Some(p) = &bound_scratch {
+            let _ = std::fs::remove_file(p);
+        }
         result.map_err(|e| match e {
             StoreError::Io(e) => Fail::refused(format!("append: {e}")),
             StoreError::Corrupt(c) => Fail::refused(format!("{c}")),

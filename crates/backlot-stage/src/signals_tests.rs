@@ -462,6 +462,208 @@ async fn a_permission_request_signal_blocks_before_the_screen_does() {
     }
 }
 
+/// A `role.approval` for `role` the way `backlot approve` records it.
+fn approve(dir: &Path, role: &str, by: &str, decision: backlot_model::event::ApprovalDecision) {
+    let (role, by) = (role.to_string(), by.to_string());
+    store::append(dir, move |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role(by),
+                EventKind::RoleApproval { role, decision },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+}
+
+/// A `PermissionRequest` binds the attention it raises: the detail
+/// names the tool and the trimmed command, `<seq>.signal` keeps the
+/// request, and a decision made on it sends the key only while the
+/// last signal is still that request.
+#[tokio::test]
+async fn a_request_binds_the_attention_and_the_decision_sends() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    sample(&stage, &dir, &term, "producer", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { detail, .. } => {
+            assert!(detail.contains("Bash: cargo test"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    let seq = raised[0].seq;
+    let bound: Signal = serde_json::from_str(
+        &fs::read_to_string(dir.join(format!("attention/{seq}.signal"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(bound.event, "PermissionRequest");
+    assert_eq!(bound.ts_ms, t0);
+    assert_eq!(bound.tool_target(), Some("cargo test"));
+
+    // The decision lands while the last signal is still the bound
+    // request: the key goes to the screen.
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&stage, &dir, &term, "producer", t0 + 3_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+    assert_eq!(events(&dir, "attention.cleared").len(), 1);
+}
+
+/// A decision recorded against request A never lands on request B:
+/// the next `PermissionRequest` moving the last signal on makes the
+/// compare fail — nothing is sent, A's attention clears `prompt
+/// changed before the decision was sent`, and B raises an attention
+/// bound to itself whose own approval then sends.
+#[tokio::test]
+async fn a_second_request_refuses_the_earlier_decision() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    sample(&stage, &dir, &term, "producer", t0 + 2_000).await;
+    let seq_a = events(&dir, "attention.raised")[0].seq;
+
+    // The decision lands after the prompt already moved on.
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 3_000, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo fmt"}}),
+    );
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&stage, &dir, &term, "producer", t0 + 4_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), Vec::<String>::new());
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { target, reason } => {
+            assert_eq!(*target, seq_a);
+            assert_eq!(
+                reason.as_deref(),
+                Some("prompt changed before the decision was sent")
+            );
+        }
+        _ => unreachable!(),
+    }
+
+    // B raised its own attention, bound to B's request — its own
+    // approval sends the key.
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 2);
+    let seq_b = raised[1].seq;
+    match &raised[1].kind {
+        EventKind::AttentionRaised { detail, .. } => {
+            assert!(detail.contains("Bash: cargo fmt"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    let bound_b: Signal = serde_json::from_str(
+        &fs::read_to_string(dir.join(format!("attention/{seq_b}.signal"))).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(bound_b.tool_target(), Some("cargo fmt"));
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&stage, &dir, &term, "producer", t0 + 5_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+}
+
+/// A `PermissionRequest` whose command reaches for `BACKLOT_*`
+/// flags the attention `needs_user`: the flag read the signal's
+/// own command, though the screen never showed it, and the ledger
+/// refuses the director's answer.
+#[tokio::test]
+async fn a_request_reaching_for_backlot_vars_is_the_users() {
+    let dir = tmp();
+    studio(&dir);
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::RoleStarted {
+                    role: "actor-t1-c1".into(),
+                    terminal: Some("t9".into()),
+                    session_id: Some("s-9".into()),
+                    actor: Some(actor_cfg()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let term = term();
+    let (stage, _fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "actor-t1-c1",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-9",
+               "tool_name": "Bash",
+               "tool_input": {"command": "env -i BACKLOT_ROLE=director backlot review --task t1"}}),
+    );
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            detail, needs_user, ..
+        } => {
+            assert!(*needs_user, "the command's reach did not flag");
+            assert!(detail.contains("env -i BACKLOT_ROLE=director"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    let refused = store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("director"),
+                EventKind::RoleApproval {
+                    role: "actor-t1-c1".into(),
+                    decision: backlot_model::event::ApprovalDecision::Deny,
+                },
+            ),
+            files: Vec::new(),
+        })
+    });
+    assert!(refused.is_err(), "the director answered the user's prompt");
+}
+
 /// A `Working` signal held past the stall limit raises `stalled`
 /// with `no hook signal for <n>s` — a newer signal clears it even
 /// while the screen is unchanged.
