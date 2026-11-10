@@ -1920,17 +1920,32 @@ async fn real_stage_restart() {
         "the closed actor's terminal came back"
     );
 
-    // The recovered notices reach each role; the queued tell and a new
-    // delivery land through the normal gate.
+    // The recovered notices reach each role; t2's goes out merged
+    // with the tell queued while the core was down (S9d) — one
+    // digest line carrying both.
     for inbox in [
         "fake-inbox-producer",
         "fake-inbox-director",
         "fake-inbox-actor-t1",
-        "fake-inbox-actor-t2",
     ] {
         wait_inbox(&state, inbox, "-recovered.md");
     }
-    wait_inbox(&state, "fake-inbox-actor-t2", "-note.md");
+    let inbox = wait_inbox(&state, "fake-inbox-actor-t2", "digest-");
+    let sends: Vec<&str> = inbox.lines().filter(|l| l.contains("[backlot]")).collect();
+    assert_eq!(sends.len(), 1, "{inbox}");
+    assert!(sends[0].contains("(2 items)"), "{inbox}");
+    let top = ledger(&state)
+        .iter()
+        .filter(|e| e["kind"] == "message.queued" && e["to"] == "actor-t2-c1")
+        .filter_map(|e| e["seq"].as_u64())
+        .max()
+        .expect("a queued message for actor-t2-c1");
+    let body =
+        fs::read_to_string(state.join(format!("studios/acme-shop/messages/digest-{top}.md")))
+            .expect("the digest file");
+    assert!(body.contains("## tell (seq"), "{body}");
+    assert!(body.contains("## recovered (seq"), "{body}");
+    assert!(body.contains("-note.md"), "{body}");
     let work = state.join("studios/acme-shop/work/t1");
     let a = commit_in(&work, "a");
     let b = commit_in(&work, "b");
