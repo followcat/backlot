@@ -1311,8 +1311,10 @@ async fn real_stage_prompt_answered_elsewhere_clears() {
 /// bound attention that names the tool and command, a second
 /// request refuses the first decision, and the second request's
 /// own approval still sends the key though a `permission_prompt`
-/// chime came in between — after which the answered request never
-/// raises again and the tool's `PostToolUse` reads Working.
+/// chime came in between — `sent enter` proves the stage's key,
+/// not the chime's bytes, answered — after which the answered
+/// request never raises again and the tool's `PostToolUse` reads
+/// Working.
 #[tokio::test]
 #[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
 async fn real_stage_hooks() {
@@ -1395,7 +1397,9 @@ async fn real_stage_hooks() {
 
     // Six seconds on, Claude Code chimes the same prompt — the
     // notification is not a new request, so B's own approval still
-    // sends the key.
+    // sends the key. The chime is a line, not a key: it cannot
+    // answer the prompt itself, so `sent enter` proves the stage
+    // sent it.
     send_text(
         &client,
         &actor.address,
@@ -1408,6 +1412,12 @@ async fn real_stage_hooks() {
         "approve --person actor-t1-c1 --decision allow --as director",
     );
     wait_read(&client, &actor.address, "fake-approved: enter").await;
+    wait_kind(&state, "attention.cleared", 2);
+    let cleared_b = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared" && e["target"] == seq_b)
+        .expect("cleared event for B");
+    assert_eq!(cleared_b["reason"], "sent enter", "{cleared_b}");
 
     // The request is answered. Real Claude Code emits no hook
     // between the answer and the tool's end — five quiet seconds is
@@ -1425,6 +1435,48 @@ async fn real_stage_hooks() {
     // The tool's own signal then answers in place.
     send_text(&client, &actor.address, "hook:PostToolUse").await;
     wait_role(&client, "actor-t1-c1", |r| r["work"] == "working").await;
+}
+
+/// S9f: a `hook:` line sent while the fake is `blocked` is a line,
+/// not a key — its newline cannot answer the prompt: the screen
+/// keeps `fake-work: blocked`, no `fake-approved` prints, and a
+/// real Enter still answers afterwards.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_hook_line_stays_blocked() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    checks_studio(&scratch, &state, "", "");
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    send_text(&client, &actor.address, "work:blocked").await;
+    wait_read(&client, &actor.address, "fake-work: blocked").await;
+
+    // The chime plays its hook and stays: had its newline been a
+    // key, `fake-approved` would print within the second.
+    send_text(
+        &client,
+        &actor.address,
+        "hook:Notification:permission_prompt",
+    )
+    .await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let screen = client
+        .terminal_read(ReadParams {
+            terminal: actor.address.clone(),
+            lines: 0,
+            caller: None,
+        })
+        .await
+        .map(|r| r.text)
+        .unwrap_or_default();
+    assert!(screen.contains("fake-work: blocked"), "{screen}");
+    assert!(!screen.contains("fake-approved"), "{screen}");
+
+    // Still blocked, not dead — a real Enter answers the prompt.
+    send_keys(&client, &actor.address, &["enter"]).await;
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
 }
 
 /// S9f: a `Working` signal gone quiet past `stall_limit_s` raises

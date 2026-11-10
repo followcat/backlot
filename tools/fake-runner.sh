@@ -74,7 +74,10 @@ echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of 
 # role's inbox under the state dir when one is set. While `blocked`
 # the runner reads single bytes like a real permission prompt: CR
 # or LF is the allow key, ESC the deny, and either prints a
-# `fake-approved` marker and returns the runner to `waiting`.
+# `fake-approved` marker and returns the runner to `waiting`. A
+# byte that is none of those begins a line — it is read to its
+# newline: a `hook:` line plays as usual and the prompt stays up
+# (the line's newline is not a key), any other line is dropped.
 # `prompt:<text>` sets the prompt's own text; the next `fake-work:
 # blocked` — and each chained one — echoes it as `fake-prompt:
 # <text>` so two prompts differ on screen.
@@ -89,6 +92,36 @@ state=waiting
 prompts=0
 ptext=
 saved=$(stty -g 2>/dev/null)
+# Pipe a `hook:<event>[:<arg>]` line to the hook command as a
+# Claude-shaped JSON — the arg is the Bash command for a
+# PermissionRequest, the type for a Notification, the error for a
+# StopFailure.
+play_hook() {
+    ev="${1#hook:}"
+    arg=
+    case "$ev" in
+        *:*)
+            arg="${ev#*:}"
+            ev="${ev%%:*}"
+            ;;
+    esac
+    jarg=$(printf '%s' "$arg" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+    extra=
+    case "$ev" in
+        PermissionRequest)
+            extra=',"tool_name":"Bash","tool_input":{"command":"'"$jarg"'"}'
+            ;;
+        Notification)
+            extra=',"notification_type":"'"$jarg"'"'
+            ;;
+        StopFailure)
+            extra=',"error":"'"$jarg"'"'
+            ;;
+    esac
+    printf '{"session_id":"%s","hook_event_name":"%s"%s}\n' \
+        "${FAKE_SESSION:-fake-unknown}" "$ev" "$extra" |
+        sh -c "${BACKLOT_HOOK_CMD:-:}"
+}
 while :; do
     if [ "$state" = blocked ]; then
         stty -icanon -echo min 1 time 0 2>/dev/null
@@ -107,42 +140,22 @@ while :; do
                 fi
                 ;;
             "") break ;;
+            *)
+                # Not a key byte: it begins a line — read to its
+                # newline. A `hook:` line plays as usual and the
+                # prompt stays up — the line's newline is not a
+                # key; any other line is dropped.
+                first=$(printf "$(printf '\\%03o' "0x$b")")
+                IFS= read -r rest || break
+                case "$first$rest" in
+                    hook:*) play_hook "$first$rest" ;;
+                esac
+                ;;
         esac
     else
         IFS= read -r line || break
         case "$line" in
-            hook:*)
-                # A hook event, the way Claude Code's hooks would
-                # report it: one Claude-shaped JSON line piped to the
-                # hook command the adapter put in BACKLOT_HOOK_CMD.
-                # `hook:<event>[:<arg>]` — the arg is the Bash
-                # command for PermissionRequest, the type for a
-                # Notification, the error for a StopFailure.
-                ev="${line#hook:}"
-                arg=
-                case "$ev" in
-                    *:*)
-                        arg="${ev#*:}"
-                        ev="${ev%%:*}"
-                        ;;
-                esac
-                jarg=$(printf '%s' "$arg" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
-                extra=
-                case "$ev" in
-                    PermissionRequest)
-                        extra=',"tool_name":"Bash","tool_input":{"command":"'"$jarg"'"}'
-                        ;;
-                    Notification)
-                        extra=',"notification_type":"'"$jarg"'"'
-                        ;;
-                    StopFailure)
-                        extra=',"error":"'"$jarg"'"'
-                        ;;
-                esac
-                printf '{"session_id":"%s","hook_event_name":"%s"%s}\n' \
-                    "${FAKE_SESSION:-fake-unknown}" "$ev" "$extra" |
-                    sh -c "${BACKLOT_HOOK_CMD:-:}"
-                ;;
+            hook:*) play_hook "$line" ;;
             work:blocked:*)
                 state=blocked
                 prompts="${line##*:}"
