@@ -107,6 +107,13 @@ re-raise one `stall_limit_s` later.
 
 ## Files and records
 
+- **Checks and reviews are taken on trust.** `backlot deliver --check name=pass` records what the
+  actor reports: the stage does not run the checks or confirm that the commits are on the task
+  branch. `backlot review` does not check who runs it, so an actor can accept its own delivery from
+  its own terminal, and `backlot correct` can change a recorded verdict the same way — a
+  director's `changes-requested` turned into `accepted` by the actor. Both are plain `backlot`
+  commands, which every role runs without a prompt. `approve`, `priority`, `reopen`, `close` and
+  `studio finish` are the only commands that check the caller.
 - **Worktrees and branches are not removed** when a studio ends — `work/` trees and `backlot/…`
   branches accumulate — and state directories are not pruned. Removal is yours; the guide shows
   the commands.
