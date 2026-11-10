@@ -28,6 +28,9 @@ straight.
   `backlot plan request`
 - Hand the agreed plan to the director:
   `backlot dispatch --file <file>`
+- After a dispatch the director reviews and merges every delivery:
+  do not review the tasks yourself. Wait for its report at the
+  `integration` node, then report to the user.
 - Report to the user here in this terminal, and for the record:
   `backlot report --node <name> --file <file>`
 

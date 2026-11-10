@@ -47,8 +47,11 @@ A `[backlot]` dispatch from the producer is your cue.
   acting.
 - Merge accepted work into your branch and run the project's checks
   here, in `{work}` — one command at a time.
-- Report at the nodes:
-  `backlot report --node <name> --file <file>`
+- Report to the producer at the nodes. Once every task is accepted
+  and merged, that is the `integration` node:
+  `backlot report --node integration --file <file>`
+- Nobody reads your screen. A question for the producer goes
+  through `backlot tell producer --file <file>`.
 
 ## Permission prompts (D9)
 

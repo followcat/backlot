@@ -6,15 +6,16 @@ measurements.
 
 ## What real agents have run
 
-Claude Code is the only runner that has been through the whole loop. It ran three times on a
-small sample repository — `claude-haiku-5-5` at low effort, Claude Code 2.1.319, on `hc` from
-the followcat fork, five or six sessions each. The first and third runs finished the loop, from
-the requirement through plan, tasks, deliveries and reviews to an integration branch; the
-second stopped on a stage bug, fixed before the third. Between them the runs covered permission
-prompts answered by the director and by the person, a denied command, two actors at once, and
-merging two task branches into the integration branch. What has not run on real agents is
-everything built after the third run: stall detection, the at-cap notice, going on after a
-block, and restart recovery.
+Claude Code is the only runner that has been through the whole loop. It ran four times on a
+small sample repository — `claude-haiku-5-5` at low effort, on `hc` from the followcat fork,
+five or six sessions each; Claude Code 2.1.319 for the first three, 2.1.321 for the fourth. The
+first, third and fourth runs finished the loop, from the requirement through plan, tasks,
+deliveries and reviews to an integration branch; the second stopped on a stage bug, fixed
+before the third. Between them the runs covered permission prompts answered by the director and
+by the person, a denied command, two actors at once, and merging two task branches into the
+integration branch. The fourth stopped the hc core twice: once while both actors were working,
+once while the director was merging. What has not run on real agents: stall detection, the
+at-cap notice and going on after a block.
 
 Codex, Devin and OpenCode were launched and their session IDs captured — `runners.md` says
 exactly what was measured for each. Per runner:
@@ -30,10 +31,9 @@ exactly what was measured for each. Per runner:
   not measured, and a recorded approval sends it **no key at all** — there is none mapped, so
   the attention stays open for the user regardless of the decision.
 
-Stall detection and restart recovery have only run on the fake runner. No real agent has been
-resumed after a restart, and whether a real runner picks a stopped core's session back up is
-untested. A held role whose terminal is lost restarts through the same resume path — unmeasured
-on a real core.
+Stall detection has only run on the fake runner. Restart recovery has run on Claude Code only;
+whether Codex, Devin or OpenCode pick a stopped core's session back up is untested. A held role
+whose terminal is lost restarts through the same resume path — unmeasured on a real core.
 
 ## The hc core
 
@@ -61,6 +61,12 @@ role with a recorded session id resumes into it. A role with no recorded session
 resumed, and three losses inside ten minutes stops automatic recovery with a `cannot resume`
 attention.
 
+On Claude Code 2.1.321 this held for both restarts of the fourth run: every live role came back
+in its own session within a second of `stage start`, closed roles stayed closed, and a prompt
+open at the stop was cleared. A command that was waiting at a permission prompt is gone; the
+recovered role has to notice that and run it again — the director did, after first checking
+whether its interrupted merge had landed.
+
 A stage restart loses the in-memory screen track, so an open `stalled` attention clears and can
 re-raise one `stall_limit_s` later.
 
@@ -76,6 +82,11 @@ re-raise one `stall_limit_s` later.
   screen to hold still two, and a five-second gap since the last send to it — a notice can land
   after what it names has moved on. A crash between `terminal.send` and the ledger write can
   send the same notice twice.
+- **A question on a role's own screen reaches nobody.** Only the producer's terminal is read by
+  the person. In the fourth run the director asked there which report node to use and waited
+  about four minutes; its prompt now names the `integration` node and sends questions through
+  `backlot tell`, but nothing detects a role waiting on an answer that never comes — stall
+  detection counts an idle producer, director or writer as normal.
 - **The producer's own problems notify nobody.** An actor's stall or `cannot resume` reaches its
   task's reviewer, the writer's and director's reach the producer — the producer's shows only in
   the panel and `backlot status`.

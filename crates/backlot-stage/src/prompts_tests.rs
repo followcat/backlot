@@ -193,6 +193,33 @@ fn writer_done_goes_through_the_producer() {
     );
 }
 
+/// The restart run (S8r): a director told only "report at the
+/// nodes" asked for the node's name on its own screen, where nobody
+/// reads it, and a recovered producer reviewed a task the director
+/// had already accepted. The director names the integration node and
+/// routes questions through `tell`; the producer leaves reviews to
+/// the director after a dispatch.
+#[test]
+fn integration_report_and_review_have_one_owner() {
+    let director = template(RoleKind::Director);
+    for want in [
+        "`backlot report --node integration --file <file>`",
+        "Nobody reads your screen",
+        "`backlot tell producer --file <file>`",
+    ] {
+        assert!(director.contains(want), "director.md lacks {want}");
+    }
+    let producer = template(RoleKind::Producer);
+    let after = producer
+        .split("backlot dispatch --file <file>")
+        .nth(1)
+        .unwrap();
+    assert!(
+        after.contains("do not review the tasks yourself") && after.contains("`integration` node"),
+        "producer.md does not leave reviews to the director after a dispatch: {after}"
+    );
+}
+
 /// All four prompts carry the shared one-command rule verbatim —
 /// a chained command falls outside `Bash(backlot *)` and waits on
 /// a person — and nothing outside that rule instructs a chained

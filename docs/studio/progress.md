@@ -1,5 +1,30 @@
 # Studio progress
 
+## S8: restart recovery on real agents, first release (2026-11-10)
+
+- Run, approved by the user: Claude Code 2.1.321, `claude-haiku-5-5` at low effort, a scratch core
+  on the followcat fork, at most five sessions (producer, director, writer, two actors — a sixth
+  was never started) and 30 minutes. The hc core was stopped and started again twice: at 206 s,
+  with both actors working and one at a permission prompt, and at 442 s, with the director at a
+  prompt to merge t2. Both times nothing of the core was left after the stop. After `stage
+  start`, every live role logged `role.lost` (`terminal gone`) and `role.resumed` (`recovered`)
+  with the session id it had, inside a second; the transcript files of those ids kept growing;
+  closed roles stayed closed; the prompt open at the stop cleared with `role lost`. Both actors
+  delivered, and the director accepted t1 and t2 and merged both into integration (13 tests OK).
+  It retried the merge the second stop interrupted, after checking it had not landed. The
+  studio finished after 17 min 18 s. Of 21 permission prompts the director answered 12 and the
+  person 7, one of them denied.
+- Found and fixed, in the prompts: the director's "report at the nodes" named no node, so after
+  both merges it asked for one on its own screen and waited about four minutes. It now reports at
+  the `integration` node and sends questions through `backlot tell producer`. After the recovered
+  notice the producer reviewed t1 itself; it now leaves reviews to the director after a dispatch.
+  `prompts_tests.rs` pins both. The new wording has not run on real agents.
+- Seen, not changed: attention notices queued for a busy director arrived after their task had
+  been accepted (limits.md, "A notice can arrive late or stale"); the director recognised them as
+  stale.
+- Release: the workspace version goes back to 0.1.0 — 0.1.1 came in with the hc-tui merge — and
+  the README no longer says the first release is pending.
+
 ## S7: user docs, known limits, a clean-machine install check (2026-11-10)
 
 - Done: `docs/studio/guide.md` walks one studio start to finish — what you need, the cast
