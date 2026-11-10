@@ -1497,6 +1497,329 @@ async fn real_stage_restart() {
     scratch.finish().expect("scratch teardown");
 }
 
+/// The ledger gains a `task.checked`: it records by `stage` under
+/// `by`, not under `role`, so `wait_event`'s role filter cannot
+/// see it — assert the byline while waiting for the record.
+fn wait_checked(state: &Path) -> serde_json::Value {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        if let Some(e) = ledger(state)
+            .into_iter()
+            .find(|e| e["kind"] == "task.checked")
+        {
+            assert_eq!(e["by"]["role"], "stage", "{e}");
+            return e;
+        }
+        assert!(Instant::now() < deadline, "no task.checked in the ledger");
+        std::thread::sleep(POLL);
+    }
+}
+
+/// `p` exists within the deadline — for the work tree the stage's
+/// work-area step makes out of a cast.
+fn wait_path(p: &Path) {
+    let deadline = Instant::now() + DEADLINE;
+    while !p.exists() {
+        assert!(Instant::now() < deadline, "{} never appeared", p.display());
+        std::thread::sleep(POLL);
+    }
+}
+
+/// `true` while a process whose full command line contains `needle`
+/// lives — `pgrep -f` over the whole box.
+fn proc_has(needle: &str) -> bool {
+    Command::new("pgrep")
+        .args(["-f", needle])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// `needle` shows in a process list within the deadline.
+fn wait_proc(needle: &str) {
+    let deadline = Instant::now() + DEADLINE;
+    while !proc_has(needle) {
+        assert!(Instant::now() < deadline, "no process matching {needle:?}");
+        std::thread::sleep(POLL);
+    }
+}
+
+/// The generated body file under `messages/` for a notice `label`.
+fn message_file(studio: &Path, label: &str) -> String {
+    let deadline = Instant::now() + DEADLINE;
+    let suffix = format!("-{label}.md");
+    loop {
+        let found = fs::read_dir(studio.join("messages")).ok().and_then(|rd| {
+            rd.filter_map(|e| e.ok())
+                .find(|e| e.file_name().to_string_lossy().ends_with(&suffix))
+                .map(|e| e.path())
+        });
+        if let Some(p) = found {
+            return fs::read_to_string(p).unwrap_or_default();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no messages/*{suffix} under {}",
+            studio.display()
+        );
+        std::thread::sleep(POLL);
+    }
+}
+
+/// The S9b check fixture: a studio on a real repo, cast `top` keys
+/// before the tables and `checks` stanzas appended — up through one
+/// delivered-able task: requirement, `t1` cast on actor-a, the
+/// actor's `work/t1` tree made. Answers the studio dir.
+fn checks_studio(scratch: &ScratchCore, state: &Path, top: &str, checks: &str) -> PathBuf {
+    let studio = state.join("studios/acme-shop");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    let cast = fixture(
+        scratch,
+        "cast.toml",
+        &format!("{top}{CAST_TOML}\n{checks}\n"),
+    );
+    let req = fixture(scratch, "req.md", "# requirement\nbuild the shop\n");
+    let acc = fixture(scratch, "acc.md", "# acceptance\n");
+    bl(
+        scratch,
+        state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(scratch, state, "stage start");
+    bl(
+        scratch,
+        state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(
+        scratch,
+        state,
+        &format!(
+            "task new --title cart --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        scratch,
+        state,
+        "cast --task t1 --actor actor-a --reason first --as director",
+    );
+    wait_path(&studio.join("work/t1"));
+    studio
+}
+
+/// t1's actor delivers a real `a..b` range from its work tree,
+/// with `extra` flags like `--check`.
+fn deliver_t1(scratch: &ScratchCore, state: &Path, studio: &Path, extra: &str) {
+    let report = fixture(scratch, "report.md", "# delivery report\n");
+    let work = studio.join("work/t1");
+    let (a, b) = (commit_in(&work, "a"), commit_in(&work, "b"));
+    let extra = if extra.is_empty() {
+        String::new()
+    } else {
+        format!(" {extra}")
+    };
+    bl(
+        scratch,
+        state,
+        &format!(
+            "deliver --commits {a}..{b} --report {}{extra} --as actor-t1-c1 --task t1",
+            report.display()
+        ),
+    );
+}
+
+/// The S9b stage checks: a declared `exit 1` runs in the stage
+/// itself — recorded `task.checked` fail beside the actor's own
+/// `units=pass` — and both reach the reviewer's notice and the
+/// task's `status` line.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_check_fails() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(
+        &scratch,
+        &state,
+        "",
+        "[[checks]]\nname = \"units\"\nrun = \"exit 1\"\ntimeout_s = 30",
+    );
+    wait_terminal(&client, "bl-acme-shop-director").await;
+    deliver_t1(&scratch, &state, &studio, "--check units=pass");
+
+    // The stage ran it: a `task.checked` fail from `stage`, and the
+    // log it names sits under `checks/`.
+    let checked = wait_checked(&state);
+    assert_eq!(checked["task"], "t1", "{checked}");
+    assert_eq!(checked["delivery"], 1, "{checked}");
+    assert_eq!(checked["name"], "units", "{checked}");
+    assert_eq!(checked["exit_code"], 1, "{checked}");
+    assert_ne!(checked["timed_out"].as_bool(), Some(true), "{checked}");
+    let log = studio.join(checked["output"].as_str().expect("output"));
+    assert!(log.exists(), "no check log at {}", log.display());
+
+    // The reviewer's notice waited for the record, then lists what
+    // the stage ran apart from what the actor reported.
+    wait_inbox(&state, "fake-inbox-director", "-delivered.md");
+    let notice = message_file(&studio, "delivered");
+    for want in ["Stage ran:", "units: fail", "actor reported: units=pass"] {
+        assert!(notice.contains(want), "notice misses {want}: {notice}");
+    }
+    // `status` marks the stage's fail on the task line.
+    let status = bl(&scratch, &state, "status");
+    assert!(status.contains("units:fail"), "{status}");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// The check's environment is the stage's stripped to the
+/// passthrough list plus the declared `check_env` names: a proxy
+/// and a `BACKLOT_*` name the stage itself carries never reach the
+/// check's log — while the one declared name does.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_check_env_is_stripped() {
+    // The extras sit on the core, so every terminal — the stage
+    // included — carries them in its own environment.
+    let scratch = ScratchCore::spawn_with(vec![
+        ("CHECK_MARK".into(), "yes".into()),
+        ("HTTPS_PROXY".into(), "http://proxy.invalid:1".into()),
+        ("BACKLOT_ROLE".into(), "x".into()),
+    ])
+    .await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(
+        &scratch,
+        &state,
+        "check_env = [\"CHECK_MARK\"]\n",
+        "[[checks]]\nname = \"envs\"\nrun = \"env\"\ntimeout_s = 30",
+    );
+    deliver_t1(&scratch, &state, &studio, "");
+
+    let checked = wait_checked(&state);
+    assert_eq!(checked["name"], "envs", "{checked}");
+    assert_eq!(checked["exit_code"], 0, "{checked}");
+    let log = fs::read_to_string(studio.join(checked["output"].as_str().expect("output")))
+        .expect("check log");
+    // The declared name crossed from the stage's own env — proof
+    // the extras really were on the stage and only the declared
+    // one passed.
+    assert!(log.contains("CHECK_MARK=yes"), "{log}");
+    assert!(log.contains("PATH="), "{log}");
+    for banned in ["HTTPS_PROXY", "BACKLOT_ROLE", "BACKLOT_STATE_DIR"] {
+        assert!(!log.contains(banned), "{banned} reached the check: {log}");
+    }
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// A check past its `timeout_s` is recorded `timed_out` — and the
+/// TERM/KILL escalation hits the whole process group, so its
+/// `sleep` is gone too.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_check_timeout_kills_the_process_group() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(
+        &scratch,
+        &state,
+        "",
+        "[[checks]]\nname = \"slow\"\nrun = \"sleep 33\"\ntimeout_s = 1",
+    );
+    deliver_t1(&scratch, &state, &studio, "");
+
+    let checked = wait_checked(&state);
+    assert_eq!(checked["name"], "slow", "{checked}");
+    assert_eq!(checked["timed_out"], true, "{checked}");
+    // The escalation hit the group: no `sleep 33` survives.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while proc_has("sleep 33") {
+        assert!(
+            Instant::now() < deadline,
+            "a `sleep 33` survived its check's timeout"
+        );
+        std::thread::sleep(POLL);
+    }
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// A stage stopped mid-check records nothing for the run; the
+/// fresh stage owes the check again and the rerun lands exactly
+/// one `task.checked`.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_check_reruns_after_a_stage_restart() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(
+        &scratch,
+        &state,
+        "",
+        "[[checks]]\nname = \"slow\"\nrun = \"sleep 12\"\ntimeout_s = 60",
+    );
+    deliver_t1(&scratch, &state, &studio, "");
+
+    // Mid-check: its sleep is live. Stop the stage alone — the
+    // orphaned run's result dies with it.
+    wait_proc("sleep 12");
+    let stage = wait_terminal(&client, "backlot-stage").await;
+    client
+        .terminal_kill(TerminalParams {
+            terminal: stage.address.clone(),
+            caller: None,
+        })
+        .await
+        .expect("terminal.kill backlot-stage");
+    while terminal_named(&client, "backlot-stage").await.is_some() {
+        tokio::time::sleep(POLL).await;
+    }
+    bl(&scratch, &state, "stage start");
+    wait_terminal(&client, "backlot-stage").await;
+
+    // The fresh stage owes the check; the rerun records once.
+    let checked = wait_checked(&state);
+    assert_eq!(checked["name"], "slow", "{checked}");
+    assert_ne!(checked["timed_out"].as_bool(), Some(true), "{checked}");
+    assert_eq!(checked["exit_code"], 0, "{checked}");
+    let records = ledger(&state)
+        .iter()
+        .filter(|e| {
+            e["kind"] == "task.checked"
+                && e["task"] == "t1"
+                && e["delivery"] == 1
+                && e["name"] == "slow"
+        })
+        .count();
+    assert_eq!(records, 1, "the check was recorded {records} times");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
 /// Killing only the `backlot-stage` terminal leaves the roles live on
 /// the core: a new `stage start` adopts them — no `role.lost`, no
 /// second terminal per role.

@@ -97,10 +97,18 @@ fn base<'a>(
 
 /// `hc serve` in its own process group, matching the core's detached-start
 /// convention — signals aimed at the test process never reach it.
-fn spawn_serve(root: &Path, session: &str, socket: &Path, log: &Path) -> Child {
+/// `extra` joins the fixture env: terminal children inherit it.
+fn spawn_serve(
+    root: &Path,
+    session: &str,
+    socket: &Path,
+    log: &Path,
+    extra: &[(String, String)],
+) -> Child {
     let err = fs::File::create(log).unwrap();
     let mut command = Command::new(core_binary());
     base(&mut command, root, session, socket)
+        .envs(extra.iter().cloned())
         .arg("serve")
         .stdout(Stdio::null())
         .stderr(Stdio::from(err))
@@ -164,6 +172,9 @@ pub struct ScratchCore {
     /// The serve child's stderr/stdout log for failure context.
     pub log: PathBuf,
     child: Option<Child>,
+    /// Extra environment the serve was spawned with — a `respawn`
+    /// carries the same.
+    extra: Vec<(String, String)>,
     /// `None` until teardown runs — latched so `finish` and `Drop` agree.
     stopped: Option<bool>,
 }
@@ -181,6 +192,13 @@ impl ScratchCore {
     /// framed RPC `hello` succeeds. A construction guard removes the root
     /// on any failure before this returns.
     pub async fn spawn() -> ScratchCore {
+        Self::spawn_with(Vec::new()).await
+    }
+
+    /// [`spawn`](Self::spawn) plus `extra` names in the serve's
+    /// environment — terminal children inherit them, so a test can
+    /// put a variable on the stage itself.
+    pub async fn spawn_with(extra: Vec<(String, String)>) -> ScratchCore {
         let root = std::env::temp_dir().join(format!("hctui-{}-{:x}", std::process::id(), nanos()));
         // Claim a new root atomically; never adopt an existing directory.
         fs::create_dir(&root).unwrap();
@@ -205,7 +223,7 @@ impl ScratchCore {
 
         let log = root.join("log/serve.log");
         let work = root.join("work");
-        let child = spawn_serve(&root, &session, &socket, &log);
+        let child = spawn_serve(&root, &session, &socket, &log, &extra);
         let this = ScratchCore {
             endpoint: Endpoint::Local(Local {
                 session: session.clone(),
@@ -219,6 +237,7 @@ impl ScratchCore {
             work,
             log,
             child: Some(child),
+            extra,
             stopped: None,
         };
         // Transfer cleanup before readiness can fail or be cancelled. The
@@ -273,6 +292,7 @@ impl ScratchCore {
             &self.session,
             &self.root.join("s.sock"),
             &log,
+            &self.extra,
         ));
     }
 
