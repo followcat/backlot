@@ -91,8 +91,9 @@ backlot stage start
 backlot
 ```
 
-`hc server start` brings a core up first — the studio commands need one. `backlot` (the TUI)
-would also start one itself, so the last line alone covers it if you skip the first.
+`hc server start` brings a core up first, because the studio commands need one and do not start
+it themselves. If `backlot` (the TUI) is already open, a core is already running and you can skip
+that line.
 
 `backlot studio new` records `studio.created` in the studio's ledger and prints it back.
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
