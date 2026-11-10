@@ -20,9 +20,12 @@ use backlot_model::validate::{Refusal, validate};
 
 /// A file a command wants copied into the studio directory; `dest` is
 /// relative to the studio dir so the ledger never points elsewhere.
+/// `append` is the stage's own annotation — bytes the source file
+/// never carried, written after the copy lands.
 pub struct PendingFile {
     pub src: PathBuf,
     pub dest: String,
+    pub append: Option<String>,
 }
 
 /// What an append builds inside the lock: the event and its file copies.
@@ -256,6 +259,12 @@ where
             fs::create_dir_all(parent)?;
         }
         fs::copy(&pf.src, &dest)?;
+        if let Some(extra) = &pf.append {
+            OpenOptions::new()
+                .append(true)
+                .open(&dest)?
+                .write_all(extra.as_bytes())?;
+        }
     }
 
     let event = pending.event.stamp(

@@ -87,6 +87,20 @@ fn cap_round(t: &backlot_model::state::Task, r: &backlot_model::state::ReviewRec
         .count() as u32
 }
 
+/// How one `task.checked` reads in the delivery notice.
+fn outcome(r: &backlot_model::state::CheckedRecord) -> String {
+    if r.passed() {
+        "pass".into()
+    } else if r.timed_out {
+        "timed out".into()
+    } else {
+        match r.exit_code {
+            Some(code) => format!("fail (exit {code})"),
+            None => "fail (signal)".into(),
+        }
+    }
+}
+
 /// Every notice the state owes — one per source event, deduped on
 /// `source_seq` so the list is stable until the events land. A
 /// purpose-bearing message — a `nudge`, a `plan`/`dispatch` call —
@@ -101,14 +115,50 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
         .filter_map(|m| m.source_seq)
         .collect();
     let cap = state.rework_cap();
+    let declared = state
+        .studio
+        .as_ref()
+        .map(|s| s.checks.as_slice())
+        .unwrap_or(&[]);
     let mut out = Vec::new();
     for t in state.tasks.values() {
         for d in &t.deliveries {
             if sent.contains(&d.seq) {
                 continue;
             }
-            let checks = if d.checks.is_empty() {
-                "none recorded".to_string()
+            // The reviewer's notice waits for the stage's records:
+            // while the task is still delivered on this delivery
+            // every declared check must have one. A task that moved
+            // on gets the notice with whatever landed — a check
+            // that never ran is named as having no record.
+            let still_delivered = t.status == TaskStatus::Delivered
+                && t.deliveries.last().is_some_and(|last| last.n == d.n);
+            if still_delivered
+                && !declared.is_empty()
+                && !t.checks_missing(d.n, declared).is_empty()
+            {
+                continue;
+            }
+            let stage_ran = if declared.is_empty() {
+                "No checks were declared — the actor's reported results are all there is."
+                    .to_string()
+            } else {
+                declared
+                    .iter()
+                    .map(|c| match t.checked_of(d.n).find(|r| r.name == c.name) {
+                        Some(r) => format!(
+                            "- {}: {} — {}",
+                            c.name,
+                            outcome(r),
+                            dir.join(&r.output).display()
+                        ),
+                        None => format!("- {}: no record", c.name),
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            let reported = if d.checks.is_empty() {
+                "none".to_string()
             } else {
                 d.checks
                     .iter()
@@ -126,16 +176,17 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                 to: reviewer_for(t),
                 label: "delivered",
                 body: format!(
-                    "# {} delivery {}\n\nTask `{}` was delivered by {} as delivery {}.\n\n- commits: `{}`\n- checks: {}\n- report: `{}`\n- dispatched under requirement v{}\n\nReview it against the task's acceptance list and record a verdict with `backlot review`.\n",
+                    "# {} delivery {}\n\nTask `{}` was delivered by {} as delivery {}.\n\n- commits: `{}`\n- report: `{}`\n- dispatched under requirement v{}\n\nStage ran:\n{}\n\nThe actor reported: {}\n\nReview it against the task's acceptance list and record a verdict with `backlot review`.\n",
                     t.id,
                     d.n,
                     t.id,
                     caster,
                     d.n,
                     d.commits,
-                    checks,
                     dir.join(&d.report).display(),
                     d.requirement_version,
+                    stage_ran,
+                    reported,
                 ),
             });
         }

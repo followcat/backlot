@@ -5,7 +5,7 @@
 //! summary carries the first, and the stage's nudge pass reads them.
 //! Nothing is owed once the studio is finished.
 
-use crate::event::{PlanKind, TaskStateChange, Verdict};
+use crate::event::{CheckDecl, PlanKind, TaskStateChange, Verdict};
 use crate::state::{Message, StudioState, Task, TaskStatus};
 
 /// One thing the ledger still owes: who, what, and since when.
@@ -197,21 +197,41 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
                     since_ms: ts,
                 });
             }
-            // The latest delivery still awaits its review.
+            // The latest delivery still awaits its review. While the
+            // cast declares checks the step waits for the stage's
+            // records and is then owed from the last `task.checked`
+            // — the nudge cannot overtake the delivery notice, which
+            // waits on the same records.
             TaskStatus::Delivered => {
                 if let Some(d) = t.deliveries.last()
                     && t.review_of(d.n).is_none()
                 {
-                    out.push(Step {
-                        key: d.seq,
-                        label: format!("review {}", t.id),
-                        owner: t.reviewer().into(),
-                        command: format!(
-                            "backlot review --task {} --delivery {} --verdict <verdict> --conclusion <text>",
-                            t.id, d.n
-                        ),
-                        since_ms: d.ts_ms,
-                    });
+                    let declared: &[CheckDecl] = state
+                        .studio
+                        .as_ref()
+                        .map(|s| s.checks.as_slice())
+                        .unwrap_or(&[]);
+                    let key_ts = if declared.is_empty() {
+                        Some((d.seq, d.ts_ms))
+                    } else if t.checks_missing(d.n, declared).is_empty() {
+                        t.checked_of(d.n)
+                            .max_by_key(|c| c.seq)
+                            .map(|c| (c.seq, c.ts_ms))
+                    } else {
+                        None
+                    };
+                    if let Some((seq, ts)) = key_ts {
+                        out.push(Step {
+                            key: seq,
+                            label: format!("review {}", t.id),
+                            owner: t.reviewer().into(),
+                            command: format!(
+                                "backlot review --task {} --delivery {} --verdict <verdict> --conclusion <text>",
+                                t.id, d.n
+                            ),
+                            since_ms: ts,
+                        });
+                    }
                 }
             }
             // Past the cap the call is the producer's: accept with

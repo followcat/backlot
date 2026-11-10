@@ -59,6 +59,7 @@ fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -> PendingFi
     PendingFile {
         src: src.to_path_buf(),
         dest: format!("{subdir}/{leaf}"),
+        append: None,
     }
 }
 
@@ -204,6 +205,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                     vec![PendingFile {
                         src: file,
                         dest: format!("req/v{version}.md"),
+                        append: None,
                     }],
                 ))
             }))
@@ -245,8 +247,9 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         Cmd::Report { node, file } => {
             must_exist(&file, "--file")?;
             let to = report_to(&caller.role)?;
-            Ok(Box::new(move |_, seq| {
-                let pf = copy_to("reports", seq, &file, Some(&sanitize(&node)));
+            Ok(Box::new(move |state, seq| {
+                let mut pf = copy_to("reports", seq, &file, Some(&sanitize(&node)));
+                pf.append = crate::checks::failing_section(state);
                 Ok(pending(
                     EventKind::ReportSent {
                         to,
@@ -399,12 +402,13 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                     .cast
                     .clone()
                     .ok_or_else(|| Fail::refused(format!("task '{task}' has no cast")))?;
-                let pf = copy_to(
+                let mut pf = copy_to(
                     "reports",
                     seq,
                     &report,
                     Some(&format!("{task}-d{}", t.deliveries.len() + 1)),
                 );
+                pf.append = crate::checks::failing_section(state);
                 Ok(pending(
                     EventKind::TaskDelivered {
                         task: task.clone(),

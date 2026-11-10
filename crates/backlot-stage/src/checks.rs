@@ -187,3 +187,47 @@ pub fn run_dir(dir: &Path, delivery_seq: u64) -> PathBuf {
 pub fn log_rel(delivery_seq: u64, name: &str) -> String {
     format!("checks/{delivery_seq}-{name}.log")
 }
+
+/// The "Accepted with failing stage checks" section every report
+/// copied into the ledger gains while such a task exists: task,
+/// delivery, the failing names and the conclusion the review
+/// recorded for them. `None` when nothing qualifies.
+pub fn failing_section(state: &StudioState) -> Option<String> {
+    let studio = state.studio.as_ref()?;
+    let mut rows = Vec::new();
+    for t in state.tasks.values() {
+        if !matches!(
+            t.status,
+            TaskStatus::Accepted | TaskStatus::PartiallyAccepted
+        ) {
+            continue;
+        }
+        let Some(r) = t.reviews.last().filter(|r| {
+            matches!(
+                r.verdict,
+                backlot_model::event::Verdict::Accepted
+                    | backlot_model::event::Verdict::PartiallyAccepted
+            )
+        }) else {
+            continue;
+        };
+        let failed = t.checks_failed(r.delivery, &studio.checks);
+        if failed.is_empty() {
+            continue;
+        }
+        rows.push(format!(
+            "- {} delivery {}: {} — {}",
+            t.id,
+            r.delivery,
+            failed.join(", "),
+            r.conclusion
+        ));
+    }
+    if rows.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "\n\n## Accepted with failing stage checks\n\n{}\n",
+        rows.join("\n")
+    ))
+}

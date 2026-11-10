@@ -1,7 +1,7 @@
 //! Append-time validation. `validate` runs before an event is written;
 //! a `Refusal` is the one-line reason the CLI prints with exit code 1.
 
-use crate::correct::{SeqTarget, correction_keys, correction_value_ok};
+use crate::correct::{SeqTarget, correction_keys, correction_value_ok, parse_verdict};
 use crate::event::*;
 use crate::state::{RoleLifecycle, StudioState, TaskStatus, actor_task};
 
@@ -319,13 +319,18 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+        // An accepting verdict answers to the stage's checks: while
+        // a declared check has no record only the user may accept
+        // ahead of it, and over a recorded failure the conclusion
+        // must name every failing check. Other verdicts are free.
         EventKind::TaskReviewed {
             task,
             delivery,
             verdict,
+            conclusion,
             ..
         } => {
-            require_studio(state)?;
+            let studio = require_studio(state)?;
             let t = require_task(state, task)?;
             match t.status {
                 TaskStatus::Delivered => {}
@@ -352,7 +357,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     got: *delivery,
                 });
             }
-            Ok(())
+            check_acceptance(studio, t, *delivery, *verdict, conclusion, &new.by.role)
         }
         // A finding may be recorded on any task that has that
         // delivery, including closed tasks; it never changes status.
@@ -414,8 +419,11 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 TaskStateChange::TakenOver | TaskStateChange::Blocked => check_task_open(t, true),
             }
         }
+        // A correction that leaves a review accepting over
+        // unrecorded or unnamed failing checks is refused the same
+        // way the review itself would be.
         EventKind::Correction { target, set, .. } => {
-            require_studio(state)?;
+            let studio = require_studio(state)?;
             let Some(target_ref) = state.targets.get(target) else {
                 return Err(Refusal::NoCorrectionTarget(*target));
             };
@@ -434,9 +442,62 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                     });
                 }
             }
+            if let SeqTarget::TaskReviewed { task, idx } = target_ref
+                && let Some(t) = state.tasks.get(task)
+                && let Some(r) = t.reviews.get(*idx)
+            {
+                let mut verdict = r.verdict;
+                let mut conclusion = r.conclusion.clone();
+                for (key, value) in set {
+                    match key.as_str() {
+                        "verdict" => verdict = parse_verdict(value).unwrap_or(verdict),
+                        "conclusion" => conclusion = value.clone(),
+                        _ => {}
+                    }
+                }
+                return check_acceptance(studio, t, r.delivery, verdict, &conclusion, &new.by.role);
+            }
             Ok(())
         }
     }
+}
+
+/// The accepting-verdict rule `task.reviewed` and a review-targeting
+/// `correct` share: while a declared check has no `task.checked`
+/// record only `user` may accept ahead of it; over a recorded
+/// failure or timeout the conclusion must name every failing check.
+fn check_acceptance(
+    studio: &crate::state::StudioConfig,
+    t: &crate::state::Task,
+    delivery: u32,
+    verdict: Verdict,
+    conclusion: &str,
+    by: &str,
+) -> Result<(), Refusal> {
+    if !matches!(verdict, Verdict::Accepted | Verdict::PartiallyAccepted)
+        || studio.checks.is_empty()
+    {
+        return Ok(());
+    }
+    let missing = t.checks_missing(delivery, &studio.checks);
+    if !missing.is_empty() && by != "user" {
+        return Err(Refusal::ChecksPending {
+            task: t.id.clone(),
+            checks: missing,
+        });
+    }
+    let unnamed: Vec<String> = t
+        .checks_failed(delivery, &studio.checks)
+        .into_iter()
+        .filter(|n| !conclusion.contains(n.as_str()))
+        .collect();
+    if !unnamed.is_empty() {
+        return Err(Refusal::ChecksFailing {
+            task: t.id.clone(),
+            checks: unnamed,
+        });
+    }
+    Ok(())
 }
 
 /// Whether an open `permission prompt` is the user's to answer:

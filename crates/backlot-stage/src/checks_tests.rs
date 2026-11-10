@@ -502,3 +502,222 @@ fn finish_logs_appends_and_drops_the_tree_when_done() {
     let state = store::load_state(&dir).unwrap();
     assert!(checks::owed(&state).is_none());
 }
+
+// ── Results the studio shows ─────────────────────────────────────
+//
+// `backlot status` carries the stage's results on the task line;
+// the reviewer's report copies gain the "Accepted with failing
+// stage checks" section only while such a task exists.
+
+/// `backlot status` marks each declared check on the latest
+/// delivery: `running` while the record is owed, `pass` or `fail`
+/// when it lands — and `-` when it never will.
+#[test]
+fn status_marks_each_check_on_the_task_line() {
+    let (mut events, state) = checked_state();
+    let line = |state: &StudioState| {
+        crate::render::status("acme-shop", state, 0)
+            .lines()
+            .find(|l| l.trim_start().starts_with("t1"))
+            .unwrap()
+            .to_string()
+    };
+    assert!(
+        line(&state).contains("checks unit:running lint:running"),
+        "{}",
+        line(&state)
+    );
+    events.push(checked_ev(6, "unit"));
+    let state = backlot_model::state::replay(&events);
+    assert!(
+        line(&state).contains("checks unit:pass lint:running"),
+        "{}",
+        line(&state)
+    );
+    let mut lint_fail = checked_ev(7, "lint");
+    let K::TaskChecked { exit_code, .. } = &mut lint_fail.kind else {
+        unreachable!()
+    };
+    *exit_code = Some(1);
+    events.push(lint_fail);
+    let state = backlot_model::state::replay(&events);
+    assert!(
+        line(&state).contains("checks unit:pass lint:fail"),
+        "{}",
+        line(&state)
+    );
+}
+
+/// `failing_section` lists each accepted task's failing checks and
+/// the review's conclusion — nothing while no such task exists.
+#[test]
+fn the_failing_checks_section_lists_what_the_review_accepted_over() {
+    let (mut events, _) = checked_state();
+    // unit failed, lint passed; the review accepted naming unit.
+    let mut unit_fail = checked_ev(6, "unit");
+    let K::TaskChecked { exit_code, .. } = &mut unit_fail.kind else {
+        unreachable!()
+    };
+    *exit_code = Some(1);
+    events.push(unit_fail);
+    events.push(checked_ev(7, "lint"));
+    let mut accepted = tk::reviewed("t1", 1, Verdict::Accepted, vec![]);
+    let K::TaskReviewed { conclusion, .. } = &mut accepted else {
+        unreachable!()
+    };
+    *conclusion = "unit failed, accepted anyway".into();
+    events.push(tk::ev(8, "director", accepted));
+    let state = backlot_model::state::replay(&events);
+    let section = checks::failing_section(&state).expect("a section");
+    assert!(
+        section.contains("## Accepted with failing stage checks"),
+        "{section}"
+    );
+    assert!(
+        section.contains("t1 delivery 1: unit — unit failed, accepted anyway"),
+        "{section}"
+    );
+    // No accepted-with-failures task: no section.
+    let (events, _) = checked_state();
+    let state = backlot_model::state::replay(&events);
+    assert!(checks::failing_section(&state).is_none());
+}
+
+/// `store::append` writes a `PendingFile.append` after the copy —
+/// the stage's annotation lands inside the ledger's file.
+#[test]
+fn a_pending_append_lands_after_the_copied_file() {
+    let (scratch, _) = scratch();
+    let dir = store::studio_dir(&scratch.dir, "acme-shop");
+    std::fs::create_dir_all(&dir).unwrap();
+    seed_ledger(&dir);
+    let src = scratch.files.join("r.md");
+    std::fs::write(&src, "the report body\n").unwrap();
+    store::append(&dir, |_, seq| {
+        Ok::<_, std::convert::Infallible>(store::Pending {
+            event: NewEvent::new(
+                EventBy::role("director"),
+                K::ReportSent {
+                    to: "producer".into(),
+                    node: "integration".into(),
+                    file: format!("reports/{seq}-r.md"),
+                },
+            ),
+            files: vec![store::PendingFile {
+                src: src.clone(),
+                dest: format!("reports/{seq}-r.md"),
+                append: Some("\n\n## Accepted with failing stage checks\n\n- t1 delivery 1: unit — it failed\n".into()),
+            }],
+        })
+    })
+    .unwrap();
+    let copy = std::fs::read_to_string(dir.join("reports/6-r.md")).unwrap();
+    assert!(copy.starts_with("the report body\n"), "{copy}");
+    assert!(
+        copy.ends_with("- t1 delivery 1: unit — it failed\n"),
+        "{copy}"
+    );
+}
+
+/// End to end: the delivery's own report lands before the verdict —
+/// no section yet — while the node report that follows an
+/// accepted-with-failures task carries it.
+#[test]
+fn a_report_written_after_an_accept_over_failures_carries_the_section() {
+    let (scratch, env) = scratch();
+    new_studio(
+        &env,
+        &scratch,
+        &cast_with_checks("", "[[checks]]\nname = \"unit\"\nrun = \"true\""),
+    )
+    .unwrap();
+    let req = fixture(&scratch, "req.md", "the ask\n");
+    let acc = fixture(&scratch, "acc.md", "acceptance\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary first --as producer"),
+    );
+    ok(
+        &env,
+        &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
+    );
+    ok(
+        &env,
+        "cast --task t1 --actor actor-a --reason strongest --as director",
+    );
+    let work = work_area(&scratch, "t1");
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
+    let rep = fixture(&scratch, "d1.md", "delivery report\n");
+    ok(
+        &env,
+        &format!(
+            "deliver --commits {a}..{b} --report {rep} --check unit=pass --as actor-t1-c1 --task t1"
+        ),
+    );
+    // The stage records unit as a failure; the director accepts
+    // naming it.
+    let dir = store::studio_dir(&scratch.dir, "acme-shop");
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(store::Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                K::TaskChecked {
+                    task: "t1".into(),
+                    delivery: 1,
+                    name: "unit".into(),
+                    exit_code: Some(1),
+                    timed_out: false,
+                    output: "checks/5-unit.log".into(),
+                    duration_ms: 10,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    ok(
+        &env,
+        "review --task t1 --delivery 1 --verdict accepted --conclusion unit_failed_accepted --as director",
+    );
+    let report = fixture(&scratch, "node.md", "node report\n");
+    ok(
+        &env,
+        &format!("report --node integration --file {report} --as director"),
+    );
+    // The delivery's own copy predates the verdict: no section.
+    let delivery_copy = std::fs::read_to_string(
+        dir.join("reports")
+            .read_dir()
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().contains("t1-d1"))
+            .unwrap()
+            .path(),
+    )
+    .unwrap();
+    assert!(
+        !delivery_copy.contains("failing stage checks"),
+        "{delivery_copy}"
+    );
+    // The node report's copy carries it: task, delivery, names,
+    // conclusion.
+    let node_copy = std::fs::read_to_string(
+        dir.join("reports")
+            .read_dir()
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().contains("integration"))
+            .unwrap()
+            .path(),
+    )
+    .unwrap();
+    assert!(
+        node_copy.contains("## Accepted with failing stage checks"),
+        "{node_copy}"
+    );
+    assert!(
+        node_copy.contains("t1 delivery 1: unit — unit_failed_accepted"),
+        "{node_copy}"
+    );
+}

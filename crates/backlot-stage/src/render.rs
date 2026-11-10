@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use backlot_model::event::EventKind;
+use backlot_model::event::{CheckDecl, EventKind};
 use backlot_model::state::{StudioState, Task, TaskStatus};
 use backlot_model::{ActorIdentity, ActorRecord};
 
@@ -30,7 +30,7 @@ fn fmt_ms(ms: u64) -> String {
     }
 }
 
-fn task_line(t: &Task, current_req: u32, cap: u32) -> String {
+fn task_line(t: &Task, declared: &[CheckDecl], current_req: u32, cap: u32) -> String {
     let mut s = format!(
         "  {:<4} {:<10} {:<18}",
         t.id,
@@ -53,6 +53,27 @@ fn task_line(t: &Task, current_req: u32, cap: u32) -> String {
         t.rework_rounds,
         cap
     );
+    // The stage's own results on the latest delivery: `running` is
+    // a record still owed, `-` one that never landed.
+    if !declared.is_empty()
+        && let Some(d) = t.deliveries.last()
+    {
+        let live = t.status == TaskStatus::Delivered;
+        let marks = declared
+            .iter()
+            .map(|c| {
+                let mark = match t.checked_of(d.n).find(|r| r.name == c.name) {
+                    Some(r) if r.passed() => "pass",
+                    Some(_) => "fail",
+                    None if live => "running",
+                    None => "-",
+                };
+                format!("{}:{mark}", c.name)
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let _ = write!(s, "  checks {marks}");
+    }
     if let Some(from) = t.paused_from {
         let _ = write!(s, "  (was {})", fmt_status(from));
     }
@@ -131,7 +152,12 @@ pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
             let _ = writeln!(
                 out,
                 "{}",
-                task_line(t, state.requirement_version, studio.rework_cap)
+                task_line(
+                    t,
+                    &studio.checks,
+                    state.requirement_version,
+                    studio.rework_cap
+                )
             );
         }
     }
@@ -215,6 +241,14 @@ pub fn records(recs: &[ActorRecord]) -> String {
             r.defect_repeats,
             r.new_in_rework,
             r.later_defects
+        );
+        let _ = writeln!(
+            out,
+            "    checks: stage ran {} pass, {} fail; actor reported {} pass, {} fail",
+            r.stage_checks_passed,
+            r.stage_checks_failed,
+            r.reported_checks_passed,
+            r.reported_checks_failed
         );
         let _ = writeln!(
             out,

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use backlot_model::event::{CANNOT_RESUME, EventKind, TaskStateChange, Verdict};
-use backlot_model::state::{Message, StudioState};
+use backlot_model::state::{Message, StudioState, apply};
 use backlot_model::testkit::*;
 
 use crate::notices;
@@ -16,6 +16,139 @@ const DIR: &str = "/state/studios/acme-shop";
 
 fn dir() -> &'static Path {
     Path::new(DIR)
+}
+
+/// `base_events` whose studio declares `unit` and `lint`.
+fn checked_base() -> Vec<backlot_model::Event> {
+    let mut evs = base_events();
+    let EventKind::StudioCreated { checks, .. } = &mut evs[0].kind else {
+        unreachable!()
+    };
+    *checks = vec![
+        check_decl("unit", "cargo test --lib", 60),
+        check_decl("lint", "cargo clippy", 60),
+    ];
+    evs
+}
+
+/// A `task.checked` on t1 delivery 1 for `name`.
+fn checked_ev(seq: u64, name: &str, code: Option<i32>, timed_out: bool) -> backlot_model::Event {
+    ev(
+        seq,
+        "stage",
+        EventKind::TaskChecked {
+            task: "t1".into(),
+            delivery: 1,
+            name: name.into(),
+            exit_code: code,
+            timed_out,
+            output: format!("checks/5-{name}.log"),
+            duration_ms: 10,
+        },
+    )
+}
+
+/// The reviewer's delivery notice waits until every declared check
+/// of the delivery has its `task.checked` — then it separates what
+/// the stage ran, with each log, from what the actor reported.
+#[test]
+fn a_delivery_notice_waits_for_the_stage_checks() {
+    let mut d = delivered("t1", 1, "a", 1);
+    if let EventKind::TaskDelivered { checks, .. } = &mut d {
+        *checks = vec![backlot_model::event::Check {
+            name: "build".into(),
+            passed: true,
+        }];
+    }
+    let mut state = state_with(
+        &checked_base(),
+        vec![("director", cast("t1", "actor-a", "a")), ("actor", d)],
+    );
+    // Nothing owed while both declared checks are unrecorded.
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "delivered")
+    );
+    // One of two recorded: still waiting.
+    apply(&mut state, &checked_ev(6, "unit", Some(0), false));
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "delivered")
+    );
+    // Both recorded: the notice lands.
+    apply(&mut state, &checked_ev(7, "lint", None, true));
+    let n = notices::owed(&state, dir())
+        .into_iter()
+        .find(|n| n.label == "delivered")
+        .expect("delivered notice");
+    assert_eq!(n.to, "director");
+    assert_eq!(n.source_seq, 5);
+    for want in [
+        "Stage ran:",
+        "- unit: pass — ",
+        "checks/5-unit.log",
+        "- lint: timed out — ",
+        "checks/5-lint.log",
+        "The actor reported: build=pass",
+    ] {
+        assert!(n.body.contains(want), "notice misses {want}: {}", n.body);
+    }
+}
+
+/// A task reviewed before its checks landed still gets the notice —
+/// each check that never ran says it has no record.
+#[test]
+fn a_task_that_moved_on_gets_the_notice_anyway() {
+    let state = state_with(
+        &checked_base(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor", delivered("t1", 1, "a", 1)),
+            (
+                "stage",
+                EventKind::TaskChecked {
+                    task: "t1".into(),
+                    delivery: 1,
+                    name: "unit".into(),
+                    exit_code: Some(1),
+                    timed_out: false,
+                    output: "checks/5-unit.log".into(),
+                    duration_ms: 10,
+                },
+            ),
+            (
+                "director",
+                reviewed("t1", 1, Verdict::ChangesRequested, vec![]),
+            ),
+        ],
+    );
+    let n = notices::owed(&state, dir())
+        .into_iter()
+        .find(|n| n.label == "delivered")
+        .expect("delivered notice");
+    assert!(n.body.contains("- unit: fail (exit 1)"), "{}", n.body);
+    assert!(n.body.contains("- lint: no record"), "{}", n.body);
+}
+
+/// With no checks declared the notice says so outright, and still
+/// separates the actor's own claims.
+#[test]
+fn a_delivery_notice_says_so_with_no_checks_declared() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor", delivered("t1", 1, "a", 1)),
+        ],
+    );
+    let n = notices::owed(&state, dir())
+        .into_iter()
+        .find(|n| n.label == "delivered")
+        .expect("delivered notice");
+    assert!(n.body.contains("No checks were declared"), "{}", n.body);
+    assert!(n.body.contains("The actor reported:"), "{}", n.body);
 }
 
 /// t1 under actor-a, delivered and sent back twice below the cap,

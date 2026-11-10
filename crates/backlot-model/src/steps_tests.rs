@@ -457,3 +457,58 @@ fn a_paused_task_owes_nothing() {
     let state = replay(&events);
     assert!(next_steps(&state).is_empty());
 }
+
+/// While the cast declares checks the review step waits for the
+/// stage's records — nothing is owed before them — and is then owed
+/// from the last `task.checked`, so a nudge can never overtake the
+/// delivery notice the stage queues on the same records.
+#[test]
+fn a_review_step_waits_on_the_last_check() {
+    let mut kind = studio_kind();
+    let EventKind::StudioCreated { checks, .. } = &mut kind else {
+        unreachable!()
+    };
+    *checks = vec![
+        check_decl("unit", "cargo test --lib", 600),
+        check_decl("lint", "cargo clippy", 60),
+    ];
+    let mut events = base();
+    events[0] = ev(1, "user", kind);
+    events.extend([
+        ev(3, "director", task_created("t1", "feature", 1)),
+        ev(4, "director", cast("t1", "actor-a", "a")),
+        ev(5, "actor-t1-c1", delivered("t1", 1, "a", 1)),
+    ]);
+    let checked = |seq: u64, name: &str| {
+        ev(
+            seq,
+            "stage",
+            EventKind::TaskChecked {
+                task: "t1".into(),
+                delivery: 1,
+                name: name.into(),
+                exit_code: Some(0),
+                timed_out: false,
+                output: format!("checks/5-{name}.log"),
+                duration_ms: 10,
+            },
+        )
+    };
+    // Nothing recorded: no review step, no matter how long it idles.
+    let mut state = replay(&events);
+    assert!(step(&state, "review t1").is_none());
+    // One of two recorded: still nothing.
+    apply(&mut state, &checked(6, "unit"));
+    assert!(step(&state, "review t1").is_none());
+    // Both recorded: owed from the last `task.checked` (seq 7).
+    apply(&mut state, &checked(7, "lint"));
+    assert_eq!(step(&state, "review t1"), Some((7, "director".into())));
+    assert_eq!(
+        next_steps(&state)
+            .iter()
+            .find(|s| s.label == "review t1")
+            .unwrap()
+            .since_ms,
+        7000
+    );
+}

@@ -74,6 +74,17 @@ pub struct ActorRecord {
     pub later_defects: usize,
     /// Fixes the director made itself on this actor's deliveries.
     pub upstream_changes: usize,
+    /// Stage-run checks on this actor's deliveries that passed —
+    /// the ledger's own records (S9b part 2).
+    pub stage_checks_passed: usize,
+    /// Stage-run checks on this actor's deliveries that failed or
+    /// timed out.
+    pub stage_checks_failed: usize,
+    /// Check results the actor reported on `task.delivered` — its
+    /// own word, never the stage's.
+    pub reported_checks_passed: usize,
+    /// Check results the actor reported as failing.
+    pub reported_checks_failed: usize,
     /// Tasks this actor delivered on that were taken over.
     pub takeovers: usize,
     pub final_outcome: FinalOutcome,
@@ -97,6 +108,10 @@ struct Acc {
     new_in_rework: usize,
     later_defects: usize,
     upstream_changes: usize,
+    stage_checks_passed: usize,
+    stage_checks_failed: usize,
+    reported_checks_passed: usize,
+    reported_checks_failed: usize,
     takeovers: usize,
     final_outcome: FinalOutcome,
     wall_time_ms: u64,
@@ -119,6 +134,10 @@ impl Acc {
             new_in_rework: self.new_in_rework,
             later_defects: self.later_defects,
             upstream_changes: self.upstream_changes,
+            stage_checks_passed: self.stage_checks_passed,
+            stage_checks_failed: self.stage_checks_failed,
+            reported_checks_passed: self.reported_checks_passed,
+            reported_checks_failed: self.reported_checks_failed,
             takeovers: self.takeovers,
             final_outcome: self.final_outcome,
             wall_time_ms: self.wall_time_ms,
@@ -215,6 +234,27 @@ fn fold_task(accs: &mut BTreeMap<(ActorIdentity, String), Acc>, task: &Task, stu
         acc.deliveries += mine.len();
         let first_n = mine.iter().next().copied().unwrap_or(0);
         first_delivery_bucket(acc, task.review_of(first_n).map(|r| r.verdict));
+
+        // The stage's own check records on this actor's deliveries
+        // count apart from the results the delivery reported.
+        for n in &mine {
+            for r in task.checked_of(*n) {
+                if r.passed() {
+                    acc.stage_checks_passed += 1;
+                } else {
+                    acc.stage_checks_failed += 1;
+                }
+            }
+            if let Some(d) = task.deliveries.iter().find(|d| d.n == *n) {
+                for c in &d.checks {
+                    if c.passed {
+                        acc.reported_checks_passed += 1;
+                    } else {
+                        acc.reported_checks_failed += 1;
+                    }
+                }
+            }
+        }
 
         let mut counted: BTreeSet<&str> = BTreeSet::new();
         for r in &reviews {

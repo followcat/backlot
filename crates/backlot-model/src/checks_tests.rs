@@ -200,3 +200,209 @@ fn the_checked_record_folds_with_a_strict_pass() {
     assert!(!by_name("lint").passed());
     assert_eq!(t.checked.len(), 2);
 }
+
+// ── Accepting answers to the stage's records ─────────────────────
+//
+// `accepted`/`partially-accepted` on the delivery is refused while a
+// declared check has no `task.checked` — the user alone may accept
+// ahead of the stage — and over a recorded failure unless the
+// conclusion names every failing check. A `correct` that would leave
+// a review in that state is refused the same way.
+
+/// A review event on t1 delivery 1 with `verdict` and `conclusion`.
+fn review(role: &str, verdict: Verdict, conclusion: &str) -> NewEvent {
+    new_ev(
+        role,
+        EventKind::TaskReviewed {
+            task: "t1".into(),
+            delivery: 1,
+            reviewer: role.into(),
+            verdict,
+            conclusion: conclusion.into(),
+            findings: vec![],
+            upstream_changes: vec![],
+        },
+    )
+}
+
+/// Record `exit`/`timed_out` for `name` on t1 delivery 1.
+fn record(state: &mut StudioState, seq: u64, name: &str, exit: Option<i32>, timed_out: bool) {
+    apply(
+        state,
+        &ev(
+            seq,
+            "stage",
+            EventKind::TaskChecked {
+                task: "t1".into(),
+                delivery: 1,
+                name: name.into(),
+                exit_code: exit,
+                timed_out,
+                output: format!("checks/5-{name}.log"),
+                duration_ms: 10,
+            },
+        ),
+    );
+}
+
+/// While any declared check is unrecorded, an accepting verdict is
+/// refused to everyone but the user — who may accept ahead of the
+/// stage. Other verdicts are free, recorded checks or not.
+#[test]
+fn an_accept_waits_on_the_stage_checks() {
+    let state = delivered_state();
+    let pending = Refusal::ChecksPending {
+        task: "t1".into(),
+        checks: vec!["unit".into(), "lint".into()],
+    };
+    for role in ["producer", "director"] {
+        assert_eq!(
+            validate(&state, &review(role, Verdict::Accepted, "fine")),
+            Err(pending.clone()),
+            "{role}"
+        );
+        assert_eq!(
+            validate(&state, &review(role, Verdict::PartiallyAccepted, "gaps")),
+            Err(pending.clone()),
+            "{role} partial"
+        );
+    }
+    // The user may still accept ahead of the stage.
+    assert!(validate(&state, &review("user", Verdict::Accepted, "fine")).is_ok());
+    // Non-accepting verdicts are never gated.
+    assert!(
+        validate(
+            &state,
+            &review("director", Verdict::ChangesRequested, "redo")
+        )
+        .is_ok(),
+        "changes-requested"
+    );
+    assert!(validate(&state, &review("director", Verdict::Blocked, "stuck")).is_ok());
+    // One check recorded, one still owed: still refused.
+    let mut state = delivered_state();
+    record(&mut state, 6, "unit", Some(0), false);
+    assert_eq!(
+        validate(&state, &review("director", Verdict::Accepted, "fine")),
+        Err(Refusal::ChecksPending {
+            task: "t1".into(),
+            checks: vec!["lint".into()],
+        })
+    );
+}
+
+/// A recorded failure or timeout is the reviewer's call — but an
+/// accepting verdict must name every failing check, whoever records
+/// it.
+#[test]
+fn an_accept_over_failing_checks_names_them() {
+    let mut state = delivered_state();
+    record(&mut state, 6, "unit", Some(1), false);
+    record(&mut state, 7, "lint", None, true);
+    // Neither name in the conclusion.
+    assert_eq!(
+        validate(&state, &review("director", Verdict::Accepted, "looks fine")),
+        Err(Refusal::ChecksFailing {
+            task: "t1".into(),
+            checks: vec!["unit".into(), "lint".into()],
+        })
+    );
+    // One name missing: only the missing one is listed.
+    assert_eq!(
+        validate(
+            &state,
+            &review("director", Verdict::Accepted, "unit failed")
+        ),
+        Err(Refusal::ChecksFailing {
+            task: "t1".into(),
+            checks: vec!["lint".into()],
+        })
+    );
+    // The same rule binds the user — a failure is never silent.
+    assert_eq!(
+        validate(&state, &review("user", Verdict::Accepted, "fine")),
+        Err(Refusal::ChecksFailing {
+            task: "t1".into(),
+            checks: vec!["unit".into(), "lint".into()],
+        })
+    );
+    assert!(
+        validate(
+            &state,
+            &review("director", Verdict::Accepted, "unit and lint both failed")
+        )
+        .is_ok()
+    );
+}
+
+/// A `correct` that would leave a review accepting over unrecorded
+/// or unnamed checks is refused the way the review itself would be.
+#[test]
+fn a_correct_to_accept_is_gated_the_same() {
+    let mut state = delivered_state();
+    // A changes-requested review at seq 6, while both checks run.
+    apply(
+        &mut state,
+        &ev(
+            6,
+            "director",
+            reviewed("t1", 1, Verdict::ChangesRequested, vec![]),
+        ),
+    );
+    let mut set = std::collections::BTreeMap::new();
+    set.insert("verdict".to_string(), "accepted".to_string());
+    let correct = |role: &str, target: u64, set: &std::collections::BTreeMap<String, String>| {
+        new_ev(
+            role,
+            EventKind::Correction {
+                target,
+                reason: "upgrade".into(),
+                set: set.clone(),
+            },
+        )
+    };
+    let pending = Refusal::ChecksPending {
+        task: "t1".into(),
+        checks: vec!["unit".into(), "lint".into()],
+    };
+    assert_eq!(
+        validate(&state, &correct("director", 6, &set)),
+        Err(pending.clone())
+    );
+    assert!(validate(&state, &correct("user", 6, &set)).is_ok());
+
+    // With a failing record the post-state must name it: a
+    // conclusion-only edit that drops the name is refused too.
+    let mut state = delivered_state();
+    record(&mut state, 6, "unit", Some(1), false);
+    record(&mut state, 7, "lint", Some(0), false);
+    apply(
+        &mut state,
+        &ev(
+            8,
+            "director",
+            EventKind::TaskReviewed {
+                task: "t1".into(),
+                delivery: 1,
+                reviewer: "director".into(),
+                verdict: Verdict::Accepted,
+                conclusion: "unit failed; accepted anyway".into(),
+                findings: vec![],
+                upstream_changes: vec![],
+            },
+        ),
+    );
+    let mut drop = std::collections::BTreeMap::new();
+    drop.insert("conclusion".to_string(), "looks fine".to_string());
+    assert_eq!(
+        validate(&state, &correct("user", 8, &drop)),
+        Err(Refusal::ChecksFailing {
+            task: "t1".into(),
+            checks: vec!["unit".into()],
+        })
+    );
+    // A correct that escapes the state — back to changes — is free.
+    let mut back = std::collections::BTreeMap::new();
+    back.insert("verdict".to_string(), "changes-requested".to_string());
+    assert!(validate(&state, &correct("director", 8, &back)).is_ok());
+}

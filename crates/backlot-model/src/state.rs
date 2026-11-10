@@ -247,6 +247,29 @@ impl Task {
         self.checked.iter().filter(move |c| c.delivery == delivery)
     }
 
+    /// Declared checks with no `task.checked` record on `delivery`
+    /// yet, in declaration order.
+    pub fn checks_missing(&self, delivery: u32, declared: &[CheckDecl]) -> Vec<String> {
+        declared
+            .iter()
+            .filter(|c| !self.checked_of(delivery).any(|r| r.name == c.name))
+            .map(|c| c.name.clone())
+            .collect()
+    }
+
+    /// Declared checks recorded as not passing on `delivery` — a
+    /// nonzero exit, a signal or a timeout — in declaration order.
+    pub fn checks_failed(&self, delivery: u32, declared: &[CheckDecl]) -> Vec<String> {
+        declared
+            .iter()
+            .filter(|c| {
+                self.checked_of(delivery)
+                    .any(|r| r.name == c.name && !r.passed())
+            })
+            .map(|c| c.name.clone())
+            .collect()
+    }
+
     /// Who the task's review-side obligations go to: `producer`
     /// when the producer cast it — the light path has no director —
     /// and the director in every other case.

@@ -93,3 +93,72 @@ fn later_defects_come_from_task_finding_on_the_delivery() {
     assert_eq!(a.defects, 0);
     assert_eq!(b.defects, 0);
 }
+
+/// The stage's `task.checked` records count apart from the
+/// `checks` an actor reports on `task.delivered` — and each lands
+/// on the actor who made that delivery.
+#[test]
+fn stage_checks_and_actor_reported_checks_count_apart() {
+    let mut kind = studio_kind();
+    let EventKind::StudioCreated { checks, .. } = &mut kind else {
+        unreachable!()
+    };
+    *checks = vec![
+        check_decl("unit", "true", 60),
+        check_decl("lint", "true", 60),
+    ];
+    let mut log = vec![ev(1, "user", kind)];
+    log.extend(base_events()[1..].iter().cloned());
+    let mut seq = log.len() as u64;
+    let mut push = |role: &str, kind: EventKind| {
+        seq += 1;
+        log.push(ev(seq, role, kind));
+    };
+    push("director", cast("t1", "actor-a", "a"));
+    // Actor-a's delivery 1 claims unit and lint pass; the stage
+    // records unit pass, lint fail.
+    let mut d = delivered("t1", 1, "a", 1);
+    if let EventKind::TaskDelivered { checks, .. } = &mut d {
+        *checks = vec![
+            Check {
+                name: "unit".into(),
+                passed: true,
+            },
+            Check {
+                name: "lint".into(),
+                passed: true,
+            },
+        ];
+    }
+    push("actor-t1-c1", d);
+    let checked = |delivery: u32, name: &str, code: Option<i32>| EventKind::TaskChecked {
+        task: "t1".into(),
+        delivery,
+        name: name.into(),
+        exit_code: code,
+        timed_out: false,
+        output: format!("checks/x-{name}.log"),
+        duration_ms: 10,
+    };
+    push("stage", checked(1, "unit", Some(0)));
+    push("stage", checked(1, "lint", Some(1)));
+    // Recast: actor-b's delivery 2 reports nothing; the stage
+    // records a pass for it on both checks.
+    push("director", cast("t1", "actor-b", "b"));
+    push("actor-t1-c2", delivered("t1", 2, "b", 1));
+    push("stage", checked(2, "unit", Some(0)));
+    push("stage", checked(2, "lint", Some(0)));
+    let recs = records(&[StudioLog {
+        studio: "s1".into(),
+        events: log,
+    }]);
+    let a = rec(&recs, "a", "feature");
+    let b = rec(&recs, "b", "feature");
+    // a: stage recorded pass + fail on delivery 1; the actor
+    // claimed both pass — the two counts stay apart.
+    assert_eq!((a.stage_checks_passed, a.stage_checks_failed), (1, 1));
+    assert_eq!((a.reported_checks_passed, a.reported_checks_failed), (2, 0));
+    // b: only the stage's two passes — its delivery reported none.
+    assert_eq!((b.stage_checks_passed, b.stage_checks_failed), (2, 0));
+    assert_eq!((b.reported_checks_passed, b.reported_checks_failed), (0, 0));
+}

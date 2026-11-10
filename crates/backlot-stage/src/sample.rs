@@ -262,6 +262,7 @@ impl Stage {
                 files: vec![crate::store::PendingFile {
                     src: pending_scratch,
                     dest: format!("attention/{seq}.txt"),
+                    append: None,
                 }],
             })
         });

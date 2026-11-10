@@ -49,6 +49,18 @@ pub enum Refusal {
         delivery: u32,
         name: String,
     },
+    /// An accepting verdict while declared checks are still
+    /// unrecorded — only the user may accept ahead of the stage.
+    ChecksPending {
+        task: String,
+        checks: Vec<String>,
+    },
+    /// An accepting verdict over failing checks whose conclusion
+    /// does not name every one of them.
+    ChecksFailing {
+        task: String,
+        checks: Vec<String>,
+    },
     AtCapVerdict {
         task: String,
     },
@@ -170,6 +182,20 @@ impl fmt::Display for Refusal {
                 write!(
                     f,
                     "task '{task}' delivery {delivery} check '{name}' is already recorded"
+                )
+            }
+            Refusal::ChecksPending { task, checks } => {
+                write!(
+                    f,
+                    "task '{task}' has checks the stage has not recorded yet: {}; only the user may accept ahead of them",
+                    checks.join(", ")
+                )
+            }
+            Refusal::ChecksFailing { task, checks } => {
+                write!(
+                    f,
+                    "task '{task}' has failing checks: {}; the conclusion must name every failing check to accept",
+                    checks.join(", ")
                 )
             }
             Refusal::AtCapVerdict { task } => {
