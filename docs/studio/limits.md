@@ -38,8 +38,9 @@ on a real core.
 ## The hc core
 
 CI runs the studio's integration tests on a pinned official `herdr-core` build with the fake
-runner. Real agents have only ever run on the followcat fork. Running backlot on official hc is
-intended but has not been verified end to end.
+runner, and installs a release build on clean Linux and macOS runners with official `hc` 0.1.19,
+where a studio starts its producer and director against a stub `claude`. Real agents have only
+ever run on the followcat fork, so a full studio on official `hc` has not been tried.
 
 The fork's core reads screens to detect agent status; official hc has no such detection — an
 agent shows a status there only if it reports OSC 7501 itself. That is the sidebar's status.

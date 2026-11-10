@@ -33,9 +33,11 @@
   session probes do, at 5 s and 10 s); the panel reads only the local core's document, so a
   remote studio shows nothing; and a held role's restart after terminal loss is unmeasured on a
   real core.
-- Not verified: the install-check job has not run — the maintainer runs the workflow for real
-  after the merge; no real agent ran anywhere in it (the stub is the point); `docs/studio/plan.md`'s
-  S7 row stands unchanged.
+- Measured after the merge: the `install-check` job passed on ubuntu-latest and macos-latest. The
+  official installer put `hc` 0.1.19 on each runner, and `backlot` built from the release job
+  started a studio there with the producer and the director live.
+- Not verified: no real agent ran anywhere in that job (the `claude` it starts is a stub); the
+  one-line install from a real published release has not run, because there is no release yet.
 
 ## S7a: merge hc-tui main at 2c85e84 (2026-11-10)
 
