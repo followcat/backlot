@@ -442,6 +442,12 @@ impl Stage {
                     resume: start.resume.as_ref().map(|r| r.session.as_str()),
                     studio_dir: &studio_dir,
                     stage_env: &self.env_vars,
+                    role: &start.role,
+                    checks: state
+                        .studio
+                        .as_ref()
+                        .map(|s| s.checks.as_slice())
+                        .unwrap_or(&[]),
                 };
                 match runners::decide_start(
                     runners::plan(&start.actor, &ctx),

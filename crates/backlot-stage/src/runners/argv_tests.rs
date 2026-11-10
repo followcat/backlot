@@ -19,6 +19,18 @@ fn ctx<'a>(
     prompt: Option<&'a str>,
     resume: Option<&'a str>,
 ) -> LaunchCtx<'a> {
+    // The role key decides the pre-allow rules — the base case is a
+    // fixed role with no declared checks.
+    role_ctx(stage_env, "producer", prompt, resume, &[])
+}
+
+fn role_ctx<'a>(
+    stage_env: &'a BTreeMap<String, String>,
+    role: &'a str,
+    prompt: Option<&'a str>,
+    resume: Option<&'a str>,
+    checks: &'a [backlot_model::event::CheckDecl],
+) -> LaunchCtx<'a> {
     LaunchCtx {
         terminal: "bl-s-t1",
         cwd: "/home/user/acme-shop",
@@ -26,6 +38,8 @@ fn ctx<'a>(
         resume,
         studio_dir: "/home/user/state/studios/acme-shop",
         stage_env,
+        role,
+        checks,
     }
 }
 
@@ -161,6 +175,93 @@ fn claude_allows_nothing_broader() {
             }
         }
     }
+}
+
+/// S9c: a Claude actor's launch pre-allows the git commands its
+/// loop needs plus every declared check's `run` — each bare and
+/// with arguments. The director gets `git merge` and the same
+/// checks; producer and writer stay on the base pair, and a `run`
+/// the rule syntax cannot hold — a parenthesis — is simply never
+/// pre-allowed though the cast accepted it.
+#[test]
+fn claude_pre_allows_per_role() {
+    use backlot_model::event::CheckDecl;
+    let env = BTreeMap::new();
+    let base = "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)";
+    let checks = [
+        CheckDecl {
+            name: "unit".into(),
+            run: "cargo test --lib".into(),
+            timeout_s: 600,
+        },
+        CheckDecl {
+            name: "lint".into(),
+            run: "cargo clippy".into(),
+            timeout_s: 600,
+        },
+    ];
+    // An actor: the six git commands bare and starred, then the
+    // checks verbatim.
+    let l = plan(
+        &actor("claude", "standard"),
+        &role_ctx(&env, "actor-t1-c1", None, None, &checks),
+    )
+    .unwrap();
+    assert_eq!(
+        l.argv[2],
+        format!(
+            "{base},Bash(git add),Bash(git add *),Bash(git commit),Bash(git commit *),\
+             Bash(git status),Bash(git status *),Bash(git diff),Bash(git diff *),\
+             Bash(git log),Bash(git log *),Bash(git show),Bash(git show *),\
+             Bash(cargo test --lib),Bash(cargo clippy)"
+        )
+    );
+    // The director: `git merge` and the same checks — not the
+    // actor's git set.
+    let l = plan(
+        &actor("claude", "standard"),
+        &role_ctx(&env, "director", None, None, &checks),
+    )
+    .unwrap();
+    assert_eq!(
+        l.argv[2],
+        format!(
+            "{base},Bash(git merge),Bash(git merge *),Bash(cargo test --lib),Bash(cargo clippy)"
+        )
+    );
+    // Producer and writer keep the base pair only.
+    for role in ["producer", "writer"] {
+        let l = plan(
+            &actor("claude", "standard"),
+            &role_ctx(&env, role, None, None, &checks),
+        )
+        .unwrap();
+        assert_eq!(l.argv[2], base, "{role}");
+    }
+    // With no declared checks the actor's git set still lands,
+    // resume or fresh alike.
+    for resume in [None, Some("ses-9")] {
+        let l = plan(
+            &actor("claude", "standard"),
+            &role_ctx(&env, "actor-t1-c1", None, resume, &[]),
+        )
+        .unwrap();
+        let at = l.argv.iter().position(|a| a == "--allowedTools").unwrap();
+        assert_eq!(l.argv[at + 1].split(',').count(), 14, "{}", l.argv[at + 1]);
+    }
+    // A `run` with a parenthesis is not expressible in the rule
+    // syntax — the cast accepted it, no rule carries it.
+    let paren = [CheckDecl {
+        name: "odd".into(),
+        run: "make (all)".into(),
+        timeout_s: 600,
+    }];
+    let l = plan(
+        &actor("claude", "standard"),
+        &role_ctx(&env, "actor-t1-c1", None, None, &paren),
+    )
+    .unwrap();
+    assert!(!l.argv[2].contains("make"), "{}", l.argv[2]);
 }
 
 #[test]

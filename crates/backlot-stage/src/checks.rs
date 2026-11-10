@@ -77,6 +77,16 @@ pub fn declarations(
                 check.name
             )));
         }
+        // A `run` reaching for `BACKLOT_*` or an environment-clearing
+        // flag is refused outright — the same words `touches_env`
+        // flags on a prompt. A claude launch pre-allows each check
+        // verbatim and could never be trusted to cover one.
+        if crate::permit::touches_env(&check.run) {
+            return Err(Fail::usage(format!(
+                "check '{}' run may not reach for BACKLOT_*, env -i or --ignore-environment",
+                check.name
+            )));
+        }
         if check.timeout_s == 0 {
             return Err(Fail::usage(format!(
                 "check '{}' timeout_s must be at least 1",

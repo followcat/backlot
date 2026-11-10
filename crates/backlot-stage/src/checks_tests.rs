@@ -141,6 +141,43 @@ fn a_zero_timeout_is_a_usage_error() {
     assert!(out.contains("timeout_s"), "{out}");
 }
 
+/// S9c: a `run` that reaches for the role-identity variables or an
+/// environment-clearing flag — the same words `touches_env` looks
+/// for — is refused outright: a pre-allow could never be trusted to
+/// cover it, so it must never be declared.
+#[test]
+fn a_run_reaching_for_identity_is_a_usage_error() {
+    for run in [
+        "BACKLOT_ROLE=director backlot review --task t1",
+        "echo $BACKLOT_STATE_DIR",
+        "env -i backlot status",
+        "env --ignore-environment backlot status",
+        "sh -c 'env -i make'",
+    ] {
+        let (scratch, env) = scratch();
+        let out = new_studio(
+            &env,
+            &scratch,
+            &cast_with_checks("", &format!("[[checks]]\nname = \"unit\"\nrun = \"{run}\"")),
+        )
+        .unwrap_err();
+        assert!(out.contains("unit"), "{out}");
+        assert!(
+            !store::studio_dir(&scratch.dir, "acme-shop").exists(),
+            "the refused studio was still created"
+        );
+    }
+    // A parenthesised `run` stays accepted — the rule syntax just
+    // never pre-allows it.
+    let (scratch, env) = scratch();
+    new_studio(
+        &env,
+        &scratch,
+        &cast_with_checks("", "[[checks]]\nname = \"unit\"\nrun = \"make (all)\""),
+    )
+    .expect("a parenthesised run stays accepted");
+}
+
 /// `check_env` names that would hand the stage's own identity or a
 /// secret to the check are refused; the reason names the variable.
 #[test]

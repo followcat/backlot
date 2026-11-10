@@ -8,6 +8,8 @@
 use std::collections::BTreeMap;
 
 use backlot_model::ActorIdentity;
+use backlot_model::event::CheckDecl;
+use backlot_model::state::actor_task;
 
 use super::{Launch, LaunchCtx, PlanError, Session, uuid_v4};
 
@@ -44,12 +46,51 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
 
 /// The per-session `--allowedTools` value: `backlot` commands and
 /// reads under the studio's state directory, where the prompts,
-/// messages and requirement files live — nothing broader. `//` is
-/// Claude Code's rule syntax for an absolute path; a single leading
-/// `/` would anchor at the working directory and match nothing.
-fn allowed_tools(studio_dir: &str) -> String {
+/// messages and requirement files live — plus, per role, the
+/// commands its job needs. An actor gets the six git commands its
+/// loop drives, bare and with arguments, and every declared check's
+/// `run` verbatim; the director merges and runs the same checks.
+/// Nothing is written to settings: the rules live only in this
+/// argv. `//` is Claude Code's rule syntax for an absolute path; a
+/// single leading `/` would anchor at the working directory and
+/// match nothing.
+fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
     let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
-    format!("Bash(backlot *),Read(//{dir}/**)")
+    let mut rules = vec!["Bash(backlot *)".to_string(), format!("Read(//{dir}/**)")];
+    // One command in both forms Claude's rule syntax takes: bare and
+    // with arguments.
+    let command = |rules: &mut Vec<String>, cmd: &str| {
+        rules.push(format!("Bash({cmd})"));
+        rules.push(format!("Bash({cmd} *)"));
+    };
+    let is_actor = actor_task(role).is_some();
+    if is_actor {
+        for cmd in [
+            "git add",
+            "git commit",
+            "git status",
+            "git diff",
+            "git log",
+            "git show",
+        ] {
+            command(&mut rules, cmd);
+        }
+    }
+    if role == "director" {
+        command(&mut rules, "git merge");
+    }
+    if is_actor || role == "director" {
+        for check in checks {
+            // `(` and `,` are the rule syntax's own — a `run`
+            // holding either is never pre-allowed (the cast still
+            // accepted it; `studio new` refuses the words that would
+            // change who the command runs as).
+            if !check.run.contains(['(', ')', ',']) {
+                rules.push(format!("Bash({})", check.run));
+            }
+        }
+    }
+    rules.join(",")
 }
 
 /// The session id a live claude terminal's argv chose: the value
@@ -81,7 +122,10 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // The `--allowedTools` list is variadic, so the pair goes before
     // `--model`: a `--flag` must follow the value or the positional
     // prompt would be swallowed as a tool name.
-    argv.extend(["--allowedTools".into(), allowed_tools(ctx.studio_dir)]);
+    argv.extend([
+        "--allowedTools".into(),
+        allowed_tools(ctx.studio_dir, ctx.role, ctx.checks),
+    ]);
     argv.extend([
         "--model".into(),
         identity.model.clone(),

@@ -68,6 +68,12 @@ pub struct LaunchCtx<'a> {
     /// The stage's own environment, for adapters that scrub
     /// inherited markers.
     pub stage_env: &'a BTreeMap<String, String>,
+    /// The role's ledger key — `actor-<task>-c<n>`, `director`, … —
+    /// the pre-allow rules choose on it. Only claude uses it today.
+    pub role: &'a str,
+    /// The studio's declared checks, verbatim — the rules their
+    /// `run` strings become. Only claude uses it today.
+    pub checks: &'a [backlot_model::event::CheckDecl],
 }
 
 /// A role that cannot start, as `attention.raised` records it.

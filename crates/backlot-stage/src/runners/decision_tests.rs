@@ -21,6 +21,8 @@ fn ctx<'a>(terminal: &'a str, env: &'a BTreeMap<String, String>) -> LaunchCtx<'a
         resume: None,
         studio_dir: "/home/user/state/studios/acme-shop",
         stage_env: env,
+        role: "actor-t1-c1",
+        checks: &[],
     }
 }
 
