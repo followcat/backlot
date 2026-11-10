@@ -163,14 +163,23 @@ pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
             );
         }
     }
-    let queued = state.messages.iter().filter(|m| !m.delivered).count();
+    let pending = state
+        .messages
+        .iter()
+        .filter(|m| !m.delivered && !m.dropped)
+        .count();
+    let dropped = state.messages.iter().filter(|m| m.dropped).count();
     if !state.messages.is_empty() {
-        let _ = writeln!(
+        let _ = write!(
             out,
             "  messages: {} queued, {} delivered",
-            queued,
-            state.messages.len() - queued
+            pending,
+            state.messages.len() - pending - dropped
         );
+        if dropped > 0 {
+            let _ = write!(out, ", {dropped} dropped");
+        }
+        let _ = writeln!(out);
     }
     if !state.reports.is_empty() {
         let _ = writeln!(out, "  reports:");

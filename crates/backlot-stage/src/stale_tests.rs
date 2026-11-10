@@ -349,3 +349,27 @@ fn the_never_stale_rows() {
     // table drops only what it knows.
     assert_eq!(stale_reason(&state, &notice(9, 4, "mystery")), None);
 }
+
+/// `backlot status` counts a dropped message apart: not queued,
+/// not delivered — its own count, shown only while any exist.
+#[test]
+fn status_counts_dropped_separately() {
+    let mut state = base_state();
+    let mut dropped_a = notice(4, 1, "attention");
+    dropped_a.dropped = true;
+    let mut dropped_b = notice(5, 2, "blocked");
+    dropped_b.dropped = true;
+    let mut sent = notice(6, 3, "delivered");
+    sent.delivered = true;
+    state.messages = vec![notice(7, 4, "req"), dropped_a, dropped_b, sent];
+    let out = crate::render::status("acme-shop", &state, 0);
+    assert!(
+        out.contains("messages: 1 queued, 1 delivered, 2 dropped"),
+        "{out}"
+    );
+
+    state.messages.retain(|m| !m.dropped);
+    let out = crate::render::status("acme-shop", &state, 0);
+    assert!(out.contains("messages: 1 queued, 1 delivered"), "{out}");
+    assert!(!out.contains("dropped"), "{out}");
+}
