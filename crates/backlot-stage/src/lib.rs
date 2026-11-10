@@ -17,6 +17,7 @@ mod deliver;
 mod digest;
 mod discover;
 mod doc;
+pub mod hook;
 pub mod link;
 mod notices;
 mod nudge;
@@ -63,6 +64,9 @@ mod digest_tests;
 mod discover_tests;
 #[cfg(test)]
 mod docs_tests;
+
+#[cfg(test)]
+mod hook_tests;
 #[cfg(test)]
 mod limits_cmd_tests;
 #[cfg(test)]

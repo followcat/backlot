@@ -22,7 +22,7 @@ use crate::store::{self, StoreError};
 const COMMANDS: &[&str] = &[
     "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "deliver",
     "block", "review", "correct", "status", "records", "finding", "stage", "priority", "reopen",
-    "close", "approve",
+    "close", "approve", "hook",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
@@ -373,6 +373,12 @@ pub fn maybe_run(args: &[String]) -> Option<ExitCode> {
     let first = args.first()?;
     if !COMMANDS.contains(&first.as_str()) {
         return None;
+    }
+    // `hook` is the runner hook's own command (S9f): no studio, no
+    // ledger, always silent, always 0 — it must never get in its
+    // runner's way.
+    if first == "hook" {
+        return Some(crate::hook::run(&args[1..]));
     }
     let env = Env::process();
     Some(match run(args, &env) {
