@@ -105,6 +105,66 @@ fn outbox_gathers_each_roles_pending_items() {
     );
 }
 
+/// The digest's order — `blocked`, `at-cap`, `delivered`, `rework`,
+/// then `attention`, `denied`, `stalled`, `lost`, `owed`, then what
+/// roles wrote each other and reports by seq, then `req`, `nudge`,
+/// `resumed`, `recovered` — deliberately queued so the seq order
+/// fights it. Ties inside a rank go by seq.
+#[test]
+fn the_digest_orders_by_label_then_seq() {
+    let notice = |seq: u64, src: u64, label: &str| Message {
+        seq,
+        from: "stage".into(),
+        to: "director".into(),
+        file: Some(format!("messages/{src}-{label}.md")),
+        purpose: None,
+        source_seq: Some(src),
+        delivered: false,
+        dropped: false,
+        ts_ms: 0,
+        delivered_ms: None,
+    };
+    let mut state = StudioState::default();
+    // Ranks 1–14 queued so a seq sort alone inverts them.
+    for (seq, src, label) in [
+        (20, 1, "blocked"),
+        (19, 2, "at-cap"),
+        (18, 3, "delivered"),
+        (17, 4, "rework"),
+        (16, 5, "attention"),
+        (15, 6, "denied"),
+        (14, 7, "stalled"),
+        (13, 8, "lost"),
+        (12, 9, "owed"),
+        (9, 11, "req"),
+        (8, 12, "nudge"),
+        (7, 13, "resumed"),
+        (6, 14, "recovered"),
+    ] {
+        state.messages.push(notice(seq, src, label));
+    }
+    // Rank 10: a report and a tell share it, in seq order.
+    state.messages.push(message(11, "director", false));
+    state.reports.push(ReportRecord {
+        seq: 10,
+        from: "writer".into(),
+        to: "director".into(),
+        node: "revise".into(),
+        file: "reports/10-revise.md".into(),
+        delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
+    });
+    let out = outbox(&state, dir());
+    assert_eq!(out.len(), 1);
+    let order: Vec<u64> = out[0].items.iter().map(|i| i.seq()).collect();
+    assert_eq!(
+        order,
+        vec![20, 19, 18, 17, 16, 15, 14, 13, 12, 10, 11, 9, 8, 7, 6],
+        "rank then seq: {order:?}"
+    );
+}
+
 /// A dropped message is never pending: it skips the outbox entirely,
 /// and a role with only drops left is sent nothing.
 #[test]

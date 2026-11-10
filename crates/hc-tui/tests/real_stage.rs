@@ -1382,12 +1382,14 @@ async fn real_stage_stale_notice_drops() {
 }
 
 /// S9d — several pending items go as one send: while the director
-/// is `work:working` two deliveries on different tasks and a `tell`
-/// queue for it; when it goes `work:waiting` a single `[backlot]`
-/// line names `messages/digest-<top>.md (3 items)`, the file lists
-/// both `delivered` notices ahead of the tell, and every item gets
-/// its `message.delivered`. Two tasks, not two deliveries on one —
-/// the second delivery on a task supersedes the first's notice.
+/// is `work:working` a `tell` and two deliveries on different
+/// tasks queue for it; when it goes `work:waiting` a single
+/// `[backlot]` line names `messages/digest-<top>.md (3 items)`,
+/// the file lists both `delivered` notices ahead of the tell —
+/// the priority order, not the ledger's, since the tell queued
+/// first — and every item gets its `message.delivered`. Two
+/// tasks, not two deliveries on one — the second delivery on a
+/// task supersedes the first's notice.
 #[tokio::test]
 #[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
 async fn real_stage_digest_sends_once() {
@@ -1420,8 +1422,28 @@ async fn real_stage_digest_sends_once() {
     send_text(&client, &director.address, "work:working").await;
     wait_role(&client, "director", |r| r["work"] == "working").await;
 
+    // The tell queues first — its low seq fights the priority order
+    // the digest must follow.
+    bl(
+        &scratch,
+        &state,
+        &format!("tell director --file {} --as writer", note.display()),
+    );
+    // The `bl` call already appended — the tell is the director's
+    // queued message with no source_seq and no purpose.
+    let tell = ledger(&state)
+        .into_iter()
+        .find(|e| {
+            e["kind"] == "message.queued"
+                && e["to"] == "director"
+                && e["source_seq"].is_null()
+                && e["purpose"].is_null()
+        })
+        .and_then(|e| e["seq"].as_u64())
+        .expect("the tell's queued message");
+
     // Each delivery's `delivered` notice must queue before the next
-    // item lands, so the ledger order — and the digest's — is fixed.
+    // lands, so the two notice seqs stay in order.
     let mut notices: Vec<u64> = Vec::new();
     for (task, actor) in [("t1", "actor-t1-c1"), ("t2", "actor-t2-c1")] {
         let work = studio.join(format!("work/{task}"));
@@ -1456,23 +1478,6 @@ async fn real_stage_digest_sends_once() {
             std::thread::sleep(POLL);
         }
     }
-    bl(
-        &scratch,
-        &state,
-        &format!("tell director --file {} --as writer", note.display()),
-    );
-    // The `bl` call already appended — the tell is the director's
-    // queued message with no source_seq and no purpose.
-    let tell = ledger(&state)
-        .into_iter()
-        .find(|e| {
-            e["kind"] == "message.queued"
-                && e["to"] == "director"
-                && e["source_seq"].is_null()
-                && e["purpose"].is_null()
-        })
-        .and_then(|e| e["seq"].as_u64())
-        .expect("the tell's queued message");
     let top = notices.iter().copied().chain([tell]).max().unwrap();
 
     // Waiting opens the gate: one send, one line, one digest file.

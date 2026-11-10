@@ -87,10 +87,11 @@ fn item_line(it: &OutItem, dir: &Path) -> String {
 }
 
 /// Every role's pending items, one `Outbound` each. Messages and
-/// reports share the per-role seq order; a `to: user` report is
-/// never sent. One pending item keeps its own line; two or more
-/// merge into `messages/digest-<top seq>.md` behind a single
-/// `stage → <role>` line naming the file and the count.
+/// reports share the queue; a `to: user` report is never sent. One
+/// pending item keeps its own line; two or more merge into
+/// `messages/digest-<top seq>.md` behind a single `stage → <role>`
+/// line naming the file and the count — the items inside sit in
+/// the digest's priority order (`digest::rank`), ties by seq.
 pub fn outbox(state: &StudioState, dir: &Path) -> Vec<Outbound> {
     let mut by_role: BTreeMap<String, Vec<OutItem>> = BTreeMap::new();
     for m in &state.messages {
@@ -112,7 +113,7 @@ pub fn outbox(state: &StudioState, dir: &Path) -> Vec<Outbound> {
     by_role
         .into_iter()
         .map(|(role, mut items)| {
-            items.sort_by_key(OutItem::seq);
+            items.sort_by_key(|it| (digest::rank(it), it.seq()));
             let (text, digest) = match items.as_slice() {
                 [one] => (item_line(one, dir), None),
                 many => {
