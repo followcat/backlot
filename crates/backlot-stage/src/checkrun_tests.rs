@@ -227,11 +227,25 @@ fn a_final_burst_reaches_the_log() {
 
 /// A process that escapes the group (`setsid`) and holds a pipe
 /// open keeps its reader from EOF; the log says its end was cut.
+/// The escapee touches `ready` only after it has left the group
+/// and the shell waits for it — so the group KILL always misses
+/// it and the drain deadline, not the reader, decides.
 #[test]
 fn a_pipe_held_open_marks_the_log_cut() {
+    let work = std::env::temp_dir().join(format!(
+        "checkrun-cut-{}-{:x}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&work).unwrap();
     let mut child = checkrun::real_spawn(&CheckSpawn {
-        run: "setsid sleep 3 </dev/null & echo hi".into(),
-        dir: std::env::temp_dir(),
+        run: "setsid sh -c 'touch ready; exec sleep 5' </dev/null & \
+              while [ ! -e ready ]; do sleep 0.05; done; echo hi"
+            .into(),
+        dir: work.clone(),
         env: vec![("PATH".into(), "/usr/bin:/bin".into())],
     })
     .expect("spawn");
@@ -239,6 +253,7 @@ fn a_pipe_held_open_marks_the_log_cut() {
     let text = String::from_utf8_lossy(&out.output);
     assert!(text.contains("hi"), "{text}");
     assert!(text.contains("output cut"), "{text}");
+    let _ = std::fs::remove_dir_all(&work);
 }
 
 /// The real spawn: `sh -c` under the given env, both pipes into the
