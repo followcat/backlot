@@ -125,7 +125,8 @@ program.
 ## Pasting text and images
 
 `Ctrl+Shift+V` pastes text. That is your terminal's own shortcut, and the program receives it as a bracketed paste,
-unchanged.
+unchanged. While a popup is open the paste goes to the popup's program, wrapped only when that program asked for
+bracketed paste, just like a pane.
 
 On a remote endpoint `Ctrl+V` pastes a clipboard image instead. hc-tui reads your local clipboard, uploads the image
 to the program's machine with `terminal.put`, and the program receives the path of the uploaded file. This applies to

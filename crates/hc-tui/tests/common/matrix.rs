@@ -124,7 +124,9 @@ impl Ctx {
     /// Pastes `text` as the host's bracketed paste, then asserts the
     /// exact wire bytes land in `tag`'s file — wrapped for a `?2004`
     /// program, `\n`→`\r` rewritten raw for one without it (ghostty's
-    /// paste encoder, shared with herdr).
+    /// paste encoder; herdr wraps by hand and passes `\n` verbatim —
+    /// same effect on canonical readers, a byte difference only for
+    /// raw-mode programs without bracketed paste).
     pub async fn assert_paste(&mut self, tag: &str, text: &str, wrap: bool) -> Result<(), String> {
         let out = self.out(tag);
         let mark = fs::read(&out).map(|b| b.len()).unwrap_or(0);

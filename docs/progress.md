@@ -637,6 +637,37 @@
   harness at 80x24 matches cell for cell except the documented
   navigator footer-identity cells (8 and 12 cell exceptions).
 
+## Paste matrix: copy and paste across tabs, workspaces, machines and agents (branch test/paste-matrix)
+
+- Two ignored e2e tests drive a real `hc-tui` in a PTY against owned
+  scratch cores with a file-backed clipboard stub: `paste_matrix_e2e`
+  covers the local endpoint (22 cells) and `paste_matrix_remote_e2e`
+  covers `--remote host-a`, `--remote host-b` through a hostname-routed
+  stub `ssh`, and a `machine/tN` pane added through a via-command on a
+  second scratch core. Fake agents stand in for a shell, Claude Code,
+  Codex, Devin and OpenCode (bracketed paste on or off, kitty `>1u` for
+  the Claude fake) and record their exact input bytes to files.
+- Every cell passes: text (simple, multiline, CJK, 64 KiB), copy from
+  external paste, mouse selection, copy-mode `y` and popup selection,
+  paste into same/split/other-tab/other-workspace/machine panes and the
+  Alt+F popup, the reported select-then-switch-tab bug (not a bug:
+  selection copies at release and paste follows focus), PNG/JPEG and
+  file-manager image copies through the remote Ctrl+V bridge, and
+  pastes immediately after Alt+arrow and Alt+F.
+- Two real herdr-parity bugs were fixed. Popup selection indexed the
+  VT frame's cell array by the clipped surface width instead of the
+  frame width, garbling copies whenever the popup surface was narrower
+  than its terminal. And host paste into an open popup bypassed
+  bracketed-paste encoding entirely (`input_encoded` instead of a
+  semantic paste), so a multiline paste into a `?2004` popup program
+  would have fired line by line.
+- One documented difference kept: hc-tui's ghostty paste encoder
+  rewrites `\n` to `\r` only in the unwrapped case where herdr passes
+  `\n` verbatim; canonical programs see identical input.
+- Gates: fmt, all-target clippy, the full suite, the 29 installer
+  tests, parity vectors and the 80x24 parity run (navigator footer
+  exceptions only). Details in `~/AIcontrol/hc-tui-work/briefs/paste-matrix.report.md`.
+
 ## Image paste over remote: file copies and visible misses (branch fix/remote-image-paste)
 
 - The Linux clipboard read gained a file-list pass after the image
