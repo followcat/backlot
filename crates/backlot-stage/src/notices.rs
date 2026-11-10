@@ -45,10 +45,7 @@ pub struct Notice {
 /// in every other case. `user` and the empty name have no
 /// terminal, so they fall to the director too.
 pub fn reviewer_for(task: &backlot_model::state::Task) -> String {
-    match task.cast.as_ref().map(|c| c.by.as_str()) {
-        Some("producer") => "producer".into(),
-        _ => "director".into(),
-    }
+    task.reviewer().into()
 }
 
 /// The role key the task's current cast runs under — the same key

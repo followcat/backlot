@@ -139,6 +139,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 file: file.clone(),
                 requirement_version: *requirement_version,
                 seq,
+                ts_ms: ts,
             });
             state
                 .targets
@@ -173,8 +174,10 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     state_changes: Vec::new(),
                     created_seq: seq,
                     created_ts_ms: ts,
+                    created_by: event.by.role.clone(),
                     last_ts_ms: ts,
                     closed_ts_ms: None,
+                    closed_seq: None,
                 },
             );
             state
@@ -337,6 +340,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 purpose: purpose.clone(),
                 source_seq: *source_seq,
                 delivered: false,
+                ts_ms: ts,
+                delivered_ms: None,
             });
             state
                 .targets
@@ -346,11 +351,13 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             Some(SeqTarget::Message(idx)) => {
                 if let Some(m) = state.messages.get_mut(*idx) {
                     m.delivered = true;
+                    m.delivered_ms = Some(ts);
                 }
             }
             Some(SeqTarget::Report(idx)) => {
                 if let Some(r) = state.reports.get_mut(*idx) {
                     r.delivered = true;
+                    r.delivered_ms = Some(ts);
                 }
             }
             _ => {}
@@ -363,6 +370,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 node: node.clone(),
                 file: file.clone(),
                 delivered: false,
+                ts_ms: ts,
+                delivered_ms: None,
             });
             state
                 .targets

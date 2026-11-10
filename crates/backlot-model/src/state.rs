@@ -69,6 +69,8 @@ pub struct PlanRecord {
     pub file: String,
     pub requirement_version: u32,
     pub seq: u64,
+    #[serde(default)]
+    pub ts_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -174,9 +176,18 @@ pub struct Task {
     pub state_changes: Vec<StateChangeRecord>,
     pub created_seq: u64,
     pub created_ts_ms: u64,
+    /// Who recorded the `task.created` (`by.role`) — the role an
+    /// uncast task's cast step is owed to. Empty on logs that
+    /// predate the field.
+    #[serde(default)]
+    pub created_by: String,
     pub last_ts_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_ts_ms: Option<u64>,
+    /// The seq of the event that took the task terminal — the key
+    /// of the step that follows it. `None` on logs that predate it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_seq: Option<u64>,
 }
 
 impl Task {
@@ -187,6 +198,16 @@ impl Task {
 
     pub fn review_of(&self, delivery: u32) -> Option<&ReviewRecord> {
         self.reviews.iter().find(|r| r.delivery == delivery)
+    }
+
+    /// Who the task's review-side obligations go to: `producer`
+    /// when the producer cast it — the light path has no director —
+    /// and the director in every other case.
+    pub fn reviewer(&self) -> &'static str {
+        match self.cast.as_ref().map(|c| c.by.as_str()) {
+            Some("producer") => "producer",
+            _ => "director",
+        }
     }
 }
 
@@ -256,8 +277,8 @@ pub struct Message {
     pub to: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
-    /// `plan` or `dispatch` when the command sent the message with a
-    /// fixed meaning; unset for `tell`/`ask`.
+    /// `plan`, `dispatch` or `nudge` when the message carries a fixed
+    /// meaning; unset for `tell`/`ask`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
     /// For a stage-generated notice, the seq of the source event it
@@ -265,6 +286,14 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_seq: Option<u64>,
     pub delivered: bool,
+    /// The `message.queued` event's time — the obligation it can
+    /// create owes from then.
+    #[serde(default)]
+    pub ts_ms: u64,
+    /// When the `message.delivered` landed — a nudge's escalation
+    /// clock starts there. `None` on logs that predate it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivered_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -278,6 +307,12 @@ pub struct ReportRecord {
     /// deliver like messages (`to: user` is never sent anywhere).
     #[serde(default)]
     pub delivered: bool,
+    /// The `report.sent` event's time.
+    #[serde(default)]
+    pub ts_ms: u64,
+    /// When the `message.delivered` on this report landed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivered_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

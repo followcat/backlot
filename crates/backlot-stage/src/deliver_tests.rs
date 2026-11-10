@@ -34,6 +34,8 @@ fn message(seq: u64, to: &str, delivered: bool) -> Message {
         purpose: None,
         source_seq: None,
         delivered,
+        ts_ms: 0,
+        delivered_ms: None,
     }
 }
 
@@ -54,6 +56,8 @@ fn outbox_is_oldest_first_per_role() {
         node: "review".into(),
         file: "reports/6-review.md".into(),
         delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
     });
     state.reports.push(ReportRecord {
         seq: 7,
@@ -62,6 +66,8 @@ fn outbox_is_oldest_first_per_role() {
         node: "done".into(),
         file: "reports/7-done.md".into(),
         delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
     });
     let out = outbox(&state, dir());
     assert_eq!(out.len(), 3, "{out:?}");
@@ -96,6 +102,8 @@ fn the_plan_request_says_what_is_wanted() {
         purpose: Some("plan".into()),
         source_seq: None,
         delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
     });
     let out = outbox(&state, dir());
     assert_eq!(out.len(), 1);
@@ -286,8 +294,10 @@ fn task(id: &str) -> Task {
         state_changes: Vec::new(),
         created_seq: 1,
         created_ts_ms: 0,
+        created_by: "director".into(),
         last_ts_ms: 0,
         closed_ts_ms: None,
+        closed_seq: None,
     }
 }
 
@@ -383,6 +393,8 @@ fn notices_are_owed_once_per_source_event() {
             purpose: None,
             source_seq: Some(n.source_seq),
             delivered: false,
+            ts_ms: 0,
+            delivered_ms: None,
         });
     }
     assert!(notices::owed(&state, dir()).is_empty());

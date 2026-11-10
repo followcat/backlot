@@ -76,8 +76,10 @@ fn state_with_task() -> StudioState {
             state_changes: Vec::new(),
             created_seq: 9,
             created_ts_ms: 0,
+            created_by: "director".into(),
             last_ts_ms: 0,
             closed_ts_ms: None,
+            closed_seq: None,
         },
     );
     state

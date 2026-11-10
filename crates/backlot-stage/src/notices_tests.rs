@@ -88,6 +88,8 @@ fn the_cap_review_owes_the_producer_not_the_actor() {
         purpose: None,
         source_seq: Some(10),
         delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
     });
     let owed = notices::owed(&state, dir());
     assert!(owed.iter().all(|n| n.label != "at-cap"), "{owed:?}");
@@ -176,6 +178,8 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
             purpose: None,
             source_seq: Some(seq),
             delivered: false,
+            ts_ms: 0,
+            delivered_ms: None,
         });
     }
     assert!(
@@ -250,6 +254,8 @@ fn a_recovered_resume_owes_the_role_one_notice() {
         purpose: None,
         source_seq: Some(5),
         delivered: false,
+        ts_ms: 0,
+        delivered_ms: None,
     });
     assert!(
         notices::owed(&state, dir())

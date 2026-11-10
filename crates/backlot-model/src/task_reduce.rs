@@ -86,15 +86,25 @@ pub fn reduce_task(task: &mut Task, cap: u32) {
                 .chain(task.reviews.iter().map(|r| (r.seq, r.ts_ms)))
                 .chain(task.state_changes.iter().map(|s| (s.seq, s.ts_ms)))
                 .chain(task.casts.iter().map(|c| (c.seq, c.ts_ms)))
-                .find(|(s, _)| *s == seq)
-                .map(|(_, ts)| ts);
+                .find(|(s, _)| *s == seq);
         }
         status = next;
     }
     task.status = status;
     task.paused_from = paused_from;
     task.rework_rounds = rounds;
-    task.closed_ts_ms = if status.is_terminal() { closed } else { None };
+    task.closed_ts_ms = if status.is_terminal() {
+        closed.map(|(_, ts)| ts)
+    } else {
+        None
+    };
+    // The closing event's own seq — the step rows key on it. Kept
+    // only while terminal, like `closed_ts_ms`.
+    task.closed_seq = if status.is_terminal() {
+        closed.map(|(s, _)| s)
+    } else {
+        None
+    };
     for change in &mut task.state_changes {
         if change.state == TaskStateChange::Resumed {
             change.resumed_to = resumed_to
