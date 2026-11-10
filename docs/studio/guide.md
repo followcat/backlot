@@ -144,8 +144,11 @@ backlot tell director --file /home/user/note.md --studio acme-shop --as user
 ```
 
 The stage delivers it as `[backlot] user → director: read <file>` once the role reads idle and
-its screen has held still — it can wait a while, and it can arrive after the situation it names
-has moved on. In the ledger you are the role `user`, so person-facing commands take `--as user`.
+its screen has held still — it can wait a while. When several items are owed at once they arrive
+together, as one line naming a `messages/digest-<seq>.md` to read. A stage notice whose situation
+has moved on is dropped instead of sent — the ledger keeps the drop (`message.dropped`) and
+`backlot status` counts it under `messages:` — but a `tell` is a person's words and always goes.
+In the ledger you are the role `user`, so person-facing commands take `--as user`.
 
 `backlot status` shows the studio's recorded state at any time:
 
@@ -341,7 +344,7 @@ studios/acme-shop/
   req/v<N>.md                requirement versions
   plan/                      the writer's plans and acceptance lists
   reports/                   delivery reports, review findings, node reports
-  messages/                  role-to-role messages and stage notice bodies
+  messages/                  role-to-role messages, stage notice bodies, digest-<seq>.md merges
   attention/                 screens saved when attention was raised
   prompts/                   the rendered role prompt each fresh start got
   work/integration           the director's worktree, branch backlot/acme-shop/integration

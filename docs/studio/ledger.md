@@ -16,7 +16,7 @@ $XDG_STATE_HOME/backlot/<core id>/
     req/v<N>.md       requirement versions
     plan/             writer's plans and acceptance lists
     reports/          deliveries and node reports
-    messages/         role-to-role and stage notice bodies
+    messages/         role-to-role and stage notice bodies, and digest-<seq>.md merges
     checks/           detached check worktrees and the <delivery-seq>-<name>.log each records
     attention/        screens saved when an attention was raised
     prompts/          the rendered role prompt each fresh start was given
@@ -56,7 +56,8 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `task.checked` | task, delivery number, check name, exit code, `timed_out`, output log, duration — `stage` only |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
-| `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq` |
+| `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq`; `delivered` carries the target seq |
+| `message.dropped` | target seq, reason — `stage` only |
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail, `needs_user` flag on `permission prompt` |
 | `correction` | target event, changed fields, reason |
@@ -96,6 +97,22 @@ nothing. A `report.sent` to a role is deliverable the same way; `to: user` is ne
 terminal. `message.delivered` marks the target — a message or a report — only after `terminal.send`
 reports sent. A crash between the send and the record can send the same line twice on restart;
 that is harmless.
+
+At send time every queued message carrying a `source_seq` is checked against the event it relays
+(S9d): when the source no longer stands the stage records `message.dropped` with a short reason
+and sends nothing — the table of what counts as stale is in `design.md`. A dropped message is
+never pending again — not for the outbox, not for the idle rule that gates nudges — but it still
+counts as handled in the dedup set, so the same notice is never re-queued; a dropped message is
+never marked `message.delivered`. Only `stage` may record the event, and only on a queued message
+still undelivered — a send already in flight is exempt, since it cannot be un-sent. Messages
+without a `source_seq` (`tell`, `ask`, `dispatch`, the plan request) and reports are never
+dropped.
+
+When a role is owed two or more items at send time they go out as one digest: the stage writes
+`messages/digest-<highest seq>.md` — one section per item — then sends the single line
+`[backlot] stage → <role>: read <path> (<n> items)`. When the send answers, every item it covered
+gets its own `message.delivered`. The same crash window applies: a crash between the send and
+the records can send the digest twice.
 
 `task.cast` records `by`, the role that cast. A producer's cast (the light path) routes the
 delivery notice to the producer; a director's or unattributed cast routes it to the director.

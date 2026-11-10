@@ -1,5 +1,34 @@
 # Studio progress
 
+## S9d: notices that are still true, merged and in order (2026-11-10)
+
+- Done: a queued message carrying a `source_seq` is checked against its source at send time;
+  when the source no longer stands — the table lives in `stale::stale_reason` and `design.md` —
+  the stage records `message.dropped { target, reason }` and sends nothing. A dropped message
+  leaves the outbox and the nudge pass's idle count, still counts as handled in the notices'
+  dedup set so it is never re-queued, and is never marked `message.delivered`; reports and
+  `source_seq`-less messages are never dropped, and a send already in flight is exempt. When the
+  gate opens on two or more pending items the stage writes `messages/digest-<top seq>.md` — one
+  `## <label> (seq <n>)` section each, a stage notice's body inlined, a role file or report
+  named by path, a file-less message shown as its line — sends the single
+  `stage → <role>: read <path> (<n> items)` line, and records `message.delivered` for every
+  item. `digest::rank` holds the priority order in one place (documented in `design.md`), ties
+  by seq; `backlot status` counts dropped messages apart. The S8 failure — the director's
+  notice arriving after its prompt was already answered — now lands as `message.dropped`
+  instead of a wasted turn.
+- Measured: one unit test per staleness row plus the never-stale rows, the digest's body per
+  item kind, the full fourteen-rank order queued so seq alone would invert it, and `queued_for`
+  / the outbox / `notices::owed` all leaving a dropped message alone. Real-core fake-runner:
+  `real_stage_stale_notice_drops` replays the S8 case — `message.dropped` with `attention
+  cleared`, an empty director inbox — and `real_stage_digest_sends_once` queues a `tell` before
+  two `delivered` notices and gets one digest line with the notices first and all three
+  delivered. Gates: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and
+  `cargo test` on every commit; clippy on the CI-pinned 1.99.0 and the serial ignored
+  `real_stage` run both green.
+- Not verified: drops and digests have only run on the fake runner — no real agent has read a
+  digest or had a stale notice dropped — and a notice that goes stale while `terminal.send` is
+  still in flight still lands.
+
 ## S9c: approvals land on the prompt they were made for (2026-11-10)
 
 - Done: `permit::prompt_block` gives each runner a whitespace-normalised region that names the

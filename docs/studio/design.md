@@ -96,13 +96,55 @@ If an actor goes quiet without delivering, the stage reminds it once and then ra
 
 - **User to producer:** the user types in the producer's terminal. Selecting a studio focuses it.
 - **Role to role:** `backlot tell` records the message and writes its body to a file. The stage sends the target one
-  line — `[backlot] <from> → <to>: read <file>` — with `terminal.send`, oldest first, at most one send per role at a
-  time. A send goes only while the target is live, its work sample is `waiting`, its screen has been unchanged for two
-  samples at least two seconds apart, it has been up at least five seconds, and no send to it finished in the last five
-  seconds. A refused send stays queued and is retried; a crash between send and record can repeat a line, which is
-  harmless. `terminal.send` can hold for minutes, so it is spawned off the stage loop and collected on a later tick.
-  `report.sent` to a role delivers the same way. The stage's own notices (see ledger.md `source_seq`) queue as ordinary
-  messages with a generated body file under `messages/`.
+  line — `[backlot] <from> → <to>: read <file>` — with `terminal.send`, at most one send per role at a time. A send
+  goes only while the target is live, its work sample is `waiting`, its screen has been unchanged for two samples at
+  least two seconds apart, it has been up at least five seconds, and no send to it finished in the last five seconds.
+  A refused send stays queued and is retried; a crash between send and record can repeat a line, which is harmless.
+  `terminal.send` can hold for minutes, so it is spawned off the stage loop and collected on a later tick.
+  `report.sent` to a role delivers the same way. The stage's own notices (see ledger.md `source_seq`) queue as
+  ordinary messages with a generated body file under `messages/`.
+- **Only what is still true is sent (S9d).** Before a send, every queued message carrying a `source_seq` — a stage
+  notice or a nudge — is checked against the event it relays. When the source no longer stands the stage records
+  `message.dropped` with a short reason and sends nothing:
+
+  | label / purpose | stale when | reason |
+  |---|---|---|
+  | `attention`, `stalled`, `lost`, `owed` | that attention is cleared | `attention cleared` |
+  | `delivered` | that delivery has a review, a newer delivery exists, or the task is terminal | `delivery reviewed` / `superseded` / `task closed` |
+  | `rework` | a newer delivery exists or the task is no longer running | `superseded` / `no longer running` |
+  | `at-cap` | the task is no longer at cap | `no longer at cap` |
+  | `blocked` | the task is no longer blocked | `no longer blocked` |
+  | `resumed` | the task is terminal | `task closed` |
+  | `nudge` | the step keyed by `source_seq` is no longer in `next_steps` | `step done` |
+  | `recovered`, `denied`, `req` | never | — |
+
+  A dropped message counts as handled in the notices' dedup set — it is never re-queued — while staying out of the
+  outbox and the nudge pass's idle count, and it is never marked `message.delivered`. Messages without a
+  `source_seq` (`tell`, `ask`, `dispatch`, the plan request) and reports are never dropped — a person wrote them and
+  the words stand. A send already in flight is exempt: it cannot be un-sent, so a notice that went stale while the
+  wire held still lands.
+- **Several pending items go as one digest.** When the gate opens on two or more items for a role the stage writes
+  `messages/digest-<top seq>.md` and sends `[backlot] stage → <role>: read <path> (<n> items)`; on the answer every
+  item gets its `message.delivered`. The file gives each item a `## <label> (seq <n>)` section — a stage-written
+  notice's body inlined, a role-written file or a report named by path, a file-less message shown as the line it
+  would have sent alone. Items sit in this order (`digest::rank` is the one place it lives), ties by seq:
+
+  1. `blocked`
+  2. `at-cap`
+  3. `delivered`
+  4. `rework`
+  5. `attention`
+  6. `denied`
+  7. `stalled`
+  8. `lost`
+  9. `owed`
+  10. role-written messages and reports, in seq order
+  11. `req`
+  12. `nudge`
+  13. `resumed`
+  14. `recovered`
+
+  One pending item keeps the single-line send above.
 - **Producer to user:** in the producer's terminal, with a one-line summary in the panel.
 
 ## Flow

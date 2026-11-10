@@ -80,10 +80,14 @@ re-raise one `stall_limit_s` later.
 - **Stall detection watches an *unchanged* screen.** A runner that keeps animating while it is
   stuck — a live spinner, a clock in its status line — never looks frozen and never raises
   `stalled`.
-- **A notice can arrive late or stale.** Delivery waits for the role to be up five seconds, its
-  screen to hold still two, and a five-second gap since the last send to it — a notice can land
-  after what it names has moved on. A crash between `terminal.send` and the ledger write can
-  send the same notice twice.
+- **A notice can still arrive late — a stale one is dropped, not sent.** Delivery waits for the
+  role to be up five seconds, its screen to hold still two, and a five-second gap since the last
+  send to it, and several items owed at once now merge into one `messages/digest-<seq>.md`
+  rather than several sends. At send time every source-backed queued item is checked against
+  the event it relays (`design.md` has the table): one whose source has moved on is recorded
+  `message.dropped` and never reaches the terminal. Two windows remain: a send already in
+  flight cannot be un-sent, so a notice that went stale while `terminal.send` held still
+  lands; and a crash between the send and the ledger write can send the same text twice.
 - **The approval race is closed on the fake runner only.** Before a recorded decision's key goes out,
   the screen on show is compared with the attention's saved screen through a per-runner prompt block
   (`runners.md`); a changed prompt sends nothing, clears `prompt changed before the decision was
