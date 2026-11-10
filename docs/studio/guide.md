@@ -31,6 +31,7 @@ rework_cap = 2          # optional, default 2
 stall_limit_s = 600     # optional, default 600
 nudge_after_s = 180     # optional, default 180
 escalate_after_s = 600  # optional, default 600
+check_env = ["CI"]      # stage env names a check may see — optional
 
 [producer]
 runner = "claude"
@@ -63,6 +64,13 @@ runner = "codex"
 model = "gpt-5.3-codex"
 effort = "medium"
 permission_profile = "worktree"
+
+# Checks the stage itself runs on every delivery, in a detached
+# worktree at the delivery's tip.
+[[checks]]
+name = "units"
+run = "cargo test --lib"
+timeout_s = 120
 ```
 
 | Key | Meaning |
@@ -81,6 +89,8 @@ permission_profile = "worktree"
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from `<runner> --version` when you leave it out. |
 | `mode` | Optional. `standard` is the default and the only process that exists; `experimental` is a reserved name (R14, not built). |
+| `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
+| `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. |
 
 The three fixed roles and every `[[candidates]]` entry each need `runner`, `model`, `effort` and
 `permission_profile`. The candidates are the pool the director picks actors from — it cannot cast
@@ -160,8 +170,8 @@ In the normal path the steps run in this order:
 | plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
 | cast | director | `backlot task new` splits the plan into tasks; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. |
-| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it ran). |
-| review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. |
+| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
+| review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. An accepting verdict waits for every declared check's stage record — only you may accept over pending ones — and names each failing check in the conclusion. |
 | rework | actor | A `changes-requested` review goes back to the actor as a `[backlot]` message; it fixes and delivers again. The rework cap counts the rounds. |
 | report | director → producer → you | `backlot report` at agreed nodes; the producer reports to you in its own terminal. |
 

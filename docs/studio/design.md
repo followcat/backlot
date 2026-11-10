@@ -76,6 +76,20 @@ before the agent has finished. The range is real: the CLI resolves both ends in 
 empty range or a tip that is not on the task's `backlot/<studio>/<task>` branch, so the ledger holds the resolved
 `sha..sha` (S9b).
 
+**The checks on a delivery are the stage's, not the actor's** (S9b part 2). The cast declares
+`[[checks]]` — a name, a `run` command and `timeout_s` — and may pass stage environment names
+through `check_env`; dangerous names (`BACKLOT_*`, `HC_*`, proxies, credentials) are refused at
+`studio new`. Each declared check runs once per delivery on the stage itself: `sh -c` in a
+detached worktree at the delivery's end sha, under an environment stripped to a passthrough list
+plus `check_env`, one run per studio polled across ticks, the timeout escalated TERM then KILL
+five seconds later, the log capped and written under `checks/` before the result is recorded
+`task.checked` by `stage`. A stage stopped mid-check owes it again — the ledger either holds its
+record or it reruns. What the actor reports with `deliver --check` stays its own claim, kept
+apart from the stage's records in the reviewer's notice (which waits for them), `status` and
+`records`. An accepting or partially accepting review is refused while a declared check has no
+record — the user alone may accept over pending ones — and unless its conclusion names every
+failing check; a `correction` producing such a review is gated the same way.
+
 If an actor goes quiet without delivering, the stage reminds it once and then raises attention to the director.
 
 ## Messages

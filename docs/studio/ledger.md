@@ -17,6 +17,7 @@ $XDG_STATE_HOME/backlot/<core id>/
     plan/             writer's plans and acceptance lists
     reports/          deliveries and node reports
     messages/         role-to-role and stage notice bodies
+    checks/           detached check worktrees and the <delivery-seq>-<name>.log each records
     attention/        screens saved when an attention was raised
     prompts/          the rendered role prompt each fresh start was given
     work/integration  the director's worktree, backlot/<studio>/integration
@@ -39,7 +40,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 
 | Kind | Main fields |
 |---|---|
-| `studio.created` | title, repo, mode, candidates, role configurations |
+| `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks` |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
 | `role.session` | role, session ID |
@@ -50,8 +51,9 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `task.created` | id, title, requirement version, acceptance, dependencies |
 | `task.cast` | task, actor identity, reason, optional priority, by (the caster) |
 | `task.priority` | task, priority |
-| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`), report file, requirement version, checks run |
+| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`), report file, requirement version, actor-reported checks |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
+| `task.checked` | task, delivery number, check name, exit code, `timed_out`, output log, duration — `stage` only |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
 | `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq` |
@@ -103,6 +105,22 @@ runs git in the task's `work/<task>` area, resolves both ends to full shas, refu
 and refuses a tip that `git merge-base --is-ancestor` does not place on the task's
 `backlot/<studio>/<task>` branch. The ledger holds `sha..sha`, never the symbolic input; the model
 itself runs no git.
+
+`task.checked` is the stage's own check record (S9b part 2): `studio.created` carries the cast's
+`[[checks]]` — a name, the `run` command and `timeout_s` — and `check_env`, the stage-environment
+names a check may see. Each declared check runs once per delivery on the stage, `sh -c` in a
+detached worktree at the delivery's end sha with the environment stripped to a passthrough list
+plus `check_env`; the timeout escalates TERM then KILL, and the capped log lands at
+`checks/<delivery-seq>-<name>.log` before the event. An append that is not by `stage`, names an
+undeclared check, targets a delivery that does not exist or repeats a `(delivery, check)` pair is
+refused. A pass is exit 0 — a signal exit or a timeout is not. An accepting or partially accepting
+`task.reviewed` is refused while a declared check has no record — the user alone may accept over
+pending ones — and refused unless its conclusion names every failing or timed-out check; a
+`correction` producing such a review is gated the same way. The reviewer's delivery notice waits
+the same, then lists what the stage ran — pass, fail or timed out, with its log — apart from the
+actor's own `--check` claims, and `backlot status` marks each declared check `running`, `pass` or
+`fail` on the task line. A report file copied into the ledger gains a "Accepted with failing
+stage checks" section while a task accepted over failures exists.
 
 `role.approval` records a director's or user's decision on an open `permission prompt` attention —
 refused without one, and refused for the director when the prompt is the user's (S9b): a flagged

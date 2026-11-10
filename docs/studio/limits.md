@@ -114,8 +114,16 @@ re-raise one `stall_limit_s` later.
   from anyone but the task's current actor is the user's alone, and `stage start`/`stage run`
   refuse working-role callers. `backlot deliver --commits A..B` resolves both ends in
   `work/<task>` and refuses an empty range or a tip off the task branch, so the recorded
-  `sha..sha` is real — but `--check name=pass` still records what the actor reports; the stage
-  does not run the checks (S9b part 2). A permission prompt whose screen reaches for
+  `sha..sha` is real. The stage also runs the declared checks itself (S9b part 2): each
+  `[[checks]]` entry in the cast runs once per delivery in a detached worktree at the delivery's
+  end sha, `sh -c` under an environment stripped to a passthrough list plus the declared
+  `check_env` names, with the timeout escalated TERM then KILL and the log capped — the result
+  is `task.checked`, recorded by `stage`. An accepting review waits for every declared check —
+  the user may accept over pending ones — and names each failing check in its conclusion; a
+  correction is gated the same. `--check name=pass` on `deliver` stays the actor's own claim,
+  kept apart from the stage's records in notices, `status` and `records`. A check is
+  actor-written code run as the user with a stripped environment and a timeout — it is not a
+  sandbox. A permission prompt whose screen reaches for
   `BACKLOT_*`, `env -i` or `--ignore-environment` is the user's: the director gets no notice and
   cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets

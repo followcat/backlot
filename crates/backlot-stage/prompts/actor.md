@@ -29,6 +29,7 @@ The requirement it serves: `{req_file}` (v{req_version}).
 
 When the checks pass and the acceptance list holds:
 
+- The stage runs the cast's declared checks on your delivery itself.
 - `backlot deliver --commits <A..B> --report <file> --check <name>=pass`
   (a check that failed is `--check <name>=fail`)
 
