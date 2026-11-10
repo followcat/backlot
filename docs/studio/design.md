@@ -152,8 +152,10 @@ keeps an in-memory idle-since per role (a restart starts it over). Once the late
 stretch passes `nudge_after_s` (default 180 s), exactly one `message.queued` with `purpose: nudge` and the step's key
 as `source_seq` joins the outbox — the body names what is owed and the command that discharges it. Still owed and
 still idle `escalate_after_s` (default 600 s) after that nudge was delivered, the step raises one `owed` attention on
-the owner; a non-producer owner also owes the producer one `owed` notice. The attention clears when the role owes
-nothing or is no longer wanted. A step the user owes is shown, never pushed. A nudge shares `source_seq` with ordinary
+the owner; a non-producer owner also owes the producer one `owed` notice. The attention is tied to the step it
+escalated: it clears as soon as none of the role's owed steps carries a delivered nudge — so a newer, unnudged step
+does not hold it up — or when the role is no longer wanted. The newer step then runs its own nudge and its own `owed`
+attention. A step the user owes is shown, never pushed. A nudge shares `source_seq` with ordinary
 notices without either suppressing the other: the dedup set counts only purpose-free messages, and the writer's
 wanted clock follows `plan`/`dispatch` purposes alone.
 

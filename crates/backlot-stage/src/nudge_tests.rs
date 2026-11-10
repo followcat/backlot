@@ -461,6 +461,115 @@ async fn the_still_idle_director_escalates_then_clears() {
     )));
 }
 
+/// The `owed` attention ties to the step it escalated, not the
+/// role: once `tasks` is answered the attention clears even though
+/// the director already owes `cast t1` — which then earns its own
+/// nudge, its own escalation, a detail that names it.
+#[tokio::test]
+async fn the_owed_attention_follows_its_step_not_the_role() {
+    let dir = tmp();
+    record(&dir, "user", studio_kind());
+    record(&dir, "producer", req_v1());
+    record(&dir, "producer", plan_request());
+    record(&dir, "writer", publish(PlanKind::Plan, 4));
+    record(&dir, "writer", publish(PlanKind::Acceptance, 5));
+    record(
+        &dir,
+        "producer",
+        EventKind::MessageQueued {
+            to: "director".into(),
+            file: Some("messages/6-dispatch.md".into()),
+            purpose: Some("dispatch".into()),
+            source_seq: None,
+        },
+    );
+    record(&dir, "stage", EventKind::MessageDelivered { target: 6 });
+    record(
+        &dir,
+        "stage",
+        role_started("director", "bl-acme-shop-director"),
+    );
+
+    let stage = new_stage().await;
+    let live = vec![term("acme-shop", "director")];
+    let state = store::load_state(&dir).unwrap();
+    work(&stage, "acme-shop", "director", Work::Waiting);
+    let t0 = now(&dir);
+
+    // `tasks` owed: past the idle limit the nudge queues, and the
+    // escalate window runs from its delivery.
+    stage.nudge("acme-shop", &dir, &state, &live, t0).unwrap();
+    stage
+        .nudge("acme-shop", &dir, &state, &live, t0 + 190_000)
+        .unwrap();
+    let nudge_seq = queued(&dir, "nudge")[0].seq;
+    record(
+        &dir,
+        "stage",
+        EventKind::MessageDelivered { target: nudge_seq },
+    );
+    let delivered_at = now(&dir);
+    let state = store::load_state(&dir).unwrap();
+    stage
+        .nudge("acme-shop", &dir, &state, &live, delivered_at + 600_000)
+        .unwrap();
+    let open: Vec<_> = attentions(&dir)
+        .into_iter()
+        .filter(|a| a.open && a.reason == reasons::OWED)
+        .collect();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert!(open[0].detail.contains("tasks"), "{}", open[0].detail);
+
+    // `task new` answers `tasks` — but leaves `cast t1` owed and
+    // unnudged: the answered step's attention clears anyway.
+    let created = record(&dir, "director", task_created("t1", "feature", 1));
+    let state = store::load_state(&dir).unwrap();
+    stage
+        .nudge("acme-shop", &dir, &state, &live, created.ts_ms)
+        .unwrap();
+    let owed: Vec<_> = attentions(&dir)
+        .into_iter()
+        .filter(|a| a.reason == reasons::OWED)
+        .collect();
+    assert_eq!(owed.len(), 1, "{owed:?}");
+    assert!(!owed[0].open, "the answered step's attention clears");
+
+    // `cast t1` runs its own course: its own nudge after the limit,
+    // keyed on the task creation, then its own escalation.
+    let state = store::load_state(&dir).unwrap();
+    stage
+        .nudge("acme-shop", &dir, &state, &live, created.ts_ms + 190_000)
+        .unwrap();
+    let nudges = queued(&dir, "nudge");
+    assert_eq!(nudges.len(), 2, "{nudges:?}");
+    match &nudges[1].kind {
+        EventKind::MessageQueued { to, source_seq, .. } => {
+            assert_eq!(to, "director");
+            assert_eq!(*source_seq, Some(created.seq));
+        }
+        other => panic!("wrong event: {other:?}"),
+    }
+    record(
+        &dir,
+        "stage",
+        EventKind::MessageDelivered {
+            target: nudges[1].seq,
+        },
+    );
+    let delivered_at = now(&dir);
+    let state = store::load_state(&dir).unwrap();
+    stage
+        .nudge("acme-shop", &dir, &state, &live, delivered_at + 600_000)
+        .unwrap();
+    let open: Vec<_> = attentions(&dir)
+        .into_iter()
+        .filter(|a| a.open && a.reason == reasons::OWED)
+        .collect();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert_eq!(open[0].role, "director");
+    assert!(open[0].detail.contains("cast t1"), "{}", open[0].detail);
+}
+
 /// A nudge and an ordinary notice share a `source_seq` without
 /// suppressing each other: the delivered-task step's key is the
 /// delivery's seq — the same seq the delivery notice claims.

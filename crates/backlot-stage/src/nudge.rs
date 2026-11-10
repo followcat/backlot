@@ -7,8 +7,10 @@
 //! message, ever, with the step's key as `source_seq`. Still owed
 //! and still idle `escalate_after_s` after that nudge was
 //! delivered, the step raises one `owed` attention on the owner —
-//! cleared the moment the owner owes nothing or is no longer
-//! wanted. A step the user owes is shown, never pushed.
+//! cleared once no owed step of the owner still carries a delivered
+//! nudge (the escalated step is done, whatever it owes next) or the
+//! owner is no longer wanted. A step the user owes is shown, never
+//! pushed.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -114,10 +116,14 @@ pub fn plan(
             }
         }
     }
-    // An `owed` attention stands only while its role still owes a
-    // step and is still wanted.
+    // An `owed` attention stands only while its role is wanted and
+    // some owed step still carries a delivered nudge — the step it
+    // escalated. A newer step, not yet nudged, does not hold it up.
     for a in state.open_attention().filter(|a| a.reason == reasons::OWED) {
-        if !wanted.contains(&a.role) || !steps.iter().any(|s| s.owner == a.role) {
+        let nudged = steps
+            .iter()
+            .any(|s| s.owner == a.role && nudge_for(state, s.key).is_some_and(|m| m.delivered));
+        if !wanted.contains(&a.role) || !nudged {
             out.push(Move::Clear { seq: a.seq });
         }
     }
