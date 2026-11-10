@@ -50,13 +50,13 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `task.created` | id, title, requirement version, acceptance, dependencies |
 | `task.cast` | task, actor identity, reason, optional priority, by (the caster) |
 | `task.priority` | task, priority |
-| `task.delivered` | task, delivery number, actor identity, commit range, report file, requirement version, checks run |
+| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`), report file, requirement version, checks run |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
 | `task.finding` | task, delivery number, findings, by |
 | `task.state` | task, paused, resumed, abandoned, or taken over, with reason |
 | `message.queued` / `message.delivered` | from, to, file, purpose, optional `source_seq` |
 | `report.sent` | from, to, node, file |
-| `attention.raised` / `attention.cleared` | role, reason, detail |
+| `attention.raised` / `attention.cleared` | role, reason, detail, `needs_user` flag on `permission prompt` |
 | `correction` | target event, changed fields, reason |
 
 `role.lost` means a role recorded as live vanished unexpectedly (its terminal is gone with no
@@ -98,8 +98,18 @@ that is harmless.
 `task.cast` records `by`, the role that cast. A producer's cast (the light path) routes the
 delivery notice to the producer; a director's or unattributed cast routes it to the director.
 
+`task.delivered`'s commit range is resolved before the append (S9b): `backlot deliver --commits A..B`
+runs git in the task's `work/<task>` area, resolves both ends to full shas, refuses an empty range,
+and refuses a tip that `git merge-base --is-ancestor` does not place on the task's
+`backlot/<studio>/<task>` branch. The ledger holds `sha..sha`, never the symbolic input; the model
+itself runs no git.
+
 `role.approval` records a director's or user's decision on an open `permission prompt` attention —
-refused without one. The stage sends the runner's approval key while the prompt still shows, then
+refused without one, and refused for the director when the prompt is the user's (S9b): a flagged
+attention, or a prompt on a role that is not an actor. A permission prompt is flagged
+`needs_user` when its saved screen, flattened of whitespace and box-drawing, reached for
+`BACKLOT_*`, `env -i` or `--ignore-environment`; such an attention owes the director no notice and
+shows as the user's. The stage sends the runner's approval key while the prompt still shows, then
 `attention.cleared` lands; a prompt already gone clears with no key sent. The stage never answers a
 prompt without a recorded decision, and a decision recorded before the attention does not answer a
 later prompt. A `deny` also owes the denied role a notice naming who denied it — the esc

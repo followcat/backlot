@@ -160,7 +160,7 @@ In the normal path the steps run in this order:
 | plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
 | cast | director | `backlot task new` splits the plan into tasks; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. |
-| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range, a report file and the checks it ran). |
+| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it ran). |
 | review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. |
 | rework | actor | A `changes-requested` review goes back to the actor as a `[backlot]` message; it fixes and delivers again. The rework cap counts the rounds. |
 | report | director → producer → you | `backlot report` at agreed nodes; the producer reports to you in its own terminal. |
@@ -204,6 +204,9 @@ in the state directory.
 - A prompt touching **real sessions, production, accounts or global settings**, or destructive
   outside the work area, is yours — and so is any prompt on a role that is not an actor (the
   producer, the director, the writer).
+- A prompt whose screen reaches for **the role-identity variables or environment-clearing flags**
+  — `BACKLOT_*`, `env -i`, `--ignore-environment` — is yours outright: the stage marks it
+  `needs the user`, the director gets no notice and its `backlot approve` refuses.
 
 Answer with `backlot approve`, naming the role's key — `producer`, `director`, `writer` or
 `actor-<task>-c<n>` (the panel and `backlot status` show it):

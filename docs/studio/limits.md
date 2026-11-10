@@ -107,13 +107,19 @@ re-raise one `stall_limit_s` later.
 
 ## Files and records
 
-- **Checks and reviews are taken on trust.** `backlot deliver --check name=pass` records what the
-  actor reports: the stage does not run the checks or confirm that the commits are on the task
-  branch. `backlot review` does not check who runs it, so an actor can accept its own delivery from
-  its own terminal, and `backlot correct` can change a recorded verdict the same way — a
-  director's `changes-requested` turned into `accepted` by the actor. Both are plain `backlot`
-  commands, which every role runs without a prompt. `approve`, `priority`, `reopen`, `close` and
-  `studio finish` are the only commands that check the caller.
+- **Who may record what is enforced at append; the contents are still trusted.** The ledger
+  refuses an event outside the recording role's whitelist: an actor records only its own task's
+  delivery, its own `blocked` and plain `tell`/`ask` messages — it can no longer accept its own
+  delivery or correct a verdict. The writer records plans and messages only, `task.delivered`
+  from anyone but the task's current actor is the user's alone, and `stage start`/`stage run`
+  refuse working-role callers. `backlot deliver --commits A..B` resolves both ends in
+  `work/<task>` and refuses an empty range or a tip off the task branch, so the recorded
+  `sha..sha` is real — but `--check name=pass` still records what the actor reports; the stage
+  does not run the checks (S9b part 2). A permission prompt whose screen reaches for
+  `BACKLOT_*`, `env -i` or `--ignore-environment` is the user's: the director gets no notice and
+  cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
+  doing another role's step *through backlot*, not a determined process — a script that sets
+  the variable inside shows only `bash x.sh` on the prompt screen.
 - **Worktrees and branches are not removed** when a studio ends — `work/` trees and `backlot/…`
   branches accumulate — and state directories are not pruned. Removal is yours; the guide shows
   the commands.

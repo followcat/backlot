@@ -65,9 +65,16 @@ no per-agent integration beyond the launch flags in `runners.md`.
 | Actor | `backlot deliver`, `backlot block` |
 | Any | `backlot status`, `backlot tell <role>` |
 
+The table is enforced, not just followed (S9b): the ledger refuses an event from a role outside its whitelist — an
+actor records only its own task's `task.delivered`, its own `blocked` and purpose-free messages, and `task.delivered`
+from anyone who is not the task's current actor is the user's alone. `stage start` and `stage run` refuse actor and
+writer callers too.
+
 **A delivery is only what `backlot deliver` records**, with a commit range and a report. An idle status, a finished turn
 or a report file appearing are not deliveries. Status can read idle in the middle of a turn, and a report file can appear
-before the agent has finished.
+before the agent has finished. The range is real: the CLI resolves both ends in the task's work area and refuses an
+empty range or a tip that is not on the task's `backlot/<studio>/<task>` branch, so the ledger holds the resolved
+`sha..sha` (S9b).
 
 If an actor goes quiet without delivering, the stage reminds it once and then raises attention to the director.
 
@@ -97,9 +104,9 @@ Normal path:
 7. At nodes, the director reports to the producer, and the producer reports to the user.
 
 Light path: the producer dispatches one task directly to one actor, or does the job itself — `task new`, `cast` and
-`review` have no caller restriction, so `backlot … --as producer` runs the whole path. A producer's cast is recorded in
-`task.cast`'s `by` and routes the delivery notice to the producer. It is recorded the same way, so the two paths can be
-compared on real work.
+`review` are the producer's and director's to run, so `backlot … --as producer` runs the whole path. A producer's cast
+is recorded in `task.cast`'s `by` and routes the delivery notice to the producer. It is recorded the same way, so the
+two paths can be compared on real work.
 
 When everything is accepted the user decides; `backlot studio finish` records `studio.finished` and the studio stops
 scheduling — only a person explicitly reopened is desired again.
@@ -284,6 +291,13 @@ work area; `backlot approve --person <role> --decision allow|deny` records `role
 runner's approval key while the prompt still shows — never without a recorded decision — then clears the attention. A
 prompt that touches real sessions, production, accounts or global settings, or is destructive outside the work area,
 goes to the user and shows in the panel; so does a prompt on any role that is not an actor.
+
+Two prompts are the user's outright (S9b), and the director's `role.approval` on either is refused: a prompt on a role
+that is not an actor — the director answers only an actor's — and a prompt whose saved screen reaches for the
+role-identity variables or the environment-clearing env flags. The stage reads the screen with whitespace and
+box-drawing characters removed, so a wrapped prompt box cannot hide a mid-word `BACKLOT_`, `env -i` or
+`--ignore-environment`, and flags the attention `needs_user`: no notice to the director, `backlot status` and the
+panel mark it as the user's.
 
 ## Defaults that can still change
 
