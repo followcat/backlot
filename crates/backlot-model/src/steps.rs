@@ -6,7 +6,7 @@
 //! Nothing is owed once the studio is finished.
 
 use crate::event::{CheckDecl, PlanKind, TaskStateChange, Verdict};
-use crate::state::{Message, StudioState, Task, TaskStatus};
+use crate::state::{Message, RoleLifecycle, StudioState, Task, TaskStatus};
 
 /// One thing the ledger still owes: who, what, and since when.
 #[derive(Debug, Clone, PartialEq)]
@@ -345,6 +345,24 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
             since_ms: r.delivered_ms.unwrap_or(r.ts_ms),
         });
     }
+
+    // A start a `[limits]` cap still holds owes nothing — no step,
+    // so no nudge and no `owed` attention can name a terminal that
+    // does not exist. A live role's obligation ages from the later
+    // of its ordinary since and its latest start: the wait under
+    // the cap did not run the clock.
+    let held = crate::limits::held(state);
+    out.retain_mut(|s| {
+        if held.contains_key(&s.owner) {
+            return false;
+        }
+        if let Some(r) = state.roles.get(&s.owner)
+            && r.lifecycle() == RoleLifecycle::Live
+        {
+            s.since_ms = s.since_ms.max(r.since_ms);
+        }
+        true
+    });
 
     out.sort_by_key(|s| s.key);
     out

@@ -169,14 +169,16 @@ async fn the_idle_producer_is_nudged_once() {
     let dir = tmp();
     record(&dir, "user", studio_kind());
     record(&dir, "producer", req_v1());
-    record(&dir, "producer", plan_request());
-    record(&dir, "writer", publish(PlanKind::Plan, 4));
-    let last = record(&dir, "writer", publish(PlanKind::Acceptance, 5));
+    // The producer is up before the work it answers — a step owed it
+    // ages from its latest start, so the start comes first here.
     record(
         &dir,
         "stage",
         role_started("producer", "bl-acme-shop-producer"),
     );
+    record(&dir, "producer", plan_request());
+    record(&dir, "writer", publish(PlanKind::Plan, 4));
+    let last = record(&dir, "writer", publish(PlanKind::Acceptance, 5));
     let t0 = last.ts_ms;
 
     let stage = new_stage().await;
@@ -235,14 +237,16 @@ async fn working_or_busy_owners_are_never_nudged() {
     let dir = tmp();
     record(&dir, "user", studio_kind());
     record(&dir, "producer", req_v1());
-    record(&dir, "producer", plan_request());
-    record(&dir, "writer", publish(PlanKind::Plan, 4));
-    let last = record(&dir, "writer", publish(PlanKind::Acceptance, 5));
+    // The producer is up before the work it answers — a step owed it
+    // ages from its latest start, so the start comes first here.
     record(
         &dir,
         "stage",
         role_started("producer", "bl-acme-shop-producer"),
     );
+    record(&dir, "producer", plan_request());
+    record(&dir, "writer", publish(PlanKind::Plan, 4));
+    let last = record(&dir, "writer", publish(PlanKind::Acceptance, 5));
     let t0 = last.ts_ms;
 
     let stage = new_stage().await;
@@ -289,14 +293,16 @@ async fn a_restart_restarts_the_stretch_but_never_the_nudge() {
     let dir = tmp();
     record(&dir, "user", studio_kind());
     record(&dir, "producer", req_v1());
-    record(&dir, "producer", plan_request());
-    record(&dir, "writer", publish(PlanKind::Plan, 4));
-    let last = record(&dir, "writer", publish(PlanKind::Acceptance, 5));
+    // The producer is up before the work it answers — a step owed it
+    // ages from its latest start, so the start comes first here.
     record(
         &dir,
         "stage",
         role_started("producer", "bl-acme-shop-producer"),
     );
+    record(&dir, "producer", plan_request());
+    record(&dir, "writer", publish(PlanKind::Plan, 4));
+    let last = record(&dir, "writer", publish(PlanKind::Acceptance, 5));
     let t0 = last.ts_ms;
 
     let stage = new_stage().await;
@@ -357,6 +363,11 @@ async fn the_still_idle_director_escalates_then_clears() {
     let dir = tmp();
     record(&dir, "user", studio_kind());
     record(&dir, "producer", req_v1());
+    record(
+        &dir,
+        "stage",
+        role_started("director", "bl-acme-shop-director"),
+    );
     record(&dir, "director", task_created("t1", "feature", 1));
     record(&dir, "director", cast("t1", "actor-a", "a"));
     record(&dir, "actor-t1-c1", delivered("t1", 1, "a", 1));
@@ -364,11 +375,6 @@ async fn the_still_idle_director_escalates_then_clears() {
         &dir,
         "director",
         reviewed("t1", 1, Verdict::Accepted, vec![]),
-    );
-    record(
-        &dir,
-        "stage",
-        role_started("director", "bl-acme-shop-director"),
     );
     let t0 = closed.ts_ms;
 
@@ -470,10 +476,15 @@ async fn the_owed_attention_follows_its_step_not_the_role() {
     let dir = tmp();
     record(&dir, "user", studio_kind());
     record(&dir, "producer", req_v1());
+    record(
+        &dir,
+        "stage",
+        role_started("director", "bl-acme-shop-director"),
+    );
     record(&dir, "producer", plan_request());
     record(&dir, "writer", publish(PlanKind::Plan, 4));
     record(&dir, "writer", publish(PlanKind::Acceptance, 5));
-    record(
+    let dispatched = record(
         &dir,
         "producer",
         EventKind::MessageQueued {
@@ -483,11 +494,12 @@ async fn the_owed_attention_follows_its_step_not_the_role() {
             source_seq: None,
         },
     );
-    record(&dir, "stage", EventKind::MessageDelivered { target: 6 });
     record(
         &dir,
         "stage",
-        role_started("director", "bl-acme-shop-director"),
+        EventKind::MessageDelivered {
+            target: dispatched.seq,
+        },
     );
 
     let stage = new_stage().await;

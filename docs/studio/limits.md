@@ -123,6 +123,10 @@ re-raise one `stall_limit_s` later.
   real ceiling is the sum of the studios' caps, set by the person who writes the casts. `studio
   new` refuses a cap that can never sit its fixed roles — under the producer-and-director count on
   the runner, or at their count while the writer or a candidate shares it.
+- **A held role owes nothing until it starts.** A start a `[limits]` cap holds back accrues no
+  task budget (the clock opens at the first `role.started`), owes no step, draws no nudge and no
+  `owed` attention; once the role starts, an owed step ages from the later of its ordinary
+  `since` and that start.
 - **The summary document is written at most once every two seconds** and only when it changed —
   `backlot status` reads the ledger, but the panel can be a couple of seconds behind it.
 - **The summary document has a 1 MiB hard limit.** A live studio is written even past the 64 KiB

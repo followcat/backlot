@@ -2,6 +2,8 @@
 //! per obligation row, keyed on the seq of the event that created it
 //! — and nothing once the studio is finished.
 
+use std::collections::BTreeMap;
+
 use crate::event::*;
 use crate::state::{StudioState, apply, replay};
 use crate::steps::next_steps;
@@ -538,4 +540,122 @@ fn a_waiting_task_owes_no_cast_step() {
     ]);
     state = replay(&events);
     assert_eq!(step(&state, "cast t2"), Some((4, "director".into())));
+}
+
+/// S9e fix round — every role and candidate on `fake`, capped at
+/// `cap` live roles.
+fn limited(cap: u32) -> EventKind {
+    let mut kind = studio_kind();
+    let EventKind::StudioCreated {
+        roles,
+        candidates,
+        limits,
+        ..
+    } = &mut kind
+    else {
+        unreachable!()
+    };
+    for r in [
+        &mut roles.producer.runner,
+        &mut roles.director.runner,
+        &mut roles.writer.runner,
+    ]
+    .into_iter()
+    .chain(candidates.iter_mut().map(|c| &mut c.runner))
+    {
+        *r = "fake".into();
+    }
+    *limits = BTreeMap::from([("fake".to_string(), cap)]);
+    kind
+}
+
+/// A cast on `fake` — the cast records the candidate's runner.
+fn cast_fake(task: &str) -> EventKind {
+    let mut kind = cast(task, "actor-a", "a");
+    let EventKind::TaskCast { actor, .. } = &mut kind else {
+        unreachable!()
+    };
+    actor.runner = "fake".into();
+    kind
+}
+
+/// `role.started` on `fake` — the actor identity is what
+/// `limits::held` counts a live role's seat by.
+fn started(seq: u64, role: &str) -> Event {
+    let mut kind = role_started(role);
+    let EventKind::RoleStarted { actor, .. } = &mut kind else {
+        unreachable!()
+    };
+    *actor = Some(ActorIdentity {
+        runner: "fake".into(),
+        runner_version: None,
+        model: "m".into(),
+        effort: "high".into(),
+        permission_profile: "standard".into(),
+    });
+    ev(seq, "stage", kind)
+}
+
+/// A start a `[limits]` cap holds back owes nothing — no `deliver`
+/// step, so no nudge and no `owed` attention can name a terminal
+/// that does not exist.
+#[test]
+fn a_held_actor_owes_no_step() {
+    let events = vec![
+        ev(1, "user", limited(2)),
+        ev(
+            2,
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ev(3, "director", task_created("t1", "feature", 1)),
+        ev(4, "director", cast_fake("t1")),
+        // Producer and director fill the two seats; the actor waits.
+        started(5, "producer"),
+        started(6, "director"),
+    ];
+    let state = replay(&events);
+    assert!(crate::limits::held(&state).contains_key("actor-t1-c1"));
+    assert!(step(&state, "deliver t1").is_none());
+    assert!(
+        next_steps(&state).iter().all(|s| s.owner != "actor-t1-c1"),
+        "{:?}",
+        next_steps(&state)
+    );
+}
+
+/// The moment the held actor starts its step is owed — aged from
+/// the start, not the cast: the pre-start wait cannot make it
+/// overdue on its first live tick.
+#[test]
+fn a_started_actors_step_ages_from_the_start() {
+    let events = vec![
+        ev(1, "user", limited(2)),
+        ev(
+            2,
+            "producer",
+            EventKind::ReqVersion {
+                version: 1,
+                file: "req/v1.md".into(),
+                summary: "first".into(),
+            },
+        ),
+        ev(3, "director", task_created("t1", "feature", 1)),
+        ev(4, "director", cast_fake("t1")),
+        started(5, "producer"),
+        started(6, "director"),
+        // The seat freed, the actor started at 8000.
+        started(8, "actor-t1-c1"),
+    ];
+    let state = replay(&events);
+    let s = next_steps(&state)
+        .into_iter()
+        .find(|s| s.label == "deliver t1")
+        .expect("a live actor owes its delivery");
+    assert_eq!(s.owner, "actor-t1-c1");
+    assert_eq!(s.since_ms, 8_000, "aged from the start, not the 4000 cast");
 }

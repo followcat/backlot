@@ -47,7 +47,8 @@ until a slot frees, with nothing recorded for the wait. `backlot status` and the
 `waiting for a <runner> slot` on the held role. The cap is per studio: two studios on one account each count only
 their own roles. `studio new` refuses a cap that can never sit its fixed roles — under the producer-and-director
 count on the runner, or at their count while the writer or a candidate shares it — because no seat could ever free
-for the rest.
+for the rest. A held role accrues no task budget and owes nothing until its first `role.started`, which then becomes
+the floor for its obligations' age.
 
 It uses `hc-proto` directly, because `doc.get` and `doc.set` have no CLI verb.
 
