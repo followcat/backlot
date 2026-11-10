@@ -177,6 +177,17 @@ pub struct Check {
     pub passed: bool,
 }
 
+/// A check the cast declares for the stage to run on each delivery
+/// (`[[checks]]`, S9b part 2). The stage runs `run` under a stripped
+/// environment in a worktree of the delivery's tip and records
+/// `task.checked`; `timeout_s` bounds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckDecl {
+    pub name: String,
+    pub run: String,
+    pub timeout_s: u64,
+}
+
 /// Finding severity; the ledger names the field but not the values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -257,6 +268,14 @@ pub enum EventKind {
         /// before the `owed` attention.
         #[serde(default = "default_escalate_after_s")]
         escalate_after_s: u32,
+        /// Environment variable names passed through to every
+        /// stage-run check (`check_env` in the cast file).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        check_env: Vec<String>,
+        /// The checks the stage runs on each delivery, in declared
+        /// order. Absent on logs that predate the field.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        checks: Vec<CheckDecl>,
     },
     #[serde(rename = "role.started")]
     RoleStarted {

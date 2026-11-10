@@ -80,6 +80,10 @@ struct CastFile {
     writer: ActorIdentity,
     #[serde(default)]
     candidates: Vec<Candidate>,
+    #[serde(default)]
+    check_env: Vec<String>,
+    #[serde(default)]
+    checks: Vec<crate::checks::CastCheck>,
 }
 
 fn read_cast(path: &Path) -> Result<CastFile, Fail> {
@@ -159,6 +163,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
             cast_file,
         } => {
             let cast = read_cast(&cast_file)?;
+            let (check_env, checks) = crate::checks::declarations(&cast.check_env, &cast.checks)?;
             Ok(Box::new(move |_, _| {
                 Ok(pending(
                     EventKind::StudioCreated {
@@ -177,6 +182,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         escalate_after_s: cast
                             .escalate_after_s
                             .unwrap_or_else(default_escalate_after_s),
+                        check_env,
+                        checks,
                     },
                     by,
                     Vec::new(),

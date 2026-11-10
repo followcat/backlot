@@ -58,6 +58,17 @@ pub fn studio_kind() -> EventKind {
         stall_limit_s: 600,
         nudge_after_s: 180,
         escalate_after_s: 600,
+        check_env: Vec::new(),
+        checks: Vec::new(),
+    }
+}
+
+/// A declared stage check for `studio.created`.
+pub fn check_decl(name: &str, run: &str, timeout_s: u64) -> CheckDecl {
+    CheckDecl {
+        name: name.into(),
+        run: run.into(),
+        timeout_s,
     }
 }
 

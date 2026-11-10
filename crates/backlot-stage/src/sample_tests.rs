@@ -205,6 +205,8 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                     stall_limit_s,
                     nudge_after_s: 180,
                     escalate_after_s: 600,
+                    check_env: Vec::new(),
+                    checks: Vec::new(),
                 },
             ),
             files: Vec::new(),

@@ -29,6 +29,12 @@ pub struct StudioConfig {
     /// Seconds a delivered nudge may go unanswered before escalation.
     #[serde(default = "default_escalate_after_s")]
     pub escalate_after_s: u32,
+    /// Environment variable names passed to every stage-run check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub check_env: Vec<String>,
+    /// The checks the stage runs on each delivery, in declared order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<CheckDecl>,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the

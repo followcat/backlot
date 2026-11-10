@@ -39,6 +39,8 @@ fn studio(repo: &str) -> StudioState {
             stall_limit_s: 600,
             nudge_after_s: 180,
             escalate_after_s: 600,
+            check_env: Vec::new(),
+            checks: Vec::new(),
         }),
         ..StudioState::default()
     }
