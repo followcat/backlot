@@ -748,20 +748,47 @@ fn failed_roles_reports_stop_failures() {
     assert!(signals::failed_roles(&dir, &state).is_empty());
 }
 
-/// `backlot status` shows `last turn failed: <error>` on the role.
+/// `backlot status` appends ` — last turn failed: <error>` to the
+/// role's own line — a fixed role's line, and a live actor's the
+/// roles section does not otherwise list.
 #[test]
-fn status_shows_the_last_turn_failure() {
+fn status_appends_the_last_turn_failure_to_the_roles_line() {
     let dir = tmp();
     studio(&dir);
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("stage"),
+                EventKind::RoleStarted {
+                    role: "actor-t1-c1".into(),
+                    terminal: Some("t9".into()),
+                    session_id: Some("s-9".into()),
+                    actor: Some(actor_cfg()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
     emit(
         &dir,
         "producer",
         json!({"ts_ms": 1, "event": "StopFailure", "session_id": "s-1", "error": "overloaded"}),
     );
+    emit(
+        &dir,
+        "actor-t1-c1",
+        json!({"ts_ms": 2, "event": "StopFailure", "session_id": "s-9", "error": "rate_limit"}),
+    );
     let state = store::load_state(&dir).unwrap();
     let out = crate::render::status("acme-shop", &state, &signals::failed_roles(&dir, &state), 0);
     assert!(
-        out.contains("producer  last turn failed: overloaded"),
+        out.contains("producer  fake/plain/high/standard (live) — last turn failed: overloaded"),
+        "{out}"
+    );
+    assert!(
+        out.contains("actor-t1-c1 fake/plain/high/standard (live) — last turn failed: rate_limit"),
         "{out}"
     );
 }

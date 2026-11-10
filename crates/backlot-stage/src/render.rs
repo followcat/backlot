@@ -119,6 +119,17 @@ pub fn status(
     let _ = writeln!(out, "  rework cap {}", studio.rework_cap);
     let _ = writeln!(out, "  stall limit {}s", studio.stall_limit_s);
     let _ = writeln!(out, "  roles:");
+    // S9f: a role whose last hook signal was a StopFailure carries
+    // ` — last turn failed: <error>` on its own line until the next
+    // signal — appended to the roles line it has, or on a line of
+    // its own when the section lists none.
+    let mut shown: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    let suffix = |role: &str| -> String {
+        failed
+            .get(role)
+            .map(|e| format!(" — last turn failed: {e}"))
+            .unwrap_or_default()
+    };
     // Runner limits (S9e): a held wanted role shows `waiting for a
     // <runner> slot` — a fixed role in place, actors after the fixed
     // three in wanted order.
@@ -136,6 +147,7 @@ pub fn status(
         ),
         ("writer", &studio.roles.writer, state.roles.get("writer")),
     ] {
+        shown.insert(role);
         let live = match live {
             _ if held.contains_key(role) => {
                 format!("waiting for a {} slot", held[role])
@@ -145,26 +157,59 @@ pub fn status(
             Some(_) => "lost".into(),
             None => "not started".into(),
         };
-        let _ = writeln!(out, "    {role:<9} {} ({live})", actor_short(cfg));
+        let _ = writeln!(
+            out,
+            "    {role:<9} {} ({live}){}",
+            actor_short(cfg),
+            suffix(role)
+        );
     }
-    for w in backlot_model::wanted::wanted_roles(state) {
+    let wanted = backlot_model::wanted::wanted_roles(state);
+    for w in &wanted {
         let Some(runner) = held.get(&w.role) else {
             continue;
         };
         if matches!(w.role.as_str(), "producer" | "director" | "writer") {
             continue;
         }
+        shown.insert(w.role.as_str());
         let _ = writeln!(
             out,
-            "    {:<9} {} (waiting for a {runner} slot)",
+            "    {:<9} {} (waiting for a {runner} slot){}",
             w.role,
-            actor_short(&w.actor)
+            actor_short(&w.actor),
+            suffix(&w.role),
         );
     }
-    // S9f: a role whose last hook signal was a StopFailure shows
-    // `last turn failed: <error>` until its next signal.
     for (role, error) in failed {
-        let _ = writeln!(out, "    {role:<9} last turn failed: {error}");
+        if shown.contains(role.as_str()) {
+            continue;
+        }
+        let r = state.roles.get(role);
+        let live = match r {
+            Some(r) if r.live => "live",
+            Some(r) if r.closed => "closed",
+            Some(_) => "lost",
+            None => "not started",
+        };
+        let who = r.and_then(|r| r.actor.clone()).or_else(|| {
+            wanted
+                .iter()
+                .find(|w| w.role == *role)
+                .map(|w| w.actor.clone())
+        });
+        match who {
+            Some(a) => {
+                let _ = writeln!(
+                    out,
+                    "    {role:<9} {} ({live}) — last turn failed: {error}",
+                    actor_short(&a)
+                );
+            }
+            None => {
+                let _ = writeln!(out, "    {role:<9} last turn failed: {error}");
+            }
+        }
     }
     if !studio.candidates.is_empty() {
         let _ = writeln!(out, "  candidates:");
