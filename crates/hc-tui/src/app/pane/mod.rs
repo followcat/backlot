@@ -347,6 +347,13 @@ impl Pane {
     pub fn take_clipboard_writes(&mut self) -> Vec<Vec<u8>> {
         std::mem::take(&mut self.pending_clipboard)
     }
+
+    /// The live wire completed its first paint and keeps it: its VT sees
+    /// live program output. An opening or reattaching pane is `false` —
+    /// and clears captures on the paint that lands.
+    pub fn is_painted(&self) -> bool {
+        matches!(&self.state, State::Live(live) if !live.await_paint)
+    }
 }
 
 /// Aborts a Live attach's tasks — every path that leaves Live calls it
