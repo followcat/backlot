@@ -17,6 +17,14 @@ fn raw_id(id: &str, kind: &str) -> Option<String> {
     (raw.len() == length.parse::<usize>().ok()?).then(|| raw.to_owned())
 }
 
+/// herdr's spawned-pane contract (src/pty/backend/unix.rs): `HERDR_ENV=1`
+/// tells programs a herdr-family client renders the terminal and forwards
+/// their OSC 52 to the host clipboard — Codex only emits it then. Terminal
+/// programs the TUI starts get the same marker.
+pub(super) fn program_env() -> BTreeMap<String, String> {
+    BTreeMap::from([("HERDR_ENV".into(), "1".into())])
+}
+
 impl App {
     pub(super) fn creation(
         &self,
@@ -131,6 +139,7 @@ impl App {
                 no_parent: true,
                 no_notify: true,
                 keep: true,
+                env: program_env(),
                 labels: BTreeMap::from([
                     ("herdr.space".into(), raw_space.clone()),
                     ("herdr.tab".into(), raw_tab),
@@ -194,6 +203,7 @@ impl App {
                 no_parent: true,
                 no_notify: true,
                 keep: true,
+                env: program_env(),
                 labels: BTreeMap::from([
                     ("herdr.space".into(), raw_space.clone()),
                     ("herdr.tab".into(), raw_tab.clone()),

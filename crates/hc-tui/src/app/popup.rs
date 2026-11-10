@@ -7,6 +7,7 @@
 use super::input::{MouseButton, MouseEventKind, MouseInput, TerminalKey};
 use super::pane::{Pane, Role, Spec};
 use super::*;
+use crate::app::creation::program_env;
 use crate::config::{CustomCommandAction, CustomCommandKeybind};
 use crate::operations::Action;
 use crate::popup_size::{PopupSize, resolve_popup_geometry};
@@ -131,6 +132,7 @@ impl App {
             keep: false,
             no_notify: true,
             no_parent: true,
+            env: program_env(),
             labels: BTreeMap::from([(POPUP_LABEL.into(), "1".into())]),
             display: self.host_facts.display(),
             ..Default::default()

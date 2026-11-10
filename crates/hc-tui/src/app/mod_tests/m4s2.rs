@@ -414,6 +414,19 @@ async fn a_program_copy_reaches_the_outer_terminal_once() {
 }
 
 #[tokio::test]
+async fn created_terminals_carry_the_herdr_env_marker() {
+    // herdr injects HERDR_ENV=1 into every spawned pane; programs that
+    // forward clipboard writes through the terminal key on it.
+    let mut app = app_with(&["t1"]);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    let creation = app.creation(None, false).unwrap();
+    assert_eq!(creation.params.env.get("HERDR_ENV"), Some(&"1".into()));
+    let (creation, _) = app.workspace_creation().unwrap();
+    assert_eq!(creation.params.env.get("HERDR_ENV"), Some(&"1".into()));
+}
+
+#[tokio::test]
 async fn seen_writes_the_turn_once_per_turn_and_retries_a_failure() {
     let mut app = app_alerts();
     app.focused = Some("t1".into());
