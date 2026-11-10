@@ -489,7 +489,7 @@ fn check_acceptance(
     let unnamed: Vec<String> = t
         .checks_failed(delivery, &studio.checks)
         .into_iter()
-        .filter(|n| !conclusion.contains(n.as_str()))
+        .filter(|n| !names_check(conclusion, n))
         .collect();
     if !unnamed.is_empty() {
         return Err(Refusal::ChecksFailing {
@@ -498,6 +498,18 @@ fn check_acceptance(
         });
     }
     Ok(())
+}
+
+/// Whether `conclusion` names the check as a whole word — `unit`
+/// bounded on both sides by a non-`[a-z0-9_-]` character, so
+/// "community tests failed" does not name `unit`.
+fn names_check(conclusion: &str, name: &str) -> bool {
+    let name_char = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-';
+    conclusion.match_indices(name).any(|(i, _)| {
+        let before = conclusion[..i].chars().next_back();
+        let after = conclusion[i + name.len()..].chars().next();
+        before.is_none_or(|c| !name_char(c)) && after.is_none_or(|c| !name_char(c))
+    })
 }
 
 /// Whether an open `permission prompt` is the user's to answer:

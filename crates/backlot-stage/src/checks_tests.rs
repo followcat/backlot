@@ -701,7 +701,7 @@ fn a_report_written_after_an_accept_over_failures_carries_the_section() {
     .unwrap();
     ok(
         &env,
-        "review --task t1 --delivery 1 --verdict accepted --conclusion unit_failed_accepted --as director",
+        "review --task t1 --delivery 1 --verdict accepted --conclusion unit.failed_accepted --as director",
     );
     let report = fixture(&scratch, "node.md", "node report\n");
     ok(
@@ -740,7 +740,7 @@ fn a_report_written_after_an_accept_over_failures_carries_the_section() {
         "{node_copy}"
     );
     assert!(
-        node_copy.contains("t1 delivery 1: unit — unit_failed_accepted"),
+        node_copy.contains("t1 delivery 1: unit — unit.failed_accepted"),
         "{node_copy}"
     );
 }

@@ -335,6 +335,38 @@ fn an_accept_over_failing_checks_names_them() {
     );
 }
 
+/// A failing check is named in the conclusion as a whole word —
+/// `unit` inside "community" or "unit-tests" does not count.
+#[test]
+fn a_failing_check_is_named_as_a_whole_word() {
+    let mut state = delivered_state();
+    record(&mut state, 6, "unit", Some(1), false);
+    record(&mut state, 7, "lint", Some(0), false);
+    let unnamed = || {
+        Err(Refusal::ChecksFailing {
+            task: "t1".into(),
+            checks: vec!["unit".into()],
+        })
+    };
+    for c in [
+        "the community tests failed",
+        "accept unit-tests anyway",
+        "unit_x is fine",
+    ] {
+        assert_eq!(
+            validate(&state, &review("director", Verdict::Accepted, c)),
+            unnamed(),
+            "{c}"
+        );
+    }
+    for c in ["unit failed", "(unit) broke", "unit, sadly", "accept unit."] {
+        assert!(
+            validate(&state, &review("director", Verdict::Accepted, c)).is_ok(),
+            "{c}"
+        );
+    }
+}
+
 /// A `correct` that would leave a review accepting over unrecorded
 /// or unnamed checks is refused the way the review itself would be.
 #[test]
