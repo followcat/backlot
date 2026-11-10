@@ -64,6 +64,58 @@ impl Backend for FailBackend {
         Ok(())
     }
 }
+impl crate::ansi::FrameCursor for FailBackend {}
+
+/// A backend whose frames never reach the terminal: `emitted` is always
+/// false, the way `AnsiBackend` reports an identical-frame skip.
+struct QuietBackend;
+impl Backend for QuietBackend {
+    type Error = std::io::Error;
+    fn draw<'a, I>(&mut self, _c: I) -> std::io::Result<()>
+    where
+        I: Iterator<Item = (u16, u16, &'a ratatui::buffer::Cell)>,
+    {
+        Ok(())
+    }
+    fn hide_cursor(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn show_cursor(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn get_cursor_position(&mut self) -> std::io::Result<ratatui::layout::Position> {
+        Ok((0, 0).into())
+    }
+    fn set_cursor_position<P: Into<ratatui::layout::Position>>(
+        &mut self,
+        _p: P,
+    ) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn clear(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn clear_region(&mut self, _: ratatui::backend::ClearType) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn size(&self) -> std::io::Result<ratatui::layout::Size> {
+        Ok((80, 24).into())
+    }
+    fn window_size(&mut self) -> std::io::Result<ratatui::backend::WindowSize> {
+        Ok(ratatui::backend::WindowSize {
+            columns_rows: (80, 24).into(),
+            pixels: (800, 480).into(),
+        })
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+impl crate::ansi::FrameCursor for QuietBackend {
+    fn emitted(&self) -> bool {
+        false
+    }
+}
 
 fn app() -> App {
     let (accepted, _rx) = mpsc::channel(1);
@@ -85,14 +137,7 @@ fn app() -> App {
         None,
         std::path::PathBuf::new(),
     );
-    App::new(
-        watcher,
-        open,
-        live,
-        shell,
-        Arc::new(Probe::default()),
-        Box::new(|_, _| {}),
-    )
+    App::new(watcher, open, live, shell, Arc::new(Probe::default()))
 }
 
 fn app_with_spaces(spaced: &[(&str, &str)]) -> App {

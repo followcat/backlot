@@ -182,14 +182,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         Box::pin(async move { hc_proto::client::Client::connect(&endpoint, None).await })
     });
     let mouse_capture = shell.mouse_capture;
-    let mut app = App::new(
-        watcher,
-        open,
-        live,
-        shell,
-        Arc::new(Probe::default()),
-        crate::term::cursor_sink(),
-    );
+    let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
 
     app.set_operations(operations);
     // `endpoint_accepts_local_images` client arms: a `--remote`

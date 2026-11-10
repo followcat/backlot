@@ -8,7 +8,6 @@ impl App {
         live: crate::config::LiveKeybindConfig,
         shell: ClientShellConfig,
         probe: Arc<Probe>,
-        cursor_sink: CursorSink,
     ) -> App {
         let (pane_tx, pane_rx) = mpsc::channel(64);
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
@@ -121,9 +120,7 @@ impl App {
                 shape: hc_vt::CursorShape::Default,
                 blinking: true,
             },
-            applied_cursor: (hc_vt::CursorShape::Default, true),
             last_visible_cursor: None,
-            cursor_sink,
             quitting: false,
             host_facts: crate::host::HostFacts::default(),
             presentation: presentation::Presentation::default(),

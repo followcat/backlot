@@ -605,3 +605,34 @@
 - Gates: `cargo fmt --check`, `sh scripts/test-install.sh` and
   `sh tools/test-fetch-zig-deps.sh` under the heavy-lock; no crates/
   files were touched, so clippy and cargo test were not required.
+
+## Atomic frames end cursor flicker (branch fix/flicker)
+
+- The frame writer was split: ratatui flushed changed cells inside a
+  synchronized-output block, then cursor position, visibility and shape
+  went out in separate writes after the block ended. Terminals and IMEs
+  could show the cursor at intermediate positions, which read as
+  flicker and a flashing cursor. Wakeups also drew unconditionally, so
+  identical frames still emitted empty synchronized blocks.
+- `AnsiBackend` now buffers each frame and emits one write: sync
+  begin, cursor hide, OSC 8 reset, an optional `2J` for deferred
+  clears, changed cells, the final cursor position, a deduplicated
+  DECSCUSR shape change and cursor visibility, sync end, then the
+  non-Windows IME anchor repeat. `clear`/`clear_region(All)` arm a
+  pending clear carried inside the next block instead of writing a
+  bare `2J`. Frames whose diff and cursor state are unchanged emit no
+  bytes, and the scheduler unarms instead of stamping a phantom draw
+  so fresh dirt is not delayed. Cursor resolution (clamp, visible
+  memory, hidden anchor, bottom-right default, shape map) matches the
+  reference `resolve_host_cursor_state`.
+- Recorded pty streams against owned scratch sessions show redraw and
+  typing byte-identical to the reference (same synchronized block
+  count, same inside/outside cursor counters, same totals) and zero
+  bytes on idle and on no-op switches where older builds emitted
+  redundant empty blocks. Keystroke-to-echo latency matches the
+  reference locally; `--remote` adds about one hop of latency inherent
+  to the topology.
+- Gates: formatting, all-target Clippy and the full suite pass; the
+  29 installer tests pass; all 13 reference vectors pass; the parity
+  harness at 80x24 matches cell for cell except the documented
+  navigator footer-identity cells (8 and 12 cell exceptions).
