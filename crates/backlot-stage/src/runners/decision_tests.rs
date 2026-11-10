@@ -60,6 +60,7 @@ fn launch_for(runner: &str) -> Result<Launch, PlanError> {
         argv: vec![runner.into()],
         env: BTreeMap::new(),
         session: Session::PostLaunch,
+        hooks: None,
     })
 }
 

@@ -62,11 +62,13 @@ fn claude_new_argv() {
     let env = BTreeMap::new();
     let l = plan(&actor("claude", "standard"), &ctx(&env, None, None)).unwrap();
     assert_eq!(
-        normalized(&l.argv)[..9],
+        normalized(&l.argv)[..11],
         [
             "claude",
             "--allowedTools",
             "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)",
+            "--settings",
+            "/home/user/state/studios/acme-shop/roles/producer/claude-settings.json",
             "--model",
             "m",
             "--effort",
@@ -75,16 +77,16 @@ fn claude_new_argv() {
             "manual"
         ]
     );
-    assert_eq!(l.argv[9], "--session-id");
+    assert_eq!(l.argv[11], "--session-id");
     let id = l.session_id().unwrap();
-    assert_eq!(l.argv[10], id);
-    assert_eq!(l.argv.len(), 11);
+    assert_eq!(l.argv[12], id);
+    assert_eq!(l.argv.len(), 13);
     // With a prompt it lands last.
     let l = plan(&actor("claude", "standard"), &ctx(&env, Some("hi"), None)).unwrap();
-    assert_eq!(l.argv[11], "hi");
+    assert_eq!(l.argv[13], "hi");
     // Worktree edits are auto-accepted.
     let l = plan(&actor("claude", "worktree"), &ctx(&env, None, None)).unwrap();
-    assert_eq!(l.argv[8], "acceptEdits");
+    assert_eq!(l.argv[10], "acceptEdits");
 }
 
 #[test]
@@ -100,6 +102,8 @@ fn claude_resume_argv() {
             "ses-9",
             "--allowedTools",
             "Bash(backlot *),Read(//home/user/state/studios/acme-shop/**)",
+            "--settings",
+            "/home/user/state/studios/acme-shop/roles/producer/claude-settings.json",
             "--model",
             "m",
             "--effort",
@@ -110,6 +114,101 @@ fn claude_resume_argv() {
         ]
     );
     assert_eq!(l.session_id().as_deref(), Some("ses-9"));
+}
+
+/// S9f: every launch — fresh or resumed — carries a `HookSetup`
+/// under `roles/<role>/`: the `--settings` argv names its file, the
+/// file holds exactly the eight hook events each wired to the
+/// binary's own `hook` command at a five second timeout — nothing
+/// else, no permissions and no env, so the `--settings` layer can
+/// never change what the user's own settings decide.
+#[test]
+fn claude_settings_file_is_hooks_only() {
+    let env = BTreeMap::new();
+    for c in [
+        ctx(&env, None, None),
+        ctx(&env, Some("go"), Some("ses-9")),
+        ctx(&env, None, Some("ses-9")),
+    ] {
+        let l = plan(&actor("claude", "standard"), &c).unwrap();
+        let h = l.hooks.as_ref().expect("a hook setup");
+        assert_eq!(
+            h.settings.to_str().unwrap(),
+            "/home/user/state/studios/acme-shop/roles/producer/claude-settings.json"
+        );
+        assert_eq!(
+            h.signals.to_str().unwrap(),
+            "/home/user/state/studios/acme-shop/roles/producer/signals.jsonl"
+        );
+        let at = l.argv.iter().position(|a| a == "--settings").unwrap();
+        assert_eq!(l.argv[at + 1], h.settings.to_str().unwrap());
+        let file: serde_json::Value = serde_json::from_str(&h.content).unwrap();
+        assert_eq!(
+            file.as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["hooks"],
+            "{file}"
+        );
+        let hooks = file["hooks"].as_object().unwrap();
+        assert_eq!(hooks.len(), 8);
+        for event in [
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "PermissionRequest",
+            "Notification",
+            "Stop",
+            "StopFailure",
+        ] {
+            let entry = &hooks[event][0];
+            assert!(
+                !entry.as_object().expect(event).contains_key("matcher"),
+                "{event} carried a matcher"
+            );
+            let hook = &entry["hooks"][0];
+            assert_eq!(hook["type"], "command", "{event}");
+            assert_eq!(hook["timeout"], 5, "{event}");
+            assert_eq!(hook["command"], h.command, "{event}");
+        }
+        assert!(h.command.contains(" hook --file "), "{}", h.command);
+        assert!(h.command.ends_with("signals.jsonl'"), "{}", h.command);
+    }
+}
+
+/// The hook command is shell-safe even when the studio directory
+/// holds a space and a quote: `sh` must word-split it back into the
+/// binary path, `hook --file`, and the literal signals path.
+#[test]
+#[cfg(unix)]
+fn hook_command_quotes_spaces_and_quotes() {
+    let env = BTreeMap::new();
+    let c = LaunchCtx {
+        studio_dir: "/home/user/stu dio's/acme-shop",
+        ..ctx(&env, None, None)
+    };
+    let l = plan(&actor("claude", "standard"), &c).unwrap();
+    let h = l.hooks.unwrap();
+    let exe = std::env::current_exe().unwrap().display().to_string();
+    assert_eq!(
+        h.command,
+        format!(
+            "'{exe}' hook --file '/home/user/stu dio'\\''s/acme-shop/roles/producer/signals.jsonl'"
+        ),
+        "{}",
+        h.command
+    );
+    // `echo` unquotes the command: its output must be the two bare
+    // paths with the words between.
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("echo {}", h.command))
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap().trim(),
+        format!("{exe} hook --file /home/user/stu dio's/acme-shop/roles/producer/signals.jsonl")
+    );
 }
 
 /// The `--allowedTools` pair is one flag and one comma-joined value

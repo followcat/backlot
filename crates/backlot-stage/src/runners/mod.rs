@@ -27,6 +27,29 @@ pub struct Launch {
     pub env: BTreeMap<String, String>,
     /// How the role's session id becomes known.
     pub session: Session,
+    /// The per-session hook files to write before `terminal.run`
+    /// (S9f) — `None` for runners with no hooks.
+    pub hooks: Option<HookSetup>,
+}
+
+/// A hook-capable launch's per-session files: the settings file the
+/// argv's `--settings` names and the signals file its hook command
+/// appends to. Both live under `roles/<role>/` in the studio
+/// directory and are rewritten — the settings — or truncated — the
+/// signals — at every start and resume, so a moved binary or
+/// studio directory heals on the next launch.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HookSetup {
+    /// `roles/<role>/claude-settings.json` — the `--settings` argv
+    /// value and where `content` lands.
+    pub settings: PathBuf,
+    /// `roles/<role>/signals.jsonl` — the hook command's `--file`.
+    pub signals: PathBuf,
+    /// The settings file's JSON content.
+    pub content: String,
+    /// The hook command inside `content` — the fake runner gets it
+    /// as `BACKLOT_HOOK_CMD`.
+    pub command: String,
 }
 
 /// Where the session id a start records comes from.

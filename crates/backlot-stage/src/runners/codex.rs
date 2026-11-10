@@ -38,5 +38,6 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         argv,
         env: BTreeMap::new(),
         session: Session::PostLaunch,
+        hooks: None,
     })
 }

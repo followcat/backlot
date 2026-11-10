@@ -11,7 +11,7 @@ use backlot_model::ActorIdentity;
 use backlot_model::event::CheckDecl;
 use backlot_model::state::actor_task;
 
-use super::{Launch, LaunchCtx, PlanError, Session, uuid_v4};
+use super::{HookSetup, Launch, LaunchCtx, PlanError, Session, uuid_v4};
 
 /// The marker names a parent Claude Code leaves in its
 /// environment — exactly these: a `CLAUDE_CODE_*` prefix would also
@@ -93,6 +93,68 @@ fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
     rules.join(",")
 }
 
+/// The hook events the per-session settings file registers — every
+/// one a `command` hook running the binary's own `hook` subcommand,
+/// no matcher so all of them fire (S9f).
+const HOOK_EVENTS: &[&str] = &[
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "PermissionRequest",
+    "Notification",
+    "Stop",
+    "StopFailure",
+];
+
+/// POSIX single-quoting for the settings file's command line: `'` is
+/// written `'\''`. A studio directory can hold spaces or quotes.
+fn sh_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+/// The per-session Claude settings file (S9f): `hooks` only — no
+/// permissions, no env — pointing every event at
+/// `backlot hook --file <role's signals.jsonl>` with a five second
+/// timeout. `--settings <file>` is one session's extra layer, so
+/// the user's own hooks keep running and no user settings file is
+/// touched. The command is the running binary's absolute path —
+/// both paths shell-quoted.
+pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
+    let role_dir = std::path::Path::new(ctx.studio_dir)
+        .join("roles")
+        .join(ctx.role);
+    let settings = role_dir.join("claude-settings.json");
+    let signals = role_dir.join("signals.jsonl");
+    let exe = std::env::current_exe()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| "backlot".into());
+    let command = format!(
+        "{} hook --file {}",
+        sh_quote(&exe),
+        sh_quote(&signals.to_string_lossy())
+    );
+    let hook = serde_json::json!({"type": "command", "command": command, "timeout": 5});
+    let events: serde_json::Map<String, serde_json::Value> = HOOK_EVENTS
+        .iter()
+        .map(|e| {
+            (
+                (*e).to_string(),
+                serde_json::json!([{"hooks": [hook.clone()]}]),
+            )
+        })
+        .collect();
+    let content = serde_json::to_string_pretty(&serde_json::json!({"hooks": events}))
+        .unwrap_or_default()
+        + "\n";
+    HookSetup {
+        settings,
+        signals,
+        content,
+        command,
+    }
+}
+
 /// The session id a live claude terminal's argv chose: the value
 /// after `--session-id`, or after `-r` when it was a resume.
 pub fn session_in_argv(argv: &[String]) -> Option<String> {
@@ -122,9 +184,12 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // The `--allowedTools` list is variadic, so the pair goes before
     // `--model`: a `--flag` must follow the value or the positional
     // prompt would be swallowed as a tool name.
+    let hooks = hook_setup(ctx);
     argv.extend([
         "--allowedTools".into(),
         allowed_tools(ctx.studio_dir, ctx.role, ctx.checks),
+        "--settings".into(),
+        hooks.settings.to_string_lossy().into_owned(),
     ]);
     argv.extend([
         "--model".into(),
@@ -144,5 +209,6 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         argv,
         env: BTreeMap::new(),
         session: Session::Chosen(session),
+        hooks: Some(hooks),
     })
 }

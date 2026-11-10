@@ -24,6 +24,18 @@ use crate::runners::{self, LaunchCtx, StartDecision};
 use crate::store::{self, StoreError};
 use crate::workareas::{self, AreaFail};
 
+/// The launch's per-session hook files (S9f): write the settings
+/// file and truncate the signals file — a fresh session starts an
+/// empty stream so a dead turn's last signal cannot read as its own.
+fn prepare_hooks(hooks: &runners::HookSetup) -> std::io::Result<()> {
+    if let Some(parent) = hooks.settings.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&hooks.settings, &hooks.content)?;
+    std::fs::write(&hooks.signals, "")?;
+    Ok(())
+}
+
 /// A ledger event the stage appends for one studio.
 pub(crate) fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
     store::append(dir, move |_state, _seq| {
@@ -198,6 +210,12 @@ impl Stage {
         launch: &runners::Launch,
         runner_env: BTreeMap<String, String>,
     ) -> Result<bool, Fail> {
+        // S9f: the per-session hook files — settings rewritten,
+        // signals truncated — at every start and resume, so a moved
+        // binary or studio directory heals on the next launch.
+        if let Some(hooks) = &launch.hooks {
+            prepare_hooks(hooks).map_err(|e| Fail::refused(format!("hook files: {e}")))?;
+        }
         let cwd = workareas::role_dir(dir, &start.repo, &start.role);
         let run = self
             .client

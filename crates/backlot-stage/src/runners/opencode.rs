@@ -54,5 +54,6 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         argv,
         env,
         session: Session::Chosen(session),
+        hooks: None,
     })
 }

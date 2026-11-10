@@ -20,5 +20,6 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         ],
         env,
         session: Session::Chosen(format!("fake-{}", ctx.terminal)),
+        hooks: None,
     })
 }
