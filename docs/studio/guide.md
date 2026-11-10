@@ -143,6 +143,14 @@ has moved on. In the ledger you are the role `user`, so person-facing commands t
 backlot status --studio acme-shop
 ```
 
+The `next:` lines are what the ledger still owes — one per outstanding step, naming the step, the
+role that owes it and how long it has been owed (`next: dispatch — producer, owed 4m`). `user` as
+the owner means the step is yours (for example `finish` once every task is terminal and reported).
+While a step sits with an idle owner the stage nudges it once after `nudge_after_s` and raises an
+`owed` attention `escalate_after_s` after the nudge was delivered — so a `next:` line that survives
+for minutes is a real hold-up, not a refresh artifact. The panel shows the first owed step as the
+`→` line under the studio.
+
 ## What happens next
 
 In the normal path the steps run in this order:

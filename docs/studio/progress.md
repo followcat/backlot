@@ -1,5 +1,30 @@
 # Studio progress
 
+## S9a: who owes the next step (2026-11-10)
+
+- Done: `backlot_model::steps::next_steps` derives every obligation the ledger still holds — the
+  plan pair, dispatch, task split, cast, delivery, review, unblock, the node report, the
+  producer's report to the user and finish — each keyed on the seq of the event that created it,
+  with an owner and a since-when. The stage's nudge pass tracks an in-memory idle stretch per
+  role (live, terminal up, `waiting`, nothing queued, no send in flight) and queues exactly one
+  `purpose: nudge` message per step after `nudge_after_s`, then raises one `owed` attention when
+  it stays owed and idle `escalate_after_s` past delivery; a non-producer owner also notices the
+  producer, and the attention clears when the role owes nothing or is no longer wanted. Both
+  delays are cast-file keys, serde-defaulted on `studio.created`, with `0` refused like
+  `stall_limit_s = 0`. Nudges share `source_seq` with ordinary notices without suppressing
+  either, and the writer's wanted clock follows `plan`/`dispatch` purposes alone. `backlot
+  status` prints one `next:` line per owed step, the summary document carries the first as a
+  capped optional `next`, and the panel draws it under the studio like the `error` line.
+- Measured: 15 model tests cover every obligation row and none after `studio.finished`; 6 stage
+  tests cover the producer and director nudge paths, working/busy owners, restart replay, the
+  shared `source_seq` and the user's step never being pushed; cli tests cover both `0` refusals
+  and set values reaching the ledger; the summary and panel tests cover the `next` field and the
+  drawn line; the ignored real-core test ran green on the fake runner — plan published, the
+  producer's inbox got the single nudge, dispatch removed the `next:` line (7.7 s). `cargo fmt
+  --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` pass on every commit.
+- Not verified: no real agent has been nudged or escalated yet — the timings are untested against
+  real idle stretches, and the escalation notice to the producer has only run in unit tests.
+
 ## S8: restart recovery on real agents, first release (2026-11-10)
 
 - Run, approved by the user: Claude Code 2.1.321, `claude-haiku-5-5` at low effort, a scratch core

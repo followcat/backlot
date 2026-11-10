@@ -138,6 +138,29 @@ A permission prompt follows the approval policy. Rate-limit and connection-error
 nothing is measured — so a role that hits one simply stops, and reaches its reviewer as a stall like any other frozen
 screen.
 
+## Owed steps (S9a)
+
+A stall says a screen stopped moving; it says nothing about whose turn it is. `backlot_model::steps::next_steps` reads
+the reduced ledger the way the notices do and returns every obligation still outstanding — publish the plan pair,
+dispatch, split tasks, cast, deliver, review, unblock, the node report, the producer's report to the user, finish —
+each keyed on the seq of the event that created it, with an owner (a role key or `user`) and the time it became owed.
+Nothing is owed once the studio is finished.
+
+The stage's nudge pass runs inside the deliver pass. An owner counts as **idle** when it is ledger-live, its terminal
+is up, its latest work sample reads `waiting`, nothing undelivered is queued for it and no send is in flight; the stage
+keeps an in-memory idle-since per role (a restart starts it over). Once the later of the step's age and the idle
+stretch passes `nudge_after_s` (default 180 s), exactly one `message.queued` with `purpose: nudge` and the step's key
+as `source_seq` joins the outbox — the body names what is owed and the command that discharges it. Still owed and
+still idle `escalate_after_s` (default 600 s) after that nudge was delivered, the step raises one `owed` attention on
+the owner; a non-producer owner also owes the producer one `owed` notice. The attention clears when the role owes
+nothing or is no longer wanted. A step the user owes is shown, never pushed. A nudge shares `source_seq` with ordinary
+notices without either suppressing the other: the dedup set counts only purpose-free messages, and the writer's
+wanted clock follows `plan`/`dispatch` purposes alone.
+
+`backlot status` prints one `next:` line per owed step — label, owner and age. The summary document carries the first
+as an optional capped `next` field (`"label — owner"`, deliberately free of clock text so `same_as` stays stable), and
+the panel draws it as one line under the studio like the `error` line.
+
 ## State directory
 
 `$XDG_STATE_HOME/backlot/<core id>/`, overridable with `BACKLOT_STATE_DIR`. Keying by core ID keeps scratch sessions
