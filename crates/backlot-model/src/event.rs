@@ -250,6 +250,13 @@ pub enum EventKind {
         /// Seconds a live role's unchanged screen counts as a stall.
         #[serde(default = "default_stall_limit_s")]
         stall_limit_s: u32,
+        /// Seconds an owed step's owner may idle before the nudge.
+        #[serde(default = "default_nudge_after_s")]
+        nudge_after_s: u32,
+        /// Seconds a delivered nudge may go unanswered, still idle,
+        /// before the `owed` attention.
+        #[serde(default = "default_escalate_after_s")]
+        escalate_after_s: u32,
     },
     #[serde(rename = "role.started")]
     RoleStarted {
@@ -457,6 +464,17 @@ pub fn default_rework_cap() -> u32 {
 
 /// Default stall limit in seconds (design.md "Watching agents").
 pub fn default_stall_limit_s() -> u32 {
+    600
+}
+
+/// Seconds an owed step's owner may idle before one nudge (S9a).
+pub fn default_nudge_after_s() -> u32 {
+    180
+}
+
+/// Seconds a delivered nudge may go unanswered before the `owed`
+/// attention (S9a).
+pub fn default_escalate_after_s() -> u32 {
     600
 }
 

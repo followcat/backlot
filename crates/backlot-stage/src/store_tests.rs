@@ -55,6 +55,8 @@ fn seed_studio(dir: &Path) {
         }],
         rework_cap: 2,
         stall_limit_s: 600,
+        nudge_after_s: 180,
+        escalate_after_s: 600,
     };
     append::<(), _>(dir, |_, _| {
         Ok(Pending {

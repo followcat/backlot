@@ -23,6 +23,12 @@ pub struct StudioConfig {
     pub rework_cap: u32,
     /// Seconds a live role's unchanged screen counts as a stall.
     pub stall_limit_s: u32,
+    /// Seconds an owed step's owner may idle before the nudge.
+    #[serde(default = "default_nudge_after_s")]
+    pub nudge_after_s: u32,
+    /// Seconds a delivered nudge may go unanswered before escalation.
+    #[serde(default = "default_escalate_after_s")]
+    pub escalate_after_s: u32,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the
@@ -405,6 +411,20 @@ impl StudioState {
             .as_ref()
             .map(|s| s.stall_limit_s)
             .unwrap_or_else(default_stall_limit_s)
+    }
+
+    pub fn nudge_after_s(&self) -> u32 {
+        self.studio
+            .as_ref()
+            .map(|s| s.nudge_after_s)
+            .unwrap_or_else(default_nudge_after_s)
+    }
+
+    pub fn escalate_after_s(&self) -> u32 {
+        self.studio
+            .as_ref()
+            .map(|s| s.escalate_after_s)
+            .unwrap_or_else(default_escalate_after_s)
     }
 
     pub fn open_attention(&self) -> impl Iterator<Item = &Attention> {

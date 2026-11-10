@@ -162,6 +162,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         candidates: cast.candidates,
                         rework_cap: cast.rework_cap.unwrap_or_else(default_rework_cap),
                         stall_limit_s: cast.stall_limit_s.unwrap_or_else(default_stall_limit_s),
+                        nudge_after_s: default_nudge_after_s(),
+                        escalate_after_s: default_escalate_after_s(),
                     },
                     by,
                     Vec::new(),

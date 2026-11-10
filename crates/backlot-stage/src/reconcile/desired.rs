@@ -20,13 +20,14 @@ fn kind_of(role_key: &str) -> RoleKind {
 }
 
 /// The writer is wanted from a `purpose: "plan"` message until the
-/// next `purpose: "dispatch"` one.
+/// next `purpose: "dispatch"` one. Other purposes — a `nudge`, the
+/// producer's `owed` note — carry no command and change nothing.
 fn writer_wanted(state: &StudioState) -> bool {
     state
         .messages
         .iter()
         .rev()
-        .find(|m| m.purpose.is_some())
+        .find(|m| matches!(m.purpose.as_deref(), Some("plan") | Some("dispatch")))
         .is_some_and(|m| m.purpose.as_deref() == Some("plan"))
 }
 

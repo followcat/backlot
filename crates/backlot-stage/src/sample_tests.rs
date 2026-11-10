@@ -203,6 +203,8 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                     }],
                     rework_cap: 2,
                     stall_limit_s,
+                    nudge_after_s: 180,
+                    escalate_after_s: 600,
                 },
             ),
             files: Vec::new(),

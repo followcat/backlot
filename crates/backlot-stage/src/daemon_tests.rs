@@ -213,6 +213,8 @@ fn studio(base: &Path, name: &str) -> PathBuf {
                     candidates: Vec::new(),
                     rework_cap: 2,
                     stall_limit_s: 600,
+                    nudge_after_s: 180,
+                    escalate_after_s: 600,
                 },
             ),
             files: Vec::new(),

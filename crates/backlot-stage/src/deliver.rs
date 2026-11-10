@@ -210,6 +210,7 @@ impl Stage {
         // Notices owed by this state, as ordinary queued messages —
         // the body file lands first so a crash mid-append leaves a
         // rewritable file, and `source_seq` dedups across restarts.
+        let mut grew = false;
         for n in notices::owed(state, dir) {
             let dest = format!("messages/{}-{}.md", n.source_seq, n.label);
             let path = dir.join(&dest);
@@ -232,7 +233,21 @@ impl Stage {
                     source_seq: Some(n.source_seq),
                 },
             )?;
+            grew = true;
         }
+
+        // Owed steps the idle owner has not run: nudge once, then
+        // escalate — the messages join the same outbox below. When
+        // this pass queued mail, reload so it counts as undelivered
+        // and keeps its owner off the idle list.
+        let fresh;
+        let state = if grew {
+            fresh = crate::daemon::load_studio(dir)?;
+            &fresh
+        } else {
+            state
+        };
+        self.nudge(studio, dir, state, live, now_ms)?;
 
         // Collect finished sends — a finished handle answers without
         // blocking the tick. Only this studio's: another's record

@@ -56,6 +56,8 @@ pub fn studio_kind() -> EventKind {
         candidates: vec![candidate("actor-a", "a"), candidate("actor-b", "b")],
         rework_cap: 2,
         stall_limit_s: 600,
+        nudge_after_s: 180,
+        escalate_after_s: 600,
     }
 }
 

@@ -150,6 +150,15 @@ pub fn terminal_name(studio: &str, role_key: &str) -> Option<String> {
     }
 }
 
+/// The role keys the ledger wants live right now — the nudge pass
+/// clears `owed` attention a role no longer desired still holds.
+pub(crate) fn wanted(studio: &str, state: &StudioState) -> BTreeSet<String> {
+    desired::desired(studio, state)
+        .into_iter()
+        .map(|s| s.role)
+        .collect()
+}
+
 /// The actions that move the live view toward the ledger's desired
 /// one. `live` is name → hc address for the terminals this studio
 /// owns — the caller builds it with [`studio_view`], so every name

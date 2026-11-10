@@ -15,6 +15,7 @@ mod discover;
 mod doc;
 pub mod link;
 mod notices;
+mod nudge;
 mod permit;
 mod prompts;
 mod reasons;
@@ -48,6 +49,8 @@ mod docs_tests;
 mod loop_cmd_tests;
 #[cfg(test)]
 mod notices_tests;
+#[cfg(test)]
+mod nudge_tests;
 #[cfg(test)]
 mod permit_tests;
 #[cfg(test)]

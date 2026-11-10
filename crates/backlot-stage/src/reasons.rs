@@ -15,6 +15,9 @@ pub const LAUNCH_REFUSED: &str = "launch refused";
 pub const NOT_A_GIT_REPO: &str = "not a git repository";
 /// A git step failed while preparing `work/`; the detail is git's.
 pub const WORK_AREA_FAILED: &str = "work area failed";
+/// A nudge went unanswered: the step is still owed and the owner
+/// still idle `escalate_after_s` after the nudge was delivered (S9a).
+pub const OWED: &str = "owed";
 
 /// Every attention reason the stage raises — the docs test's copy of
 /// the guide's table.
@@ -30,4 +33,5 @@ pub const ALL: &[&str] = &[
     RUNNER_NOT_SUPPORTED,
     PROFILE_NOT_SUPPORTED,
     CONFIG_MALFORMED,
+    OWED,
 ];

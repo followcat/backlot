@@ -88,9 +88,18 @@ fn cap_round(t: &backlot_model::state::Task, r: &backlot_model::state::ReviewRec
 }
 
 /// Every notice the state owes — one per source event, deduped on
-/// `source_seq` so the list is stable until the events land.
+/// `source_seq` so the list is stable until the events land. A
+/// purpose-bearing message — a `nudge`, a `plan`/`dispatch` call —
+/// never counts: a nudge shares its `source_seq` with the step it
+/// names, and neither suppresses nor is suppressed by the ordinary
+/// notice on that seq.
 pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
-    let sent: BTreeSet<u64> = state.messages.iter().filter_map(|m| m.source_seq).collect();
+    let sent: BTreeSet<u64> = state
+        .messages
+        .iter()
+        .filter(|m| m.purpose.is_none())
+        .filter_map(|m| m.source_seq)
+        .collect();
     let cap = state.rework_cap();
     let mut out = Vec::new();
     for t in state.tasks.values() {
@@ -267,6 +276,23 @@ pub fn owed(state: &StudioState, dir: &Path) -> Vec<Notice> {
                         to,
                         label: "lost",
                         body: cannot_resume_body(a),
+                    });
+                }
+            }
+            // An `owed` escalation that is not the producer's own
+            // step owes the producer one notice (S9a): the step's
+            // owner is the user's problem now, but the producer
+            // should hear its role is idle.
+            crate::reasons::OWED => {
+                if a.role != "producer" {
+                    out.push(Notice {
+                        source_seq: a.seq,
+                        to: "producer".into(),
+                        label: "owed",
+                        body: format!(
+                            "# {} owes a step\n\n`{}` was nudged and stayed idle — an `owed` attention is now open for the user: {}.\n",
+                            a.role, a.role, a.detail,
+                        ),
                     });
                 }
             }

@@ -164,6 +164,9 @@ pub(crate) struct Stage {
     /// `(studio, role)` → when the current blocked episode started;
     /// the D9 attention dedups per episode, not per sample.
     pub(crate) blocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → when the current idle stretch began — the
+    /// nudge pass's clock. In-memory: a restart starts it over.
+    pub(crate) idle_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -331,6 +334,7 @@ impl Stage {
             sent_ms: std::cell::RefCell::new(BTreeMap::new()),
             sending: std::cell::RefCell::new(BTreeMap::new()),
             blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+            idle_since: std::cell::RefCell::new(BTreeMap::new()),
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
             broken: BTreeMap::new(),
@@ -343,7 +347,7 @@ impl Stage {
 /// One studio's state read for `tick`. The caller's `log_once` and
 /// the summary row above it already name the studio, so the error
 /// starts with the reason — the panel's `error` line is short.
-fn load_studio(dir: &Path) -> Result<StudioState, Fail> {
+pub(crate) fn load_studio(dir: &Path) -> Result<StudioState, Fail> {
     store::load_state(dir).map_err(|e| match e {
         StoreError::Io(e) => Fail::refused(format!("{e}")),
         StoreError::Corrupt(c) => Fail::refused(format!("{c}")),
@@ -401,6 +405,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         sent_ms: std::cell::RefCell::new(BTreeMap::new()),
         sending: std::cell::RefCell::new(BTreeMap::new()),
         blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+        idle_since: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
         broken: BTreeMap::new(),
