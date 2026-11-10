@@ -1305,6 +1305,135 @@ async fn real_stage_prompt_answered_elsewhere_clears() {
     wait_events(&state, "attention.raised", "actor-t1-c1", 2);
 }
 
+/// S9f: the fake runner's `hook:` inputs drive the signal path end
+/// to end — `UserPromptSubmit` then `Stop` moves the work state
+/// with the screen untouched, a `PermissionRequest` raises a
+/// bound attention that names the tool and command, a second
+/// request refuses the first decision, and the second request's
+/// own approval sends the key.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_hooks() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(&scratch, &state, "", "");
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    // The signals file the launch prepared, and its settings file.
+    let signals = studio.join("roles/actor-t1-c1/signals.jsonl");
+    wait_path(&signals);
+    assert!(
+        studio
+            .join("roles/actor-t1-c1/claude-settings.json")
+            .is_file()
+    );
+
+    // Working then Waiting on an idle screen — the signal answers.
+    send_text(&client, &actor.address, "hook:UserPromptSubmit").await;
+    wait_role(&client, "actor-t1-c1", |r| r["work"] == "working").await;
+    send_text(&client, &actor.address, "hook:Stop").await;
+    wait_role(&client, "actor-t1-c1", |r| r["work"] == "waiting").await;
+
+    // A permission request raises the attention bound to it: the
+    // detail names the tool and the command, and the request itself
+    // lands next to the saved screen.
+    send_text(&client, &actor.address, "hook:PermissionRequest:cargo test").await;
+    let raised_a = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised_a["reason"], "permission prompt", "{raised_a}");
+    let seq_a = raised_a["seq"].as_u64().unwrap();
+    assert!(
+        raised_a["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Bash: cargo test"),
+        "{raised_a}"
+    );
+    let bound_a = fs::read_to_string(studio.join(format!("attention/{seq_a}.signal")))
+        .expect("the bound request");
+    assert!(bound_a.contains("cargo test"), "{bound_a}");
+
+    // The prompt moves on: a second request makes the first
+    // decision stale — nothing is sent, A clears `prompt changed`,
+    // and B raises an attention bound to itself.
+    send_text(&client, &actor.address, "hook:PermissionRequest:cargo fmt").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+    wait_kind(&state, "attention.cleared", 1);
+    let cleared_a = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared")
+        .expect("cleared event");
+    assert_eq!(cleared_a["target"], seq_a, "{cleared_a}");
+    assert_eq!(
+        cleared_a["reason"], "prompt changed before the decision was sent",
+        "{cleared_a}"
+    );
+    wait_events(&state, "attention.raised", "actor-t1-c1", 2);
+    let raised = ledger(&state)
+        .into_iter()
+        .filter(|e| e["kind"] == "attention.raised" && e["role"] == "actor-t1-c1")
+        .collect::<Vec<_>>();
+    let seq_b = raised[1]["seq"].as_u64().unwrap();
+    let bound_b = fs::read_to_string(studio.join(format!("attention/{seq_b}.signal")))
+        .expect("the bound request");
+    assert!(bound_b.contains("cargo fmt"), "{bound_b}");
+    assert!(
+        raised[1]["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Bash: cargo fmt"),
+        "{}",
+        raised[1]
+    );
+
+    // B's own approval sends the key — the byte-mode prompt shows
+    // the answer.
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
+}
+
+/// S9f: a `Working` signal gone quiet past `stall_limit_s` raises
+/// `stalled` naming the signal silence — a screen that never
+/// changed cannot — and any newer signal clears it.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_signal_stall() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    checks_studio(&scratch, &state, "stall_limit_s = 5\n", "");
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    send_text(&client, &actor.address, "hook:UserPromptSubmit").await;
+    let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised["reason"], "stalled", "{raised}");
+    assert!(
+        raised["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no hook signal for"),
+        "{raised}"
+    );
+
+    // A newer signal clears the open stall.
+    send_text(&client, &actor.address, "hook:PostToolUse").await;
+    wait_kind(&state, "attention.cleared", 1);
+    let cleared = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared")
+        .expect("attention.cleared");
+    assert_eq!(cleared["reason"], "new hook signal", "{cleared}");
+}
+
 /// S9d — the S8 bug: the director is `work:working` while the actor's
 /// prompt raises its attention and queues the notice; the user's
 /// approval clears the attention, and when the director goes

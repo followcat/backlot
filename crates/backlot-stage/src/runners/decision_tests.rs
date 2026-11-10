@@ -27,11 +27,15 @@ fn ctx<'a>(terminal: &'a str, env: &'a BTreeMap<String, String>) -> LaunchCtx<'a
 }
 
 /// `fake` runs the shipped script and reports a derivable session.
+/// S9f: it plays the same hooks Claude does — its argv carries the
+/// same `--settings` file, `BACKLOT_HOOK_CMD` holds the settings
+/// file's own command line, and `FAKE_SESSION` the id its hook
+/// lines emit.
 #[test]
 fn fake_plans_the_script_and_a_session() {
     let env = BTreeMap::new();
     let launch = plan(&actor("fake"), &ctx("bl-s-t1", &env)).unwrap();
-    assert_eq!(launch.argv.len(), 1);
+    assert_eq!(launch.argv.len(), 3);
     assert!(launch.argv[0].ends_with("tools/fake-runner.sh"));
     assert!(
         std::path::Path::new(&launch.argv[0]).is_file(),
@@ -41,6 +45,25 @@ fn fake_plans_the_script_and_a_session() {
     assert_eq!(launch.session_id().as_deref(), Some("fake-bl-s-t1"));
     assert_eq!(
         session_id(&actor("fake"), "bl-s-t1").as_deref(),
+        Some("fake-bl-s-t1")
+    );
+    let hooks = launch.hooks.as_ref().expect("a hook setup");
+    assert_eq!(launch.argv[1], "--settings");
+    assert_eq!(launch.argv[2], hooks.settings.to_str().unwrap());
+    assert_eq!(
+        launch.env.get("BACKLOT_HOOK_CMD"),
+        Some(&hooks.command),
+        "the settings file's command is the one the script runs"
+    );
+    assert!(
+        hooks
+            .content
+            .contains(&format!("\"command\": \"{}\"", hooks.command)),
+        "the settings file holds that same command: {}",
+        hooks.content
+    );
+    assert_eq!(
+        launch.env.get("FAKE_SESSION").map(String::as_str),
         Some("fake-bl-s-t1")
     );
 }

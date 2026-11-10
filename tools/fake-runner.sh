@@ -81,7 +81,10 @@ echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of 
 # `work:blocked:<n>` chains <n> prompts back to back: the first
 # <n>-1 approvals print a new `fake-work: blocked` — the next
 # prompt already up, no unblocked screen in between — and only the
-# last one returns to `waiting`.
+# last one returns to `waiting`. `hook:<event>[:<arg>]` pipes a
+# Claude-shaped hook JSON to `sh -c "$BACKLOT_HOOK_CMD"` — the fake
+# plays the S9f hooks so the stage's signal path is exercisable
+# without a real Claude.
 state=waiting
 prompts=0
 ptext=
@@ -108,6 +111,38 @@ while :; do
     else
         IFS= read -r line || break
         case "$line" in
+            hook:*)
+                # A hook event, the way Claude Code's hooks would
+                # report it: one Claude-shaped JSON line piped to the
+                # hook command the adapter put in BACKLOT_HOOK_CMD.
+                # `hook:<event>[:<arg>]` — the arg is the Bash
+                # command for PermissionRequest, the type for a
+                # Notification, the error for a StopFailure.
+                ev="${line#hook:}"
+                arg=
+                case "$ev" in
+                    *:*)
+                        arg="${ev#*:}"
+                        ev="${ev%%:*}"
+                        ;;
+                esac
+                jarg=$(printf '%s' "$arg" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+                extra=
+                case "$ev" in
+                    PermissionRequest)
+                        extra=',"tool_name":"Bash","tool_input":{"command":"'"$jarg"'"}'
+                        ;;
+                    Notification)
+                        extra=',"notification_type":"'"$jarg"'"'
+                        ;;
+                    StopFailure)
+                        extra=',"error":"'"$jarg"'"'
+                        ;;
+                esac
+                printf '{"session_id":"%s","hook_event_name":"%s"%s}\n' \
+                    "${FAKE_SESSION:-fake-unknown}" "$ev" "$extra" |
+                    sh -c "${BACKLOT_HOOK_CMD:-:}"
+                ;;
             work:blocked:*)
                 state=blocked
                 prompts="${line##*:}"
