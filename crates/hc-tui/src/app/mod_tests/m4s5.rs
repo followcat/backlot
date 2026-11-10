@@ -141,6 +141,33 @@ async fn popup_eats_keys_and_terminal_loss_closes_with_a_kill() {
 }
 
 #[tokio::test]
+async fn paste_to_popup_uses_the_terminals_paste_mode() {
+    let mut app = app_with(&["t1"]);
+    pending(&mut app);
+    app.reconcile_published_view();
+    // t9 in the inventory keeps the popup pane attachable — without it
+    // `on_view` marks the pane Gone and input is refused.
+    let mut t9 = crate::sidebar::fixture::term("t9");
+    t9.created_ms = 9;
+    t9.labels.insert("hc-tui.popup".into(), "1".into());
+    app.view.inventory.replace(1, vec![t9]);
+    app.reconcile_published_view();
+    app.popup_pending = Some(super::super::popup::PopupPending {
+        width: Some(PopupSize::Percent(80)),
+        height: Some(PopupSize::Percent(80)),
+    });
+    app.on_popup_spawned("t9".into());
+    app.on_input(input::UiEvent::Paste(b"line-one\nline-two".to_vec()), 120);
+    // The reference sends a semantic Paste to the popup target — the
+    // wire must encode it under the popup terminal's ?2004 mode, not
+    // paste bytes verbatim like IME text.
+    assert!(
+        app.popup.as_ref().unwrap().pane.pending_has_paste(),
+        "popup paste must queue Pending::Paste for bracketed-paste encoding"
+    );
+}
+
+#[tokio::test]
 async fn shell_command_dispatches_machine_exec() {
     let mut app = app_with(&["t1"]);
     pending(&mut app);

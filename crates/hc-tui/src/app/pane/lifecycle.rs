@@ -296,6 +296,15 @@ impl Pane {
         self.allocated
     }
 
+    /// Test-only: a semantic paste is queued for the wire — controls
+    /// may sit ahead of it, so the whole queue is scanned.
+    #[cfg(test)]
+    pub(crate) fn pending_has_paste(&self) -> bool {
+        self.pending
+            .iter()
+            .any(|item| matches!(item, Pending::Paste(_)))
+    }
+
     /// Sends what fits of the coalesced controls: latest desired size and
     /// focus. `sent_size` and the local VT move only on a real send —
     /// a Full queue leaves everything armed for the progress wake.

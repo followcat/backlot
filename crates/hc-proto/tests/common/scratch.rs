@@ -199,6 +199,23 @@ impl ScratchCore {
     /// environment — terminal children inherit them, so a test can
     /// put a variable on the stage itself.
     pub async fn spawn_with(extra: Vec<(String, String)>) -> ScratchCore {
+        Self::spawn_full("scratch-core", "host-a", extra).await
+    }
+
+    /// [`spawn`](Self::spawn) with an explicit pre-seeded core identity —
+    /// a second core in the same test needs its own id/name or the
+    /// `machine.add` same-id check rejects it as a copy.
+    pub async fn spawn_identity(core_id: &str, core_name: &str) -> ScratchCore {
+        Self::spawn_full(core_id, core_name, Vec::new()).await
+    }
+
+    /// `spawn` with both knobs: an explicit core identity and extra
+    /// names in the serve's environment.
+    async fn spawn_full(
+        core_id: &str,
+        core_name: &str,
+        extra: Vec<(String, String)>,
+    ) -> ScratchCore {
         let root = std::env::temp_dir().join(format!("hctui-{}-{:x}", std::process::id(), nanos()));
         // Claim a new root atomically; never adopt an existing directory.
         fs::create_dir(&root).unwrap();
@@ -217,7 +234,7 @@ impl ScratchCore {
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join("core.json"),
-            r#"{"id":"scratch-core","name":"host-a"}"#,
+            format!(r#"{{"id":"{core_id}","name":"{core_name}"}}"#),
         )
         .unwrap();
 

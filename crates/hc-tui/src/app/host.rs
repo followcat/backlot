@@ -104,7 +104,6 @@ mod tests {
             config.live_keybinds(),
             shell,
             Arc::new(super::super::Probe::default()),
-            Box::new(|_, _| {}),
         )
     }
 
@@ -139,24 +138,19 @@ mod tests {
     #[tokio::test]
     async fn hidden_cursor_uses_explicit_anchor_then_clamped_visible_memory() {
         let mut app = app(&crate::config::Config::default());
-        let output = Arc::new(Mutex::new(Vec::new()));
-        let sink = Arc::clone(&output);
-        app.set_host_control(Box::new(move |bytes| {
-            sink.lock().unwrap().extend_from_slice(bytes);
-            Ok(())
-        }));
         app.area = (120, 40);
         app.want_cursor.pos = Some((110, 35));
         app.want_cursor.anchor = Some((110, 35));
-        app.apply_cursor();
+        let cursor = app.resolve_host_cursor();
+        assert_eq!((cursor.x, cursor.y, cursor.visible), (110, 35, true));
         app.want_cursor.pos = None;
         app.want_cursor.anchor = Some((40, 10));
-        app.apply_cursor();
-        assert!(output.lock().unwrap().ends_with(b"\x1b[11;41H\x1b[?25l"));
+        let cursor = app.resolve_host_cursor();
+        assert_eq!((cursor.x, cursor.y, cursor.visible), (40, 10, false));
         app.want_cursor.anchor = None;
         app.area = (80, 24);
-        app.apply_cursor();
-        assert!(output.lock().unwrap().ends_with(b"\x1b[24;80H\x1b[?25l"));
+        let cursor = app.resolve_host_cursor();
+        assert_eq!((cursor.x, cursor.y, cursor.visible), (79, 23, false));
     }
 
     #[tokio::test]

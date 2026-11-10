@@ -605,3 +605,95 @@
 - Gates: `cargo fmt --check`, `sh scripts/test-install.sh` and
   `sh tools/test-fetch-zig-deps.sh` under the heavy-lock; no crates/
   files were touched, so clippy and cargo test were not required.
+
+## Atomic frames end cursor flicker (branch fix/flicker)
+
+- The frame writer was split: ratatui flushed changed cells inside a
+  synchronized-output block, then cursor position, visibility and shape
+  went out in separate writes after the block ended. Terminals and IMEs
+  could show the cursor at intermediate positions, which read as
+  flicker and a flashing cursor. Wakeups also drew unconditionally, so
+  identical frames still emitted empty synchronized blocks.
+- `AnsiBackend` now buffers each frame and emits one write: sync
+  begin, cursor hide, OSC 8 reset, an optional `2J` for deferred
+  clears, changed cells, the final cursor position, a deduplicated
+  DECSCUSR shape change and cursor visibility, sync end, then the
+  non-Windows IME anchor repeat. `clear`/`clear_region(All)` arm a
+  pending clear carried inside the next block instead of writing a
+  bare `2J`. Frames whose diff and cursor state are unchanged emit no
+  bytes, and the scheduler unarms instead of stamping a phantom draw
+  so fresh dirt is not delayed. Cursor resolution (clamp, visible
+  memory, hidden anchor, bottom-right default, shape map) matches the
+  reference `resolve_host_cursor_state`.
+- Recorded pty streams against owned scratch sessions show redraw and
+  typing byte-identical to the reference (same synchronized block
+  count, same inside/outside cursor counters, same totals) and zero
+  bytes on idle and on no-op switches where older builds emitted
+  redundant empty blocks. Keystroke-to-echo latency matches the
+  reference locally; `--remote` adds about one hop of latency inherent
+  to the topology.
+- Gates: formatting, all-target Clippy and the full suite pass; the
+  29 installer tests pass; all 13 reference vectors pass; the parity
+  harness at 80x24 matches cell for cell except the documented
+  navigator footer-identity cells (8 and 12 cell exceptions).
+
+## Paste matrix: copy and paste across tabs, workspaces, machines and agents (branch test/paste-matrix)
+
+- Two ignored e2e tests drive a real `hc-tui` in a PTY against owned
+  scratch cores with a file-backed clipboard stub: `paste_matrix_e2e`
+  covers the local endpoint (22 cells) and `paste_matrix_remote_e2e`
+  covers `--remote host-a`, `--remote host-b` through a hostname-routed
+  stub `ssh`, and a `machine/tN` pane added through a via-command on a
+  second scratch core. Fake agents stand in for a shell, Claude Code,
+  Codex, Devin and OpenCode (bracketed paste on or off, kitty `>1u` for
+  the Claude fake) and record their exact input bytes to files.
+- Every cell passes: text (simple, multiline, CJK, 64 KiB), copy from
+  external paste, mouse selection, copy-mode `y` and popup selection,
+  paste into same/split/other-tab/other-workspace/machine panes and the
+  Alt+F popup, the reported select-then-switch-tab bug (not a bug:
+  selection copies at release and paste follows focus), PNG/JPEG and
+  file-manager image copies through the remote Ctrl+V bridge, and
+  pastes immediately after Alt+arrow and Alt+F.
+- Two real herdr-parity bugs were fixed. Popup selection indexed the
+  VT frame's cell array by the clipped surface width instead of the
+  frame width, garbling copies whenever the popup surface was narrower
+  than its terminal. And host paste into an open popup bypassed
+  bracketed-paste encoding entirely (`input_encoded` instead of a
+  semantic paste), so a multiline paste into a `?2004` popup program
+  would have fired line by line.
+- One documented difference kept: hc-tui's ghostty paste encoder
+  rewrites `\n` to `\r` only in the unwrapped case where herdr passes
+  `\n` verbatim; canonical programs see identical input.
+- Gates: fmt, all-target clippy, the full suite, the 29 installer
+  tests, parity vectors and the 80x24 parity run (navigator footer
+  exceptions only).
+- `real_agent_smoke_e2e` (ignored, `HC_TUI_REAL_AGENTS=1`) pastes into
+  the real Claude Code, Codex, Devin and OpenCode without submitting.
+  All four show pasted text in their input; over a remote endpoint
+  Claude Code turns the uploaded image path into an image chip.
+
+## Image paste over remote: file copies and visible misses (branch fix/remote-image-paste)
+
+- The Linux clipboard read gained a file-list pass after the image
+  MIMES: `x-special/gnome-copied-files`, `text/uri-list` and
+  `text/plain` are read through the same `wl-paste`/`xclip` pair, and
+  `clipdrop::image_paths_from_clipboard_text` resolves `file://` URIs
+  (percent-decoded, local or `localhost` authority only) plus a single
+  bare absolute path into candidates that `read_image_file` reads back
+  bounded. A copied image file in a file manager now uploads exactly
+  like a drop instead of answering `None` and forwarding silently.
+- `ClipboardRead` gained `Unavailable(&'static str)` and
+  `ReaderOutcome` gained `Missing`: a spawn failure no longer counts as
+  "no image". The reader tracks attempts versus answered runs, so no
+  display env, every tool missing and a timed-out owner surface as
+  `Unavailable` with a reason; macOS and non-reader platforms report
+  `Unavailable` too.
+- `dispatch_image_read` shows a notice for `None` ("No image to
+  paste") and `Unavailable` (the reason) while still forwarding the
+  gesture, so a paste that cannot work never fails silently.
+- The e2e now types the real kitty stream (`CSI 118;5u` press,
+  `CSI 118;5:3u` release) and a second ignored case drives a copied
+  image file through `x-special/gnome-copied-files`; both pass on the
+  scratch core, and the file case fails on pre-fix code by timeout.
+- Gates: fmt, clippy, the full suite, the 29 installer tests, parity
+  vectors and the 80x24 parity run (details in the brief report).

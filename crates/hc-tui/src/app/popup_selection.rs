@@ -18,11 +18,14 @@ use super::mouse::contains;
 /// The reference's `cell_span`: walk a visible row left to right by
 /// cell widths and return the `(left, right)` columns of the cell that
 /// owns `column`. Wide graphemes report their full span so a selection
-/// edge never splits them.
-fn cell_span(cells: &[String], width: u16, row: u16, column: u16) -> (u16, u16) {
+/// edge never splits them. `frame_width` is the cell row stride (the
+/// terminal's columns); `width` is the clipped visible bound — they
+/// differ when the popup surface is narrower than its terminal.
+fn cell_span(cells: &[String], frame_width: u16, width: u16, row: u16, column: u16) -> (u16, u16) {
     let mut left = 0;
     while left < width {
-        let Some(symbol) = cells.get(usize::from(row) * usize::from(width) + usize::from(left))
+        let Some(symbol) =
+            cells.get(usize::from(row) * usize::from(frame_width) + usize::from(left))
         else {
             break;
         };
@@ -66,12 +69,12 @@ fn popup_frame_cells(popup: &mut super::popup::PopupState) -> Option<(u16, u16, 
 /// spans.
 fn visible_selection(
     selection: &Selection<String>,
-    width: u16,
+    frame_width: u16,
     height: u16,
     cells: &[String],
     inner: Rect,
 ) -> Option<Selection<()>> {
-    let width = width.min(inner.width);
+    let width = frame_width.min(inner.width);
     let height = height.min(inner.height);
     if !selection.is_visible() || width == 0 || height == 0 {
         return None;
@@ -90,8 +93,8 @@ fn visible_selection(
     } else {
         last_col.min(width - 1)
     };
-    let first_col = cell_span(cells, width, first_row as u16, first_col).0;
-    let last_col = cell_span(cells, width, clipped_last_row as u16, last_col).1;
+    let first_col = cell_span(cells, frame_width, width, first_row as u16, first_col).0;
+    let last_col = cell_span(cells, frame_width, width, clipped_last_row as u16, last_col).1;
     Some(Selection::absolute_range(
         (),
         (first_row, first_col),
@@ -108,6 +111,53 @@ fn popup_mouse_reporting(app: &App, hit: &PaneHit) -> bool {
         .filter(|popup| popup.terminal == hit.pane_id)
         .and_then(|popup| popup.pane.vt_ref())
         .is_some_and(|vt| vt.mouse_tracking())
+}
+
+/// The reference's extraction loop: emit the clipped cells row by row —
+/// wide heads emit their grapheme once, blanks emit a space, and a line
+/// reaching the right edge loses trailing spaces. Rows are addressed by
+/// `frame_width` (the terminal's stride); `width` is only the clip bound
+/// for the edge trim.
+fn selection_text(
+    cells: &[String],
+    frame_width: u16,
+    width: u16,
+    clipped: &Selection<()>,
+) -> String {
+    let ((first_row, first_col), (last_row, last_col)) = clipped.ordered_cells();
+    let mut text = String::new();
+    for row in first_row..=last_row {
+        if row != first_row {
+            text.push('\n');
+        }
+        let left = if row == first_row { first_col } else { 0 };
+        let right = if row == last_row { last_col } else { width - 1 };
+        let start = text.len();
+        let mut column = 0;
+        while column <= right {
+            let Some(symbol) =
+                cells.get(row as usize * usize::from(frame_width) + usize::from(column))
+            else {
+                break;
+            };
+            if column >= left {
+                if symbol.is_empty() {
+                    text.push(' ');
+                } else {
+                    text.push_str(symbol);
+                }
+            }
+            let cell_width = u16::try_from(UnicodeWidthStr::width(symbol.as_str()))
+                .unwrap_or(u16::MAX)
+                .max(1);
+            column = column.saturating_add(cell_width);
+        }
+        if right == width - 1 {
+            let trimmed = text[start..].trim_end_matches(' ').len();
+            text.truncate(start + trimmed);
+        }
+    }
+    text
 }
 
 impl App {
@@ -207,47 +257,17 @@ impl App {
         else {
             return false;
         };
-        let Some((width, height, cells)) = self.popup.as_mut().and_then(popup_frame_cells) else {
-            return false;
-        };
-        let Some(clipped) = visible_selection(&selection, width, height, &cells, hit.inner_rect)
+        let Some((frame_width, height, cells)) = self.popup.as_mut().and_then(popup_frame_cells)
         else {
             return false;
         };
-        let ((first_row, first_col), (last_row, last_col)) = clipped.ordered_cells();
-        let width = width.min(hit.inner_rect.width);
-        let mut text = String::new();
-        for row in first_row..=last_row {
-            if row != first_row {
-                text.push('\n');
-            }
-            let left = if row == first_row { first_col } else { 0 };
-            let right = if row == last_row { last_col } else { width - 1 };
-            let start = text.len();
-            let mut column = 0;
-            while column <= right {
-                let Some(symbol) =
-                    cells.get(row as usize * usize::from(width) + usize::from(column))
-                else {
-                    break;
-                };
-                if column >= left {
-                    if symbol.is_empty() {
-                        text.push(' ');
-                    } else {
-                        text.push_str(symbol);
-                    }
-                }
-                let cell_width = u16::try_from(UnicodeWidthStr::width(symbol.as_str()))
-                    .unwrap_or(u16::MAX)
-                    .max(1);
-                column = column.saturating_add(cell_width);
-            }
-            if right == width - 1 {
-                let trimmed = text[start..].trim_end_matches(' ').len();
-                text.truncate(start + trimmed);
-            }
-        }
+        let Some(clipped) =
+            visible_selection(&selection, frame_width, height, &cells, hit.inner_rect)
+        else {
+            return false;
+        };
+        let width = frame_width.min(hit.inner_rect.width);
+        let text = selection_text(&cells, frame_width, width, &clipped);
         let sequence = crate::selection::osc52_sequence(text.as_bytes());
         let _ = (self.host_control)(sequence.as_bytes());
         if self.show_copy_feedback(std::time::Instant::now()) {
@@ -294,5 +314,54 @@ impl App {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `width`-strided frame cells: each row padded to `width` cells,
+    /// text at column 0 like the popup terminal lays it out.
+    fn frame_cells(width: u16, rows: &[&str]) -> Vec<String> {
+        let mut cells = Vec::new();
+        for row in rows {
+            for col in 0..width {
+                cells.push(
+                    row.chars()
+                        .nth(usize::from(col))
+                        .map(|c| c.to_string())
+                        .unwrap_or_default(),
+                );
+            }
+        }
+        cells
+    }
+
+    /// A popup terminal wider than its drawn surface (the reference's
+    /// `terminal_width` asymmetry): extraction must still index cells by
+    /// the frame stride or it reads the wrong row. Regression for the
+    /// clipped-width indexing that produced shifted copies.
+    #[test]
+    fn selection_text_indexes_by_frame_stride_not_clip_width() {
+        let cells = frame_cells(10, &["          ", "MARK popup", "          "]);
+        let clipped = Selection::absolute_range((), (1, 0), (1, 9));
+        assert_eq!(selection_text(&cells, 10, 3, &clipped), "MARK popup");
+    }
+
+    /// The whole `visible_selection` + extract path under a mismatched
+    /// stride: a row-1 drag over "MARK popup" yields that text, not the
+    /// previous row's tail.
+    #[test]
+    fn visible_selection_extracts_the_dragged_row_under_wide_frame() {
+        let cells = frame_cells(10, &["          ", "MARK popup", "          "]);
+        let inner = Rect::new(0, 0, 3, 3);
+        let mut selection = Selection::anchor("t9".to_string(), 1, 0, None);
+        selection.drag(2, 1, inner, None);
+        let clipped = visible_selection(&selection, 10, 3, &cells, inner).unwrap();
+        let ((fr, fc), (lr, lc)) = clipped.ordered_cells();
+        assert_eq!((fr, fc, lr, lc), (1, 0, 1, 2));
+        let width = 10u16.min(inner.width);
+        assert_eq!(selection_text(&cells, 10, width, &clipped), "MAR");
     }
 }

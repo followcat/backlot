@@ -278,6 +278,22 @@ async fn no_image_forwards_the_key_unchanged_and_in_order() {
         "the trigger key and the following key both reach the program, in order"
     );
     assert_eq!(app.pending_actions, 0);
+    assert!(app.notice.is_some(), "a miss explains itself");
+}
+
+#[tokio::test]
+async fn an_unreadable_clipboard_explains_and_forwards_the_key() {
+    let mut app = remote_app(&["t1"]);
+    app.image_paste_reader =
+        Box::new(|| crate::clipboard::ClipboardRead::Unavailable("no clipboard tool"));
+    press_key(&mut app, ctrl_v(Action::Press));
+    assert_eq!(
+        app.pane.input_backlog().0,
+        1,
+        "the key still reaches the program"
+    );
+    assert_eq!(app.pending_actions, 0);
+    assert!(app.notice.is_some(), "the miss explains itself");
 }
 
 #[tokio::test]
@@ -353,6 +369,19 @@ async fn dropped_image_path_uploads_the_file_not_the_text() {
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 1);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn an_unreadable_dropped_image_path_explains_and_forwards() {
+    let mut app = remote_app(&["t1"]);
+    let gone = "/tmp/hc-tui-test-definitely-missing.png";
+    app.on_input(input::UiEvent::Paste(gone.as_bytes().to_vec()), 120);
+    assert_eq!(
+        app.pane.input_backlog().0,
+        1,
+        "the path text still forwards"
+    );
+    assert!(app.notice.is_some(), "the miss explains itself");
 }
 
 #[tokio::test]

@@ -33,8 +33,13 @@ on the core. [Runtime](runtime.md) has the details.
 another machine (`machine/tN`) and to backlot itself running inside an SSH session. On a plain local endpoint `Ctrl+V`
 is left alone. Local programs read the clipboard themselves.
 
-On Linux the clipboard read needs `wl-paste` under Wayland or `xclip` under X11. A missing tool counts as no image.
-PNG, JPEG, GIF, WebP and BMP are recognized, up to the 8 MB `terminal.put` limit. The key is
+On Linux the clipboard read needs `wl-paste` under Wayland or `xclip` under X11. PNG, JPEG, GIF, WebP and BMP are
+recognized, up to the 8 MB `terminal.put` limit. A copied image file counts as well: file managers offer
+`x-special/gnome-copied-files` or `text/uri-list`, and a `text/plain` holding one absolute image path resolves the
+same way a drop does.
+
+The gesture never fails silently. No image and no image file means the key still reaches the program, with a notice
+saying so. No display, no tool or a hung clipboard owner means the notice tells you why nothing could be read. The key is
 `keys.remote_image_paste` (default `"ctrl+v"`). Set it to `""` to disable the trigger.
 [Keys](keys.md#pasting-text-and-images) covers the trigger config and the other gestures.
 

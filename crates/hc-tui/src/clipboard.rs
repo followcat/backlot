@@ -4,7 +4,7 @@
 //! remote image-paste bridge (R9). Unlike the reference's unbounded
 //! reads, every spawned tool here is killed after about two seconds:
 //! a hung clipboard owner must not stall input forwarding, and a
-//! missing tool simply counts as "no image".
+//! missing tool reports "unavailable", never a silent "no image".
 
 use std::ffi::OsString;
 use std::io::Read;
@@ -37,11 +37,15 @@ pub(crate) struct ClipboardImage {
 /// What a clipboard or dropped-file read produced: nothing usable
 /// (`None`), an image under the `terminal.put` bound (`Image`), or a
 /// payload over the bound whose capped prefix still matched the
-/// advertised format (`TooLarge`). The bridge reports `TooLarge`
-/// instead of forwarding the gesture as plain input.
+/// advertised format (`TooLarge`). `Unavailable` is the "can't even
+/// try" arm — no display, every tool missing, or a hung owner — and
+/// carries the reason a notice shows the user. The bridge reports
+/// `TooLarge` instead of forwarding the gesture as plain input; `None`
+/// and `Unavailable` forward it, but never silently.
 #[derive(Debug)]
 pub(crate) enum ClipboardRead {
     None,
+    Unavailable(&'static str),
     Image(ClipboardImage),
     TooLarge,
 }
@@ -95,7 +99,7 @@ pub(crate) fn read_clipboard_image() -> ClipboardRead {
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        ClipboardRead::None
+        ClipboardRead::Unavailable("This platform has no clipboard image reader")
     }
 }
 
@@ -146,19 +150,23 @@ pub(crate) fn read_limited(
 
 /// What one bounded tool run produced. `TimedOut` aborts the whole
 /// clipboard read: a hung owner stalls every later read the same way.
-/// `Oversized` keeps the capped prefix for the caller's signature check.
+/// `Oversized` keeps the capped prefix for the caller's signature
+/// check. `Missing` means the tool could not even be spawned — the
+/// caller counts it separately so "no tool exists" never reports as
+/// "no image".
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 enum ReaderOutcome {
     Data(Vec<u8>),
     Oversized(Vec<u8>),
     Empty,
     TimedOut,
+    Missing,
 }
 
 /// Spawn a clipboard tool and drain its stdout, bounded in bytes and
-/// time. A missing tool, a nonzero exit and an empty payload are
-/// `Empty`; a deadline kill is `TimedOut`; a stream that filled the cap
-/// is `Oversized` with the prefix retained.
+/// time. A missing tool is `Missing`, a nonzero exit and an empty
+/// payload are `Empty`; a deadline kill is `TimedOut`; a stream that
+/// filled the cap is `Oversized` with the prefix retained.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_tool(mut command: Command, timeout: Duration) -> ReaderOutcome {
     let mut child = match command
@@ -168,7 +176,7 @@ fn read_tool(mut command: Command, timeout: Duration) -> ReaderOutcome {
         .spawn()
     {
         Ok(child) => child,
-        Err(_) => return ReaderOutcome::Empty,
+        Err(_) => return ReaderOutcome::Missing,
     };
     let Some(stdout) = child.stdout.take() else {
         let _ = child.kill();
@@ -260,104 +268,7 @@ pub(crate) fn bytes_match_image_signature(extension: &str, bytes: &[u8]) -> bool
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) mod linux {
-    use super::*;
-    use std::path::Path;
-
-    const MIMES: [(&str, &str); 6] = [
-        ("image/png", "png"),
-        ("image/jpeg", "jpg"),
-        ("image/jpg", "jpg"),
-        ("image/gif", "gif"),
-        ("image/webp", "webp"),
-        ("image/bmp", "bmp"),
-    ];
-
-    /// The reference's Windows-side PowerShell clipboard read.
-    const WSL_CLIPBOARD_SCRIPT: &str = "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $image=[System.Windows.Forms.Clipboard]::GetImage(); if ($null -eq $image) { exit 1 }; $stream=[System.IO.MemoryStream]::new(); try { $image.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png); [Console]::OpenStandardOutput().Write($stream.GetBuffer(), 0, [int]$stream.Length) } finally { $stream.Dispose(); $image.Dispose() }";
-
-    const WSL_MARKER_ENV_VARS: &[&str] = &["WSL_DISTRO_NAME", "WSL_INTEROP"];
-
-    pub(super) fn running_inside_wsl() -> bool {
-        static WSL: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *WSL.get_or_init(|| {
-            proc_file_indicates_wsl("/proc/sys/kernel/osrelease")
-                || proc_file_indicates_wsl("/proc/version")
-                || WSL_MARKER_ENV_VARS
-                    .iter()
-                    .any(|key| std::env::var_os(key).is_some())
-                || Path::new("/run/WSL").exists()
-        })
-    }
-
-    fn proc_file_indicates_wsl(path: &str) -> bool {
-        std::fs::read_to_string(path)
-            .map(|text| {
-                let text = text.to_ascii_lowercase();
-                text.contains("microsoft") || text.contains("wsl")
-            })
-            .unwrap_or(false)
-    }
-
-    /// WSL → `wl-paste` (Wayland) → `xclip` (X11), in the reference's
-    /// MIME order. A `TimedOut` read stops the whole attempt. An
-    /// oversized stream stops it too when its prefix still matches the
-    /// advertised image signature — that is a real image, just too big;
-    /// an oversized stream with a foreign prefix stays "no image".
-    pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
-        if env.wsl {
-            let args = [
-                "-NoProfile",
-                "-NonInteractive",
-                "-STA",
-                "-Command",
-                WSL_CLIPBOARD_SCRIPT,
-            ];
-            match read_tool(tool_command(env, "powershell.exe", &args), timeout) {
-                ReaderOutcome::Data(bytes) if bytes_match_image_signature("png", &bytes) => {
-                    return ClipboardRead::Image(ClipboardImage {
-                        bytes,
-                        extension: "png",
-                    });
-                }
-                ReaderOutcome::Oversized(prefix) if bytes_match_image_signature("png", &prefix) => {
-                    return ClipboardRead::TooLarge;
-                }
-                ReaderOutcome::TimedOut => return ClipboardRead::None,
-                _ => {}
-            }
-        }
-        for (mime, extension) in MIMES {
-            for (available, program, args) in [
-                (env.wayland, "wl-paste", vec!["--type", mime]),
-                (
-                    env.display,
-                    "xclip",
-                    vec!["-selection", "clipboard", "-t", mime, "-o"],
-                ),
-            ] {
-                if !available {
-                    continue;
-                }
-                match read_tool(tool_command(env, program, &args), timeout) {
-                    ReaderOutcome::Data(bytes)
-                        if bytes_match_image_signature(extension, &bytes) =>
-                    {
-                        return ClipboardRead::Image(ClipboardImage { bytes, extension });
-                    }
-                    ReaderOutcome::Oversized(prefix)
-                        if bytes_match_image_signature(extension, &prefix) =>
-                    {
-                        return ClipboardRead::TooLarge;
-                    }
-                    ReaderOutcome::TimedOut => return ClipboardRead::None,
-                    _ => {}
-                }
-            }
-        }
-        ClipboardRead::None
-    }
-}
+pub(crate) mod linux;
 
 #[cfg(target_os = "linux")]
 fn read_linux_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
@@ -382,6 +293,12 @@ fn read_macos_clipboard_image(env: &ClipboardEnv, timeout: Duration) -> Clipboar
     let command = tool_command(env, "osascript", &["-e", &script]);
     let run = read_tool(command, timeout);
     let image = match run {
+        ReaderOutcome::Missing => {
+            return ClipboardRead::Unavailable("Osascript could not run");
+        }
+        ReaderOutcome::TimedOut => {
+            return ClipboardRead::Unavailable("The clipboard owner stopped answering");
+        }
         // osascript emits no stdout; anything else is still only the
         // temp-file payload below.
         ReaderOutcome::Empty => match std::fs::File::open(&path)

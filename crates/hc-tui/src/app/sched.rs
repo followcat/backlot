@@ -52,6 +52,13 @@ impl Scheduler {
         self.draws += 1;
     }
 
+    /// A scheduled draw produced no output (identical frame): the dirt
+    /// is consumed without stamping `last_draw`, so the next real
+    /// change is not pushed a whole frame slot out.
+    pub fn unarm(&mut self) {
+        self.due = None;
+    }
+
     /// Bookkeeping for the loop arming a one-shot sleep toward `due`.
     pub fn armed_timer(&mut self) {
         self.armed += 1;
@@ -122,5 +129,20 @@ mod tests {
         assert_eq!(sched.deadline(), Some(t0 + FRAME));
         assert!(!sched.due_now(t0 + Duration::from_millis(10)));
         assert!(sched.due_now(t0 + FRAME));
+    }
+
+    /// A draw that emitted nothing consumes its deadline without
+    /// stamping `last_draw`: fresh dirt draws immediately instead of
+    /// waiting a frame slot behind a phantom frame.
+    #[test]
+    fn an_unemitted_draw_unarms_without_stamping_last_draw() {
+        let mut sched = Scheduler::default();
+        let t0 = t(0);
+        sched.mark_dirty(t0);
+        assert!(sched.due_now(t0));
+        sched.unarm();
+        assert_eq!(sched.deadline(), None);
+        sched.mark_dirty(t0);
+        assert!(sched.due_now(t0));
     }
 }
