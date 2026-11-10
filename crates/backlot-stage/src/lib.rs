@@ -29,6 +29,7 @@ pub mod reconcile;
 pub mod render;
 mod runners;
 mod sample;
+pub mod signals;
 mod stage;
 mod stale;
 mod stall;
@@ -95,6 +96,9 @@ mod reopen_cmd_tests;
 mod role_cmd_tests;
 #[cfg(test)]
 mod sample_tests;
+
+#[cfg(test)]
+mod signals_tests;
 #[cfg(test)]
 mod stale_tests;
 #[cfg(test)]

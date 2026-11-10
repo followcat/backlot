@@ -92,7 +92,7 @@ fn held_roles_show_the_waiting_line() {
         started(6, "producer"),
         started(7, "director"),
     ];
-    let out = status("acme-shop", &replay(&events), 10_000);
+    let out = status("acme-shop", &replay(&events), &Default::default(), 10_000);
     let writer = out
         .lines()
         .find(|l| l.trim_start().starts_with("writer"))

@@ -109,6 +109,28 @@ fn a_behind_actor_draws_its_doing_line() {
     assert!(text.contains("task t1 · behind v2"), "{text}");
 }
 
+/// S9f: a role whose last hook signal was a StopFailure draws
+/// `! last turn failed: <error>` under its name — a line, not an
+/// attention.
+#[test]
+fn a_stop_failed_role_draws_its_failed_line() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "role": "actor-zed", "name": "zed", "terminal": "t9",
+            "state": "live", "work": "waiting", "failed": "rate_limit",
+        }));
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 40);
+    let mut buf = Buffer::empty(area);
+    render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("! last turn failed: rate_limit"), "{text}");
+}
+
 #[test]
 fn collapsed_draw_lists_working_groups() {
     let summary = summary();

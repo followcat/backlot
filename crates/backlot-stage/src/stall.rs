@@ -34,6 +34,31 @@ pub fn stalled(
     }
 }
 
+/// The hook-signal half of the stall rule (S9f): a role whose last
+/// signal reports Working and is older than the stall limit is as
+/// stalled as a frozen screen — the screen may keep spinning while
+/// the turn itself is dead. `blocked` never counts, and the
+/// actor / fixed-role scoping matches the screen rule's.
+pub fn signal_stalled(
+    role: &str,
+    task: Option<TaskStatus>,
+    work: Work,
+    signal: &crate::signals::Signal,
+    limit_ms: u64,
+    now_ms: u64,
+) -> bool {
+    if work == Work::Blocked
+        || signal.work() != Some(Work::Working)
+        || now_ms.saturating_sub(signal.ts_ms) < limit_ms
+    {
+        return false;
+    }
+    match actor_task(role) {
+        Some(_) => task == Some(TaskStatus::Running),
+        None => true,
+    }
+}
+
 /// The role's open `stalled` attention, when it has one.
 pub fn open_stall<'s>(state: &'s StudioState, role: &str) -> Option<&'s Attention> {
     state

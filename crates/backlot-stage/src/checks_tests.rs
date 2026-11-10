@@ -554,7 +554,7 @@ fn finish_logs_appends_and_drops_the_tree_when_done() {
 fn status_marks_each_check_on_the_task_line() {
     let (mut events, state) = checked_state();
     let line = |state: &StudioState| {
-        crate::render::status("acme-shop", state, 0)
+        crate::render::status("acme-shop", state, &Default::default(), 0)
             .lines()
             .find(|l| l.trim_start().starts_with("t1"))
             .unwrap()

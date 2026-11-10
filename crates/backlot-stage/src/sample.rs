@@ -20,6 +20,7 @@ use crate::daemon::Stage;
 use crate::permit;
 use crate::reconcile::LiveTerminal;
 use crate::runners;
+use crate::signals;
 use crate::stall;
 use crate::store::{self, StoreError};
 use crate::watch::work_due;
@@ -63,7 +64,29 @@ impl Stage {
             Err(CallError::Rpc(_)) => return Ok(()),
             Err(e) => return Err(Fail::call(e)),
         };
-        let work = runners::work_state(w.runner, &text);
+        // Signals first (S9f): the last line the role's own session
+        // sent is its state; the screen answers when the session
+        // sent nothing — every other runner, and any session with
+        // no signal yet.
+        let session = w
+            .state
+            .roles
+            .get(w.role)
+            .and_then(|r| r.session_id.as_deref());
+        let signal = session.and_then(|sid| {
+            signals::last(&signals::tail(&signals::signals_path(w.dir, w.role)), sid)
+        });
+        match &signal {
+            Some(s) => self
+                .last_signal
+                .borrow_mut()
+                .insert(pair.clone(), s.clone()),
+            None => self.last_signal.borrow_mut().remove(&pair),
+        };
+        let work = signals::combine(
+            signal.as_ref().and_then(|s| s.work()),
+            runners::work_state(w.runner, &text),
+        );
         self.work.borrow_mut().insert(pair.clone(), work);
         // The send gate's screen-stability track — same screen, same
         // `same_since`; a new screen resets the window.
@@ -73,7 +96,7 @@ impl Stage {
             crate::deliver::Screen::note(prev.as_ref(), text.clone(), now_ms),
         );
         self.permission(studio, w, work, &text, now_ms).await?;
-        self.stall(studio, w, work).await
+        self.stall(studio, w, work, now_ms).await
     }
 
     /// The S6 stall pass on the sample just stored: a screen held
@@ -84,20 +107,41 @@ impl Stage {
     /// in-memory track, so the first sample after it reads as a
     /// fresh screen: an open stall clears and can re-raise one
     /// limit later — acceptable until S6b's recovery work.
-    async fn stall(&self, studio: &str, w: &Watched<'_>, work: Work) -> Result<(), Fail> {
+    ///
+    /// S9f adds the signal half: a role whose last hook signal
+    /// reports Working and is older than the limit is as stalled as
+    /// a frozen screen — the spinner may keep moving while the turn
+    /// itself is dead. Either source can clear an open stall: a new
+    /// screen, or a newer signal.
+    async fn stall(
+        &self,
+        studio: &str,
+        w: &Watched<'_>,
+        work: Work,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
         let Some(screen) = self.screens.borrow().get(&pair).cloned() else {
             return Ok(());
         };
+        let signal = self.last_signal.borrow().get(&pair).cloned();
         if let Some(attn) = stall::open_stall(state, role) {
-            // The screen moved since the raise: the episode is over.
-            if screen.same_since_ms > attn.ts_ms {
+            // The screen moved or a newer signal landed since the
+            // raise: the episode is over.
+            let cleared = if screen.same_since_ms > attn.ts_ms {
+                Some("screen changed")
+            } else if signal.as_ref().is_some_and(|s| s.ts_ms > attn.ts_ms) {
+                Some("new hook signal")
+            } else {
+                None
+            };
+            if let Some(reason) = cleared {
                 record(
                     dir,
                     EventKind::AttentionCleared {
                         target: attn.seq,
-                        reason: Some("screen changed".into()),
+                        reason: Some(reason.into()),
                     },
                 )?;
             }
@@ -107,7 +151,16 @@ impl Stage {
             .and_then(|id| state.tasks.get(id))
             .map(|t| t.status);
         let limit_ms = u64::from(state.stall_limit_s()) * 1000;
-        if stall::stalled(role, task, work, &screen, limit_ms) {
+        if let Some(sig) =
+            signal.filter(|s| stall::signal_stalled(role, task, work, s, limit_ms, now_ms))
+        {
+            let silent_s = now_ms.saturating_sub(sig.ts_ms) / 1000;
+            self.raise_attention(dir, role, STALLED, &screen.text, false, move |seq| {
+                format!("no hook signal for {silent_s}s; screen saved to attention/{seq}.txt")
+            })
+            .await?;
+            eprintln!("stage: {role} stalled");
+        } else if stall::stalled(role, task, work, &screen, limit_ms) {
             let held_s = screen.at_ms.saturating_sub(screen.same_since_ms) / 1000;
             self.raise_attention(dir, role, STALLED, &screen.text, false, move |seq| {
                 format!("screen unchanged for {held_s}s; screen saved to attention/{seq}.txt")

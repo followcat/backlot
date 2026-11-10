@@ -32,6 +32,44 @@ fn live_view() -> BTreeMap<String, String> {
     ])
 }
 
+/// S9f: a live role whose last hook signal was a StopFailure
+/// carries its error in `failed`; a closed role drops it, like
+/// `work`.
+#[test]
+fn a_stop_failed_role_carries_its_error() {
+    let state = state_with(
+        &base_events(),
+        vec![
+            ("stage", started("producer", "t1", "prod")),
+            ("stage", started("director", "t2", "dir")),
+            ("stage", closed("director")),
+        ],
+    );
+    let failed = BTreeMap::from([
+        (
+            ("acme-shop".to_string(), "producer".to_string()),
+            "rate_limit".to_string(),
+        ),
+        (
+            ("acme-shop".to_string(), "director".to_string()),
+            "overloaded".to_string(),
+        ),
+    ]);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &live_view(),
+        &BTreeMap::new(),
+        &failed,
+        &BTreeMap::new(),
+        42,
+    );
+    let roles = &s.studios[0].roles;
+    let producer = roles.iter().find(|r| r.role == "producer").unwrap();
+    assert_eq!(producer.failed.as_deref(), Some("rate_limit"));
+    let director = roles.iter().find(|r| r.role == "director").unwrap();
+    assert_eq!(director.failed, None, "a closed role shows nothing");
+}
+
 /// The document carries the schema and per-studio fields.
 #[test]
 fn summary_shape_and_live_doing() {
@@ -45,6 +83,7 @@ fn summary_shape_and_live_doing() {
     let s = summary(
         &[("acme-shop".into(), state)],
         &live_view(),
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         42,
@@ -86,6 +125,7 @@ fn a_closed_role_stays_listed_without_doing() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let w = s.studios[0]
@@ -110,6 +150,7 @@ fn an_actor_names_its_candidate_and_task() {
     let state = state_with(&base, vec![("stage", started("actor-t1-c1", "t7", "a"))]);
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -157,6 +198,7 @@ fn a_user_owned_prompt_marks_the_attention_line() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let role = |name: &str| s.studios[0].roles.iter().find(|r| r.role == name).unwrap();
@@ -181,6 +223,7 @@ fn a_user_owned_prompt_marks_the_attention_line() {
     );
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -219,6 +262,7 @@ fn a_behind_actor_marks_its_doing_line() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let a = s.studios[0]
@@ -254,6 +298,7 @@ fn counters_follow_the_ledger() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     assert_eq!(s.studios[0].open_reviews, 1);
@@ -269,6 +314,7 @@ fn the_first_owed_step_names_label_and_owner() {
     let state = state_with(&base_events(), vec![]);
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -323,6 +369,7 @@ fn the_first_owed_step_names_label_and_owner() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     assert_eq!(s.studios[0].next.as_deref(), Some("dispatch — producer"));
@@ -337,6 +384,7 @@ fn the_first_owed_step_names_label_and_owner() {
     ));
     let s = summary(
         &[("acme-shop".into(), state_with(&events, vec![]))],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -386,6 +434,7 @@ fn fixed_roles_come_first_and_every_role_is_listed() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let roles = &s.studios[0].roles;
@@ -428,6 +477,7 @@ fn finished_studios_drop_for_size_but_live_stay() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     assert!(s.studios.iter().any(|st| st.id == "live-0"), "{s:?}");
@@ -443,6 +493,7 @@ fn finished_studios_drop_for_size_but_live_stay() {
     closed_actors(&mut events, "huge", 350);
     let s = summary(
         &[("big-live".into(), replay(&events))],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -478,6 +529,7 @@ fn finished_studios_drop_off_after_live_ones() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     assert_eq!(s.studios.len(), MAX_STUDIOS);
@@ -508,6 +560,7 @@ fn work_is_sampled_into_live_roles_only() {
         &[("acme-shop".into(), state)],
         &BTreeMap::new(),
         &work,
+        &BTreeMap::new(),
         &BTreeMap::new(),
         1,
     );
@@ -542,6 +595,7 @@ fn actors_carry_task_and_priority() {
     );
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -590,6 +644,7 @@ fn resumable_is_a_closed_person_with_a_session_and_no_hold() {
     );
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
@@ -651,6 +706,7 @@ fn actors_order_by_priority_then_key_with_closed_last() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let order: Vec<&str> = s.studios[0].roles.iter().map(|r| r.role.as_str()).collect();
@@ -685,6 +741,7 @@ fn a_broken_studio_shows_its_error_even_unloaded() {
         ],
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         &errors,
         1,
     );
@@ -706,6 +763,7 @@ fn strings_are_capped() {
     state.studio.as_mut().unwrap().title = long.clone();
     let s = summary(
         &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),

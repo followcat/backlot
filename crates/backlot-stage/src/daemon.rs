@@ -31,6 +31,7 @@ use crate::discover;
 use crate::doc;
 use crate::link;
 use crate::reconcile;
+use crate::signals;
 use crate::store::{self, StoreError};
 use crate::watch;
 use crate::workareas;
@@ -183,6 +184,10 @@ pub(crate) struct Stage {
     /// `(studio, role)` → when the current idle stretch began — the
     /// nudge pass's clock. In-memory: a restart starts it over.
     pub(crate) idle_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → the last hook signal from the role's own
+    /// session (S9f) — the first work source, the signal stall's
+    /// clock and the approval bind's request identity.
+    pub(crate) last_signal: std::cell::RefCell<BTreeMap<(String, String), signals::Signal>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -387,7 +392,22 @@ impl Stage {
         // The ledger error first, otherwise the last pass failure.
         let mut errors = self.failed.clone();
         errors.extend(self.broken.iter().map(|(k, v)| (k.clone(), v.clone())));
-        summary::summary(&owned, doing, &self.work.borrow(), &errors, 0)
+        // `(studio, role)` → StopFailure error for a role whose last
+        // hook signal was a StopFailure (S9f) — `last turn failed:
+        // <error>` until its next signal.
+        let failed: BTreeMap<(String, String), String> = self
+            .last_signal
+            .borrow()
+            .iter()
+            .filter(|(_, s)| s.event == "StopFailure")
+            .map(|(k, s)| {
+                (
+                    k.clone(),
+                    s.error.clone().unwrap_or_else(|| "unknown".into()),
+                )
+            })
+            .collect();
+        summary::summary(&owned, doing, &self.work.borrow(), &failed, &errors, 0)
     }
 }
 
@@ -420,6 +440,7 @@ impl Stage {
             blocked_since: std::cell::RefCell::new(BTreeMap::new()),
             unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
+            last_signal: std::cell::RefCell::new(BTreeMap::new()),
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
             broken: BTreeMap::new(),
@@ -495,6 +516,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         blocked_since: std::cell::RefCell::new(BTreeMap::new()),
         unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
+        last_signal: std::cell::RefCell::new(BTreeMap::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
         broken: BTreeMap::new(),

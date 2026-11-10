@@ -335,6 +335,7 @@ fn held_roles_show_waiting_in_the_summary() {
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
+        &BTreeMap::new(),
         1,
     );
     let roles = &s.studios[0].roles;

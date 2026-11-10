@@ -86,6 +86,11 @@ pub struct RoleSummary {
     /// watch pass has classified the screen (R17).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work: Option<Work>,
+    /// The error a live role's last hook signal carried when it was
+    /// a `StopFailure` — the panel shows `last turn failed: <error>`
+    /// until the role's next signal (S9f).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed: Option<String>,
     /// The task an actor works on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
@@ -216,13 +221,15 @@ fn role_attention(state: &StudioState, role: &str) -> Option<String> {
 
 /// One role's summary. `live` maps a terminal address to what the
 /// program there reports doing; `work` the watch pass's per-role
-/// screen classification, keyed `(studio, role)`.
+/// screen classification and `failed` a role's StopFailure error,
+/// both keyed `(studio, role)`.
 fn role_summary(
     studio: &str,
     state: &StudioState,
     role: &str,
     live: &BTreeMap<String, String>,
     work: &BTreeMap<(String, String), Work>,
+    failed: &BTreeMap<(String, String), String>,
 ) -> Option<RoleSummary> {
     let r = state.roles.get(role)?;
     let lifecycle = r.lifecycle();
@@ -255,6 +262,11 @@ fn role_summary(
         .then(|| work.get(&(studio.to_string(), role.to_string())))
         .flatten()
         .copied();
+    // Like `work`: a live read only, dropped for a lost or closed role.
+    let failed = (lifecycle == RoleLifecycle::Live)
+        .then(|| failed.get(&(studio.to_string(), role.to_string())))
+        .flatten()
+        .map(|e| cap(e));
     let task = actor_task(role).map(String::from);
     let priority = task
         .as_deref()
@@ -276,6 +288,7 @@ fn role_summary(
         .into(),
         doing,
         work,
+        failed,
         task: task.map(|t| cap(&t)),
         priority,
         resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
@@ -290,15 +303,17 @@ fn role_summary(
 /// ledger mtime): live studios always keep their slot, and finished
 /// ones fill what remains — so old finished studios drop off.
 /// `live` maps a live terminal's address to what it reports doing.
-/// `work` maps `(studio, role)` to the watch pass's latest screen
-/// classification — the summary stays pure; the stage owns the map.
-/// `errors` maps a studio to the stage's last error for it — the row
-/// carries it, and a studio whose state never loaded still gets a
-/// stub row so the panel can show why.
+/// `work` maps `(studio, role)` to the watch pass's latest work
+/// classification and `failed` `(studio, role)` to the StopFailure
+/// error its last hook signal carried — the summary stays pure; the
+/// stage owns both maps. `errors` maps a studio to the stage's last
+/// error for it — the row carries it, and a studio whose state
+/// never loaded still gets a stub row so the panel can show why.
 pub fn summary(
     studios: &[(String, StudioState)],
     live: &BTreeMap<String, String>,
     work: &BTreeMap<(String, String), Work>,
+    failed: &BTreeMap<(String, String), String>,
     errors: &BTreeMap<String, String>,
     updated_ms: u64,
 ) -> Summary {
@@ -328,7 +343,7 @@ pub fn summary(
         let done = finished(state);
         let mut roles: Vec<RoleSummary> = role_keys(state)
             .into_iter()
-            .filter_map(|role| role_summary(name, state, role, live, work))
+            .filter_map(|role| role_summary(name, state, role, live, work, failed))
             .collect();
         // Runner limits (S9e): a held wanted role shows `waiting for
         // a <runner> slot` — overriding a recorded closed/lost row,
@@ -339,6 +354,7 @@ pub fn summary(
                 rs.state = "waiting".into();
                 rs.doing = Some(cap(&format!("waiting for a {runner} slot")));
                 rs.work = None;
+                rs.failed = None;
             }
         }
         for w in crate::wanted::wanted_roles(state) {
@@ -358,6 +374,7 @@ pub fn summary(
                 state: "waiting".into(),
                 doing: Some(cap(&format!("waiting for a {runner} slot"))),
                 work: None,
+                failed: None,
                 task: w.task.as_ref().map(|t| cap(t)),
                 priority: w
                     .task

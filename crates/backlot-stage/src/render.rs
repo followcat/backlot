@@ -1,5 +1,6 @@
 //! Human-readable views: `backlot status` and `backlot records`.
 
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use backlot_model::event::{CheckDecl, EventKind};
@@ -93,7 +94,12 @@ fn fmt_status(s: TaskStatus) -> String {
 
 /// The status view for one studio. `now_ms` ages each owed step's
 /// `next:` line.
-pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
+pub fn status(
+    name: &str,
+    state: &StudioState,
+    failed: &BTreeMap<String, String>,
+    now_ms: u64,
+) -> String {
     let mut out = String::new();
     let Some(studio) = &state.studio else {
         return format!("studio {name}: no events yet\n");
@@ -154,6 +160,11 @@ pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
             w.role,
             actor_short(&w.actor)
         );
+    }
+    // S9f: a role whose last hook signal was a StopFailure shows
+    // `last turn failed: <error>` until its next signal.
+    for (role, error) in failed {
+        let _ = writeln!(out, "    {role:<9} last turn failed: {error}");
     }
     if !studio.candidates.is_empty() {
         let _ = writeln!(out, "  candidates:");

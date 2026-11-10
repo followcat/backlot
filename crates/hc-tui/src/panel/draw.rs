@@ -237,8 +237,8 @@ pub(crate) fn render(
 }
 
 /// One person row: mark, name, `runner/model`, a priority flag for
-/// actors — then a `doing` line, an attention line and the armed
-/// reopen hint.
+/// actors — then a `doing` line, an attention line, a `last turn
+/// failed` line and the armed reopen hint.
 fn draw_person(
     buf: &mut Buffer,
     rect: Rect,
@@ -321,6 +321,18 @@ fn draw_person(
             format!("! {attention}"),
             (rect.x + rect.width).saturating_sub(rect.x + 2) as usize,
             Style::default().fg(palette.red),
+        );
+        y += 1;
+    }
+    // S9f: the role's last hook signal was a StopFailure — shown
+    // until its next signal; it raises nothing.
+    if let Some(failed) = &role.failed {
+        buf.set_stringn(
+            rect.x + 2,
+            y,
+            format!("! last turn failed: {failed}"),
+            (rect.x + rect.width).saturating_sub(rect.x + 2) as usize,
+            Style::default().fg(palette.peach),
         );
         y += 1;
     }
