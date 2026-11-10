@@ -1,5 +1,24 @@
 # Studio progress
 
+## S10: merge hc-tui main at 4e8731c — v0.1.2 (2026-11-10)
+
+- Done: upstream's nine commits landed as merge `f0691c2` — one synchronized write per frame,
+  copied image files and clipboard-miss notices for remote image paste, popup selection indexed
+  by the frame stride, popup pastes encoded under the popup terminal's own bracketed-paste mode,
+  the paste-matrix and real-agent smoke e2e helpers, and the version bump. Four conflicts all
+  resolved for backlot: the workspace, `hc-vt` and `Cargo.lock` keep version 0.1.0, and the paste
+  arm keeps `panel_focused()` eating paste ahead of upstream's new `popup_paste`. The new e2e
+  helpers run `CARGO_BIN_EXE_backlot`, and the merged user docs say `backlot` where they name the
+  installed binary; `NOTICE` and the `Derived from herdr` headers are untouched.
+- Measured: one new test pins the merge's routing — a focused panel eats a host paste with a
+  popup open, and releasing panel focus lets the same paste reach the popup as a semantic Paste.
+  Gates: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (every
+  suite, 0 failures), `sh scripts/test-install.sh` (29 checks), and against the pinned `hc` the
+  ignored `hc-proto` integration (5), `real_core_smoke` (1), `real_stage` (6) and both
+  paste-matrix e2e runs (2) all pass on owned scratch cores.
+- Not verified: `real_agent_smoke_e2e` stayed ignored — it launches the real agent CLIs, so it
+  was compiled but never run. The parity harness was not run; the maintainer runs it.
+
 ## S9a: who owes the next step (2026-11-10)
 
 - Done: `backlot_model::steps::next_steps` derives every obligation the ledger still holds — the
