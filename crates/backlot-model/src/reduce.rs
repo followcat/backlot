@@ -443,16 +443,18 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 open: true,
                 ts_ms: ts,
                 needs_user: *needs_user,
+                cleared_reason: None,
             });
             state
                 .targets
                 .insert(seq, SeqTarget::Attention(state.attention.len() - 1));
         }
-        EventKind::AttentionCleared { target, .. } => {
+        EventKind::AttentionCleared { target, reason } => {
             if let Some(SeqTarget::Attention(idx)) = state.targets.get(target)
                 && let Some(a) = state.attention.get_mut(*idx)
             {
                 a.open = false;
+                a.cleared_reason = reason.clone();
             }
         }
         EventKind::RoleApproval { role, decision } => {

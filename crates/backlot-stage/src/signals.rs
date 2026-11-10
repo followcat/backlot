@@ -134,22 +134,92 @@ pub fn last_work(tail: &str, session_id: &str) -> Option<Signal> {
         .find(|s| s.work().is_some())
 }
 
-/// The request the role is still waiting on: the first
-/// non-`Notification` line back from the end, when it is a
-/// `PermissionRequest`. A `permission_prompt` notification is the
-/// same prompt's six-second chime, not a change of prompt — any
-/// other event ends the request.
-pub fn pending_request(tail: &str, session_id: &str) -> Option<Signal> {
-    for line in tail.lines().rev() {
-        let Some(s) = parse(line, session_id) else {
-            continue;
-        };
-        if s.event == "Notification" {
-            continue;
-        }
-        return (s.event == "PermissionRequest").then_some(s);
+/// `true` for a line that is (or was) a permission prompt: the
+/// `PermissionRequest` itself or its `permission_prompt` chime.
+impl Signal {
+    pub(crate) fn asks(&self) -> bool {
+        self.event == "PermissionRequest"
+            || (self.event == "Notification"
+                && self.notification_type.as_deref() == Some("permission_prompt"))
     }
-    None
+}
+
+/// The tail's first non-`Notification` line back from the end.
+fn first_event(tail: &str, session_id: &str) -> Option<Signal> {
+    tail.lines()
+        .rev()
+        .filter_map(|line| parse(line, session_id))
+        .find(|s| s.event != "Notification")
+}
+
+/// The request the role is still waiting on: the first
+/// non-`Notification` line back from the end, when it is an
+/// unanswered `PermissionRequest`. A `permission_prompt`
+/// notification is the same prompt's six-second chime, not a
+/// change of prompt — any other event ends the request, and a
+/// request whose `ts_ms` is in `answered` already got its key.
+pub fn pending_request(
+    tail: &str,
+    session_id: &str,
+    answered: &std::collections::BTreeSet<u64>,
+) -> Option<Signal> {
+    let s = first_event(tail, session_id)?;
+    (s.event == "PermissionRequest" && !answered.contains(&s.ts_ms)).then_some(s)
+}
+
+/// The session's work state from its signals: the last mapped
+/// line, except that a prompt line reads `Blocked` only while its
+/// request is pending — Claude Code emits no hook between the
+/// answer and the tool's own `PostToolUse`, so an answered
+/// request reads `Working` until the next signal. A chime with no
+/// request behind it — a sandbox prompt sends none — keeps its
+/// own `Blocked`.
+pub fn state(
+    tail: &str,
+    session_id: &str,
+    answered: &std::collections::BTreeSet<u64>,
+) -> Option<Work> {
+    let s = last_work(tail, session_id)?;
+    if !s.asks() {
+        return s.work();
+    }
+    match first_event(tail, session_id) {
+        Some(f) if f.event == "PermissionRequest" => Some(if answered.contains(&f.ts_ms) {
+            Work::Working
+        } else {
+            Work::Blocked
+        }),
+        _ => s.work(),
+    }
+}
+
+/// The `PermissionRequest`s the stage already answered for `role`:
+/// every closed `permission prompt` attention that cleared
+/// `sent <key>` and was bound to a request — its
+/// `attention/<seq>.signal` names the request. Rebuilt from the
+/// ledger each sample, so a stage restart does not raise the same
+/// request again nor send its key twice.
+pub fn answered_requests(
+    dir: &Path,
+    state: &StudioState,
+    role: &str,
+) -> std::collections::BTreeSet<u64> {
+    state
+        .attention
+        .iter()
+        .filter(|a| {
+            a.role == role
+                && !a.open
+                && a.cleared_reason
+                    .as_deref()
+                    .is_some_and(|r| r.starts_with("sent "))
+        })
+        .filter_map(|a| {
+            std::fs::read_to_string(dir.join("attention").join(format!("{}.signal", a.seq))).ok()
+        })
+        .filter_map(|s| serde_json::from_str::<Signal>(&s).ok())
+        .map(|s| s.ts_ms)
+        .collect()
 }
 
 /// Signals first, the screen as fallback (S9f): `Blocked` wins from

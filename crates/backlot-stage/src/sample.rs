@@ -82,21 +82,26 @@ impl Stage {
         // any session with no signal yet. The pending request is
         // the same tail's first non-Notification line — a
         // `permission_prompt` notification is the same prompt's
-        // six-second chime, never a new prompt.
+        // six-second chime, never a new prompt — minus the
+        // requests the ledger says this stage already answered:
+        // their prompt is gone but no hook line comes until the
+        // tool's own, so they read Working meanwhile.
         let session = w
             .state
             .roles
             .get(w.role)
             .and_then(|r| r.session_id.as_deref());
-        let (signal, request) = session
+        let (signal, request, signal_state) = session
             .map(|sid| {
                 let tail = signals::tail(&signals::signals_path(w.dir, w.role));
+                let answered = signals::answered_requests(w.dir, w.state, w.role);
                 (
                     signals::last_work(&tail, sid),
-                    signals::pending_request(&tail, sid),
+                    signals::pending_request(&tail, sid, &answered),
+                    signals::state(&tail, sid, &answered),
                 )
             })
-            .unwrap_or((None, None));
+            .unwrap_or((None, None, None));
         match &signal {
             Some(s) => self
                 .last_signal
@@ -104,10 +109,7 @@ impl Stage {
                 .insert(pair.clone(), s.clone()),
             None => self.last_signal.borrow_mut().remove(&pair),
         };
-        let work = signals::combine(
-            signal.as_ref().and_then(|s| s.work()),
-            runners::work_state(w.runner, &text),
-        );
+        let work = signals::combine(signal_state, runners::work_state(w.runner, &text));
         self.work.borrow_mut().insert(pair.clone(), work);
         // The send gate's screen-stability track — same screen, same
         // `same_since`; a new screen resets the window.
@@ -306,7 +308,12 @@ impl Stage {
         // from a `PermissionRequest` signal carries the request in
         // `<seq>.signal` (S9f): the compare is that the pending
         // request is still that request — the same `ts_ms` and
-        // `tool_input` — `Notification` chimes skipped.
+        // `tool_input` — `Notification` chimes skipped — *and* that
+        // the screen still reads Blocked. Claude Code emits no hook
+        // between the answer and the tool's end, so a prompt
+        // answered at the role's terminal leaves its request the
+        // pending one and the screen is the only proof it went:
+        // `prompt gone` then, nothing sent and nothing raised.
         // Anything else keeps the S9c screen compare — the saved
         // screen's prompt block must still be the one on show. A
         // prompt that changed under the recorded decision (an
@@ -316,37 +323,69 @@ impl Stage {
         // attention — `needs_user` computed on it, the director
         // notified as for any new prompt. A screen with no
         // comparable block refuses the same way.
-        let same_prompt = if let Ok(bound) =
+        enum Fresh {
+            Send,
+            Changed,
+            Gone,
+        }
+        let screen_blocked = runners::work_state(w.runner, text) == Work::Blocked;
+        let fresh = if let Ok(bound) =
             std::fs::read_to_string(dir.join("attention").join(format!("{}.signal", attn.seq)))
         {
             let was: Option<signals::Signal> = serde_json::from_str(&bound).ok();
             match (was, request) {
-                (Some(w), Some(n)) => w.ts_ms == n.ts_ms && w.tool_input == n.tool_input,
-                _ => false,
+                (Some(w), Some(n)) if w.ts_ms == n.ts_ms && w.tool_input == n.tool_input => {
+                    if screen_blocked {
+                        Fresh::Send
+                    } else {
+                        Fresh::Gone
+                    }
+                }
+                (Some(_), Some(_)) => Fresh::Changed,
+                _ => {
+                    if screen_blocked {
+                        Fresh::Changed
+                    } else {
+                        Fresh::Gone
+                    }
+                }
             }
         } else {
             let saved =
                 std::fs::read_to_string(dir.join("attention").join(format!("{}.txt", attn.seq)))
                     .unwrap_or_default();
-            matches!(
-                (
-                    permit::prompt_block(w.runner, &saved),
-                    permit::prompt_block(w.runner, text),
-                ),
-                (Some(was), Some(now)) if was == now
-            )
+            match (
+                permit::prompt_block(w.runner, &saved),
+                permit::prompt_block(w.runner, text),
+            ) {
+                (Some(was), Some(now)) if was == now => Fresh::Send,
+                _ => Fresh::Changed,
+            }
         };
-        if !same_prompt {
-            record(
-                dir,
-                EventKind::AttentionCleared {
-                    target: attn.seq,
-                    reason: Some("prompt changed before the decision was sent".into()),
-                },
-            )?;
-            self.raise_permission(dir, role, w.runner, text, request)
-                .await?;
-            return Ok(());
+        match fresh {
+            Fresh::Send => {}
+            Fresh::Changed => {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: attn.seq,
+                        reason: Some("prompt changed before the decision was sent".into()),
+                    },
+                )?;
+                self.raise_permission(dir, role, w.runner, text, request)
+                    .await?;
+                return Ok(());
+            }
+            Fresh::Gone => {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: attn.seq,
+                        reason: Some("prompt gone before the decision was sent".into()),
+                    },
+                )?;
+                return Ok(());
+            }
         }
         let sent = self
             .client

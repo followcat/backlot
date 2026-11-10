@@ -66,6 +66,7 @@ fn raised(role: &str) -> Attention {
         open: true,
         ts_ms: 0,
         needs_user: false,
+        cleared_reason: None,
     }
 }
 
@@ -289,6 +290,7 @@ fn session_event_timing() {
             open,
             ts_ms: 0,
             needs_user: false,
+            cleared_reason: None,
         });
     }
     assert!(session_event("producer", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty());
@@ -324,6 +326,7 @@ fn a_previous_lifes_attention_counts_for_nothing() {
         open: false,
         ts_ms: 50,
         needs_user: false,
+        cleared_reason: None,
     });
     states.insert("one".into(), one);
     // A previous life's raise never unblocks the pair…
@@ -360,6 +363,7 @@ fn a_late_found_id_clears_the_open_attention() {
         open: true,
         ts_ms: 100,
         needs_user: false,
+        cleared_reason: None,
     });
     let events = session_event("producer", "codex", Some("s9".into()), &state, 0, 120_000);
     assert_eq!(

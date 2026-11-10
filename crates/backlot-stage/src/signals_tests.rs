@@ -514,7 +514,8 @@ async fn a_request_binds_the_attention_and_the_decision_sends() {
     assert_eq!(bound.tool_target(), Some("cargo test"));
 
     // The decision lands while the last signal is still the bound
-    // request: the key goes to the screen.
+    // request and the screen still asks: the key goes to it.
+    fake.lock().unwrap().screen = "fake-work: blocked".into();
     approve(
         &dir,
         "producer",
@@ -592,6 +593,7 @@ async fn a_second_request_refuses_the_earlier_decision() {
     )
     .unwrap();
     assert_eq!(bound_b.tool_target(), Some("cargo fmt"));
+    fake.lock().unwrap().screen = "fake-work: blocked".into();
     approve(
         &dir,
         "producer",
@@ -784,18 +786,46 @@ fn pending_request_skips_only_notifications() {
     let request = "{\"ts_ms\":1,\"event\":\"PermissionRequest\",\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cargo test\"}}";
     let chime = "{\"ts_ms\":2,\"event\":\"Notification\",\"session_id\":\"s\",\"notification_type\":\"permission_prompt\"}";
     let tail = format!("{request}\n{chime}\n");
-    let p = signals::pending_request(&tail, "s").unwrap();
+    let p = signals::pending_request(&tail, "s", &Default::default()).unwrap();
     assert_eq!(p.ts_ms, 1);
     assert_eq!(p.tool_target(), Some("cargo test"));
-    // Any non-Notification event after the request ends it.
+    // Any non-Notification event after the request ends it — and a
+    // request in the answered set is no one's to send.
     let tail = format!(
         "{request}\n{chime}\n{{\"ts_ms\":3,\"event\":\"PostToolUse\",\"session_id\":\"s\"}}\n"
     );
-    assert!(signals::pending_request(&tail, "s").is_none());
+    assert!(signals::pending_request(&tail, "s", &Default::default()).is_none());
+    let answered = std::collections::BTreeSet::from([1]);
+    assert!(signals::pending_request(&tail, "s", &answered).is_none());
+    let tail = format!("{request}\n{chime}\n");
+    assert!(signals::pending_request(&tail, "s", &answered).is_none());
     // Another session's request is not this session's.
     let tail = "{\"ts_ms\":1,\"event\":\"PermissionRequest\",\"session_id\":\"other\"}\n";
-    assert!(signals::pending_request(tail, "s").is_none());
-    assert!(signals::pending_request("", "s").is_none());
+    assert!(signals::pending_request(tail, "s", &Default::default()).is_none());
+    assert!(signals::pending_request("", "s", &Default::default()).is_none());
+}
+
+/// `signals::state`: an answered request reads Working — the tool
+/// is running and no hook line comes until its own `PostToolUse` —
+/// while a pending one and a bare chime stay Blocked.
+#[test]
+fn an_answered_request_reads_working_until_the_next_signal() {
+    let request = "{\"ts_ms\":1,\"event\":\"PermissionRequest\",\"session_id\":\"s\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cargo test\"}}";
+    let chime = "{\"ts_ms\":2,\"event\":\"Notification\",\"session_id\":\"s\",\"notification_type\":\"permission_prompt\"}";
+    let tail = format!("{request}\n{chime}\n");
+    let none = std::collections::BTreeSet::new();
+    let answered = std::collections::BTreeSet::from([1]);
+    assert_eq!(signals::state(&tail, "s", &none), Some(Work::Blocked));
+    assert_eq!(signals::state(&tail, "s", &answered), Some(Work::Working));
+    // A bare chime — no `PermissionRequest` behind it — keeps its
+    // own Blocked whatever the set holds.
+    let bare = format!("{chime}\n");
+    assert_eq!(signals::state(&bare, "s", &answered), Some(Work::Blocked));
+    // The tool's own signal answers again.
+    let tail = format!(
+        "{request}\n{chime}\n{{\"ts_ms\":3,\"event\":\"PostToolUse\",\"session_id\":\"s\"}}\n"
+    );
+    assert_eq!(signals::state(&tail, "s", &answered), Some(Work::Working));
 }
 
 /// A `permission_prompt` notification six seconds after its
@@ -819,13 +849,15 @@ async fn a_notification_keeps_the_request_pending() {
     assert_eq!(events(&dir, "attention.raised").len(), 1);
 
     // Six seconds later Claude Code chimes the same prompt; the
-    // decision taken on the bound request still sends.
+    // decision taken on the bound request still sends — the screen
+    // asks too, which a send now needs.
     emit(
         &dir,
         "producer",
         json!({"ts_ms": t0 + 6_000, "event": "Notification", "session_id": "s-1",
                "notification_type": "permission_prompt"}),
     );
+    fake.lock().unwrap().screen = "fake-work: blocked".into();
     approve(
         &dir,
         "producer",
@@ -834,6 +866,109 @@ async fn a_notification_keeps_the_request_pending() {
     );
     sample(&stage, &dir, &term, "producer", t0 + 7_000).await;
     assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+}
+
+/// An answered request never comes back: the send cleared its
+/// attention, `answered_requests` rebuilds the set from the
+/// ledger plus `<seq>.signal`, and the same request pending no
+/// more means no second raise and no second key — across a stage
+/// restart too, the answered set riding the ledger rather than
+/// memory. Until the tool's own signal lands the role reads
+/// Working.
+#[tokio::test]
+async fn an_answered_request_never_raises_again() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (st, fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    sample(&st, &dir, &term, "producer", t0).await;
+    sample(&st, &dir, &term, "producer", t0 + 2_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+    fake.lock().unwrap().screen = "fake-work: blocked".into();
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&st, &dir, &term, "producer", t0 + 3_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+
+    // The prompt is answered; the tool now runs. The screen moved
+    // past the prompt — no hook line will say so until the tool's
+    // own — and the request never raises a second attention.
+    fake.lock().unwrap().screen = "fake-work: waiting".into();
+    sample(&st, &dir, &term, "producer", t0 + 4_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+    assert_eq!(work_of(&st, "producer"), Some(Work::Working));
+
+    // A stage restart rebuilds the answered set from the ledger —
+    // the request still does not come back.
+    let (stage2, _fake2) = stage().await;
+    sample(&stage2, &dir, &term, "producer", t0 + 6_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+    assert_eq!(work_of(&stage2, "producer"), Some(Work::Working));
+
+    // The tool's own signal then answers in place.
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0 + 7_000, "event": "PostToolUse", "session_id": "s-1"}),
+    );
+    sample(&stage2, &dir, &term, "producer", t0 + 8_000).await;
+    assert_eq!(work_of(&stage2, "producer"), Some(Work::Working));
+}
+
+/// The prompt the decision was made for can go away at the role's
+/// own terminal — Claude Code emits no hook for that. The bound
+/// request stays the pending one, so the screen is the proof: not
+/// Blocked any more means `prompt gone`, nothing sent and nothing
+/// raised.
+#[tokio::test]
+async fn a_bound_attention_refuses_when_the_screen_moved_on() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    emit(
+        &dir,
+        "producer",
+        json!({"ts_ms": t0, "event": "PermissionRequest", "session_id": "s-1",
+               "tool_name": "Bash", "tool_input": {"command": "cargo test"}}),
+    );
+    sample(&stage, &dir, &term, "producer", t0).await;
+    sample(&stage, &dir, &term, "producer", t0 + 2_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // Answered at the terminal: the request is still the tail's
+    // pending line, but the screen reads waiting — refuse.
+    fake.lock().unwrap().screen = "fake-work: waiting".into();
+    approve(
+        &dir,
+        "producer",
+        "user",
+        backlot_model::event::ApprovalDecision::Allow,
+    );
+    sample(&stage, &dir, &term, "producer", t0 + 3_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), Vec::<String>::new());
+    match &events(&dir, "attention.cleared")[0].kind {
+        EventKind::AttentionCleared { reason, .. } => {
+            assert_eq!(
+                reason.as_deref(),
+                Some("prompt gone before the decision was sent")
+            );
+        }
+        _ => unreachable!(),
+    }
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
 }
 
 /// A tool event after the request means the prompt already ended:

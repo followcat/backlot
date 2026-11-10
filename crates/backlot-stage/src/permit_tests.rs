@@ -23,6 +23,7 @@ fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
         open,
         ts_ms,
         needs_user: false,
+        cleared_reason: None,
     }
 }
 

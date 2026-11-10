@@ -1311,7 +1311,8 @@ async fn real_stage_prompt_answered_elsewhere_clears() {
 /// bound attention that names the tool and command, a second
 /// request refuses the first decision, and the second request's
 /// own approval still sends the key though a `permission_prompt`
-/// chime came in between.
+/// chime came in between — after which the answered request never
+/// raises again and the tool's `PostToolUse` reads Working.
 #[tokio::test]
 #[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
 async fn real_stage_hooks() {
@@ -1407,6 +1408,23 @@ async fn real_stage_hooks() {
         "approve --person actor-t1-c1 --decision allow --as director",
     );
     wait_read(&client, &actor.address, "fake-approved: enter").await;
+
+    // The request is answered. Real Claude Code emits no hook
+    // between the answer and the tool's end — five quiet seconds is
+    // several stage ticks, and the same request must not raise a
+    // second attention nor send a second key.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let raises = ledger(&state)
+        .into_iter()
+        .filter(|e| e["kind"] == "attention.raised" && e["role"] == "actor-t1-c1")
+        .count();
+    assert_eq!(raises, 2);
+    let screen = wait_read(&client, &actor.address, "fake-approved: enter").await;
+    assert_eq!(screen.matches("fake-approved: enter").count(), 1);
+
+    // The tool's own signal then answers in place.
+    send_text(&client, &actor.address, "hook:PostToolUse").await;
+    wait_role(&client, "actor-t1-c1", |r| r["work"] == "working").await;
 }
 
 /// S9f: a `Working` signal gone quiet past `stall_limit_s` raises

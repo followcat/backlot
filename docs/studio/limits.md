@@ -92,6 +92,14 @@ re-raise one `stall_limit_s` later.
   StopFailure's error), that `--settings` hooks fire without a trust or review prompt, that
   `-r` keeps the session id across a resume, and how the S9c pre-allow list behaves beside real
   prompts — a real run checks them later.
+- **An answered request has no hook of its own.** Claude Code emits nothing between the answer
+  and the tool's end, so a bound `PermissionRequest` stays the tail's pending line while the tool
+  runs. The stage marks a request answered only when *it* sent the key (`attention.cleared` with
+  `sent <key>` on a `<seq>.signal`-bound attention, rebuilt from the ledger each sample) — until
+  the tool's own signal the role reads Working, not Blocked. A prompt answered at the role's
+  terminal instead leaves the pending line too, so `approve` requires the screen to still read
+  Blocked and refuses `prompt gone` otherwise. If Claude's screen markers ever break, approvals
+  are refused and the attention stays with the user — the safe direction.
 - **A notice can still arrive late — a stale one is dropped, not sent.** Delivery waits for the
   role to be up five seconds, its screen to hold still two, and a five-second gap since the last
   send to it, and several items owed at once now merge into one `messages/digest-<seq>.md`

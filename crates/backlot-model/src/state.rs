@@ -435,6 +435,12 @@ pub struct Attention {
     /// field.
     #[serde(default, skip_serializing_if = "crate::event::is_false")]
     pub needs_user: bool,
+    /// The `attention.cleared` reason once closed — `sent <key>`
+    /// marks a bound permission request as answered (S9f), so the
+    /// stage can rebuild that set from the ledger alone. Old
+    /// records carry no field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleared_reason: Option<String>,
 }
 
 /// A recorded `role.approval` — a permission-prompt decision.

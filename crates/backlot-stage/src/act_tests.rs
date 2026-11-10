@@ -106,6 +106,7 @@ fn attention_is_deduped_per_role_and_reason() {
         open: true,
         ts_ms: 0,
         needs_user: false,
+        cleared_reason: None,
     });
     assert!(attention_open(&state, "producer", "launch refused"));
     assert!(!attention_open(&state, "director", "launch refused"));
