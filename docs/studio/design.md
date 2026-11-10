@@ -217,6 +217,40 @@ A permission prompt follows the approval policy. Rate-limit and connection-error
 nothing is measured — so a role that hits one simply stops, and reaches its reviewer as a stall like any other frozen
 screen.
 
+## Hook signals (S9f)
+
+Screen patterns are the fallback, not the source. A Claude role launches with
+`--settings roles/<role>/claude-settings.json` — one session-only settings layer holding `hooks` and nothing else —
+wiring eight events (`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`,
+`Notification`, `Stop`, `StopFailure`) to `backlot hook --file roles/<role>/signals.jsonl`. The command is the running
+binary's own absolute path, shell-quoted, and both files are rewritten on every start and resume — the settings
+fresh, the signals truncated — so a moved binary or directory heals on the next launch. The sink appends one compact
+line per event — `ts_ms`, the event, `session_id`, the notification or error type, and for a `PermissionRequest` the
+tool name with its command or path — each string capped and the line under 4 KiB — silent and exit-0 on every path,
+so a hook can never get in the runner's way.
+
+The stage reads the file's last 16 KB and takes the newest line the role's *own* session sent — the session id the
+ledger recorded at `role.started`, so another session's lines never move the role. The two work sources combine in a
+fixed order:
+
+1. `blocked` wins from either — a prompt can reach the screen before its signal lands.
+2. Otherwise the signal's state: `UserPromptSubmit` and the tool events are `working`, `PermissionRequest` and a
+   `permission_prompt` notification `blocked`, `Stop`, `StopFailure` and `idle_prompt` `waiting`.
+3. A session that sent nothing — and every non-Claude runner — answers from the screen exactly as before.
+
+Two more uses of the same tail: a `working` last signal older than `stall_limit_s` raises `stalled` with `no hook
+signal for <n>s` — the dead-turn case a spinning screen never caught — and any newer signal clears it, the way a
+changed screen does. A `StopFailure` shows `last turn failed: <error>` on `backlot status` and the panel until the
+role's next signal; nothing is raised — the owed-step machinery already nudges an idle role.
+
+A `PermissionRequest` also binds the permission attention it raises: the detail names the tool and the trimmed
+command or path (`Bash: cargo test`), the request's own JSON lands at `attention/<seq>.signal`, and `needs_user`
+reads the request's command — the screen never shows it. Before a recorded decision's key is sent, the last signal
+must still be that request — the same `ts_ms` and `tool_input` — otherwise it is a different prompt: nothing goes
+out, the stale attention clears `prompt changed before the decision was sent`, and the pending request raises its
+own bound attention. The screen-block compare stays for any attention not raised from a signal, and the keys still
+go to the terminal: a hook never answers a prompt.
+
 ## Owed steps (S9a)
 
 A stall says a screen stopped moving; it says nothing about whose turn it is. `backlot_model::steps::next_steps` reads
@@ -303,8 +337,10 @@ the stage from the panel is not implemented — the stage runs as its own proces
   "doing", and what needs attention.
 - **Work states (R17):** working, waiting for input, blocked, lost and closed each have their own colour and mark, from
   the palette in `chrome/status.rs`. Working is animated (spinning or a slow blink). The animation runs only while
-  something is working, so an idle panel causes no redraws. The stage derives the state from per-runner screen patterns
-  and publishes it in the summary, separately from whether the role is live, lost or closed.
+  something is working, so an idle panel causes no redraws. The stage derives the state from the hook signals first
+  (see "Hook signals"), per-runner screen patterns as the fallback, and publishes it in the summary, separately from
+  whether the role is live, lost or closed. A role whose last turn failed draws `! last turn failed: <error>` beside
+  it.
 - **Scrolling (R13, R18):** a visible scrollbar, reusing `chrome/scroll`, with wheel, drag and keys.
 - **Order (R20, D11):** several people in one role are ordered by priority, and closed people come after open ones. The
   director sets priority per task with `backlot cast --priority`, the default is normal, and the user can change it in

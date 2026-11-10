@@ -77,9 +77,21 @@ re-raise one `stall_limit_s` later.
 - **Rate limits and connection errors are not recognized.** `runners.md` lists the observed
   screens (Devin's rate-limit line, its connection-error stop) but nothing matches on them — such
   a role reaches its reviewer as a stall, after `stall_limit_s` (600 by default).
-- **Stall detection watches an *unchanged* screen.** A runner that keeps animating while it is
-  stuck — a live spinner, a clock in its status line — never looks frozen and never raises
-  `stalled`.
+- **Stall detection watches an *unchanged* screen — and, for a hook-wired Claude, a silent
+  signal.** A runner that keeps animating while it is stuck — a live spinner, a clock in its
+  status line — never looks frozen on screen, but a Claude role whose last hook signal
+  reported working and then went quiet past `stall_limit_s` raises `stalled` anyway, `no hook
+  signal for <n>s`; any newer signal clears it. Every other runner still needs its screen to
+  freeze.
+- **Hook signals are only as good as the wiring.** `--settings` layers merge, so the user's own
+  hooks keep running beside ours — and `disableAllHooks` in the user's settings turns ours off:
+  the role then reads from its screen, as before. If the hook command itself stops working
+  mid-session — the backlot binary moved, the signals path vanished — the role reads as its
+  last signal until its next start or resume rewrites the files. Still unverified on a real
+  Claude Code: the exact event payloads (the sink already reads `error` and `error_type` for
+  StopFailure's error), that `--settings` hooks fire without a trust or review prompt, that
+  `-r` keeps the session id across a resume, and how the S9c pre-allow list behaves beside real
+  prompts — a real run checks them later.
 - **A notice can still arrive late — a stale one is dropped, not sent.** Delivery waits for the
   role to be up five seconds, its screen to hold still two, and a five-second gap since the last
   send to it, and several items owed at once now merge into one `messages/digest-<seq>.md`

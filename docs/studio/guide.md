@@ -267,7 +267,7 @@ stage can raise:
 | Reason | Meaning | What to do |
 |---|---|---|
 | `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's is the director's; anything else is yours. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
-| `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working: an actor whose task is `running` and whose screen reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — an idle one is normal and never stalls. | Look at the saved screen file. The role's reviewer is told; a changed screen clears the attention. |
+| `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a changed screen or a newer signal clears the attention. |
 | `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — there is no automatic way on for a fixed role. |
 | `session id not found` | A post-launch runner (`codex`, `devin`) gave no session id within 60 seconds of the role starting. | The role still runs and the stage keeps looking for up to ten minutes. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
 | `launch refused` | `terminal.run` refused the role's launch — a taken terminal name or an argv the core rejects. | The stage retries each tick; the detail names the refusal. Check the runner exists and the terminal name is free. |
@@ -355,11 +355,23 @@ studios/acme-shop/
   plan/                      the writer's plans and acceptance lists
   reports/                   delivery reports, review findings, node reports
   messages/                  role-to-role messages, stage notice bodies, digest-<seq>.md merges
-  attention/                 screens saved when attention was raised
+  attention/                 screens saved when attention was raised, with <seq>.signal
+                             when the raise came from a hook's permission request
   prompts/                   the rendered role prompt each fresh start got
+  roles/<role>/claude-settings.json   a Claude session's own hook wiring (see below)
+  roles/<role>/signals.jsonl          the one-line-per-event record those hooks append
   work/integration           the director's worktree, branch backlot/acme-shop/integration
   work/<task>                each task's actor worktree, branch backlot/acme-shop/<task>
 ```
+
+A Claude role starts with `--settings roles/<role>/claude-settings.json`: one extra settings
+layer for that session only, holding `hooks` and nothing else — no permissions, no env. The
+hooks report each turn start, tool call, permission prompt and turn end into
+`signals.jsonl`, and the stage reads that file first for what the role is doing — your
+screen is the fallback for other runners and for any session that sent nothing. The file
+is rewritten and the signals file emptied on every start and resume, so a moved binary
+heals on the next launch; nothing ever writes to your own `settings.json` or any other
+settings file — hooks from every layer just merge, and yours keep running too.
 
 `config.toml` holds per-runner environment — profiles, proxy settings — as `[runner_env.<runner>]`
 tables. Values reach the role terminal's environment only; they are never written to the ledger,
