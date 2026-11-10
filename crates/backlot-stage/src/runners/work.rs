@@ -78,19 +78,25 @@ fn working(runner: &str, screen: &str) -> bool {
 /// a transcript bullet was never a turn — both stay waiting. Older
 /// versions' `esc to interrupt` line still matches separately.
 fn claude_spinner(screen: &str) -> bool {
+    screen.lines().any(claude_spinner_line)
+}
+
+/// One line of the running-turn spinner: a single glyph from
+/// `·✢✳✶✻✽*`, a space, then a word ending in `…`. The permission
+/// block comparison drops these lines — the timer and token count
+/// move between samples of the same prompt.
+pub(crate) fn claude_spinner_line(l: &str) -> bool {
     const GLYPHS: &[char] = &['·', '✢', '✳', '✶', '✻', '✽', '*'];
-    screen.lines().any(|l| {
-        let mut parts = l.trim().splitn(2, ' ');
-        let (Some(glyph), Some(rest)) = (parts.next(), parts.next()) else {
-            return false;
-        };
-        glyph.chars().count() == 1
-            && GLYPHS.contains(&glyph.chars().next().unwrap_or_default())
-            && rest
-                .split_whitespace()
-                .next()
-                .is_some_and(|w| w.ends_with('…'))
-    })
+    let mut parts = l.trim().splitn(2, ' ');
+    let (Some(glyph), Some(rest)) = (parts.next(), parts.next()) else {
+        return false;
+    };
+    glyph.chars().count() == 1
+        && GLYPHS.contains(&glyph.chars().next().unwrap_or_default())
+        && rest
+            .split_whitespace()
+            .next()
+            .is_some_and(|w| w.ends_with('…'))
 }
 
 /// The fake runner's last announced state: `work:<state>` input

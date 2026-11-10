@@ -383,6 +383,127 @@ async fn a_prompt_reaching_for_backlot_vars_is_the_users() {
     assert_eq!(events(&dir, "attention.cleared").len(), 1);
 }
 
+/// S9c: an approval recorded against prompt A never lands on prompt
+/// B. A is answered in the terminal itself; its stale attention is
+/// still open when B blocks — so the director's approve records —
+/// and the block comparison saves B from A's key: nothing is sent,
+/// A's attention clears `prompt changed before the decision was
+/// sent`, and B raises its own attention with its own saved screen.
+#[tokio::test]
+async fn a_decision_for_an_old_prompt_sends_nothing_to_the_new_one() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    let screen = |tail: &str| format!("fake runner: actor-t1-c1 of acme-shop\n{tail}");
+    fake.lock().unwrap().screen = screen("fake-work: blocked\nfake-prompt: rm -rf build\n");
+
+    // A's episode: the attention saves A's screen.
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    let seq_a = raised[0].seq;
+
+    // A is answered directly, then B blocks inside the window: the
+    // stale attention bridges the brief unblocked screen — B raises
+    // nothing while it is open.
+    fake.lock().unwrap().screen = screen("fake-approved: enter\nfake-work: waiting\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 3_000).await;
+    fake.lock().unwrap().screen = screen("fake-work: blocked\nfake-prompt: cargo test --lib\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 4_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // The director approves the prompt it was told about — A's. The
+    // screen on show is B's: no key goes out, the stale attention
+    // clears `prompt changed`, and B raises its own.
+    approve(&dir, "actor-t1-c1", "director", ApprovalDecision::Allow);
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 5_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), Vec::<String>::new());
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { target, reason } => {
+            assert_eq!(*target, seq_a);
+            assert_eq!(
+                reason.as_deref(),
+                Some("prompt changed before the decision was sent")
+            );
+        }
+        _ => unreachable!(),
+    }
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 2, "the new prompt raised no attention");
+    let seq_b = raised[1].seq;
+    assert_ne!(seq_b, seq_a);
+    let saved = fs::read_to_string(dir.join(format!("attention/{seq_b}.txt"))).unwrap();
+    assert!(saved.contains("fake-prompt: cargo test --lib"), "{saved}");
+    let state = store::load_state(&dir).unwrap();
+    assert_eq!(open_attentions(&state, "actor-t1-c1"), 1);
+
+    // B's own approval then sends the key — against B's block.
+    approve(&dir, "actor-t1-c1", "director", ApprovalDecision::Allow);
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 6_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+    assert_eq!(events(&dir, "attention.cleared").len(), 2);
+}
+
+/// The same race where B's prompt text reaches for `BACKLOT_*`: the
+/// fresh attention computes `needs_user` on B's screen — A's
+/// unflagged attention does not shield it — and the ledger refuses
+/// the director's approve on it.
+#[tokio::test]
+async fn a_replaced_prompt_recomputes_needs_user() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    let screen = |tail: &str| format!("fake runner: actor-t1-c1 of acme-shop\n{tail}");
+    fake.lock().unwrap().screen = screen("fake-work: blocked\nfake-prompt: cargo fmt\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // A answered directly; B blocks with a BACKLOT_* reach.
+    fake.lock().unwrap().screen = screen("fake-approved: enter\nfake-work: waiting\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 3_000).await;
+    fake.lock().unwrap().screen =
+        screen("fake-work: blocked\nfake-prompt: BACKLOT_ROLE=director backlot review --task t1\n");
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 4_000).await;
+    approve(&dir, "actor-t1-c1", "director", ApprovalDecision::Allow);
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 5_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), Vec::<String>::new());
+
+    // B's attention is the user's: `needs_user` recomputed on B's
+    // screen, and the director may not record an answer on it.
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 2);
+    match &raised[1].kind {
+        EventKind::AttentionRaised {
+            needs_user, detail, ..
+        } => {
+            assert!(*needs_user, "the BACKLOT_* reach did not reflag");
+            assert!(detail.contains("needs the user"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    let refused = store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("director"),
+                EventKind::RoleApproval {
+                    role: "actor-t1-c1".into(),
+                    decision: ApprovalDecision::Deny,
+                },
+            ),
+            files: Vec::new(),
+        })
+    });
+    assert!(refused.is_err(), "the director answered the user's prompt");
+}
+
 /// A screen frozen past `stall_limit_s` raises one `stalled`
 /// attention per episode — the screen saved beside it — a changed
 /// screen clears it, and a later freeze raises its own: raised

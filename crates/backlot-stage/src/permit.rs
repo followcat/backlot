@@ -12,6 +12,7 @@ use backlot_model::event::{ApprovalDecision, PERMISSION_PROMPT};
 use backlot_model::state::{ApprovalRecord, Attention, StudioState, actor_task};
 use backlot_model::summary::Work;
 
+use crate::runners::work;
 use crate::watch::trust_dialog;
 
 /// Two samples this far apart make a blocked episode — the same
@@ -54,6 +55,58 @@ pub fn approval_keys(runner: &str, decision: ApprovalDecision) -> Option<&'stati
         }),
         _ => None,
     }
+}
+
+/// The region of a blocked screen that names *this* prompt — what a
+/// recorded decision may answer, compared against the block of the
+/// screen the attention saved. `None` when the runner's prompt
+/// markers are not on the screen: a runner the stage can answer
+/// then sends nothing. Blocks are whitespace-normalised and drop
+/// lines that move while the prompt waits — Claude's spinner
+/// carries a running timer.
+pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
+    let lines: Vec<&str> = screen.lines().collect();
+    let start = match runner {
+        // From the last full-width `─` rule above `Do you want to
+        // proceed?` to the end: the tool header, the description,
+        // the command between `╌` rules and the picker.
+        "claude" => {
+            let ask = lines
+                .iter()
+                .rposition(|l| l.contains("Do you want to proceed?"))?;
+            lines[..ask].iter().rposition(|l| is_full_width_rule(l))?
+        }
+        // From the last `fake-work: blocked` line to the end — a
+        // `fake-prompt:` line under it is what tells two prompts
+        // apart.
+        "fake" => lines
+            .iter()
+            .rposition(|l| l.trim_end() == "fake-work: blocked")?,
+        // The question line to the end — the command the picker asks
+        // about sits under it. Unmeasured, see docs/studio/runners.md.
+        "codex" => lines
+            .iter()
+            .rposition(|l| l.contains("Would you like to"))?,
+        "devin" => lines
+            .iter()
+            .rposition(|l| l.trim_start().starts_with("Allow") && l.contains("Once"))?,
+        _ => return None,
+    };
+    let block = lines[start..]
+        .iter()
+        .filter(|l| !(runner == "claude" && work::claude_spinner_line(l)))
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(block.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+/// A separator drawn the full width of the screen: only `─` after
+/// trimming. The `╌` rules inside the prompt block — the ones around
+/// the command — are a different character and stay inside it.
+fn is_full_width_rule(l: &str) -> bool {
+    let t = l.trim();
+    t.chars().count() >= 3 && t.chars().all(|c| c == '─')
 }
 
 /// The role's open `permission prompt` attention, when it has one.

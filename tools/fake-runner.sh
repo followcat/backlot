@@ -75,12 +75,16 @@ echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of 
 # the runner reads single bytes like a real permission prompt: CR
 # or LF is the allow key, ESC the deny, and either prints a
 # `fake-approved` marker and returns the runner to `waiting`.
+# `prompt:<text>` sets the prompt's own text; the next `fake-work:
+# blocked` — and each chained one — echoes it as `fake-prompt:
+# <text>` so two prompts differ on screen.
 # `work:blocked:<n>` chains <n> prompts back to back: the first
 # <n>-1 approvals print a new `fake-work: blocked` — the next
 # prompt already up, no unblocked screen in between — and only the
 # last one returns to `waiting`.
 state=waiting
 prompts=0
+ptext=
 saved=$(stty -g 2>/dev/null)
 while :; do
     if [ "$state" = blocked ]; then
@@ -92,6 +96,7 @@ while :; do
                 prompts=$((prompts - 1))
                 if [ "$prompts" -gt 0 ]; then
                     printf 'fake-approved: %s\nfake-work: blocked\n' "$key"
+                    [ -n "$ptext" ] && printf 'fake-prompt: %s\n' "$ptext"
                 else
                     [ -n "$saved" ] && stty "$saved" 2>/dev/null
                     printf 'fake-approved: %s\nfake-work: waiting\n' "$key"
@@ -107,11 +112,17 @@ while :; do
                 state=blocked
                 prompts="${line##*:}"
                 printf 'fake-work: blocked\n'
+                [ -n "$ptext" ] && printf 'fake-prompt: %s\n' "$ptext"
                 ;;
             work:*)
                 state="${line#work:}"
                 prompts=1
                 printf 'fake-work: %s\n' "$state"
+                [ "$state" = blocked ] && [ -n "$ptext" ] &&
+                    printf 'fake-prompt: %s\n' "$ptext"
+                ;;
+            prompt:*)
+                ptext="${line#prompt:}"
                 ;;
             "")
                 ;; # a send's own trailing CR, not a message

@@ -121,8 +121,11 @@ impl Stage {
     /// The D9 pass on one fresh sample: a `blocked` screen held for
     /// [`permit::EPISODE_MIN_MS`] raises `permission prompt` once per
     /// episode with the screen saved under `attention/`; a recorded
-    /// `role.approval` sends the runner's key while the prompt still
-    /// shows and clears — a gone prompt clears with no key sent.
+    /// `role.approval` sends the runner's key only while the saved
+    /// screen's prompt block is still the one on show — a prompt
+    /// that changed under the decision clears `prompt changed` and
+    /// raises its own attention, and a gone prompt clears with no
+    /// key sent.
     async fn permission(
         &self,
         studio: &str,
@@ -173,6 +176,36 @@ impl Stage {
             // Unmeasured runner: the open attention stays for the user.
             return Ok(());
         };
+        // The key answers the prompt the attention saved — the
+        // screen on show must be that same prompt. A prompt that
+        // changed under the recorded decision (an earlier prompt
+        // answered in the terminal, the next one up) is a different
+        // prompt: nothing goes out, the stale attention clears, and
+        // this screen raises its own attention — `needs_user`
+        // computed on it, the director notified as for any new
+        // prompt. A screen with no comparable block refuses the
+        // same way.
+        let saved =
+            std::fs::read_to_string(dir.join("attention").join(format!("{}.txt", attn.seq)))
+                .unwrap_or_default();
+        let same_prompt = matches!(
+            (
+                permit::prompt_block(w.runner, &saved),
+                permit::prompt_block(w.runner, text),
+            ),
+            (Some(was), Some(now)) if was == now
+        );
+        if !same_prompt {
+            record(
+                dir,
+                EventKind::AttentionCleared {
+                    target: attn.seq,
+                    reason: Some("prompt changed before the decision was sent".into()),
+                },
+            )?;
+            self.raise_permission(dir, role, text).await?;
+            return Ok(());
+        }
         let sent = self
             .client
             .call(

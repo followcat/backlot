@@ -11,7 +11,7 @@ use backlot_model::summary::Work;
 use crate::notices;
 use crate::permit::{
     approval_keys, director_notice, episode_due, episode_raised, in_episode, is_actor,
-    open_episode, pending_approval, touches_env,
+    open_episode, pending_approval, prompt_block, touches_env,
 };
 
 fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
@@ -267,6 +267,128 @@ fn attention_notice_owed_once() {
         delivered_ms: None,
     });
     assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 7));
+}
+
+/// A neutral Claude-shaped permission screen: the last full-width
+/// `─` rule above `Do you want to proceed?` opens the region that
+/// names the prompt — the ` Bash command` header, the description,
+/// the command between `╌` rules and the picker — while the
+/// spinner's running timer moves under it.
+fn claude_screen(command: &str, spinner: &str) -> String {
+    format!(
+        "compacting old output\n\
+         ─────────────────────────────────────────\n\
+         \x20Bash command\n\
+         \x20 The command a task asked to run\n\
+         ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌\n\
+         \x20 {command}\n\
+         ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌\n\
+         \x20Do you want to proceed?\n\
+         \x20❯ 1. Yes\n\
+         \x20  2. Yes, and don't ask again for this command\n\
+         \x20  3. No\n\
+         {spinner}\n"
+    )
+}
+
+/// The claude block: the spinner's running timer and token count do
+/// not move it — the same prompt between two samples reads as the
+/// same block — and a different command is a different block.
+#[test]
+fn prompt_block_on_claude() {
+    let a = claude_screen(
+        "rm -rf ./build",
+        "✻ Orbiting… (12s · ↓ 95 tokens · esc to interrupt)",
+    );
+    let later = claude_screen(
+        "rm -rf ./build",
+        "✻ Orbiting… (47s · ↓ 2 tokens · esc to interrupt)",
+    );
+    let block_a = prompt_block("claude", &a).expect("a block");
+    assert_eq!(block_a, prompt_block("claude", &later).unwrap());
+    assert!(block_a.contains("rm -rf ./build"), "{block_a}");
+    assert!(block_a.contains("Do you want to proceed?"), "{block_a}");
+    assert!(!block_a.contains("Orbiting"), "{block_a}");
+    let other = claude_screen(
+        "cargo test --lib",
+        "✻ Orbiting… (12s · ↓ 95 tokens · esc to interrupt)",
+    );
+    assert_ne!(
+        prompt_block("claude", &a),
+        prompt_block("claude", &other),
+        "a different command must be a different block"
+    );
+    // Whitespace moves do not move the block.
+    let spaced = a.replacen("rm -rf ./build", "  rm   -rf   ./build  ", 1);
+    assert_eq!(prompt_block("claude", &a), prompt_block("claude", &spaced));
+    // Without the full-width rule there is no comparable block.
+    assert_eq!(
+        prompt_block("claude", "Do you want to proceed?\n❯ 1. Yes\n"),
+        None
+    );
+    // Without the question there is none either.
+    assert_eq!(
+        prompt_block("claude", &a.replace("Do you want to proceed?", "")),
+        None
+    );
+}
+
+/// The fake block: from the last `fake-work: blocked` line to the
+/// end — a `fake-prompt:` line under it is what makes two prompts
+/// differ; anything above the last blocked line is out of it.
+#[test]
+fn prompt_block_on_fake() {
+    let waiting = "fake runner: actor-t1-c1 of acme-shop\nfake-work: waiting\n";
+    assert_eq!(prompt_block("fake", waiting), None);
+    let a = "fake runner: actor-t1-c1 of acme-shop\n\
+             fake-work: blocked\n\
+             fake-prompt: rm -rf build\n";
+    let b = "fake runner: actor-t1-c1 of acme-shop\n\
+             fake-work: blocked\n\
+             fake-prompt: rm -rf build\n\
+             fake-approved: enter\n\
+             fake-work: waiting\n\
+             fake-work: blocked\n\
+             fake-prompt: cargo test --lib\n";
+    let block_a = prompt_block("fake", a).unwrap();
+    assert_eq!(block_a, "fake-work: blocked fake-prompt: rm -rf build");
+    assert_ne!(
+        block_a,
+        prompt_block("fake", b).unwrap(),
+        "the second prompt's block is its own"
+    );
+    assert_eq!(
+        prompt_block("fake", b).unwrap(),
+        "fake-work: blocked fake-prompt: cargo test --lib"
+    );
+}
+
+/// Codex and Devin blocks come from their own prompt markers —
+/// unmeasured, but enough to tell two prompts apart. A runner with
+/// no block markers — or none mapped — yields no block.
+#[test]
+fn prompt_block_on_codex_devin_and_others() {
+    let codex_a = "some output\nWould you like to run `rm -rf build`?\n› 1. Yes, proceed\n";
+    let codex_b = "some output\nWould you like to run `cargo test`?\n› 1. Yes, proceed\n";
+    assert_ne!(
+        prompt_block("codex", codex_a).expect("codex block"),
+        prompt_block("codex", codex_b).unwrap()
+    );
+    assert_eq!(prompt_block("codex", "plain output\n"), None);
+    let devin_a = "earlier\n Allow Once\n Allow Always\n Deny\n";
+    let devin_b = "earlier\n Allow Once\n Deny\n";
+    assert_ne!(
+        prompt_block("devin", devin_a).expect("devin block"),
+        prompt_block("devin", devin_b).unwrap()
+    );
+    assert_eq!(prompt_block("devin", "plain output\n"), None);
+    for runner in ["opencode", "unknown"] {
+        assert_eq!(
+            prompt_block(runner, "Permission required\nAllow once\n"),
+            None,
+            "{runner}"
+        );
+    }
 }
 
 fn approval(seq: u64, role: &str, by: &str, decision: ApprovalDecision) -> ApprovalRecord {

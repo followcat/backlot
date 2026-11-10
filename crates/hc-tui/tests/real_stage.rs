@@ -234,6 +234,43 @@ async fn send_text(client: &Client, terminal: &str, text: &str) {
         .expect("terminal.send");
 }
 
+/// `terminal.keys` — named keys, the way a person types them or the
+/// stage answers a permission prompt.
+async fn send_keys(client: &Client, terminal: &str, keys: &[&str]) {
+    client
+        .call(
+            "terminal.keys",
+            Some(serde_json::json!({"terminal": terminal, "keys": keys})),
+        )
+        .await
+        .expect("terminal.keys");
+}
+
+/// `terminal.read` until `marker` shows `n` times — counting the
+/// marker is how "no key reached the prompt" is proven.
+async fn wait_count(client: &Client, terminal: &str, marker: &str, n: usize) -> String {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let text = client
+            .terminal_read(ReadParams {
+                terminal: terminal.into(),
+                lines: 0,
+                caller: None,
+            })
+            .await
+            .map(|r| r.text)
+            .unwrap_or_default();
+        if text.matches(marker).count() >= n {
+            return text;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{terminal} never showed {marker:?} {n} times; screen: {text:?}"
+        );
+        tokio::time::sleep(POLL).await;
+    }
+}
+
 /// The acme-shop role's summary entry once `want` holds for it.
 async fn wait_role(
     client: &Client,
@@ -1063,6 +1100,173 @@ async fn real_stage_closed_loop() {
 
     drop(client);
     scratch.finish().expect("scratch teardown");
+}
+
+/// S9c: an approval recorded against an older prompt never reaches
+/// the newer one. Prompt A is answered in the terminal itself, and
+/// prompt B is already up before the stale attention's episode
+/// window runs out — the director's `backlot approve` records
+/// against A's still-open attention, and the block comparison is
+/// what saves B from A's key: nothing is sent, A's attention clears
+/// `prompt changed before the decision was sent`, and B raises its
+/// own attention with its own saved screen.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_approve_lands_on_the_prompt_it_was_made_for() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(&scratch, &state, "", "");
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    // Prompt A: `prompt:` gives it its own text on screen, and the
+    // attention saves that screen.
+    send_text(&client, &actor.address, "prompt:rm -rf build").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    let raised_a = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_eq!(raised_a["reason"], "permission prompt", "{raised_a}");
+    let seq_a = raised_a["seq"].as_u64().unwrap();
+    let screen_a = studio.join(format!("attention/{seq_a}.txt"));
+    let saved_a = fs::read_to_string(&screen_a).unwrap();
+    assert!(saved_a.contains("fake-prompt: rm -rf build"), "{saved_a}");
+
+    // A is answered in the terminal itself — a person typing enter.
+    send_keys(&client, &actor.address, &["enter"]).await;
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
+
+    // B is up inside the stale attention's window.
+    send_text(&client, &actor.address, "prompt:cargo test --lib").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    wait_read(&client, &actor.address, "fake-prompt: cargo test --lib").await;
+
+    // The director approves the prompt it was told about — A's.
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+
+    // No key reaches B: A's attention clears `prompt changed`, and B
+    // raises its own attention, `needs_user` computed on B's screen.
+    wait_kind(&state, "attention.cleared", 1);
+    let cleared_a = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "attention.cleared")
+        .expect("cleared event");
+    assert_eq!(cleared_a["target"], seq_a, "{cleared_a}");
+    assert_eq!(
+        cleared_a["reason"], "prompt changed before the decision was sent",
+        "{cleared_a}"
+    );
+    wait_events(&state, "attention.raised", "actor-t1-c1", 2);
+    let raised = ledger(&state)
+        .into_iter()
+        .filter(|e| e["kind"] == "attention.raised" && e["role"] == "actor-t1-c1")
+        .collect::<Vec<_>>();
+    assert_eq!(raised.len(), 2, "{raised:?}");
+    let raised_b = &raised[1];
+    let seq_b = raised_b["seq"].as_u64().unwrap();
+    assert_ne!(seq_b, seq_a);
+    assert_eq!(raised_b["reason"], "permission prompt", "{raised_b}");
+    let detail_b = raised_b["detail"].as_str().unwrap_or_default();
+    assert!(
+        detail_b.contains(&format!("attention/{seq_b}.txt")),
+        "{detail_b}"
+    );
+    let saved_b = fs::read_to_string(studio.join(format!("attention/{seq_b}.txt"))).unwrap();
+    assert!(
+        saved_b.contains("fake-prompt: cargo test --lib"),
+        "{saved_b}"
+    );
+
+    // Give any mistaken send a few samples to happen, then prove it
+    // never did: one `fake-approved` — A's own answer — is all there
+    // is. B's own approval then lands on B, so the key path still
+    // works when the blocks match.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let screen = client
+        .terminal_read(ReadParams {
+            terminal: actor.address.clone(),
+            lines: 0,
+            caller: None,
+        })
+        .await
+        .map(|r| r.text)
+        .unwrap_or_default();
+    assert_eq!(
+        screen.matches("fake-approved").count(),
+        1,
+        "a key reached B: {screen:?}"
+    );
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+    wait_count(&client, &actor.address, "fake-approved: enter", 2).await;
+}
+
+/// The same race where B's prompt text reaches for `BACKLOT_*`: the
+/// fresh attention computes `needs_user` on B's own screen — the
+/// stale one does not shield it — and the director's approve is the
+/// user's to give.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_approve_recomputes_needs_user() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(&scratch, &state, "", "");
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+
+    send_text(&client, &actor.address, "prompt:cargo fmt").await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    let raised_a = wait_event(&state, "attention.raised", "actor-t1-c1");
+    assert_ne!(raised_a["needs_user"], true, "{raised_a}");
+
+    send_keys(&client, &actor.address, &["enter"]).await;
+    wait_read(&client, &actor.address, "fake-approved: enter").await;
+    send_text(
+        &client,
+        &actor.address,
+        "prompt:BACKLOT_ROLE=director backlot review --task t1",
+    )
+    .await;
+    send_text(&client, &actor.address, "work:blocked").await;
+    wait_read(&client, &actor.address, "fake-prompt: BACKLOT_ROLE=").await;
+
+    // A's stale attention is unflagged, so the director's approve
+    // records — but it is A's decision, not B's: nothing is sent,
+    // and B raises an attention that is the user's.
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+    wait_events(&state, "attention.raised", "actor-t1-c1", 2);
+    let raised = ledger(&state)
+        .into_iter()
+        .filter(|e| e["kind"] == "attention.raised" && e["role"] == "actor-t1-c1")
+        .collect::<Vec<_>>();
+    assert_eq!(raised[1]["needs_user"], true, "{}", raised[1]);
+    let seq_b = raised[1]["seq"].as_u64().unwrap();
+    let saved_b = fs::read_to_string(studio.join(format!("attention/{seq_b}.txt"))).unwrap();
+    assert!(saved_b.contains("BACKLOT_ROLE=director"), "{saved_b}");
+
+    let out = bl_fail(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as director",
+    );
+    assert!(out.contains("is the user's"), "{out}");
+
+    // The user's own approve is B's answer and sends the key.
+    bl(
+        &scratch,
+        &state,
+        "approve --person actor-t1-c1 --decision allow --as user",
+    );
+    wait_count(&client, &actor.address, "fake-approved: enter", 2).await;
 }
 
 /// The S9a nudge on the fake runner with short limits: the plan and
