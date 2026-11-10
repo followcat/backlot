@@ -83,6 +83,13 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 } if reason == RECOVERED => Some(seq),
                 _ => None,
             };
+            // An actor's start opens its task's budget clock (S9e):
+            // the first start ever is the origin — a recast does
+            // not rewind it.
+            if let Some(t) = actor_task(role).and_then(|id| state.tasks.get_mut(id)) {
+                let origin = t.actor_started_ms.get_or_insert(ts);
+                *origin = (*origin).min(ts);
+            }
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
         EventKind::RoleLost { role, .. } => {
@@ -191,6 +198,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     last_ts_ms: ts,
                     closed_ts_ms: None,
                     closed_seq: None,
+                    actor_started_ms: None,
                 },
             );
             state

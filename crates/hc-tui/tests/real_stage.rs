@@ -2453,8 +2453,8 @@ async fn real_stage_over_budget_notice_and_clear() {
     );
     wait_terminal(&client, "bl-acme-shop-t1").await;
 
-    // Two seconds of budget from the cast — the raise lands within
-    // a tick or two of it passing, on the task's actor key.
+    // Two seconds of budget from the actor's start — the raise
+    // lands within a tick or two of it passing, on the task's actor key.
     let raised = wait_event(&state, "attention.raised", "actor-t1-c1");
     assert_eq!(raised["reason"], "over budget", "{raised}");
     for needle in ["t1", "2s"] {

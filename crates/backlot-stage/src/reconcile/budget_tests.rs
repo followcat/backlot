@@ -12,8 +12,8 @@ use super::*;
 
 const STUDIO: &str = "acme-shop";
 
-/// t1 cast at seq 5 (ts 5000) under a 2-second budget: over from
-/// now > 7000.
+/// t1 cast at seq 5 (ts 5000), its actor started at 6000, under a
+/// 2-second budget: over from now > 8000.
 fn budgeted() -> Vec<Event> {
     let mut kind = studio_kind();
     let EventKind::StudioCreated { task_budget_s, .. } = &mut kind else {
@@ -33,6 +33,7 @@ fn budgeted() -> Vec<Event> {
         ),
         ev(3, "director", task_created("t1", "feature", 1)),
         ev(5, "director", cast("t1", "actor-a", "a")),
+        ev(6, "stage", role_started("actor-t1-c1")),
     ]
 }
 
@@ -56,14 +57,21 @@ fn over_budget(actions: &[Action]) -> Vec<&Action> {
         .collect()
 }
 
+/// The started actor's terminal is up — an actor's terminal is
+/// task-named (`bl-<studio>-<task>`); without it reconcile marks
+/// the live role lost and clears its open attentions `role lost`.
+fn live() -> BTreeMap<String, String> {
+    BTreeMap::from([("bl-acme-shop-t1".to_string(), "a".to_string())])
+}
+
 /// Under the budget nothing raises; past it one attention lands on
 /// the task's current actor key, naming task, budget and used.
 #[test]
 fn an_over_budget_task_raises_once_on_its_actor() {
     let state = replay(&budgeted());
-    let quiet = reconcile(STUDIO, &state, &BTreeMap::new(), 7_000);
+    let quiet = reconcile(STUDIO, &state, &live(), 8_000);
     assert!(over_budget(&quiet).is_empty(), "{quiet:?}");
-    let acts = reconcile(STUDIO, &state, &BTreeMap::new(), 8_000);
+    let acts = reconcile(STUDIO, &state, &live(), 9_000);
     let [
         Action::Attention {
             role,
@@ -87,11 +95,11 @@ fn an_over_budget_task_raises_once_on_its_actor() {
 fn a_recast_does_not_raise_a_second() {
     let mut events = budgeted();
     events.extend([
-        raised(6, "actor-t1-c1"),
-        ev(7, "director", cast("t1", "actor-b", "b")),
+        raised(7, "actor-t1-c1"),
+        ev(8, "director", cast("t1", "actor-b", "b")),
     ]);
     let state = replay(&events);
-    let acts = reconcile(STUDIO, &state, &BTreeMap::new(), 20_000);
+    let acts = reconcile(STUDIO, &state, &live(), 20_000);
     assert!(over_budget(&acts).is_empty(), "{acts:?}");
 }
 
@@ -100,27 +108,27 @@ fn a_recast_does_not_raise_a_second() {
 #[test]
 fn terminal_clears_done_running_keeps() {
     let mut events = budgeted();
-    events.push(raised(6, "actor-t1-c1"));
+    events.push(raised(7, "actor-t1-c1"));
     let state = replay(&events);
-    let acts = reconcile(STUDIO, &state, &BTreeMap::new(), 9_000);
+    let acts = reconcile(STUDIO, &state, &live(), 9_000);
     assert!(
         !acts
             .iter()
-            .any(|a| matches!(a, Action::ClearAttention { target: 6, .. })),
+            .any(|a| matches!(a, Action::ClearAttention { target: 7, .. })),
         "{acts:?}"
     );
     // Delivered and accepted: terminal → the clear lands.
     let mut events = budgeted();
     events.extend([
-        raised(6, "actor-t1-c1"),
-        ev(7, "actor-t1-c1", delivered("t1", 1, "a", 1)),
-        ev(8, "director", reviewed("t1", 1, Verdict::Accepted, vec![])),
+        raised(7, "actor-t1-c1"),
+        ev(8, "actor-t1-c1", delivered("t1", 1, "a", 1)),
+        ev(9, "director", reviewed("t1", 1, Verdict::Accepted, vec![])),
     ]);
     let state = replay(&events);
-    let acts = reconcile(STUDIO, &state, &BTreeMap::new(), 9_000);
+    let acts = reconcile(STUDIO, &state, &live(), 9_000);
     assert!(
         acts.iter()
-            .any(|a| matches!(a, Action::ClearAttention { target: 6, reason } if reason == "done")),
+            .any(|a| matches!(a, Action::ClearAttention { target: 7, reason } if reason == "done")),
         "{acts:?}"
     );
 }
@@ -130,8 +138,20 @@ fn terminal_clears_done_running_keeps() {
 #[test]
 fn a_delivered_task_over_budget_raises() {
     let mut events = budgeted();
-    events.push(ev(6, "actor-t1-c1", delivered("t1", 1, "a", 1)));
+    events.push(ev(7, "actor-t1-c1", delivered("t1", 1, "a", 1)));
     let state = replay(&events);
-    let acts = reconcile(STUDIO, &state, &BTreeMap::new(), 9_000);
+    let acts = reconcile(STUDIO, &state, &live(), 9_000);
     assert_eq!(over_budget(&acts).len(), 1, "{acts:?}");
+}
+
+/// A cast whose actor never started — held back by a runner cap —
+/// accrues no budget: the clock opens at the first `role.started`,
+/// not at the cast.
+#[test]
+fn a_cast_without_a_started_actor_never_raises() {
+    let mut events = budgeted();
+    events.retain(|e| !matches!(e.kind, EventKind::RoleStarted { .. }));
+    let state = replay(&events);
+    let acts = reconcile(STUDIO, &state, &BTreeMap::new(), 99_000);
+    assert!(over_budget(&acts).is_empty(), "{acts:?}");
 }

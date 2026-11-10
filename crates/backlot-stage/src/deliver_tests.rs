@@ -394,6 +394,7 @@ fn task(id: &str) -> Task {
         last_ts_ms: 0,
         closed_ts_ms: None,
         closed_seq: None,
+        actor_started_ms: None,
     }
 }
 

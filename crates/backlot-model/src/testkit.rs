@@ -76,6 +76,19 @@ pub fn check_decl(name: &str, run: &str, timeout_s: u64) -> CheckDecl {
     }
 }
 
+/// A `role.started` — the actor's budget clock opens here. No
+/// terminal: a live role without one is never marked lost, which
+/// keeps budget and step tests free of terminal bookkeeping.
+pub fn role_started(role: &str) -> EventKind {
+    EventKind::RoleStarted {
+        role: role.into(),
+        terminal: None,
+        actor: None,
+        session_id: None,
+        reason: None,
+    }
+}
+
 pub fn task_created(id: &str, kind: &str, req: u32) -> EventKind {
     EventKind::TaskCreated {
         task: id.into(),

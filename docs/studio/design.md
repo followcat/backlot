@@ -184,7 +184,8 @@ Agents reviewing agents can loop without end, so the stage enforces limits:
 - Rework rounds per task. Default 2. At the cap the task goes to the producer to accept with documented gaps, rescope or
   recast.
 - A running time budget per task, optional — `task_budget_s` in the cast file. The clock runs from the task's first
-  cast to its close or to now, leaving out `paused`→`resumed` stretches. A running or delivered task past it raises
+  actor `role.started` to its close or to now, leaving out `paused`→`resumed` stretches — a cast a runner cap still
+  holds accrues nothing. A running or delivered task past it raises
   one `over budget` attention on the task's current actor key — once ever, a recast does not re-raise — the director
   and the producer each get the notice, nothing is killed or paused, and the attention clears `done` when the task
   turns terminal.

@@ -237,6 +237,11 @@ pub struct Task {
     /// of the step that follows it. `None` on logs that predate it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_seq: Option<u64>,
+    /// The task's first actor `role.started` — the budget clock's
+    /// origin (S9e): a cast that waits on a runner cap accrues
+    /// nothing before it, and a recast does not rewind it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_started_ms: Option<u64>,
 }
 
 impl Task {
