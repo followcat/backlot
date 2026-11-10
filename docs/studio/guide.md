@@ -32,13 +32,13 @@ stall_limit_s = 600   # optional, default 600
 
 [producer]
 runner = "claude"
-model = "claude-sonnet-4-6"
+model = "claude-sonnet-5-5"
 effort = "high"
 permission_profile = "standard"
 
 [director]
 runner = "claude"
-model = "claude-sonnet-4-6"
+model = "claude-sonnet-5-5"
 effort = "high"
 permission_profile = "standard"
 

@@ -210,19 +210,19 @@ jobs:
           cat > "$HOME/cast.toml" <<'CAST'
           [producer]
           runner = "claude"
-          model = "claude-haiku-4-5"
+          model = "claude-haiku-5-5"
           effort = "low"
           permission_profile = "standard"
 
           [director]
           runner = "claude"
-          model = "claude-haiku-4-5"
+          model = "claude-haiku-5-5"
           effort = "low"
           permission_profile = "standard"
 
           [writer]
           runner = "claude"
-          model = "claude-haiku-4-5"
+          model = "claude-haiku-5-5"
           effort = "low"
           permission_profile = "standard"
           CAST
