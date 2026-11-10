@@ -1,17 +1,22 @@
 //! Opt-in real-core end-to-end for the R9 image-paste bridge: the actual
 //! `hc-tui --remote` binary in a PTY, a fake `ssh` that runs
-//! `hc connect` locally, and a fake `wl-paste` serving a small PNG.
-//! Ctrl+V must upload through the real core's `terminal.put` and the
-//! returned path must reach the focused program — the file it names
-//! must exist.
+//! `hc connect` locally, and a fake `wl-paste` serving a small PNG or
+//! a copied-image file list. `Ctrl+V` — typed as the real kitty
+//! press/release CSI-u stream — must upload through the real core's
+//! `terminal.put` and the returned path must reach the focused
+//! program — the file it names must exist.
 //!
 //! Ignored by default: `cargo test` never touches a real core. Run
 //! explicitly with
 //!
 //! ```sh
-//! HC_TUI_TEST_CORE=$(command -v hc) \
+//! HC_TUI_TEST_CORE=/path/to/pinned/herdr-core \
 //!     cargo test -p hc-tui --test image_paste_e2e -- --ignored --test-threads=1
 //! ```
+//!
+//! `HC_TUI_TEST_CORE` must name a pinned build (see
+//! `tools/build-test-core.sh`), never the installed `hc`: the fixture
+//! spawns it as the scratch core.
 
 #![cfg(unix)]
 
@@ -257,10 +262,46 @@ async fn connect(scratch: &ScratchCore) -> Client {
 #[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
 async fn ctrl_v_uploads_the_clipboard_image_over_remote() {
     let scratch = ScratchCore::spawn().await;
+    let png_path = scratch.root.join("clip.png");
+    fs::write(&png_path, PNG).unwrap();
+    image_paste_e2e(
+        scratch,
+        &format!(
+            "case \"$2\" in image/png) cat \"{}\" ;; *) exit 1 ;; esac\n",
+            png_path.display()
+        ),
+    )
+    .await;
+}
+
+/// A copied image FILE offers `x-special/gnome-copied-files`, never an
+/// image MIME: the bridge must resolve the named local file and upload
+/// its bytes. Pre-fix this read answered `None` and `Ctrl+V` forwarded
+/// silently.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn ctrl_v_uploads_a_copied_image_file_over_remote() {
+    let scratch = ScratchCore::spawn().await;
+    let png_path = scratch.root.join("copied.png");
+    fs::write(&png_path, PNG).unwrap();
+    image_paste_e2e(
+        scratch,
+        &format!(
+            "case \"$2\" in x-special/gnome-copied-files) printf 'copy\\nfile://%s\\n' \"{}\" ;; *) exit 1 ;; esac\n",
+            png_path.display()
+        ),
+    )
+    .await;
+}
+
+/// The shared end-to-end: `wl_paste_body` is the fake `wl-paste` case
+/// script (`$2` holds the requested MIME). Takes ownership so teardown
+/// can consume the scratch core at the end.
+async fn image_paste_e2e(scratch: ScratchCore, wl_paste_body: &str) {
     let client = connect(&scratch).await;
 
     // The stub dir: `hc` (the pinned binary), a fake `ssh` that runs the
-    // remote command locally, and a fake `wl-paste` serving the PNG.
+    // remote command locally, and a fake `wl-paste` serving the image.
     let stub = scratch.root.join("stub");
     fs::create_dir(&stub).unwrap();
     std::os::unix::fs::symlink(scratch::core_binary(), stub.join("hc")).unwrap();
@@ -270,15 +311,7 @@ async fn ctrl_v_uploads_the_clipboard_image_over_remote() {
         &stub.join("ssh"),
         "for last; do :; done\nexec sh -c \"$last\"\n",
     );
-    let png_path = scratch.root.join("clip.png");
-    fs::write(&png_path, PNG).unwrap();
-    write_executable(
-        &stub.join("wl-paste"),
-        &format!(
-            "case \"$2\" in image/png) cat \"{}\" ;; *) exit 1 ;; esac\n",
-            png_path.display()
-        ),
-    );
+    write_executable(&stub.join("wl-paste"), wl_paste_body);
 
     // The stand-in program: writes its stdin to a file so the pasted
     // path lands somewhere checkable.
@@ -344,11 +377,14 @@ async fn ctrl_v_uploads_the_clipboard_image_over_remote() {
     until_received(&tui, &mut vt, &received, "hello-text", "text paste").await;
 
     // Ctrl+V is the default keys.remote_image_paste trigger: the fake
-    // wl-paste's PNG uploads through the real `terminal.put` and the
-    // returned path is pasted. The paste adds no newline, so the path
+    // wl-paste's image uploads through the real `terminal.put` and the
+    // returned path is pasted. The keys are the real kitty stream —
+    // `CSI 118;5u` press then `CSI 118;5:3u` release under the pushed
+    // enhancement flags (the host Vt answers `CSI ?u`, so release
+    // suppression is armed). The paste adds no newline, so the path
     // waits in the PTY's canonical buffer until Enter flushes it and
     // cat writes it as the last line.
-    tui.type_keys(b"\x16");
+    tui.type_keys(b"\x1b[118;5u\x1b[118;5:3u");
     let deadline = Instant::now() + DEADLINE;
     loop {
         // The path wraps mid-word on the small pane; joining the text

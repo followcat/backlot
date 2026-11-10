@@ -57,6 +57,75 @@ fn unescape_drop_path(text: &str) -> String {
     unescaped
 }
 
+/// Local image paths a clipboard can name without carrying image
+/// bytes: a `text/uri-list` or `x-special/gnome-copied-files` file
+/// copy, or a `text/plain` holding one absolute path (like the drop
+/// parser's). Every `file://` line is a candidate; the action word
+/// (`copy`/`cut`) and `#` comments never parse as URIs on their own.
+/// The first candidate that reads as an image wins.
+pub(crate) fn image_paths_from_clipboard_text(text: &str) -> Vec<(PathBuf, &'static str)> {
+    let mut paths = Vec::new();
+    if let Some(found) = image_path_from_paste(text) {
+        paths.push(found);
+    }
+    for line in text.lines() {
+        let line = line.trim_end_matches('\r');
+        let Some(path) = local_path_from_file_uri(line) else {
+            continue;
+        };
+        let Some(extension) = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(recognized_image_extension)
+        else {
+            continue;
+        };
+        paths.push((path, extension));
+    }
+    paths
+}
+
+/// One `file://` URI line decoded into a local absolute path: empty or
+/// `localhost` authority only, `%HH` sequences decoded, anything else
+/// rejected.
+fn local_path_from_file_uri(line: &str) -> Option<PathBuf> {
+    let rest = line.strip_prefix("file://")?;
+    let slash = rest.find('/')?;
+    let (authority, raw_path) = rest.split_at(slash);
+    if !authority.is_empty() && !authority.eq_ignore_ascii_case("localhost") {
+        return None;
+    }
+    let path = String::from_utf8(percent_decode(raw_path)?).ok()?;
+    let path = PathBuf::from(path);
+    path.is_absolute().then_some(path)
+}
+
+/// URI `%HH` escape decoding — anything malformed rejects the whole
+/// line rather than guessing a path.
+fn percent_decode(text: &str) -> Option<Vec<u8>> {
+    fn hex(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            b'A'..=b'F' => Some(byte - b'A' + 10),
+            _ => None,
+        }
+    }
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            decoded.push(hex(*bytes.get(index + 1)?)? * 16 + hex(*bytes.get(index + 2)?)?);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    Some(decoded)
+}
+
 fn recognized_image_extension(extension: &str) -> Option<&'static str> {
     if extension.eq_ignore_ascii_case("png") {
         Some("png")

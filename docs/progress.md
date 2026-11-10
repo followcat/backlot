@@ -636,3 +636,29 @@
   29 installer tests pass; all 13 reference vectors pass; the parity
   harness at 80x24 matches cell for cell except the documented
   navigator footer-identity cells (8 and 12 cell exceptions).
+
+## Image paste over remote: file copies and visible misses (branch fix/remote-image-paste)
+
+- The Linux clipboard read gained a file-list pass after the image
+  MIMES: `x-special/gnome-copied-files`, `text/uri-list` and
+  `text/plain` are read through the same `wl-paste`/`xclip` pair, and
+  `clipdrop::image_paths_from_clipboard_text` resolves `file://` URIs
+  (percent-decoded, local or `localhost` authority only) plus a single
+  bare absolute path into candidates that `read_image_file` reads back
+  bounded. A copied image file in a file manager now uploads exactly
+  like a drop instead of answering `None` and forwarding silently.
+- `ClipboardRead` gained `Unavailable(&'static str)` and
+  `ReaderOutcome` gained `Missing`: a spawn failure no longer counts as
+  "no image". The reader tracks attempts versus answered runs, so no
+  display env, every tool missing and a timed-out owner surface as
+  `Unavailable` with a reason; macOS and non-reader platforms report
+  `Unavailable` too.
+- `dispatch_image_read` shows a notice for `None` ("No image to
+  paste") and `Unavailable` (the reason) while still forwarding the
+  gesture, so a paste that cannot work never fails silently.
+- The e2e now types the real kitty stream (`CSI 118;5u` press,
+  `CSI 118;5:3u` release) and a second ignored case drives a copied
+  image file through `x-special/gnome-copied-files`; both pass on the
+  scratch core, and the file case fails on pre-fix code by timeout.
+- Gates: fmt, clippy, the full suite, the 29 installer tests, parity
+  vectors and the 80x24 parity run (details in the brief report).

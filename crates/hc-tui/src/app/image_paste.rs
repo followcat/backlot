@@ -141,7 +141,8 @@ impl App {
     }
 
     /// Shared end of both triggers: upload an image, notice a too-large
-    /// one, or leave the gesture untouched when there is none.
+    /// one, or explain the miss and let the gesture through when there
+    /// is none — a paste that cannot work never fails silently.
     fn dispatch_image_read(
         &mut self,
         target: ImagePasteTarget,
@@ -156,7 +157,17 @@ impl App {
                 self.image_too_large_notice();
                 true
             }
-            crate::clipboard::ClipboardRead::None => false,
+            crate::clipboard::ClipboardRead::Unavailable(reason) => {
+                self.show_notice("Image paste unavailable", reason);
+                false
+            }
+            crate::clipboard::ClipboardRead::None => {
+                self.show_notice(
+                    "No image to paste",
+                    "The clipboard or dropped path has no readable image",
+                );
+                false
+            }
         }
     }
 
