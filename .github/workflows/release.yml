@@ -274,7 +274,7 @@ jobs:
         run: if [ -f mirror.pid ]; then kill "$(cat mirror.pid)" || true; fi
 
   release:
-    needs: build
+    needs: [build, install-check]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
