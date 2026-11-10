@@ -64,6 +64,8 @@ mod discover_tests;
 #[cfg(test)]
 mod docs_tests;
 #[cfg(test)]
+mod limits_cmd_tests;
+#[cfg(test)]
 mod loop_cmd_tests;
 #[cfg(test)]
 mod notices_tests;
@@ -81,6 +83,8 @@ mod prompts_tests;
 mod range_cmd_tests;
 #[cfg(test)]
 mod range_tests;
+#[cfg(test)]
+mod render_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
 #[cfg(test)]

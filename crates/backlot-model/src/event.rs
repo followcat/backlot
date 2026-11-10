@@ -115,7 +115,7 @@ pub const REOPENED: &str = "reopened";
 pub const RECOVERED: &str = "recovered";
 
 /// A task's display priority (R20, D11): it orders people in the
-/// panel and nothing else — scheduling never reads it.
+/// panel — and, since S9e, the actors a runner cap picks first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Priority {
@@ -281,6 +281,11 @@ pub enum EventKind {
         /// budget` attention. Absent means no budget.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         task_budget_s: Option<u32>,
+        /// The cast's `[limits]` table (S9e): runner name → maximum
+        /// live roles in this studio; a missing runner is unlimited.
+        /// Absent on logs that predate the field.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        limits: BTreeMap<String, u32>,
     },
     #[serde(rename = "role.started")]
     RoleStarted {

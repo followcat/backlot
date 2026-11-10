@@ -1,5 +1,7 @@
 //! Shared builders for model tests. Neutral data only.
 
+use std::collections::BTreeMap;
+
 use crate::event::*;
 use crate::state::{StudioState, apply, replay};
 
@@ -61,6 +63,7 @@ pub fn studio_kind() -> EventKind {
         check_env: Vec::new(),
         checks: Vec::new(),
         task_budget_s: None,
+        limits: BTreeMap::new(),
     }
 }
 

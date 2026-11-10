@@ -326,10 +326,49 @@ pub fn summary(
             continue;
         };
         let done = finished(state);
-        let roles: Vec<RoleSummary> = role_keys(state)
+        let mut roles: Vec<RoleSummary> = role_keys(state)
             .into_iter()
             .filter_map(|role| role_summary(name, state, role, live, work))
             .collect();
+        // Runner limits (S9e): a held wanted role shows `waiting for
+        // a <runner> slot` — overriding a recorded closed/lost row,
+        // or as a synthetic row for a role never started.
+        let held = crate::limits::held(state);
+        for rs in roles.iter_mut() {
+            if let Some(runner) = held.get(&rs.role) {
+                rs.state = "waiting".into();
+                rs.doing = Some(cap(&format!("waiting for a {runner} slot")));
+                rs.work = None;
+            }
+        }
+        for w in crate::wanted::wanted_roles(state) {
+            let Some(runner) = held.get(&w.role) else {
+                continue;
+            };
+            if roles.iter().any(|r| r.role == w.role) {
+                continue;
+            }
+            roles.push(RoleSummary {
+                role: cap(&w.role),
+                name: role_name(state, &w.role),
+                terminal: None,
+                runner: Some(cap(&w.actor.runner)),
+                model: Some(cap(&w.actor.model)),
+                effort: Some(cap(&w.actor.effort)),
+                state: "waiting".into(),
+                doing: Some(cap(&format!("waiting for a {runner} slot"))),
+                work: None,
+                task: w.task.as_ref().map(|t| cap(t)),
+                priority: w
+                    .task
+                    .as_deref()
+                    .and_then(|t| state.tasks.get(t))
+                    .map(|t| t.priority),
+                resumable: false,
+                since_ms: 0,
+                attention: None,
+            });
+        }
         let entry = StudioSummary {
             id: cap(name),
             title: cap(&cfg.title),

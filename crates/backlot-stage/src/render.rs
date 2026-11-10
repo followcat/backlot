@@ -113,6 +113,10 @@ pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
     let _ = writeln!(out, "  rework cap {}", studio.rework_cap);
     let _ = writeln!(out, "  stall limit {}s", studio.stall_limit_s);
     let _ = writeln!(out, "  roles:");
+    // Runner limits (S9e): a held wanted role shows `waiting for a
+    // <runner> slot` — a fixed role in place, actors after the fixed
+    // three in wanted order.
+    let held = backlot_model::limits::held(state);
     for (role, cfg, live) in [
         (
             "producer",
@@ -127,12 +131,29 @@ pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
         ("writer", &studio.roles.writer, state.roles.get("writer")),
     ] {
         let live = match live {
-            Some(r) if r.live => "live",
-            Some(r) if r.closed => "closed",
-            Some(_) => "lost",
-            None => "not started",
+            _ if held.contains_key(role) => {
+                format!("waiting for a {} slot", held[role])
+            }
+            Some(r) if r.live => "live".into(),
+            Some(r) if r.closed => "closed".into(),
+            Some(_) => "lost".into(),
+            None => "not started".into(),
         };
         let _ = writeln!(out, "    {role:<9} {} ({live})", actor_short(cfg));
+    }
+    for w in backlot_model::wanted::wanted_roles(state) {
+        let Some(runner) = held.get(&w.role) else {
+            continue;
+        };
+        if matches!(w.role.as_str(), "producer" | "director" | "writer") {
+            continue;
+        }
+        let _ = writeln!(
+            out,
+            "    {:<9} {} (waiting for a {runner} slot)",
+            w.role,
+            actor_short(&w.actor)
+        );
     }
     if !studio.candidates.is_empty() {
         let _ = writeln!(out, "  candidates:");

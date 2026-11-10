@@ -12,6 +12,7 @@
 pub mod budget;
 pub mod correct;
 pub mod event;
+pub mod limits;
 pub mod records;
 pub mod reduce;
 pub mod refusal;
@@ -21,6 +22,7 @@ pub mod steps;
 pub mod summary;
 pub mod task_reduce;
 pub mod validate;
+pub mod wanted;
 
 pub use event::{ActorIdentity, Event, EventBy, EventKind, NewEvent};
 pub use records::{ActorRecord, StudioLog, records};
@@ -38,6 +40,8 @@ mod budget_tests;
 mod cap_tests;
 #[cfg(test)]
 mod checks_tests;
+#[cfg(test)]
+mod limits_tests;
 #[cfg(test)]
 mod loop_tests;
 #[cfg(test)]

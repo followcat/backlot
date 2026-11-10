@@ -38,6 +38,9 @@ pub struct StudioConfig {
     /// The optional per-task running budget in seconds (S9e).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task_budget_s: Option<u32>,
+    /// Runner name → maximum live roles in this studio (S9e).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub limits: BTreeMap<String, u32>,
 }
 
 /// Task lifecycle (ledger.md task-state diagram). `Running` covers the

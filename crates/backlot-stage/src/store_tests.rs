@@ -60,6 +60,7 @@ fn seed_studio(dir: &Path) {
         check_env: Vec::new(),
         checks: Vec::new(),
         task_budget_s: None,
+        limits: Default::default(),
     };
     append::<(), _>(dir, |_, _| {
         Ok(Pending {

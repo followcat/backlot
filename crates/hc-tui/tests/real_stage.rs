@@ -2505,3 +2505,119 @@ async fn real_stage_over_budget_notice_and_clear() {
     drop(client);
     scratch.finish().expect("scratch teardown");
 }
+
+/// S9e — `[limits] fake = 2`: the studio seats two live roles on the
+/// runner, a wanted actor past the cap waits — `waiting for a fake
+/// slot`, no `role.started`, no ledger noise — and the writer's slot
+/// freed by `dispatch` starts it next tick.
+///
+/// The director sits on an unsupported runner so it never takes a
+/// `fake` slot: under a cap the only slots that free are a live
+/// role's — the writer's on `dispatch` here — since a closed
+/// still-wanted role retakes its own slot in start order.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_runner_limit_holds_and_releases() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let repo = scratch.work.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let out = Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&repo)
+        .output()
+        .expect("git init");
+    assert!(out.status.success(), "git init failed");
+    git(&repo, &["commit", "--allow-empty", "-m", "init"]);
+    let cast = fixture(
+        &scratch,
+        "cast.toml",
+        &(CAST_TOML.replacen(
+            "[director]\nrunner = \"fake\"",
+            "[director]\nrunner = \"void\"",
+            1,
+        ) + "\n[limits]\nfake = 2\n"),
+    );
+    let req = fixture(&scratch, "req.md", "# requirement\n");
+    let acc = fixture(&scratch, "acc.md", "# acceptance\n");
+    let note = fixture(&scratch, "note.md", "director: go\n");
+
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            repo.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+    // Producer takes the first of two fake slots; the director's
+    // unsupported runner holds none and raises its own attention.
+    wait_terminal(&client, "bl-acme-shop-producer").await;
+    let refused_runner = wait_event(&state, "attention.raised", "director");
+    assert_eq!(refused_runner["reason"], "runner not supported");
+
+    // The writer takes the second slot on the plan request.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "req revise --file {} --summary v1 --as producer",
+            req.display()
+        ),
+    );
+    bl(&scratch, &state, "plan request --as producer");
+    wait_terminal(&client, "bl-acme-shop-writer").await;
+
+    // The cast actor is the wanted start past the cap: no terminal,
+    // no `role.started`, and status shows the waiting line.
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "task new --title cart --kind feature --acceptance-file {} --as director",
+            acc.display()
+        ),
+    );
+    bl(
+        &scratch,
+        &state,
+        "cast --task t1 --actor actor-a --reason first --as director",
+    );
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(
+        terminal_named(&client, "bl-acme-shop-t1").await.is_none(),
+        "the held actor started despite the cap"
+    );
+    assert!(
+        !ledger(&state)
+            .iter()
+            .any(|e| e["kind"] == "role.started" && e["role"] == "actor-t1-c1"),
+        "a held start wrote to the ledger"
+    );
+    let status = bl(&scratch, &state, "status");
+    let actor_line = status
+        .lines()
+        .find(|l| l.trim_start().starts_with("actor-t1-c1"))
+        .unwrap_or_else(|| panic!("no actor-t1-c1 line:\n{status}"));
+    assert!(
+        actor_line.contains("waiting for a fake slot"),
+        "{actor_line}"
+    );
+
+    // The writer's slot freed by `dispatch` starts the held actor.
+    bl(
+        &scratch,
+        &state,
+        &format!("dispatch --file {} --as producer", note.display()),
+    );
+    wait_absent(&client, "bl-acme-shop-writer").await;
+    wait_event(&state, "role.closed", "writer");
+    wait_terminal(&client, "bl-acme-shop-t1").await;
+    wait_event(&state, "role.started", "actor-t1-c1");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}

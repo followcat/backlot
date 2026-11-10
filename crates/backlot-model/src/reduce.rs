@@ -28,6 +28,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             check_env,
             checks,
             task_budget_s,
+            limits,
         } => {
             state.studio = Some(StudioConfig {
                 title: title.clone(),
@@ -42,6 +43,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 check_env: check_env.clone(),
                 checks: checks.clone(),
                 task_budget_s: *task_budget_s,
+                limits: limits.clone(),
             });
             state.targets.insert(seq, SeqTarget::Studio);
         }

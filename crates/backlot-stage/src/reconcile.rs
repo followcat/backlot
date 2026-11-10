@@ -301,6 +301,16 @@ pub fn reconcile(
     // clears its raise `done`.
     budget::actions(state, now_ms, &mut records, &mut cleared);
 
+    // Runner limits (S9e): a held start waits — no event, retried
+    // next tick. `limits::held` reads the ledger the same way the
+    // views do, so a held role shows `waiting for a <runner> slot`
+    // until a slot frees.
+    let held = backlot_model::limits::held(state);
+    starts.retain(|a| match a {
+        Action::Start(w) => !held.contains_key(&w.role),
+        _ => true,
+    });
+
     // Strays: terminals in this studio's view that no role entry
     // explains and nothing adopted this round.
     for (name, address) in live {
@@ -325,6 +335,8 @@ pub fn reconcile(
 
 #[cfg(test)]
 mod budget_tests;
+#[cfg(test)]
+mod limits_tests;
 #[cfg(test)]
 mod recover_tests;
 #[cfg(test)]

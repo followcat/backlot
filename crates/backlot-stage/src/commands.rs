@@ -79,6 +79,10 @@ struct CastFile {
     /// S9e: the per-task running budget in seconds; unset means none.
     #[serde(default)]
     task_budget_s: Option<u32>,
+    /// S9e: `[limits]` — runner name → maximum live roles in this
+    /// studio; a runner with no entry is unlimited.
+    #[serde(default)]
+    limits: std::collections::BTreeMap<String, u32>,
     producer: ActorIdentity,
     director: ActorIdentity,
     writer: ActorIdentity,
@@ -110,6 +114,11 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     // A zero budget flags every cast the tick it lands.
     if cast.task_budget_s == Some(0) {
         return Err(Fail::usage("task_budget_s must be at least 1"));
+    }
+    // A zero cap seats nobody — a runner is either limited by a real
+    // number or absent and unlimited.
+    if let Some((runner, _)) = cast.limits.iter().find(|(_, cap)| **cap == 0) {
+        return Err(Fail::usage(format!("limits.{runner} must be at least 1")));
     }
     Ok(cast)
 }
@@ -193,6 +202,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         check_env,
                         checks,
                         task_budget_s: cast.task_budget_s,
+                        limits: cast.limits,
                     },
                     by,
                     Vec::new(),

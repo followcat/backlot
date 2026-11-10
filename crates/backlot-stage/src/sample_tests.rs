@@ -208,6 +208,7 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                     check_env: Vec::new(),
                     checks: Vec::new(),
                     task_budget_s: None,
+                    limits: Default::default(),
                 },
             ),
             files: Vec::new(),
