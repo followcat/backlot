@@ -148,17 +148,25 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         }
         // An approval answers an open `permission prompt` attention —
         // refusing without one keeps the stage from answering a prompt
-        // nobody recorded a decision for.
+        // nobody recorded a decision for. A flagged prompt (`BACKLOT_*`
+        // or environment-clearing flags on the saved screen), or a
+        // prompt on a role that is not an actor, is the user's (D9):
+        // the director may not record its answer.
         EventKind::RoleApproval { role, .. } => {
             require_studio(state)?;
-            let open = state
+            let Some(attn) = state
                 .open_attention()
-                .any(|a| a.role == *role && a.reason == PERMISSION_PROMPT);
-            if open {
-                Ok(())
-            } else {
-                Err(Refusal::NoPermissionPrompt(role.clone()))
+                .find(|a| a.role == *role && a.reason == PERMISSION_PROMPT)
+            else {
+                return Err(Refusal::NoPermissionPrompt(role.clone()));
+            };
+            if new.by.role == "director" && user_owned(attn) {
+                return Err(Refusal::PromptForUser {
+                    role: role.clone(),
+                    why: user_owned_why(attn),
+                });
             }
+            Ok(())
         }
         EventKind::StudioFinished { .. } => {
             require_studio(state)?;
@@ -395,5 +403,26 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             }
             Ok(())
         }
+    }
+}
+
+/// Whether an open `permission prompt` is the user's to answer:
+/// the stage flagged the saved screen (`needs_user`), or the prompt
+/// sits on a role that is not an actor — D9 delegates only an
+/// actor's prompt to the director.
+fn user_owned(attn: &crate::state::Attention) -> bool {
+    attn.needs_user || actor_task(&attn.role).is_none()
+}
+
+/// The reason a `PromptForUser` refusal reports, naming what the
+/// saved screen reached for.
+fn user_owned_why(attn: &crate::state::Attention) -> String {
+    if attn.needs_user {
+        "its screen reached for BACKLOT_* or an environment-clearing env flag".to_string()
+    } else {
+        format!(
+            "'{}' is not an actor; only an actor's prompt is the director's",
+            attn.role
+        )
     }
 }

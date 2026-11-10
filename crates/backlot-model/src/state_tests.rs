@@ -64,6 +64,7 @@ fn script() -> Vec<Event> {
                 role: "actor".into(),
                 reason: "stalled".into(),
                 detail: "no output".into(),
+                needs_user: false,
             },
         ),
         ev(

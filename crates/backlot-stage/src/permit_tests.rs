@@ -11,7 +11,7 @@ use backlot_model::summary::Work;
 use crate::notices;
 use crate::permit::{
     approval_keys, director_notice, episode_due, episode_raised, in_episode, is_actor,
-    open_episode, pending_approval,
+    open_episode, pending_approval, touches_env,
 };
 
 fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
@@ -22,6 +22,7 @@ fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
         detail: format!("screen saved to attention/{seq}.txt"),
         open,
         ts_ms,
+        needs_user: false,
     }
 }
 
@@ -162,7 +163,9 @@ fn actor_keys() {
 }
 
 /// The director is told about an actor's episode with the saved
-/// screen's path and the approve command; a non-actor gets none.
+/// screen's path and the approve command; a non-actor gets none —
+/// and a flagged `needs_user` attention gets none either, actor or
+/// not (S9b).
 #[test]
 fn director_notice_is_actor_only() {
     let a = attn(9, "actor-t1-c1", true, 10);
@@ -172,6 +175,69 @@ fn director_notice_is_actor_only() {
     assert!(body.contains("backlot approve --person actor-t1-c1 --decision allow"));
     let w = attn(11, "writer", true, 10);
     assert!(director_notice(&w, "/state/studios/acme-shop/attention/11.txt").is_none());
+    let mut flagged = attn(13, "actor-t1-c1", true, 10);
+    flagged.needs_user = true;
+    assert!(director_notice(&flagged, "/state/studios/acme-shop/attention/13.txt").is_none());
+}
+
+/// The S9b screen scan: any reach for a `BACKLOT_*` variable, `env
+/// -i` or `--ignore-environment` flags the prompt as the user's —
+/// plain and inside a prompt box alike; an ordinary `cargo build`
+/// prompt does not.
+#[test]
+fn touches_env_flags_the_identity_reaches() {
+    for screen in [
+        "BACKLOT_ROLE=director backlot review --task t1",
+        "env -u BACKLOT_ROLE backlot review --task t1",
+        "unset BACKLOT_ROLE; backlot review --task t1",
+        "export BACKLOT_STUDIO=other backlot status",
+        "env -i backlot status",
+        "env -i BACKLOT_ROLE=user backlot status",
+        "sudo --ignore-environment backlot review --task t1",
+    ] {
+        assert!(touches_env(screen), "{screen:?}");
+    }
+    for screen in [
+        "cargo build --workspace",
+        "rm -rf work/t1",
+        "backlot status",
+        "environmental review of the changes",
+    ] {
+        assert!(!touches_env(screen), "{screen:?}");
+    }
+}
+
+/// A prompt box wraps a long command mid-word and draws a border —
+/// the flattened text still carries the variable, so `BACKLOT_RO`
+/// `LE` across lines is the same reach.
+#[test]
+fn touches_env_sees_through_a_wrapped_box() {
+    let wrapped = "╭────────────────────────────────────────────╮\n\
+                   │ Bash command                               │\n\
+                   │   BACKLOT_RO                               │\n\
+                   │   LE=director backlot review --task t1     │\n\
+                   │                                            │\n\
+                   │ Do you want to proceed?                    │\n\
+                   │ ❯ 1. Yes                                   │\n\
+                   ╰────────────────────────────────────────────╯";
+    assert!(touches_env(wrapped));
+    let wrapped_flag = "┌─────────────────────────┐\n\
+                        │   env -i \u{2028}backlot      │\n\
+                        │   status                  │\n\
+                        └─────────────────────────┘";
+    assert!(touches_env(wrapped_flag));
+}
+
+/// A flagged attention owes the director no notice — the user owns
+/// the prompt.
+#[test]
+fn a_flagged_attention_owes_no_director_notice() {
+    let mut state = StudioState::default();
+    let mut flagged = attn(7, "actor-t1-c1", true, 10);
+    flagged.needs_user = true;
+    state.attention.push(flagged);
+    let dir = Path::new("/state/studios/acme-shop");
+    assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 7));
 }
 
 /// Owed notices: an actor's permission attention owes the director

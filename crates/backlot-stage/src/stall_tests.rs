@@ -123,6 +123,7 @@ fn open_stall_is_one_reason_open() {
             detail: String::new(),
             open,
             ts_ms: 0,
+            needs_user: false,
         });
     }
     assert_eq!(stall::open_stall(&state, "writer").unwrap().seq, 3);
@@ -137,6 +138,7 @@ fn raised(seq: u64, role: &str) -> Attention {
         detail: format!("screen unchanged for 5s; screen saved to attention/{seq}.txt"),
         open: true,
         ts_ms: 0,
+        needs_user: false,
     }
 }
 

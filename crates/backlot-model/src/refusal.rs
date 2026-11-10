@@ -99,6 +99,12 @@ pub enum Refusal {
         role: String,
         who: &'static str,
     },
+    /// A `role.approval` the director may not record: the prompt is
+    /// the user's (D9) — `why` says which rule flagged it.
+    PromptForUser {
+        role: String,
+        why: String,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -210,6 +216,12 @@ impl fmt::Display for Refusal {
             }
             Refusal::RoleBound { role, who } => {
                 write!(f, "role '{role}' cannot do this; {who} can")
+            }
+            Refusal::PromptForUser { role, why } => {
+                write!(
+                    f,
+                    "the permission prompt on '{role}' is the user's — {why}; the director cannot answer it"
+                )
             }
         }
     }

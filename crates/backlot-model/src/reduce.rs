@@ -385,6 +385,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             role,
             reason,
             detail,
+            needs_user,
         } => {
             state.attention.push(Attention {
                 seq,
@@ -393,6 +394,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 detail: detail.clone(),
                 open: true,
                 ts_ms: ts,
+                needs_user: *needs_user,
             });
             state
                 .targets

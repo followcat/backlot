@@ -105,6 +105,7 @@ fn attention_is_deduped_per_role_and_reason() {
         detail: "terminal.run: taken: bl-acme-producer".into(),
         open: true,
         ts_ms: 0,
+        needs_user: false,
     });
     assert!(attention_open(&state, "producer", "launch refused"));
     assert!(!attention_open(&state, "director", "launch refused"));

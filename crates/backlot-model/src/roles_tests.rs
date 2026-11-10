@@ -157,6 +157,7 @@ fn an_actor_records_only_its_own_delivery_block_and_messages() {
                 role: "actor-t1-c1".into(),
                 reason: PERMISSION_PROMPT.into(),
                 detail: String::new(),
+                needs_user: false,
             },
             "the stage",
         ),
@@ -338,6 +339,7 @@ fn the_other_roles_keep_what_they_had() {
                     role: "actor-t1-c1".into(),
                     reason: PERMISSION_PROMPT.into(),
                     detail: String::new(),
+                    needs_user: false,
                 },
             )
         ),

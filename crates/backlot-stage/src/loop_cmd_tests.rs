@@ -29,6 +29,7 @@ fn raise(env: &Env, role: &str, reason: &str) {
                     role,
                     reason,
                     detail: "screen text".into(),
+                    needs_user: false,
                 },
             ),
             files: Vec::new(),

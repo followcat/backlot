@@ -8,10 +8,15 @@ use crate::testkit::*;
 use crate::validate::{Refusal, validate};
 
 fn permission(role: &str) -> EventKind {
+    permission_flag(role, false)
+}
+
+fn permission_flag(role: &str, needs_user: bool) -> EventKind {
     EventKind::AttentionRaised {
         role: role.into(),
         reason: PERMISSION_PROMPT.into(),
         detail: String::new(),
+        needs_user,
     }
 }
 
@@ -61,6 +66,53 @@ fn approval_needs_an_open_permission_attention() {
     assert_eq!(
         validate(&cleared, &approve("actor-t1-c1", ApprovalDecision::Allow)),
         Err(Refusal::NoPermissionPrompt("actor-t1-c1".into()))
+    );
+}
+
+/// A `needs_user` prompt — the stage flagged `BACKLOT_*` on the
+/// saved screen — or a prompt on a role that is not an actor is the
+/// user's alone (S9b): the director's approval refuses, the user's
+/// records. The refusal names what the screen reached for.
+#[test]
+fn a_user_owned_prompt_refuses_the_director() {
+    let approve = |role: &str, by: &str| {
+        new_ev(
+            by,
+            EventKind::RoleApproval {
+                role: role.into(),
+                decision: ApprovalDecision::Allow,
+            },
+        )
+    };
+    let mut flagged = base_state();
+    apply(
+        &mut flagged,
+        &ev(4, "stage", permission_flag("actor-t1-c1", true)),
+    );
+    let refusal = validate(&flagged, &approve("actor-t1-c1", "director"));
+    assert!(
+        matches!(&refusal, Err(Refusal::PromptForUser { role, why })
+            if role == "actor-t1-c1" && why.contains("BACKLOT_*")),
+        "{refusal:?}"
+    );
+    assert_eq!(validate(&flagged, &approve("actor-t1-c1", "user")), Ok(()));
+    // An unflagged prompt on a non-actor is the user's too: the
+    // director answers only an actor's prompt (D9).
+    let mut non_actor = base_state();
+    apply(&mut non_actor, &ev(4, "stage", permission("writer")));
+    let refusal = validate(&non_actor, &approve("writer", "director"));
+    assert!(
+        matches!(&refusal, Err(Refusal::PromptForUser { role, why })
+            if role == "writer" && why.contains("not an actor")),
+        "{refusal:?}"
+    );
+    assert_eq!(validate(&non_actor, &approve("writer", "user")), Ok(()));
+    // An ordinary actor prompt stays the director's — unchanged.
+    let mut plain = base_state();
+    apply(&mut plain, &ev(4, "stage", permission("actor-t1-c1")));
+    assert_eq!(
+        validate(&plain, &approve("actor-t1-c1", "director")),
+        Ok(())
     );
 }
 

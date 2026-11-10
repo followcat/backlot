@@ -74,6 +74,7 @@ fn attention(seq: u64, role: &str, reason: &str) -> Event {
             role: role.into(),
             reason: reason.into(),
             detail: "d".into(),
+            needs_user: false,
         },
     )
 }

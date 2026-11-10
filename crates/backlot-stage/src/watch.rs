@@ -259,6 +259,7 @@ pub(crate) fn session_event(
         role: role.into(),
         reason: SESSION_NOT_FOUND.into(),
         detail: format!("runner '{runner}' gave no session id within 60s of the role starting"),
+        needs_user: false,
     }]
 }
 

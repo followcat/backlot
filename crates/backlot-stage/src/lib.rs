@@ -53,6 +53,8 @@ mod notices_tests;
 #[cfg(test)]
 mod nudge_tests;
 #[cfg(test)]
+mod permit_cmd_tests;
+#[cfg(test)]
 mod permit_tests;
 #[cfg(test)]
 mod priority_cmd_tests;

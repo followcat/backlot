@@ -96,11 +96,42 @@ pub fn is_actor(role: &str) -> bool {
     actor_task(role).is_some()
 }
 
+/// Whether a saved prompt screen reaches for the role-identity
+/// variables or the environment-clearing env flags — the S9b "the
+/// prompt is the user's" flag. The screen is flattened first
+/// (whitespace and box-drawing characters removed) so a wrapped
+/// `BACKLOT_RO\nLE` inside a prompt box still matches; a command
+/// that asks for `BACKLOT_` anything, runs `env -i` or passes
+/// `--ignore-environment` is trying to change who it runs as, and
+/// only the user may say yes.
+pub fn touches_env(screen: &str) -> bool {
+    let flat = flattened(screen);
+    flat.contains("BACKLOT_") || flat.contains("env-i") || flat.contains("--ignore-environment")
+}
+
+/// The screen with every whitespace and box-drawing character
+/// removed: prompt boxes wrap long commands across lines and draw a
+/// border, so matching looks at the flattened text — a `│` between
+/// wrapped halves of a word cannot hide it.
+fn flattened(screen: &str) -> String {
+    screen
+        .chars()
+        .filter(|c| !c.is_whitespace() && !is_box_drawing(*c))
+        .collect()
+}
+
+/// The box-drawing and block range a prompt box's border is made
+/// of: `─│┌┐└┘├┤╭╮╰╯█` and friends.
+fn is_box_drawing(c: char) -> bool {
+    matches!(c, '\u{2500}'..='\u{259F}')
+}
+
 /// The director's notice for an actor's episode, pointing at the
 /// saved screen — `None` for any other role, whose attention says
-/// it needs the user.
+/// it needs the user, and for a flagged screen (`needs_user`),
+/// which is the user's to answer.
 pub fn director_notice(attn: &Attention, detail_file: &str) -> Option<String> {
-    if !is_actor(&attn.role) {
+    if attn.needs_user || !is_actor(&attn.role) {
         return None;
     }
     Some(format!(

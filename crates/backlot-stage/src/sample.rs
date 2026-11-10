@@ -109,7 +109,7 @@ impl Stage {
         let limit_ms = u64::from(state.stall_limit_s()) * 1000;
         if stall::stalled(role, task, work, &screen, limit_ms) {
             let held_s = screen.at_ms.saturating_sub(screen.same_since_ms) / 1000;
-            self.raise_attention(dir, role, STALLED, &screen.text, move |seq| {
+            self.raise_attention(dir, role, STALLED, &screen.text, false, move |seq| {
                 format!("screen unchanged for {held_s}s; screen saved to attention/{seq}.txt")
             })
             .await?;
@@ -208,16 +208,18 @@ impl Stage {
     }
 
     /// `attention.raised` for a blocked episode: the screen lands at
-    /// `attention/<seq>.txt` via the append's own file copy. An
-    /// actor's detail points the director at the file; any other
-    /// role's says it needs the user.
+    /// `attention/<seq>.txt` via the append's own file copy. A
+    /// screen reaching for `BACKLOT_*` or an environment-clearing
+    /// flag is flagged `needs_user` — the director never sees the
+    /// notice and may not answer it. An actor's ordinary prompt gets
+    /// the director's detail; anything else says it needs the user.
     async fn raise_permission(&self, dir: &Path, role: &str, text: &str) -> Result<(), Fail> {
-        let actor = permit::is_actor(role);
-        self.raise_attention(dir, role, PERMISSION_PROMPT, text, move |seq| {
-            if actor {
-                format!("screen saved to attention/{seq}.txt")
-            } else {
+        let user_owned = !permit::is_actor(role) || permit::touches_env(text);
+        self.raise_attention(dir, role, PERMISSION_PROMPT, text, user_owned, move |seq| {
+            if user_owned {
                 format!("needs the user; screen saved to attention/{seq}.txt")
+            } else {
+                format!("screen saved to attention/{seq}.txt")
             }
         })
         .await?;
@@ -227,13 +229,16 @@ impl Stage {
 
     /// `attention.raised` with the screen saved to
     /// `attention/<seq>.txt` via the append's own file copy — the
-    /// seq is only known inside the lock, so `detail` builds from it.
+    /// seq is only known inside the lock, so `detail` builds from
+    /// it. `needs_user` marks a `permission prompt` the director may
+    /// not answer (S9b); stalls pass `false`.
     async fn raise_attention(
         &self,
         dir: &Path,
         role: &str,
         reason: &'static str,
         text: &str,
+        needs_user: bool,
         detail: impl Fn(u64) -> String + 'static,
     ) -> Result<(), Fail> {
         let scratch = dir.join("attention").join(format!(".new-{role}"));
@@ -251,6 +256,7 @@ impl Stage {
                         role: role_key.clone(),
                         reason: reason.into(),
                         detail: detail(seq),
+                        needs_user,
                     },
                 ),
                 files: vec![crate::store::PendingFile {

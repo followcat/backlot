@@ -231,6 +231,7 @@ impl Stage {
                             role: start.role.clone(),
                             reason: reasons::LAUNCH_REFUSED.into(),
                             detail: format!("terminal.run: {e}"),
+                            needs_user: false,
                         },
                     )?;
                 }
@@ -305,6 +306,7 @@ impl Stage {
                             role: role.clone(),
                             reason: reason.clone(),
                             detail: detail.clone(),
+                            needs_user: false,
                         },
                     )?;
                 }
@@ -407,6 +409,7 @@ impl Stage {
                                     role: start.role.clone(),
                                     reason: reason.into(),
                                     detail,
+                                    needs_user: false,
                                 },
                             )?;
                         }
@@ -459,6 +462,7 @@ impl Stage {
                                     role: start.role.clone(),
                                     reason: e.reason.into(),
                                     detail: e.detail,
+                                    needs_user: false,
                                 },
                             )?;
                         }

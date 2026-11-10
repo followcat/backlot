@@ -174,6 +174,7 @@ fn delivered_and_cleared_links_validate() {
             role: "actor".into(),
             reason: "stalled".into(),
             detail: String::new(),
+            needs_user: false,
         },
     ));
     let state = replay(&base);

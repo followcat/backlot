@@ -124,6 +124,76 @@ fn an_actor_names_its_candidate_and_task() {
     assert_eq!(a.doing.as_deref(), Some("task t1"));
 }
 
+/// A `permission prompt` the director may not answer — flagged
+/// `needs_user`, or any prompt on a role that is not an actor — is
+/// marked as the user's on the role's `attention` line (S9b); an
+/// ordinary actor prompt keeps the plain reason.
+#[test]
+fn a_user_owned_prompt_marks_the_attention_line() {
+    let mut base = base_events();
+    base.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    let flag = |role: &str, needs_user: bool| {
+        (
+            "stage",
+            EventKind::AttentionRaised {
+                role: role.into(),
+                reason: crate::event::PERMISSION_PROMPT.into(),
+                detail: String::new(),
+                needs_user,
+            },
+        )
+    };
+    let state = state_with(
+        &base,
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            ("stage", started("writer", "t8", "w")),
+            flag("actor-t1-c1", true),
+            flag("writer", false),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let role = |name: &str| s.studios[0].roles.iter().find(|r| r.role == name).unwrap();
+    assert_eq!(
+        role("actor-t1-c1").attention.as_deref(),
+        Some("permission prompt — needs the user")
+    );
+    assert_eq!(
+        role("writer").attention.as_deref(),
+        Some("permission prompt — needs the user")
+    );
+    // Unflagged on an actor: the plain reason — the director's.
+    let state = state_with(
+        &base_events()
+            .into_iter()
+            .chain([ev(4, "director", cast("t1", "actor-a", "a"))])
+            .collect::<Vec<_>>(),
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            flag("actor-t1-c1", false),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let a = s.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "actor-t1-c1")
+        .unwrap();
+    assert_eq!(a.attention.as_deref(), Some("permission prompt"));
+}
+
 /// An actor whose task `is_behind` the current requirement says so
 /// on its `doing` line — the panel draws it verbatim.
 #[test]
@@ -174,6 +244,7 @@ fn counters_follow_the_ledger() {
                     role: "actor-t1-c1".into(),
                     reason: "permission".into(),
                     detail: "wants to write".into(),
+                    needs_user: false,
                 },
             ),
         ],

@@ -332,6 +332,12 @@ pub struct Attention {
     /// dedups on "an attention at or after the episode's start".
     #[serde(default)]
     pub ts_ms: u64,
+    /// A `permission prompt` the director may not answer (S9b): the
+    /// saved screen reached for the `BACKLOT_*` identity variables
+    /// or environment-clearing env flags. Old records carry no
+    /// field.
+    #[serde(default, skip_serializing_if = "crate::event::is_false")]
+    pub needs_user: bool,
 }
 
 /// A recorded `role.approval` — a permission-prompt decision.

@@ -198,12 +198,20 @@ fn role_name(state: &StudioState, role: &str) -> String {
         .unwrap_or_else(base)
 }
 
-/// The first open attention on this role, if any.
+/// The first open attention on this role, if any. A `permission
+/// prompt` the director may not answer — a flagged `BACKLOT_*`
+/// screen, or any prompt on a role that is not an actor — is marked
+/// as the user's (S9b).
 fn role_attention(state: &StudioState, role: &str) -> Option<String> {
-    state
-        .open_attention()
-        .find(|a| a.role == role)
-        .map(|a| cap(&a.reason))
+    state.open_attention().find(|a| a.role == role).map(|a| {
+        if a.reason == crate::event::PERMISSION_PROMPT
+            && (a.needs_user || crate::state::actor_task(&a.role).is_none())
+        {
+            cap(&format!("{} — needs the user", a.reason))
+        } else {
+            cap(&a.reason)
+        }
+    })
 }
 
 /// One role's summary. `live` maps a terminal address to what the

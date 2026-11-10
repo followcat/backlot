@@ -424,6 +424,12 @@ pub enum EventKind {
         reason: String,
         #[serde(default)]
         detail: String,
+        /// A `permission prompt` the director may not answer (S9b):
+        /// the stage flagged the saved screen on the `BACKLOT_*`
+        /// identity variables or environment-clearing env flags, so
+        /// the attention is the user's. Absent on old logs.
+        #[serde(default, skip_serializing_if = "is_false")]
+        needs_user: bool,
     },
     /// `target` is the seq of the `attention.raised` event.
     #[serde(rename = "attention.cleared")]
@@ -455,6 +461,13 @@ pub enum EventKind {
         reason: String,
         set: BTreeMap<String, String>,
     },
+}
+
+/// `skip_serializing_if` for a bool flag that only carries meaning
+/// when set — an unset flag writes nothing, and old logs with no
+/// field deserialize `false`.
+pub(crate) fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Default rework cap per task (design.md "Stop conditions").

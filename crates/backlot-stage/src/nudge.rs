@@ -194,6 +194,7 @@ impl Stage {
                             role: role.clone(),
                             reason: reasons::OWED.into(),
                             detail,
+                            needs_user: false,
                         },
                     )?;
                     eprintln!("stage: {role} still owes a step — escalated");

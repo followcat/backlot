@@ -322,6 +322,65 @@ async fn a_prompt_after_an_answered_one_raises_its_own_attention() {
     assert_eq!(open_attentions(&state, "actor-t1-c1"), 1);
 }
 
+/// A blocked screen reaching for `BACKLOT_*` — the role asking to
+/// change who it runs as — raises a `needs_user` attention the
+/// director may not answer (S9b): the ledger refuses the
+/// director's `role.approval`, and the user's sends the key.
+#[tokio::test]
+async fn a_prompt_reaching_for_backlot_vars_is_the_users() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n\
+                                   fake-work: blocked\n\
+                                   Do you want to proceed?\n\
+                                   Bash command: BACKLOT_ROLE=director backlot review --task t1\n"
+        .into();
+    let t0 = now_ms();
+
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            role,
+            reason,
+            detail,
+            needs_user,
+        } => {
+            assert_eq!(role, "actor-t1-c1");
+            assert_eq!(reason, PERMISSION_PROMPT);
+            assert!(needs_user, "the BACKLOT_* reach did not flag");
+            assert!(detail.contains("needs the user"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+
+    // The director's answer refuses — the role gate is append-time,
+    // so the same refusal lands through `backlot approve`.
+    let refused = store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("director"),
+                EventKind::RoleApproval {
+                    role: "actor-t1-c1".into(),
+                    decision: ApprovalDecision::Deny,
+                },
+            ),
+            files: Vec::new(),
+        })
+    });
+    assert!(refused.is_err(), "the director answered the user's prompt");
+
+    // The user's `allow` still records and sends `enter`.
+    approve(&dir, "actor-t1-c1", "user", ApprovalDecision::Allow);
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 3_000).await;
+    assert_eq!(fake.lock().unwrap().keys.as_slice(), ["enter"]);
+    assert_eq!(events(&dir, "attention.cleared").len(), 1);
+}
+
 /// A screen frozen past `stall_limit_s` raises one `stalled`
 /// attention per episode — the screen saved beside it — a changed
 /// screen clears it, and a later freeze raises its own: raised
@@ -354,6 +413,7 @@ async fn a_frozen_screen_raises_stalls_once_and_clears_on_change() {
             role,
             reason,
             detail,
+            ..
         } => {
             assert_eq!(role, "actor-t1-c1");
             assert_eq!(reason, backlot_model::event::STALLED);

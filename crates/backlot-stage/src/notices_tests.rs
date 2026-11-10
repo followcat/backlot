@@ -111,6 +111,7 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     role: "actor-t1-c1".into(),
                     reason: CANNOT_RESUME.into(),
                     detail: "lost 3 times in 10 minutes".into(),
+                    needs_user: false,
                 },
             ),
             (
@@ -119,6 +120,7 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     role: "writer".into(),
                     reason: CANNOT_RESUME.into(),
                     detail: "no session id to resume".into(),
+                    needs_user: false,
                 },
             ),
             (
@@ -127,6 +129,7 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     role: "director".into(),
                     reason: CANNOT_RESUME.into(),
                     detail: "no session id to resume".into(),
+                    needs_user: false,
                 },
             ),
             (
@@ -135,6 +138,7 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
                     role: "producer".into(),
                     reason: CANNOT_RESUME.into(),
                     detail: "no session id to resume".into(),
+                    needs_user: false,
                 },
             ),
         ],
