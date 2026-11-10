@@ -168,8 +168,12 @@ pub fn next_steps(state: &StudioState) -> Vec<Step> {
         // Created and never cast: whoever created it casts it — the
         // director on the split path, the producer when it made the
         // task itself. Old logs carry no `by`: the director is the
-        // usual hand.
+        // usual hand. A task whose dependencies are still open owes
+        // no cast step — nobody is nudged for a cast they may not do.
         if t.casts.is_empty() {
+            if !t.open_dependencies(state).is_empty() {
+                continue;
+            }
             out.push(Step {
                 key: t.created_seq,
                 label: format!("cast {}", t.id),

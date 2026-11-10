@@ -30,7 +30,7 @@ fn fmt_ms(ms: u64) -> String {
     }
 }
 
-fn task_line(t: &Task, declared: &[CheckDecl], current_req: u32, cap: u32) -> String {
+fn task_line(t: &Task, state: &StudioState, declared: &[CheckDecl], cap: u32) -> String {
     let mut s = format!(
         "  {:<4} {:<10} {:<18}",
         t.id,
@@ -43,7 +43,7 @@ fn task_line(t: &Task, declared: &[CheckDecl], current_req: u32, cap: u32) -> St
         let _ = write!(s, " {:<12}", "-");
     }
     let _ = write!(s, " req v{}", t.requirement_version);
-    if t.is_behind(current_req) {
+    if t.is_behind(state.requirement_version) {
         s.push_str(" BEHIND");
     }
     let _ = write!(
@@ -78,6 +78,10 @@ fn task_line(t: &Task, declared: &[CheckDecl], current_req: u32, cap: u32) -> St
     }
     if let Some(from) = t.paused_from {
         let _ = write!(s, "  (was {})", fmt_status(from));
+    }
+    let open = t.open_dependencies(state);
+    if !open.is_empty() {
+        let _ = write!(s, "  waits for {}", open.join(", "));
     }
     let _ = write!(s, "  \"{}\"", t.title);
     s
@@ -154,12 +158,7 @@ pub fn status(name: &str, state: &StudioState, now_ms: u64) -> String {
             let _ = writeln!(
                 out,
                 "{}",
-                task_line(
-                    t,
-                    &studio.checks,
-                    state.requirement_version,
-                    studio.rework_cap
-                )
+                task_line(t, state, &studio.checks, studio.rework_cap)
             );
         }
     }

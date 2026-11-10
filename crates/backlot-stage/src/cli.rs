@@ -351,6 +351,18 @@ fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<St
         }
         *commits = crate::range::check_range(&dir, &caller.studio, &task, commits)?;
     }
+    // `cast` checks each accepted dependency's delivery already sits
+    // on the integration branch — a cast before the merge would cut
+    // the task's work area without its dependency's code. A working
+    // role never reaches git: the append's role gate refuses it.
+    if let Cmd::Cast { .. } = &cmd
+        && backlot_model::state::actor_task(&caller.role).is_none()
+        && caller.role != "writer"
+    {
+        let task = caller.task.clone().unwrap_or_default();
+        let state = load(&dir)?;
+        crate::range::check_dependencies(&dir, &caller.studio, &state, &task)?;
+    }
     let built = commands::build(&caller, cmd)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;
     Ok(render::confirm(&event))

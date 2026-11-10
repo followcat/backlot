@@ -258,6 +258,16 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             let studio = require_studio(state)?;
             let t = require_task(state, task)?;
             check_task_open(t, false)?;
+            // Dependencies hold the cast (S9e): the actor's work area
+            // is cut from the integration tip, so a task may not
+            // start while work it depends on is still open.
+            let open = t.open_dependencies(state);
+            if !open.is_empty() {
+                return Err(Refusal::DependencyOpen {
+                    task: task.clone(),
+                    deps: open.iter().map(|d| d.to_string()).collect(),
+                });
+            }
             let found = studio.candidates.iter().find(|c| c.name == *candidate);
             match found {
                 None => Err(Refusal::UnknownCandidate(candidate.clone())),

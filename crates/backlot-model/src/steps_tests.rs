@@ -512,3 +512,30 @@ fn a_review_step_waits_on_the_last_check() {
         7000
     );
 }
+
+/// S9e: a task that still waits on dependencies owes no `cast` step —
+/// nobody is nudged for a cast they may not do. Once the dependency
+/// is accepted the step comes back, owed by the task's creator.
+#[test]
+fn a_waiting_task_owes_no_cast_step() {
+    let mut events = base();
+    events.push(ev(3, "director", task_created("t1", "feature", 1)));
+    let mut dep = task_created("t2", "fix", 1);
+    let EventKind::TaskCreated { dependencies, .. } = &mut dep else {
+        unreachable!()
+    };
+    *dependencies = vec!["t1".into()];
+    events.push(ev(4, "director", dep));
+    let mut state = replay(&events);
+    assert_eq!(step(&state, "cast t2"), None);
+    // The dependency still waiting: t1's own cast step is owed, but
+    // t2's is not.
+    assert!(step(&state, "cast t1").is_some());
+    events.extend([
+        ev(5, "director", cast("t1", "actor-a", "a")),
+        ev(6, "actor-t1-c1", delivered("t1", 1, "a", 1)),
+        ev(7, "director", reviewed("t1", 1, Verdict::Accepted, vec![])),
+    ]);
+    state = replay(&events);
+    assert_eq!(step(&state, "cast t2"), Some((4, "director".into())));
+}

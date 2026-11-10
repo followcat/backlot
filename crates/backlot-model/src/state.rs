@@ -280,6 +280,23 @@ impl Task {
             _ => "director",
         }
     }
+
+    /// Dependencies still open (S9e): not `accepted` or
+    /// `partially-accepted` — a name no task carries counts as open
+    /// too, so a bad correction keeps the gate shut. The cast
+    /// refusal and the `waits for` status marker read the same list.
+    pub fn open_dependencies<'s>(&'s self, state: &'s StudioState) -> Vec<&'s str> {
+        self.dependencies
+            .iter()
+            .filter(|d| {
+                !matches!(
+                    state.tasks.get(d.as_str()).map(|t| t.status),
+                    Some(TaskStatus::Accepted | TaskStatus::PartiallyAccepted)
+                )
+            })
+            .map(String::as_str)
+            .collect()
+    }
 }
 
 /// Where a recorded role stands: `live` while its terminal should be

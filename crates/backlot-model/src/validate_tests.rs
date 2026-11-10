@@ -121,6 +121,84 @@ fn cast_only_from_candidates() {
     );
 }
 
+/// A `task_created` kind carrying `deps` — the testkit helper takes
+/// none, so the dependencies are set on the kind directly.
+fn task_created_deps(id: &str, kind: &str, req: u32, deps: &[&str]) -> EventKind {
+    let mut k = task_created(id, kind, req);
+    let EventKind::TaskCreated { dependencies, .. } = &mut k else {
+        unreachable!()
+    };
+    *dependencies = deps.iter().map(|d| d.to_string()).collect();
+    k
+}
+
+/// S9e: `task.cast` is refused while any dependency is not `accepted`
+/// or `partially-accepted`, and the refusal names the ones still
+/// open. An accepting verdict — partial counts too — frees the cast.
+#[test]
+fn cast_refused_while_a_dependency_is_open() {
+    // t2 depends on t1, still `created` — the refusal names t1.
+    let state = state_with(
+        &base_events(),
+        vec![("director", task_created_deps("t2", "fix", 1, &["t1"]))],
+    );
+    assert_eq!(
+        validate(&state, &new_ev("director", cast("t2", "actor-a", "a"))),
+        Err(Refusal::DependencyOpen {
+            task: "t2".into(),
+            deps: vec!["t1".into()]
+        })
+    );
+    // Running, then delivered, is still open — an accepting verdict
+    // is what frees the cast.
+    let open = |extra: Vec<(&str, EventKind)>| {
+        let mut kinds = vec![
+            ("director", task_created_deps("t2", "fix", 1, &["t1"])),
+            ("director", cast("t1", "actor-a", "a")),
+            ("actor", delivered("t1", 1, "a", 1)),
+        ];
+        kinds.extend(extra);
+        state_with(&base_events(), kinds)
+    };
+    for verdict in [
+        Vec::new(),
+        vec![(
+            "director",
+            reviewed("t1", 1, Verdict::ChangesRequested, vec![]),
+        )],
+    ] {
+        let state = open(verdict);
+        assert_eq!(
+            validate(&state, &new_ev("director", cast("t2", "actor-b", "b"))),
+            Err(Refusal::DependencyOpen {
+                task: "t2".into(),
+                deps: vec!["t1".into()]
+            })
+        );
+    }
+    for verdict in [Verdict::Accepted, Verdict::PartiallyAccepted] {
+        let state = open(vec![("director", reviewed("t1", 1, verdict, vec![]))]);
+        assert_eq!(
+            validate(&state, &new_ev("director", cast("t2", "actor-b", "b"))),
+            Ok(())
+        );
+    }
+    // Several open dependencies are all named.
+    let mut base = base_events();
+    base.push(ev(4, "director", task_created("t2", "fix", 1)));
+    let state = state_with(
+        &base,
+        vec![("director", task_created_deps("t3", "fix", 1, &["t1", "t2"]))],
+    );
+    assert_eq!(
+        validate(&state, &new_ev("director", cast("t3", "actor-a", "a"))),
+        Err(Refusal::DependencyOpen {
+            task: "t3".into(),
+            deps: vec!["t1".into(), "t2".into()]
+        })
+    );
+}
+
 #[test]
 fn cast_refused_on_paused_and_terminal_tasks() {
     let mut kinds = vec![

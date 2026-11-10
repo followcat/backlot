@@ -54,6 +54,8 @@ mod daemon_tests;
 #[cfg(test)]
 mod deliver_tests;
 #[cfg(test)]
+mod dep_cmd_tests;
+#[cfg(test)]
 mod digest_tests;
 #[cfg(test)]
 mod discover_tests;

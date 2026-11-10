@@ -7,6 +7,9 @@
 
 use std::path::{Path, PathBuf};
 
+use backlot_model::event::Verdict;
+use backlot_model::state::{StudioState, Task, TaskStatus};
+
 use crate::cli::Fail;
 use crate::workareas::{self, GitRun};
 
@@ -96,4 +99,102 @@ pub fn check_range(dir: &Path, studio: &str, task: &str, range: &str) -> Result<
     let work = work_area(dir, task)?;
     let branch = format!("backlot/{studio}/{task}");
     resolve(&mut workareas::real_git, &work, &branch, range)
+}
+
+/// The sha `A..B` records as `B` — the delivery's tip.
+fn range_end(commits: &str) -> &str {
+    commits.rsplit("..").next().unwrap_or(commits)
+}
+
+/// The tip of the delivery a terminal task was accepted on: the
+/// delivery its last accepting review named, else the latest — the
+/// strictest read of what must already sit on integration.
+fn accepted_end(t: &Task) -> Option<&str> {
+    let d = t
+        .reviews
+        .iter()
+        .rev()
+        .find(|r| matches!(r.verdict, Verdict::Accepted | Verdict::PartiallyAccepted))
+        .and_then(|r| t.deliveries.iter().find(|d| d.n == r.delivery))
+        .or_else(|| t.deliveries.last())?;
+    Some(range_end(&d.commits))
+}
+
+/// The `task.cast` git gate (S9e): every accepted dependency's
+/// accepted delivery must already be an ancestor of
+/// `backlot/<studio>/integration` — the task's work area is cut from
+/// the integration tip, so an unmerged dependency would start the
+/// actor without its code. Dependencies still open are the model's
+/// refusal, not this one's. Runs in `work/integration`, falling back
+/// to the studio repo — the same object store.
+pub fn check_dependencies(
+    dir: &Path,
+    studio: &str,
+    state: &StudioState,
+    task: &str,
+) -> Result<(), Fail> {
+    let (Some(t), Some(repo)) = (state.tasks.get(task), state.studio.as_ref()) else {
+        return Ok(()); // the model's own refusal names what is missing
+    };
+    let work = dir.join("work").join("integration");
+    let area = if work.is_dir() {
+        work
+    } else {
+        PathBuf::from(&repo.repo)
+    };
+    let cwd = area.to_string_lossy().into_owned();
+    let branch = format!("backlot/{studio}/integration");
+    let mut unmerged: Vec<&str> = Vec::new();
+    for dep in &t.dependencies {
+        let Some(d) = state.tasks.get(dep.as_str()) else {
+            continue; // unknown counts as open — the model refuses
+        };
+        if !matches!(
+            d.status,
+            TaskStatus::Accepted | TaskStatus::PartiallyAccepted
+        ) {
+            continue; // still open — the model's refusal names it
+        }
+        let Some(end) = accepted_end(d) else {
+            continue;
+        };
+        let tip = workareas::real_git(
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "--end-of-options",
+                &format!("{branch}^{{commit}}"),
+            ],
+            &cwd,
+        );
+        let merged = match tip.code {
+            // No integration branch yet: nothing is merged into it.
+            0 => {
+                let out = workareas::real_git(&["merge-base", "--is-ancestor", end, &branch], &cwd);
+                match out.code {
+                    0 => true,
+                    1 => false,
+                    _ => {
+                        return Err(Fail::refused(format!(
+                            "cast: merge check for '{dep}' failed ({})",
+                            workareas::err_line(&out)
+                        )));
+                    }
+                }
+            }
+            _ => false,
+        };
+        if !merged {
+            unmerged.push(dep);
+        }
+    }
+    if unmerged.is_empty() {
+        Ok(())
+    } else {
+        Err(Fail::refused(format!(
+            "merge {} into integration first",
+            unmerged.join(", ")
+        )))
+    }
 }

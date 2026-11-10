@@ -118,6 +118,45 @@ pub fn commit_in(work: &Path, text: &str) -> String {
     git(work, &["rev-parse", "HEAD"])
 }
 
+/// One source repo under `files/repo` shared by the studio's work
+/// areas (S9e): `work/integration` and `work/<task>` sit on branches
+/// of the same object store, so a dependency's delivery can really
+/// merge into `backlot/acme-shop/integration`.
+pub fn shared_repo(scratch: &Scratch) -> PathBuf {
+    let repo = scratch.files.join("repo");
+    if repo.is_dir() {
+        return repo;
+    }
+    fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    fs::write(repo.join("f"), "base\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "base"]);
+    repo
+}
+
+/// `work/<name>` inside the studio dir on branch
+/// `backlot/acme-shop/<name>` off the shared repo — `t1` for a task,
+/// `integration` for the integration area.
+pub fn shared_area(scratch: &Scratch, name: &str) -> PathBuf {
+    let repo = shared_repo(scratch);
+    let work = crate::store::studio_dir(&scratch.dir, "acme-shop")
+        .join("work")
+        .join(name);
+    fs::create_dir_all(work.parent().unwrap()).unwrap();
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            &format!("backlot/acme-shop/{name}"),
+            work.to_str().unwrap(),
+        ],
+    );
+    work
+}
+
 pub const CAST_TOML: &str = r#"
 mode = "standard"
 rework_cap = 2

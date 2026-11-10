@@ -82,6 +82,13 @@ pub enum Refusal {
         task: String,
         dep: String,
     },
+    /// A `task.cast` while one of the task's dependencies is not
+    /// `accepted` or `partially-accepted` (S9e); `deps` names the
+    /// ones still open.
+    DependencyOpen {
+        task: String,
+        deps: Vec<String>,
+    },
     BadPauseResume {
         task: String,
         state: &'static str,
@@ -221,6 +228,13 @@ impl fmt::Display for Refusal {
             Refusal::UnknownReqVersion(v) => write!(f, "no requirement version v{v}"),
             Refusal::UnknownDependency { task, dep } => {
                 write!(f, "task '{task}' depends on unknown task '{dep}'")
+            }
+            Refusal::DependencyOpen { task, deps } => {
+                write!(
+                    f,
+                    "task '{task}' waits on open dependencies: {}",
+                    deps.join(", ")
+                )
             }
             Refusal::BadPauseResume {
                 task,
