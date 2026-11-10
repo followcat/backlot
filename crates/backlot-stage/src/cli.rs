@@ -301,7 +301,7 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     }
 }
 
-fn exec_event(common: Common, cmd: Cmd, env: &Env, base: &Path) -> Result<String, Fail> {
+fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<String, Fail> {
     let needs_task = matches!(
         cmd,
         Cmd::Deliver { .. }
@@ -332,6 +332,24 @@ fn exec_event(common: Common, cmd: Cmd, env: &Env, base: &Path) -> Result<String
     // against a studio with no log is refused without touching disk.
     if !matches!(cmd, Cmd::StudioNew { .. }) && !dir.join("events.jsonl").is_file() {
         return Err(Fail::refused(format!("no studio '{}'", caller.studio)));
+    }
+    // `deliver` checks the caller's right to record before git runs
+    // — a refused role hears "cannot do this", not a git error — then
+    // the task and cast, then resolves the range in the task's work
+    // area. The ledger records the resolved `sha..sha`; the model
+    // re-checks the role under the append lock.
+    if let Cmd::Deliver { commits, .. } = &mut cmd {
+        let task = caller.task.clone().unwrap_or_default();
+        let state = load(&dir)?;
+        backlot_model::roles::may_deliver(&state, &caller.role, &task).map_err(refused)?;
+        let t = state
+            .tasks
+            .get(&task)
+            .ok_or_else(|| Fail::refused(format!("no task '{task}'")))?;
+        if t.cast.is_none() {
+            return Err(Fail::refused(format!("task '{task}' has no cast")));
+        }
+        *commits = crate::range::check_range(&dir, &caller.studio, &task, commits)?;
     }
     let built = commands::build(&caller, cmd)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;

@@ -18,6 +18,7 @@ mod notices;
 mod nudge;
 mod permit;
 mod prompts;
+mod range;
 mod reasons;
 pub mod reconcile;
 pub mod render;
@@ -57,6 +58,10 @@ mod permit_tests;
 mod priority_cmd_tests;
 #[cfg(test)]
 mod prompts_tests;
+#[cfg(test)]
+mod range_cmd_tests;
+#[cfg(test)]
+mod range_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
 #[cfg(test)]

@@ -73,10 +73,13 @@ fn finding_records_on_open_and_closed_tasks() {
         &format!("task new --title cart --kind feature --acceptance-file {acc} --as director"),
     );
     ok(&env, "cast --task t1 --actor actor-a --as director");
+    let work = work_area(&scratch, "t1");
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
     let rep = fixture(&scratch, "r.md", "report\n");
     ok(
         &env,
-        &format!("deliver --commits a..b --report {rep} --as actor-t1-c1 --task t1"),
+        &format!("deliver --commits {a}..{b} --report {rep} --as actor-t1-c1 --task t1"),
     );
 
     // --task is required; a delivery the task never had is refused.
@@ -190,10 +193,13 @@ fn task_state_commands() {
         "task takeover --task t3 --reason director-finishes --as director",
     );
     assert!(out.contains("task.state t3 TakenOver"), "{out}");
+    let work = work_area(&scratch, "t4");
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
     let rep = fixture(&scratch, "r.md", "report\n");
     ok(
         &env,
-        &format!("deliver --commits a..b --report {rep} --as actor-t4-c1 --task t4"),
+        &format!("deliver --commits {a}..{b} --report {rep} --as actor-t4-c1 --task t4"),
     );
     ok(
         &env,
@@ -231,12 +237,16 @@ fn review_at_cap_accepts_or_recasts() {
     );
     ok(&env, "cast --task t1 --actor actor-a --as director");
     // cap = 2: three changes-requested land at_cap.
+    let work = work_area(&scratch, "t1");
+    let mut range = commit_in(&work, "one");
     let rep = fixture(&scratch, "r.md", "report\n");
     for d in 1..=3 {
+        let tip = commit_in(&work, &format!("round {d}"));
         ok(
             &env,
-            &format!("deliver --commits a..b --report {rep} --as actor-t1-c1 --task t1"),
+            &format!("deliver --commits {range}..{tip} --report {rep} --as actor-t1-c1 --task t1"),
         );
+        range = tip;
         ok(
             &env,
             &format!(

@@ -146,11 +146,15 @@ fn full_loop_status_and_records() {
         &env,
         "cast --task t1 --actor actor-a --reason strongest --as director",
     );
+    let work = work_area(&scratch, "t1");
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
+    let c = commit_in(&work, "three");
     let rep1 = fixture(&scratch, "r1.md", "report 1\n");
     let out = ok(
         &env,
         &format!(
-            "deliver --commits a..b --report {rep1} --check tests=pass --as actor-t1-c1 --task t1"
+            "deliver --commits {a}..{b} --report {rep1} --check tests=pass --as actor-t1-c1 --task t1"
         ),
     );
     assert!(out.contains("task.delivered t1 d1"));
@@ -158,7 +162,7 @@ fn full_loop_status_and_records() {
     assert!(
         refused(
             &env,
-            &format!("deliver --commits b..c --report {rep1} --as actor-t1-c1 --task t1")
+            &format!("deliver --commits {b}..{c} --report {rep1} --as actor-t1-c1 --task t1")
         )
         .contains("not running")
     );
@@ -184,7 +188,7 @@ fn full_loop_status_and_records() {
     let rep2 = fixture(&scratch, "r2.md", "report 2\n");
     ok(
         &env,
-        &format!("deliver --commits b..c --report {rep2} --as actor-t1-c1 --task t1"),
+        &format!("deliver --commits {b}..{c} --report {rep2} --as actor-t1-c1 --task t1"),
     );
     ok(
         &env,
@@ -305,7 +309,7 @@ fn exit_kinds_usage_vs_refused() {
     assert!(
         refused(
             &env,
-            &format!("deliver --commits a..b --report {rep} --as actor-t1-c1 --task t1")
+            &format!("deliver --commits a..b --report {rep} --as user --task t1")
         )
         .contains("has no cast")
     );

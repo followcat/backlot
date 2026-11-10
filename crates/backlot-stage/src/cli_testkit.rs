@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::cli::{Env, Fail, run};
@@ -62,6 +62,60 @@ pub fn usage(env: &Env, s: &str) -> String {
         Err(Fail::Usage(m)) => m,
         other => panic!("expected usage error on '{s}', got {other:?}"),
     }
+}
+
+/// Run git in `dir`; answers trimmed stdout, panics on failure.
+pub fn git(dir: &Path, args: &[&str]) -> String {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["-c", "user.name=alice", "-c", "user.email=alice@host-a"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?} in {}: {}",
+        dir.display(),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// A real `work/<task>` for `deliver` (S9b): a source repo under
+/// `files/`, a worktree inside the studio dir on the task's own
+/// `backlot/acme-shop/<task>` branch — the layout the stage's
+/// work-area step produces.
+pub fn work_area(scratch: &Scratch, task: &str) -> PathBuf {
+    let repo = scratch.files.join(format!("repo-{task}"));
+    fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    fs::write(repo.join("f"), "base\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "base"]);
+    let work = crate::store::studio_dir(&scratch.dir, "acme-shop")
+        .join("work")
+        .join(task);
+    fs::create_dir_all(work.parent().unwrap()).unwrap();
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            &format!("backlot/acme-shop/{task}"),
+            work.to_str().unwrap(),
+        ],
+    );
+    work
+}
+
+/// Commit `text` as `f` inside `work` and answer its full sha.
+pub fn commit_in(work: &Path, text: &str) -> String {
+    fs::write(work.join("f"), format!("{text}\n")).unwrap();
+    git(work, &["add", "."]);
+    git(work, &["commit", "-m", text]);
+    git(work, &["rev-parse", "HEAD"])
 }
 
 pub const CAST_TOML: &str = r#"

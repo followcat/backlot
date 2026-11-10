@@ -45,10 +45,13 @@ fn cast_task(scratch: &Scratch, env: &Env, id: &str) {
 
 fn delivered_task(scratch: &Scratch, env: &Env, id: &str) {
     cast_task(scratch, env, id);
+    let work = work_area(scratch, id);
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
     let rep = fixture(scratch, &format!("rep-{id}.md"), "report\n");
     ok(
         env,
-        &format!("deliver --commits a..b --report {rep} --as actor-{id}-c1 --task {id}"),
+        &format!("deliver --commits {a}..{b} --report {rep} --as actor-{id}-c1 --task {id}"),
     );
 }
 
@@ -217,6 +220,9 @@ fn only_the_actor_or_the_user_delivers() {
     let (scratch, env) = scratch();
     studio(&scratch, &env);
     cast_task(&scratch, &env, "t1");
+    let work = work_area(&scratch, "t1");
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
     let rep = fixture(&scratch, "r.md", "report\n");
     for role in ["producer", "director", "stage", "actor", "nobody"] {
         let msg = refused(
@@ -231,7 +237,7 @@ fn only_the_actor_or_the_user_delivers() {
     }
     ok(
         &env,
-        &format!("deliver --commits a..b --report {rep} --as user --task t1"),
+        &format!("deliver --commits {a}..{b} --report {rep} --as user --task t1"),
     );
 }
 

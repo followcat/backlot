@@ -71,13 +71,17 @@ fn scripted_studio_loop() {
         ],
     );
 
+    let work = work_area(&s, "t1");
+    let a = commit_in(&work, "one");
+    let b = commit_in(&work, "two");
+    let c = commit_in(&work, "three");
     let r1 = s.fixture("r1.md", "report one\n");
     let o = ok(
         &s,
         &[
             "deliver",
             "--commits",
-            "a..b",
+            &format!("{a}..{b}"),
             "--report",
             &r1,
             "--check",
@@ -118,7 +122,7 @@ fn scripted_studio_loop() {
         &[
             "deliver",
             "--commits",
-            "b..c",
+            &format!("{b}..{c}"),
             "--report",
             &r2,
             "--task",
