@@ -2,8 +2,12 @@
 //! the chat id, so the session is found after launch. Every role
 //! runs isolated: `CURSOR_CONFIG_DIR`, `CURSOR_DATA_DIR` and
 //! `CURSOR_SANDBOX_POLICY_DIR` point under
-//! `roles/<role>/cursor/` in the studio state directory, so a role
-//! never touches `~/.cursor`. `auth.json` — the login — does not
+//! `roles/<role>/cursor/` in the studio state directory, so a role's
+//! config, chats, trust and sandbox stay out of `~/.cursor` — only
+//! the global `mcp.json` is still read (hard-coded path; every server
+//! it names is disabled per role) and a daily empty
+//! `.agent-data-cleanup-<date>` marker lands in its `projects/`.
+//! `auth.json` — the login — does not
 //! move with `CURSOR_CONFIG_DIR`, it reads `XDG_CONFIG_HOME`; a
 //! stage env carrying it would log the role out, so that env is a
 //! plan refusal. `XDG_CONFIG_HOME` itself is never set.
