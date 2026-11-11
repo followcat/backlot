@@ -298,8 +298,21 @@ async fn stalled_discovery_does_not_delay_last_handle_cleanup() {
 async fn connect_over_a_real_unix_socket() {
     use hc_proto::endpoint::{Endpoint, Local};
 
-    let dir = std::env::temp_dir().join(format!("hc-tui-client-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    // A claimed-unique dir: `create_dir` never adopts a leftover that
+    // could hold a stale socket the bind below would trip on.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = loop {
+        let dir = std::env::temp_dir().join(format!(
+            "hc-tui-client-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => break dir,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => panic!("create scratch dir {}: {e}", dir.display()),
+        }
+    };
     let socket = dir.join("fake.sock");
     let listener = tokio::net::UnixListener::bind(&socket).unwrap();
     let server = tokio::spawn(async move {

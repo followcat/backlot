@@ -21,9 +21,22 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Scratch {
-        let path = std::env::temp_dir().join(format!("hc-tui-test-{name}-{}", std::process::id()));
-        std::fs::create_dir_all(&path).unwrap();
-        Scratch(path)
+        // The per-process counter keeps parallel tests apart even on a
+        // reused name; `create_dir` claims the path atomically — a
+        // leftover directory is retried, never adopted.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        loop {
+            let path = std::env::temp_dir().join(format!(
+                "hc-tui-test-{name}-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Scratch(path),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => panic!("create scratch dir {}: {e}", path.display()),
+            }
+        }
     }
 }
 
