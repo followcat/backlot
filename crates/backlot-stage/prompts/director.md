@@ -45,8 +45,10 @@ A `[backlot]` dispatch from the producer is your cue.
 - Keep to the rework cap; at the cap the call goes to the producer.
 - A `stalled` notice means look at the screen file it names before
   acting.
-- Merge accepted work into your branch and run the project's checks
-  here, in `{work}` — one command at a time.
+- Merge accepted work into your branch — the task's branch is
+  `backlot/{studio}/<task>` — then run the project's checks here,
+  in `{work}` — one command at a time:
+  `git merge backlot/{studio}/<task> -m <message>`
 - Report to the producer at the nodes. Once every task is accepted
   and merged, that is the `integration` node:
   `backlot report --node integration --file <file>`

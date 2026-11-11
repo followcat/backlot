@@ -152,11 +152,17 @@ fn render_fills_every_placeholder() {
     assert!(text.contains("backlot/acme-shop/t1"), "{text}");
     let work = dir.join("work/t1").to_string_lossy().into_owned();
     assert!(text.contains(&work), "{text}");
-    // The director's names the integration branch instead.
+    // The director's names the integration branch instead — and the
+    // merge line carries the task-branch form S11c had to dig out of
+    // the binary.
     let st = start(RoleKind::Director, "director", None);
     let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
     let text = fs::read_to_string(&file).unwrap();
     assert!(text.contains("backlot/acme-shop/integration"), "{text}");
+    assert!(
+        text.contains("`git merge backlot/acme-shop/<task> -m <message>`"),
+        "{text}"
+    );
 }
 
 /// S9g: the actor's Delivering section names each declared check —
