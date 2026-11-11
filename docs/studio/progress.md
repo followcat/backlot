@@ -1,5 +1,28 @@
 # Studio progress
 
+## S9g: an actor's terminal carries its own key (2026-11-11)
+
+- Done: a real run's `backlot deliver` from a live actor terminal was refused — `role_env`
+  set `BACKLOT_ROLE` to the kind name `actor` while `may_deliver` wants the cast key. The
+  terminal's `BACKLOT_ROLE` is now `start.role`: `actor-<task>-c<n>` for an actor on start,
+  recast, resume and reopen, the fixed name otherwise. And the other half of the hole is
+  closed: a `by.role` of exactly `actor` is refused for every kind at append — it matched no
+  actor-key whitelist and fell through to permissive — while replay still reads the v0.1.0
+  ledgers that hold its events. The actor prompt now lists each declared `[[checks]]` entry
+  by `name` and `run` and says `--check <name>=pass|fail` names one of them (or that the
+  cast declares none), and the fake runner's `sh:<command>` input runs a line through
+  `sh -c` in the role's own environment and cwd, echoing `fake-sh: exit <code>`.
+- Measured: `role_env` unit tests pin the actor key on start, recast and resume; model tests
+  refuse a bare `actor` on every kind and still replay an old `actor` log; CLI tests pin the
+  refusal text on deliver, review and block; prompt tests cover the declared and
+  none-declared casts. Real-core fake-runner: `real_stage_actor_terminal_delivers_under_its_key`
+  sends `backlot deliver` and `backlot review` through `sh:` — no `--as`, no test-set
+  `BACKLOT_ROLE` — and `task.delivered` lands under `actor-t1-c1` while the review is
+  refused with no `task.reviewed`. Gates: `cargo fmt --check`, stable and `+1.99.0`
+  clippy, `cargo test`, and the serial ignored `real_stage` run all green.
+- Not verified: no real agent has run with the keyed `BACKLOT_ROLE` yet — the fake runner
+  proves the environment, not a real runner's behaviour under it.
+
 ## S9d: notices that are still true, merged and in order (2026-11-10)
 
 - Done: a queued message carrying a `source_seq` is checked against its source at send time;

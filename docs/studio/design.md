@@ -60,6 +60,10 @@ Each role is a terminal started through `terminal.run`:
 - **Labels:** `backlot.studio`, `backlot.role`, `backlot.task`, plus `herdr.space`, `herdr.tab` and `herdr.seen=0` so
   the terminal appears in the left sidebar like any other.
 - **Environment:** `BACKLOT_STUDIO`, `BACKLOT_ROLE`, `BACKLOT_TASK`, plus the runner's environment profile.
+  `BACKLOT_ROLE` is the role's ledger key — `actor-<task>-c<n>` for an actor, the fixed name otherwise
+  — so a `backlot` command run inside the terminal needs no `--as`: it is the role itself. The bare
+  `actor` is no caller: the ledger refuses it for every kind, while replay still reads old logs whose
+  events it recorded.
 - **No parent and no notes:** a terminal started with a parent ends with it by default, and a role must outlive whoever
   started it.
 
