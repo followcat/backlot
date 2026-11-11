@@ -75,6 +75,12 @@ fn blocked(runner: &str, screen: &str) -> bool {
             has_line_containing(screen, "Permission required")
                 && has_line_containing(screen, "Allow once")
         }
+        "cursor" => {
+            cursor_trust_dialog(screen)
+                || (has_line_containing(screen, "Run this command?")
+                    && has_line_starting(screen, "Not in allowlist:")
+                    && has_line_containing(screen, "→ Run (once) (y)"))
+        }
         "fake" => fake_state(screen) == Some(Work::Blocked),
         _ => false,
     }
@@ -88,9 +94,43 @@ fn working(runner: &str, screen: &str) -> bool {
         "devin" => screen.contains("to interrupt"),
         // Not measured yet — see docs/studio/runners.md.
         "opencode" => screen.contains("esc interrupt"),
+        "cursor" => screen.contains("ctrl+c to stop") || screen.lines().any(cursor_spinner_line),
         "fake" => fake_state(screen) == Some(Work::Working),
         _ => false,
     }
+}
+
+/// cursor-agent 2026.11.05's running turn: one or two braille
+/// glyphs, a space, then `Composing` (a token count may follow) or
+/// `Running` with a trailing token count — ` ⠠⠜ Composing`,
+/// ` ⠘⠤ Running  44 tokens`. The glyph is required: a transcript
+/// line starting `Running the…` is not a turn.
+fn cursor_spinner_line(l: &str) -> bool {
+    let mut parts = l.trim().splitn(2, ' ');
+    let (Some(glyphs), Some(rest)) = (parts.next(), parts.next()) else {
+        return false;
+    };
+    if glyphs.is_empty()
+        || glyphs.chars().count() > 2
+        || !glyphs
+            .chars()
+            .all(|c| ('\u{2800}'..='\u{28ff}').contains(&c))
+    {
+        return false;
+    }
+    let rest = rest.trim_start();
+    rest.starts_with("Composing")
+        || rest
+            .strip_prefix("Running")
+            .is_some_and(|r| r.trim_end().ends_with("tokens"))
+}
+
+/// cursor-agent's workspace-trust dialog — `⚠ Workspace Trust
+/// Required` with the `[a] Trust this workspace` option. `--trust`
+/// should keep it away, so a screen still showing it is the user's
+/// prompt, never something the stage answers.
+pub(crate) fn cursor_trust_dialog(text: &str) -> bool {
+    text.contains("Workspace Trust Required") && text.contains("Trust this workspace")
 }
 
 /// Claude Code's running turn on 2.1.319: a spinner glyph from

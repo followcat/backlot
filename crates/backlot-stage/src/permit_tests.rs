@@ -59,6 +59,23 @@ fn keys_per_runner() {
     }
 }
 
+/// cursor's allow is `y` — the `→ Run (once) (y)` picker's key — and
+/// a deny sends nothing: S11a showed the runner retries a rejected
+/// command, so no key could close the prompt anyway. Neither
+/// decision may ever map to `tab` or `shift+tab` — those are the
+/// picker's allowlist entries and would write the config.
+#[test]
+fn keys_per_runner_cursor() {
+    assert_eq!(approval_keys("cursor", ApprovalDecision::Allow), Some("y"));
+    assert_eq!(approval_keys("cursor", ApprovalDecision::Deny), None);
+    for decision in [ApprovalDecision::Allow, ApprovalDecision::Deny] {
+        assert!(
+            !matches!(approval_keys("cursor", decision), Some("tab" | "shift+tab")),
+            "{decision:?} must never reach the allowlist entries"
+        );
+    }
+}
+
 /// `open_episode` finds only an open `permission prompt` for the
 /// role — a cleared attention or another reason does not count.
 #[test]
@@ -421,6 +438,66 @@ fn prompt_block_on_fake() {
         prompt_block("fake", b).unwrap(),
         "fake-work: blocked fake-prompt: cargo test --lib"
     );
+}
+
+/// A neutral cursor-shaped prompt screen (the S11a capture): the
+/// `$ <cmd>` line under a full-width `─` rule opens the block, the
+/// picker ends it.
+fn cursor_screen(command: &str) -> String {
+    format!(
+        "  $ backlot studios 1.2s\n\
+         \x20   backlot stub studios\n\
+         ─────────────────────────────────────────\n\
+         \x20$  {command} in .\n\n\
+         \x20Run this command?\n\
+         \x20Not in allowlist: wc\n\
+         \x20 → Run (once) (y)\n\
+         \x20   Add Shell(wc) to allowlist? (tab)\n\
+         \x20   Run Everything (shift+tab)\n\
+         \x20   Skip & tell the agent what to do instead (esc or n)\n"
+    )
+}
+
+/// The cursor block runs from the `─` rule above `Run this
+/// command?` to the end — a different command is a different block,
+/// the transcript above the rule is out of it, and without the rule
+/// or the question there is nothing comparable.
+#[test]
+fn prompt_block_on_cursor() {
+    let a = cursor_screen("wc -l README.md");
+    let b = cursor_screen("cargo test --lib");
+    let block = prompt_block("cursor", &a).expect("cursor block");
+    assert!(block.contains("wc -l README.md"), "{block}");
+    assert!(block.contains("Run this command?"), "{block}");
+    assert!(!block.contains("backlot stub"), "{block}");
+    assert_ne!(
+        block,
+        prompt_block("cursor", &b).unwrap(),
+        "a different command must be a different block"
+    );
+    assert_eq!(prompt_block("cursor", "plain output\n"), None);
+    assert_eq!(
+        prompt_block(
+            "cursor",
+            " Run this command?\n Not in allowlist: wc\n  → Run (once) (y)\n"
+        ),
+        None,
+        "no full-width rule — nothing comparable"
+    );
+}
+
+/// A cursor workspace-trust dialog is the user's even on an actor —
+/// the stage launches with `--trust`, so the dialog showing at all
+/// is a user decision, never something the stage answers.
+#[test]
+fn cursor_trust_dialog_is_the_users() {
+    let trust = "  │  ⚠ Workspace Trust Required\n\
+                 \x20 │  Do you trust the contents of this directory?\n\
+                 \x20 │    /home/user/acme-shop\n\
+                 \x20 │    [a] Trust this workspace\n\
+                 \x20 │    [q] Quit\n";
+    assert!(needs_user("actor-t1-c1", "cursor", trust, None));
+    assert!(needs_user("director", "cursor", trust, None));
 }
 
 /// Codex blocks come from their own prompt marker — unmeasured, but

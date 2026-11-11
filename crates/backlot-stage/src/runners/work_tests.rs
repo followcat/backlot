@@ -119,6 +119,87 @@ fn opencode_blocked() {
     );
 }
 
+/// cursor-agent's permission prompt on 2026.11.05 — the S11a
+/// capture, neutralised: the command under a full-width `─` rule,
+/// then `Run this command?`, the `Not in allowlist:` line and the
+/// `→ Run (once) (y)` picker. Blocked needs all three lines.
+#[test]
+fn cursor_blocked() {
+    let screen = "  $ backlot studios 1.2s\n\
+                  \x20   backlot stub studios\n\
+                  ─────────────────────────────────────────\n\
+                  \x20$  wc -l README.md in .\n\n\
+                  \x20Run this command?\n\
+                  \x20Not in allowlist: wc\n\
+                  \x20 → Run (once) (y)\n\
+                  \x20   Add Shell(wc) to allowlist? (tab)\n\
+                  \x20   Run Everything (shift+tab)\n\
+                  \x20   Skip & tell the agent what to do instead (esc or n)\n";
+    assert_eq!(work_state("cursor", screen), Work::Blocked);
+    // Any missing piece is not the prompt.
+    for cut in ["Run this command?", "Not in allowlist:", "→ Run (once) (y)"] {
+        assert_eq!(
+            work_state("cursor", &screen.replacen(cut, "", 1)),
+            Work::Waiting,
+            "without {cut:?}"
+        );
+    }
+}
+
+/// cursor's workspace-trust dialog is blocked too — `--trust`
+/// should keep it away, so a role still showing it is the user's
+/// prompt (S11a capture, neutralised).
+#[test]
+fn cursor_trust_dialog_is_blocked() {
+    let trust = "  │  ⚠ Workspace Trust Required\n\
+                 \x20 │\n\
+                 \x20 │  Cursor Agent can execute code and access files in this directory.\n\
+                 \x20 │  Do you trust the contents of this directory?\n\
+                 \x20 │    /home/user/acme-shop\n\
+                 \x20 │    [a] Trust this workspace\n\
+                 \x20 │    [q] Quit\n";
+    assert_eq!(work_state("cursor", trust), Work::Blocked);
+}
+
+/// cursor's running turn on 2026.11.05: `ctrl+c to stop` in the
+/// input row, or one/two braille glyphs then `Composing` or
+/// `Running … tokens`.
+#[test]
+fn cursor_working() {
+    for screen in [
+        "  → Ask anything\n ctrl+c to stop\n",
+        "  ⠠⠜ Composing\n",
+        "  ⠘⠤ Composing\n",
+        "  ⠰⠰ Composing 147 tokens\n",
+        "  ⠘⠤ Running  44 tokens\n",
+    ] {
+        assert_eq!(work_state("cursor", screen), Work::Working, "{screen:?}");
+    }
+    // A transcript's `Running the…` is not the spinner, and the
+    // token line needs the braille glyph.
+    for screen in [
+        "│ Running the shell command \"wc -l README.md\".\n",
+        "Running  44 tokens\n",
+    ] {
+        assert_eq!(work_state("cursor", screen), Work::Waiting, "{screen:?}");
+    }
+}
+
+/// cursor's idle composer (S11a capture, neutralised): the `→`
+/// input hint, model row and cwd — nothing moves, so waiting.
+#[test]
+fn cursor_idle_is_waiting() {
+    let idle = "  Cursor Agent\n\
+                \x20 v2026.11.05-86047df\n\
+                \x20 Tip: Use /plan to plan execution and reach the right outcome faster.\n\
+                ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄\n\
+                \x20 → Plan, search, build anything\n\
+                ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀\n\
+                \x20 Composer 2.5\n\
+                \x20 /home/user/acme-shop · main\n";
+    assert_eq!(work_state("cursor", idle), Work::Waiting);
+}
+
 /// The fake runner's latest `fake-work:` line is its state.
 #[test]
 fn fake_reads_its_last_announced_state() {

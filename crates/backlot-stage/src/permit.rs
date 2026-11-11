@@ -53,6 +53,13 @@ pub fn approval_keys(runner: &str, decision: ApprovalDecision) -> Option<&'stati
             ApprovalDecision::Allow => "enter",
             ApprovalDecision::Deny => "esc",
         }),
+        // cursor's allow is `y` on its picker; a deny gets no key —
+        // the runner retries a rejected command, so the attention
+        // stays open for the user either way (S11a).
+        "cursor" => match decision {
+            ApprovalDecision::Allow => Some("y"),
+            ApprovalDecision::Deny => None,
+        },
         _ => None,
     }
 }
@@ -87,6 +94,15 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         "codex" => lines
             .iter()
             .rposition(|l| l.contains("Would you like to"))?,
+        // From the last full-width `─` rule above `Run this
+        // command?` to the end — the `$ <cmd>` line, the allowlist
+        // sentence and the picker (measured on 2026.11.05).
+        "cursor" => {
+            let ask = lines
+                .iter()
+                .rposition(|l| l.contains("Run this command?"))?;
+            lines[..ask].iter().rposition(|l| is_full_width_rule(l))?
+        }
         // From the last `●` line above `Approval required` to the
         // end — the `●` block holds the command the picker asks
         // about, and the judge's sentence, the `❭` cursor and the
@@ -170,6 +186,7 @@ pub fn is_actor(role: &str) -> bool {
 /// screen when it maps none.
 pub fn needs_user(role: &str, runner: &str, screen: &str, command: Option<&str>) -> bool {
     !is_actor(role)
+        || (runner == "cursor" && work::cursor_trust_dialog(screen))
         || touches_env(
             &command.map(String::from).unwrap_or_else(|| {
                 prompt_block(runner, screen).unwrap_or_else(|| screen.to_string())
