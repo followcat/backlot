@@ -40,8 +40,10 @@ pub fn render(template: &str, fields: &BTreeMap<String, String>) -> String {
 }
 
 /// Every placeholder a start's prompt fills: the studio, the role
-/// and its task, the requirement file and version, and the work
-/// folder and branch the terminal starts in.
+/// and its task, the requirement file and version, the work folder
+/// and branch the terminal starts in, and the checks block — the
+/// declared checks by `name` and `run` that `--check <name>` names,
+/// or the sentence saying the cast declares none.
 fn fields(
     studio: &str,
     dir: &Path,
@@ -72,6 +74,30 @@ fn fields(
         RoleKind::Actor => format!("backlot/{studio}/{task}"),
         _ => String::new(),
     };
+    let declared = state
+        .studio
+        .as_ref()
+        .map(|s| s.checks.as_slice())
+        .unwrap_or(&[]);
+    let checks = if declared.is_empty() {
+        concat!(
+            "- `backlot deliver --commits <A..B> --report <file>` — the cast\n",
+            "  declares no checks, so `deliver` takes no `--check` here.\n"
+        )
+        .to_string()
+    } else {
+        let mut block =
+            "- The stage runs the cast's declared checks on your delivery itself:\n".to_string();
+        for c in declared {
+            block.push_str(&format!("  - `{}`: `{}`\n", c.name, c.run));
+        }
+        block.push_str(concat!(
+            "- `backlot deliver --commits <A..B> --report <file> --check <name>=pass`\n",
+            "  (a check that failed is `--check <name>=fail`) — `<name>` is one of\n",
+            "  the checks above.\n"
+        ));
+        block
+    };
     BTreeMap::from([
         ("studio".into(), studio.into()),
         ("studio_dir".into(), dir.to_string_lossy().into_owned()),
@@ -83,6 +109,7 @@ fn fields(
         ("req_version".into(), state.requirement_version.to_string()),
         ("work".into(), work.to_string_lossy().into_owned()),
         ("branch".into(), branch),
+        ("checks".into(), checks),
     ])
 }
 

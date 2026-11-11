@@ -3,12 +3,13 @@
 //! argument parser, and the first prompt a fresh start gets is the
 //! one line pointing at the rendered file.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use backlot_model::event::{ActorIdentity, Priority};
-use backlot_model::state::{StudioState, Task, TaskStatus};
+use backlot_model::event::{ActorIdentity, CheckDecl, Priority, RoleConfigs, StudioMode};
+use backlot_model::state::{StudioConfig, StudioState, Task, TaskStatus};
 
 use crate::args;
 use crate::prompts::*;
@@ -87,6 +88,30 @@ fn state_with_task() -> StudioState {
     state
 }
 
+/// A studio config carrying `checks` — the rest of the cast is the
+/// prompt's neutral fixture.
+fn studio_config(checks: Vec<CheckDecl>) -> StudioConfig {
+    StudioConfig {
+        title: "acme-shop".into(),
+        repo: "/home/user/acme-shop".into(),
+        mode: StudioMode::Standard,
+        roles: RoleConfigs {
+            producer: actor(),
+            director: actor(),
+            writer: actor(),
+        },
+        candidates: Vec::new(),
+        rework_cap: 2,
+        stall_limit_s: 600,
+        nudge_after_s: 180,
+        escalate_after_s: 600,
+        check_env: Vec::new(),
+        checks,
+        task_budget_s: None,
+        limits: BTreeMap::new(),
+    }
+}
+
 /// Render fills every placeholder: no `{name}` survives in any role's
 /// output, and the concrete values land where they should.
 #[test]
@@ -132,6 +157,58 @@ fn render_fills_every_placeholder() {
     let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
     let text = fs::read_to_string(&file).unwrap();
     assert!(text.contains("backlot/acme-shop/integration"), "{text}");
+}
+
+/// S9g: the actor's Delivering section names each declared check —
+/// one line per `[[checks]]` entry, `name` and `run` — and says the
+/// `--check <name>` it reports is one of them; with none declared it
+/// says so and the deliver command takes no `--check`.
+#[test]
+fn the_actor_prompt_names_the_declared_checks() {
+    let dir = tmp();
+    let mut state = state_with_task();
+    let st = start(RoleKind::Actor, "actor-t1-c1", Some("t1"));
+
+    state.studio = Some(studio_config(vec![
+        CheckDecl {
+            name: "units".into(),
+            run: "cargo test --lib".into(),
+            timeout_s: 30,
+        },
+        CheckDecl {
+            name: "lint".into(),
+            run: "cargo clippy".into(),
+            timeout_s: 60,
+        },
+    ]));
+    let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+    let text = fs::read_to_string(&file).unwrap();
+    for want in [
+        "`units`: `cargo test --lib`",
+        "`lint`: `cargo clippy`",
+        "--check <name>=pass",
+        "--check <name>=fail",
+        "`<name>` is one of",
+    ] {
+        assert!(text.contains(want), "actor prompt misses {want}:\n{text}");
+    }
+    assert!(!text.contains("declares no checks"), "{text}");
+    // One line per declared check, in declared order.
+    let units = text.find("units").unwrap();
+    let lint = text.find("lint").unwrap();
+    assert!(units < lint, "check order flipped:\n{text}");
+
+    // No declared checks: the prompt says so and the command drops
+    // the flag — `--check` survives only inside the explanation.
+    state.studio = Some(studio_config(Vec::new()));
+    let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(text.contains("declares no checks"), "{text}");
+    assert!(
+        text.contains("`backlot deliver --commits <A..B> --report <file>`"),
+        "{text}"
+    );
+    assert!(!text.contains("--check <name>"), "{text}");
 }
 
 /// Producer and director start before any requirement exists: the
