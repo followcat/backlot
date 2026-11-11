@@ -40,10 +40,11 @@ Codex, Devin, OpenCode and cursor-agent were launched and their session IDs capt
   chat — through `real_stage_cursor_director`. Whether the real CLI matches everything the
   adapter assumes — the `Shell(...)` rules actually pre-allowing, the trust marker landing under
   `CURSOR_DATA_DIR`, the chat directory layout — waits for the controlled director run. Two
-  global leaks are known and accepted: `~/.cursor/mcp.json` is still read (the role writes
-  `mcp-disabled.json` naming every server, so it sees none), and a daily empty
-  `.agent-data-cleanup-<date>` marker still lands in the global `projects/` — sandbox policies do
-  move to the role's `CURSOR_SANDBOX_POLICY_DIR`. A denied command is retried by the runner, so
+  global leaks are measured: `~/.cursor/mcp.json` is still read (the role writes
+  `mcp-disabled.json` naming every server — whether that list really hides them is unverified
+  until the controlled director run), and a daily empty `.agent-data-cleanup-<date>` marker still
+  lands in the global `projects/`; sandbox policies are pointed at the role's
+  `CURSOR_SANDBOX_POLICY_DIR`, also unverified. A denied command is retried by the runner, so
   deny sends no key and the attention stays open for the user.
 
 Stall detection has only run on the fake runner. Restart recovery has run on Claude Code only;
@@ -139,6 +140,9 @@ re-raise one `stall_limit_s` later.
 - **The producer's own problems notify nobody.** An actor's stall or `cannot resume` reaches its
   task's reviewer, the writer's and director's reach the producer — the producer's shows only in
   the panel and `backlot status`.
+- **Every cursor-agent run keeps one direct connection.** `api3.cursor.sh:443` is reached outside
+  whatever proxy the environment carries — `NODE_USE_ENV_PROXY=1` does not redirect it — while
+  the model and API traffic go through the configured proxy. Measured in S11a and accepted.
 
 ## The stage's loop
 
@@ -191,6 +195,9 @@ re-raise one `stall_limit_s` later.
   cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets
   the variable inside shows only `bash x.sh` on the prompt screen.
+- **A cursor role's `cli-config.json` holds the account's `authInfo`** once the agent has run —
+  the agent writes it into the role's isolated `roles/<role>/cursor/config/`. The studio state
+  directory is private: do not share or publish it.
 - **Worktrees and branches are not removed** when a studio ends — `work/` trees and `backlot/…`
   branches accumulate — and state directories are not pruned. Removal is yours; the guide shows
   the commands.

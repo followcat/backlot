@@ -377,6 +377,10 @@ is rewritten and the signals file emptied on every start and resume, so a moved 
 heals on the next launch; nothing ever writes to your own `settings.json` or any other
 settings file — hooks from every layer just merge, and yours keep running too.
 
+A cursor role keeps its config, data and sandbox under `roles/<role>/cursor/`; its
+`config/cli-config.json` holds the account's `authInfo` once the agent has run — the studio
+state directory is private, so do not share or publish it.
+
 `config.toml` holds per-runner environment — profiles, proxy settings — as `[runner_env.<runner>]`
 tables. Values reach the role terminal's environment only; they are never written to the ledger,
 the summary or logs. A malformed file raises `config malformed`.

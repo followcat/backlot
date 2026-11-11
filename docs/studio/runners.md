@@ -124,22 +124,27 @@ half-configured role.
 
 Every cursor role runs isolated: `CURSOR_CONFIG_DIR`, `CURSOR_DATA_DIR` and
 `CURSOR_SANDBOX_POLICY_DIR` point under `roles/<role>/cursor/` in the studio state directory
-(directories mode 700, stage-written files 600), so a role never reads or writes `~/.cursor`. The
-login does not move — `auth.json` reads `XDG_CONFIG_HOME`, not `CURSOR_CONFIG_DIR` — which is why a
-stage environment carrying a nonempty `XDG_CONFIG_HOME` is a plan refusal rather than something the
-adapter overrides: `XDG_CONFIG_HOME` itself is never set.
+(directories mode 700, stage-written files 600). The isolation is not total — the global
+`~/.cursor/mcp.json` is still read from a hard-coded path (below), and a daily empty
+`.agent-data-cleanup-<date>` marker still lands in the global `~/.cursor/projects/` — and one
+network constant was measured: every run keeps a connection to `api3.cursor.sh:443` outside the
+configured proxy, which `NODE_USE_ENV_PROXY=1` does not redirect, while the model and API traffic
+go through the proxy. The login does not move — `auth.json` reads `XDG_CONFIG_HOME`, not
+`CURSOR_CONFIG_DIR` — which is why a stage environment carrying a nonempty `XDG_CONFIG_HOME` is a
+plan refusal rather than something the adapter overrides: `XDG_CONFIG_HOME` itself is never set.
 
-Two files are written on each launch. `config/cli-config.json` gets the role's
-`permissions.allow` — `Shell(...)` rules in the narrowest form the bundle's matcher takes: a rule
-matches its command bare, with any arguments, or as the command's base word, so `Shell(backlot)`
-covers `backlot status` and there is no starred variant. An existing file keeps every other key
-byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base rule is
-`Shell(backlot)`; an actor adds `git add`, `git commit`, `git status`, `git diff`, `git log`,
-`git show`, the director adds `git merge`, and both add every declared check's `run` verbatim.
-Producer and writer keep the base only. Nothing broader is written — no `Shell(*)`, no `--force`,
-`--yolo` or `--approve-mcps` — and a `run` holding `()` `,` `*?[]{}:` or `\` is not expressible
-(`,` splits rules, `:` splits a command from its argument pattern, the rest are glob or syntax
-characters), so it is simply never pre-allowed.
+Two files are written on each launch. `config/cli-config.json` gets the role's `permissions.allow`
+— `Shell(...)` rules in the narrowest form the bundle's matcher takes: a rule without `*` or `:`
+matches only the command equal to it or starting with it plus a space, the command also tried as
+its executable's basename — so `Shell(backlot)` covers `backlot status`, `Shell(git merge)`
+reaches `git merge …` alone, and there is no starred variant. An existing file keeps every other
+key byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base
+rule is `Shell(backlot)`; an actor adds `git add`, `git commit`, `git status`, `git diff`,
+`git log`, `git show`, the director adds `git merge`, and both add every declared check's `run`
+verbatim. Producer and writer keep the base only. Nothing broader is written — no `Shell(*)`, no
+`--force`, `--yolo` or `--approve-mcps` — and a `run` holding `()` `,` `*?[]{}:` or `\` is not
+expressible (`,` splits rules, `:` splits a command from its argument pattern, the rest are glob
+or syntax characters), so it is simply never pre-allowed.
 
 `data/projects/<slug>/mcp-disabled.json` holds the names of the user's global MCP servers —
 `~/.cursor/mcp.json` is read from a hard-coded path regardless of `CURSOR_CONFIG_DIR` and holds
