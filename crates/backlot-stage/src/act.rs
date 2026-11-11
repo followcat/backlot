@@ -212,6 +212,26 @@ impl Stage {
         launch: &runners::Launch,
         runner_env: BTreeMap<String, String>,
     ) -> Result<bool, Fail> {
+        // A runner's per-launch filesystem prep — cursor's
+        // isolated tree — before anything starts. A failure is an
+        // attention, not a half-configured role; the start retries
+        // each tick.
+        if let Some(prep) = &launch.prep
+            && let Err(detail) = runners::prepare(prep)
+        {
+            if !attention_open(state, &start.role, reasons::CURSOR_PREP_FAILED) {
+                record(
+                    dir,
+                    EventKind::AttentionRaised {
+                        role: start.role.clone(),
+                        reason: reasons::CURSOR_PREP_FAILED.into(),
+                        detail,
+                        needs_user: true,
+                    },
+                )?;
+            }
+            return Ok(false);
+        }
         // S9f: the per-session hook files — settings rewritten,
         // signals truncated — at every start and resume, so a moved
         // binary or studio directory heals on the next launch.
@@ -502,7 +522,7 @@ impl Stage {
                         let mut start = start.clone();
                         start.actor.runner_version = self.runner_version(&start.actor.runner);
                         if !self
-                            .launch(studio, dir, state, &start, &launch, runner_env)
+                            .launch(studio, dir, state, &start, launch.as_ref(), runner_env)
                             .await?
                         {
                             *real_slot_free = true;

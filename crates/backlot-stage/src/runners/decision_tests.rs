@@ -84,6 +84,7 @@ fn launch_for(runner: &str) -> Result<Launch, PlanError> {
         env: BTreeMap::new(),
         session: Session::PostLaunch,
         hooks: None,
+        prep: None,
     })
 }
 

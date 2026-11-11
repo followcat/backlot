@@ -331,13 +331,17 @@ impl Stage {
                 // Claimed ids come from every studio, not just this
                 // one, plus anything found earlier in this pass.
                 let taken = taken_ids(&self.cached, &self.found_sessions.borrow());
+                let look = discover::Look {
+                    home: &home,
+                    role_dir: &dir.join("roles").join(key),
+                };
                 discover::find_session(
                     &actor.runner,
                     &term.argv,
                     &cwd,
                     role.since_ms,
                     &taken,
-                    &home,
+                    &look,
                     &*self.exec,
                 )
             } else {

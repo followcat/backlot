@@ -178,6 +178,7 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
         // Codex and devin stay PostLaunch even on a resume.
         session: Session::PostLaunch,
         hooks: None,
+        prep: None,
     };
     match start_event(&held, &launch, "t7") {
         backlot_model::EventKind::RoleResumed {
@@ -202,6 +203,7 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
         env: BTreeMap::new(),
         session: Session::Chosen("chosen-1".into()),
         hooks: None,
+        prep: None,
     };
     match start_event(&fresh, &launch, "t7") {
         backlot_model::EventKind::RoleStarted {

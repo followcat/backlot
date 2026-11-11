@@ -7,6 +7,7 @@
 
 pub mod claude;
 mod codex;
+pub mod cursor;
 mod devin;
 mod fake;
 pub mod opencode;
@@ -30,6 +31,28 @@ pub struct Launch {
     /// The per-session hook files to write before `terminal.run`
     /// (S9f) — `None` for runners with no hooks.
     pub hooks: Option<HookSetup>,
+    /// Filesystem work the launch needs before `terminal.run`,
+    /// beyond the hook pair — cursor's isolated tree. `None` for
+    /// runners with none.
+    pub prep: Option<Prep>,
+}
+
+/// Per-launch filesystem work, computed in `plan` — where paths
+/// and rule lists are known — and run before `terminal.run`; a
+/// failure is the caller's attention, not a started role.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Prep {
+    /// cursor's isolated config/data/sandbox tree, its
+    /// `cli-config.json` permissions and its MCP-off list.
+    Cursor(cursor::CursorPrep),
+}
+
+/// Run the launch's prep; the error string is the attention's
+/// detail. It never holds content read from a runner's files.
+pub(crate) fn prepare(prep: &Prep) -> Result<(), String> {
+    match prep {
+        Prep::Cursor(p) => cursor::prepare(p),
+    }
 }
 
 /// A hook-capable launch's per-session files: the settings file the
@@ -152,7 +175,7 @@ pub enum StartDecision {
     Defer,
     /// `terminal.run` with this argv and the merged runner env.
     Launch {
-        launch: Launch,
+        launch: Box<Launch>,
         /// The `[runner_env.<runner>]` map from config.toml.
         runner_env: BTreeMap<String, String>,
     },
@@ -162,7 +185,7 @@ pub enum StartDecision {
 /// (`Session::PostLaunch` on a `Launch`; this answers the same
 /// question for a live role that only has its actor identity).
 pub fn post_launch_session(runner: &str) -> bool {
-    matches!(runner, "codex" | "devin")
+    matches!(runner, "codex" | "devin" | "cursor")
 }
 
 /// The tick's decision for one pending start. Plan and config errors
@@ -199,7 +222,10 @@ pub fn decide_start(
         }
         *real_slot_free = false;
     }
-    StartDecision::Launch { launch, runner_env }
+    StartDecision::Launch {
+        launch: Box::new(launch),
+        runner_env,
+    }
 }
 
 /// The runner's plan for `identity` in `ctx`, or why it cannot run.
@@ -210,6 +236,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "codex" => codex::plan(identity, ctx),
         "devin" => devin::plan(identity, ctx),
         "opencode" => opencode::plan(identity, ctx),
+        "cursor" => cursor::plan(identity, ctx),
         other => Err(PlanError::runner(other, ctx)),
     }
 }

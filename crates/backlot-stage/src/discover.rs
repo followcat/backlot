@@ -106,25 +106,41 @@ pub fn runner_version(exec: &Exec, runner: &str) -> Option<String> {
         .filter(|line| !line.is_empty())
 }
 
+/// The places `find_session` may read: the user's home (codex's
+/// `~/.codex/sessions` tree) and `roles/<role>/` in the studio
+/// state directory (cursor's per-role chats).
+pub struct Look<'a> {
+    pub home: &'a Path,
+    pub role_dir: &'a Path,
+}
+
 /// The session id a live role's runner assigned, if it can be found:
 /// chosen ids read back off the terminal's argv (an adopted claude or
-/// opencode), the codex rollout tree or `devin list`. `taken` holds
-/// the session ids other roles in the studio already claim.
+/// opencode), the codex rollout tree, `devin list` or cursor's
+/// per-role chats tree. `taken` holds the session ids other roles in
+/// the studio already claim.
 pub fn find_session(
     runner: &str,
     argv: &[String],
     cwd: &str,
     started_ms: u64,
     taken: &BTreeSet<String>,
-    home: &Path,
+    look: &Look<'_>,
     exec: &Exec,
 ) -> Option<String> {
+    let (home, role_dir) = (look.home, look.role_dir);
     match runner {
         "claude" | "opencode" => {
             runners::session_in_argv(runner, argv).filter(|id| !taken.contains(id))
         }
         "codex" => codex_session(home, cwd, started_ms, taken),
         "devin" => devin_session(exec, cwd, started_ms, taken),
+        "cursor" => runners::cursor::session_at(
+            &runners::cursor::chats_root(&role_dir.join("cursor")),
+            cwd,
+            started_ms,
+            taken,
+        ),
         _ => None,
     }
 }

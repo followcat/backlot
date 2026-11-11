@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::discover::{ExecCall, find_session, real_exec, runner_version};
+use crate::discover::{ExecCall, Look, find_session, real_exec, runner_version};
 
 const CWD: &str = "/home/user/acme-shop";
 
@@ -34,9 +34,22 @@ fn no_exec(_: &ExecCall) -> Result<String, String> {
 fn codex_finds_its_rollout() {
     let home = tmp("codex-ok");
     rollout(&home, "2026/11/09", "rollout-a.jsonl", "sess-1", CWD);
+    let role_dir = Path::new("/rd");
     let taken = BTreeSet::new();
     assert_eq!(
-        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec).as_deref(),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            1,
+            &taken,
+            &Look {
+                home: &home,
+                role_dir
+            },
+            &no_exec
+        )
+        .as_deref(),
         Some("sess-1")
     );
 }
@@ -52,16 +65,41 @@ fn codex_prefers_the_oldest_match() {
     rollout(&home, "2026/11/09", "rollout-a.jsonl", "sess-role", CWD);
     rollout(&home, "2026/11/09", "rollout-z.jsonl", "sess-person", CWD);
     rollout(&home, "2026/11/10", "rollout-b.jsonl", "sess-next-day", CWD);
+    let role_dir = Path::new("/rd");
     let taken = BTreeSet::new();
     assert_eq!(
-        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec).as_deref(),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            1,
+            &taken,
+            &Look {
+                home: &home,
+                role_dir
+            },
+            &no_exec
+        )
+        .as_deref(),
         Some("sess-role"),
         "the earliest rollout in the folder is the role's own"
     );
     // With the role's id already claimed, the next-oldest serves.
     let taken = BTreeSet::from(["sess-role".to_string()]);
     assert_eq!(
-        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec).as_deref(),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            1,
+            &taken,
+            &Look {
+                home: &home,
+                role_dir
+            },
+            &no_exec
+        )
+        .as_deref(),
         Some("sess-person")
     );
 }
@@ -76,6 +114,7 @@ fn codex_skips_day_directories_before_the_role() {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
+    let role_dir = Path::new("/rd");
     // The file itself is fresh — only its day directory is stale.
     assert_eq!(
         find_session(
@@ -84,7 +123,10 @@ fn codex_skips_day_directories_before_the_role() {
             CWD,
             now.saturating_sub(60_000),
             &BTreeSet::new(),
-            &home,
+            &Look {
+                home: &home,
+                role_dir
+            },
             &no_exec
         ),
         None,
@@ -106,28 +148,74 @@ fn codex_rejects_the_wrong_files() {
         "/elsewhere",
     );
     rollout(&home, "2026/11/09", "rollout-a.jsonl", "sess-old", CWD);
+    let role_dir = Path::new("/rd");
     let taken = BTreeSet::new();
     assert_eq!(
-        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec).as_deref(),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            1,
+            &taken,
+            &Look {
+                home: &home,
+                role_dir
+            },
+            &no_exec
+        )
+        .as_deref(),
         Some("sess-old"),
         "the scan keeps going past a wrong-cwd file"
     );
     // An id another role claims is not this role's.
     let taken = BTreeSet::from(["sess-old".to_string()]);
     assert_eq!(
-        find_session("codex", &[], CWD, 1, &taken, &home, &no_exec),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            1,
+            &taken,
+            &Look {
+                home: &home,
+                role_dir
+            },
+            &no_exec
+        ),
         None
     );
     // A start far in the future makes every file pre-start.
     let far = u64::MAX;
     assert_eq!(
-        find_session("codex", &[], CWD, far, &BTreeSet::new(), &home, &no_exec),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            far,
+            &BTreeSet::new(),
+            &Look {
+                home: &home,
+                role_dir
+            },
+            &no_exec
+        ),
         None
     );
     // And a tree that is not there at all finds nothing.
     let empty = tmp("codex-empty");
     assert_eq!(
-        find_session("codex", &[], CWD, 1, &BTreeSet::new(), &empty, &no_exec),
+        find_session(
+            "codex",
+            &[],
+            CWD,
+            1,
+            &BTreeSet::new(),
+            &Look {
+                home: &empty,
+                role_dir
+            },
+            &no_exec
+        ),
         None
     );
 }
@@ -151,11 +239,24 @@ fn devin_finds_its_entry() {
         ]"#
         .to_string())
     };
+    let role_dir = Path::new("/rd");
     let taken = BTreeSet::from(["dev-taken".to_string()]);
     // Role started at 100s: dev-old is pre-start, dev-taken is
     // claimed, dev-person came later — dev-new is the role's own.
     assert_eq!(
-        find_session("devin", &[], CWD, 100_000, &taken, Path::new("/h"), &exec).as_deref(),
+        find_session(
+            "devin",
+            &[],
+            CWD,
+            100_000,
+            &taken,
+            &Look {
+                home: Path::new("/h"),
+                role_dir
+            },
+            &exec
+        )
+        .as_deref(),
         Some("dev-new")
     );
     let calls = calls.lock().unwrap();
@@ -171,6 +272,7 @@ fn devin_finds_its_entry() {
 /// A failing or malformed `devin list` finds nothing.
 #[test]
 fn devin_failures_find_nothing() {
+    let role_dir = Path::new("/rd");
     let failing = |_: &ExecCall| Err("no devin".to_string());
     assert_eq!(
         find_session(
@@ -179,7 +281,10 @@ fn devin_failures_find_nothing() {
             CWD,
             1,
             &BTreeSet::new(),
-            Path::new("/h"),
+            &Look {
+                home: Path::new("/h"),
+                role_dir
+            },
             &failing
         ),
         None
@@ -192,7 +297,10 @@ fn devin_failures_find_nothing() {
             CWD,
             1,
             &BTreeSet::new(),
-            Path::new("/h"),
+            &Look {
+                home: Path::new("/h"),
+                role_dir
+            },
             &garbage
         ),
         None
@@ -208,14 +316,38 @@ fn chosen_ids_come_off_argv() {
         "--session-id".to_string(),
         "uuid-1".to_string(),
     ];
+    let role_dir = Path::new("/rd");
     let taken = BTreeSet::new();
     assert_eq!(
-        find_session("claude", &argv, CWD, 0, &taken, Path::new("/h"), &no_exec).as_deref(),
+        find_session(
+            "claude",
+            &argv,
+            CWD,
+            0,
+            &taken,
+            &Look {
+                home: Path::new("/h"),
+                role_dir
+            },
+            &no_exec
+        )
+        .as_deref(),
         Some("uuid-1")
     );
     let taken = BTreeSet::from(["uuid-1".to_string()]);
     assert_eq!(
-        find_session("claude", &argv, CWD, 0, &taken, Path::new("/h"), &no_exec),
+        find_session(
+            "claude",
+            &argv,
+            CWD,
+            0,
+            &taken,
+            &Look {
+                home: Path::new("/h"),
+                role_dir
+            },
+            &no_exec
+        ),
         None
     );
     assert_eq!(
@@ -225,7 +357,10 @@ fn chosen_ids_come_off_argv() {
             CWD,
             0,
             &BTreeSet::new(),
-            Path::new("/h"),
+            &Look {
+                home: Path::new("/h"),
+                role_dir
+            },
             &no_exec
         ),
         None

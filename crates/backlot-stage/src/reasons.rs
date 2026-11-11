@@ -2,6 +2,9 @@
 //! guide's attention table is checked against [`ALL`], so a new reason
 //! lands here — the docs test fails before the docs can drift.
 
+pub use crate::runners::cursor::CURSOR_PREP_FAILED;
+#[cfg(test)]
+pub(crate) use crate::runners::cursor::XDG_CONFIG_HOME_SET;
 #[cfg(test)]
 pub use crate::runners::{CONFIG_MALFORMED, PROFILE_NOT_SUPPORTED, RUNNER_NOT_SUPPORTED};
 #[cfg(test)]
@@ -36,6 +39,8 @@ pub const ALL: &[&str] = &[
     RUNNER_NOT_SUPPORTED,
     PROFILE_NOT_SUPPORTED,
     CONFIG_MALFORMED,
+    CURSOR_PREP_FAILED,
+    XDG_CONFIG_HOME_SET,
     OWED,
     OVER_BUDGET,
 ];
