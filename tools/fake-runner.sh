@@ -87,7 +87,10 @@ echo "fake runner: ${BACKLOT_ROLE:-role}${BACKLOT_TASK:+ task $BACKLOT_TASK} of 
 # last one returns to `waiting`. `hook:<event>[:<arg>]` pipes a
 # Claude-shaped hook JSON to `sh -c "$BACKLOT_HOOK_CMD"` — the fake
 # plays the S9f hooks so the stage's signal path is exercisable
-# without a real Claude.
+# without a real Claude. `sh:<command>` runs `sh -c '<command>'` in
+# the fake's own environment — the role env the stage gave it — and
+# cwd, then echoes `fake-sh: exit <code>`; in blocked byte mode a
+# `sh:` line is read whole like a `hook:` line, never a key.
 state=waiting
 prompts=0
 ptext=
@@ -122,6 +125,13 @@ play_hook() {
         "${FAKE_SESSION:-fake-unknown}" "$ev" "$extra" |
         sh -c "${BACKLOT_HOOK_CMD:-:}"
 }
+# Run a `sh:<command>` line's command through `sh -c` in the fake's
+# own environment and cwd, then echo its exit code — the marker the
+# sender polls for.
+run_sh() {
+    sh -c "${1#sh:}"
+    printf 'fake-sh: exit %s\n' "$?"
+}
 while :; do
     if [ "$state" = blocked ]; then
         stty -icanon -echo min 1 time 0 2>/dev/null
@@ -149,6 +159,7 @@ while :; do
                 IFS= read -r rest || break
                 case "$first$rest" in
                     hook:*) play_hook "$first$rest" ;;
+                    sh:*) run_sh "$first$rest" ;;
                 esac
                 ;;
         esac
@@ -156,6 +167,7 @@ while :; do
         IFS= read -r line || break
         case "$line" in
             hook:*) play_hook "$line" ;;
+            sh:*) run_sh "$line" ;;
             work:blocked:*)
                 state=blocked
                 prompts="${line##*:}"

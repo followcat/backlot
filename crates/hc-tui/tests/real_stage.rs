@@ -1102,6 +1102,68 @@ async fn real_stage_closed_loop() {
     scratch.finish().expect("scratch teardown");
 }
 
+/// S9g — the real actor environment, end to end: the fake's `sh:`
+/// line runs `backlot` inside the terminal the stage launched —
+/// `BACKLOT_ROLE` is the ledger key, `BACKLOT_TASK` is t1, no `--as`
+/// and no test-side override — so `deliver` records under
+/// `actor-t1-c1` itself, and `review` from the same terminal is
+/// refused and records nothing.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_actor_terminal_delivers_under_its_key() {
+    let scratch = ScratchCore::spawn().await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    let studio = checks_studio(
+        &scratch,
+        &state,
+        "",
+        "[[checks]]\nname = \"units\"\nrun = \"exit 0\"\ntimeout_s = 30",
+    );
+    let actor = wait_terminal(&client, "bl-acme-shop-t1").await;
+    let report = fixture(&scratch, "report.md", "# delivery report\n");
+
+    // One commit in the task's work area; the terminal's own env
+    // carries the identity — the command has no `--as` and the test
+    // sets no `BACKLOT_*`.
+    let work = studio.join("work/t1");
+    commit_in(&work, "a");
+    send_text(
+        &client,
+        &actor.address,
+        &format!(
+            "sh:backlot deliver --commits HEAD~1..HEAD --report {} --check units=pass",
+            report.display()
+        ),
+    )
+    .await;
+    wait_read(&client, &actor.address, "fake-sh: exit 0").await;
+    let delivered = ledger(&state)
+        .into_iter()
+        .find(|e| e["kind"] == "task.delivered")
+        .expect("no task.delivered in the ledger");
+    assert_eq!(delivered["by"]["role"], "actor-t1-c1", "{delivered}");
+    assert_eq!(delivered["task"], "t1", "{delivered}");
+
+    // The same terminal cannot review its own delivery — the role
+    // gate refuses and the ledger stays clean.
+    send_text(
+        &client,
+        &actor.address,
+        "sh:backlot review --task t1 --delivery 1 --verdict accepted --conclusion x",
+    )
+    .await;
+    wait_read(&client, &actor.address, "fake-sh: exit 1").await;
+    assert!(
+        !ledger(&state).iter().any(|e| e["kind"] == "task.reviewed"),
+        "a task.reviewed landed: {:?}",
+        ledger(&state)
+    );
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
 /// S9c: an approval recorded against an older prompt never reaches
 /// the newer one. Prompt A is answered in the terminal itself, and
 /// prompt B is already up before the stale attention's episode
