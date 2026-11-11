@@ -5,6 +5,8 @@
 //! - An actor key (`actor-<task>-c<n>`) may record only its own
 //!   task's delivery while it is the current cast, its own task's
 //!   `blocked` state, and purpose-free `tell`/`ask` messages.
+//! - The bare `actor` kind name is no caller at all (S9g): every
+//!   kind refuses, pointing at the key an actor records under.
 //! - The writer may record only `plan.published` and the same
 //!   messages.
 //! - `task.delivered` from anyone who is not that task's current
@@ -28,6 +30,11 @@ fn cannot(role: &str, who: &'static str) -> Refusal {
 /// and the CLI calls it before resolving the commit range so a
 /// refused role hears "cannot do this", not a git error.
 pub fn may_deliver(state: &StudioState, role: &str, task: &str) -> Result<(), Refusal> {
+    // The bare kind name is no caller — an actor delivers under its
+    // `actor-<task>-c<n>` key (S9g).
+    if role == "actor" {
+        return Err(Refusal::BareActor);
+    }
     let allowed = match actor_task(role) {
         Some(own) if own == task => {
             let n = state.tasks.get(task).map(|t| t.casts.len()).unwrap_or(0);
@@ -48,6 +55,11 @@ pub fn may_deliver(state: &StudioState, role: &str, task: &str) -> Result<(), Re
 /// a refused role hears "cannot do this" ahead of any other refusal.
 pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
     let role = new.by.role.as_str();
+    // The bare kind name is no caller — a pre-key terminal would
+    // record the forbidden kinds under it otherwise (S9g).
+    if role == "actor" {
+        return Err(Refusal::BareActor);
+    }
     if let Some(own) = actor_task(role) {
         return match &new.kind {
             EventKind::TaskDelivered { task, .. } => may_deliver(state, role, task),

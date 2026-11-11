@@ -130,6 +130,10 @@ pub enum Refusal {
         role: String,
         who: &'static str,
     },
+    /// `by.role` is the bare `actor` kind name (S9g): a key, not a
+    /// kind — an actor records under `actor-<task>-c<n>`, and the
+    /// bare word records nothing at all.
+    BareActor,
     /// A `role.approval` the director may not record: the prompt is
     /// the user's (D9) — `why` says which rule flagged it.
     PromptForUser {
@@ -283,6 +287,10 @@ impl fmt::Display for Refusal {
             Refusal::RoleBound { role, who } => {
                 write!(f, "role '{role}' cannot do this; {who} can")
             }
+            Refusal::BareActor => write!(
+                f,
+                "role 'actor' cannot do this; an actor records under its key actor-<task>-c<n>"
+            ),
             Refusal::PromptForUser { role, why } => {
                 write!(
                     f,

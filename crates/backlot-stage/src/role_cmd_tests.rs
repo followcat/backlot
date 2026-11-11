@@ -224,7 +224,7 @@ fn only_the_actor_or_the_user_delivers() {
     let a = commit_in(&work, "one");
     let b = commit_in(&work, "two");
     let rep = fixture(&scratch, "r.md", "report\n");
-    for role in ["producer", "director", "stage", "actor", "nobody"] {
+    for role in ["producer", "director", "stage", "nobody"] {
         let msg = refused(
             &env,
             &format!("deliver --commits a..b --report {rep} --as {role} --task t1"),
@@ -233,6 +233,20 @@ fn only_the_actor_or_the_user_delivers() {
             msg,
             format!("role '{role}' cannot do this; the task's current actor or the user can"),
             "{role}"
+        );
+    }
+    // The bare kind name is no caller (S9g): the refusal names the
+    // key an actor records under, and a non-delivery command —
+    // gated in `roles::check`, not `may_deliver` — says the same.
+    for args in [
+        format!("deliver --commits a..b --report {rep} --as actor --task t1"),
+        "review --task t1 --delivery 1 --verdict accepted --conclusion x --as actor".into(),
+        "block --reason x --task t1 --as actor".into(),
+    ] {
+        assert_eq!(
+            refused(&env, &args),
+            "role 'actor' cannot do this; an actor records under its key actor-<task>-c<n>",
+            "{args}"
         );
     }
     ok(
@@ -266,9 +280,10 @@ fn the_stage_is_not_for_working_roles() {
     );
 }
 
-/// A log written before the role gate still replays: an
-/// actor-authored `task.reviewed` from an old ledger loads and
-/// folds — the rule is on append, never on replay.
+/// A log written before the role gate still replays: a v0.1.0
+/// terminal recorded under the bare `actor` kind name, and its
+/// events — refused at append today — still load and fold. The
+/// rule is on append, never on replay.
 #[test]
 fn an_old_actor_authored_review_still_loads() {
     let (scratch, env) = scratch();
@@ -290,12 +305,8 @@ fn an_old_actor_authored_review_still_loads() {
         ),
         ev(3, "director", tk::task_created("t1", "feature", 1)),
         ev(4, "director", tk::cast("t1", "actor-a", "a")),
-        ev(5, "actor-t1-c1", tk::delivered("t1", 1, "a", 1)),
-        ev(
-            6,
-            "actor-t1-c1",
-            tk::reviewed("t1", 1, Verdict::Accepted, vec![]),
-        ),
+        ev(5, "actor", tk::delivered("t1", 1, "a", 1)),
+        ev(6, "actor", tk::reviewed("t1", 1, Verdict::Accepted, vec![])),
     ];
     write_log(&dir, &log);
     let state = store::load_state(&dir).unwrap();

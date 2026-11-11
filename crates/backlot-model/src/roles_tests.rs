@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::event::*;
+use crate::state::{TaskStatus, replay};
 use crate::testkit::*;
 use crate::validate::{Refusal, validate};
 
@@ -292,14 +293,15 @@ fn the_writer_records_only_plans_and_messages() {
 }
 
 /// `task.delivered` from anyone who is not the task's current actor
-/// is the user's alone — producer and director do not deliver, a
-/// bare `actor` is not a role key, and the stage never delivers.
+/// is the user's alone — producer and director do not deliver and
+/// the stage never does; a bare `actor` is refused as no caller at
+/// all (S9g).
 #[test]
 fn delivery_belongs_to_the_current_actor_or_the_user() {
     let state = running_state();
     let d = delivered("t1", 1, "a", 1);
     assert_eq!(validate(&state, &new_ev("user", d.clone())), Ok(()));
-    for role in ["producer", "director", "stage", "writer", "actor", "nobody"] {
+    for role in ["producer", "director", "stage", "writer", "nobody"] {
         assert_eq!(
             validate(&state, &new_ev(role, d.clone())),
             Err(Refusal::RoleBound {
@@ -309,6 +311,66 @@ fn delivery_belongs_to_the_current_actor_or_the_user() {
             "{role}"
         );
     }
+    assert_eq!(
+        validate(&state, &new_ev("actor", d)),
+        Err(Refusal::BareActor)
+    );
+}
+
+/// The bare `actor` kind name is no caller (S9g): every kind — the
+/// ones an actor key may record and the forbidden ones alike —
+/// refuses, naming the key an actor records under. Replay stays
+/// permissive: an old v0.1.0 log's `actor` events still fold.
+#[test]
+fn a_bare_actor_records_nothing() {
+    let state = running_state();
+    // The three kinds an actor key may record refuse under the bare
+    // name, and so do the rest — there is no permissive fallthrough.
+    let kinds = [
+        delivered("t1", 1, "a", 1),
+        task_state("t1", TaskStateChange::Blocked, "needs an answer"),
+        EventKind::MessageQueued {
+            to: "director".into(),
+            file: Some("messages/9-m.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+        reviewed("t1", 1, Verdict::Accepted, vec![]),
+        cast("t1", "actor-b", "b"),
+        EventKind::TaskChecked {
+            task: "t1".into(),
+            delivery: 1,
+            name: "units".into(),
+            exit_code: Some(0),
+            timed_out: false,
+            output: "checks/9.txt".into(),
+            duration_ms: 1,
+        },
+        EventKind::RoleApproval {
+            role: "actor-t1-c1".into(),
+            decision: ApprovalDecision::Allow,
+        },
+    ];
+    for kind in &kinds {
+        assert_eq!(
+            validate(&state, &new_ev("actor", kind.clone())),
+            Err(Refusal::BareActor),
+            "{kind:?}"
+        );
+    }
+    assert_eq!(
+        Refusal::BareActor.to_string(),
+        "role 'actor' cannot do this; an actor records under its key actor-<task>-c<n>"
+    );
+
+    // Replay is permissive: a v0.1.0 log recorded under the bare
+    // name still loads and folds — the refusal is on append only.
+    let mut log = base_events();
+    log.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    log.push(ev(5, "actor", delivered("t1", 1, "a", 1)));
+    log.push(ev(6, "actor", reviewed("t1", 1, Verdict::Accepted, vec![])));
+    let state = replay(&log);
+    assert_eq!(state.tasks["t1"].status, TaskStatus::Accepted);
 }
 
 /// User, producer, director and stage keep what they had — the gate

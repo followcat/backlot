@@ -1926,7 +1926,7 @@ async fn real_stage_watch() {
     bl(
         &scratch,
         &state,
-        "block --reason needs-an-answer --as actor --task t1",
+        "block --reason needs-an-answer --as actor-t1-c1 --task t1",
     );
     wait_inbox(&state, "fake-inbox-director", "-blocked.md");
     bl(
