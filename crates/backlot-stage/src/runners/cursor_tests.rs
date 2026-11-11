@@ -163,7 +163,7 @@ fn prepare_writes_the_isolated_tree() {
     fs::create_dir_all(home.join(".cursor")).unwrap();
     fs::write(
         home.join(".cursor/mcp.json"),
-        r#"{"mcpServers":{"tinyfish":{"x":1},"other":{"y":2}}}"#,
+        r#"{"mcpServers":{"web-tools":{"x":1},"other":{"y":2}}}"#,
     )
     .unwrap();
     let prep = CursorPrep {
@@ -199,7 +199,7 @@ fn prepare_writes_the_isolated_tree() {
         serde_json::json!(["Shell(backlot)", "Shell(git merge)"])
     );
     let names: Vec<String> = serde_json::from_str(&fs::read_to_string(&disabled).unwrap()).unwrap();
-    assert_eq!(names, ["other", "tinyfish"], "sorted server names");
+    assert_eq!(names, ["other", "web-tools"], "sorted server names");
 }
 
 /// A drifted directory mode heals on the next `prepare`; a missing
