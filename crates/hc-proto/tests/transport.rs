@@ -23,11 +23,12 @@ impl Scratch {
     fn new(name: &str) -> Scratch {
         // The per-process counter keeps parallel tests apart even on a
         // reused name; `create_dir` claims the path atomically — a
-        // leftover directory is retried, never adopted.
+        // leftover directory is retried, never adopted. The prefix stays
+        // short: macOS caps a socket path at 103 bytes and its temp dir is long.
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         loop {
             let path = std::env::temp_dir().join(format!(
-                "hc-tui-test-{name}-{}-{}",
+                "hct-{name}-{}-{}",
                 std::process::id(),
                 NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ));
