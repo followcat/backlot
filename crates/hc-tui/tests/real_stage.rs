@@ -994,7 +994,7 @@ async fn real_stage_closed_loop() {
         &state,
         "review --task t1 --delivery 1 --verdict changes-requested --conclusion fix-it --as director",
     );
-    wait_inbox(&state, "fake-inbox-actor-t1", "-rework.md");
+    wait_inbox(&state, "fake-inbox-actor-t1-c1", "-rework.md");
 
     // The requirement moves mid-loop: the director is told which
     // tasks are now behind.
@@ -1053,7 +1053,7 @@ async fn real_stage_closed_loop() {
     );
     wait_read(&client, &actor.address, "fake-approved: esc").await;
     wait_kind(&state, "attention.cleared", 2);
-    wait_inbox(&state, "fake-inbox-actor-t1", "-denied.md");
+    wait_inbox(&state, "fake-inbox-actor-t1-c1", "-denied.md");
 
     // `studio finish` names the tasks still open; once accepted the
     // actor closes deliberately and stays resumable.
@@ -1934,7 +1934,7 @@ async fn real_stage_watch() {
         &state,
         "task resume --task t1 --reason answered --as director",
     );
-    wait_inbox(&state, "fake-inbox-actor-t1", "-resumed.md");
+    wait_inbox(&state, "fake-inbox-actor-t1-c1", "-resumed.md");
     let work = studio.join("work/t1");
     let a = commit_in(&work, "a");
     let b = commit_in(&work, "b");
@@ -2133,11 +2133,11 @@ async fn real_stage_restart() {
     for inbox in [
         "fake-inbox-producer",
         "fake-inbox-director",
-        "fake-inbox-actor-t1",
+        "fake-inbox-actor-t1-c1",
     ] {
         wait_inbox(&state, inbox, "-recovered.md");
     }
-    let inbox = wait_inbox(&state, "fake-inbox-actor-t2", "digest-");
+    let inbox = wait_inbox(&state, "fake-inbox-actor-t2-c1", "digest-");
     let sends: Vec<&str> = inbox.lines().filter(|l| l.contains("[backlot]")).collect();
     assert_eq!(sends.len(), 1, "{inbox}");
     assert!(sends[0].contains("(2 items)"), "{inbox}");

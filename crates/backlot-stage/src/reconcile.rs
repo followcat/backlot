@@ -23,7 +23,8 @@ pub enum RoleKind {
 }
 
 impl RoleKind {
-    /// The `BACKLOT_ROLE` a terminal of this kind gets.
+    /// The kind's prose name — the prompt's `{role}`; `BACKLOT_ROLE`
+    /// is the ledger key `start.role`, not this.
     pub fn name(self) -> &'static str {
         match self {
             RoleKind::Producer => "producer",

@@ -96,7 +96,9 @@ fn desired_actor<'s>(state: &'s StudioState, role: &str) -> Option<&'s ActorIden
 /// one structural variable a config may bend: a configured value
 /// replaces the inherited PATH (a runner installed under nvm, say)
 /// but this exe's directory still leads, so `backlot` and the
-/// shipped tools stay reachable.
+/// shipped tools stay reachable. `BACKLOT_ROLE` is the ledger key —
+/// `actor-<task>-c<n>` for an actor, never the bare kind name —
+/// because it is what the role records under.
 pub(crate) fn role_env(
     studio: &str,
     start: &Start,
@@ -110,7 +112,7 @@ pub(crate) fn role_env(
     let configured_path = runner_env.get("PATH").cloned();
     env.extend(runner_env);
     env.insert("BACKLOT_STUDIO".into(), studio.into());
-    env.insert("BACKLOT_ROLE".into(), start.kind.name().into());
+    env.insert("BACKLOT_ROLE".into(), start.role.clone());
     if let Some(task) = &start.task {
         env.insert("BACKLOT_TASK".into(), task.clone());
     }

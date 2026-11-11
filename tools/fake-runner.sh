@@ -177,7 +177,7 @@ while :; do
             *)
                 [ -n "${BACKLOT_STATE_DIR:-}" ] &&
                     printf '%s\n' "$line" \
-                        >>"$BACKLOT_STATE_DIR/fake-inbox-${BACKLOT_ROLE:-role}${BACKLOT_TASK:+-$BACKLOT_TASK}"
+                        >>"$BACKLOT_STATE_DIR/fake-inbox-${BACKLOT_ROLE:-role}"
                 ;;
         esac
     fi

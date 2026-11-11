@@ -62,6 +62,52 @@ fn runner_env_reaches_env_and_nothing_else() {
     assert!(!labels.contains("proxy"), "{labels}");
 }
 
+/// S9g: `BACKLOT_ROLE` is the ledger key — `actor-<task>-c<n>`, the
+/// name the role's own appends record under — never the bare kind
+/// name. A fresh cast gets `c1`, a recast `c2`, a resumed or
+/// reopened `c1` keeps its key; `BACKLOT_TASK` stays the task.
+#[test]
+fn an_actor_terminal_gets_its_ledger_key() {
+    let env_of = |start: &Start| {
+        role_env(
+            "acme-shop",
+            start,
+            "/state",
+            "/exe",
+            "/bin",
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+    };
+    let actor = |role: &str| Start {
+        role: role.into(),
+        kind: RoleKind::Actor,
+        task: Some("t1".into()),
+        terminal: "bl-acme-shop-t1".into(),
+        ..start()
+    };
+    let env = env_of(&actor("actor-t1-c1"));
+    assert_eq!(env["BACKLOT_ROLE"], "actor-t1-c1");
+    assert_eq!(env["BACKLOT_TASK"], "t1");
+    // A recast starts c2 under the same terminal name.
+    assert_eq!(env_of(&actor("actor-t1-c2"))["BACKLOT_ROLE"], "actor-t1-c2");
+    // A resume — recovered or reopened — keeps the recorded cast's key.
+    for reason in ["recovered", "reopened"] {
+        let mut held = actor("actor-t1-c1");
+        held.resume = Some(crate::reconcile::Resume {
+            session: "sess-1".into(),
+            reason,
+        });
+        assert_eq!(
+            env_of(&held)["BACKLOT_ROLE"],
+            "actor-t1-c1",
+            "a {reason} launch must keep the key"
+        );
+    }
+    // A fixed role keeps its name.
+    assert_eq!(env_of(&start())["BACKLOT_ROLE"], "producer");
+}
+
 /// `PATH` is the one structural variable a config may bend: a
 /// configured value leads, the exe's own directory stays first;
 /// no configured PATH keeps the stage's usual one.
