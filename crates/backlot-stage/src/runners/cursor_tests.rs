@@ -42,9 +42,9 @@ fn slug_is_the_bundles() {
 }
 
 /// `allow` rules per role: the base `Shell(backlot)`; an actor's
-/// six git commands; the director's `git merge`; the declared
-/// checks verbatim — and a `run` the rule syntax cannot express is
-/// simply never there.
+/// six git commands; the director's read-only set and `git merge`,
+/// never `git branch`; the declared checks verbatim — and a `run`
+/// the rule syntax cannot express is simply never there.
 #[test]
 fn rules_per_role() {
     let checks = [
@@ -55,6 +55,10 @@ fn rules_per_role() {
         allow_rules("director", &checks),
         [
             "Shell(backlot)",
+            "Shell(git status)",
+            "Shell(git diff)",
+            "Shell(git log)",
+            "Shell(git show)",
             "Shell(git merge)",
             "Shell(cargo test --lib)",
             "Shell(cargo clippy)"
@@ -196,7 +200,14 @@ fn prepare_writes_the_isolated_tree() {
     let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(
         v["permissions"]["allow"],
-        serde_json::json!(["Shell(backlot)", "Shell(git merge)"])
+        serde_json::json!([
+            "Shell(backlot)",
+            "Shell(git status)",
+            "Shell(git diff)",
+            "Shell(git log)",
+            "Shell(git show)",
+            "Shell(git merge)"
+        ])
     );
     let names: Vec<String> = serde_json::from_str(&fs::read_to_string(&disabled).unwrap()).unwrap();
     assert_eq!(names, ["other", "web-tools"], "sorted server names");
@@ -354,6 +365,16 @@ fn plan_carries_its_prep() {
         Path::new("/home/user/state/studios/acme-shop/roles/director/cursor")
     );
     assert_eq!(p.project, "home-user-acme-shop");
-    assert_eq!(p.allow, ["Shell(backlot)", "Shell(git merge)"]);
+    assert_eq!(
+        p.allow,
+        [
+            "Shell(backlot)",
+            "Shell(git status)",
+            "Shell(git diff)",
+            "Shell(git log)",
+            "Shell(git show)",
+            "Shell(git merge)"
+        ]
+    );
     assert_eq!(p.global_mcp, Path::new("/home/user/.cursor/mcp.json"));
 }

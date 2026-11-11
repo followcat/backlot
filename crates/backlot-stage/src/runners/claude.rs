@@ -49,7 +49,9 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
 /// messages and requirement files live — plus, per role, the
 /// commands its job needs. An actor gets the six git commands its
 /// loop drives, bare and with arguments, and every declared check's
-/// `run` verbatim; the director merges and runs the same checks.
+/// `run` verbatim; the director reads what it reviews, merges and
+/// runs the same checks — never `git branch`, which would also allow
+/// the deleting `git branch -D`.
 /// Nothing is written to settings: the rules live only in this
 /// argv. `//` is Claude Code's rule syntax for an absolute path; a
 /// single leading `/` would anchor at the working directory and
@@ -77,7 +79,9 @@ fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
         }
     }
     if role == "director" {
-        command(&mut rules, "git merge");
+        for cmd in ["git status", "git diff", "git log", "git show", "git merge"] {
+            command(&mut rules, cmd);
+        }
     }
     if is_actor || role == "director" {
         for check in checks {

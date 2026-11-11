@@ -77,8 +77,10 @@ pub fn slug(path: &str) -> String {
 /// `cmd == pat || cmd starts with pat + ' ' || base matches`), so
 /// one rule per command is the narrow form; unlike claude there is
 /// no starred variant. The base is `backlot`; an actor gets the git
-/// commands its loop drives, the director `git merge`, and both get
-/// every declared check's `run`. A `run` holding `()` `,` `*?[]{}:`
+/// commands its loop drives, the director the read-only set it
+/// reviews with plus `git merge` — never `git branch`, whose prefix
+/// form would also allow `git branch -D` — and both get every
+/// declared check's `run`. A `run` holding `()` `,` `*?[]{}:`
 /// or `\` is not expressible — `,` splits rules, the rest are glob
 /// or syntax characters — and is simply never pre-allowed.
 pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
@@ -97,7 +99,9 @@ pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
         }
     }
     if role == "director" {
-        rules.push("Shell(git merge)".into());
+        for cmd in ["git status", "git diff", "git log", "git show", "git merge"] {
+            rules.push(format!("Shell({cmd})"));
+        }
     }
     if is_actor || role == "director" {
         for check in checks {

@@ -315,8 +315,9 @@ fn claude_pre_allows_per_role() {
              Bash(cargo test --lib),Bash(cargo clippy)"
         )
     );
-    // The director: `git merge` and the same checks — not the
-    // actor's git set.
+    // The director: the read-only git set it reviews with, `git
+    // merge` and the same checks — never `git branch`, which would
+    // also allow `git branch -D`.
     let l = plan(
         &actor("claude", "standard"),
         &role_ctx(&env, "director", None, None, &checks),
@@ -325,7 +326,9 @@ fn claude_pre_allows_per_role() {
     assert_eq!(
         l.argv[2],
         format!(
-            "{base},Bash(git merge),Bash(git merge *),Bash(cargo test --lib),Bash(cargo clippy)"
+            "{base},Bash(git status),Bash(git status *),Bash(git diff),Bash(git diff *),\
+             Bash(git log),Bash(git log *),Bash(git show),Bash(git show *),\
+             Bash(git merge),Bash(git merge *),Bash(cargo test --lib),Bash(cargo clippy)"
         )
     );
     // Producer and writer keep the base pair only.
