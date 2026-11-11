@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use backlot_model::ActorIdentity;
-use backlot_model::event::CheckDecl;
+use backlot_model::event::{CheckDecl, EventKind};
 use backlot_model::state::actor_task;
 
 use super::{Launch, LaunchCtx, PlanError, Prep, Session};
@@ -38,6 +38,9 @@ use super::{Launch, LaunchCtx, PlanError, Prep, Session};
 pub const XDG_CONFIG_HOME_SET: &str = "inherited XDG_CONFIG_HOME";
 /// `prepare` could not do its work — the role does not start.
 pub const CURSOR_PREP_FAILED: &str = "cursor prep failed";
+/// `roles/<role>/cursor/` had a group or other permission bit; the
+/// stage set it back to 700 — informational only.
+pub const CURSOR_DIR_OPEN: &str = "cursor dir was open";
 
 /// The role's own cursor tree: `<studio>/roles/<role>/cursor`.
 pub fn role_root(studio_dir: &str, role: &str) -> PathBuf {
@@ -208,6 +211,42 @@ fn dir700(dir: &Path) -> std::io::Result<()> {
 #[cfg(not(unix))]
 fn dir700(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)
+}
+
+/// The privacy boundary the role's whole tree hangs on: cursor's
+/// own writes (`cli-config.json`, `chats/`, `projects/`) take the
+/// process umask, so their modes are whatever the user's shell
+/// leaves — only this root keeps them unreachable. `root` is
+/// created or forced back to mode 700; `Ok(true)` reports it was
+/// found open to group or other, for the caller's one attention.
+#[cfg(unix)]
+pub(crate) fn ensure_private(root: &Path) -> std::io::Result<bool> {
+    use std::os::unix::fs::PermissionsExt;
+    let open = match root.metadata() {
+        Ok(m) => m.permissions().mode() & 0o077 != 0,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => return Err(e),
+    };
+    dir700(root)?;
+    Ok(open)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn ensure_private(root: &Path) -> std::io::Result<bool> {
+    dir700(root)?;
+    Ok(false)
+}
+
+/// The one informational attention an open `roles/<role>/cursor/`
+/// earns — the detail names the path's suffix only, never a file
+/// below it.
+pub(crate) fn dir_open_event(role: &str) -> EventKind {
+    EventKind::AttentionRaised {
+        role: role.into(),
+        reason: CURSOR_DIR_OPEN.into(),
+        detail: format!("roles/{role}/cursor"),
+        needs_user: false,
+    }
 }
 
 /// A stage-written file, mode 600 — `cli-config.json` will hold the
@@ -383,12 +422,22 @@ fn mcp_server_names(global_mcp: &Path) -> Result<Vec<String>, String> {
 /// caller's attention — a role never starts half-configured. The
 /// existing `cli-config.json` is spliced by byte range; its other
 /// keys' contents — `authInfo` above all — are never parsed into
-/// the process, logged or returned in an error.
-pub(crate) fn prepare(prep: &CursorPrep) -> Result<(), String> {
+/// the process, logged or returned in an error. `Ok(true)` says
+/// `prep.root` was found open to group or other and is now 700 —
+/// the caller raises `CURSOR_DIR_OPEN` for it.
+pub(crate) fn prepare(prep: &CursorPrep) -> Result<bool, String> {
     let io = |what: &'static str| move |e: std::io::Error| format!("{what}: {e}");
+    let open = ensure_private(&prep.root).map_err(io("cursor dirs"))?;
     let config_dir = prep.root.join("config");
-    let project_dir = prep.root.join("data").join("projects").join(&prep.project);
-    for dir in [&config_dir, &project_dir, &prep.root.join("sandbox")] {
+    let data_dir = prep.root.join("data");
+    let project_dir = data_dir.join("projects").join(&prep.project);
+    for dir in [
+        &config_dir,
+        &data_dir,
+        &data_dir.join("projects"),
+        &project_dir,
+        &prep.root.join("sandbox"),
+    ] {
         dir700(dir).map_err(io("cursor dirs"))?;
     }
     let cli_config = config_dir.join("cli-config.json");
@@ -405,7 +454,7 @@ pub(crate) fn prepare(prep: &CursorPrep) -> Result<(), String> {
     let disabled = serde_json::to_string(&names).unwrap_or_default() + "\n";
     write600(&project_dir.join("mcp-disabled.json"), disabled.as_bytes())
         .map_err(io("mcp-disabled.json"))?;
-    Ok(())
+    Ok(open)
 }
 
 /// The newest chat a fresh launch could have created: a uuid dir

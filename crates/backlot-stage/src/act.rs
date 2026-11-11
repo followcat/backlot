@@ -215,22 +215,27 @@ impl Stage {
         // A runner's per-launch filesystem prep — cursor's
         // isolated tree — before anything starts. A failure is an
         // attention, not a half-configured role; the start retries
-        // each tick.
-        if let Some(prep) = &launch.prep
-            && let Err(detail) = runners::prepare(prep)
-        {
-            if !attention_open(state, &start.role, reasons::CURSOR_PREP_FAILED) {
-                record(
-                    dir,
-                    EventKind::AttentionRaised {
-                        role: start.role.clone(),
-                        reason: reasons::CURSOR_PREP_FAILED.into(),
-                        detail,
-                        needs_user: true,
-                    },
-                )?;
+        // each tick. A healed open root gets one informational
+        // attention: the detail names the path suffix only.
+        match launch.prep.as_ref().map(runners::prepare) {
+            Some(Err(detail)) => {
+                if !attention_open(state, &start.role, reasons::CURSOR_PREP_FAILED) {
+                    record(
+                        dir,
+                        EventKind::AttentionRaised {
+                            role: start.role.clone(),
+                            reason: reasons::CURSOR_PREP_FAILED.into(),
+                            detail,
+                            needs_user: true,
+                        },
+                    )?;
+                }
+                return Ok(false);
             }
-            return Ok(false);
+            Some(Ok(true)) if !attention_open(state, &start.role, reasons::CURSOR_DIR_OPEN) => {
+                record(dir, runners::cursor::dir_open_event(&start.role))?;
+            }
+            _ => {}
         }
         // S9f: the per-session hook files — settings rewritten,
         // signals truncated — at every start and resume, so a moved

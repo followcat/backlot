@@ -328,6 +328,17 @@ impl Stage {
             let last_look = self.discover_looked.borrow().get(&pair).copied();
             let found = if discovery_due(age_ms, last_look, now_ms) {
                 self.discover_looked.borrow_mut().insert(pair, now_ms);
+                // A cursor role's root keeps the agent-written
+                // files under it unreachable: heal a drifted-open
+                // mode here too — one informational attention per
+                // drift, the path suffix only.
+                if actor.runner == "cursor"
+                    && let Ok(true) =
+                        runners::cursor::ensure_private(&dir.join("roles").join(key).join("cursor"))
+                    && !crate::act::attention_open(state, key, crate::reasons::CURSOR_DIR_OPEN)
+                {
+                    record(dir, runners::cursor::dir_open_event(key))?;
+                }
                 // Claimed ids come from every studio, not just this
                 // one, plus anything found earlier in this pass.
                 let taken = taken_ids(&self.cached, &self.found_sessions.borrow());

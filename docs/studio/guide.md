@@ -280,6 +280,7 @@ stage can raise:
 | `permission profile not supported` | The cast's `permission_profile` is not `standard` or `worktree`. | Same: the role never starts; fix the cast for the next studio. |
 | `config malformed` | `<state base>/config.toml` did not parse, or a `[runner_env.<runner>]` table held a non-string — the role gets no runner env and does not start. | Fix the file's TOML; the stage retries each tick. Only the error's line and column are reported, never the file's contents. |
 | `cursor prep failed` | A cursor role's per-session setup failed — its directories, `cli-config.json` or the `mcp-disabled.json` list could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
+| `cursor dir was open` | A cursor role's `roles/<role>/cursor/` — the boundary that keeps the agent's `authInfo`-holding files unreachable — carried a group or other permission bit. The stage found it at launch prep or at session discovery and set it back to 700. | Informational only — the detail names the path suffix. Check what set the mode (a loose umask, an outside chmod); a repeat drift raises it again. |
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
 
 The ledger is append-only — a `correction` event changes the view, not the past. To repair a

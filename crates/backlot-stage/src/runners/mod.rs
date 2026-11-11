@@ -49,7 +49,9 @@ pub enum Prep {
 
 /// Run the launch's prep; the error string is the attention's
 /// detail. It never holds content read from a runner's files.
-pub(crate) fn prepare(prep: &Prep) -> Result<(), String> {
+/// `Ok(true)` means the prep found and healed something worth one
+/// attention — cursor's root open to group or other.
+pub(crate) fn prepare(prep: &Prep) -> Result<bool, String> {
     match prep {
         Prep::Cursor(p) => cursor::prepare(p),
     }

@@ -8,9 +8,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use backlot_model::event::CheckDecl;
+use backlot_model::event::{CheckDecl, EventKind};
 
-use super::cursor::{CursorPrep, allow_rules, config_content, prepare, session_at, slug};
+use super::cursor::{
+    CursorPrep, allow_rules, config_content, dir_open_event, ensure_private, prepare, session_at,
+    slug,
+};
 use super::{ActorIdentity, LaunchCtx, Prep, plan};
 
 fn tmp(tag: &str) -> PathBuf {
@@ -156,8 +159,9 @@ fn config_splice_preserves_unrelated_bytes() {
 
 /// `prepare` makes the isolated tree and writes both files — mode
 /// 700 on directories, 600 on files — listing every server the
-/// global `mcp.json` names. An error names only paths, never file
-/// content.
+/// global `mcp.json` names. A fresh root is not a drift, so the
+/// call reports nothing open. An error names only paths, never
+/// file content.
 #[test]
 #[cfg(unix)]
 fn prepare_writes_the_isolated_tree() {
@@ -176,11 +180,14 @@ fn prepare_writes_the_isolated_tree() {
         allow: allow_rules("director", &[]),
         global_mcp: home.join(".cursor/mcp.json"),
     };
-    prepare(&prep).unwrap();
+    assert!(!prepare(&prep).unwrap(), "a fresh root is not open");
     for d in [
+        "root",
         "root/config",
-        "root/sandbox",
+        "root/data",
+        "root/data/projects",
         "root/data/projects/home-user-acme-shop",
+        "root/sandbox",
     ] {
         let mode = fs::metadata(prep.root.parent().unwrap().join(d))
             .unwrap()
@@ -213,26 +220,38 @@ fn prepare_writes_the_isolated_tree() {
     assert_eq!(names, ["other", "web-tools"], "sorted server names");
 }
 
-/// A drifted directory mode heals on the next `prepare`; a missing
-/// global `mcp.json` writes an empty disable list.
+/// A drifted directory mode heals on the next `prepare`; a root
+/// found open to group or other is the reported drift — once,
+/// since the next call sees it private. A missing global
+/// `mcp.json` writes an empty disable list.
 #[test]
 #[cfg(unix)]
 fn prepare_heals_modes_and_handles_no_mcp() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tmp("prep-heal");
-    let config = dir.join("root/config");
+    let root = dir.join("root");
+    let config = root.join("config");
     fs::create_dir_all(&config).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o775)).unwrap();
     fs::set_permissions(&config, fs::Permissions::from_mode(0o755)).unwrap();
     let prep = CursorPrep {
-        root: dir.join("root"),
+        root: root.clone(),
         project: "home-user-acme-shop".into(),
         allow: vec!["Shell(backlot)".into()],
         global_mcp: dir.join("home/.cursor/mcp.json"),
     };
-    prepare(&prep).unwrap();
-    assert_eq!(
-        fs::metadata(&config).unwrap().permissions().mode() & 0o777,
-        0o700
+    assert!(prepare(&prep).unwrap(), "the open root is reported");
+    for d in [&root, &config] {
+        assert_eq!(
+            fs::metadata(d).unwrap().permissions().mode() & 0o777,
+            0o700,
+            "{}",
+            d.display()
+        );
+    }
+    assert!(
+        !prepare(&prep).unwrap(),
+        "a repaired root reports nothing — one attention per drift"
     );
     let names: Vec<String> = serde_json::from_str(
         &fs::read_to_string(dir.join("root/data/projects/home-user-acme-shop/mcp-disabled.json"))
@@ -240,6 +259,137 @@ fn prepare_heals_modes_and_handles_no_mcp() {
     )
     .unwrap();
     assert!(names.is_empty());
+}
+
+/// Every path strictly below `dir`, recursively — `dir` itself is
+/// the caller's to check.
+#[cfg(unix)]
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.extend(walk(&path));
+            }
+            out.push(path);
+        }
+    }
+    out
+}
+
+/// `path` is reachable by group or other only while every ancestor
+/// from itself up to and including `stop` keeps a group or other
+/// bit — one boundary directory (`mode & 0o077 == 0`) cuts the
+/// whole chain off.
+#[cfg(unix)]
+fn reachable_by_group_or_other(path: &Path, stop: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    path.ancestors()
+        .take_while(|a| a.starts_with(stop))
+        .all(|a| fs::metadata(a).unwrap().permissions().mode() & 0o077 != 0)
+}
+
+/// With the process umask at 002 — as in the S11c run — the
+/// agent's own writes land at 775/664: `prepare` re-asserts the
+/// boundary it owns (root, config, data, sandbox at 700, its own
+/// file at 600), the agent's group-writable chats dir keeps its
+/// mode, and nothing below the root stays reachable by group or
+/// other — the root is the boundary.
+#[test]
+#[cfg(unix)]
+fn a_loose_umask_leaves_nothing_below_the_root_reachable() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tmp("prep-umask");
+    let home = dir.join("home");
+    fs::create_dir_all(home.join(".cursor")).unwrap();
+    fs::write(home.join(".cursor/mcp.json"), "{}").unwrap();
+    let prep = CursorPrep {
+        root: dir.join("root"),
+        project: "home-user-acme-shop".into(),
+        allow: vec!["Shell(backlot)".into()],
+        global_mcp: home.join(".cursor/mcp.json"),
+    };
+    assert!(!prepare(&prep).unwrap());
+    // What the agent does under umask 002: a group-writable chats
+    // dir and a group-readable cli-config.json holding authInfo.
+    let old_umask = unsafe { libc::umask(0o002) };
+    fs::create_dir_all(prep.root.join("config/chats/deadbeef/chat-a")).unwrap();
+    fs::write(
+        prep.root.join("config/cli-config.json"),
+        "{\"authInfo\":\"fake-secret\"}",
+    )
+    .unwrap();
+    unsafe { libc::umask(old_umask) };
+    let chats = prep.root.join("config/chats");
+    assert_eq!(
+        fs::metadata(&chats).unwrap().permissions().mode() & 0o777,
+        0o775,
+        "the agent's own writes take the umask"
+    );
+    assert!(!prepare(&prep).unwrap(), "no drift — the root was 700");
+    for d in ["root", "root/config", "root/data", "root/sandbox"] {
+        let mode = fs::metadata(dir.join(d)).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "{d}");
+    }
+    assert_eq!(
+        fs::metadata(prep.root.join("config/cli-config.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600,
+        "the stage's own file is re-asserted"
+    );
+    assert_eq!(
+        fs::metadata(&chats).unwrap().permissions().mode() & 0o777,
+        0o775,
+        "agent-made dirs keep their mode — the root, not they, is the boundary"
+    );
+    let below = walk(&prep.root);
+    assert!(below.len() > 3, "the check covers a real tree: {below:?}");
+    for path in below {
+        assert!(
+            !reachable_by_group_or_other(&path, &prep.root),
+            "{}",
+            path.display()
+        );
+    }
+}
+
+/// `ensure_private` reports an open root exactly while it drifts —
+/// the one attention per drift — and `dir_open_event` carries the
+/// reason, the role and the path suffix only.
+#[test]
+#[cfg(unix)]
+fn an_open_root_is_healed_and_reported_once() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tmp("prep-open");
+    let root = dir.join("root");
+    fs::create_dir_all(&root).unwrap();
+    fs::set_permissions(&root, fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(ensure_private(&root).unwrap(), "an open root is reported");
+    assert_eq!(
+        fs::metadata(&root).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    assert!(
+        !ensure_private(&root).unwrap(),
+        "a repaired root reports nothing — the attention fires once per drift"
+    );
+    let EventKind::AttentionRaised {
+        role,
+        reason,
+        detail,
+        needs_user,
+    } = dir_open_event("director")
+    else {
+        panic!("dir_open_event is an attention");
+    };
+    assert_eq!(role, "director");
+    assert_eq!(reason, "cursor dir was open");
+    assert_eq!(detail, "roles/director/cursor");
+    assert!(!needs_user);
 }
 
 /// `prepare` errors carry a path and the cause only — a fake
