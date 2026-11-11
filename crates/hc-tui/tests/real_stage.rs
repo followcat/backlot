@@ -2901,7 +2901,6 @@ permission_profile = "standard"
 [director]
 runner = "cursor"
 model = "composer-2.5"
-effort = "high"
 permission_profile = "standard"
 
 [writer]

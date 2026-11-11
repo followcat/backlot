@@ -279,7 +279,7 @@ fn role_summary(
         terminal: terminal.map(|t| cap(&t)),
         runner: actor.map(|a| cap(&a.runner)),
         model: actor.map(|a| cap(&a.model)),
-        effort: actor.map(|a| cap(&a.effort)),
+        effort: actor.and_then(|a| (!a.effort.is_empty()).then(|| cap(&a.effort))),
         state: match lifecycle {
             RoleLifecycle::Live => "live",
             RoleLifecycle::Lost => "lost",
@@ -370,7 +370,7 @@ pub fn summary(
                 terminal: None,
                 runner: Some(cap(&w.actor.runner)),
                 model: Some(cap(&w.actor.model)),
-                effort: Some(cap(&w.actor.effort)),
+                effort: (!w.actor.effort.is_empty()).then(|| cap(&w.actor.effort)),
                 state: "waiting".into(),
                 doing: Some(cap(&format!("waiting for a {runner} slot"))),
                 work: None,

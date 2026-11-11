@@ -120,6 +120,33 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     if let Some((runner, _)) = cast.limits.iter().find(|(_, cap)| **cap == 0) {
         return Err(Fail::usage(format!("limits.{runner} must be at least 1")));
     }
+    // `cursor` and `devin` carry the thinking depth in the model id
+    // — no effort flag exists. `cursor`'s cast may only omit it
+    // (a set one would lie in the ledger); every other runner that
+    // consumes it still needs it declared.
+    let roles = [
+        ("producer", &cast.producer.runner, &cast.producer.effort),
+        ("director", &cast.director.runner, &cast.director.effort),
+        ("writer", &cast.writer.runner, &cast.writer.effort),
+    ];
+    for (who, runner, effort) in roles.into_iter().chain(
+        cast.candidates
+            .iter()
+            .map(|c| (c.name.as_str(), &c.runner, &c.effort)),
+    ) {
+        if runner.as_str() == "cursor" && !effort.is_empty() {
+            return Err(Fail::usage(format!(
+                "{who}: runner 'cursor' has no effort flag — \
+                 the depth is part of the model id"
+            )));
+        }
+        if !matches!(runner.as_str(), "cursor" | "devin") && effort.is_empty() {
+            return Err(Fail::usage(format!(
+                "{who}: runner '{runner}' needs an effort — only 'cursor' and 'devin' \
+                 carry the depth in the model id"
+            )));
+        }
+    }
     // The producer and the director are always wanted: they keep
     // their slots for the studio's whole run. A cap under their
     // count seats no fixed role, and a cap at their count while the

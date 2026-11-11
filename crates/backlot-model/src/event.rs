@@ -30,6 +30,9 @@ pub struct ActorIdentity {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runner_version: Option<String>,
     pub model: String,
+    /// Thinking depth — `""` for a runner that carries it in the
+    /// model id (`cursor`, `devin`); an empty one is never written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub effort: String,
     pub permission_profile: String,
 }
@@ -43,6 +46,9 @@ pub struct Candidate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runner_version: Option<String>,
     pub model: String,
+    /// Thinking depth — `""` for a runner that carries it in the
+    /// model id (`cursor`, `devin`); an empty one is never written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub effort: String,
     pub permission_profile: String,
 }

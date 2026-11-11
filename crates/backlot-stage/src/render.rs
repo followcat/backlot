@@ -8,16 +8,16 @@ use backlot_model::state::{StudioState, Task, TaskStatus};
 use backlot_model::{ActorIdentity, ActorRecord};
 
 fn actor_short(a: &ActorIdentity) -> String {
-    match &a.runner_version {
-        Some(v) => format!(
-            "{}/{}@{}/{}/{}",
-            a.runner, a.model, v, a.effort, a.permission_profile
-        ),
-        None => format!(
-            "{}/{}/{}/{}",
-            a.runner, a.model, a.effort, a.permission_profile
-        ),
+    let mut s = format!("{}/{}", a.runner, a.model);
+    if let Some(v) = &a.runner_version {
+        let _ = write!(s, "@{v}");
     }
+    // A runner carrying its depth in the model id records no effort
+    // — the segment is absent, not an empty `//`.
+    if !a.effort.is_empty() {
+        let _ = write!(s, "/{}", a.effort);
+    }
+    format!("{s}/{}", a.permission_profile)
 }
 
 fn fmt_ms(ms: u64) -> String {

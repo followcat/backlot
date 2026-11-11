@@ -519,6 +519,83 @@ fn cast_toml_needs_all_roles() {
     assert!(matches!(err, Err(Fail::Usage(_))), "{err:?}");
 }
 
+/// S11d: `cursor` has no effort flag — the depth is part of the
+/// model id — so its cast may only omit `effort`, and the field
+/// never lands in the ledger. A set one is a usage error naming
+/// the runner; a runner whose argv consumes effort still needs it.
+#[test]
+fn cast_toml_effort_rules() {
+    let (scratch, env) = scratch();
+    // A `cursor` role carries no `effort` line; `devin` may omit
+    // it too; every other runner must still set one.
+    const CAST: &str = r#"
+mode = "standard"
+rework_cap = 2
+
+[producer]
+runner = "runner-p"
+model = "model-p"
+effort = "high"
+permission_profile = "standard"
+
+[director]
+runner = "cursor"
+model = "composer-2.5"
+permission_profile = "standard"
+
+[writer]
+runner = "runner-w"
+model = "model-w"
+effort = "medium"
+permission_profile = "standard"
+
+[[candidates]]
+name = "actor-a"
+runner = "devin"
+model = "model-a"
+permission_profile = "worktree"
+"#;
+    // A cursor role with `effort` set is refused, runner named.
+    let set = fixture(
+        &scratch,
+        "cast-cursor-effort.toml",
+        &CAST.replacen(
+            "model = \"composer-2.5\"",
+            "model = \"composer-2.5\"\neffort = \"low\"",
+            1,
+        ),
+    );
+    let err = usage(
+        &env,
+        &format!("studio new --title e1 --repo /home/user/acme-shop --cast {set}"),
+    );
+    assert!(err.contains("cursor"), "{err}");
+    // A role on a runner that takes effort cannot omit it.
+    let missing = fixture(
+        &scratch,
+        "cast-no-effort.toml",
+        &CAST.replacen("effort = \"medium\"\n", "", 1),
+    );
+    let err = usage(
+        &env,
+        &format!("studio new --title e2 --repo /home/user/acme-shop --cast {missing}"),
+    );
+    assert!(err.contains("runner-w"), "{err}");
+    // The accepted cast lands: cursor and devin roles hold no
+    // `effort` key at all.
+    let cast = fixture(&scratch, "cast-effort.toml", CAST);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let (events, _) =
+        crate::store::load_events(&crate::store::studio_dir(&scratch.dir, "acme-shop")).unwrap();
+    let v = serde_json::to_value(&events[0]).unwrap();
+    assert_eq!(v["roles"]["director"]["effort"], serde_json::Value::Null);
+    assert_eq!(v["roles"]["producer"]["effort"], "high");
+    assert_eq!(v["candidates"][0]["effort"], serde_json::Value::Null);
+}
+
 /// Every first word the parser accepts is registered in `COMMANDS` —
 /// a missing one falls through `maybe_run` into the TUI's own
 /// parser, where it dies as an unexpected argument. `maybe_run` on
