@@ -1,6 +1,6 @@
 //! Finding what a runner only reveals after launch: the session id
 //! codex leaves in `~/.codex/sessions` and the one `devin list`
-//! reports, plus the `<runner> --version` line `role.started` carries.
+//! reports, plus the `<program> --version` line `role.started` carries.
 //! Every external command goes through the injected [`Exec`], so the
 //! stage never names a CLI in a test and tests never spawn one.
 
@@ -92,11 +92,14 @@ pub fn real_exec(call: &ExecCall) -> Result<String, String> {
     }
 }
 
-/// `<runner> --version`'s first line, capped at five seconds — a
-/// failure or an empty one leaves `runner_version` empty.
-pub fn runner_version(exec: &Exec, runner: &str) -> Option<String> {
+/// `<program> --version`'s first line, capped at five seconds —
+/// `program` is the launch plan's `argv[0]` (`cursor` launches
+/// `cursor-agent`; the runner name alone would hit the IDE
+/// launcher). A failure or an empty one leaves `runner_version`
+/// empty.
+pub fn runner_version(exec: &Exec, program: &str) -> Option<String> {
     let call = ExecCall {
-        argv: vec![runner.to_string(), "--version".into()],
+        argv: vec![program.to_string(), "--version".into()],
         cwd: ".".into(),
         timeout: Duration::from_secs(5),
     };

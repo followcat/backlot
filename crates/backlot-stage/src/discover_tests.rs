@@ -509,3 +509,55 @@ fn version_is_the_first_line_or_nothing() {
     let empty = |_: &ExecCall| Ok("\n".to_string());
     assert_eq!(runner_version(&empty, "quiet"), None);
 }
+
+/// S11d: the probe runs on the program the launch plan uses —
+/// `cursor` launches `cursor-agent`, and `cursor --version` would
+/// answer the IDE launcher's version (3.21.16 in S11c); `claude`
+/// still launches `claude`.
+#[test]
+fn version_asks_the_launch_program() {
+    use backlot_model::ActorIdentity;
+    use std::collections::BTreeMap;
+
+    use crate::runners::{LaunchCtx, plan};
+
+    let env = BTreeMap::new();
+    let ctx = LaunchCtx {
+        terminal: "bl-s-t1",
+        cwd: "/home/user/acme-shop",
+        prompt: None,
+        resume: None,
+        studio_dir: "/home/user/state/studios/acme-shop",
+        stage_env: &env,
+        role: "producer",
+        checks: &[],
+    };
+    let ident = |runner: &str| ActorIdentity {
+        runner: runner.into(),
+        runner_version: None,
+        model: "m".into(),
+        effort: "high".into(),
+        permission_profile: "standard".into(),
+    };
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let seen = calls.clone();
+    let exec = move |call: &ExecCall| {
+        seen.lock().unwrap().push(call.argv.clone());
+        Ok("v 1.0\n".to_string())
+    };
+    for (runner, program) in [("cursor", "cursor-agent"), ("claude", "claude")] {
+        let launch = plan(&ident(runner), &ctx).unwrap();
+        assert_eq!(launch.argv[0], program, "{runner}");
+        assert_eq!(
+            runner_version(&exec, &launch.argv[0]).as_deref(),
+            Some("v 1.0")
+        );
+    }
+    assert_eq!(
+        *calls.lock().unwrap(),
+        [
+            ["cursor-agent", "--version"].map(String::from).to_vec(),
+            ["claude", "--version"].map(String::from).to_vec(),
+        ]
+    );
+}

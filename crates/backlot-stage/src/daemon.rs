@@ -147,7 +147,8 @@ pub(crate) struct Stage {
     /// Studios whose leftover `checks/run-*` trees the first pass
     /// already swept.
     pruned: std::cell::RefCell<BTreeSet<String>>,
-    /// `<runner> --version` answers, asked once per runner per run.
+    /// `<program> --version` answers, asked once per launch program
+    /// (`argv[0]`) per run.
     pub(crate) versions: std::cell::RefCell<BTreeMap<String, Option<String>>>,
     /// Session ids the running pass recorded — `cached` cannot see
     /// them until the ledgers reload, so the watch adds them itself.

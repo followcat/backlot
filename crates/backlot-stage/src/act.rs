@@ -298,14 +298,16 @@ impl Stage {
         config::runner_env_in(&text, runner)
     }
 
-    /// `<runner> --version`'s first line, asked once per runner per
-    /// stage run; a failure stays an empty `runner_version`.
-    fn runner_version(&self, runner: &str) -> Option<String> {
-        if let Some(v) = self.versions.borrow().get(runner) {
+    /// `<program> --version`'s first line, asked once per launch
+    /// program per stage run — the program is `argv[0]`, which the
+    /// runner name need not equal (`cursor` launches
+    /// `cursor-agent`); a failure stays an empty `runner_version`.
+    fn runner_version(&self, program: &str) -> Option<String> {
+        if let Some(v) = self.versions.borrow().get(program) {
             return v.clone();
         }
-        let v = discover::runner_version(&*self.exec, runner);
-        self.versions.borrow_mut().insert(runner.into(), v.clone());
+        let v = discover::runner_version(&*self.exec, program);
+        self.versions.borrow_mut().insert(program.into(), v.clone());
         v
     }
 
@@ -520,7 +522,10 @@ impl Stage {
                         // hands the tick's real-launch slot back so a
                         // stuck role cannot starve the ones behind it.
                         let mut start = start.clone();
-                        start.actor.runner_version = self.runner_version(&start.actor.runner);
+                        start.actor.runner_version = launch
+                            .argv
+                            .first()
+                            .and_then(|program| self.runner_version(program));
                         if !self
                             .launch(studio, dir, state, &start, launch.as_ref(), runner_env)
                             .await?
