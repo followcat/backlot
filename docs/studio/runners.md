@@ -94,7 +94,8 @@ Per role, on top of the base pair, and only in the argv — nothing is written t
 - An **actor** gets the git commands its loop drives — `git add`, `git commit`, `git status`,
   `git diff`, `git log`, `git show`, each bare (`Bash(git add)`) and with arguments
   (`Bash(git add *)`) — plus every declared check's `run` verbatim as `Bash(<run>)`.
-- The **director** gets `git merge` the same way, plus the declared checks.
+- The **director** gets the read-only set it reviews with — `git status`, `git diff`, `git log`,
+  `git show`, bare and starred — plus `git merge` and the declared checks.
 - The **producer** and **writer** keep the base pair; anything else still prompts and D9 answers it.
 
 Nothing broader is pre-allowed: no `Bash(*)`, no bypass flag or mode, no `--add-dir`, no
@@ -133,6 +134,17 @@ go through the proxy. The login does not move — `auth.json` reads `XDG_CONFIG_
 `CURSOR_CONFIG_DIR` — which is why a stage environment carrying a nonempty `XDG_CONFIG_HOME` is a
 plan refusal rather than something the adapter overrides: `XDG_CONFIG_HOME` itself is never set.
 
+The agent's own writes take the process umask — measured on the controlled run, where
+`cli-config.json` landed group-readable and directories at 775 — so `roles/<role>/cursor/`
+itself is the privacy boundary: every prepare forces it, `config/`, `data/` and `sandbox/` back
+to 700, session discovery re-checks the root, and a dir found open raises one informational
+`cursor dir was open` attention naming the path suffix. The bundle's own mkdir modes match:
+only its sandbox-policies, agent-store and socket paths pin a mode; everything else inherits.
+`CURSOR_SANDBOX_POLICY_DIR` relocation is unexercised, not broken — the bundle honors the
+variable (`process.env.CURSOR_SANDBOX_POLICY_DIR?.trim()`, else `~/.cursor/sandbox-policies`),
+but the run's director wrote no policy; the global policy churn seen then was the user's own
+running Cursor IDE.
+
 Two files are written on each launch. `config/cli-config.json` gets the role's `permissions.allow`
 — `Shell(...)` rules in the narrowest form the bundle's matcher takes: a rule without `*` or `:`
 matches only the command equal to it or starting with it plus a space, the command also tried as
@@ -140,24 +152,32 @@ its executable's basename — so `Shell(backlot)` covers `backlot status`, `Shel
 reaches `git merge …` alone, and there is no starred variant. An existing file keeps every other
 key byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base
 rule is `Shell(backlot)`; an actor adds `git add`, `git commit`, `git status`, `git diff`,
-`git log`, `git show`, the director adds `git merge`, and both add every declared check's `run`
-verbatim. Producer and writer keep the base only. Nothing broader is written — no `Shell(*)`, no
+`git log`, `git show`, the director the read-only set it reviews with — `git status`,
+`git diff`, `git log`, `git show` — plus `git merge`, and both add every declared check's `run`
+verbatim. `git branch` stays out: the matcher's prefix form would also allow `git branch -D`.
+Producer and writer keep the base only. Nothing broader is written — no `Shell(*)`, no
 `--force`, `--yolo` or `--approve-mcps` — and a `run` holding `()` `,` `*?[]{}:` or `\` is not
 expressible (`,` splits rules, `:` splits a command from its argument pattern, the rest are glob
 or syntax characters), so it is simply never pre-allowed.
 
 `data/projects/<slug>/mcp-disabled.json` holds the names of the user's global MCP servers —
 `~/.cursor/mcp.json` is read from a hard-coded path regardless of `CURSOR_CONFIG_DIR` and holds
-paid tools a role must never see; only the server names are read, never the values. The slug is
-cursor's own: non-alphanumeric runs collapse to one `-`, ends trimmed. `--trust` at launch writes
-the workspace-trust marker into the same isolated `projects/<slug>/`, so it stays per role.
+paid tools a role must never see; only the server names are read, never the values. Measured on
+the controlled run: `cursor-agent mcp list` under the role's env listed the user's server as
+`disabled`. The slug is cursor's own: non-alphanumeric runs collapse to one `-`, ends trimmed.
+`--trust` at launch writes the workspace-trust marker into the same isolated `projects/<slug>/`,
+so it stays per role.
 
 cursor-agent assigns the chat id itself, so a session is found after launch: the newest uuid
 directory under `config/chats/<md5(absolute cwd)>/` whose `meta.json` names the role's cwd and was
-created at or after the launch. `--resume <id>` then restarts it with context. Effort lives in the
-model id (`gpt-5.3-codex-low`), so `--model` carries both. Never used: `--print`/`-p` (a different
-run mode the stage cannot watch), `--output-format` (print mode only) and `--workspace` (the
-terminal's cwd already picks the workspace).
+created at or after the launch. `--resume <id>` then restarts it with context — measured
+resuming the same uuid with its full transcript after a kill. The `runner_version` the ledger
+records on `role.started`/`role.resumed` comes from the launch program itself —
+`cursor-agent --version`, never `cursor --version`, which is the IDE launcher — cached per
+program. Effort lives in the model id (`gpt-5.3-codex-low`), so `--model` carries both, a cast
+with `effort` is refused at `studio new`, and none is recorded. Never used: `--print`/`-p` (a
+different run mode the stage cannot watch), `--output-format` (print mode only) and
+`--workspace` (the terminal's cwd already picks the workspace).
 
 ## Screen patterns
 

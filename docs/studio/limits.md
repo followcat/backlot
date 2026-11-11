@@ -32,20 +32,25 @@ Codex, Devin, OpenCode and cursor-agent were launched and their session IDs capt
 - **OpenCode 2.2.5** — launched; its replies were not confirmed. Its working marker is guessed,
   not measured, and a recorded approval sends it **no key at all** — there is none mapped, so
   the attention stays open for the user regardless of the decision.
-- **cursor-agent 2026.11.05** — measured end to end (launch, resume, trust, permission prompt,
-  approval keys, per-session config and the isolated `CURSOR_*_DIR` roots), and the adapter's
-  argv, per-session files, screen markers and session discovery are unit-tested. But no real
-  cursor-agent has run as a studio role: the end-to-end check so far drove `tools/cursor-stub.sh`
-  — a script that answers `--version`, shows a cursor-shaped screen and writes a deterministic
-  chat — through `real_stage_cursor_director`. Whether the real CLI matches everything the
-  adapter assumes — the `Shell(...)` rules actually pre-allowing, the trust marker landing under
-  `CURSOR_DATA_DIR`, the chat directory layout — waits for the controlled director run. Two
-  global leaks are measured: `~/.cursor/mcp.json` is still read (the role writes
-  `mcp-disabled.json` naming every server — whether that list really hides them is unverified
-  until the controlled director run), and a daily empty `.agent-data-cleanup-<date>` marker still
-  lands in the global `projects/`; sandbox policies are pointed at the role's
-  `CURSOR_SANDBOX_POLICY_DIR`, also unverified. A denied command is retried by the runner, so
-  deny sends no key and the attention stays open for the user.
+- **cursor-agent 2026.11.05** — ran one controlled director run with every other role on `fake`:
+  the `CURSOR_*_DIR` isolation held (chats, projects and the `--trust` marker under
+  `roles/<role>/cursor/`), `mcp list` under the role's env showed the user's MCP server
+  `disabled` — the `mcp-disabled.json` list is verified to hide them — the `Shell(...)` rules
+  pre-allowed `backlot`, `git merge …` and the declared check prompt-free, and a killed director
+  resumed the same chat uuid with its context. The review still prompted five times —
+  `git diff`, `git log` twice, `git branch` and a `rg`/`strings` pipe; the read-only set
+  `git status`, `git diff`, `git log`, `git show` is now pre-allowed for the director, while
+  `git branch` stays out since its prefix would allow `git branch -D`. The `api3.cursor.sh:443` direct connection was not re-measured at the
+  director — the run closed before the probe — so the S11a finding stands (outside the proxy,
+  `NODE_USE_ENV_PROXY=1` does not redirect it; model and API traffic go through the proxy). The
+  agent's own writes take the umask — `cli-config.json` landed 664 — so the stage holds
+  `roles/<role>/cursor/` at 700 as the boundary and raises `cursor dir was open` on drift.
+  `CURSOR_SANDBOX_POLICY_DIR` relocation is unexercised, not broken — the bundle honors the
+  variable; the director wrote no policy and the run's global `sandbox-policies` churn was the
+  user's running Cursor IDE. `runner_version` used to ask `cursor --version` and record the IDE's
+  version; it now asks the launch program (`cursor-agent --version`), cached per program. A
+  denied command is retried by the runner, so deny sends no key and the attention stays open for
+  the user.
 
 Stall detection has only run on the fake runner. Restart recovery has run on Claude Code only;
 whether Codex, Devin, OpenCode or cursor-agent pick a stopped core's session back up is untested.

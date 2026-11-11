@@ -45,6 +45,25 @@
   lands under `CURSOR_DATA_DIR`, and the chat layout matches on a live launch waits for the
   controlled director run (S11c). A hook path like Claude's does not exist — cursor has no
   settings-file hooks the stage can wire, so its roles read from the screen only.
+- Run (S11c): one controlled run — cursor-agent 2026.11.05 as director, every other role `fake`
+  — closed the full flow (dispatch → cast → delivery → checks → accepted review → merge →
+  report → `studio.finished`) in 48 events. Isolation, MCP hiding (`mcp list` showed the server
+  `disabled`), the trust marker, prompt-free `backlot`/`git merge`/check runs, same-uuid resume
+  after a kill, authInfo leak scan and the global diff all passed; the live-director proxy check
+  was not measured (the run closed first). Five read-only prompts — `git diff`, `git log`,
+  `git branch`, `rg`/`strings` — exposed the director's missing read-only rules, and
+  `runner_version` recorded the IDE's version via `cursor --version` while a `cli-config.json`
+  landed 664 under the user's umask 002. Report:
+  `backlot-work/briefs/S11c-cursor-real-run.report.md`.
+- Done (S11d), the run's fixes: the director's read-only git set (`git status`, `git diff`,
+  `git log`, `git show`, `git merge` — never `git branch`) is pre-allowed on both cursor's
+  `Shell(...)` rules and claude's `Bash(...)` tools; the director prompt names the merge
+  command `git merge backlot/<studio>/<task> -m <message>`; `runner_version` asks the launch
+  program's `argv[0]` (`cursor-agent --version`), cached per program; `cursor` and `devin`
+  record no `effort` — the depth is part of the model id — and `studio new` refuses a set
+  `effort` on cursor; and `roles/<role>/cursor/` is held at 700 (prepare forces it and
+  `config`/`data`/`sandbox`, discovery re-checks the root), an open dir healing with one
+  informational `cursor dir was open` attention.
 
 ## S9g: an actor's terminal carries its own key (2026-11-11)
 
