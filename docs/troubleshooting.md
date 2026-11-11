@@ -44,6 +44,15 @@ specific core that you manage yourself.
 
 - **Copied text doesn't reach the clipboard.** Selection copies through OSC 52, so the terminal you're looking at has
   to allow it. Over SSH that's the terminal on your laptop, not the server. In tmux, use `set -g set-clipboard on`.
+- **A program says it copied, but your clipboard didn't change.** Codex, for one, writes the clipboard of the machine
+  it runs on when that machine has a display, and sends the copy to your terminal (OSC 52) only when `HERDR_ENV=1`,
+  SSH or tmux says something forwards it. Terminals backlot creates get `HERDR_ENV=1`. For terminals started another
+  way, such as `hc run`, add this line to the shell's startup file (`~/.zshrc` or `~/.bashrc`) on that machine, then
+  start a new shell and restart the program:
+
+  ```sh
+  [ -n "$HC_TERMINAL_ID" ] && export HERDR_ENV=1
+  ```
 - **The sidebar has no Git details or agent statuses.** Official `hc` doesn't provide Git details, and agents only show
   a status if they report it through OSC 7501. See [Core compatibility](compatibility.md).
 - **A pane shows a size notice.** Another client, such as herdr-app, may own that terminal's size. Click the notice to

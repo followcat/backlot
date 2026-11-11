@@ -59,6 +59,14 @@ impl Scheduler {
         self.due = None;
     }
 
+    /// The loop is ending while dirt still waits on the frame cap:
+    /// allow the closing draw now — the cap only bounds the live loop.
+    pub fn force_due(&mut self, now: Instant) {
+        if self.due.is_some() {
+            self.due = Some(now);
+        }
+    }
+
     /// Bookkeeping for the loop arming a one-shot sleep toward `due`.
     pub fn armed_timer(&mut self) {
         self.armed += 1;
@@ -129,6 +137,21 @@ mod tests {
         assert_eq!(sched.deadline(), Some(t0 + FRAME));
         assert!(!sched.due_now(t0 + Duration::from_millis(10)));
         assert!(sched.due_now(t0 + FRAME));
+    }
+
+    /// Shutdown flush: armed dirt becomes due immediately; a clean
+    /// scheduler stays unarmed so exit draws nothing spurious.
+    #[test]
+    fn force_due_pulls_only_armed_dirt_forward() {
+        let mut sched = Scheduler::default();
+        let t0 = t(0);
+        sched.force_due(t0);
+        assert!(!sched.due_now(t0));
+        sched.drew(t0);
+        sched.mark_dirty(t0);
+        assert!(!sched.due_now(t0));
+        sched.force_due(t0);
+        assert!(sched.due_now(t0));
     }
 
     /// A draw that emitted nothing consumes its deadline without

@@ -299,6 +299,14 @@ impl App {
                     .store(self.pane.attaches, std::sync::atomic::Ordering::Relaxed);
             }
         }
+        // The input source can end while a coalesced draw still waits
+        // on the frame cap: paint it now so `run` returns only once
+        // the last processed state is the drawn one. The host terminal may
+        // already be gone (the window closed), so a failed paint must not
+        // skip the releases and shutdown below or fail a clean exit.
+        let now = Instant::now();
+        self.sched.force_due(now);
+        let _ = self.maybe_draw(term, now);
         // Detach/quitting while keys are held: the pane's program saw
         // presses and must see their releases before the attach dies.
         // The source server drains delivered presses on detach, independently

@@ -414,6 +414,44 @@ async fn a_program_copy_reaches_the_outer_terminal_once() {
 }
 
 #[tokio::test]
+async fn a_program_copy_survives_an_unpainted_observer() {
+    let mut app = app_alerts();
+    let (bytes, sink) = captured();
+    app.set_host_control(sink);
+    app.open_attach = std::sync::Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    app.pane.want(Some(Spec {
+        terminal: "t1".into(),
+        role: Role::Active,
+    }));
+    // The observer is still opening: its first paint clears captures, so
+    // the active wire is then the only live copy of the write.
+    app.pane.pending_clipboard.push(b"hello".to_vec());
+    app.observers.insert(
+        "t1".into(),
+        pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone()),
+    );
+    app.drain_clipboard_writes();
+    assert_eq!(
+        bytes.lock().unwrap().as_slice(),
+        &[b"\x1b]52;c;aGVsbG8=\x07".to_vec()]
+    );
+}
+
+#[tokio::test]
+async fn created_terminals_carry_the_herdr_env_marker() {
+    // herdr injects HERDR_ENV=1 into every spawned pane; programs that
+    // forward clipboard writes through the terminal key on it.
+    let mut app = app_with(&["t1"]);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    let creation = app.creation(None, false).unwrap();
+    assert_eq!(creation.params.env.get("HERDR_ENV"), Some(&"1".into()));
+    let (creation, _) = app.workspace_creation().unwrap();
+    assert_eq!(creation.params.env.get("HERDR_ENV"), Some(&"1".into()));
+}
+
+#[tokio::test]
 async fn seen_writes_the_turn_once_per_turn_and_retries_a_failure() {
     let mut app = app_alerts();
     app.focused = Some("t1".into());

@@ -75,6 +75,7 @@ async fn sidebar_divider_drag_changes_the_drawn_geometry() {
     let (ui_tx, mut ui) = mpsc::channel(8);
     let (_reply_tx, mut replies) = mpsc::channel(1);
     let producer = tokio::spawn(async move {
+        // The divider hit rectangle exists only after the first frame.
         while probe.draws.load(Ordering::Relaxed) == 0 {
             tokio::task::yield_now().await;
         }
@@ -91,9 +92,8 @@ async fn sidebar_divider_drag_changes_the_drawn_geometry() {
             };
             ui_tx.send(event).await.unwrap();
         }
-        while probe.draws.load(Ordering::Relaxed) < 2 {
-            tokio::task::yield_now().await;
-        }
+        // Closing the input ends the run, which returns only once the
+        // drag's final geometry has been drawn.
         drop(ui_tx);
     });
     tokio::time::timeout(
@@ -184,6 +184,46 @@ async fn rejected_input_uses_the_reference_notice_surface() {
         .collect();
     assert!(text.contains("Input rejected"), "{text}");
     assert!(text.contains("Paste exceeds the input limit"), "{text}");
+}
+
+/// A state change processed inside the frame cap's window defers its
+/// draw; if the input source ends in that window `run` must still paint
+/// it before returning — the channel closing must not drop the last
+/// frame.
+#[tokio::test]
+async fn closing_input_still_draws_the_last_coalesced_state() {
+    let (mut app, probe) = app();
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    let (ui_tx, mut ui) = mpsc::channel(8);
+    let (_reply_tx, mut replies) = mpsc::channel(1);
+    let producer = tokio::spawn(async move {
+        while probe.draws.load(Ordering::Relaxed) == 0 {
+            tokio::task::yield_now().await;
+        }
+        // Lands in the frame slot the first draw just opened, so its
+        // draw is deferred to a deadline the closed channel outruns.
+        ui_tx
+            .send(hc_tui::app::UiEvent::InputRejected("the closing frame"))
+            .await
+            .unwrap();
+        drop(ui_tx);
+    });
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        app.run(&mut terminal, &mut ui, &mut replies),
+    )
+    .await
+    .expect("input close and shutdown must stay responsive")
+    .unwrap();
+    producer.await.unwrap();
+    let text: String = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(text.contains("the closing frame"), "{text}");
 }
 
 #[tokio::test]
