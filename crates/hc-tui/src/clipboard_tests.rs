@@ -47,16 +47,27 @@ struct StubDir(PathBuf);
 
 impl StubDir {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "hc-tui-clipboard-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        Self(path)
+        // Parallel tests share this clock: two can draw the same nanos
+        // and get one stub dir, racing each other's tool scripts. The
+        // per-process counter keeps names apart; `create_dir` never
+        // adopts a stale one.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        loop {
+            let path = std::env::temp_dir().join(format!(
+                "hc-tui-clipboard-test-{}-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Self(path),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => panic!("create stub dir {}: {e}", path.display()),
+            }
+        }
     }
     fn stub(&self, name: &str, body: &str) {
         let path = self.0.join(name);

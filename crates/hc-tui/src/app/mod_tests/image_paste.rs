@@ -25,6 +25,25 @@ fn no_image() -> crate::clipboard::ClipboardRead {
     crate::clipboard::ClipboardRead::None
 }
 
+/// An owned scratch dir for one test: the per-process counter keeps
+/// parallel tests apart, and `create_dir` claims the name atomically —
+/// a leftover directory is retried, never adopted.
+fn scratch_dir(tag: &str) -> std::path::PathBuf {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    loop {
+        let dir = std::env::temp_dir().join(format!(
+            "hc-tui-{tag}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return dir,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => panic!("create scratch dir {}: {e}", dir.display()),
+        }
+    }
+}
+
 fn ctrl_v(action: Action) -> input::TerminalKey {
     term_key(Key::Char('v'), Mods::CTRL, action)
 }
@@ -340,8 +359,7 @@ async fn empty_paste_with_no_image_stays_an_empty_paste() {
 
 #[tokio::test]
 async fn dropped_image_path_uploads_the_file_not_the_text() {
-    let dir = std::env::temp_dir().join(format!("hc-tui-drop-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch_dir("drop");
     let file = dir.join("shot one.png");
     std::fs::write(&file, PNG).unwrap();
     let mut app = remote_app(&["t1"]);
@@ -583,8 +601,7 @@ async fn oversized_clipboard_image_consumes_with_a_notice_and_no_rpc() {
 
 #[tokio::test]
 async fn dropped_oversized_image_consumes_with_a_notice_and_no_rpc() {
-    let dir = std::env::temp_dir().join(format!("hc-tui-drop-big-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch_dir("drop-big");
     let file = dir.join("big.png");
     let mut bytes = PNG.to_vec();
     bytes.resize(crate::clipboard::MAX_CLIPBOARD_IMAGE_BYTES + 1, 0);
@@ -615,16 +632,7 @@ mod stub_tools {
 
     impl StubDir {
         pub(super) fn new() -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "hc-tui-image-paste-test-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
-            std::fs::create_dir_all(&path).unwrap();
-            Self(path)
+            Self(super::scratch_dir("image-paste-test"))
         }
 
         pub(super) fn write(&self, name: &str, bytes: &[u8]) -> PathBuf {

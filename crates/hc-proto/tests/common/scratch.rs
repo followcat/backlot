@@ -24,6 +24,7 @@ use std::fs;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use hc_proto::client::Client;
@@ -216,7 +217,14 @@ impl ScratchCore {
         core_name: &str,
         extra: Vec<(String, String)>,
     ) -> ScratchCore {
-        let root = std::env::temp_dir().join(format!("hctui-{}-{:x}", std::process::id(), nanos()));
+        // Two parallel spawns can draw the same clock nanos, so the
+        // per-process counter is what keeps names apart — `create_dir`
+        // still claims the root atomically and never adopts an
+        // existing directory.
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let seq = NEXT.fetch_add(1, Ordering::Relaxed);
+        let root =
+            std::env::temp_dir().join(format!("hctui-{}-{seq}-{:x}", std::process::id(), nanos()));
         // Claim a new root atomically; never adopt an existing directory.
         fs::create_dir(&root).unwrap();
         let mut guard = RootGuard {
@@ -226,7 +234,7 @@ impl ScratchCore {
         for dir in ["state", "config", "run", "home", "work", "log"] {
             fs::create_dir_all(root.join(dir)).unwrap();
         }
-        let session = format!("hctui-test-{:x}", nanos());
+        let session = format!("hctui-test-{seq:x}-{:x}", nanos());
         let socket = root.join("s.sock");
 
         // Pre-seed a stable neutral identity so hello names `host-a`.
