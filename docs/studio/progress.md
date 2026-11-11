@@ -1,5 +1,51 @@
 # Studio progress
 
+## S11: the cursor-agent adapter (2026-11-11)
+
+- Measured first (S11a): cursor-agent 2026.11.05 was probed live in a scratch hc session —
+  `--model` argv and the on-screen id, positional prompts on fresh and resumed chats,
+  `create-chat`/`--resume`, the workspace-trust dialog and `--trust`, the permission picker's
+  `y`/reject keys (a denied command is retried by the runner), the `ctrl+c to stop` and braille
+  `Composing`/`Running … tokens` working markers, no OSC 7501 anywhere, and chats under
+  `<config>/chats/<md5(cwd)>/<uuid>/` with `meta.json` holding `createdAtMs` and `cwd`. A second
+  pass measured `CURSOR_CONFIG_DIR`/`CURSOR_DATA_DIR`/`CURSOR_SANDBOX_POLICY_DIR`: chats land in
+  CONFIG, projects in DATA, `~/.config/cursor/auth.json` and the global `cli-config.json` stay
+  untouched, while `~/.cursor/mcp.json` is still read and a daily cleanup marker still writes
+  globally. The measurement report is `backlot-work/briefs/S11a-cursor-measure.report.md`.
+- Done (S11b): `runners/cursor.rs` launches `cursor-agent --trust --model <model> [prompt]` and
+  resumes with `--resume <id>` before it — never `--print`, `--force`, `--yolo`,
+  `--approve-mcps` or `--workspace`. `Launch` gains `prep`, run by `runners::prepare` before
+  every start and resume: the role's `CURSOR_*_DIR` roots under `roles/<role>/cursor/` (dirs
+  700, files 600), `cli-config.json` with `permissions.allow` `Shell(...)` rules spliced so every
+  other key — `authInfo` included — keeps its bytes, and
+  `data/projects/<slug>/mcp-disabled.json` naming the global mcp.json's servers so the role sees
+  none of them. A nonempty inherited `XDG_CONFIG_HOME` is a plan refusal (`inherited
+  XDG_CONFIG_HOME`); prep failure is `cursor prep failed` attention, never a half-configured
+  start. Session discovery reads `meta.json` under the role's `config/chats/` for the newest
+  eligible uuid matching cwd and `createdAtMs >= started_ms`. Blocked is the trust dialog or the
+  three permission markers (`Run this command?` + `Not in allowlist:` + `→ Run (once) (y)`);
+  working is `ctrl+c to stop` or the braille spinner line — a transcript `Running the …` line is
+  neither. Approvals map allow → `y` and deny → nothing (the runner retries a rejected command);
+  the prompt block runs from the full-width `─` rule above the ask line, and a cursor trust
+  dialog is the user's even for an actor. `tools/cursor-stub.sh` is the test-only stand-in:
+  `--version`, a cursor-shaped idle screen, its env echoed, and a deterministic chat directory
+  with `meta.json`.
+- Measured: unit tests pin the slug, the `Shell(...)` rules per role, fresh/resume argv, the env
+  roots, the XDG refusal, the prep tree and modes, the mcp-disabled list, the splice preserving
+  foreign config keys, and session discovery against fake metadata trees (including malformed and
+  missing `meta.json`); work and permit tests cover the trust dialog, the permission prompt, both
+  spinner forms, the transcript false positive and the prompt block. The ignored
+  `real_stage_cursor_director` runs a real scratch core with the stub first on `PATH` and an
+  emptied `XDG_CONFIG_HOME`: the director's terminal comes up on the stub's screen, the isolated
+  env lands, discovery records the stub's uuid as `role.session`, and `status --json` exposes it.
+  Gates: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` and the
+  serial ignored `real_stage` run all green on every commit.
+- Not verified: the real `cursor-agent` has never run as a studio role — the stub proves the
+  plumbing, not the binary. Whether its `Shell(...)` rules actually pre-allow, the trust marker
+  lands under `CURSOR_DATA_DIR`, and the chat layout matches on a live launch waits for the
+  controlled director run (S11c). A hook path like Claude's does not exist — cursor has no
+  settings-file hooks the stage can wire, so its roles read from the screen only.
+
 ## S9g: an actor's terminal carries its own key (2026-11-11)
 
 - Done: a real run's `backlot deliver` from a live actor terminal was refused — `role_env`

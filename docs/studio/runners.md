@@ -3,19 +3,19 @@
 A runner is a coding agent CLI that can fill a role. An adapter holds what differs between them: how to launch one with
 a chosen model and thinking depth, how to resume it, and how to read its screen.
 
-Measured on 2026-11-09 with real launches in an isolated hc session, unless a cell says otherwise. Kimi 0.38.0 has not
-been measured.
+Measured on 2026-11-09 with real launches in an isolated hc session, unless a cell says otherwise; cursor-agent was
+measured on 2026-11-11. Kimi 0.38.0 has not been measured.
 
-| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 |
-|---|---|---|---|---|
-| Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` |
-| Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured |
-| First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` |
-| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered |
-| Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` |
-| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used |
-| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen |
-| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen |
+| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 | cursor-agent 2026.11.05 |
+|---|---|---|---|---|---|
+| Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` | `--model` |
+| Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured | Part of the model ID (`composer-2.5`, `gpt-5.3-codex-low`) |
+| First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` | Positional; submits on open, fresh and resumed |
+| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) |
+| Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` | `create-chat` prints a uuid and `--resume <uuid>` starts in it; the stage instead finds the newest chat under `<config>/chats/<md5(cwd)>/<uuid>/` after launch — its `meta.json` holds the cwd |
+| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used | `permissions.allow` `Shell(...)` rules, written per session into the role's own `cli-config.json` (see below) |
+| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` |
+| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen | None — no `]7501;` bytes in a full-session typescript, `status: null` throughout |
 
 Screen detection exists only on the followcat core and covers each agent partially (`docs/screen-status.md` in that core).
 On official hc, an agent that does not report status has none, so the stage's own screen sampling matters there. Running
@@ -35,6 +35,7 @@ sees it.
 | Codex | a line containing `Would you like to` and a line trimmed to `› 1.` | `esc to interrupt` | An older capture — not measured on 0.166.0 |
 | Devin | an `Allow` picker line — an optional `❭` cursor, `← ◼◼◼◼ →` and any scope word after the arrows — plus a `Deny` option line, cursor optional on both | `to interrupt` | Live 3000.12.32 screens — `esc twice to interrupt`, the `❭ Allow ← ◼◼◼◼ → Once`/`Deny` prompt with the cursor on `Allow` |
 | OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
+| cursor-agent | the workspace-trust dialog — `Workspace Trust Required` and `Trust this workspace` together; or a permission prompt — `Run this command?`, a line starting `Not in allowlist:` and `→ Run (once) (y)` | `ctrl+c to stop`, or a spinner line — one or two braille glyphs, a space, then `Composing` or `Running … tokens`. A transcript line starting `Running the` is not one | Measured on 2026.11.05 |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
 ## Prompt blocks
@@ -51,6 +52,7 @@ answer. Lines that move while the prompt waits are dropped first.
 | Codex | From the last `Would you like to` line to the end | Unmeasured — best effort from its `blocked` markers |
 | Devin | From the last `●` line above `Approval required` to the end — the command block, the judge's sentence and the picker with its `❭` cursor and scope word | Built from a live 3000.12.32 prompt read; Devin has not yet run as a studio role — only Claude has |
 | OpenCode | none | No approval key is ever sent, so no block is mapped |
+| cursor-agent | From the last full-width `─` rule above `Run this command?` to the end — the `$ <command>` line, the allowlist sentence and the picker | Measured on 2026.11.05 |
 | Anything else | none | — |
 
 ## Approval keys
@@ -65,6 +67,7 @@ A recorded `role.approval` sends one key while the saved prompt block is still t
 | Codex | `enter` | `esc` | From its `› 1.` picker — still to be measured |
 | Devin | `enter` | `esc` | Observed on 3000.12.32 — `enter` takes the highlighted `Once`, `esc` cancels |
 | OpenCode | none sent | none sent | Not measured — the attention stays open for the user |
+| cursor-agent | `y` | none sent | `y` takes `Run (once)` — measured on 2026.11.05. A denied command is retried by the runner (it re-asked four times, then read the file itself), so no deny key is mapped and the attention stays open for the user |
 | Anything else | none sent | none sent | — |
 
 ## Rules for adapters
@@ -113,6 +116,44 @@ is refused before the command runs. And a chained, env-prefixed or wrapped comma
 `Bash(backlot *)` — measured in the same run, every one prompted — so the role prompts demand one
 plain command per shell call.
 
+## Per-session files (cursor-agent)
+
+cursor-agent has no allowed-tools flag, so the stage writes what each launch needs into the role's
+own files instead — before every start and resume, and a failure there is attention, never a
+half-configured role.
+
+Every cursor role runs isolated: `CURSOR_CONFIG_DIR`, `CURSOR_DATA_DIR` and
+`CURSOR_SANDBOX_POLICY_DIR` point under `roles/<role>/cursor/` in the studio state directory
+(directories mode 700, stage-written files 600), so a role never reads or writes `~/.cursor`. The
+login does not move — `auth.json` reads `XDG_CONFIG_HOME`, not `CURSOR_CONFIG_DIR` — which is why a
+stage environment carrying a nonempty `XDG_CONFIG_HOME` is a plan refusal rather than something the
+adapter overrides: `XDG_CONFIG_HOME` itself is never set.
+
+Two files are written on each launch. `config/cli-config.json` gets the role's
+`permissions.allow` — `Shell(...)` rules in the narrowest form the bundle's matcher takes: a rule
+matches its command bare, with any arguments, or as the command's base word, so `Shell(backlot)`
+covers `backlot status` and there is no starred variant. An existing file keeps every other key
+byte-for-byte — `authInfo` above all — with only the `permissions` value spliced. The base rule is
+`Shell(backlot)`; an actor adds `git add`, `git commit`, `git status`, `git diff`, `git log`,
+`git show`, the director adds `git merge`, and both add every declared check's `run` verbatim.
+Producer and writer keep the base only. Nothing broader is written — no `Shell(*)`, no `--force`,
+`--yolo` or `--approve-mcps` — and a `run` holding `()` `,` `*?[]{}:` or `\` is not expressible
+(`,` splits rules, `:` splits a command from its argument pattern, the rest are glob or syntax
+characters), so it is simply never pre-allowed.
+
+`data/projects/<slug>/mcp-disabled.json` holds the names of the user's global MCP servers —
+`~/.cursor/mcp.json` is read from a hard-coded path regardless of `CURSOR_CONFIG_DIR` and holds
+paid tools a role must never see; only the server names are read, never the values. The slug is
+cursor's own: non-alphanumeric runs collapse to one `-`, ends trimmed. `--trust` at launch writes
+the workspace-trust marker into the same isolated `projects/<slug>/`, so it stays per role.
+
+cursor-agent assigns the chat id itself, so a session is found after launch: the newest uuid
+directory under `config/chats/<md5(absolute cwd)>/` whose `meta.json` names the role's cwd and was
+created at or after the launch. `--resume <id>` then restarts it with context. Effort lives in the
+model id (`gpt-5.3-codex-low`), so `--model` carries both. Never used: `--print`/`-p` (a different
+run mode the stage cannot watch), `--output-format` (print mode only) and `--workspace` (the
+terminal's cwd already picks the workspace).
+
 ## Screen patterns
 
 Observed on real runs. These are the first entries for each adapter's pattern table and need captured fixtures.
@@ -123,10 +164,12 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 | Codex | Workspace trust prompt | First run in a folder | Launch-time `-c 'projects={"<cwd>"={trust_level="trusted"}}'` keeps it away; if seen, answer for the actor's own work area only |
 | Devin | `Connection error` | Stopped until it gets a message | One short continue message |
 | Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | Wait, then a short retry. Do not change model |
+| cursor-agent | `Workspace Trust Required` with `Trust this workspace` | First launch in an untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | Any | Permission dialog | Waiting on a person | Approval policy |
 
 Fixtures use neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
 
 ## First version
 
-Claude Code, Codex, Devin and OpenCode. Kimi and others follow the same adapter shape when needed.
+Claude Code, Codex, Devin, OpenCode and cursor-agent. Kimi and others follow the same adapter
+shape when needed.

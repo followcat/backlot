@@ -18,8 +18,9 @@ been verified; read it before trusting a studio with real work.
 - **A git repository with at least one commit.** Actors and the director work in git worktrees
   created off it. It does not have to be clean.
 - **At least one agent CLI installed and logged in:** Claude Code (`claude`), Codex (`codex`),
-  Devin (`devin`) or OpenCode (`opencode`). The stage launches it with flags; nothing interactive
-  runs. Each role in the cast file names its runner, so different roles can use different CLIs.
+  Devin (`devin`), OpenCode (`opencode`) or cursor-agent (`cursor`). The stage launches it with
+  flags; nothing interactive runs. Each role in the cast file names its runner, so different roles
+  can use different CLIs.
 
 ## The cast file
 
@@ -92,9 +93,9 @@ timeout_s = 120
 | `escalate_after_s` | Seconds after that nudge was delivered during which the step may stay owed and the owner idle before an `owed` attention raises. Optional; default 600. Must be at least 1. |
 | `task_budget_s` | Running-time budget per task in seconds, counted from the task's first actor `role.started` to its close, leaving out paused stretches — a cast a `[limits]` cap still holds has used nothing. A running or delivered task past it raises one `over budget` attention — the director and the producer are told; nothing is killed or paused. Optional; unset means no budget. Must be at least 1. |
 | `[limits]` | Live-role cap per runner in this studio — `claude = 3` starts no fourth live role on `claude` until a slot frees. Fixed roles and actors count alike, a role being started counts, and a runner with no entry is unlimited. Held starts go producer, director, writer, then actors by task priority and seq, and the waiting role shows `waiting for a <runner> slot`. Per studio: two studios on one account each count only their own roles. A `0` is refused — a runner is limited by a real number or absent. The cap must seat its fixed roles first — the producer and the director stay live for the studio's whole run — so `studio new` refuses a cap under their count on the runner, or at their count while the writer or a candidate shares it: nobody else could ever sit. |
-| `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin` or `opencode`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
+| `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin`, `opencode` or `cursor`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. |
-| `effort` | Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; Devin takes it as part of the model id; OpenCode has no flag). |
+| `effort` | Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; Devin and cursor-agent take it as part of the model id; OpenCode has no flag). |
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from `<runner> --version` when you leave it out. |
 | `mode` | Optional. `standard` is the default and the only process that exists; `experimental` is a reserved name (R14, not built). |
@@ -275,7 +276,7 @@ stage can raise:
 | `work area failed` | A git step failed while preparing `work/` — the detail is git's first error line. | Fix what git complained about; the stage retries each tick. |
 | `owed` | A role was nudged about a step it owes — the detail names the step — and `escalate_after_s` later the step is still owed and the role is still idle. | Do the step yourself or talk to the role with `backlot tell <role> --file <file>`; the producer is told for other roles. It clears once the nudged step is done — when none of the role's owed steps carries a delivered nudge — or when the role is no longer wanted; a newer step then earns its own nudge and its own `owed` attention. |
 | `over budget` | A running or delivered task passed its `task_budget_s` — the detail names the task, the budget and the time used. | The director and the producer are both told; nothing was stopped or paused, so let it run, pause it, or recast. One raise per task ever — a recast does not re-raise — and it clears `done` when the task is terminal. |
-| `runner not supported` | The cast's `runner` has no adapter — a typo, or a runner other than `claude`, `codex`, `devin`, `opencode`. | The role never starts. `backlot correct` or a new studio is the way out — see below. |
+| `runner not supported` | The cast's `runner` has no adapter — a typo, or a runner other than `claude`, `codex`, `devin`, `opencode`, `cursor`. | The role never starts. `backlot correct` or a new studio is the way out — see below. |
 | `permission profile not supported` | The cast's `permission_profile` is not `standard` or `worktree`. | Same: the role never starts; fix the cast for the next studio. |
 | `config malformed` | `<state base>/config.toml` did not parse, or a `[runner_env.<runner>]` table held a non-string — the role gets no runner env and does not start. | Fix the file's TOML; the stage retries each tick. Only the error's line and column are reported, never the file's contents. |
 | `cursor prep failed` | A cursor role's per-session setup failed — its directories, `cli-config.json` or the `mcp-disabled.json` list could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
@@ -362,6 +363,7 @@ studios/acme-shop/
   prompts/                   the rendered role prompt each fresh start got
   roles/<role>/claude-settings.json   a Claude session's own hook wiring (see below)
   roles/<role>/signals.jsonl          the one-line-per-event record those hooks append
+  roles/<role>/cursor/                a cursor role's isolated config, data and sandbox trees
   work/integration           the director's worktree, branch backlot/acme-shop/integration
   work/<task>                each task's actor worktree, branch backlot/acme-shop/<task>
 ```

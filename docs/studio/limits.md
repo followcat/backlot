@@ -17,8 +17,8 @@ integration branch. The fourth stopped the hc core twice: once while both actors
 once while the director was merging. What has not run on real agents: stall detection, the
 at-cap notice and going on after a block.
 
-Codex, Devin and OpenCode were launched and their session IDs captured — `runners.md` says
-exactly what was measured for each. Per runner:
+Codex, Devin, OpenCode and cursor-agent were launched and their session IDs captured —
+`runners.md` says exactly what was measured for each. Per runner:
 
 - **Claude Code** — launch, resume, the base `--allowedTools` pair, the approval keys (`enter`/`esc`)
   and the work-state markers all measured on 2.1.319. The per-role git and check `Bash` rules added
@@ -32,10 +32,24 @@ exactly what was measured for each. Per runner:
 - **OpenCode 2.2.5** — launched; its replies were not confirmed. Its working marker is guessed,
   not measured, and a recorded approval sends it **no key at all** — there is none mapped, so
   the attention stays open for the user regardless of the decision.
+- **cursor-agent 2026.11.05** — measured end to end (launch, resume, trust, permission prompt,
+  approval keys, per-session config and the isolated `CURSOR_*_DIR` roots), and the adapter's
+  argv, per-session files, screen markers and session discovery are unit-tested. But no real
+  cursor-agent has run as a studio role: the end-to-end check so far drove `tools/cursor-stub.sh`
+  — a script that answers `--version`, shows a cursor-shaped screen and writes a deterministic
+  chat — through `real_stage_cursor_director`. Whether the real CLI matches everything the
+  adapter assumes — the `Shell(...)` rules actually pre-allowing, the trust marker landing under
+  `CURSOR_DATA_DIR`, the chat directory layout — waits for the controlled director run. Two
+  global leaks are known and accepted: `~/.cursor/mcp.json` is still read (the role writes
+  `mcp-disabled.json` naming every server, so it sees none), and a daily empty
+  `.agent-data-cleanup-<date>` marker still lands in the global `projects/` — sandbox policies do
+  move to the role's `CURSOR_SANDBOX_POLICY_DIR`. A denied command is retried by the runner, so
+  deny sends no key and the attention stays open for the user.
 
 Stall detection has only run on the fake runner. Restart recovery has run on Claude Code only;
-whether Codex, Devin or OpenCode pick a stopped core's session back up is untested. A held role
-whose terminal is lost restarts through the same resume path — unmeasured on a real core.
+whether Codex, Devin, OpenCode or cursor-agent pick a stopped core's session back up is untested.
+A held role whose terminal is lost restarts through the same resume path — unmeasured on a real
+core.
 
 ## The hc core
 
@@ -133,7 +147,7 @@ re-raise one `stall_limit_s` later.
   probes — codex's `~/.codex/sessions` scan and `devin list` (10 s) — do time out, but a slow one
   still delays that tick for every studio.
 - **One real runner starts per tick.** Casting several actors spreads the launches over several
-  ticks; `fake` is exempt. A post-launch runner (`codex`, `devin`) also defers its start while a
+  ticks; `fake` is exempt. A post-launch runner (`codex`, `devin`, `cursor`) also defers its start while a
   live role in the same runner-and-folder pair still lacks a session id.
 - **`[limits]` caps live roles per runner, per studio.** The cast table's `<runner> = <n>` holds a
   wanted start back once `<n>` live roles — fixed and actor alike, a being-started one included —
