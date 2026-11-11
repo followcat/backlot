@@ -168,16 +168,28 @@ mod tests {
 
     impl Scratch {
         fn new() -> Scratch {
-            let dir = std::env::temp_dir().join(format!(
-                "hctui-corestart-{}-{:x}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
-            std::fs::create_dir_all(&dir).unwrap();
-            Scratch(dir)
+            // Parallel tests share this clock: two can draw the same
+            // nanos and get one directory — one's `hc` rewrite then
+            // races the other's exec (ETXTBSY), and a shared
+            // `missing.sock` answers `dead()`. The per-process counter
+            // keeps names apart; `create_dir` never adopts a stale one.
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            loop {
+                let dir = std::env::temp_dir().join(format!(
+                    "hctui-corestart-{}-{}-{:x}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos()
+                ));
+                match std::fs::create_dir(&dir) {
+                    Ok(()) => return Scratch(dir),
+                    Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
+                    Err(e) => panic!("create scratch dir {}: {e}", dir.display()),
+                }
+            }
         }
     }
 
