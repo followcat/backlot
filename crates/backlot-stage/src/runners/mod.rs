@@ -344,6 +344,8 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod argv_tests;
 #[cfg(test)]
+mod cursor_tests;
+#[cfg(test)]
 mod decision_tests;
 #[cfg(test)]
 mod work_tests;

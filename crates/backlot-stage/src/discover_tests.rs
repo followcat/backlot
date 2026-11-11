@@ -307,6 +307,66 @@ fn devin_failures_find_nothing() {
     );
 }
 
+/// A fake `<role>/cursor/config/chats/<hash>/<uuid>/meta.json`
+/// tree, as `session_at` reads it.
+fn cursor_chat(role_dir: &Path, hash: &str, uuid: &str, created_ms: u64, cwd: &str) {
+    let dir = role_dir.join("cursor/config/chats").join(hash).join(uuid);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("meta.json"),
+        format!("{{\"createdAtMs\":{created_ms},\"cwd\":\"{cwd}\"}}"),
+    )
+    .unwrap();
+}
+
+/// A cursor role's chat under its own isolated config tree is the
+/// session — at or after the role's start, in the role's cwd and
+/// not already claimed. An older chat, a different cwd and a taken
+/// id are never it.
+#[test]
+fn cursor_finds_its_chat() {
+    let home = tmp("cursor-home");
+    let role_dir = tmp("cursor-rd");
+    let (u1, u2) = (
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    );
+    cursor_chat(&role_dir, "hash-a", u1, 100, CWD);
+    cursor_chat(&role_dir, "hash-b", u2, 200, CWD);
+    let find = |taken: &BTreeSet<String>, started: u64| {
+        find_session(
+            "cursor",
+            &[],
+            CWD,
+            started,
+            taken,
+            &Look {
+                home: &home,
+                role_dir: &role_dir,
+            },
+            &no_exec,
+        )
+    };
+    // The newest matching chat is the session.
+    assert_eq!(find(&BTreeSet::new(), 1).as_deref(), Some(u2));
+    // Claimed already: the older one serves.
+    assert_eq!(
+        find(&BTreeSet::from([u2.to_string()]), 1).as_deref(),
+        Some(u1)
+    );
+    // Both from before the role's start: nothing.
+    assert_eq!(find(&BTreeSet::new(), 300), None);
+    // A chat in a different cwd is never the role's.
+    cursor_chat(
+        &role_dir,
+        "hash-c",
+        "33333333-3333-4333-8333-333333333333",
+        400,
+        "/home/user/other",
+    );
+    assert_eq!(find(&BTreeSet::new(), 1).as_deref(), Some(u2));
+}
+
 /// Chosen ids read back off argv respect `taken`; runners that
 /// do not choose give nothing here.
 #[test]

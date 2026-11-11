@@ -145,7 +145,13 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "standard" | "worktree" => {}
         other => return Err(PlanError::profile(other)),
     }
-    if ctx.stage_env.contains_key("XDG_CONFIG_HOME") {
+    // An empty value is the XDG convention for unset — auth stays at
+    // the default `~/.config`; only a real redirect moves it.
+    if ctx
+        .stage_env
+        .get("XDG_CONFIG_HOME")
+        .is_some_and(|v| !v.is_empty())
+    {
         return Err(PlanError {
             reason: XDG_CONFIG_HOME_SET,
             detail: "the stage's environment carries XDG_CONFIG_HOME; cursor's auth.json \
@@ -337,7 +343,7 @@ fn splice_permissions(text: &str, value: &str) -> Option<String> {
 }
 
 /// The JSON content `config/cli-config.json` holds after prepare.
-fn config_content(existing: Option<&[u8]>, allow: &[String]) -> Vec<u8> {
+pub(crate) fn config_content(existing: Option<&[u8]>, allow: &[String]) -> Vec<u8> {
     let value = serde_json::to_string(&permissions_value(allow)).unwrap_or_default();
     if let Some(text) = existing.and_then(|b| std::str::from_utf8(b).ok()) {
         let text = text.trim();

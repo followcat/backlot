@@ -561,11 +561,71 @@ fn opencode_argv_and_env() {
     }
 }
 
+/// cursor's fresh and resume argv — `--trust` (its marker lands in
+/// the role's own data dir), `--model`, the prompt positional and
+/// last — plus the per-role env trio under the studio state dir.
+/// The session id is found after launch; effort rides in the model
+/// id, so no flag carries it.
+#[test]
+fn cursor_argv_and_env() {
+    let env = BTreeMap::new();
+    for profile in ["standard", "worktree"] {
+        let l = plan(&actor("cursor", profile), &ctx(&env, None, None)).unwrap();
+        assert_eq!(l.argv, ["cursor-agent", "--trust", "--model", "m"]);
+        assert_eq!(l.session, Session::PostLaunch);
+        // A first prompt is positional and last.
+        let c = ctx(&env, Some("first"), None);
+        let l = plan(&actor("cursor", profile), &c).unwrap();
+        assert_eq!(l.argv, ["cursor-agent", "--trust", "--model", "m", "first"]);
+        // Resume: `--resume <id>` ahead of `--trust`, prompt last.
+        let c = ctx(&env, Some("more"), Some("chat-9"));
+        let l = plan(&actor("cursor", profile), &c).unwrap();
+        assert_eq!(
+            l.argv,
+            [
+                "cursor-agent",
+                "--resume",
+                "chat-9",
+                "--trust",
+                "--model",
+                "m",
+                "more"
+            ]
+        );
+        // The forbidden flags never appear, fresh or resume.
+        for flag in ["--force", "--yolo", "--approve-mcps", "-p", "--print"] {
+            assert!(!l.argv.iter().any(|a| a == flag), "{flag}");
+        }
+        // The env trio roots in the role's own cursor tree inside
+        // the studio state directory — never the worktree, and
+        // `XDG_CONFIG_HOME` is never set.
+        let root = "/home/user/state/studios/acme-shop/roles/producer/cursor";
+        assert_eq!(l.env["CURSOR_CONFIG_DIR"], format!("{root}/config"));
+        assert_eq!(l.env["CURSOR_DATA_DIR"], format!("{root}/data"));
+        assert_eq!(
+            l.env["CURSOR_SANDBOX_POLICY_DIR"],
+            format!("{root}/sandbox")
+        );
+        assert!(!l.env.contains_key("XDG_CONFIG_HOME"));
+    }
+    // An `XDG_CONFIG_HOME` in the stage's own env refuses the
+    // launch: cursor's auth.json moves with it, so the role would
+    // start logged out — the attention names that cause.
+    let mut env = BTreeMap::new();
+    env.insert("XDG_CONFIG_HOME".into(), "/home/user/.config".into());
+    let e = plan(&actor("cursor", "standard"), &ctx(&env, None, None)).unwrap_err();
+    assert_eq!(e.reason, cursor::XDG_CONFIG_HOME_SET);
+    assert!(e.detail.contains("XDG_CONFIG_HOME"), "{e:?}");
+    // An empty value is the XDG convention for unset — no refusal.
+    env.insert("XDG_CONFIG_HOME".into(), String::new());
+    assert!(plan(&actor("cursor", "standard"), &ctx(&env, None, None)).is_ok());
+}
+
 /// A profile no runner knows is a refusal, whatever the runner.
 #[test]
 fn an_unknown_profile_refuses_every_runner() {
     let env = BTreeMap::new();
-    for runner in ["claude", "codex", "devin", "opencode"] {
+    for runner in ["claude", "codex", "devin", "opencode", "cursor"] {
         let e = plan(&actor(runner, "nowhere"), &ctx(&env, None, None)).unwrap_err();
         assert_eq!(e.reason, PROFILE_NOT_SUPPORTED, "{runner}");
         assert!(e.detail.contains("nowhere"), "{e:?}");

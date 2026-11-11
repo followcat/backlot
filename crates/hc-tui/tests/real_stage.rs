@@ -86,10 +86,11 @@ fn bl_run(env: Vec<(String, String)>, args: &str) -> std::process::Output {
     }
 }
 
-/// `backlot <args>` under the fixture env; assert exit 0 and return
-/// stdout.
-fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
-    let out = bl_run(bl_env(scratch, state), args);
+/// `backlot <args>` under an explicit env; assert exit 0 and return
+/// stdout. The cursor test needs an env of its own — no
+/// `XDG_CONFIG_HOME`, the stub first on `PATH`.
+fn bl_with(env: Vec<(String, String)>, args: &str) -> String {
+    let out = bl_run(env, args);
     assert!(
         out.status.success(),
         "backlot {args} exited {}; stderr: {}",
@@ -97,6 +98,12 @@ fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
         String::from_utf8_lossy(&out.stderr)
     );
     String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// `backlot <args>` under the fixture env; assert exit 0 and return
+/// stdout.
+fn bl(scratch: &ScratchCore, state: &Path, args: &str) -> String {
+    bl_with(bl_env(scratch, state), args)
 }
 
 /// `bl` without the `BACKLOT_STUDIO` pin — the fixture pins every
@@ -2876,6 +2883,129 @@ async fn real_stage_runner_limit_holds_and_releases() {
     wait_event(&state, "role.closed", "writer");
     wait_terminal(&client, "bl-acme-shop-t1").await;
     wait_event(&state, "role.started", "actor-t1-c1");
+
+    drop(client);
+    scratch.finish().expect("scratch teardown");
+}
+
+/// The S11b cast: the director on `cursor`, the rest on `fake` —
+/// the real cursor-agent never runs; `tools/cursor-stub.sh` stands
+/// in on `PATH`.
+const CURSOR_CAST_TOML: &str = r#"
+[producer]
+runner = "fake"
+model = "model-p"
+effort = "high"
+permission_profile = "standard"
+
+[director]
+runner = "cursor"
+model = "composer-2.5"
+effort = "high"
+permission_profile = "standard"
+
+[writer]
+runner = "fake"
+model = "model-w"
+effort = "medium"
+permission_profile = "standard"
+
+[[candidates]]
+name = "actor-a"
+runner = "fake"
+model = "model-a"
+effort = "high"
+permission_profile = "worktree"
+"#;
+
+/// S11b: a `cursor` role through the whole stage loop on the stub —
+/// never the real cursor-agent. The stub stands in as `cursor-agent`
+/// first on `PATH` and prints a cursor-shaped idle screen echoing
+/// its env; discovery records the stub chat's uuid as
+/// `role.session`. The stage's own env is the core's, so the fixture
+/// carries `XDG_CONFIG_HOME` — emptied through `spawn_with`, the
+/// XDG convention for unset — and the stub dir leads `PATH`.
+#[tokio::test]
+#[ignore = "needs HC_TUI_TEST_CORE: a real pinned herdr-core binary"]
+async fn real_stage_cursor_director() {
+    // The stub dir must exist before the serve inherits its PATH.
+    // The scratch root does not exist yet — put the stub under the
+    // test's own temp so the serve's env is complete at spawn.
+    let stub_dir = std::env::temp_dir().join(format!("bl-stubbin-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&stub_dir);
+    fs::create_dir_all(&stub_dir).unwrap();
+    fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/cursor-stub.sh"),
+        stub_dir.join("cursor-agent"),
+    )
+    .expect("copy cursor-stub.sh");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            stub_dir.join("cursor-agent"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    let scratch = ScratchCore::spawn_with(vec![
+        ("XDG_CONFIG_HOME".into(), String::new()),
+        (
+            "PATH".into(),
+            format!("{}:/usr/bin:/bin", stub_dir.display()),
+        ),
+    ])
+    .await;
+    let client = connect(&scratch).await;
+    let state = scratch.root.join("bl-state");
+    Command::new("git")
+        .args(["init", "-b", "main"])
+        .arg(&scratch.work)
+        .output()
+        .expect("git init");
+    git(&scratch.work, &["commit", "--allow-empty", "-m", "init"]);
+
+    let cast = fixture(&scratch, "cast.toml", CURSOR_CAST_TOML);
+    bl(
+        &scratch,
+        &state,
+        &format!(
+            "studio new --title acme-shop --repo {} --cast {}",
+            scratch.work.display(),
+            cast.display()
+        ),
+    );
+    bl(&scratch, &state, "stage start");
+
+    // The director's terminal comes up on the stub's idle screen,
+    // its three Cursor roots inside the studio state directory.
+    let director = wait_terminal(&client, "bl-acme-shop-director").await;
+    check_labels(&director, "acme-shop", "director", None);
+    let root = state.join("studios/acme-shop/roles/director/cursor");
+    let screen = wait_read(&client, "bl-acme-shop-director", "CURSOR_DATA_DIR=").await;
+    for (var, leaf) in [
+        ("CURSOR_CONFIG_DIR", "config"),
+        ("CURSOR_DATA_DIR", "data"),
+        ("CURSOR_SANDBOX_POLICY_DIR", "sandbox"),
+    ] {
+        assert!(
+            screen.contains(&format!("{var}={}", root.join(leaf).display())),
+            "{var} not under the studio state dir:\n{screen}"
+        );
+    }
+
+    // The stub's composer reads waiting — and discovery records the
+    // stub chat's uuid as `role.session`, in the ledger and in
+    // `status --json`.
+    wait_role(&client, "director", |r| r["work"] == "waiting").await;
+    wait_event(&state, "role.session", "director");
+    let status: serde_json::Value =
+        serde_json::from_str(&bl(&scratch, &state, "status --json")).unwrap();
+    assert_eq!(
+        status["roles"]["director"]["session_id"].as_str(),
+        Some("11111111-2222-3333-4444-555555555555"),
+        "{status}"
+    );
 
     drop(client);
     scratch.finish().expect("scratch teardown");
