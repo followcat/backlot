@@ -230,7 +230,8 @@ mod tests {
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nprintf 'hc %s session=%s\\n' \"$*\" \"${{HC_SESSION-}}\" \
+                "#!/bin/sh\n[ -n \"$STUB_PROBE\" ] && exit 0\n\
+                 printf 'hc %s session=%s\\n' \"$*\" \"${{HC_SESSION-}}\" \
                  >> \"{}\"\n{tail}\n",
                 record.display(),
             ),
@@ -241,7 +242,32 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
+        wait_executable(&script);
         (script.into_os_string(), record)
+    }
+
+    /// A fork in another test thread can briefly pin the just-written
+    /// script's open writer fd, and a racing `exec` then fails with
+    /// ETXTBSY. The sentinel probe runs the script as a no-op until
+    /// that transient clears; once exec succeeds no writer can appear
+    /// again. Same approach as `clipboard_tests::wait_executable`.
+    fn wait_executable(path: &Path) {
+        for _ in 0..200 {
+            match std::process::Command::new(path)
+                .env("STUB_PROBE", "1")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+            {
+                Ok(_) => return,
+                Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(e) => panic!("cannot exec stub {}: {e}", path.display()),
+            }
+        }
+        panic!("stub {} never became executable", path.display());
     }
 
     /// The only latch consumer in the suite: a dead socket runs
@@ -302,7 +328,17 @@ mod tests {
         let missing = scratch.0.join("missing.sock");
         assert!(dead(&missing).await);
         drop(std::os::unix::net::UnixListener::bind(&missing).unwrap());
-        assert!(dead(&missing).await);
+        // A fork in a sibling test can inherit the transient listener
+        // fd and hold it until that child execs — the stale file then
+        // answers briefly. The holder set is fixed at drop, so polling
+        // converges once they all exec.
+        for _ in 0..200 {
+            if dead(&missing).await {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        panic!("stale socket still answers");
     }
 
     #[tokio::test]
