@@ -148,12 +148,13 @@ pub(crate) fn read_limited(
     }
 }
 
-/// What one bounded tool run produced. `TimedOut` aborts the whole
-/// clipboard read: a hung owner stalls every later read the same way.
-/// `Oversized` keeps the capped prefix for the caller's signature
-/// check. `Missing` means the tool could not even be spawned — the
-/// caller counts it separately so "no tool exists" never reports as
-/// "no image".
+/// What one bounded tool run produced. `TimedOut` marks that tool
+/// hung: its later calls are skipped so the wait stays bounded, but
+/// the next tool still runs — a dead display cannot hide an image on
+/// another one. `Oversized` keeps the capped prefix for the caller's
+/// signature check. `Missing` means the tool could not even be
+/// spawned — the caller counts it separately so "no tool exists"
+/// never reports as "no image".
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 enum ReaderOutcome {
     Data(Vec<u8>),

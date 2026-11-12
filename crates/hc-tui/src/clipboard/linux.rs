@@ -60,15 +60,30 @@ fn proc_file_indicates_wsl(path: &str) -> bool {
 
 /// Whether any tool was tried and whether one actually ran — the
 /// difference between "no image on the clipboard" and "nothing
-/// could even read the clipboard".
+/// could even read the clipboard". `hung` names the tools that hit
+/// the deadline: a hung owner stalls every later read the same way,
+/// so they are skipped and the wait stays bounded.
 #[derive(Default)]
 struct Attempts {
     any: bool,
     answered: bool,
+    timed_out: bool,
+    hung: Vec<&'static str>,
 }
 
 impl Attempts {
+    /// Whether this tool may still be spawned: a tool that already
+    /// hit the deadline is not asked again.
+    fn may_run(&self, program: &'static str) -> bool {
+        !self.hung.contains(&program)
+    }
+
     fn outcome(&self) -> ClipboardRead {
+        if self.timed_out {
+            // A reachable display went unread; reporting "no image"
+            // would be a guess. This also covers every tool hanging.
+            return ClipboardRead::Unavailable(TIMED_OUT);
+        }
         match (self.any, self.answered) {
             (false, _) => ClipboardRead::Unavailable(NO_DISPLAY),
             (true, false) => ClipboardRead::Unavailable(NO_TOOL),
@@ -78,12 +93,24 @@ impl Attempts {
 }
 
 /// One bounded tool run counted for the attempts ledger: a spawn
-/// failure tries but does not answer.
-fn attempt_tool(attempts: &mut Attempts, command: Command, timeout: Duration) -> ReaderOutcome {
+/// failure tries but does not answer; a timeout marks the tool hung
+/// but leaves the next tool its own turn.
+fn attempt_tool(
+    attempts: &mut Attempts,
+    program: &'static str,
+    command: Command,
+    timeout: Duration,
+) -> ReaderOutcome {
     attempts.any = true;
     let outcome = read_tool(command, timeout);
-    if !matches!(outcome, ReaderOutcome::Missing) {
-        attempts.answered = true;
+    match outcome {
+        ReaderOutcome::Missing => {}
+        ReaderOutcome::TimedOut => {
+            attempts.answered = true;
+            attempts.timed_out = true;
+            attempts.hung.push(program);
+        }
+        _ => attempts.answered = true,
     }
     outcome
 }
@@ -103,12 +130,14 @@ fn display_tools<'a>(env: &ClipboardEnv, mime: &'a str) -> [(bool, &'static str,
 
 /// WSL → `wl-paste` (Wayland) → `xclip` (X11), in the reference's
 /// MIME order, then a file-list pass that resolves a copied image
-/// file on disk. A `TimedOut` read stops the whole attempt. An
-/// oversized stream stops it too when its prefix still matches the
-/// advertised image signature — that is a real image, just too big;
-/// an oversized stream with a foreign prefix stays "no image".
-/// When nothing could even try, the read is `Unavailable`, not
-/// `None`.
+/// file on disk. A `TimedOut` run marks its tool hung — its later
+/// calls are skipped so the wait stays bounded — but the next tool
+/// still runs: a dead Wayland offer cannot hide an image sitting on
+/// the X11 side. An oversized stream stops the read when its prefix
+/// still matches the advertised image signature — that is a real
+/// image, just too big; an oversized stream with a foreign prefix
+/// stays "no image". When nothing could even try, or a display went
+/// unread past its deadline, the read is `Unavailable`, not `None`.
 pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
     let mut attempts = Attempts::default();
     if env.wsl {
@@ -121,6 +150,7 @@ pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
         ];
         match attempt_tool(
             &mut attempts,
+            "powershell.exe",
             tool_command(env, "powershell.exe", &args),
             timeout,
         ) {
@@ -133,16 +163,20 @@ pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
             ReaderOutcome::Oversized(prefix) if bytes_match_image_signature("png", &prefix) => {
                 return ClipboardRead::TooLarge;
             }
-            ReaderOutcome::TimedOut => return ClipboardRead::Unavailable(TIMED_OUT),
             _ => {}
         }
     }
     for (mime, extension) in MIMES {
         for (available, program, args) in display_tools(env, mime) {
-            if !available {
+            if !available || !attempts.may_run(program) {
                 continue;
             }
-            match attempt_tool(&mut attempts, tool_command(env, program, &args), timeout) {
+            match attempt_tool(
+                &mut attempts,
+                program,
+                tool_command(env, program, &args),
+                timeout,
+            ) {
                 ReaderOutcome::Data(bytes) if bytes_match_image_signature(extension, &bytes) => {
                     return ClipboardRead::Image(ClipboardImage { bytes, extension });
                 }
@@ -151,7 +185,6 @@ pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
                 {
                     return ClipboardRead::TooLarge;
                 }
-                ReaderOutcome::TimedOut => return ClipboardRead::Unavailable(TIMED_OUT),
                 _ => {}
             }
         }
@@ -160,22 +193,22 @@ pub(crate) fn read(env: &ClipboardEnv, timeout: Duration) -> ClipboardRead {
     // names and read it back bounded, like a drop.
     for mime in FILE_MIMES {
         for (available, program, args) in display_tools(env, mime) {
-            if !available {
+            if !available || !attempts.may_run(program) {
                 continue;
             }
-            match attempt_tool(&mut attempts, tool_command(env, program, &args), timeout) {
-                ReaderOutcome::Data(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
-                    for (path, extension) in crate::clipdrop::image_paths_from_clipboard_text(&text)
-                    {
-                        match crate::clipdrop::read_image_file(&path, extension) {
-                            ClipboardRead::None => {}
-                            hit => return hit,
-                        }
+            if let ReaderOutcome::Data(bytes) = attempt_tool(
+                &mut attempts,
+                program,
+                tool_command(env, program, &args),
+                timeout,
+            ) {
+                let text = String::from_utf8_lossy(&bytes);
+                for (path, extension) in crate::clipdrop::image_paths_from_clipboard_text(&text) {
+                    match crate::clipdrop::read_image_file(&path, extension) {
+                        ClipboardRead::None => {}
+                        hit => return hit,
                     }
                 }
-                ReaderOutcome::TimedOut => return ClipboardRead::Unavailable(TIMED_OUT),
-                _ => {}
             }
         }
     }
