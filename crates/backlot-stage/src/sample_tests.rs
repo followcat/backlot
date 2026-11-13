@@ -129,6 +129,7 @@ fn term() -> LiveTerminal {
         argv: Vec::new(),
         cwd: "/home/user/acme-shop".into(),
         labels: BTreeMap::new(),
+        ..Default::default()
     }
 }
 

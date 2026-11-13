@@ -235,6 +235,27 @@ pub(crate) fn work_due(last_ms: Option<u64>, now_ms: u64) -> bool {
     last_ms.is_none_or(|t| now_ms.saturating_sub(t) >= WORK_SAMPLE_EVERY_MS)
 }
 
+/// The terminal's structured word for the work map (S12d):
+/// `waiting_for_person` is the core's own blocked flag and catches
+/// prompt kinds no screen marker knows; a `status.state` of the
+/// usual words maps straight. `error` is the rate-limit pass's
+/// input — the work map reads the screen for it — and a terminal
+/// reporting nothing (`None`) leaves the whole answer to the
+/// screen, so an upstream core without the fork's inference still
+/// works.
+pub(crate) fn structured_state(term: &LiveTerminal) -> Option<backlot_model::summary::Work> {
+    use backlot_model::summary::Work;
+    if term.waiting_for_person {
+        return Some(Work::Blocked);
+    }
+    match term.status.as_ref().map(|s| s.state.as_str()) {
+        Some("working") => Some(Work::Working),
+        Some("blocked") => Some(Work::Blocked),
+        Some("idle") | Some("done") | Some("waiting") => Some(Work::Waiting),
+        _ => None,
+    }
+}
+
 /// The ledger events a session-less live role's watch yields: a
 /// `role.session` — plus an `attention.cleared` for any still-open
 /// `session not found` of the role — when the id was found, or one
@@ -410,6 +431,9 @@ impl Stage {
             .borrow_mut()
             .retain(|(s, r), _| keep(s, r));
         self.session_warned.borrow_mut().retain(|(s, r)| keep(s, r));
+        self.revision_since
+            .borrow_mut()
+            .retain(|(s, r), _| keep(s, r));
         Ok(())
     }
 

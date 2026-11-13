@@ -23,7 +23,7 @@ use crate::runners;
 use crate::signals;
 use crate::stall;
 use crate::store::{self, StoreError};
-use crate::watch::work_due;
+use crate::watch::{structured_state, work_due};
 
 /// What a live role's samples need: its ledger view, its identity
 /// and its terminal — bundled so the pass stays readable.
@@ -109,7 +109,15 @@ impl Stage {
                 .insert(pair.clone(), s.clone()),
             None => self.last_signal.borrow_mut().remove(&pair),
         };
-        let work = signals::combine(signal_state, runners::work_state(w.runner, &text));
+        // Structured state sits between the signal and the screen
+        // (S12d): a core that reports — natively or through screen
+        // inference — is believed ahead of the stage's own read;
+        // a `blocked` from any source still wins the map.
+        let work = signals::combine(
+            signal_state,
+            structured_state(w.term),
+            runners::work_state(w.runner, &text),
+        );
         self.work.borrow_mut().insert(pair.clone(), work);
         // The send gate's screen-stability track — same screen, same
         // `same_since`; a new screen resets the window.
@@ -146,15 +154,38 @@ impl Stage {
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
+        // The structured stall's clock (S12d): while the terminal
+        // reports `working`, its activity revision must keep
+        // moving — `rev_since` is when the current revision first
+        // showed. A terminal not reporting `working` drops its
+        // entry and never stalls this way.
+        let working = w.term.status.as_ref().is_some_and(|s| s.state == "working");
+        let rev_since = match w.term.activity_revision.filter(|_| working) {
+            None => {
+                self.revision_since.borrow_mut().remove(&pair);
+                None
+            }
+            Some(rev) => {
+                let mut map = self.revision_since.borrow_mut();
+                let e = map.entry(pair.clone()).or_insert((rev, now_ms));
+                if e.0 != rev {
+                    *e = (rev, now_ms);
+                }
+                Some(e.1)
+            }
+        };
         let Some(screen) = self.screens.borrow().get(&pair).cloned() else {
             return Ok(());
         };
         let signal = self.last_signal.borrow().get(&pair).cloned();
         if let Some(attn) = stall::open_stall(state, role) {
-            // A newer signal — the turn demonstrably alive — or the
-            // screen having moved since the raise ends the episode.
+            // A newer signal — the turn demonstrably alive — an
+            // activity revision that moved since the raise, or the
+            // screen having moved ends the episode.
             let cleared = if signal.as_ref().is_some_and(|s| s.ts_ms > attn.ts_ms) {
                 Some("new hook signal")
+            } else if rev_since.is_some_and(|s| s > attn.ts_ms) {
+                Some("activity resumed")
             } else if screen.same_since_ms > attn.ts_ms {
                 Some("screen changed")
             } else {
@@ -190,6 +221,28 @@ impl Stage {
                 },
                 move |seq| {
                     format!("no hook signal for {silent_s}s; screen saved to attention/{seq}.txt")
+                },
+            )
+            .await?;
+            eprintln!("stage: {role} stalled");
+        } else if rev_since.is_some_and(|s| now_ms.saturating_sub(s) >= limit_ms) {
+            // The terminal still says `working` but its activity
+            // revision has not moved for the limit — the
+            // structured twin of the frozen-screen stall.
+            let held_s = now_ms.saturating_sub(rev_since.unwrap_or(now_ms)) / 1000;
+            self.raise_attention(
+                Raise {
+                    dir,
+                    role,
+                    reason: STALLED,
+                    text: &screen.text,
+                    needs_user: false,
+                    bound: None,
+                },
+                move |seq| {
+                    format!(
+                        "status 'working' but activity revision unchanged for {held_s}s; screen saved to attention/{seq}.txt"
+                    )
                 },
             )
             .await?;
@@ -359,6 +412,11 @@ impl Stage {
                 permit::prompt_block(w.runner, text),
             ) {
                 (Some(was), Some(now)) if was == now => Fresh::Send,
+                // Neither screen carries an identifiable block —
+                // the episode came from structured state and the
+                // prompt's kind is unread: no key can be bound, so
+                // nothing is sent (S12d).
+                (None, None) => Fresh::Gone,
                 _ => Fresh::Changed,
             }
         };
@@ -443,7 +501,12 @@ impl Stage {
         request: Option<&signals::Signal>,
     ) -> Result<(), Fail> {
         let command = request.and_then(|s| s.tool_target());
-        let user_owned = permit::needs_user(role, runner, text, command);
+        // A prompt kind the markers cannot identify — a blocked
+        // raised from structured state alone — is the user's: no
+        // recorded decision can be bound to a prompt the stage
+        // cannot read (S12d).
+        let user_owned = permit::needs_user(role, runner, text, command)
+            || permit::prompt_block(runner, text).is_none();
         // The bound request: `backlot approve` refuses a key when
         // the last signal is no longer this one.
         let bound = request.and_then(|s| serde_json::to_string(s).ok());

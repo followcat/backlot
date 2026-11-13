@@ -407,6 +407,7 @@ fn a_failed_refresh_keeps_the_last_inventory() {
                 argv: Vec::new(),
                 cwd: String::new(),
                 labels: BTreeMap::new(),
+                ..Default::default()
             })
             .collect(),
         doing: BTreeMap::new(),
