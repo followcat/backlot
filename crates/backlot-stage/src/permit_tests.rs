@@ -500,6 +500,75 @@ fn cursor_trust_dialog_is_the_users() {
     assert!(needs_user("director", "cursor", trust, None));
 }
 
+/// cmd's allow is `enter` on the highlighted `❯ 1. Yes` (run-once);
+/// `esc` denies — the turn ENDS, no retry. Option `2` — "don't ask
+/// again" — is never a decision the stage sends.
+#[test]
+fn keys_per_runner_cmd() {
+    assert_eq!(approval_keys("cmd", ApprovalDecision::Allow), Some("enter"));
+    assert_eq!(approval_keys("cmd", ApprovalDecision::Deny), Some("esc"));
+    for decision in [ApprovalDecision::Allow, ApprovalDecision::Deny] {
+        assert!(!matches!(
+            approval_keys("cmd", decision),
+            Some("2" | "down")
+        ));
+    }
+}
+
+/// A neutral cmd-shaped prompt screen (the S12a capture): the
+/// full-width `─` rule opens the block, the `❯ 1.` picker ends it.
+fn cmd_screen(command: &str) -> String {
+    format!(
+        "◇ Conjuring… esc to interrupt • 5s • ↓ 219\n\
+         ─────────────────────────────────────────\n\
+         Execute Shell Command\n\
+         Command Code needs to execute this shell command:\n\
+         \x20 {command}\n\
+         ❯ 1. Yes\n\
+         \x20 2. Yes, don't ask again for `cmd` commands in this project\n\
+         \x20 3. No, tell Command Code what to do differently\n"
+    )
+}
+
+/// The cmd block runs from the last `─` rule above the `❯ 1.`
+/// picker to the end — a different command is a different block,
+/// and without the rule or the picker there is nothing comparable.
+#[test]
+fn prompt_block_on_cmd() {
+    let a = cmd_screen("touch allow-ok.txt");
+    let b = cmd_screen("rm scratch.txt");
+    let block = prompt_block("cmd", &a).expect("cmd block");
+    assert!(block.contains("touch allow-ok.txt"), "{block}");
+    assert!(block.contains("needs to execute"), "{block}");
+    assert!(!block.contains("Conjuring"), "{block}");
+    assert_ne!(
+        block,
+        prompt_block("cmd", &b).unwrap(),
+        "a different command must be a different block"
+    );
+    assert_eq!(prompt_block("cmd", "plain output\n"), None);
+    assert_eq!(
+        prompt_block("cmd", "Execute Shell Command\nneeds to execute\n❯ 1. Yes\n"),
+        None,
+        "no full-width rule — nothing comparable"
+    );
+}
+
+/// A cmd folder-trust dialog is the user's even on an actor — the
+/// stage launches with `--trust`, so the dialog showing at all is
+/// a user decision, never something the stage answers.
+#[test]
+fn cmd_trust_dialog_is_the_users() {
+    let trust = "  Do you trust the files in this folder?\n\
+                 \x20 /home/user/acme-shop\n\
+                 \x20 ❯ 1. Yes, proceed\n\
+                 \x20   2. No, exit\n";
+    assert!(needs_user("actor-t1-c1", "cmd", trust, None));
+    assert!(needs_user("director", "cmd", trust, None));
+    // And its rounded box is not a prompt block.
+    assert_eq!(prompt_block("cmd", trust), None);
+}
+
 /// Codex blocks come from their own prompt marker — unmeasured, but
 /// enough to tell two prompts apart. A runner with no block markers
 /// — or none mapped — yields no block.

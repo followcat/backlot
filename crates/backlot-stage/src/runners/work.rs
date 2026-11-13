@@ -81,6 +81,17 @@ fn blocked(runner: &str, screen: &str) -> bool {
                     && has_line_starting(screen, "Not in allowlist:")
                     && has_line_containing(screen, "→ Run (once) (y)"))
         }
+        // Command Code's permission prompt: the `needs to …`
+        // sentence plus the numbered picker cursor (S12a). The
+        // folder-trust dialog is blocked too — `--trust` should
+        // keep it away, so it is the user's prompt, never answered.
+        "cmd" => {
+            cmd_trust_dialog(screen)
+                || ((has_line_containing(screen, "needs to execute")
+                    || has_line_containing(screen, "needs to run")
+                    || has_line_containing(screen, "make this edit to"))
+                    && has_line_starting(screen, "❯ 1."))
+        }
         "fake" => fake_state(screen) == Some(Work::Blocked),
         _ => false,
     }
@@ -95,6 +106,10 @@ fn working(runner: &str, screen: &str) -> bool {
         // Not measured yet — see docs/studio/runners.md.
         "opencode" => screen.contains("esc interrupt"),
         "cursor" => screen.contains("ctrl+c to stop") || screen.lines().any(cursor_spinner_line),
+        // cmd's status line mid-turn: `◇ Conjuring… esc to
+        // interrupt • 5s • ↓ 219` — the verb rotates, the marker
+        // is stable (S12a).
+        "cmd" => screen.contains("esc to interrupt"),
         "fake" => fake_state(screen) == Some(Work::Working),
         _ => false,
     }
@@ -131,6 +146,15 @@ fn cursor_spinner_line(l: &str) -> bool {
 /// prompt, never something the stage answers.
 pub(crate) fn cursor_trust_dialog(text: &str) -> bool {
     text.contains("Workspace Trust Required") && text.contains("Trust this workspace")
+}
+
+/// Command Code's folder-trust dialog — `Do you trust the files in
+/// this folder?` with the `❯ 1. Yes, proceed` picker (S12a).
+/// `--trust` should keep it away — a screen still showing it means
+/// the flag was forgotten or the cwd was unexpectedly non-empty; it
+/// is the user's prompt, never something the stage answers.
+pub(crate) fn cmd_trust_dialog(text: &str) -> bool {
+    text.contains("Do you trust the files in this folder?") && text.contains("Yes, proceed")
 }
 
 /// Claude Code's running turn on 2.1.319: a spinner glyph from

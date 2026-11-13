@@ -200,6 +200,70 @@ fn cursor_idle_is_waiting() {
     assert_eq!(work_state("cursor", idle), Work::Waiting);
 }
 
+/// cmd's permission prompt (the S12a capture, neutralised): the
+/// `Execute Shell Command` title, the `needs to execute` sentence
+/// and the numbered picker under a full-width `─` rule. Blocked
+/// needs the sentence AND the `❯ 1.` cursor — and it beats a
+/// working line still on screen.
+#[test]
+fn cmd_blocked() {
+    let screen = "◇ Conjuring… esc to interrupt • 5s • ↓ 219\n\
+                  ─────────────────────────────────────────\n\
+                  Execute Shell Command\n\
+                  Command Code needs to execute this shell command:\n\
+                  \x20 touch allow-ok.txt\n\
+                  ❯ 1. Yes\n\
+                  \x20 2. Yes, don't ask again for `touch` commands in this project\n\
+                  \x20 3. No, tell Command Code what to do differently\n";
+    assert_eq!(work_state("cmd", screen), Work::Blocked);
+    // Other tool prompts read the same way.
+    let run = screen.replacen(
+        "needs to execute this shell command:",
+        "needs to run this command:",
+        1,
+    );
+    assert_eq!(work_state("cmd", &run), Work::Blocked);
+    let edit = screen.replacen("needs to execute", "wants to make this edit to", 1);
+    assert_eq!(work_state("cmd", &edit), Work::Blocked);
+    // The sentence without the picker cursor is not the prompt.
+    assert_eq!(
+        work_state("cmd", "Command Code needs to execute this shell command:\n"),
+        Work::Waiting
+    );
+    // Nor a cursor alone.
+    assert_eq!(work_state("cmd", "❯ 1. Yes\n"), Work::Waiting);
+}
+
+/// cmd's folder-trust dialog is blocked too — `--trust` should
+/// keep it away, so a role still showing it is the user's prompt
+/// (S12a capture, neutralised).
+#[test]
+fn cmd_trust_dialog_is_blocked() {
+    let trust = "  Do you trust the files in this folder?\n\
+                 \x20 /home/user/acme-shop\n\
+                 \x20 ❯ 1. Yes, proceed\n\
+                 \x20   2. No, exit\n";
+    assert_eq!(work_state("cmd", trust), Work::Blocked);
+}
+
+/// cmd's working turn is the status line's `esc to interrupt`;
+/// the post-turn `✻ Worked for`/`✻ Thought for` lines and the
+/// idle composer are waiting.
+#[test]
+fn cmd_working_and_idle() {
+    assert_eq!(
+        work_state("cmd", "◇ Conjuring… esc to interrupt • 5s • ↓ 219\n"),
+        Work::Working
+    );
+    for screen in [
+        "✻ Worked for 3s\n",
+        "✻ Thought for 1 second [ctrl+o to expand]\n",
+        "❯ Ask your question...\n",
+    ] {
+        assert_eq!(work_state("cmd", screen), Work::Waiting, "{screen:?}");
+    }
+}
+
 /// The fake runner's latest `fake-work:` line is its state.
 #[test]
 fn fake_reads_its_last_announced_state() {
