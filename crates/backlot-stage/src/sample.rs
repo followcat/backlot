@@ -128,7 +128,153 @@ impl Stage {
         );
         self.permission(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
-        self.stall(studio, w, work, now_ms).await
+        self.stall(studio, w, work, now_ms).await?;
+        self.rate_limit(studio, w, &text, now_ms).await
+    }
+
+    /// The S12d rate-limit pass on one fresh sample: a limited
+    /// role gets one stage-owned attention while the stage waits
+    /// the parsed reset out and sends `continue`; three retries
+    /// and the episode escalates `needs_user`. A `continue` that
+    /// worked — the limit lifted — resolves `resumed`; a cleared
+    /// or escalated episode never re-raises while the limit
+    /// holds. Counted by its own reason, never as stall or rework.
+    async fn rate_limit(
+        &self,
+        studio: &str,
+        w: &Watched<'_>,
+        text: &str,
+        now_ms: u64,
+    ) -> Result<(), Fail> {
+        use crate::ratelimit as rl;
+        let (dir, state, role) = (w.dir, w.state, w.role);
+        let pair = (studio.to_string(), role.to_string());
+        let limited = rl::limited(w.term, text);
+        let open = state
+            .open_attention()
+            .find(|a| a.role == role && a.reason == rl::RATE_LIMITED);
+        match (limited, open) {
+            (None, Some(attn)) => {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: attn.seq,
+                        reason: Some("resumed".into()),
+                    },
+                )?;
+                self.rate_pace.borrow_mut().remove(&pair);
+            }
+            (None, None) => {
+                self.rate_pace.borrow_mut().remove(&pair);
+            }
+            (Some(wait), None) => {
+                if self.rate_pace.borrow().contains_key(&pair) {
+                    return Ok(());
+                }
+                self.raise_attention(
+                    Raise {
+                        dir,
+                        role,
+                        reason: rl::RATE_LIMITED,
+                        text,
+                        needs_user: false,
+                        bound: None,
+                    },
+                    move |seq| {
+                        format!("rate limited; auto-retry after the reset; screen saved to attention/{seq}.txt")
+                    },
+                )
+                .await?;
+                self.rate_pace.borrow_mut().insert(
+                    pair,
+                    rl::RatePace {
+                        retries: 0,
+                        due_ms: now_ms + wait + rl::RETRY_MARGIN_MS,
+                    },
+                );
+                eprintln!("stage: {role} rate limited");
+            }
+            (Some(wait), Some(attn)) => {
+                if attn.needs_user {
+                    return Ok(());
+                }
+                let pace = self
+                    .rate_pace
+                    .borrow()
+                    .get(&pair)
+                    .copied()
+                    .unwrap_or(rl::RatePace {
+                        retries: 0,
+                        due_ms: now_ms,
+                    });
+                match rl::step(pace, pace.retries < rl::MAX_RETRIES, now_ms) {
+                    rl::Step::Wait => {}
+                    rl::Step::Send => {
+                        let sent = self
+                            .client
+                            .call(
+                                "terminal.send",
+                                Some(serde_json::json!({
+                                    "terminal": w.term.address,
+                                    "text": rl::CONTINUE,
+                                })),
+                            )
+                            .await;
+                        match sent {
+                            Ok(_) => {
+                                eprintln!(
+                                    "stage: sent '{:?}' to {role} after its rate-limit reset",
+                                    rl::CONTINUE
+                                );
+                                self.rate_pace.borrow_mut().insert(
+                                    pair,
+                                    rl::RatePace {
+                                        retries: pace.retries + 1,
+                                        due_ms: now_ms + wait + rl::RETRY_MARGIN_MS,
+                                    },
+                                );
+                            }
+                            Err(CallError::Rpc(_)) => {}
+                            Err(e) => return Err(Fail::call(e)),
+                        }
+                    }
+                    rl::Step::Escalate => {
+                        record(
+                            dir,
+                            EventKind::AttentionCleared {
+                                target: attn.seq,
+                                reason: Some(format!(
+                                    "auto-retries exhausted after {}",
+                                    rl::MAX_RETRIES
+                                )),
+                            },
+                        )?;
+                        self.raise_attention(
+                            Raise {
+                                dir,
+                                role,
+                                reason: rl::RATE_LIMITED,
+                                text,
+                                needs_user: true,
+                                bound: None,
+                            },
+                            move |seq| {
+                                format!(
+                                    "rate limited after {} auto-retries; needs the user — screen saved to attention/{seq}.txt",
+                                    rl::MAX_RETRIES
+                                )
+                            },
+                        )
+                        .await?;
+                        eprintln!(
+                            "stage: {role} rate limit escalated after {} auto-retries",
+                            rl::MAX_RETRIES
+                        );
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The S6 stall pass on the sample just stored: a screen held

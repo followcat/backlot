@@ -283,6 +283,7 @@ stage can raise:
 | `cursor dir was open` | A cursor role's `roles/<role>/cursor/` — the boundary that keeps the agent's `authInfo`-holding files unreachable — carried a group or other permission bit. The stage found it at launch prep or at session discovery and set it back to 700. | Informational only — the detail names the path suffix. Check what set the mode (a loose umask, an outside chmod); a repeat drift raises it again. |
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
 | `cmd prep failed` | A cmd role's per-session setup failed — its workdir `.commandcode/settings.json` could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
+| `rate limited` | The role's terminal reports `error`, or a waiting screen names a limit — counted separately from `stalled` and rework. | Usually nothing: the stage waits the parsed reset out and sends `continue`, up to three auto-retries. A successful resume resolves `resumed`; an episode that outlives the budget re-raises `needs the user` — answer it by hand. |
 
 A stale open attention — one whose condition no longer holds, such as a stage-restart leftover —
 closes by hand:

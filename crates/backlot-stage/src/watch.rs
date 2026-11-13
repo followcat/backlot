@@ -434,6 +434,7 @@ impl Stage {
         self.revision_since
             .borrow_mut()
             .retain(|(s, r), _| keep(s, r));
+        self.rate_pace.borrow_mut().retain(|(s, r), _| keep(s, r));
         Ok(())
     }
 
