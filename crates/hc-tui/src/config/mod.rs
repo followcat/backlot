@@ -19,6 +19,7 @@ pub use tab_bar::TabBarRightEntryConfig;
 mod io;
 mod keybinds;
 mod registry;
+mod shell_command;
 mod sidebar;
 mod sound;
 mod theme;

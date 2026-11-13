@@ -17,6 +17,8 @@ pub enum Action {
     Help,
     /// Print the version; never connects.
     Version,
+    /// Run the official installer to upgrade; never connects.
+    Upgrade,
     /// Run the client.
     Run(Options),
 }
@@ -40,6 +42,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Action::Help),
             "-V" | "--version" => return Ok(Action::Version),
+            "--upgrade" => return Ok(Action::Upgrade),
             "--session" => {
                 let Some(value) = args.next() else {
                     return Err("--session needs a value".into());
@@ -69,6 +72,38 @@ pub fn version_text() -> String {
     format!("backlot {}", env!("CARGO_PKG_VERSION"))
 }
 
+/// The documented installer one-liner — the same URL `docs/install.md`
+/// publishes. Kept in one constant so `--upgrade` and the notice text
+/// can't drift apart.
+pub const INSTALL_COMMAND: &str =
+    "curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | sh";
+
+/// `backlot --upgrade`: a user-invoked network action, not a background
+/// call — the official installer runs with stdio inherited so its
+/// progress shows, and the exit code propagates.
+pub fn upgrade() -> std::process::ExitCode {
+    use std::process::ExitCode;
+    match std::process::Command::new("sh")
+        .args(["-c", INSTALL_COMMAND])
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+    {
+        Ok(status) if status.success() => {
+            println!("restart backlot to use the new version");
+            ExitCode::SUCCESS
+        }
+        Ok(status) => status.code().map_or(ExitCode::FAILURE, |code| {
+            ExitCode::from(u8::try_from(code).unwrap_or(1))
+        }),
+        Err(e) => {
+            eprintln!("error: upgrade: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// Long help for `--help`.
 pub fn help_text() -> String {
     format!(
@@ -85,6 +120,8 @@ Options:
                          target (login kept 10 minutes)
   -h, --help             Print this help
   -V, --version          Print the version
+      --upgrade          Run the official installer to upgrade to the
+                         latest release, then restart backlot
 
 Default keys: Ctrl+B prefix — q detach · w workspace navigation ·
 b sidebar · ? keybinds · Ctrl+B Ctrl+B literal ^B.
@@ -172,7 +209,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
             let mut params = params;
             // The verified local caller tags every attach — the core
             // refuses a terminal attaching to itself, so no nested
-            // hc-tui can echo its own output back.
+            // backlot can echo its own output back.
             params.caller = caller;
             match conn {
                 // A remote attach rides the one framed connection every
@@ -237,6 +274,13 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     // failed above and starts nothing. Kick the one-shot local core
     // start; its report lands as a notice only when it fails.
     app.set_core_start(crate::core_start::kick(endpoint, env));
+    // The sanctioned one-off release check: one curl HEAD, bounded and
+    // silent — `update.version_check = false` or HC_TUI_NO_UPDATE_CHECK
+    // disarm it before anything spawns.
+    app.set_update_check(crate::update_check::kick(
+        env,
+        loaded.config.update.version_check,
+    ));
     let result = app
         .run(&mut terminal, &mut reader.ui, &mut reader.replies)
         .await;
@@ -319,6 +363,18 @@ mod tests {
             session: "scratch".into(),
         });
         assert_eq!(self_caller(&env, &remote), None);
+    }
+
+    /// `--upgrade` is a first-class action — and near-miss flags still
+    /// error rather than silently starting the client.
+    #[test]
+    fn upgrade_is_a_parse_action() {
+        assert!(matches!(
+            parse(vec!["--upgrade".to_owned()]).unwrap(),
+            Action::Upgrade
+        ));
+        assert!(parse(vec!["--upgrde".to_owned()]).is_err());
+        assert!(INSTALL_COMMAND.contains("install.sh"));
     }
 
     /// Only a remote endpoint's attaches multiplex onto the shared

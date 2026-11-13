@@ -697,3 +697,41 @@
   scratch core, and the file case fails on pre-fix code by timeout.
 - Gates: fmt, clippy, the full suite, the 29 installer tests, parity
   vectors and the 80x24 parity run (details in the brief report).
+## Per-tab persistent floating terminal (branch feat/float-per-tab)
+
+- Popup commands gained a `persistent` field: it defaults on for `type =
+  "popup"` commands that launch a bare interactive shell (the documented
+  `exec "${SHELL:-sh}"` example qualifies unchanged), and everything else
+  stays a one-shot popup unless it sets `persistent = true`.
+- Each tab owns its float, keyed by machine + tab + binding. The chord
+  toggles it; leaving a tab or focusing another pane parks the float on
+  a `SizeLease` so the program keeps running at its actual size, and
+  returning restores it if it was visible. Spawn happens on the tab's
+  machine (remote included) with `keep` + `rm` and owner/command labels;
+  cwd falls back repo root → space folder → terminal cwd.
+- Reconciliation adopts labelled floats after a client restart, removes
+  `rm`-reaped records, and kills an owner-gone float once — verified
+  through `terminal.get` on the owning endpoint's Online snapshot, then
+  `terminal.kill` with the incarnation's `created_ms`. Remote tab closes
+  and offline endpoints behave the same (offline never kills). A
+  workspace closing kills every float its tabs parked in one pass.
+- While a persistent float is focused, the direct bindings of
+  `previous_tab`/`next_tab`/`previous_agent`/`next_agent` and every
+  popup command chord still dispatch — Alt+arrows navigate, Alt+F hides
+  instead of typing. Intercepted presses record their identity so the
+  matching release never reaches a program that saw no press; all other
+  keys, Esc included, type through.
+- Review fixes: host resize refits hidden `SizeLease` attachments; an
+  ephemeral popup cannot preempt a persistent run in flight; persistent
+  `PopupState.owner_tab` stays `None` (ownership lives in `FloatKey`);
+  duplicate owner-gone kills are gated by `kill_sent` while inventory
+  still lists the record.
+- Tests: shell-predicate table plus 22 fake-core tests — spawn params
+  and labels, cwd fallback chain, remote `on`, hide/restore/toggle,
+  exit and record-removal cleanup, owner-gone kill-once for local tab,
+  remote tab and whole-workspace closes, offline retention, label
+  adoption, hidden-float refit, pending-run race, chord interception
+  and release suppression.
+- Gates: fmt, all-target clippy with denied warnings and the full suite
+  pass on every commit (38c93aa, 33797c8, 4b9c46d). The scratch-core e2e
+  remains ignored until `HC_TUI_TEST_CORE` names a pinned binary.

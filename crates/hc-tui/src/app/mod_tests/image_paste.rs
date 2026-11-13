@@ -448,6 +448,9 @@ async fn popup_terminal_is_the_target() {
         width: None,
         height: None,
         owner_tab: None,
+        persistent: false,
+        key: None,
+        created_ms: 9,
         seen: true,
     });
     let mut t9 = crate::sidebar::fixture::term("t9");

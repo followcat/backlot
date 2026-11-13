@@ -2,6 +2,9 @@
 mod cases_1;
 mod cases_2;
 mod endpoint_nav;
+mod float_draw;
+mod float_takeover;
+mod floats;
 mod image_paste;
 mod layout;
 mod layout_regressions;
@@ -142,16 +145,24 @@ fn app() -> App {
 }
 
 fn app_with_spaces(spaced: &[(&str, &str)]) -> App {
+    let tabbed: Vec<(&str, &str, &str)> = spaced
+        .iter()
+        .map(|(a, space)| (*a, *space, "tab"))
+        .collect();
+    app_with_tabs(&tabbed)
+}
+
+fn app_with_tabs(tabbed: &[(&str, &str, &str)]) -> App {
     let mut app = app();
-    let terms: Vec<_> = spaced
+    let terms: Vec<_> = tabbed
         .iter()
         .enumerate()
-        .map(|(i, (a, space))| {
+        .map(|(i, (a, space, tab))| {
             let mut t = crate::sidebar::fixture::term(a);
             t.pid = Some(1);
             t.created_ms = i as u64;
             t.labels.insert("herdr.space".into(), (*space).into());
-            t.labels.insert("herdr.tab".into(), "tab".into());
+            t.labels.insert("herdr.tab".into(), (*tab).into());
             t
         })
         .collect();

@@ -54,8 +54,26 @@ The archive also contains `LICENSE`, `NOTICE` and a short `README.md`.
 
 ## Upgrade
 
-Re-run the install script. `BACKLOT_VERSION=v<new>` moves to a specific release, up or down.
-The binary is replaced atomically; running clients keep their own in-memory copy until restart.
+```sh
+backlot --upgrade
+```
+
+`--upgrade` runs the install script again for the latest release, with its progress on your terminal, and asks you to
+restart backlot. Set `BACKLOT_VERSION=v<version>` first to move to a specific release, newer or older. Clients that are
+already running keep the old version until you restart them.
+
+### Update check
+
+On startup backlot asks GitHub what the latest release is — one `HEAD` request to `releases/latest`, bounded to five
+seconds and fully asynchronous. When a newer release exists a toast says `backlot vX.Y.Z is out — run: backlot
+--upgrade`. The answer is cached in `$XDG_STATE_HOME/backlot/update-check.json` (`~/.local/state/backlot/` when XDG is
+unset) for 24 hours, so at most one real request happens per day; a cached "newer" answer still shows the toast. Any
+network or parse failure stays silent — no toast, no warning.
+
+Opt out either way:
+
+- `update.version_check = false` in your Herdr config, or
+- `BACKLOT_NO_UPDATE_CHECK=1` in the environment.
 
 ## Uninstall
 
@@ -69,4 +87,5 @@ backlot leaves little else behind:
   config. Other content in that file isn't touched.
 - The SSH control socket lives in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>`. It expires by itself, and
   you can delete the directory.
+- The update-check cache is one JSON file in `$XDG_STATE_HOME/hc-tui/` (`~/.local/state/hc-tui/` when XDG is unset).
 - The `hc-tui` layout document is stored on the core.

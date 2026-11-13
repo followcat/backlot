@@ -309,6 +309,10 @@ pub struct CustomCommandKeybind {
     /// Popup geometry, only meaningful for `action == Popup`.
     pub width: Option<crate::popup_size::PopupSize>,
     pub height: Option<crate::popup_size::PopupSize>,
+    /// `type = "popup"` runs as a per-tab persistent float: Alt+F-style
+    /// hide/show instead of a modal one-shot. Resolved from the optional
+    /// `persistent` key or the interactive-shell heuristic.
+    pub persistent: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -143,8 +143,38 @@ height = "80%"
 ![A floating shell opened with Alt+F](images/alt-f.gif)
 
 `width` and `height` take a percentage or a number of cells. While the popup is open, every key goes to it, including
-`Esc`. It closes when its program exits, so type `exit` or press `Ctrl+D`. Leaving its tab also closes it and ends its
-program.
+`Esc`.
+
+A popup that just runs an interactive shell — like the `Alt+F` example above — is a *persistent float* per tab: press the
+key again to hide it, press it once more to bring it back. Leaving the tab hides it too, but the program keeps running
+and coming back shows it again if it was open when you left. It starts in the project directory of the tab it belongs
+to, and it ends only when its program exits or when you close that tab or workspace. Other popup commands stay
+one-shot: they close and end when you leave the tab. Set `persistent = true` on a `[[keys.command]]` entry to give any
+popup command the same per-tab behavior, or `persistent = false` to keep even a shell one-shot. While a float is
+starting, its own chord is held back until the terminal is up.
+
+While a persistent float is focused, the keys bound to `previous_tab`/`next_tab`/`previous_agent`/`next_agent` — the
+`Alt+arrow` shortcuts above, if you set them — still switch tabs and agents: the float parks on its tab and keeps
+running, exactly as if you had clicked away. Any `[[keys.command]]` popup chord also still works, so `Alt+F` toggles
+the float instead of typing into it. The program loses exactly those chords — press, repeat and release; everything
+else, `Esc` included, reaches it, and an action with no binding loses nothing.
+
+The persistent float draws a dressed frame: the panes behind it dim, a one-cell drop shadow sits right and below, and
+the corners are rounded. Its title carries the binding, the owning tab and the program, with the hide chord hinted on
+the right — the hint drops when the frame is too narrow to show it clear of the title. The border is the theme accent
+while the float is focused and turns muted while the keyboard is locked (`Ctrl+G`).
+
+```text
+╭ float alt+f — work — zsh          alt+f hide · esc sends to program ╮
+│                                                                   │
+│  ~/project                                                        │
+│  $                                                                │
+│                                                                   │
+╰───────────────────────────────────────────────────────────────────╯
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+```
+
+One-shot popups keep the plain square frame.
 
 ## Pasting text and images
 

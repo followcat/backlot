@@ -13,7 +13,7 @@ use super::keybinds::{
     is_unmodified_printable, normalize_key_combo, parse_binding_string, parse_key_combo,
     parse_prefix_keys,
 };
-use super::{CommandKeybindType, Config};
+use super::{CommandKeybindType, Config, shell_command};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BindingSource {
@@ -425,6 +425,16 @@ fn append_custom_command_bindings(
                 }
             }
         }
+        let mut persistent = false;
+        if action != CustomCommandAction::Popup && command.persistent.is_some() {
+            diagnostics.push(format!(
+                "persistent on non-popup custom command: keys.command[{index}]; ignoring persistent"
+            ));
+        } else if action == CustomCommandAction::Popup {
+            persistent = command
+                .persistent
+                .unwrap_or_else(|| shell_command::popup_command_is_shell(&command.command));
+        }
         let label = bindings.label().unwrap_or_else(|| "unset".to_string());
         keybinds.custom_commands.push(CustomCommandKeybind {
             bindings,
@@ -434,6 +444,7 @@ fn append_custom_command_bindings(
             description: command.description.clone(),
             width,
             height,
+            persistent,
         });
     }
 }

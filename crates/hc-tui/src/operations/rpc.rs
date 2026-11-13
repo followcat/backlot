@@ -419,7 +419,7 @@ pub(super) async fn run(
                 .await
                 .map_err(|e| format!("Popup failed: {e}; the request was not replayed"))?
                 .terminal;
-            Ok(Outcome::Ran(terminal.address))
+            Ok(Outcome::Ran(terminal.address, terminal.created_ms))
         }
         Action::PeekKeep {
             mut edit,

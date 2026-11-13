@@ -112,8 +112,11 @@ async fn a_focused_panel_eats_a_host_paste_ahead_of_an_open_popup() {
     app.popup_pending = Some(crate::app::popup::PopupPending {
         width: Some(PopupSize::Percent(80)),
         height: Some(PopupSize::Percent(80)),
+        persistent: false,
+        owner: String::new(),
+        command: String::new(),
     });
-    app.on_popup_spawned("t10".into());
+    app.on_popup_spawned("t10".into(), 10);
     assert!(app.popup.is_some());
     assert!(app.panel_focused());
     // The paste arm reaches the focused panel before upstream's
