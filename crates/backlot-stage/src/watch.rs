@@ -22,8 +22,21 @@ use crate::runners;
 use crate::workareas;
 
 /// A live role may keep its session id hidden this long before the
-/// stage asks for attention.
+/// stage asks for attention — the default window.
 pub(crate) const SESSION_WAIT_MS: u64 = 60_000;
+
+/// The discovery window is per-runner (S12d): cmd's `.jsonl` only
+/// lands once the first turn's picker is answered — measured ~175s
+/// — so its window is four minutes; every other runner keeps the
+/// one-minute default. A session-less role past the default but
+/// inside its own window is a soft warning in the log only; the
+/// `session id not found` attention waits for its runner's window.
+pub(crate) fn session_wait_ms(runner: &str) -> u64 {
+    match runner {
+        "cmd" => 240_000,
+        _ => SESSION_WAIT_MS,
+    }
+}
 
 /// A session-less role's id is looked for at most this often —
 /// a rollout walk or a `devin list` every tick would block the loop.
@@ -252,13 +265,17 @@ pub(crate) fn session_event(
         );
         return events;
     }
-    if age_ms < SESSION_WAIT_MS || session_attention(state, role, since_ms).is_some() {
+    let wait_ms = session_wait_ms(runner);
+    if age_ms < wait_ms || session_attention(state, role, since_ms).is_some() {
         return Vec::new();
     }
     vec![EventKind::AttentionRaised {
         role: role.into(),
         reason: SESSION_NOT_FOUND.into(),
-        detail: format!("runner '{runner}' gave no session id within 60s of the role starting"),
+        detail: format!(
+            "runner '{runner}' gave no session id within {}s of the role starting",
+            wait_ms / 1000
+        ),
         needs_user: false,
     }]
 }
@@ -358,6 +375,23 @@ impl Stage {
             } else {
                 None
             };
+            // Past the default window but inside the runner's own:
+            // an anomaly worth one log line, not yet an attention.
+            if found.is_none()
+                && age_ms >= SESSION_WAIT_MS
+                && age_ms < session_wait_ms(&actor.runner)
+                && self
+                    .session_warned
+                    .borrow_mut()
+                    .insert((studio.to_string(), key.clone()))
+            {
+                eprintln!(
+                    "stage: {key} still has no session id at {}s; '{}' waits {}s",
+                    age_ms / 1000,
+                    actor.runner,
+                    session_wait_ms(&actor.runner) / 1000
+                );
+            }
             for kind in session_event(key, &actor.runner, found, state, role.since_ms, age_ms) {
                 if let EventKind::RoleSession { session_id, .. } = &kind {
                     self.found_sessions.borrow_mut().insert(session_id.clone());
@@ -375,6 +409,7 @@ impl Stage {
         self.blocked_since
             .borrow_mut()
             .retain(|(s, r), _| keep(s, r));
+        self.session_warned.borrow_mut().retain(|(s, r)| keep(s, r));
         Ok(())
     }
 

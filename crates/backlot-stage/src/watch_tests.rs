@@ -306,6 +306,35 @@ fn session_event_timing() {
     assert!(!session_event("director", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty());
 }
 
+/// The discovery window is per-runner (S12d): cmd's `.jsonl` lands
+/// late — measured ~175s — so it waits 240s while every other
+/// runner keeps the 60s default. Inside its window a cmd miss
+/// stays quiet; past it the attention names the real window.
+#[test]
+fn session_wait_is_per_runner() {
+    let state = StudioState::default();
+    for age in [SESSION_WAIT_MS, 120_000, 239_999] {
+        assert!(
+            session_event("actor-t1", "cmd", None, &state, 0, age).is_empty(),
+            "cmd at {age}ms stays quiet"
+        );
+    }
+    let raised = session_event("actor-t1", "cmd", None, &state, 0, 240_000);
+    match raised.as_slice() {
+        [EventKind::AttentionRaised { reason, detail, .. }] => {
+            assert_eq!(reason, SESSION_NOT_FOUND);
+            assert!(detail.contains("240s"), "{detail}");
+        }
+        other => panic!("expected one attention, got {other:?}"),
+    }
+    // A late find still clears an open attention as before.
+    let cleared = session_event("actor-t1", "cmd", Some("s2".into()), &state, 0, 300_000);
+    assert!(matches!(
+        cleared.as_slice(),
+        [EventKind::RoleSession { .. }]
+    ));
+}
+
 /// An attention from before `since_ms` — a previous life's — neither
 /// unblocks a pending `(runner, folder)` pair nor suppresses this
 /// life's own raise; the same attention raised in this life does
