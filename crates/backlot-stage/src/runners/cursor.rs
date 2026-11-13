@@ -31,6 +31,7 @@ use backlot_model::ActorIdentity;
 use backlot_model::event::{CheckDecl, EventKind};
 use backlot_model::state::actor_task;
 
+use super::splice::{splice_permissions, write600};
 use super::{Launch, LaunchCtx, PlanError, Prep, Session};
 
 /// The stage env carries `XDG_CONFIG_HOME`: `auth.json` moves with
@@ -249,20 +250,6 @@ pub(crate) fn dir_open_event(role: &str) -> EventKind {
     }
 }
 
-/// A stage-written file, mode 600 — `cli-config.json` will hold the
-/// account's `authInfo` once the agent has run.
-#[cfg(unix)]
-fn write600(path: &Path, content: &[u8]) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, content)?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-}
-
-#[cfg(not(unix))]
-fn write600(path: &Path, content: &[u8]) -> std::io::Result<()> {
-    std::fs::write(path, content)
-}
-
 /// The `permissions` value the file carries — the role's `allow`
 /// rules and the mandatory empty `deny` (the schema requires both).
 fn permissions_value(allow: &[String]) -> serde_json::Value {
@@ -280,113 +267,6 @@ fn minimal_config(allow: &[String]) -> String {
     }))
     .unwrap_or_default()
         + "\n"
-}
-
-/// A JSON string literal in `text` starting at `at` (which must be
-/// the opening quote): its end offset, or `None` when unterminated.
-fn string_end(text: &str, at: usize) -> Option<usize> {
-    let bytes = text.as_bytes();
-    let mut i = at + 1;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\\' => i += 2,
-            b'"' => return Some(i + 1),
-            _ => i += 1,
-        }
-    }
-    None
-}
-
-/// The end offset of the JSON value starting at `at` — object,
-/// array, string, or a scalar literal; nesting and strings handled.
-/// A scalar runs to the next `,` `}` `]` or the text's end.
-fn value_end(text: &str, at: usize) -> Option<usize> {
-    let bytes = text.as_bytes();
-    let mut depth = 0usize;
-    let mut i = at;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'"' => i = string_end(text, i)?,
-            b'{' | b'[' => {
-                depth += 1;
-                i += 1;
-            }
-            b'}' | b']' => {
-                if depth == 0 {
-                    return Some(i);
-                }
-                depth -= 1;
-                i += 1;
-            }
-            b',' if depth == 0 => return Some(i),
-            _ => i += 1,
-        }
-        if depth == 0 && i > at && matches!(bytes[at], b'{' | b'[' | b'"') {
-            // A delimited value ended at its own close.
-            return Some(i);
-        }
-    }
-    if depth == 0 && i > at { Some(i) } else { None }
-}
-
-/// `text`'s top-level `"permissions"` value replaced by `value`,
-/// spliced byte-exact so every other key — `authInfo` included,
-/// never parsed here — keeps its bytes. When the object has no
-/// `permissions` key the member is appended; a text that is not a
-/// JSON object at all yields `None` and the caller writes fresh.
-fn splice_permissions(text: &str, value: &str) -> Option<String> {
-    let bytes = text.as_bytes();
-    if bytes.first() != Some(&b'{') {
-        return None;
-    }
-    let mut members: Vec<(usize, usize, usize)> = Vec::new(); // (key start, value start, value end)
-    let mut i = 1;
-    let mut close = None;
-    while i < bytes.len() {
-        i += text[i..]
-            .bytes()
-            .take_while(|b| b.is_ascii_whitespace() || *b == b',')
-            .count();
-        match bytes.get(i) {
-            Some(&b'}') => {
-                close = Some(i);
-                break;
-            }
-            Some(&b'"') => {
-                let key_start = i;
-                i = string_end(text, i)?;
-                i += text[i..]
-                    .bytes()
-                    .take_while(|b| b.is_ascii_whitespace())
-                    .count();
-                if bytes.get(i) != Some(&b':') {
-                    return None;
-                }
-                i += 1;
-                i += text[i..]
-                    .bytes()
-                    .take_while(|b| b.is_ascii_whitespace())
-                    .count();
-                let vstart = i;
-                i = value_end(text, i)?;
-                members.push((key_start, vstart, i));
-            }
-            _ => return None,
-        }
-    }
-    let close = close?;
-    for (ks, vs, ve) in &members {
-        if text[*ks..string_end(text, *ks)?] == *"\"permissions\"" {
-            return Some(format!("{}{}{}", &text[..*vs], value, &text[*ve..]));
-        }
-    }
-    // No permissions key: append before the closing brace.
-    let insertion = if members.is_empty() {
-        format!("\n  \"permissions\": {value}\n")
-    } else {
-        format!(",\n  \"permissions\": {value}\n")
-    };
-    Some(format!("{}{}{}", &text[..close], insertion, &text[close..]))
 }
 
 /// The JSON content `config/cli-config.json` holds after prepare.

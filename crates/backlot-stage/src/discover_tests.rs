@@ -367,6 +367,74 @@ fn cursor_finds_its_chat() {
     assert_eq!(find(&BTreeSet::new(), 1).as_deref(), Some(u2));
 }
 
+/// A fake `~/.commandcode/projects/<slug>/<uuid>.jsonl` whose first
+/// line is the session record, as `session_at` reads it.
+fn cmd_transcript(home: &Path, slug_dir: &str, uuid: &str, cwd: &str) {
+    let dir = home.join(".commandcode/projects").join(slug_dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join(format!("{uuid}.jsonl")),
+        format!("{{\"type\":\"session\",\"version\":3,\"id\":\"{uuid}\",\"cwd\":\"{cwd}\"}}\n"),
+    )
+    .unwrap();
+}
+
+/// A cmd role's transcript lives under the user's HOME (cmd has no
+/// per-role state tree): the newest uuid `.jsonl` at or after the
+/// role's start whose line 1 names the cwd is the session. A
+/// resumed role's id reads back off its argv instead.
+#[test]
+fn cmd_finds_its_transcript() {
+    let home = tmp("cmd-home");
+    let role_dir = tmp("cmd-rd");
+    let (u1, u2) = (
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    );
+    cmd_transcript(&home, "home-user-acme-shop", u1, CWD);
+    cmd_transcript(&home, "home-user-acme-shop", u2, CWD);
+    let find = |taken: &BTreeSet<String>| {
+        find_session(
+            "cmd",
+            &[],
+            CWD,
+            1,
+            taken,
+            &Look {
+                home: &home,
+                role_dir: &role_dir,
+            },
+            &no_exec,
+        )
+    };
+    let found = find(&BTreeSet::new());
+    assert!(found.as_deref() == Some(u1) || found.as_deref() == Some(u2));
+    // Both taken: nothing; one taken: the other serves.
+    assert_eq!(
+        find(&BTreeSet::from([u1.to_string(), u2.to_string()])),
+        None
+    );
+    // A resumed role's `-r <id>` reads off argv — taken or not,
+    // argv wins only when the id is free.
+    let argv = vec!["cmd".into(), "-r".into(), "sess-9".into()];
+    assert_eq!(
+        find_session(
+            "cmd",
+            &argv,
+            CWD,
+            1,
+            &BTreeSet::new(),
+            &Look {
+                home: &home,
+                role_dir: &role_dir
+            },
+            &no_exec
+        )
+        .as_deref(),
+        Some("sess-9")
+    );
+}
+
 /// Chosen ids read back off argv respect `taken`; runners that
 /// do not choose give nothing here.
 #[test]

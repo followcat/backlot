@@ -624,11 +624,84 @@ fn cursor_argv_and_env() {
     assert!(plan(&actor("cursor", "standard"), &ctx(&env, None, None)).is_ok());
 }
 
+/// cmd's fresh and resume argv — `-n <terminal>` names a fresh
+/// session (resumable by name), `-r <id>` resumes, `-m` carries the
+/// model, and the measured flag trio always rides. The prompt is
+/// positional on a fresh launch only — a resume ignores it, so the
+/// stage sends it after the composer opens (like devin).
+/// `NODE_USE_ENV_PROXY=1` is always in the env — measured: without
+/// it the model traffic bypasses the company proxy (S12a).
+#[test]
+fn cmd_argv_and_env() {
+    let env = BTreeMap::new();
+    for profile in ["standard", "worktree"] {
+        let l = plan(&actor("cmd", profile), &ctx(&env, None, None)).unwrap();
+        assert_eq!(
+            l.argv,
+            [
+                "cmd",
+                "-n",
+                "bl-s-t1",
+                "-m",
+                "m",
+                "--trust",
+                "--skip-onboarding",
+                "--no-auto-update"
+            ]
+        );
+        assert_eq!(l.session, Session::PostLaunch);
+        assert_eq!(l.env["NODE_USE_ENV_PROXY"], "1");
+        // A first prompt is positional and last.
+        let c = ctx(&env, Some("first"), None);
+        let l = plan(&actor("cmd", profile), &c).unwrap();
+        assert_eq!(l.argv.last().unwrap(), "first");
+        // Resume: `-r <id>` ahead of `-m`, no `-n`, no prompt —
+        // the positional is ignored on a resumed TUI.
+        let c = ctx(&env, Some("more"), Some("sess-9"));
+        let l = plan(&actor("cmd", profile), &c).unwrap();
+        assert_eq!(
+            l.argv,
+            [
+                "cmd",
+                "-r",
+                "sess-9",
+                "-m",
+                "m",
+                "--trust",
+                "--skip-onboarding",
+                "--no-auto-update"
+            ]
+        );
+        assert!(!l.argv.iter().any(|a| a == "more"), "{:?}", l.argv);
+        // The never-flags, fresh or resume — `--effort` writes the
+        // GLOBAL config (measured); the rest are non-interactive
+        // modes, global writes or bypasses the stage must not
+        // produce.
+        for flag in [
+            "--effort",
+            "--permission-mode",
+            "--tools-all",
+            "--tools-enable",
+            "--yolo",
+            "--dangerously-skip-permissions",
+            "--config",
+            "-p",
+            "--print",
+            "--output-format",
+            "-w",
+            "--cloud",
+            "--no-session",
+        ] {
+            assert!(!l.argv.iter().any(|a| a == flag), "{flag}");
+        }
+    }
+}
+
 /// A profile no runner knows is a refusal, whatever the runner.
 #[test]
 fn an_unknown_profile_refuses_every_runner() {
     let env = BTreeMap::new();
-    for runner in ["claude", "codex", "devin", "opencode", "cursor"] {
+    for runner in ["claude", "codex", "devin", "opencode", "cursor", "cmd"] {
         let e = plan(&actor(runner, "nowhere"), &ctx(&env, None, None)).unwrap_err();
         assert_eq!(e.reason, PROFILE_NOT_SUPPORTED, "{runner}");
         assert!(e.detail.contains("nowhere"), "{e:?}");

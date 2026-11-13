@@ -144,6 +144,20 @@ pub fn find_session(
             started_ms,
             taken,
         ),
+        // cmd's id sits in the resumed terminal's argv when there
+        // is one; a fresh launch's lives under the user's
+        // `~/.commandcode/projects/<slug(cwd)>/` — HOME, not the
+        // role dir, since cmd has no per-role state tree (S12a).
+        "cmd" => runners::session_in_argv(runner, argv)
+            .filter(|id| !taken.contains(id))
+            .or_else(|| {
+                runners::cmd::session_at(
+                    &home.join(".commandcode").join("projects"),
+                    cwd,
+                    started_ms,
+                    taken,
+                )
+            }),
         _ => None,
     }
 }

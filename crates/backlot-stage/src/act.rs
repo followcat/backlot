@@ -219,12 +219,17 @@ impl Stage {
         // attention: the detail names the path suffix only.
         match launch.prep.as_ref().map(runners::prepare) {
             Some(Err(detail)) => {
-                if !attention_open(state, &start.role, reasons::CURSOR_PREP_FAILED) {
+                let reason = launch
+                    .prep
+                    .as_ref()
+                    .map(runners::prep_failed_reason)
+                    .unwrap_or(reasons::CURSOR_PREP_FAILED);
+                if !attention_open(state, &start.role, reason) {
                     record(
                         dir,
                         EventKind::AttentionRaised {
                             role: start.role.clone(),
-                            reason: reasons::CURSOR_PREP_FAILED.into(),
+                            reason: reason.into(),
                             detail,
                             needs_user: true,
                         },

@@ -6,11 +6,13 @@
 //! tick ([`decide_start`]); `fake` is exempt.
 
 pub mod claude;
+pub mod cmd;
 mod codex;
 pub mod cursor;
 mod devin;
 mod fake;
 pub mod opencode;
+pub(crate) mod splice;
 pub(crate) mod work;
 
 pub(crate) use work::work_state;
@@ -45,6 +47,9 @@ pub enum Prep {
     /// cursor's isolated config/data/sandbox tree, its
     /// `cli-config.json` permissions and its MCP-off list.
     Cursor(cursor::CursorPrep),
+    /// cmd's workdir `.commandcode/settings.json` — the role's
+    /// allow rules and its MCP-server deny mask.
+    Cmd(cmd::CmdPrep),
 }
 
 /// Run the launch's prep; the error string is the attention's
@@ -54,6 +59,16 @@ pub enum Prep {
 pub(crate) fn prepare(prep: &Prep) -> Result<bool, String> {
     match prep {
         Prep::Cursor(p) => cursor::prepare(p),
+        Prep::Cmd(p) => cmd::prepare(p),
+    }
+}
+
+/// The attention reason a failed `prepare` raises — each runner
+/// names its own.
+pub(crate) fn prep_failed_reason(prep: &Prep) -> &'static str {
+    match prep {
+        Prep::Cursor(_) => cursor::CURSOR_PREP_FAILED,
+        Prep::Cmd(_) => cmd::CMD_PREP_FAILED,
     }
 }
 
@@ -187,7 +202,7 @@ pub enum StartDecision {
 /// (`Session::PostLaunch` on a `Launch`; this answers the same
 /// question for a live role that only has its actor identity).
 pub fn post_launch_session(runner: &str) -> bool {
-    matches!(runner, "codex" | "devin" | "cursor")
+    matches!(runner, "codex" | "devin" | "cursor" | "cmd")
 }
 
 /// The tick's decision for one pending start. Plan and config errors
@@ -239,6 +254,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "devin" => devin::plan(identity, ctx),
         "opencode" => opencode::plan(identity, ctx),
         "cursor" => cursor::plan(identity, ctx),
+        "cmd" => cmd::plan(identity, ctx),
         other => Err(PlanError::runner(other, ctx)),
     }
 }
@@ -261,6 +277,8 @@ pub fn session_in_argv(runner: &str, argv: &[String]) -> Option<String> {
     match runner {
         "claude" => claude::session_in_argv(argv),
         "opencode" => opencode::session_in_argv(argv),
+        // `-r` takes the resumed id or the `-n` name alike.
+        "cmd" => cmd::session_in_argv(argv),
         _ => None,
     }
 }
@@ -345,6 +363,8 @@ fn uuid_v4() -> String {
 
 #[cfg(test)]
 mod argv_tests;
+#[cfg(test)]
+mod cmd_tests;
 #[cfg(test)]
 mod cursor_tests;
 #[cfg(test)]
