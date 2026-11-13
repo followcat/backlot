@@ -272,6 +272,10 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
             check_stage_caller(&common, env)?;
             return crate::stage::run(&common, env);
         }
+        Cmd::StageWatch { ref target } => {
+            check_stage_caller(&common, env)?;
+            return crate::watchdog::watch(&common, env, target.clone());
+        }
         _ => {}
     }
     let base = base(env, &common)?;

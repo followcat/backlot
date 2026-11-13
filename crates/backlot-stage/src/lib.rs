@@ -36,6 +36,7 @@ mod stale;
 mod stall;
 pub mod store;
 mod watch;
+mod watchdog;
 mod workareas;
 
 #[cfg(test)]
