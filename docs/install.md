@@ -52,8 +52,26 @@ The archive also contains `LICENSE`, `NOTICE` and a short `README.md`.
 
 ## Upgrade
 
-Run the install script again. Set `HC_TUI_VERSION=v<version>` to move to a specific release, newer or older. Clients
-that are already running keep the old version until you restart them.
+```sh
+hc-tui --upgrade
+```
+
+`--upgrade` runs the install script again for the latest release, with its progress on your terminal, and asks you to
+restart hc-tui. Set `HC_TUI_VERSION=v<version>` first to move to a specific release, newer or older. Clients that are
+already running keep the old version until you restart them.
+
+### Update check
+
+On startup hc-tui asks GitHub what the latest release is — one `HEAD` request to `releases/latest`, bounded to five
+seconds and fully asynchronous. When a newer release exists a toast says `hc-tui vX.Y.Z is out — run: hc-tui
+--upgrade`. The answer is cached in `$XDG_STATE_HOME/hc-tui/update-check.json` (`~/.local/state/hc-tui/` when XDG is
+unset) for 24 hours, so at most one real request happens per day; a cached "newer" answer still shows the toast. Any
+network or parse failure stays silent — no toast, no warning.
+
+Opt out either way:
+
+- `update.version_check = false` in your Herdr config, or
+- `HC_TUI_NO_UPDATE_CHECK=1` in the environment.
 
 ## Uninstall
 
@@ -67,4 +85,5 @@ hc-tui leaves little else behind:
   config. Other content in that file isn't touched.
 - The SSH control socket lives in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>`. It expires by itself, and
   you can delete the directory.
+- The update-check cache is one JSON file in `$XDG_STATE_HOME/hc-tui/` (`~/.local/state/hc-tui/` when XDG is unset).
 - The `hc-tui` layout document is stored on the core.

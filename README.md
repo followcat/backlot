@@ -16,6 +16,10 @@ terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
 - Works locally or over plain SSH. Your terminals stay on the server when you detach.
 - Over SSH, `Ctrl+V` pastes an image from your local clipboard into the agent's machine. `Ctrl+Shift+V` stays the
   text paste.
+- A persistent floating terminal per tab (bind `Alt+F` to a shell popup — see [docs/keys.md](docs/keys.md)). It keeps
+  running while you work in the tab, parked when you switch away, killed when its tab closes.
+- A release check on startup tells you when a newer hc-tui is out — one cached request a day, disabled with
+  `update.version_check = false` or `HC_TUI_NO_UPDATE_CHECK=1`. `hc-tui --upgrade` installs it.
 
 | Mouse selection | Settings |
 |---|---|

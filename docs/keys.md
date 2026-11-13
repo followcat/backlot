@@ -135,6 +135,23 @@ running, exactly as if you had clicked away. Any `[[keys.command]]` popup chord 
 the float instead of typing into it. The program loses exactly those chords — press, repeat and release; everything
 else, `Esc` included, reaches it, and an action with no binding loses nothing.
 
+The persistent float draws a dressed frame: the panes behind it dim, a one-cell drop shadow sits right and below, and
+the corners are rounded. Its title carries the binding, the owning tab and the program, with the hide chord hinted on
+the right — the hint drops when the frame is too narrow to show it clear of the title. The border is the theme accent
+while the float is focused and turns muted while the keyboard is locked (`Ctrl+G`).
+
+```text
+╭ float alt+f — work — zsh          alt+f hide · esc sends to program ╮
+│                                                                   │
+│  ~/project                                                        │
+│  $                                                                │
+│                                                                   │
+╰───────────────────────────────────────────────────────────────────╯
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+```
+
+One-shot popups keep the plain square frame.
+
 ## Pasting text and images
 
 `Ctrl+Shift+V` pastes text. That is your terminal's own shortcut, and the program receives it as a bracketed paste,
