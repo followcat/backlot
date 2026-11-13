@@ -233,7 +233,7 @@ fn actor() -> backlot_model::event::ActorIdentity {
         runner: "fake".into(),
         runner_version: None,
         model: "plain".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }

@@ -198,7 +198,7 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                         runner: "fake".into(),
                         runner_version: None,
                         model: "plain".into(),
-                        effort: "high".into(),
+                        effort: Some("high".into()),
                         permission_profile: "standard".into(),
                     }],
                     rework_cap: 2,
@@ -257,7 +257,7 @@ fn actor() -> backlot_model::event::ActorIdentity {
         runner: "fake".into(),
         runner_version: None,
         model: "plain".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }

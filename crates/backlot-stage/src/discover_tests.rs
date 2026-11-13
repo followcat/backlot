@@ -604,7 +604,7 @@ fn version_asks_the_launch_program() {
         runner: runner.into(),
         runner_version: None,
         model: "m".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     };
     let calls = Arc::new(Mutex::new(Vec::new()));

@@ -14,8 +14,8 @@ fn actor_short(a: &ActorIdentity) -> String {
     }
     // A runner carrying its depth in the model id records no effort
     // — the segment is absent, not an empty `//`.
-    if !a.effort.is_empty() {
-        let _ = write!(s, "/{}", a.effort);
+    if let Some(e) = a.effort.as_deref().filter(|e| !e.is_empty()) {
+        let _ = write!(s, "/{e}");
     }
     format!("{s}/{}", a.permission_profile)
 }

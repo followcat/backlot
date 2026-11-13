@@ -135,6 +135,7 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
             .iter()
             .map(|c| (c.name.as_str(), &c.runner, &c.effort)),
     ) {
+        let effort = effort.as_deref().unwrap_or_default();
         if runner.as_str() == "cursor" && !effort.is_empty() {
             return Err(Fail::usage(format!(
                 "{who}: runner 'cursor' has no effort flag — \

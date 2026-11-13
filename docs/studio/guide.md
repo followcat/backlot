@@ -95,16 +95,16 @@ timeout_s = 120
 | `[limits]` | Live-role cap per runner in this studio — `claude = 3` starts no fourth live role on `claude` until a slot frees. Fixed roles and actors count alike, a role being started counts, and a runner with no entry is unlimited. Held starts go producer, director, writer, then actors by task priority and seq, and the waiting role shows `waiting for a <runner> slot`. Per studio: two studios on one account each count only their own roles. A `0` is refused — a runner is limited by a real number or absent. The cap must seat its fixed roles first — the producer and the director stay live for the studio's whole run — so `studio new` refuses a cap under their count on the runner, or at their count while the writer or a candidate shares it: nobody else could ever sit. |
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin`, `opencode` or `cursor`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. |
-| `effort` | Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; OpenCode has no flag). `cursor` and `devin` carry the depth in the model id and may omit it — a set `effort` on `cursor` is refused. |
+| `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; OpenCode has no flag). `cursor` and `devin` carry the depth in the model id and `cmd`'s flag writes global config, so all three omit it — a set `effort` on any of them is refused. |
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
 | `mode` | Optional. `standard` is the default and the only process that exists; `experimental` is a reserved name (R14, not built). |
 | `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
 | `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. |
 
-The three fixed roles and every `[[candidates]]` entry each need `runner`, `model`, `effort` and
-`permission_profile`. The candidates are the pool the director picks actors from — it cannot cast
-anyone else.
+The three fixed roles and every `[[candidates]]` entry each need `runner`, `model` and
+`permission_profile`; `effort` is required only on a runner that takes one. The candidates are the
+pool the director picks actors from — it cannot cast anyone else.
 
 ## Starting
 

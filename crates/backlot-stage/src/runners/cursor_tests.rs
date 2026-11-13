@@ -503,7 +503,7 @@ fn plan_carries_its_prep() {
         runner: "cursor".into(),
         runner_version: None,
         model: "m".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     };
     let l = plan(&ident, &ctx).unwrap();

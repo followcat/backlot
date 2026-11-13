@@ -23,7 +23,10 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "-m".into(),
         identity.model.clone(),
         "-c".into(),
-        format!("model_reasoning_effort={}", identity.effort),
+        format!(
+            "model_reasoning_effort={}",
+            identity.effort.as_deref().unwrap_or_default()
+        ),
         "-c".into(),
         format!("projects={{\"{}\"={{trust_level=\"trusted\"}}}}", ctx.cwd),
         "-s".into(),

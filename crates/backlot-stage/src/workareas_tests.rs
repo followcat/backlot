@@ -117,7 +117,7 @@ fn start(kind: RoleKind, task: Option<&str>) -> Start {
             runner: "fake".into(),
             runner_version: None,
             model: "m".into(),
-            effort: "high".into(),
+            effort: Some("high".into()),
             permission_profile: "standard".into(),
         },
         repo: "/home/user/acme-shop".into(),

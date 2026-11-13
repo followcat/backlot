@@ -64,7 +64,7 @@ fn started(seq: u64, role: &str, runner: &str) -> Event {
             actor: Some(ActorIdentity {
                 runner: runner.into(),
                 model: "m".into(),
-                effort: "high".into(),
+                effort: Some("high".into()),
                 permission_profile: "standard".into(),
                 runner_version: None,
             }),

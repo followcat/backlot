@@ -17,7 +17,7 @@ fn actor(runner: &str) -> ActorIdentity {
         runner: runner.into(),
         runner_version: None,
         model: "m".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }
