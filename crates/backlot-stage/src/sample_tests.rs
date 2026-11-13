@@ -42,16 +42,19 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// The fake core's memory: the screen `terminal.read` returns and
-/// the keys `terminal.keys` sent it.
+/// The fake core's memory: the screen `terminal.read` returns, the
+/// keys `terminal.keys` sent it, and the texts `terminal.send`
+/// delivered.
 #[derive(Default)]
 struct FakeCore {
     screen: String,
     keys: Vec<String>,
+    sends: Vec<String>,
 }
 
-/// Serve `hello`, then `terminal.read` from the shared screen and
-/// `terminal.keys` into the shared list. Ends on a closed wire.
+/// Serve `hello`, then `terminal.read` from the shared screen,
+/// `terminal.keys` into the shared key list and `terminal.send`
+/// into the shared send list. Ends on a closed wire.
 async fn serve(stream: DuplexStream, fake: Arc<Mutex<FakeCore>>) {
     let (read, mut write) = tokio::io::split(stream);
     let mut reader = Reader::new(read);
@@ -66,7 +69,7 @@ async fn serve(stream: DuplexStream, fake: Arc<Mutex<FakeCore>>) {
                     "generation": 1, "version": "fake-core 0.0",
                     "framed": true,
                     "core": {"id": "core-fake-1", "name": "fake-core"},
-                    "methods": ["terminal.read", "terminal.keys"],
+                    "methods": ["terminal.read", "terminal.keys", "terminal.send"],
                     "features": [],
                 }
             }))
@@ -95,6 +98,11 @@ async fn serve(stream: DuplexStream, fake: Arc<Mutex<FakeCore>>) {
                     .map(|k| k.as_str().unwrap().to_string())
                     .collect::<Vec<_>>();
                 fake.lock().unwrap().keys.extend(keys);
+                json!({})
+            }
+            "terminal.send" => {
+                let text = request["params"]["text"].as_str().unwrap_or("").to_string();
+                fake.lock().unwrap().sends.push(text);
                 json!({})
             }
             other => panic!("the stage called an unexpected method: {other}"),
@@ -704,4 +712,125 @@ async fn a_frozen_screen_raises_stalls_once_and_clears_on_change() {
     }
     sample(&stage, &dir, &term, "actor-t1-c1", t0 + 11_000).await;
     assert_eq!(events(&dir, "attention.raised").len(), 2);
+}
+
+/// A bare `error` status — no limit text in `status.msg` or the
+/// screen — is `agent error`, never `rate limited` (S12d review):
+/// the stage raises it once, sends no `continue`, and clears it
+/// `status recovered` when the status leaves `error`.
+#[tokio::test]
+async fn a_plain_error_raises_agent_error_and_sends_nothing() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let mut term = term();
+    term.status = Some(hc_proto::terminal::Status {
+        state: "error".into(),
+        msg: "transport died".into(),
+        ..Default::default()
+    });
+    let (stage, fake) = stage().await;
+    fake.lock().unwrap().screen =
+        "fake runner: actor-t1-c1 of acme-shop\nfake-work: working\n".into();
+    let t0 = now_ms();
+
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            role,
+            reason,
+            detail,
+            needs_user,
+        } => {
+            assert_eq!(role, "actor-t1-c1");
+            assert_eq!(reason, crate::ratelimit::AGENT_ERROR);
+            assert!(!needs_user, "an actor's plain error is the director's");
+            assert!(detail.contains("transport died"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    assert!(
+        fake.lock().unwrap().sends.is_empty(),
+        "a plain error sent a continue"
+    );
+
+    // Once per episode — the next errored sample re-raises nothing.
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 1_000).await;
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // The status leaving `error` clears the attention.
+    term.status = Some(hc_proto::terminal::Status {
+        state: "working".into(),
+        ..Default::default()
+    });
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { reason, .. } => {
+            assert_eq!(reason.as_deref(), Some("status recovered"));
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// The other side of the taxonomy: an `error` with observed limit
+/// text is `rate limited` — stage-owned — and the reset's
+/// auto-`continue` really goes out over `terminal.send`.
+#[tokio::test]
+async fn an_error_with_limit_text_gets_its_continue() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let mut term = term();
+    term.status = Some(hc_proto::terminal::Status {
+        state: "error".into(),
+        msg: "denied".into(),
+        ..Default::default()
+    });
+    let (stage, fake) = stage().await;
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n\
+                                   fake-work: waiting\n\
+                                   usage limit, resets in 30s\n"
+        .into();
+    let t0 = now_ms();
+
+    // The limit raises the stage-owned attention; the retry pace
+    // waits the parsed reset plus the margin.
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            reason, needs_user, ..
+        } => {
+            assert_eq!(reason, crate::ratelimit::RATE_LIMITED);
+            assert!(!needs_user, "the stage owns the rate-limit episode");
+        }
+        _ => unreachable!(),
+    }
+    assert!(fake.lock().unwrap().sends.is_empty());
+
+    // Past the 30s reset + 5s margin the `continue` goes out.
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 30_000).await;
+    assert!(fake.lock().unwrap().sends.is_empty());
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 36_000).await;
+    assert_eq!(fake.lock().unwrap().sends.as_slice(), ["continue"]);
+
+    // The limit lifting — the status recovers — resolves `resumed`.
+    term.status = Some(hc_proto::terminal::Status {
+        state: "working".into(),
+        ..Default::default()
+    });
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 37_000).await;
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { reason, .. } => {
+            assert_eq!(reason.as_deref(), Some("resumed"));
+        }
+        _ => unreachable!(),
+    }
 }

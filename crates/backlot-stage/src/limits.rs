@@ -1,9 +1,10 @@
 //! The time-bound attention episodes the per-role sample drives: a
 //! screen — or, for a reporting terminal, an activity revision —
 //! held unchanged for the stall limit raises `stalled`; an
-//! `error` status or a waiting screen naming a limit opens a
-//! `rate limited` episode the stage answers itself with bounded
-//! auto-retries.
+//! `error` status carrying limit text or a waiting screen naming a
+//! limit opens a `rate limited` episode the stage answers itself
+//! with bounded auto-retries; a bare `error` raises `agent error`
+//! instead — observed, never assumed.
 
 use backlot_model::event::{EventKind, STALLED};
 use backlot_model::state::actor_task;
@@ -13,17 +14,23 @@ use hc_proto::client::CallError;
 use crate::act::record;
 use crate::cli::Fail;
 use crate::daemon::Stage;
+use crate::permit;
 use crate::sample::{Raise, Watched};
 use crate::stall;
 
 impl Stage {
-    /// The S12d rate-limit pass on one fresh sample: a limited
+    /// The S12d error-taxonomy pass on one fresh sample. A limited
     /// role gets one stage-owned attention while the stage waits
     /// the parsed reset out and sends `continue`; three retries
     /// and the episode escalates `needs_user`. A `continue` that
     /// worked — the limit lifted — resolves `resumed`; a cleared
     /// or escalated episode never re-raises while the limit
     /// holds. Counted by its own reason, never as stall or rework.
+    /// A bare `error` status — no limit text in `status.msg` or the
+    /// screen's latest limit block — is `agent error` instead:
+    /// never an auto-`continue`, an actor's goes to the director
+    /// and anything else's needs the user, and it clears when the
+    /// status recovers or the limit text shows.
     pub(crate) async fn rate_limit(
         &self,
         studio: &str,
@@ -158,6 +165,64 @@ impl Stage {
                     }
                 }
             }
+        }
+        // A bare `error` — the status word without any limit text
+        // — raises `agent error` once and sends nothing; it clears
+        // when the status recovers or limit text hands the role to
+        // the episode above.
+        let errored = rl::errored(w.term) && limited.is_none();
+        let err_open = state
+            .open_attention()
+            .find(|a| a.role == role && a.reason == rl::AGENT_ERROR);
+        match (errored, err_open) {
+            (false, Some(attn)) => {
+                record(
+                    dir,
+                    EventKind::AttentionCleared {
+                        target: attn.seq,
+                        reason: Some(
+                            if rl::errored(w.term) {
+                                "rate limit text observed"
+                            } else {
+                                "status recovered"
+                            }
+                            .into(),
+                        ),
+                    },
+                )?;
+            }
+            (true, None) => {
+                let user_owned = !permit::is_actor(role);
+                let msg: String = w
+                    .term
+                    .status
+                    .as_ref()
+                    .and_then(|s| s.msg.lines().next())
+                    .unwrap_or("")
+                    .chars()
+                    .take(120)
+                    .collect();
+                self.raise_attention(
+                    Raise {
+                        dir,
+                        role,
+                        reason: rl::AGENT_ERROR,
+                        text,
+                        needs_user: user_owned,
+                        bound: None,
+                    },
+                    move |seq| {
+                        if user_owned {
+                            format!("terminal reports error: {msg}; needs the user — screen saved to attention/{seq}.txt")
+                        } else {
+                            format!("terminal reports error: {msg}; screen saved to attention/{seq}.txt")
+                        }
+                    },
+                )
+                .await?;
+                eprintln!("stage: {role} reports error");
+            }
+            _ => {}
         }
         Ok(())
     }

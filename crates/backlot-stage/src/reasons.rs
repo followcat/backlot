@@ -48,4 +48,5 @@ pub const ALL: &[&str] = &[
     OWED,
     OVER_BUDGET,
     crate::ratelimit::RATE_LIMITED,
+    crate::ratelimit::AGENT_ERROR,
 ];

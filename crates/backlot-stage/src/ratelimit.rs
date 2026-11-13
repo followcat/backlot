@@ -1,14 +1,20 @@
-//! The rate-limit taxonomy (S12d): a terminal whose status is
-//! `error`, or a waiting screen whose text names a limit, is rate
-//! limited — its own attention reason, counted separately from
-//! `stalled` and rework. While the limit holds the stage waits the
-//! parsed reset out, then sends `continue`; three auto-retries
-//! and the episode escalates to a person.
+//! The rate-limit taxonomy (S12d): limit text observed — in an
+//! `error` status's message or in a waiting screen's latest limit
+//! block — makes a terminal rate limited, its own attention
+//! reason, counted separately from `stalled` and rework. While
+//! the limit holds the stage waits the parsed reset out, then
+//! sends `continue`; three auto-retries and the episode escalates
+//! to a person. A bare `error` with no limit text observed is
+//! [`AGENT_ERROR`], never an auto-`continue` — observed, never
+//! assumed.
 
 use crate::reconcile::LiveTerminal;
 
-/// The attention reason.
+/// The rate-limit attention reason.
 pub const RATE_LIMITED: &str = "rate limited";
+/// A reporting core's `error` status with no limit text anywhere —
+/// its own attention, answered by the director or the user.
+pub const AGENT_ERROR: &str = "agent error";
 /// Auto-retries before the episode is a person's.
 pub const MAX_RETRIES: u8 = 3;
 /// A `continue` goes out this long after the parsed reset — the
@@ -36,19 +42,31 @@ const LIMIT_WORDS: &[&str] = &[
     "reset in",
 ];
 
+/// Whether the terminal reports `error` — regardless of whether
+/// observed limit text makes it this module's episode.
+pub(crate) fn errored(term: &LiveTerminal) -> bool {
+    term.status.as_ref().is_some_and(|s| s.state == "error")
+}
+
 /// Whether the terminal is rate limited now — and how long the
-/// wait should be before a `continue`. `status.state == "error"`
-/// from a reporting core is the primary signal (the error an
-/// agent surfaces after a burned turn is its limit); a `waiting`
-/// or unknown-status screen carrying limit text is the fallback
-/// for a core that reports nothing. `None` — not limited.
-/// `now_ms` is the injected epoch ms the `at HH:MM UTC` parses
-/// against.
+/// wait should be before a `continue`. Observed, never assumed:
+/// a reporting core's `error` counts only when limit text shows —
+/// in `status.msg`, else in the screen's latest limit block. A
+/// silent core's screen carrying a limit line is the fallback for
+/// a core that reports nothing. A bare `error` is [`AGENT_ERROR`]'s
+/// attention instead. `None` — not limited. `now_ms` is the
+/// injected epoch ms the `at HH:MM UTC` parses against.
 pub(crate) fn limited(term: &LiveTerminal, screen: &str, now_ms: u64) -> Option<u64> {
     if let Some(status) = term.status.as_ref().filter(|s| s.state == "error") {
         let msg = status.msg.to_lowercase();
-        let wait = parse_wait(&msg, now_ms).unwrap_or_else(|| reset_ms(screen, now_ms));
-        return Some(wait.clamp(RETRY_MARGIN_MS, 3_600_000));
+        if limit_text(&msg) {
+            let wait = parse_wait(&msg, now_ms).unwrap_or_else(|| reset_ms(screen, now_ms));
+            return Some(wait.clamp(RETRY_MARGIN_MS, 3_600_000));
+        }
+        if limit_text(screen) {
+            return Some(reset_ms(screen, now_ms));
+        }
+        return None;
     }
     let reporting = term.status.is_some();
     if !reporting && limit_text(screen) {
@@ -314,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn limited_reads_the_structured_error_first() {
+    fn an_error_is_limited_only_when_limit_text_is_observed() {
         use hc_proto::terminal::Status;
         let err = |msg: &str| LiveTerminal {
             status: Some(Status {
@@ -324,22 +342,28 @@ mod tests {
             }),
             ..Default::default()
         };
+        assert!(errored(&err("denied")));
+        // Limit text in the status message — the wait parses off
+        // the message itself.
         assert_eq!(
             limited(&err("429, try again in 30s"), "", NOON),
             Some(30_000)
         );
-        // An error with no reset text falls back to the screen's.
+        // Limit text only on the screen — the latest block carries
+        // the observed evidence and the wait.
         assert_eq!(
             limited(&err("denied"), "usage limit resets in 2m", NOON),
             Some(120_000)
         );
+        // A bare error with clean text everywhere is NOT a limit —
+        // it is `agent error`'s, and no `continue` ever leaves.
+        assert_eq!(limited(&err(""), "everything is fine", NOON), None);
+        assert_eq!(limited(&err("denied"), "all clean", NOON), None);
         // A silent core: waiting screen text carries it.
+        let silent = LiveTerminal::default();
+        assert!(!errored(&silent));
         assert_eq!(
-            limited(
-                &LiveTerminal::default(),
-                "rate limit reached, try again in 10s",
-                NOON
-            ),
+            limited(&silent, "rate limit reached, try again in 10s", NOON),
             Some(10_000)
         );
         // Working with an ordinary screen is not limited.
@@ -351,8 +375,6 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(limited(&working, "progress", NOON), None);
-        // A reporting core's `error` wins even over clean text.
-        assert_eq!(limited(&err(""), "everything is fine", NOON), Some(60_000));
     }
 
     #[test]
