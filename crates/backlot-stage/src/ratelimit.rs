@@ -1,12 +1,14 @@
 //! The rate-limit taxonomy (S12d): limit text observed — in an
-//! `error` status's message or in a waiting screen's latest limit
-//! block — makes a terminal rate limited, its own attention
+//! `error` status's message or in the fresh tail of a non-working
+//! screen — makes a terminal rate limited, its own attention
 //! reason, counted separately from `stalled` and rework. While
 //! the limit holds the stage waits the parsed reset out, then
 //! sends `continue`; three auto-retries and the episode escalates
 //! to a person. A bare `error` with no limit text observed is
 //! [`AGENT_ERROR`], never an auto-`continue` — observed, never
 //! assumed.
+
+use backlot_model::summary::Work;
 
 use crate::reconcile::LiveTerminal;
 
@@ -51,28 +53,55 @@ pub(crate) fn errored(term: &LiveTerminal) -> bool {
 /// Whether the terminal is rate limited now — and how long the
 /// wait should be before a `continue`. Observed, never assumed:
 /// a reporting core's `error` counts only when limit text shows —
-/// in `status.msg`, else in the screen's latest limit block. A
-/// silent core's screen carrying a limit line is the fallback for
-/// a core that reports nothing. A bare `error` is [`AGENT_ERROR`]'s
-/// attention instead. `None` — not limited. `now_ms` is the
-/// injected epoch ms the `at HH:MM UTC` parses against.
-pub(crate) fn limited(term: &LiveTerminal, screen: &str, now_ms: u64) -> Option<u64> {
+/// in `status.msg`, else in the screen's fresh tail. A silent
+/// core's screen is the fallback for a core that reports nothing —
+/// and only when its derived `work` is non-working: a working
+/// screen's limit words are text the agent printed (fixture
+/// output, an edit to this file), not a state it is in. A bare
+/// `error` is [`AGENT_ERROR`]'s attention instead. `None` — not
+/// limited. `now_ms` is the injected epoch ms the `at HH:MM UTC`
+/// parses against.
+pub(crate) fn limited(term: &LiveTerminal, screen: &str, work: Work, now_ms: u64) -> Option<u64> {
     if let Some(status) = term.status.as_ref().filter(|s| s.state == "error") {
         let msg = status.msg.to_lowercase();
         if limit_text(&msg) {
             let wait = parse_wait(&msg, now_ms).unwrap_or_else(|| reset_ms(screen, now_ms));
             return Some(wait.clamp(RETRY_MARGIN_MS, 3_600_000));
         }
-        if limit_text(screen) {
+        if limit_text(fresh_tail(screen)) {
             return Some(reset_ms(screen, now_ms));
         }
         return None;
     }
     let reporting = term.status.is_some();
-    if !reporting && limit_text(screen) {
+    if !reporting && work != Work::Working && limit_text(fresh_tail(screen)) {
         return Some(reset_ms(screen, now_ms));
     }
     None
+}
+
+/// How much of a screen still counts as *fresh* for the taxonomy:
+/// the last ~12 non-blank lines, the region a live banner
+/// occupies above the input box. Anything deeper is scrollback,
+/// and scrollback keeps stale banners — t30 stacked 54/53/51
+/// -minute ones — that must not drive the reason or the clock.
+const FRESH_NONBLANK: usize = 12;
+
+/// The screen's fresh tail — up to [`FRESH_NONBLANK`] non-blank
+/// lines off the bottom.
+fn fresh_tail(screen: &str) -> &str {
+    let mut tail = 0usize;
+    let mut nonblank = 0usize;
+    for line in screen.rsplit('\n') {
+        if nonblank == FRESH_NONBLANK {
+            break;
+        }
+        tail += line.len() + 1;
+        if !line.trim().is_empty() {
+            nonblank += 1;
+        }
+    }
+    &screen[screen.len() - tail.min(screen.len())..]
 }
 
 /// Whether the screen carries a limit line — checked whole, so a
@@ -346,25 +375,52 @@ mod tests {
         // Limit text in the status message — the wait parses off
         // the message itself.
         assert_eq!(
-            limited(&err("429, try again in 30s"), "", NOON),
+            limited(&err("429, try again in 30s"), "", Work::Waiting, NOON),
             Some(30_000)
         );
         // Limit text only on the screen — the latest block carries
         // the observed evidence and the wait.
         assert_eq!(
-            limited(&err("denied"), "usage limit resets in 2m", NOON),
+            limited(
+                &err("denied"),
+                "usage limit resets in 2m",
+                Work::Waiting,
+                NOON
+            ),
             Some(120_000)
         );
         // A bare error with clean text everywhere is NOT a limit —
         // it is `agent error`'s, and no `continue` ever leaves.
-        assert_eq!(limited(&err(""), "everything is fine", NOON), None);
-        assert_eq!(limited(&err("denied"), "all clean", NOON), None);
-        // A silent core: waiting screen text carries it.
+        assert_eq!(
+            limited(&err(""), "everything is fine", Work::Waiting, NOON),
+            None
+        );
+        assert_eq!(
+            limited(&err("denied"), "all clean", Work::Waiting, NOON),
+            None
+        );
+        // A silent core: a non-working screen's limit line carries
+        // it — but a working screen is only *printing* the words
+        // (fixture output, an edit to this file), never limited.
         let silent = LiveTerminal::default();
         assert!(!errored(&silent));
         assert_eq!(
-            limited(&silent, "rate limit reached, try again in 10s", NOON),
+            limited(
+                &silent,
+                "rate limit reached, try again in 10s",
+                Work::Waiting,
+                NOON
+            ),
             Some(10_000)
+        );
+        assert_eq!(
+            limited(
+                &silent,
+                "rate limit reached, try again in 90s",
+                Work::Working,
+                NOON
+            ),
+            None
         );
         // Working with an ordinary screen is not limited.
         let working = LiveTerminal {
@@ -374,7 +430,45 @@ mod tests {
             }),
             ..Default::default()
         };
-        assert_eq!(limited(&working, "progress", NOON), None);
+        assert_eq!(limited(&working, "progress", Work::Working, NOON), None);
+    }
+
+    #[test]
+    fn only_the_fresh_tail_counts_as_screen_evidence() {
+        use hc_proto::terminal::Status;
+        let err = |msg: &str| LiveTerminal {
+            status: Some(Status {
+                state: "error".into(),
+                msg: msg.into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // A stale banner above the fresh tail is scrollback, not
+        // evidence — the plain error is `agent error`'s.
+        let stale = format!(
+            "usage limit, resets in 5m\n{}",
+            "a fresh output line\n".repeat(FRESH_NONBLANK + 1)
+        );
+        assert_eq!(
+            limited(&err("transport died"), &stale, Work::Waiting, NOON),
+            None
+        );
+        // The same banner inside the tail is observed.
+        let fresh = "usage limit, resets in 5m\na fresh output line\n";
+        assert_eq!(
+            limited(&err("transport died"), fresh, Work::Waiting, NOON),
+            Some(300_000)
+        );
+        // And a silent core reads the tail the same way.
+        assert_eq!(
+            limited(&LiveTerminal::default(), &stale, Work::Waiting, NOON),
+            None
+        );
+        assert_eq!(
+            limited(&LiveTerminal::default(), fresh, Work::Waiting, NOON),
+            Some(300_000)
+        );
     }
 
     #[test]

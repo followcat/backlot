@@ -1,10 +1,10 @@
 //! The time-bound attention episodes the per-role sample drives: a
 //! screen — or, for a reporting terminal, an activity revision —
 //! held unchanged for the stall limit raises `stalled`; an
-//! `error` status carrying limit text or a waiting screen naming a
-//! limit opens a `rate limited` episode the stage answers itself
-//! with bounded auto-retries; a bare `error` raises `agent error`
-//! instead — observed, never assumed.
+//! `error` status carrying limit text or a non-working screen's
+//! fresh tail naming a limit opens a `rate limited` episode the
+//! stage answers itself with bounded auto-retries; a bare `error`
+//! raises `agent error` instead — observed, never assumed.
 
 use backlot_model::event::{EventKind, STALLED};
 use backlot_model::state::actor_task;
@@ -27,21 +27,24 @@ impl Stage {
     /// or escalated episode never re-raises while the limit
     /// holds. Counted by its own reason, never as stall or rework.
     /// A bare `error` status — no limit text in `status.msg` or the
-    /// screen's latest limit block — is `agent error` instead:
-    /// never an auto-`continue`, an actor's goes to the director
-    /// and anything else's needs the user, and it clears when the
-    /// status recovers or the limit text shows.
+    /// screen's fresh tail — is `agent error` instead: never an
+    /// auto-`continue`, an actor's goes to the director and
+    /// anything else's needs the user, and it clears when the
+    /// status recovers or the limit text shows. `work` is the
+    /// screen-derived state, so the silent-core fallback cannot
+    /// fire on a screen merely *mentioning* a limit while it works.
     pub(crate) async fn rate_limit(
         &self,
         studio: &str,
         w: &Watched<'_>,
         text: &str,
+        work: Work,
         now_ms: u64,
     ) -> Result<(), Fail> {
         use crate::ratelimit as rl;
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
-        let limited = rl::limited(w.term, text, now_ms);
+        let limited = rl::limited(w.term, text, work, now_ms);
         let open = state
             .open_attention()
             .find(|a| a.role == role && a.reason == rl::RATE_LIMITED);

@@ -107,11 +107,8 @@ impl Stage {
         // (S12d): a core that reports — natively or through screen
         // inference — is believed ahead of the stage's own read;
         // a `blocked` from any source still wins the map.
-        let work = signals::combine(
-            signal_state,
-            structured_state(w.term),
-            runners::work_state(w.runner, &text),
-        );
+        let screen_work = runners::work_state(w.runner, &text);
+        let work = signals::combine(signal_state, structured_state(w.term), screen_work);
         self.work.borrow_mut().insert(pair.clone(), work);
         // The send gate's screen-stability track — same screen, same
         // `same_since`; a new screen resets the window.
@@ -123,7 +120,7 @@ impl Stage {
         self.permission(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
         self.stall(studio, w, work, now_ms).await?;
-        self.rate_limit(studio, w, &text, now_ms).await
+        self.rate_limit(studio, w, &text, screen_work, now_ms).await
     }
 
     /// `attention.raised` with the screen saved to

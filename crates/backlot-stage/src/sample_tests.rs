@@ -715,9 +715,11 @@ async fn a_frozen_screen_raises_stalls_once_and_clears_on_change() {
 }
 
 /// A bare `error` status — no limit text in `status.msg` or the
-/// screen — is `agent error`, never `rate limited` (S12d review):
-/// the stage raises it once, sends no `continue`, and clears it
-/// `status recovered` when the status leaves `error`.
+/// screen's fresh tail — is `agent error`, never `rate limited`
+/// (S12d review): the stage raises it once, sends no `continue`,
+/// and clears it `status recovered` when the status leaves
+/// `error`. The screen carries a stale limit banner deep in its
+/// scrollback — old evidence, not a live limit.
 #[tokio::test]
 async fn a_plain_error_raises_agent_error_and_sends_nothing() {
     let dir = tmp();
@@ -730,8 +732,13 @@ async fn a_plain_error_raises_agent_error_and_sends_nothing() {
         ..Default::default()
     });
     let (stage, fake) = stage().await;
-    fake.lock().unwrap().screen =
-        "fake runner: actor-t1-c1 of acme-shop\nfake-work: working\n".into();
+    fake.lock().unwrap().screen = format!(
+        "fake runner: actor-t1-c1 of acme-shop\n\
+         usage limit, resets in 5m\n\
+         {}\
+         fake-work: working\n",
+        "the agent's fresh output line\n".repeat(14)
+    );
     let t0 = now_ms();
 
     sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
