@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use hc_tui::cli::{Action, help_text, parse, run_options, version_text};
+use hc_tui::cli::{Action, help_text, parse, run_options, upgrade, version_text};
 
 fn main() -> ExitCode {
     match parse(std::env::args().skip(1)) {
@@ -12,6 +12,7 @@ fn main() -> ExitCode {
             println!("{}", version_text());
             ExitCode::SUCCESS
         }
+        Ok(Action::Upgrade) => upgrade(),
         Ok(Action::Run(options)) => {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()

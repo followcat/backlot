@@ -88,6 +88,32 @@ impl App {
             self.show_notice(&title, &body);
         }
     }
+
+    /// Installs the one-shot update-check report — `cli` calls it once
+    /// terminal setup succeeded. `None` means the user opted out.
+    pub fn set_update_check(&mut self, report: Option<crate::update_check::Report>) {
+        self.update_check = report;
+    }
+
+    /// `pending()` while no check was armed; resolves once with its
+    /// outcome — `Some(notice)` only when a newer release exists.
+    pub(super) async fn update_check_report(
+        rx: &mut Option<crate::update_check::Report>,
+    ) -> Option<crate::update_check::Notice> {
+        match rx {
+            Some(rx) => rx.await.ok().flatten(),
+            None => std::future::pending().await,
+        }
+    }
+
+    /// A newer release surfaces as a dismissible toast; a quiet report
+    /// (up to date, offline, opted out) just disarms the arm.
+    pub(super) fn on_update_check(&mut self, report: Option<crate::update_check::Notice>) {
+        self.update_check = None;
+        if let Some((title, body)) = report {
+            self.show_notice(&title, &body);
+        }
+    }
 }
 
 pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {

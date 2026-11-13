@@ -32,6 +32,7 @@ pub mod terminal_modes;
 pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
+pub mod update_check;
 mod word_select;
 
 mod mouse_geometry;

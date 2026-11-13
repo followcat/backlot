@@ -153,6 +153,7 @@ pub struct App {
     notice: Option<notices::Notice>,
     /// The one-shot `hc server start` report — `Some` until it lands.
     core_start: Option<crate::core_start::Report>,
+    update_check: Option<crate::update_check::Report>,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,
