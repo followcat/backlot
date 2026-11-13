@@ -2,23 +2,35 @@
 //! round-trips, program exit, owner-gone kill, rediscovery, and the
 //! request-time owner race.
 use super::*;
-use crate::app::float::FloatKey;
+use crate::app::float::{FloatEntry, FloatKey};
 use crate::config::{CustomCommandAction, CustomCommandKeybind};
 use crate::popup_size::PopupSize;
 use crate::testcore;
 use serde_json::json;
 use std::time::Duration;
 
-fn command(line: &str) -> CustomCommandKeybind {
+fn command_labeled(label: &str, line: &str) -> CustomCommandKeybind {
     CustomCommandKeybind {
         bindings: Default::default(),
-        label: "alt+f".into(),
+        label: label.into(),
         command: line.into(),
         action: CustomCommandAction::Popup,
         description: None,
         width: Some(PopupSize::Percent(80)),
         height: Some(PopupSize::Percent(80)),
         persistent: true,
+    }
+}
+
+fn command(line: &str) -> CustomCommandKeybind {
+    command_labeled("alt+f", line)
+}
+
+fn ephemeral(line: &str) -> CustomCommandKeybind {
+    CustomCommandKeybind {
+        label: "alt+h".into(),
+        persistent: false,
+        ..command(line)
     }
 }
 
@@ -56,13 +68,22 @@ fn run_reply(address: &str, created_ms: u64) -> serde_json::Value {
 }
 
 /// The float's own terminal record, labeled like a spawned one.
-fn float_term(address: &str, owner: &str, created_ms: u64) -> hc_proto::terminal::Terminal {
+fn float_term_labeled(
+    address: &str,
+    owner: &str,
+    command: &str,
+    created_ms: u64,
+) -> hc_proto::terminal::Terminal {
     let mut term = crate::sidebar::fixture::term(address);
     term.created_ms = created_ms;
     term.labels.insert("hc-tui.popup".into(), "1".into());
     term.labels.insert("hc-tui.owner-tab".into(), owner.into());
-    term.labels.insert("hc-tui.command".into(), "alt+f".into());
+    term.labels.insert("hc-tui.command".into(), command.into());
     term
+}
+
+fn float_term(address: &str, owner: &str, created_ms: u64) -> hc_proto::terminal::Terminal {
+    float_term_labeled(address, owner, "alt+f", created_ms)
 }
 
 /// Spawn the focused tab's float straight into the shown state — the
@@ -362,7 +383,7 @@ async fn an_owner_tab_close_kills_its_parked_float() {
         let kill = core.read_request().await;
         assert_eq!(kill["method"], "terminal.kill");
         assert_eq!(kill["params"]["terminal"], "t9");
-        core.reply(&kill["id"], json!({})).await;
+        core.reply(&kill["id"], run_reply("t9", 9)).await;
     });
     // t1's workspace closes — its tab disappears from the publish.
     let mut t2 = crate::sidebar::fixture::term("t2");
@@ -412,4 +433,212 @@ async fn an_unlabeled_popup_record_is_left_alone() {
     publish(&mut app, terms);
     assert!(app.floats.is_empty(), "no owner label, no adoption");
     assert!(!app.size_leases.contains_key("t9"));
+}
+
+#[tokio::test]
+async fn an_ephemeral_spawn_cannot_steal_a_pending_float_run() {
+    let mut app = two_spaces();
+    app.run_custom_command(&command("exec \"${SHELL:-sh}\""));
+    assert!(
+        app.popup_pending
+            .as_ref()
+            .is_some_and(|pending| pending.persistent)
+    );
+    app.run_custom_command(&ephemeral("htop"));
+    let pending = app
+        .popup_pending
+        .as_ref()
+        .expect("the float run keeps its pending arm");
+    assert!(pending.persistent);
+    assert_eq!(pending.command, "alt+f");
+}
+
+#[tokio::test]
+async fn a_host_resize_refits_a_hidden_float_lease() {
+    let mut app = two_spaces();
+    app.area = (80, 24);
+    let key = spawn_shown(&mut app, "t9", 9);
+    let mut terms = base_terms();
+    terms.push(float_term("t9", &key.owner, 9));
+    publish(&mut app, terms);
+    app.focused = Some("t2".into());
+    app.reconcile_published_view();
+    let before = app.size_leases["t9"].allocated_size();
+    app.area = (160, 48);
+    app.popup_resize();
+    let after = app.size_leases["t9"].allocated_size();
+    assert_ne!(before, after, "the hidden lease refits on host resize");
+    assert!(after.0 > before.0 && after.1 > before.1);
+}
+
+/// A labeled local `t1` — endpoint snapshots need the labels to list
+/// their tabs, so publishes carry them too.
+fn labeled(address: &str, space: &str) -> hc_proto::terminal::Terminal {
+    let mut term = crate::sidebar::fixture::term(address);
+    term.pid = Some(1);
+    term.labels.insert("herdr.space".into(), space.into());
+    term.labels.insert("herdr.tab".into(), "tab".into());
+    term
+}
+
+/// A local `t1` plus a remote `host-a/t3`, each the only tab of its own
+/// workspace — the remote endpoint's status comes from `machine.state`.
+fn remote_spaces(state: &str) -> App {
+    let mut app = app();
+    let mut view = View {
+        link: hc_proto::watch::Link::Online,
+        rpc: hc_proto::watch::Link::Online,
+        core: Some(hc_proto::hello::CoreInfo {
+            id: "id-host-a".into(),
+            name: "host-a".into(),
+            hostname: None,
+        }),
+        machines: Some(vec![crate::sidebar::fixture::machine("host-a", state)]),
+        ..Default::default()
+    };
+    view.inventory.replace(
+        1,
+        vec![labeled("t1", "space-t1"), labeled("host-a/t3", "space-r")],
+    );
+    app.view = view;
+    pending(&mut app);
+    app.refresh_projection();
+    app
+}
+
+/// The qualified `layout_key` owner of host-a's single tab.
+fn remote_owner(app: &App) -> String {
+    let tab_id = app
+        .projection
+        .endpoints
+        .iter()
+        .find(|e| {
+            e.endpoint_id == crate::chrome::snapshot::ClientEndpointId::Remote("host-a".into())
+        })
+        .and_then(|e| e.snapshot.as_ref())
+        .and_then(|snapshot| snapshot.tabs.first())
+        .map(|tab| tab.tab_id.clone())
+        .expect("the remote snapshot lists its tab");
+    crate::project::layout_key(Some("host-a"), &tab_id)
+}
+
+fn hidden_float(app: &mut App, owner: String) -> FloatKey {
+    let key = FloatKey {
+        owner,
+        command: "alt+f".into(),
+    };
+    app.hide_float(
+        key.clone(),
+        FloatEntry {
+            terminal: "t9".into(),
+            width: None,
+            height: None,
+            restore: false,
+            created_ms: 9,
+            seen: false,
+            kill_sent: false,
+        },
+    );
+    key
+}
+
+#[tokio::test]
+async fn a_remote_owner_tab_close_kills_its_parked_float() {
+    let mut app = remote_spaces("connected");
+    let owner = remote_owner(&app);
+    let key = hidden_float(&mut app, owner.clone());
+    let mut rx = operations(&mut app);
+    core_id(&mut app, "core-fake-1");
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["terminal.get", "terminal.kill"], &[])
+            .await;
+        // `terminal.get` fetches the record's `created_ms` — the kill
+        // only fires when it matches the entry's incarnation.
+        let get = core.read_request().await;
+        assert_eq!(get["method"], "terminal.get");
+        core.reply(&get["id"], run_reply("t9", 9)).await;
+        let kill = core.read_request().await;
+        assert_eq!(kill["method"], "terminal.kill");
+        assert_eq!(kill["params"]["terminal"], "t9");
+        core.reply(&kill["id"], run_reply("t9", 9)).await;
+    });
+    let t1 = labeled("t1", "space-t1");
+    let t3 = labeled("host-a/t3", "space-r");
+    let t9 = float_term("t9", &owner, 9);
+    publish(&mut app, vec![t1.clone(), t3, t9.clone()]);
+    assert!(
+        !app.floats[&key].kill_sent,
+        "the remote tab is still listed"
+    );
+    // The remote tab closes: t3 disappears from inventory and its
+    // Online snapshot loses the tab — the parked float must die.
+    publish(&mut app, vec![t1.clone(), t9]);
+    assert!(app.floats[&key].kill_sent, "the owner-gone kill left");
+    settle(&mut app).await;
+    server.await.unwrap();
+    // The record finally leaves inventory — the entry follows.
+    publish(&mut app, vec![t1]);
+    assert!(app.floats.is_empty());
+    assert!(!app.size_leases.contains_key("t9"));
+}
+
+#[tokio::test]
+async fn an_owner_gone_kill_goes_out_once() {
+    let mut app = two_spaces();
+    let key = spawn_shown(&mut app, "t9", 9);
+    let mut terms = base_terms();
+    terms.push(float_term("t9", &key.owner, 9));
+    publish(&mut app, terms);
+    app.focused = Some("t2".into());
+    app.reconcile_published_view();
+    let mut rx = operations(&mut app);
+    core_id(&mut app, "core-fake-1");
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["terminal.get", "terminal.kill"], &[])
+            .await;
+        let get = core.read_request().await;
+        core.reply(&get["id"], run_reply("t9", 9)).await;
+        let kill = core.read_request().await;
+        assert_eq!(kill["method"], "terminal.kill");
+        core.reply(&kill["id"], run_reply("t9", 9)).await;
+        // The record lingers in inventory — reconcile must not repeat
+        // the kill while it is still published.
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), core.read_request())
+                .await
+                .is_err(),
+            "the owner-gone kill is sent once"
+        );
+    });
+    // t1's workspace closes — its tab disappears from the publish.
+    let t2 = base_terms().swap_remove(1);
+    publish(&mut app, vec![t2.clone(), float_term("t9", &key.owner, 9)]);
+    settle(&mut app).await;
+    // Same state published again: still no second kill.
+    publish(&mut app, vec![t2.clone(), float_term("t9", &key.owner, 9)]);
+    server.await.unwrap();
+    // The record finally leaves — the entry follows.
+    publish(&mut app, vec![t2]);
+    assert!(app.floats.is_empty());
+    assert!(!app.size_leases.contains_key("t9"));
+}
+
+#[tokio::test]
+async fn an_offline_endpoint_keeps_its_float() {
+    let mut app = remote_spaces("offline");
+    let owner = remote_owner(&app);
+    let key = hidden_float(&mut app, owner.clone());
+    let t1 = labeled("t1", "space-t1");
+    let t3 = labeled("host-a/t3", "space-r");
+    publish(&mut app, vec![t1.clone(), t3, float_term("t9", &owner, 9)]);
+    // The remote tab's record is gone but the endpoint is not Online —
+    // presence is unknown, so owner-gone must never kill.
+    publish(&mut app, vec![t1.clone(), float_term("t9", &owner, 9)]);
+    let entry = app.floats.get(&key).expect("the float survives offline");
+    assert_eq!(entry.terminal, "t9");
+    assert!(!entry.kill_sent);
 }

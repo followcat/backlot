@@ -44,6 +44,9 @@ pub(super) struct FloatEntry {
     pub created_ms: u64,
     /// Inventory-lag guard, same as `PopupState.seen`.
     pub seen: bool,
+    /// The owner-gone kill already left — send the RPC once; the entry
+    /// stays until the record actually leaves inventory.
+    pub kill_sent: bool,
 }
 
 impl App {
@@ -221,6 +224,7 @@ impl App {
                 restore,
                 created_ms: popup.created_ms,
                 seen: popup.seen,
+                kill_sent: false,
             },
         );
         self.sched.mark_dirty(Instant::now());
@@ -258,7 +262,7 @@ impl App {
             terminal: entry.terminal,
             width: entry.width,
             height: entry.height,
-            owner_tab: self.projection.snapshot.focused_tab_id.clone(),
+            owner_tab: None,
             persistent: true,
             key: Some(key.clone()),
             created_ms: entry.created_ms,
@@ -299,7 +303,7 @@ impl App {
             terminal,
             width,
             height,
-            owner_tab: self.projection.snapshot.focused_tab_id.clone(),
+            owner_tab: None,
             persistent: true,
             key: Some(key),
             created_ms,
@@ -362,6 +366,19 @@ impl App {
             created_ms: old.created_ms,
             allow_gone: true,
         });
+    }
+
+    /// Host resize: refit each hidden float's `SizeLease` pane from its
+    /// stored popup geometry — the percent/cell request follows the new
+    /// frame just like the visible popup's refit.
+    pub(super) fn floats_resize(&mut self, area: ratatui::layout::Rect) {
+        for entry in self.floats.values() {
+            if let Some(geometry) = resolve_popup_geometry(entry.width, entry.height, area)
+                && let Some(lease) = self.size_leases.get_mut(&entry.terminal)
+            {
+                popup_fit(lease, geometry);
+            }
+        }
     }
 
     /// Focus moved (tab, workspace, endpoint): the shown float of the

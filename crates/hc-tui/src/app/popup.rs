@@ -38,6 +38,8 @@ pub(super) struct PopupState {
     pub width: Option<PopupSize>,
     pub height: Option<PopupSize>,
     /// Tab the popup was opened over; a focus change dismisses it.
+    /// Ephemeral popups only — a persistent float's qualified owner
+    /// lives in `key`, so this is `None` there.
     pub owner_tab: Option<String>,
     /// `persistent` popups are per-tab floats — a hide demotes them into
     /// `floats` + a `size_leases` attach instead of killing the program.
@@ -148,6 +150,15 @@ impl App {
             self.spawn_persistent_float(command);
             return;
         }
+        // A float `terminal.run` in flight owns `popup_pending` —
+        // overwriting it would mis-shape the pending `Outcome::Ran`.
+        if self
+            .popup_pending
+            .as_ref()
+            .is_some_and(|pending| pending.persistent)
+        {
+            return;
+        }
         if self.popup.is_some() || self.popup_pending.is_some() {
             // A persistent float demotes onto a hidden lease; only an
             // ephemeral popup dies to make room.
@@ -215,6 +226,7 @@ impl App {
                         restore: true,
                         created_ms,
                         seen: false,
+                        kill_sent: false,
                     },
                 );
             }
@@ -390,7 +402,8 @@ impl App {
     }
 
     /// Re-resolve geometry on a host resize and refit the popup attach —
-    /// the reference drops the popup selection on a size change.
+    /// the reference drops the popup selection on a size change. Hidden
+    /// float leases refit from their stored geometry as well.
     pub(super) fn popup_resize(&mut self) {
         self.popup_selection = None;
         let area = self.frame_area();
@@ -399,6 +412,7 @@ impl App {
         {
             popup_fit(&mut popup.pane, geometry);
         }
+        self.floats_resize(area);
     }
 
     /// Send a host mouse event to the popup terminal — the reference's

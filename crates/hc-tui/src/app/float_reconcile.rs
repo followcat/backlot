@@ -67,15 +67,22 @@ impl App {
         let kill = self
             .floats
             .iter()
-            .filter(|(key, _)| Self::float_owner_gone(&self.projection.endpoints, &key.owner))
-            .map(|(_, entry)| (entry.terminal.clone(), entry.created_ms))
+            .filter(|(key, entry)| {
+                !entry.kill_sent && Self::float_owner_gone(&self.projection.endpoints, &key.owner)
+            })
+            .map(|(key, entry)| (key.clone(), entry.terminal.clone(), entry.created_ms))
             .collect::<Vec<_>>();
-        for (terminal, created_ms) in kill {
+        for (key, terminal, created_ms) in kill {
             self.submit_action(Action::Kill {
                 terminal,
                 created_ms,
                 allow_gone: true,
             });
+            // One RPC per record — the entry still outlives the kill
+            // until inventory drops the terminal.
+            if let Some(entry) = self.floats.get_mut(&key) {
+                entry.kill_sent = true;
+            }
         }
         // Rediscovery: labeled live records we never tracked. Records
         // without `hc-tui.owner-tab` — popups from before this feature —
@@ -131,6 +138,7 @@ impl App {
                         restore: false,
                         created_ms,
                         seen: true,
+                        kill_sent: false,
                     },
                 ),
             }
