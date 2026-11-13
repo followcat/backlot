@@ -240,7 +240,10 @@ impl Stage {
     /// for `BACKLOT_*` or an environment-clearing flag is flagged
     /// `needs_user` — the director never sees the notice and may not
     /// answer it; the flag reads the signal's command when there is
-    /// one, else the prompt's own block. An actor's ordinary prompt
+    /// one, else the prompt's own block. So is a prompt no recorded
+    /// decision can bind to — no `PermissionRequest` signal, no
+    /// identifiable block; a signal-bound raise needs no block, the
+    /// decision compares on the request. An actor's ordinary prompt
     /// gets the director's detail; anything else says it needs the
     /// user.
     pub(crate) async fn raise_permission(
@@ -252,12 +255,13 @@ impl Stage {
         request: Option<&signals::Signal>,
     ) -> Result<(), Fail> {
         let command = request.and_then(|s| s.tool_target());
-        // A prompt kind the markers cannot identify — a blocked
-        // raised from structured state alone — is the user's: no
-        // recorded decision can be bound to a prompt the stage
-        // cannot read (S12d).
+        // A prompt kind nothing can bind a recorded decision to —
+        // a blocked raised from structured state alone, no
+        // `PermissionRequest` signal and no identifiable block —
+        // is the user's (S12d). A signal-bound raise needs no
+        // block: the decision compares on the request.
         let user_owned = permit::needs_user(role, runner, text, command)
-            || permit::prompt_block(runner, text).is_none();
+            || (request.is_none() && permit::prompt_block(runner, text).is_none());
         // The bound request: `backlot approve` refuses a key when
         // the last signal is no longer this one.
         let bound = request.and_then(|s| serde_json::to_string(s).ok());

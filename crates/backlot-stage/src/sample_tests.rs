@@ -574,6 +574,94 @@ async fn a_prompts_flag_comes_from_its_own_block() {
     }
 }
 
+/// S12d: a raise bound to a `PermissionRequest` signal needs no
+/// readable prompt block — the decision binds to the request, so a
+/// screen that has not painted the picker yet raises unflagged (the
+/// `real_stage_hooks` regression: the signal's raise flagged
+/// `needs_user` and the director's approve was refused).
+#[tokio::test]
+async fn a_signal_bound_prompt_needs_no_screen_block() {
+    let dir = tmp();
+    studio(&dir);
+    running_task(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    store::append(&dir, |_, _| {
+        Ok::<_, std::convert::Infallible>(Pending {
+            event: NewEvent::new(
+                EventBy::role("the stage"),
+                EventKind::RoleStarted {
+                    role: "actor-t1-c1".into(),
+                    terminal: Some("bl-acme-shop-t1".into()),
+                    actor: Some(actor()),
+                    session_id: Some("fake-t1".into()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let sig_dir = dir.join("roles").join("actor-t1-c1");
+    fs::create_dir_all(&sig_dir).unwrap();
+    fs::write(
+        sig_dir.join("signals.jsonl"),
+        "{\"ts_ms\":1,\"session_id\":\"fake-t1\",\"event\":\"PermissionRequest\",\
+         \"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cargo test\"}}\n",
+    )
+    .unwrap();
+    // The announce line only — the picker is not painted, no block.
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n".into();
+
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised {
+            needs_user, detail, ..
+        } => {
+            assert!(!needs_user, "a signal-bound prompt is not the user's");
+            assert!(detail.contains("Bash: cargo test"), "{detail}");
+        }
+        _ => unreachable!(),
+    }
+    // The request rode along for the approve-time compare.
+    assert!(
+        dir.join("attention")
+            .join(format!("{}.signal", raised[0].seq))
+            .exists()
+    );
+}
+
+/// S12d: without a bound signal, a blocked that identifies no prompt
+/// — a structured-state episode with no readable block — stays the
+/// user's: no recorded decision could ever be bound to it.
+#[tokio::test]
+async fn an_unreadable_prompt_with_no_signal_is_the_users() {
+    let dir = tmp();
+    studio(&dir);
+    let term = LiveTerminal {
+        waiting_for_person: true,
+        ..term()
+    };
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    fake.lock().unwrap().screen = "fake runner: actor-t1-c1 of acme-shop\n".into();
+
+    sample(&stage, &dir, &term, "actor-t1-c1", t0).await;
+    sample(&stage, &dir, &term, "actor-t1-c1", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { needs_user, .. } => {
+            assert!(*needs_user, "an unbindable prompt stayed answerable");
+        }
+        _ => unreachable!(),
+    }
+}
+
 /// S9c: a prompt answered in the terminal itself must not hold its
 /// attention open — a stale attention swallows the next prompt's
 /// raise and lets a later approval fly at it. Once the role has been
