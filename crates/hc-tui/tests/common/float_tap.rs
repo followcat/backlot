@@ -87,10 +87,7 @@ async fn forward(conn: UnixStream, real: UnixStream, calls: Calls) {
     let mut framed = false;
     let mut scan = true;
     let mut chunk = [0u8; 16384];
-    loop {
-        let Ok(n) = cr.read(&mut chunk).await else {
-            break;
-        };
+    while let Ok(n) = cr.read(&mut chunk).await {
         if n == 0 {
             break;
         }
