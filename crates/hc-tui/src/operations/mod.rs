@@ -130,10 +130,11 @@ pub enum Action {
 }
 
 /// What a store request produced. `Written` carries the confirmed layout
-/// version like before; `Ran` reports a created terminal's address.
+/// version like before; `Ran` reports a created terminal's address and
+/// its `created_ms` — the incarnation the owner-gone kill matches.
 pub enum Outcome {
     Written(Box<Written>),
-    Ran(String),
+    Ran(String, u64),
     Done,
     /// A `terminal.put` landed: the terminal it wrote beside plus the
     /// path the core returned.

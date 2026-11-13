@@ -18,6 +18,9 @@ pub struct CommandKeybindConfig {
     /// Popup geometry when type = "popup" (cells or percentage strings).
     pub width: Option<toml::Value>,
     pub height: Option<toml::Value>,
+    /// Per-tab persistent float when type = "popup". Unset resolves to
+    /// `popup_command_is_shell` at registration.
+    pub persistent: Option<bool>,
 }
 
 impl CommandKeybindConfig {}
@@ -31,6 +34,7 @@ impl Default for CommandKeybindConfig {
             description: None,
             width: None,
             height: None,
+            persistent: None,
         }
     }
 }

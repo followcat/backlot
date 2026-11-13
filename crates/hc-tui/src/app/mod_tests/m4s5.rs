@@ -24,6 +24,7 @@ fn command(action: CustomCommandAction, line: &str) -> CustomCommandKeybind {
         description: None,
         width: Some(PopupSize::Percent(80)),
         height: Some(PopupSize::Percent(80)),
+        persistent: false,
     }
 }
 
@@ -121,8 +122,11 @@ async fn popup_eats_keys_and_terminal_loss_closes_with_a_kill() {
     app.popup_pending = Some(super::super::popup::PopupPending {
         width: Some(PopupSize::Percent(80)),
         height: Some(PopupSize::Percent(80)),
+        persistent: false,
+        owner: String::new(),
+        command: String::new(),
     });
-    app.on_popup_spawned("t9".into());
+    app.on_popup_spawned("t9".into(), 9);
     // Keys route to the popup attach, never the focused pane — even
     // Escape, which the reference forwards to the popup terminal.
     key(&mut app, Key::Char('x'));
@@ -155,8 +159,11 @@ async fn paste_to_popup_uses_the_terminals_paste_mode() {
     app.popup_pending = Some(super::super::popup::PopupPending {
         width: Some(PopupSize::Percent(80)),
         height: Some(PopupSize::Percent(80)),
+        persistent: false,
+        owner: String::new(),
+        command: String::new(),
     });
-    app.on_popup_spawned("t9".into());
+    app.on_popup_spawned("t9".into(), 9);
     app.on_input(input::UiEvent::Paste(b"line-one\nline-two".to_vec()), 120);
     // The reference sends a semantic Paste to the popup target — the
     // wire must encode it under the popup terminal's ?2004 mode, not

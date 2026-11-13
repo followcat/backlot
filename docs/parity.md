@@ -744,6 +744,14 @@ Everything else on the compared surfaces still diffs normally.
   forward them — inside clicks are ignored and outside clicks are
   swallowed rather than closing the popup, matching the reference's
   `pane_blocked_by_popup` swallow.
+- **Persistent floats.** Where a `type = "popup"` command is a bare
+  interactive shell (the documented `exec "${SHELL:-sh}"` example), or
+  `persistent = true` is set, hc-tui deliberately diverges from the
+  reference: the float belongs to its tab, Alt+F-style toggling hides
+  and shows it, and a tab switch parks it — program alive — instead of
+  closing it. It dies with its program or its owning tab/workspace. The
+  reference kills any popup on a tab switch; hc-tui keeps that behavior
+  only for popup commands that are not interactive shells.
 - **`type = "pane"` zoom.** The reference splits the focused pane
   horizontally and marks the new pane `zoomed` (a full-tab overlay).
   hc-tui performs the same through `Change::Split { vertical: false,

@@ -119,8 +119,14 @@ height = "80%"
 ![A floating shell opened with Alt+F](images/alt-f.gif)
 
 `width` and `height` take a percentage or a number of cells. While the popup is open, every key goes to it, including
-`Esc`. It closes when its program exits, so type `exit` or press `Ctrl+D`. Leaving its tab also closes it and ends its
-program.
+`Esc`.
+
+A popup that just runs an interactive shell — like the `Alt+F` example above — is a *persistent float* per tab: press the
+key again to hide it, press it once more to bring it back. Leaving the tab hides it too, but the program keeps running
+and coming back shows it again if it was open when you left. It starts in the project directory of the tab it belongs
+to, and it ends only when its program exits or when you close that tab or workspace. Other popup commands stay
+one-shot: they close and end when you leave the tab. Set `persistent = true` on a `[[keys.command]]` entry to give any
+popup command the same per-tab behavior, or `persistent = false` to keep even a shell one-shot.
 
 ## Pasting text and images
 

@@ -100,10 +100,12 @@ impl App {
                 self.execute_repeat(lease_key, key, plan, width);
             }
             Action::Release => {
-                // The release of a press the image bridge consumed never
-                // reaches a program — including the popup, which eats
-                // releases unconditionally while open.
+                // The release of a press the image bridge or a float
+                // binding consumed never reaches a program — including
+                // the popup, which eats releases unconditionally while
+                // open.
                 if !self.image_paste_suppress.remove(&key.identity())
+                    && !self.popup_key_suppress.remove(&key.identity())
                     && let Some(popup) = self.popup.as_mut()
                 {
                     popup.pane.key(&key);
@@ -168,7 +170,9 @@ impl App {
         // The floating popup eats every key while open — the reference
         // routes raw input to it before UI bindings (`popup.rs`). A
         // retained popup selection copies on Ctrl/Cmd+C first; every
-        // other key reaching the popup clears it.
+        // other key reaching the popup clears it. A persistent float
+        // additionally yields popup binding chords — its toggle key
+        // hides the float rather than typing into the program.
         if self.popup.is_some() {
             let popup_combo = crate::input::terminal_key_of(&press);
             if matches!(popup_combo.code, KeyCode::Char('c' | 'C'))
@@ -182,6 +186,15 @@ impl App {
                 return None;
             }
             self.clear_popup_selection();
+            if self.popup.as_ref().is_some_and(|popup| popup.persistent)
+                && let Some(crate::input::KeybindMatch::Command(command)) =
+                    crate::input::resolve_direct_binding(&self.live.keybinds, &popup_combo)
+                && command.action == crate::config::CustomCommandAction::Popup
+            {
+                self.popup_key_suppress.insert(press.identity());
+                self.run_custom_command(&command);
+                return None;
+            }
             self.popup_key(&press);
             return None;
         }

@@ -95,6 +95,8 @@ impl App {
             image_paste_remote: false,
             image_paste_over_ssh: false,
             image_paste_suppress: Default::default(),
+            popup_key_suppress: Default::default(),
+            floats: Default::default(),
             image_paste_reader: Box::new(crate::clipboard::read_clipboard_image),
             hit_map: ShellHitMap::default(),
             host_reports_all_keys: false,

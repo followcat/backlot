@@ -57,7 +57,9 @@ impl App {
     pub(super) fn on_operation(&mut self, result: Option<Result<Outcome, String>>) {
         self.pending_actions = self.pending_actions.saturating_sub(1);
         match result {
-            Some(Ok(Outcome::Ran(terminal))) => self.on_popup_spawned(terminal),
+            Some(Ok(Outcome::Ran(terminal, created_ms))) => {
+                self.on_popup_spawned(terminal, created_ms)
+            }
             Some(Ok(Outcome::Put { terminal, path })) => self.on_image_put(&terminal, &path),
             Some(Ok(Outcome::Done)) => {}
             Some(Ok(Outcome::Written(written)))
@@ -91,7 +93,13 @@ impl App {
                     });
                 }
             }
-            Some(Err(error)) => self.show_notice("Action failed", &error),
+            Some(Err(error)) => {
+                // A failed `terminal.run` leaves the pending popup armed
+                // forever, swallowing input — clear it. A misattributed
+                // error is recovered by float label rediscovery.
+                self.popup_pending = None;
+                self.show_notice("Action failed", &error);
+            }
             None => {
                 self.operations = None;
                 self.pending_actions = 0;

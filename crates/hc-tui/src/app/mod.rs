@@ -19,6 +19,8 @@ mod creation;
 mod dialogs;
 mod draw;
 mod endpoint_navigation;
+mod float;
+mod float_reconcile;
 mod help;
 mod host;
 mod image_paste;
@@ -199,6 +201,12 @@ pub struct App {
     popup: Option<popup::PopupState>,
     /// Geometry for a `terminal.run` still in flight for a popup.
     popup_pending: Option<popup::PopupPending>,
+    /// Pressed keys intercepted on behalf of a persistent float — their
+    /// releases must not reach the program either.
+    popup_key_suppress: std::collections::HashSet<hc_vt::Key>,
+    /// Hidden persistent floats, keyed by owner tab + binding — each
+    /// entry's program runs on behind a `size_leases` attach.
+    floats: std::collections::BTreeMap<float::FloatKey, float::FloatEntry>,
     /// The `pane` command's zoomed overlay — the reference's
     /// `overlay_panes` entry for a spawned command pane.
     command_overlay: Option<popup::CommandOverlay>,
@@ -415,6 +423,9 @@ impl App {
         // The reference's `apply_active_snapshot` copy arms: pane loss
         // unarms the mode, focus re-arms/disarms it.
         self.sync_copy_focus();
+        // Focus settled: park the old owner's float, restore the new
+        // one's — before `reconcile_popups` sees the publish.
+        self.sync_float_focus();
     }
 
     /// Request a surface draw; Source acknowledges only displayed output.

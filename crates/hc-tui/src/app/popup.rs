@@ -15,13 +15,21 @@ use ratatui::layout::Rect;
 use std::collections::BTreeMap;
 
 /// Fit an attach to resolved popup terminal cells.
-fn popup_fit(pane: &mut Pane, geometry: crate::popup_size::PopupResolvedGeometry) {
+pub(super) fn popup_fit(pane: &mut Pane, geometry: crate::popup_size::PopupResolvedGeometry) {
     pane.allocated(geometry.terminal_cols, geometry.terminal_rows);
 }
 
 /// The reference marks popup-owned terminals so client surfaces can keep
 /// them out of the regular inventory views.
 pub(crate) const POPUP_LABEL: &str = "hc-tui.popup";
+
+/// A persistent float's owning tab, as `layout_key(machine, tab_id)` —
+/// rediscovery matches inventory records through it after a restart.
+pub(crate) const FLOAT_OWNER_LABEL: &str = "hc-tui.owner-tab";
+
+/// A persistent float's binding label (`alt+f`), kept on the terminal so
+/// a restart can rebuild the same map key.
+pub(crate) const FLOAT_COMMAND_LABEL: &str = "hc-tui.command";
 
 /// A running popup attach.
 pub(super) struct PopupState {
@@ -31,6 +39,14 @@ pub(super) struct PopupState {
     pub height: Option<PopupSize>,
     /// Tab the popup was opened over; a focus change dismisses it.
     pub owner_tab: Option<String>,
+    /// `persistent` popups are per-tab floats — a hide demotes them into
+    /// `floats` + a `size_leases` attach instead of killing the program.
+    pub persistent: bool,
+    /// Map identity while a persistent float is shown.
+    pub key: Option<float::FloatKey>,
+    /// Core `created_ms` from the `terminal.run` result (or the adopted
+    /// record) — the incarnation match for `Action::Kill`.
+    pub created_ms: u64,
     /// The terminal showed up in the inventory at least once — only then
     /// does disappearance mean "exited" instead of "not yet published".
     pub seen: bool,
@@ -38,10 +54,15 @@ pub(super) struct PopupState {
 
 /// The `[[keys.command]]` geometry stashed while `terminal.run` is in
 /// flight — `Outcome::Ran` opens the popup with it.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(super) struct PopupPending {
     pub width: Option<PopupSize>,
     pub height: Option<PopupSize>,
+    /// Persistent floats bind their owning tab at request time, so an
+    /// `Outcome::Ran` landing after a switch never adopts the new tab.
+    pub persistent: bool,
+    pub owner: String,
+    pub command: String,
 }
 
 /// A reporting popup's captured button — the reference's
@@ -120,10 +141,17 @@ impl App {
     }
 
     /// `type = "popup"`: `terminal.run` with the popup marker label, then
-    /// attach when the address lands (`on_popup_spawned`).
+    /// attach when the address lands (`on_popup_spawned`). A `persistent`
+    /// binding toggles the tab's float instead.
     fn spawn_popup(&mut self, command: &CustomCommandKeybind) {
+        if command.persistent {
+            self.spawn_persistent_float(command);
+            return;
+        }
         if self.popup.is_some() || self.popup_pending.is_some() {
-            self.close_popup();
+            // A persistent float demotes onto a hidden lease; only an
+            // ephemeral popup dies to make room.
+            self.dismiss_popup();
         }
         let geometry = resolve_popup_geometry(command.width, command.height, self.frame_area());
         let mut params = hc_proto::terminal::RunParams {
@@ -153,15 +181,45 @@ impl App {
         self.popup_pending = Some(PopupPending {
             width: command.width,
             height: command.height,
+            persistent: false,
+            owner: String::new(),
+            command: String::new(),
         });
         self.submit_action(Action::RunPopup { params });
     }
 
-    /// `Outcome::Ran`: the popup terminal exists — attach it active.
-    pub(super) fn on_popup_spawned(&mut self, terminal: String) {
+    /// `Outcome::Ran`: the popup terminal exists — attach it active, or
+    /// park a persistent float hidden when its owner tab lost focus
+    /// while the run was in flight.
+    pub(super) fn on_popup_spawned(&mut self, terminal: String, created_ms: u64) {
         let Some(pending) = self.popup_pending.take() else {
             return;
         };
+        if pending.persistent {
+            let key = float::FloatKey {
+                owner: pending.owner,
+                command: pending.command,
+            };
+            if self.focused_owner_key().as_ref() == Some(&key.owner) {
+                self.dismiss_popup();
+                self.show_float(key, terminal, pending.width, pending.height, created_ms);
+            } else {
+                // The request bound its owner up front — a tab switch
+                // in flight never steals the new float onto this tab.
+                self.hide_float(
+                    key,
+                    float::FloatEntry {
+                        terminal,
+                        width: pending.width,
+                        height: pending.height,
+                        restore: true,
+                        created_ms,
+                        seen: false,
+                    },
+                );
+            }
+            return;
+        }
         let mut pane = Pane::new(self.pane_tx.clone(), self.open_attach.clone());
         pane.set_host_facts(self.host_facts.clone());
         pane.want(Some(Spec {
@@ -179,6 +237,9 @@ impl App {
             width: pending.width,
             height: pending.height,
             owner_tab: self.projection.snapshot.focused_tab_id.clone(),
+            persistent: false,
+            key: None,
+            created_ms,
             seen: false,
         });
     }
@@ -186,7 +247,7 @@ impl App {
     /// The surface rectangle the popup resolves against: the pane surface
     /// (right of the sidebar, under the tab bar) — the reference's
     /// `layout.pane_surface` in `composition.rs`.
-    fn frame_area(&self) -> Rect {
+    pub(super) fn frame_area(&self) -> Rect {
         self.shell
             .layout_config()
             .layout(
@@ -207,35 +268,54 @@ impl App {
         self.popup_gesture = None;
         if let Some(mut popup) = self.popup.take() {
             popup.pane.want(None);
-            if let Some(term) = self.view.inventory.get(&popup.terminal) {
-                let created_ms = term.created_ms;
-                // `rm` terminals are reaped on exit when the last attach
-                // detaches, so the kill can legitimately arrive after the
-                // core already removed it — `allow_gone` keeps that quiet.
-                self.submit_action(Action::Kill {
-                    terminal: popup.terminal,
-                    created_ms,
-                    allow_gone: true,
-                });
-            }
+            // `rm` terminals are reaped on exit when the last attach
+            // detaches, so the kill can legitimately arrive after the
+            // core already removed it — `allow_gone` keeps that quiet.
+            self.submit_action(Action::Kill {
+                terminal: popup.terminal,
+                created_ms: popup.created_ms,
+                allow_gone: true,
+            });
             self.sched.mark_dirty(Instant::now());
         }
     }
 
     /// Keep the popup's owner rule and inventory liveness after every
-    /// publish — a tab switch or a dead terminal dismisses it.
+    /// publish — a tab switch or a dead terminal dismisses an ephemeral
+    /// popup; a persistent float demotes, dies only with its owner tab,
+    /// or drops when its `rm` terminal is reaped.
     pub(super) fn reconcile_popups(&mut self) {
+        let focused_owner = self.focused_owner_key();
         if let Some(popup) = &mut self.popup {
             let seen = self.view.inventory.get(&popup.terminal).is_some();
             popup.seen |= seen;
-            let owner_gone = popup.owner_tab.is_some()
-                && popup.owner_tab != self.projection.snapshot.focused_tab_id;
             let lost =
                 popup.seen && matches!(self.view.link, hc_proto::watch::Link::Online) && !seen;
-            if owner_gone || lost {
-                self.close_popup();
+            if popup.persistent {
+                // The qualified owner tab disappeared for good — kill.
+                // `sync_float_focus` normally demotes a focus switch the
+                // same event; the wrong-owner arm stays defensive.
+                let owner_gone = popup.key.as_ref().is_some_and(|key| {
+                    Self::float_owner_gone(&self.projection.endpoints, &key.owner)
+                });
+                let wrong_tab = popup
+                    .key
+                    .as_ref()
+                    .is_some_and(|key| focused_owner.as_ref() != Some(&key.owner));
+                if lost || owner_gone {
+                    self.close_popup();
+                } else if wrong_tab {
+                    self.demote_float(true);
+                }
+            } else {
+                let owner_gone = popup.owner_tab.is_some()
+                    && popup.owner_tab != self.projection.snapshot.focused_tab_id;
+                if owner_gone || lost {
+                    self.close_popup();
+                }
             }
         }
+        self.reconcile_floats();
         if let Some(peek) = &mut self.peek {
             let seen = self.view.inventory.get(&peek.terminal).is_some();
             peek.seen |= seen;
