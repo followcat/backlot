@@ -31,11 +31,14 @@ impl App {
         }
     }
 
-    /// Classic TUI drop shadow, staggered: the right column starts one
-    /// row down, the bottom row one column over. Painted with the
-    /// palette's darkest surface as a background change only, so covered
-    /// glyphs stay legible; clipped to the pane surface so the sidebar
-    /// and status chrome never sit under it.
+    /// Classic TUI drop shadow, offset down-right: the right column
+    /// starts one row below `╮` so the top edge stays lit, while the
+    /// bottom row runs flush under the whole bottom edge — including
+    /// under `╰` and `╯`, whose corners would otherwise read as an
+    /// open seam where they meet the staggered strip. Painted with the
+    /// palette's darkest surface as a background change only, so
+    /// covered glyphs stay legible; clipped to the pane surface so the
+    /// sidebar and status chrome never sit under it.
     pub(super) fn draw_float_shadow(&self, buf: &mut Buffer, outer: Rect) {
         let clip = self.frame_area();
         let color = self.shell.palette.surface_dim;
@@ -47,7 +50,7 @@ impl App {
         for y in outer.top() + 1..=outer.bottom() {
             shade(outer.right(), y);
         }
-        for x in outer.left() + 1..=outer.right() {
+        for x in outer.left()..=outer.right() {
             shade(x, outer.bottom());
         }
     }
@@ -73,6 +76,20 @@ impl App {
             return Block::default().borders(Borders::ALL);
         };
         let palette = &self.shell.palette;
+        // ratatui lays titles on the border row between the corner
+        // glyphs — `inner_w` — and lets a right-aligned title overwrite
+        // a left title's tail when they overlap. The hint therefore
+        // only renders when both padded titles plus a separator cell
+        // fit; the title is then ellipsized into what remains, always
+        // leaving a cell clear before ╮.
+        let inner_w = usize::from(outer.width.saturating_sub(2));
+        let full_title = self.float_title(popup);
+        let hint = self.float_hint(popup, inner_w, &full_title);
+        let title_budget = inner_w.saturating_sub(3).saturating_sub(
+            hint.as_ref()
+                .map_or(0, |h| UnicodeWidthStr::width(h.as_str()) + 2),
+        );
+        let title = crate::chrome::text::truncate_end(&full_title, title_budget);
         let mut block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -82,8 +99,8 @@ impl App {
                     .bg(palette.panel_bg),
             )
             .style(Style::default().bg(palette.panel_bg))
-            .title(format!(" {} ", self.float_title(popup)));
-        if let Some(hint) = self.float_hint(popup, outer.width) {
+            .title(format!(" {title} "));
+        if let Some(hint) = hint {
             block = block.title(Line::from(format!(" {hint} ")).alignment(Alignment::Right));
         }
         block
@@ -142,14 +159,15 @@ impl App {
         })
     }
 
-    /// `<binding> hide · esc sends to program`, dropped before it can
-    /// collide with the title: borders plus a small gap must remain.
-    fn float_hint(&self, popup: &PopupState, outer_width: u16) -> Option<String> {
+    /// `<binding> hide · esc sends to program`, rendered only when the
+    /// full title, both titles' one-cell padding, and one separator
+    /// cell still fit between the corners — `title + hint + 5 <=
+    /// inner_w`. Any tighter and ratatui would let the hint clip the
+    /// title's tail.
+    fn float_hint(&self, popup: &PopupState, inner_w: usize, title: &str) -> Option<String> {
         let command = popup.key.as_ref()?.command.as_str();
         let hint = format!("{command} hide · esc sends to program");
-        let need = UnicodeWidthStr::width(hint.as_str())
-            + UnicodeWidthStr::width(self.float_title(popup).as_str())
-            + 6;
-        (usize::from(outer_width) >= need).then_some(hint)
+        let need = UnicodeWidthStr::width(title) + UnicodeWidthStr::width(hint.as_str()) + 5;
+        (inner_w >= need).then_some(hint)
     }
 }

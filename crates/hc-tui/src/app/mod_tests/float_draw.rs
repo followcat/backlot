@@ -6,6 +6,7 @@ use crate::app::float::FloatKey;
 use crate::config::{CustomCommandAction, CustomCommandKeybind};
 use crate::popup_size::PopupSize;
 use ratatui::style::Modifier;
+use ratatui::widgets::Widget;
 
 fn command_labeled(label: &str, persistent: bool) -> CustomCommandKeybind {
     CustomCommandKeybind {
@@ -145,14 +146,38 @@ async fn drop_shadow_sits_one_cell_right_and_below() {
 
     // Right column: one cell past the right edge, starting one row down.
     assert_eq!(buf[(x1 + 1, y0 + 2)].bg, shadow, "right shadow missing");
-    // Bottom row: one row below, starting one column over.
+    // Bottom row: one row below, running the whole bottom edge.
     assert_eq!(buf[(x0 + 2, y1 + 1)].bg, shadow, "bottom shadow missing");
     // The diagonal corner under the bottom-right is painted too.
     assert_eq!(buf[(x1 + 1, y1 + 1)].bg, shadow, "shadow corner missing");
-    // Stagger: the cell beside the top-right corner is not shadowed,
-    // nor is the cell below the bottom-left corner's own column.
+    // Stagger: the cell beside the top-right corner is not shadowed.
     assert_ne!(buf[(x1 + 1, y0)].bg, shadow, "shadow ran past the top");
-    assert_ne!(buf[(x0, y1 + 1)].bg, shadow, "bottom shadow ran left");
+}
+
+#[tokio::test]
+async fn every_bottom_corner_rests_on_the_shadow() {
+    let mut app = app_with_shown_float();
+    let shadow = app.shell.palette.surface_dim;
+    let backend = draw_float(&mut app, 100, 30);
+    let buf = backend.buffer();
+    let (x0, y0) = find_cell(&backend, "╭").expect("top-left corner");
+    let (x1, _) = find_cell(&backend, "╮").expect("top-right corner");
+    let (_, y1) = find_cell(&backend, "╰").expect("bottom-left corner");
+
+    // The seam the screenshot showed: cells under both bottom corners
+    // carry the shadow, so `╰` and `╯` sit on it rather than float
+    // above a one-cell notch.
+    assert_eq!(buf[(x0, y1 + 1)].bg, shadow, "open seam under ╰");
+    assert_eq!(buf[(x1, y1 + 1)].bg, shadow, "open seam under ╯");
+    // Right of ╯ and the diagonal both stay shadowed.
+    assert_eq!(buf[(x1 + 1, y1)].bg, shadow, "right of ╯");
+    assert_eq!(buf[(x1 + 1, y1 + 1)].bg, shadow, "diagonal under ╯");
+    // Top corners keep the offset look: nothing shadows beside ╭/╮
+    // and nothing sits under ╭.
+    assert_ne!(buf[(x1 + 1, y0)].bg, shadow, "right of ╮");
+    assert_ne!(buf[(x0, y0 + 1)].bg, shadow, "under ╭");
+    assert_ne!(buf[(x0 - 1, y0 + 1)].bg, shadow, "left of ╭");
+    assert_ne!(buf[(x0 - 1, y1)].bg, shadow, "left of ╰");
 }
 
 #[tokio::test]
@@ -198,6 +223,56 @@ async fn float_corners_are_rounded() {
             "missing rounded corner {symbol}"
         );
     }
+}
+
+/// Render just the float block's top row at a synthetic width — exact
+/// width control for the boundary cases, which Percent sizing can't
+/// hit through the frame layout. The fixture title is 32 cells and
+/// the hint 33, so `inner_w` fits both plus separator at exactly 70.
+fn float_top_row(app: &App, w: u16) -> String {
+    let outer = ratatui::layout::Rect::new(0, 0, w, 6);
+    let mut buf = ratatui::buffer::Buffer::empty(outer);
+    app.float_block(outer).render(outer, &mut buf);
+    (0..w).map(|x| buf[(x, 0)].symbol()).collect()
+}
+
+#[tokio::test]
+async fn the_hint_renders_at_the_exact_fit_boundary() {
+    let app = app_with_shown_float();
+    let top = float_top_row(&app, 72);
+    assert!(
+        top.contains("─ alt+f hide · esc sends to program ╮"),
+        "hint missing or colliding at exact fit: {top:?}"
+    );
+    assert!(top.starts_with("╭ float alt+f"), "{top:?}");
+}
+
+#[tokio::test]
+async fn the_hint_drops_one_cell_below_the_fit_boundary() {
+    let app = app_with_shown_float();
+    let top = float_top_row(&app, 71);
+    assert!(
+        !top.contains("hide"),
+        "hint kept one cell below its fit: {top:?}"
+    );
+    assert!(top.ends_with("╮"), "the corner survived: {top:?}");
+}
+
+#[tokio::test]
+async fn a_long_title_truncates_and_never_runs_into_the_corners() {
+    let app = app_with_shown_float();
+    let top = float_top_row(&app, 30);
+    assert!(top.contains("…"), "title not ellipsized: {top:?}");
+    assert!(
+        top.ends_with("╮") && top.starts_with("╭"),
+        "corners: {top:?}"
+    );
+    // The cell before ╮ stays border or padding — never title text
+    // clipped flush against the corner.
+    assert!(
+        top.ends_with("─╮") || top.ends_with(" ╮"),
+        "title ran into ╮: {top:?}"
+    );
 }
 
 #[tokio::test]
