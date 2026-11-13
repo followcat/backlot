@@ -34,7 +34,7 @@ impl Stage {
         use crate::ratelimit as rl;
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
-        let limited = rl::limited(w.term, text);
+        let limited = rl::limited(w.term, text, now_ms);
         let open = state
             .open_attention()
             .find(|a| a.role == role && a.reason == rl::RATE_LIMITED);
