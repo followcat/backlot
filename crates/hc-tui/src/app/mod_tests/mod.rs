@@ -2,6 +2,7 @@
 mod cases_1;
 mod cases_2;
 mod endpoint_nav;
+mod float_draw;
 mod float_takeover;
 mod floats;
 mod image_paste;

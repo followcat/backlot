@@ -13,7 +13,7 @@ use crate::operations::Action;
 
 impl App {
     /// Split `layout_key(machine, id)` into endpoint + local tab id.
-    fn owner_parts(owner: &str) -> Option<(Option<&str>, &str)> {
+    pub(super) fn owner_parts(owner: &str) -> Option<(Option<&str>, &str)> {
         let (length, tail) = owner.split_once(':')?;
         let length: usize = length.parse().ok()?;
         let machine = tail.get(..length)?;

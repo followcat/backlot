@@ -628,23 +628,35 @@ impl App {
         else {
             return;
         };
+        let persistent = self.popup.as_ref().is_some_and(|p| p.persistent);
+        if persistent {
+            // The persistent float dresses the frame its size deserves:
+            // dimmed backdrop, drop shadow, then the rounded block.
+            self.dim_float_backdrop(buf);
+            self.draw_float_shadow(buf, geometry.outer);
+        }
         Clear.render(geometry.outer, buf);
-        // The reference title is the terminal's manual label or "popup".
-        let title = self
-            .popup
-            .as_ref()
-            .and_then(|p| self.view.inventory.get(&p.terminal))
-            .and_then(|t| t.labels.get("herdr.title").cloned())
-            .filter(|t| !t.is_empty())
-            .unwrap_or_else(|| "popup".to_owned());
+        let block = if persistent {
+            self.float_block(geometry.outer)
+        } else {
+            // The ephemeral reference title is the terminal's manual
+            // label or "popup" — plain square frame, no dressing.
+            let title = self
+                .popup
+                .as_ref()
+                .and_then(|p| self.view.inventory.get(&p.terminal))
+                .and_then(|t| t.labels.get("herdr.title").cloned())
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "popup".to_owned());
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(palette.accent).bg(palette.panel_bg))
+                .style(Style::default().bg(palette.panel_bg))
+                .title(title)
+        };
         let Some(popup) = self.popup.as_mut() else {
             return;
         };
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(palette.accent).bg(palette.panel_bg))
-            .style(Style::default().bg(palette.panel_bg))
-            .title(title);
         let inner = block.inner(geometry.outer);
         block.render(geometry.outer, buf);
         // The attach's cells are `terminal_cols` wide — one column

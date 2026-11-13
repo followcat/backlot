@@ -20,6 +20,7 @@ mod dialogs;
 mod draw;
 mod endpoint_navigation;
 mod float;
+mod float_draw;
 mod float_reconcile;
 mod help;
 mod host;
