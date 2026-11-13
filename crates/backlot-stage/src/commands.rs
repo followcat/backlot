@@ -121,9 +121,10 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
         return Err(Fail::usage(format!("limits.{runner} must be at least 1")));
     }
     // `cursor` and `devin` carry the thinking depth in the model id
-    // — no effort flag exists. `cursor`'s cast may only omit it
-    // (a set one would lie in the ledger); every other runner that
-    // consumes it still needs it declared.
+    // — no effort flag exists. `cmd`'s `--effort` writes the global
+    // config (measured), so it takes none either. A set effort on a
+    // runner that carries none would lie in the ledger; every other
+    // runner that consumes it still needs it declared.
     let roles = [
         ("producer", &cast.producer.runner, &cast.producer.effort),
         ("director", &cast.director.runner, &cast.director.effort),
@@ -140,10 +141,16 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
                  the depth is part of the model id"
             )));
         }
-        if !matches!(runner.as_str(), "cursor" | "devin") && effort.is_empty() {
+        if runner.as_str() == "cmd" && !effort.is_empty() {
             return Err(Fail::usage(format!(
-                "{who}: runner '{runner}' needs an effort — only 'cursor' and 'devin' \
-                 carry the depth in the model id"
+                "{who}: runner 'cmd' cannot take an effort — \
+                 `--effort` writes the global config"
+            )));
+        }
+        if !matches!(runner.as_str(), "cursor" | "devin" | "cmd") && effort.is_empty() {
+            return Err(Fail::usage(format!(
+                "{who}: runner '{runner}' needs an effort — only 'cursor', 'devin' and 'cmd' \
+                 carry none"
             )));
         }
     }

@@ -521,8 +521,10 @@ fn cast_toml_needs_all_roles() {
 
 /// S11d: `cursor` has no effort flag — the depth is part of the
 /// model id — so its cast may only omit `effort`, and the field
-/// never lands in the ledger. A set one is a usage error naming
-/// the runner; a runner whose argv consumes effort still needs it.
+/// never lands in the ledger; `cmd` takes none either (its flag
+/// writes the global config, S12b). A set one is a usage error
+/// naming the runner; a runner whose argv consumes effort still
+/// needs it.
 #[test]
 fn cast_toml_effort_rules() {
     let (scratch, env) = scratch();
@@ -581,9 +583,34 @@ permission_profile = "worktree"
         &format!("studio new --title e2 --repo /home/user/acme-shop --cast {missing}"),
     );
     assert!(err.contains("runner-w"), "{err}");
-    // The accepted cast lands: cursor and devin roles hold no
+    // S12b: a `cmd` role with `effort` set is refused — cmd's flag
+    // writes the GLOBAL config (measured) — while an unset one is
+    // fine and lands no key.
+    let set = fixture(
+        &scratch,
+        "cast-cmd-effort.toml",
+        &CAST.replacen(
+            "runner = \"runner-w\"\nmodel = \"model-w\"",
+            "runner = \"cmd\"\nmodel = \"deepseek/m\"",
+            1,
+        ),
+    );
+    let err = usage(
+        &env,
+        &format!("studio new --title e3 --repo /home/user/acme-shop --cast {set}"),
+    );
+    assert!(err.contains("cmd"), "{err}");
+    // The accepted cast lands: cursor, devin and cmd roles hold no
     // `effort` key at all.
-    let cast = fixture(&scratch, "cast-effort.toml", CAST);
+    let cast = fixture(
+        &scratch,
+        "cast-effort.toml",
+        &CAST.replacen(
+            "runner = \"runner-w\"\nmodel = \"model-w\"\neffort = \"medium\"",
+            "runner = \"cmd\"\nmodel = \"deepseek/m\"",
+            1,
+        ),
+    );
     ok(
         &env,
         &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
@@ -593,6 +620,7 @@ permission_profile = "worktree"
     let v = serde_json::to_value(&events[0]).unwrap();
     assert_eq!(v["roles"]["director"]["effort"], serde_json::Value::Null);
     assert_eq!(v["roles"]["producer"]["effort"], "high");
+    assert_eq!(v["roles"]["writer"]["effort"], serde_json::Value::Null);
     assert_eq!(v["candidates"][0]["effort"], serde_json::Value::Null);
 }
 
