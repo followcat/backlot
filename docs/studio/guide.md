@@ -131,6 +131,18 @@ then reads the ledger and starts the producer and the director as `bl-acme-shop-
 for its task (`bl-acme-shop-t1`). Role terminals are ordinary `hc` terminals: they show in the
 sidebar under the `backlot` space, and `hc ls` lists them.
 
+The stage has no heartbeat of its own — `backlot stage watch` is the external watchdog:
+
+```sh
+backlot stage watch --target bl-acme-shop-producer --session blrun1213a
+```
+
+It polls the core's terminal list and the studio ledgers every few seconds and sends a
+`<watch>` line into `--target` on three edges: the `backlot-stage` terminal dying (and coming
+back), a role terminal disappearing while its ledger still wants it live, and a studio's open
+attention growing. Each condition reports once per edge. Without `--target` the lines go to the
+watch's own stderr; `--studio` narrows the ledgers to one studio.
+
 Run `backlot` to open the UI. Press `Ctrl+B y` — prefix, then `y` — to open the studio panel on
 the right, expanded and focused. Pressing the chord again while it is focused closes it; pressing
 it while the panel is open but unfocused focuses it again. A herdr binding on `y` still wins
