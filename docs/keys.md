@@ -129,6 +129,12 @@ one-shot: they close and end when you leave the tab. Set `persistent = true` on 
 popup command the same per-tab behavior, or `persistent = false` to keep even a shell one-shot. While a float is
 starting, its own chord is held back until the terminal is up.
 
+While a persistent float is focused, the keys bound to `previous_tab`/`next_tab`/`previous_agent`/`next_agent` — the
+`Alt+arrow` shortcuts above, if you set them — still switch tabs and agents: the float parks on its tab and keeps
+running, exactly as if you had clicked away. Any `[[keys.command]]` popup chord also still works, so `Alt+F` toggles
+the float instead of typing into it. The program loses exactly those chords — press, repeat and release; everything
+else, `Esc` included, reaches it, and an action with no binding loses nothing.
+
 ## Pasting text and images
 
 `Ctrl+Shift+V` pastes text. That is your terminal's own shortcut, and the program receives it as a bracketed paste,

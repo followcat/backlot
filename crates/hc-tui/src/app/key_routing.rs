@@ -171,8 +171,12 @@ impl App {
         // routes raw input to it before UI bindings (`popup.rs`). A
         // retained popup selection copies on Ctrl/Cmd+C first; every
         // other key reaching the popup clears it. A persistent float
-        // additionally yields popup binding chords — its toggle key
-        // hides the float rather than typing into the program.
+        // additionally yields two chord families: the direct bindings of
+        // the four navigation actions still navigate (the float parks or
+        // stays with its tab), and every popup binding chord runs its
+        // command — its own toggle key hides the float rather than typing
+        // into the program. Intercepted presses record their identity so
+        // the matching release never reaches a program that saw no press.
         if self.popup.is_some() {
             let popup_combo = crate::input::terminal_key_of(&press);
             if matches!(popup_combo.code, KeyCode::Char('c' | 'C'))
@@ -186,16 +190,30 @@ impl App {
                 return None;
             }
             self.clear_popup_selection();
-            if self.popup.as_ref().is_some_and(|popup| popup.persistent)
-                && let Some(crate::input::KeybindMatch::Command(command)) =
-                    crate::input::resolve_direct_binding(&self.live.keybinds, &popup_combo)
-                && command.action == crate::config::CustomCommandAction::Popup
-            {
-                self.popup_key_suppress.insert(press.identity());
-                self.run_custom_command(&command);
-                return None;
+            let intercepted = self
+                .popup
+                .as_ref()
+                .is_some_and(|popup| popup.persistent)
+                .then(|| crate::input::resolve_direct_binding(&self.live.keybinds, &popup_combo))
+                .flatten();
+            use crate::input::{KeybindAction as A, KeybindMatch};
+            match intercepted {
+                Some(KeybindMatch::Action(
+                    action @ (A::PreviousTab | A::NextTab | A::PreviousAgent | A::NextAgent),
+                )) => {
+                    self.popup_key_suppress.insert(press.identity());
+                    self.on_action(action, width);
+                }
+                Some(KeybindMatch::Command(command))
+                    if command.action == crate::config::CustomCommandAction::Popup =>
+                {
+                    self.popup_key_suppress.insert(press.identity());
+                    self.run_custom_command(&command);
+                }
+                _ => {
+                    self.popup_key(&press);
+                }
             }
-            self.popup_key(&press);
             return None;
         }
         // A popup still opening swallows input — the reference's
