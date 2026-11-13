@@ -471,14 +471,18 @@ async fn a_host_resize_refits_a_hidden_float_lease() {
     assert!(after.0 > before.0 && after.1 > before.1);
 }
 
-/// A labeled local `t1` — endpoint snapshots need the labels to list
+/// A labeled terminal — endpoint snapshots need the labels to list
 /// their tabs, so publishes carry them too.
-fn labeled(address: &str, space: &str) -> hc_proto::terminal::Terminal {
+fn labeled_tab(address: &str, space: &str, tab: &str) -> hc_proto::terminal::Terminal {
     let mut term = crate::sidebar::fixture::term(address);
     term.pid = Some(1);
     term.labels.insert("herdr.space".into(), space.into());
-    term.labels.insert("herdr.tab".into(), "tab".into());
+    term.labels.insert("herdr.tab".into(), tab.into());
     term
+}
+
+fn labeled(address: &str, space: &str) -> hc_proto::terminal::Terminal {
+    labeled_tab(address, space, "tab")
 }
 
 /// A local `t1` plus a remote `host-a/t3`, each the only tab of its own
@@ -522,7 +526,7 @@ fn remote_owner(app: &App) -> String {
     crate::project::layout_key(Some("host-a"), &tab_id)
 }
 
-fn hidden_float(app: &mut App, owner: String) -> FloatKey {
+fn hidden_float_as(app: &mut App, owner: String, terminal: &str, created_ms: u64) -> FloatKey {
     let key = FloatKey {
         owner,
         command: "alt+f".into(),
@@ -530,16 +534,20 @@ fn hidden_float(app: &mut App, owner: String) -> FloatKey {
     app.hide_float(
         key.clone(),
         FloatEntry {
-            terminal: "t9".into(),
+            terminal: terminal.into(),
             width: None,
             height: None,
             restore: false,
-            created_ms: 9,
+            created_ms,
             seen: false,
             kill_sent: false,
         },
     );
     key
+}
+
+fn hidden_float(app: &mut App, owner: String) -> FloatKey {
+    hidden_float_as(app, owner, "t9", 9)
 }
 
 #[tokio::test]
@@ -641,4 +649,74 @@ async fn an_offline_endpoint_keeps_its_float() {
     let entry = app.floats.get(&key).expect("the float survives offline");
     assert_eq!(entry.terminal, "t9");
     assert!(!entry.kill_sent);
+}
+
+#[tokio::test]
+async fn a_workspace_close_kills_every_float_its_tabs_parked() {
+    // One workspace, two tabs — each parked its own float. Closing the
+    // workspace drops both tabs in one publish, so both owner-gone
+    // kills go out in map order (tab-1's owner sorts first).
+    let mut app = app_with_tabs(&[
+        ("t1", "space-a", "tab-1"),
+        ("t2", "space-a", "tab-2"),
+        ("t3", "space-b", "tab"),
+    ]);
+    pending(&mut app);
+    app.reconcile_published_view();
+    let owner1 = crate::project::layout_key(None, "tab-1");
+    let owner2 = crate::project::layout_key(None, "tab-2");
+    let key1 = hidden_float_as(&mut app, owner1.clone(), "t9", 9);
+    let key2 = hidden_float_as(&mut app, owner2.clone(), "t8", 8);
+    let mut rx = operations(&mut app);
+    core_id(&mut app, "core-fake-1");
+    let server = tokio::spawn(async move {
+        let mut core = rx.recv().await.unwrap();
+        core.read_hello().await;
+        core.answer_hello(true, &["terminal.get", "terminal.kill"], &[])
+            .await;
+        for (terminal, created_ms) in [("t9", 9u64), ("t8", 8)] {
+            let get = core.read_request().await;
+            assert_eq!(get["method"], "terminal.get");
+            assert_eq!(get["params"]["terminal"], terminal);
+            core.reply(&get["id"], run_reply(terminal, created_ms))
+                .await;
+            let kill = core.read_request().await;
+            assert_eq!(kill["method"], "terminal.kill");
+            assert_eq!(kill["params"]["terminal"], terminal);
+            core.reply(&kill["id"], run_reply(terminal, created_ms))
+                .await;
+        }
+    });
+    // Both floats are sighted in inventory first.
+    publish(
+        &mut app,
+        vec![
+            labeled_tab("t1", "space-a", "tab-1"),
+            labeled_tab("t2", "space-a", "tab-2"),
+            labeled("t3", "space-b"),
+            float_term("t9", &owner1, 9),
+            float_term("t8", &owner2, 8),
+        ],
+    );
+    // space-a closes: the Online snapshot loses both of its tabs.
+    publish(
+        &mut app,
+        vec![
+            labeled("t3", "space-b"),
+            float_term("t9", &owner1, 9),
+            float_term("t8", &owner2, 8),
+        ],
+    );
+    assert!(
+        app.floats[&key1].kill_sent && app.floats[&key2].kill_sent,
+        "every parked float of the closed workspace gets its kill"
+    );
+    settle(&mut app).await;
+    settle(&mut app).await;
+    server.await.unwrap();
+    // The records finally leave — both entries and leases follow.
+    publish(&mut app, vec![labeled("t3", "space-b")]);
+    assert!(app.floats.is_empty());
+    assert!(!app.size_leases.contains_key("t9"));
+    assert!(!app.size_leases.contains_key("t8"));
 }
