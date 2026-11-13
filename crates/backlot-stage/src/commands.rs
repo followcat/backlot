@@ -445,6 +445,27 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
+        // `attention clear` resolves a still-open attention by hand:
+        // stage-restart leftovers and prompts the passes could not
+        // prove gone (S12d). Clearing one that is not open — or a
+        // seq that was never an attention — is refused.
+        Cmd::AttentionClear { target } => {
+            person_gate(caller)?;
+            let who = caller.role.clone();
+            Ok(Box::new(move |state, _| {
+                if !state.open_attention().any(|a| a.seq == target) {
+                    return Err(Fail::refused(format!("no open attention {target}")));
+                }
+                Ok(pending(
+                    EventKind::AttentionCleared {
+                        target,
+                        reason: Some(format!("cleared by {who}")),
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         // `studio finish` ends the studio; the model refuses while
         // any task is not terminal, naming them.
         Cmd::StudioFinish { reason } => {

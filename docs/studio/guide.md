@@ -270,7 +270,7 @@ stage can raise:
 | `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's is the director's; anything else is yours. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
 | `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a changed screen or a newer signal clears the attention. |
 | `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — there is no automatic way on for a fixed role. |
-| `session id not found` | A post-launch runner (`codex`, `devin`, `cursor`, `cmd`) gave no session id within 60 seconds of the role starting. | The role still runs and the stage keeps looking for up to ten minutes. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
+| `session id not found` | A post-launch runner (`codex`, `devin`, `cursor`, `cmd`) gave no session id within its discovery window — 60 seconds, 240 for `cmd`, whose session file lands late. | The role still runs and the stage keeps looking for up to ten minutes; a role past the default window but inside its runner's logs a warning only. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
 | `launch refused` | `terminal.run` refused the role's launch — a taken terminal name or an argv the core rejects. | The stage retries each tick; the detail names the refusal. Check the runner exists and the terminal name is free. |
 | `not a git repository` | The studio's `--repo` path is not a git work tree — no director or actor starts. | Point the studio at a real work tree, or make the repo one; the stage retries each tick. |
 | `work area failed` | A git step failed while preparing `work/` — the detail is git's first error line. | Fix what git complained about; the stage retries each tick. |
@@ -283,6 +283,17 @@ stage can raise:
 | `cursor dir was open` | A cursor role's `roles/<role>/cursor/` — the boundary that keeps the agent's `authInfo`-holding files unreachable — carried a group or other permission bit. The stage found it at launch prep or at session discovery and set it back to 700. | Informational only — the detail names the path suffix. Check what set the mode (a loose umask, an outside chmod); a repeat drift raises it again. |
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
 | `cmd prep failed` | A cmd role's per-session setup failed — its workdir `.commandcode/settings.json` could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
+
+A stale open attention — one whose condition no longer holds, such as a stage-restart leftover —
+closes by hand:
+
+```sh
+backlot attention clear <seq> --studio acme-shop --as user
+```
+
+The seq is the attention's ledger seq from `backlot status`. Clearing one that is not open — or a
+seq that was never an attention — is refused. The user and the director may clear; the record
+names who did.
 
 The ledger is append-only — a `correction` event changes the view, not the past. To repair a
 recorded fact use `backlot correct --event <seq> --reason <r> --set <key=value> --as user`.
