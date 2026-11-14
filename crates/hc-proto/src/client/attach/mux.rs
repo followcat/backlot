@@ -50,9 +50,9 @@ enum Dispatch {
 }
 
 /// The channel a `terminal.attach` reply named — lenient, for the
-/// cancelled-open CLOSE: even a reply whose `terminal` record fails
-/// shape still owes its channel a CLOSE.
-fn reply_channel(value: &Value) -> Option<u32> {
+/// cancelled-open and failed-shape CLOSEs: even a reply whose
+/// `terminal` record fails shape still owes its channel a CLOSE.
+pub(super) fn reply_channel(value: &Value) -> Option<u32> {
     u32::try_from(value.get("channel")?.as_u64()?)
         .ok()
         .filter(|channel| *channel != 0)
