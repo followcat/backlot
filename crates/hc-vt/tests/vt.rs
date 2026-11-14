@@ -206,6 +206,16 @@ fn repeated_create_drop_resize_cycles_do_not_panic() {
 }
 
 #[test]
+fn scrollback_max_bytes_reports_the_configured_cap() {
+    let t = Vt::new(80, 24, 64 * 1024);
+    assert_eq!(t.scrollback_max_bytes(), Some(64 * 1024));
+    let t = Vt::new(80, 24, 256 * 1024);
+    assert_eq!(t.scrollback_max_bytes(), Some(256 * 1024));
+    let t = Vt::new(80, 24, 0);
+    assert_eq!(t.scrollback_max_bytes(), Some(0));
+}
+
+#[test]
 fn bells_are_counted_and_drained() {
     let mut vt = hc_vt::Vt::new(10, 4, 0);
     vt.feed(b"a\x07b\x07\x07");

@@ -154,10 +154,8 @@ const OUT_QUEUE: usize = 64;
 /// Pending human input bound, in items and bytes.
 const PENDING_MAX_ITEMS: usize = 128;
 const PENDING_MAX_BYTES: usize = crate::app::input::MAX_INPUT_BYTES;
-/// VT scrollback kept for the future copy mode.
-const SCROLLBACK: usize = 256 * 1024;
 /// First-paint history lines requested on a fresh attach.
-const HISTORY: u64 = 200;
+pub(crate) const HISTORY: u64 = 200;
 
 /// A swapped-out attach parked to drain forwarded input leases: the
 /// program saw presses on this wire, so physical key-up releases must

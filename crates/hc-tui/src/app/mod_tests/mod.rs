@@ -21,6 +21,7 @@ mod m4s4;
 mod m4s5;
 mod mouse_selection;
 mod narrow;
+mod observer_policy_tests;
 mod page_keys;
 mod reload;
 mod remote_children;

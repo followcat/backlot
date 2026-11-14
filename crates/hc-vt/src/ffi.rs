@@ -47,6 +47,7 @@ pub const DATA_KITTY_KEYBOARD_FLAGS: i32 = 8;
 pub const DATA_MOUSE_TRACKING: i32 = 11;
 pub const DATA_TITLE: i32 = 12;
 pub const DATA_TOTAL_ROWS: i32 = 14;
+pub const DATA_SCROLLBACK_MAX_BYTES: i32 = 34;
 
 #[repr(C)]
 pub struct StringView {
