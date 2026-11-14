@@ -15,6 +15,11 @@ use backlot_model::summary::Work;
 use crate::runners::work;
 use crate::watch::trust_dialog;
 
+mod cursor;
+pub use cursor::cursor_needs_user;
+#[cfg(test)]
+pub use cursor::{CursorAsk, cursor_ask};
+
 /// Two samples this far apart make a blocked episode — the same
 /// window the send gate's screen stability uses.
 pub const EPISODE_MIN_MS: u64 = 2_000;
@@ -90,7 +95,9 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
             let ask = lines
                 .iter()
                 .rposition(|l| l.contains("Do you want to proceed?"))?;
-            lines[..ask].iter().rposition(|l| is_full_width_rule(l))?
+            lines[..ask]
+                .iter()
+                .rposition(|l| work::is_full_width_rule(l))?
         }
         // From the last `fake-work: blocked` line to the end — a
         // `fake-prompt:` line under it is what tells two prompts
@@ -103,14 +110,19 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         "codex" => lines
             .iter()
             .rposition(|l| l.contains("Would you like to"))?,
-        // From the last full-width `─` rule above `Run this
-        // command?` to the end — the `$ <cmd>` line, the allowlist
-        // sentence and the picker (measured on 2026.11.05).
+        // From the last full-width `─` rule above the picker's `→`
+        // option-cursor line to the end — the `$ <cmd>` or diff
+        // preview, the question and the options. Every approval
+        // picker shares the footer (`Run (once)`, `Proceed`, the
+        // lot — measured on 2026.11.05, file pickers from the S12e
+        // captures); a bare ` →` composer carries no label.
         "cursor" => {
             let ask = lines
                 .iter()
-                .rposition(|l| l.contains("Run this command?"))?;
-            lines[..ask].iter().rposition(|l| is_full_width_rule(l))?
+                .rposition(|l| l.trim_start().starts_with("→ "))?;
+            lines[..ask]
+                .iter()
+                .rposition(|l| work::is_full_width_rule(l))?
         }
         // From the last full-width `─` rule above the `❯ 1.`
         // picker to the end — the rule opens the prompt block,
@@ -121,7 +133,9 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
             let ask = lines
                 .iter()
                 .rposition(|l| l.trim_start().starts_with("❯ 1."))?;
-            lines[..ask].iter().rposition(|l| is_full_width_rule(l))?
+            lines[..ask]
+                .iter()
+                .rposition(|l| work::is_full_width_rule(l))?
         }
         // From the last `●` line above `Approval required` to the
         // end — the `●` block holds the command the picker asks
@@ -146,14 +160,6 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         .collect::<Vec<_>>()
         .join("\n");
     Some(block.split_whitespace().collect::<Vec<_>>().join(" "))
-}
-
-/// A separator drawn the full width of the screen: only `─` after
-/// trimming. The `╌` rules inside the prompt block — the ones around
-/// the command — are a different character and stay inside it.
-fn is_full_width_rule(l: &str) -> bool {
-    let t = l.trim();
-    t.chars().count() >= 3 && t.chars().all(|c| c == '─')
 }
 
 /// The role's open `permission prompt` attention, when it has one.

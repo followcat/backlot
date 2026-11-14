@@ -93,6 +93,29 @@ fn lost(seq: u64, role: &str) -> Event {
     )
 }
 
+fn attention(seq: u64, role: &str, reason: &str) -> Event {
+    ev(
+        seq,
+        "stage",
+        EventKind::AttentionRaised {
+            role: role.into(),
+            reason: reason.into(),
+            detail: "d".into(),
+            needs_user: false,
+        },
+    )
+}
+
+fn clears(actions: &[Action]) -> Vec<(u64, String)> {
+    actions
+        .iter()
+        .filter_map(|a| match a {
+            Action::ClearAttention { target, reason } => Some((*target, reason.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
 fn live(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs
         .iter()
@@ -244,6 +267,73 @@ fn a_deliberate_stop_is_never_a_loss() {
     assert!(
         !actions.iter().any(|a| matches!(a,
             Action::Lost { role, .. } | Action::Stop { role, .. } if role == "writer")),
+        "{actions:?}"
+    );
+}
+
+/// A deliberate stop clears the role's open attention in the same
+/// pass — the prompt or stall it named is gone with the terminal,
+/// the S12e `studio.finished` orphan (S12f). An attention left
+/// open on an already-`Closed` entry — an older ledger's — clears
+/// on the next pass too.
+#[test]
+fn role_closed_clears_the_roles_open_attention() {
+    // The S12e shape: `studio.finished` stops the still-live
+    // director whose permission prompt was open.
+    let mut events = studio();
+    events.push(started(3, "director", "t9", "sess-d"));
+    events.push(started(4, "producer", "t8", "sess-p"));
+    events.push(attention(5, "director", PERMISSION_PROMPT));
+    events.push(attention(6, "producer", STALLED));
+    events.push(ev(
+        7,
+        "producer",
+        EventKind::StudioFinished {
+            reason: "done".into(),
+        },
+    ));
+    let view = live(&[
+        ("bl-acme-shop-director", "t9"),
+        ("bl-acme-shop-producer", "t8"),
+    ]);
+    let actions = reconcile(STUDIO, &log(events), &view, NOW);
+    let mut got = clears(&actions);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            (5, "role closed".to_string()),
+            (6, "role closed".to_string())
+        ],
+        "each closed role's open attention clears with it: {actions:?}"
+    );
+    assert_eq!(
+        stops(&actions).len(),
+        2,
+        "both live roles stop: {actions:?}"
+    );
+
+    // An older ledger's orphan: `role.closed` already landed with
+    // the attention still open — the next pass clears it.
+    let mut events = studio();
+    events.push(started(3, "director", "t9", "sess-d"));
+    events.push(attention(4, "director", PERMISSION_PROMPT));
+    events.push(ev(
+        5,
+        "producer",
+        EventKind::StudioFinished {
+            reason: "done".into(),
+        },
+    ));
+    events.push(closed(6, "director"));
+    let actions = reconcile(STUDIO, &log(events), &live(&[]), NOW);
+    assert_eq!(
+        clears(&actions),
+        [(4, "role closed".to_string())],
+        "{actions:?}"
+    );
+    assert!(
+        !actions.iter().any(|a| matches!(a, Action::Lost { .. })),
         "{actions:?}"
     );
 }

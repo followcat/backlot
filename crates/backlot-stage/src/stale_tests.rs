@@ -312,6 +312,101 @@ fn a_nudge_drops_once_the_step_is_done() {
     );
 }
 
+/// A notice addressed to a role the ledger no longer wants live —
+/// a released writer, an actor whose task closed, everyone once
+/// `studio.finished` lands — is dead mail whatever its label:
+/// `no longer wanted` drops before the label table is ever
+/// consulted. Person-written mail (`source_seq: None`) and `user`
+/// stay out of it; reports never reach this check at all.
+#[test]
+fn a_notice_to_a_gone_role_drops() {
+    let state = base_state();
+    // Nobody is wanted under those keys yet — the writer needs a
+    // `plan` message and t1 is uncast. Even a never-stale `req`
+    // label drops: the addressee check runs first.
+    for label in ["req", "attention", "nudge", "delivered"] {
+        let mut m = notice(9, 1, label);
+        m.to = "writer".into();
+        assert_eq!(
+            stale_reason(&state, &m),
+            Some("no longer wanted"),
+            "{label} to an unwanted role"
+        );
+    }
+    // A wanted addressee falls through to its label's own rule —
+    // `req` is never stale.
+    let mut kept = notice(9, 1, "req");
+    kept.to = "director".into();
+    assert_eq!(stale_reason(&state, &kept), None);
+    // A person's own words to the same unwanted role keep — the
+    // addressee check only runs on sourced notices.
+    let mut tell = notice(9, 1, "req");
+    tell.to = "writer".into();
+    tell.source_seq = None;
+    assert_eq!(stale_reason(&state, &tell), None);
+    // `user` is always there.
+    let mut to_user = notice(9, 1, "req");
+    to_user.to = "user".into();
+    assert_eq!(stale_reason(&state, &to_user), None);
+}
+
+/// Once the studio is finished no role is wanted — every queued
+/// stage notice drops, `denied` and `recovered` included. A held
+/// person stays wanted and keeps its mail.
+#[test]
+fn studio_finished_drops_every_notice() {
+    let mut log = base_events();
+    log.push(ev(
+        4,
+        "producer",
+        EventKind::StudioFinished {
+            reason: "done".into(),
+        },
+    ));
+    let state = replay(&log);
+    for label in ["denied", "recovered", "req", "delivered"] {
+        assert_eq!(
+            stale_reason(&state, &notice(9, 1, label)),
+            Some("no longer wanted"),
+            "{label} after finish"
+        );
+    }
+    // A person-written message still is not checked.
+    let mut tell = notice(9, 1, "req");
+    tell.source_seq = None;
+    assert_eq!(stale_reason(&state, &tell), None);
+    // A held person stays wanted and keeps its mail.
+    let mut held = log.clone();
+    held.push(ev(
+        5,
+        "stage",
+        EventKind::RoleStarted {
+            role: "director".into(),
+            terminal: None,
+            actor: Some(actor("a")),
+            session_id: Some("sess-d".into()),
+            reason: None,
+        },
+    ));
+    held.push(ev(
+        6,
+        "stage",
+        EventKind::RoleClosed {
+            role: "director".into(),
+            reason: Some("no longer desired".into()),
+        },
+    ));
+    held.push(ev(
+        7,
+        "user",
+        EventKind::RoleReopen {
+            role: "director".into(),
+        },
+    ));
+    let held_state = replay(&held);
+    assert_eq!(stale_reason(&held_state, &notice(9, 1, "req")), None);
+}
+
 /// `recovered`, `denied` and `req` never drop — each is a fact, not
 /// a pointer at live state — and a message with no `source_seq` (a
 /// `tell`, an `ask`, a `dispatch`, the plan request) is never even

@@ -40,6 +40,17 @@ impl Stage {
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
+        // The area a cursor file picker's target is checked
+        // against — the actor's own worktree (S12f).
+        let area = crate::workareas::role_dir(
+            dir,
+            state
+                .studio
+                .as_ref()
+                .map(|s| s.repo.as_str())
+                .unwrap_or_default(),
+            role,
+        );
         // The trust dialog is the trust pass's concern, not a
         // permission episode — it resets the blocked clock.
         let ep = permit::in_episode(work, text);
@@ -53,7 +64,7 @@ impl Stage {
                     && !permit::episode_raised(state, role, since)
                     && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
                 {
-                    self.raise_permission(dir, role, w.runner, text, request)
+                    self.raise_permission(dir, role, w.runner, text, request, &area)
                         .await?;
                 }
             }
@@ -181,7 +192,7 @@ impl Stage {
                         reason: Some("prompt changed before the decision was sent".into()),
                     },
                 )?;
-                self.raise_permission(dir, role, w.runner, text, request)
+                self.raise_permission(dir, role, w.runner, text, request, &area)
                     .await?;
                 return Ok(());
             }
@@ -240,12 +251,14 @@ impl Stage {
     /// for `BACKLOT_*` or an environment-clearing flag is flagged
     /// `needs_user` — the director never sees the notice and may not
     /// answer it; the flag reads the signal's command when there is
-    /// one, else the prompt's own block. So is a prompt no recorded
-    /// decision can bind to — no `PermissionRequest` signal, no
-    /// identifiable block; a signal-bound raise needs no block, the
-    /// decision compares on the request. An actor's ordinary prompt
-    /// gets the director's detail; anything else says it needs the
-    /// user.
+    /// one, else the prompt's own block. So is a cursor file picker
+    /// whose target does not resolve strictly inside the role's
+    /// work area — or whose ask the stage cannot read (S12f) — and
+    /// a prompt no recorded decision can bind to: no
+    /// `PermissionRequest` signal, no identifiable block; a
+    /// signal-bound raise needs no block, the decision compares on
+    /// the request. An actor's ordinary prompt gets the director's
+    /// detail; anything else says it needs the user.
     pub(crate) async fn raise_permission(
         &self,
         dir: &Path,
@@ -253,6 +266,7 @@ impl Stage {
         runner: &str,
         text: &str,
         request: Option<&signals::Signal>,
+        area: &Path,
     ) -> Result<(), Fail> {
         let command = request.and_then(|s| s.tool_target());
         // A prompt kind nothing can bind a recorded decision to —
@@ -261,6 +275,7 @@ impl Stage {
         // is the user's (S12d). A signal-bound raise needs no
         // block: the decision compares on the request.
         let user_owned = permit::needs_user(role, runner, text, command)
+            || permit::cursor_needs_user(runner, text, area)
             || (request.is_none() && permit::prompt_block(runner, text).is_none());
         // The bound request: `backlot approve` refuses a key when
         // the last signal is no longer this one.

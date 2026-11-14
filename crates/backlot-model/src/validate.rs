@@ -553,7 +553,7 @@ fn user_owned(attn: &crate::state::Attention) -> bool {
 /// saved screen reached for.
 fn user_owned_why(attn: &crate::state::Attention) -> String {
     if attn.needs_user {
-        "its screen reached for BACKLOT_* or an environment-clearing env flag".to_string()
+        "its screen reached for BACKLOT_* or an environment-clearing env flag, or asked for a target the stage could not verify inside the work area".to_string()
     } else {
         format!(
             "'{}' is not an actor; only an actor's prompt is the director's",
