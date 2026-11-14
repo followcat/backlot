@@ -45,7 +45,7 @@ impl Pane {
         let ev = self.ev.clone();
         let open = Arc::clone(&self.open);
         let (out, out_rx) = mpsc::channel(OUT_QUEUE);
-        let task = tokio::spawn(attach_task(open, params, generation, ev));
+        let task = tokio::spawn(attach_task(open, params, spec.role, generation, ev));
         self.state = State::Opening {
             generation,
             spec,

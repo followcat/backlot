@@ -21,7 +21,12 @@ async fn size_holder_resizes_without_input_focus_emulator_or_replies() {
     assert!(!pane.key(&key('x')));
     pane.paste(b"unwanted");
     pane.focused(true);
-    raw_paint(&mut pane, &mut rx, &mut core, b"\x1b[6n\x1b[c\x1b[?9001l").await;
+    // The holder returns credit at the wire: no emulator, no replies,
+    // and the bytes never cross the pane event channel.
+    let queries = b"\x1b[6n\x1b[c\x1b[?9001l";
+    core.send_stream(CH, Kind::Data, queries).await;
+    await_credit(&mut core, queries.len() as u64).await;
+    drain_no_data(&mut pane, &mut rx);
     assert!(pane.vt().is_none());
     pane.allocated(84, 47);
     resize_only(&mut core).await;
@@ -32,6 +37,40 @@ async fn size_holder_resizes_without_input_focus_emulator_or_replies() {
         50,
     )
     .await;
+}
+
+/// Reads stream frames until `expected` bytes of CREDIT reached the
+/// core — proof a silent size holder consumed DATA without a UI wake.
+async fn await_credit(core: &mut FakeCore, expected: u64) {
+    let mut credited = 0u64;
+    timeout(T, async {
+        while credited < expected {
+            let frame = core.read_stream(CH).await;
+            if let Ok(hc_proto::frame::Control::Credit(n)) = frame.control() {
+                credited += n as u64;
+            }
+        }
+    })
+    .await
+    .expect("credit deadline");
+}
+
+/// Drains `rx` into the pane; size-holder DATA must never ride it —
+/// the attach actor returns that credit before any event exists.
+fn drain_no_data(pane: &mut Pane, rx: &mut mpsc::Receiver<PaneEv>) {
+    while let Ok(event) = rx.try_recv() {
+        assert!(
+            !matches!(
+                event,
+                PaneEv::Out {
+                    out: Output::Data(_),
+                    ..
+                }
+            ),
+            "size-holder DATA must never cross pane_rx"
+        );
+        pane.on_event(event, Instant::now());
+    }
 }
 
 async fn resize_only(core: &mut FakeCore) -> hc_proto::frame::Frame {
@@ -150,4 +189,101 @@ async fn live_allocation_syncs_registered_size_even_when_another_viewer_already_
             .status_label(Instant::now())
             .contains("owned by another viewer")
     );
+}
+
+#[tokio::test]
+async fn size_holder_data_credit_flows_without_waking_the_ui() {
+    let (mut pane, mut rx, mut accept) = rig();
+    pane.want(Some(spec(Role::SizeLease)));
+    let (mut core, _params) = timeout(T, accept.recv()).await.unwrap().unwrap();
+    core.serve_attach(testcore::attach_result(
+        CH,
+        testcore::minimal_terminal(),
+        true,
+    ))
+    .await;
+    // Reach Live while capturing the attach for credit inspection.
+    let attach = timeout(T, async {
+        loop {
+            let event = rx.recv().await.expect("pane event channel");
+            let opened = match &event {
+                PaneEv::Opened { attach, .. } => Some(attach.clone()),
+                _ => None,
+            };
+            pane.on_event(event, Instant::now());
+            if matches!(&pane.state, State::Live(_)) {
+                return opened.expect("the wire opens before Live");
+            }
+        }
+    })
+    .await
+    .expect("live deadline");
+
+    // More than one credit window: the holder drains every chunk at the
+    // wire while pane_rx stays silent — zero DATA events for the app.
+    const CHUNKS: usize = 64;
+    const CHUNK: usize = 8 * 1024;
+    let chunk = vec![b'x'; CHUNK];
+    for _ in 0..CHUNKS {
+        core.send_stream(CH, Kind::Data, &chunk).await;
+    }
+    let mut credited = 0u64;
+    let mut data_events = 0usize;
+    timeout(T, async {
+        while credited < (CHUNKS * CHUNK) as u64 {
+            tokio::select! {
+                frame = core.read_stream(CH) => {
+                    if let Ok(hc_proto::frame::Control::Credit(n)) = frame.control() {
+                        credited += n as u64;
+                    }
+                }
+                event = rx.recv() => {
+                    let event = event.expect("pane event channel");
+                    if matches!(event, PaneEv::Out { out: Output::Data(_), .. }) {
+                        data_events += 1;
+                    }
+                    pane.on_event(event, Instant::now());
+                }
+            }
+        }
+    })
+    .await
+    .expect("credit deadline");
+    assert_eq!(data_events, 0, "size-holder DATA crossed pane_rx");
+    assert_eq!(attach.unconsumed(), 0);
+    assert!(pane.vt().is_none());
+    drain_no_data(&mut pane, &mut rx);
+
+    // RESIZE still travels: the tracked core grid follows it.
+    core.send_stream(CH, Kind::Resize, &[44, 0, 37, 0]).await;
+    timeout(T, async {
+        while !matches!(&pane.state, State::Live(live) if live.core_grid == (44, 37)) {
+            step(&mut pane, &mut rx).await;
+        }
+    })
+    .await
+    .expect("resize event deadline");
+    assert_eq!(pane.vt_grid, (44, 37));
+
+    // CLOSE still parks the holder Down until its passive retry.
+    core.send_stream(CH, Kind::Close, b"{\"reason\":\"gone\"}")
+        .await;
+    timeout(T, async {
+        while !matches!(&pane.state, State::Down { .. }) {
+            step(&mut pane, &mut rx).await;
+        }
+    })
+    .await
+    .expect("down deadline");
+}
+
+#[tokio::test]
+async fn active_and_observe_output_still_crosses_the_event_channel() {
+    for role in [Role::Active, Role::Observe] {
+        let (mut pane, mut rx, mut accept) = rig();
+        pane.want(Some(spec(role)));
+        let mut core = serve(&mut accept, true).await;
+        step_until_live(&mut pane, &mut rx).await;
+        raw_paint(&mut pane, &mut rx, &mut core, b"program bytes").await;
+    }
 }

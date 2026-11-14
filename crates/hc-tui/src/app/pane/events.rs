@@ -165,8 +165,9 @@ impl Pane {
         };
         match out {
             Output::Data(bytes) => {
-                // A size holder needs neither an emulator nor query replies.
-                // Credit still flows so it cannot block the program.
+                // Defensive: attach_task consumes size-holder DATA at the
+                // wire and never forwards it — a stray chunk still returns
+                // its credit here so nothing can stall the stream.
                 if live.spec.role == Role::SizeLease {
                     if let Err(error) = live.attach.consume(bytes.len()) {
                         live.vt_broken = Some(format!("credit: {error}"));
