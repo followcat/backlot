@@ -3,7 +3,10 @@ use super::*;
 use crate::config::TabBarRightEntryConfig;
 
 impl App {
-    pub(super) fn update_tab_status(&mut self, now: Instant) {
+    /// Recompute the right-side tab-bar status and the next re-tick.
+    /// `true` only when the shown segments or separator actually
+    /// changed — an unchanged `%H:%M` minute must not dirty the frame.
+    pub(super) fn update_tab_status(&mut self, now: Instant) -> bool {
         let mut timed = false;
         let hostname =
             super::hostname::for_endpoint(&self.view, &self.projection.active_endpoint_id)
@@ -42,17 +45,22 @@ impl App {
             .chars()
             .filter(|ch| !ch.is_control())
             .collect::<String>();
-        self.projection.snapshot.tab_bar_right = segments.clone();
-        self.projection.snapshot.tab_bar_right_separator = separator.clone();
-        for endpoint in &mut self.projection.endpoints {
-            if endpoint.endpoint_id == self.projection.active_endpoint_id
-                && let Some(snapshot) = &mut endpoint.snapshot
-            {
-                snapshot.tab_bar_right = segments.clone();
-                snapshot.tab_bar_right_separator = separator.clone();
+        let changed = self.projection.snapshot.tab_bar_right != segments
+            || self.projection.snapshot.tab_bar_right_separator != separator;
+        if changed {
+            self.projection.snapshot.tab_bar_right = segments.clone();
+            self.projection.snapshot.tab_bar_right_separator = separator.clone();
+            for endpoint in &mut self.projection.endpoints {
+                if endpoint.endpoint_id == self.projection.active_endpoint_id
+                    && let Some(snapshot) = &mut endpoint.snapshot
+                {
+                    snapshot.tab_bar_right = segments.clone();
+                    snapshot.tab_bar_right_separator = separator.clone();
+                }
             }
         }
         self.next_tab_status = timed.then(|| now + std::time::Duration::from_secs(1));
+        changed
     }
 }
 

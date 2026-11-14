@@ -211,8 +211,9 @@ impl App {
     }
 
     /// `tick_notifications`: expire the visible toast, promote the queue,
-    /// then validate and deliver every due pending.
-    pub(super) fn tick_notifications(&mut self, now: Instant) {
+    /// then validate and deliver every due pending. `true` = shown changed.
+    pub(super) fn tick_notifications(&mut self, now: Instant) -> bool {
+        let shown = self.notifications.visible.as_ref().map(|v| v.deadline);
         if self
             .notifications
             .visible
@@ -292,6 +293,7 @@ impl App {
                 ToastDelivery::Terminal | ToastDelivery::System => {}
             }
         }
+        self.notifications.visible.as_ref().map(|v| v.deadline) != shown
     }
 
     /// `notification_target_is_active`: the event's tab (else workspace) is

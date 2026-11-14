@@ -108,10 +108,10 @@ impl Pane {
     /// the initial gate and an observer repaint. Queued input then
     /// encodes under the VT as it stands: a missing marker must never
     /// pin human input forever.
-    pub(super) fn fire_paint_fallback(&mut self, now: Instant) {
+    pub(super) fn fire_paint_fallback(&mut self, now: Instant) -> bool {
         let released = {
             let State::Live(live) = &mut self.state else {
-                return;
+                return false;
             };
             let mut released = false;
             if live.paint_gate.fire(now) {
@@ -141,5 +141,6 @@ impl Pane {
         if released {
             self.flush_pending();
         }
+        released
     }
 }
