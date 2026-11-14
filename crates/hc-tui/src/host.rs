@@ -17,7 +17,7 @@ use std::io::Write;
 use hc_vt::Rgb;
 
 /// Default colors reported by the host terminal.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HostTheme {
     pub foreground: Option<Rgb>,
     pub background: Option<Rgb>,
@@ -36,7 +36,7 @@ impl Default for HostTheme {
 }
 
 /// Everything the pane needs to present inner cells truthfully.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct HostFacts {
     pub theme: HostTheme,
     /// Pixel pitch of one cell — `ws_xpixel/cols`, `ws_ypixel/rows`.

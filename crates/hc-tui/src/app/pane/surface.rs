@@ -241,8 +241,9 @@ impl Pane {
 
     /// Fires a due retry: a fresh attach for the same spec — `resumed`,
     /// since nothing about the user's ownership changed. On a live
-    /// wire, due paint fallback deadlines release instead.
-    pub fn fire_retry(&mut self, now: Instant) {
+    /// wire, due paint fallback deadlines release instead. `true` when
+    /// a `Down` pane moved to `Opening` or a paint fallback released.
+    pub fn fire_retry(&mut self, now: Instant) -> bool {
         if let State::Down {
             spec,
             retry_at,
@@ -253,9 +254,9 @@ impl Pane {
         {
             let (spec, attempts) = (spec.clone(), *attempts);
             self.spawn(spec, true, attempts);
-            return;
+            return true;
         }
-        self.fire_paint_fallback(now);
+        self.fire_paint_fallback(now)
     }
 
     /// The retained screen, if any — the draw layer clips/pads it.

@@ -10,6 +10,9 @@ use hc_tui::app::{App, Probe};
 use ratatui::{Terminal, backend::TestBackend};
 use tokio::sync::mpsc;
 
+#[path = "common/loopcore.rs"]
+mod loopcore;
+
 fn app() -> (App, Arc<Probe>) {
     app_with_config(&hc_tui::config::Config::default())
 }
@@ -261,4 +264,128 @@ async fn rejected_notice_expires_during_idle_without_periodic_redraws() {
     assert!(!text.contains("Input rejected"), "{text}");
     assert!(counters.draws.load(Ordering::Relaxed) <= 4);
     assert!(counters.wakeups.load(Ordering::Relaxed) <= 20);
+}
+
+/// A `%H:%M` clock re-arms a one-second tick, but the formatted text
+/// only changes on a wall-clock minute boundary. Unchanged ticks must
+/// not redraw: over ~2.2 idle seconds at most one boundary can pass.
+#[tokio::test]
+async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
+    let mut config = hc_tui::config::Config::default();
+    config.ui.tab_bar_right = vec![hc_tui::config::TabBarRightEntryConfig::Datetime {
+        format: "%H:%M".into(),
+    }];
+    let (mut app, probe) = app_with_config(&config);
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    let (ui_tx, mut ui) = mpsc::channel(1);
+    let (_reply_tx, mut replies) = mpsc::channel(1);
+    let counters = probe.clone();
+    let producer = tokio::spawn(async move {
+        while counters.draws.load(Ordering::Relaxed) == 0 {
+            tokio::task::yield_now().await;
+        }
+        let settled = counters.draws.load(Ordering::Relaxed);
+        tokio::time::sleep(Duration::from_millis(2200)).await;
+        let later = counters.draws.load(Ordering::Relaxed);
+        drop(ui_tx);
+        (settled, later)
+    });
+    tokio::time::timeout(
+        Duration::from_secs(6),
+        app.run(&mut terminal, &mut ui, &mut replies),
+    )
+    .await
+    .expect("the loop must stay responsive")
+    .unwrap();
+    let (settled, later) = producer.await.unwrap();
+    assert!(
+        later - settled <= 1,
+        "idle clock ticks drew {} extra frames",
+        later - settled
+    );
+}
+
+/// Observer output for a terminal that is not on the focused tab is
+/// retained state, not a visible change; likewise a closed replies
+/// channel. Neither may arm a redraw.
+#[tokio::test]
+async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
+    let (sub_tx, mut subs) = mpsc::channel(4);
+    let (attach_tx, mut attaches) = mpsc::channel(8);
+    let rpc: OpenRpc = Arc::new(|| Box::pin(std::future::pending()));
+    let watcher = Watcher::with_openers(rpc, loopcore::sub_opens(sub_tx), WatchParams::default());
+    let config = hc_tui::config::Config::default();
+    let shell = hc_tui::chrome::ClientShellConfig::from_config(
+        &config,
+        None,
+        None,
+        std::path::PathBuf::new(),
+    );
+    let probe = Arc::new(Probe::default());
+    let mut app = App::new(
+        watcher,
+        loopcore::attach_opens(attach_tx),
+        config.live_keybinds(),
+        shell,
+        probe.clone(),
+    );
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    let (ui_tx, mut ui) = mpsc::channel(8);
+    let (reply_tx, mut replies) = mpsc::channel(1);
+    let counters = probe.clone();
+    let driver = tokio::spawn(async move {
+        // The snapshot publishes t1+t2 on one tab; the active pane,
+        // both visible observers and both size leases attach — 5 conns.
+        let mut session = loopcore::Session::connect(
+            &mut subs,
+            &mut attaches,
+            5,
+            serde_json::json!({
+                "seq": 1,
+                "terminals": [
+                    loopcore::terminal_json("t1", "one", 1),
+                    loopcore::terminal_json("t2", "one", 2),
+                ],
+            }),
+        )
+        .await;
+        let baseline = loopcore::settled_draws(&counters).await;
+        assert!(baseline > 0, "the initial frame never drew");
+        // Paint t2 once while it still shares the focused tab — a real
+        // visible change, proving the wire works end to end.
+        let t2 = session.wire("t2", true);
+        session.send_data(t2, b"\x1b[?9001lt2 line 1\r\n").await;
+        let painted = loopcore::settled_draws(&counters).await;
+        assert!(painted > baseline, "visible t2 output did not draw");
+        // Move t2 onto a different tab: its observer stays attached but
+        // now feeds a background pane.
+        session.move_to_tab("t2", "two", 2).await;
+        loopcore::draws_beyond(&counters, painted).await;
+        let moved = loopcore::settled_draws(&counters).await;
+        // Off-tab DATA chunks plus the replies channel closing: pure
+        // retained-state and liveness updates, zero redraws.
+        for chunk in 0..4u8 {
+            session
+                .send_data(t2, format!("t2 later {chunk}\r\n").as_bytes())
+                .await;
+            tokio::time::sleep(Duration::from_millis(60)).await;
+        }
+        drop(reply_tx);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let end = counters.draws.load(Ordering::Relaxed);
+        drop(ui_tx);
+        (moved, end)
+    });
+    tokio::time::timeout(
+        Duration::from_secs(15),
+        app.run(&mut terminal, &mut ui, &mut replies),
+    )
+    .await
+    .expect("the loop must stay responsive")
+    .unwrap();
+    let (moved, end) = driver.await.unwrap();
+    assert_eq!(
+        end, moved,
+        "off-tab output or closed replies redrew the screen"
+    );
 }

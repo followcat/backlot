@@ -8,6 +8,28 @@ use super::*;
 /// cached VT wire is observe-only. Scrollback remains bounded per Pane.
 pub(super) const RECENT_PANES: usize = 32;
 
+/// An event routed to a pane the frame can show. A `RouteClosed`
+/// without error retires a drained wire — bookkeeping only — and a
+/// `WriterProgress` retry is invisible unless the input backlog badge
+/// or the pane notice moved. Everything else can repaint.
+fn visible_pane_event(pane: &mut pane::Pane, event: PaneEv, now: Instant) -> bool {
+    match &event {
+        PaneEv::RouteClosed { error: None, .. } => {
+            pane.on_event(event, now);
+            false
+        }
+        PaneEv::WriterProgress { .. } => {
+            let before = (pane.input_backlog(), pane.notice().is_some());
+            pane.on_event(event, now);
+            (pane.input_backlog(), pane.notice().is_some()) != before
+        }
+        _ => {
+            pane.on_event(event, now);
+            true
+        }
+    }
+}
+
 impl App {
     pub(super) async fn shutdown_panes(&mut self) {
         let mut closing = tokio::task::JoinSet::new();
@@ -154,29 +176,51 @@ impl App {
         }
     }
 
-    pub(super) fn pane_event(&mut self, event: PaneEv, now: Instant) {
+    /// Route an attach-actor report to its owning pane; `true` only
+    /// when the event can change what the frame paints. Off-tab
+    /// observers and size leases update retained state silently —
+    /// their bells and clipboard writes surface through the drains.
+    pub(super) fn pane_event(&mut self, event: PaneEv, now: Instant) -> bool {
         let route = event.route();
         if self.pane.owns_route(route) {
-            self.pane.on_event(event, now);
-        } else if self
+            return visible_pane_event(&mut self.pane, event, now);
+        }
+        if let Some(popup) = self
             .popup
             .as_mut()
-            .is_some_and(|p| p.pane.owns_route(route))
-            && let Some(popup) = self.popup.as_mut()
+            .filter(|popup| popup.pane.owns_route(route))
         {
-            popup.pane.on_event(event, now);
-        } else if self.peek.as_mut().is_some_and(|p| p.pane.owns_route(route))
-            && let Some(peek) = self.peek.as_mut()
+            return visible_pane_event(&mut popup.pane, event, now);
+        }
+        if let Some(peek) = self
+            .peek
+            .as_mut()
+            .filter(|peek| peek.pane.owns_route(route))
         {
-            peek.pane.on_event(event, now);
-        } else if let Some(pane) = self
-            .observers
+            return visible_pane_event(&mut peek.pane, event, now);
+        }
+        // Size leases never paint; check them before pricing out the
+        // visible set an observer event might need.
+        if let Some(pane) = self
+            .size_leases
             .values_mut()
-            .chain(self.size_leases.values_mut())
-            .find(|p| p.owns_route(route))
+            .find(|pane| pane.owns_route(route))
         {
             pane.on_event(event, now);
+            return false;
         }
+        let visible = self.visible_panes();
+        if let Some((id, pane)) = self
+            .observers
+            .iter_mut()
+            .find(|(_, pane)| pane.owns_route(route))
+        {
+            if visible.iter().any(|pane_id| pane_id == id) {
+                return visible_pane_event(pane, event, now);
+            }
+            pane.on_event(event, now);
+        }
+        false
     }
 
     pub(super) fn pane_wake(&self) -> Option<Instant> {
@@ -194,21 +238,28 @@ impl App {
             .min()
     }
 
-    pub(super) fn pane_retry(&mut self, now: Instant) {
-        self.pane.fire_retry(now);
+    /// `true` when a due retry moved an on-screen pane — the new
+    /// attach state paints next.
+    pub(super) fn pane_retry(&mut self, now: Instant) -> bool {
+        let mut dirty = self.pane.fire_retry(now);
         if let Some(popup) = self.popup.as_mut() {
-            popup.pane.fire_retry(now);
+            dirty |= popup.pane.fire_retry(now);
         }
         if let Some(peek) = self.peek.as_mut() {
-            peek.pane.fire_retry(now);
+            dirty |= peek.pane.fire_retry(now);
         }
-        for pane in self
-            .observers
-            .values_mut()
-            .chain(self.size_leases.values_mut())
-        {
+        let visible = self.visible_panes();
+        for (id, pane) in self.observers.iter_mut() {
+            if visible.iter().any(|pane_id| pane_id == id) {
+                dirty |= pane.fire_retry(now);
+            } else {
+                pane.fire_retry(now);
+            }
+        }
+        for pane in self.size_leases.values_mut() {
             pane.fire_retry(now);
         }
+        dirty
     }
 
     /// The pane whose screen to draw: whichever has a complete paint. While

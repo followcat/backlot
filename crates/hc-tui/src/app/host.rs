@@ -25,7 +25,10 @@ impl App {
         }
     }
 
-    pub fn set_host_facts(&mut self, facts: HostFacts) {
+    /// `true` when any measured fact moved — default colors, palette
+    /// entries or cell pitch all feed painted cells.
+    pub fn set_host_facts(&mut self, facts: HostFacts) -> bool {
+        let changed = self.host_facts != facts;
         if !self.host_appearance_explicit
             && self.host_facts.theme.background != facts.theme.background
             && let Some(color) = facts.theme.background
@@ -41,9 +44,14 @@ impl App {
         {
             pane.set_host_facts(facts.clone());
         }
+        changed
     }
 
-    pub(super) fn on_host_reply(&mut self, reply: HostReply) {
+    /// `true` when the reply changed appearance or measured facts —
+    /// what the frame paints. Capability answers (keyboard flags,
+    /// pixel-mouse, device attributes) feed wire modes, not pixels.
+    pub(super) fn on_host_reply(&mut self, reply: HostReply) -> bool {
+        let appearance = self.host_appearance;
         match reply {
             HostReply::KeyboardFlags(flags) if !self.probe_device_attributes => {
                 self.probe_keyboard_flags = Some(flags);
@@ -72,7 +80,8 @@ impl App {
                 .is_some_and(|flags| flags & 1 != 0);
         let mut facts = self.host_facts.clone();
         crate::host::apply_reply(reply, &mut facts);
-        self.set_host_facts(facts);
+        let facts_changed = self.set_host_facts(facts);
+        appearance != self.host_appearance || facts_changed
     }
 }
 

@@ -202,6 +202,11 @@ impl App {
             self.probe
                 .wakeups
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            // A wakeup alone is never a draw reason — each arm reports
+            // whether it changed state the frame can show. `on_view`,
+            // `on_operation` and `show_notice` mark the scheduler
+            // themselves (seen-ack, published projection, notices).
+            let mut dirty = false;
             if let Some(deadline) = wake {
                 self.probe
                     .timers
@@ -209,15 +214,15 @@ impl App {
                 self.sched.armed_timer();
                 tokio::select! {
                     ev = events.recv() => match ev {
-                        Some(ev) => self.on_input(ev, self.area.0),
+                        Some(ev) => {
+                            self.on_input(ev, self.area.0);
+                            dirty = true;
+                        }
                         None => break, // input source ended: clean exit
                     },
-                    reply = replies.recv(), if replies_open => {
-                        if let Some(reply) = reply {
-                            self.on_host_reply(reply);
-                        } else {
-                            replies_open = false;
-                        }
+                    reply = replies.recv(), if replies_open => match reply {
+                        Some(reply) => dirty |= self.on_host_reply(reply),
+                        None => replies_open = false,
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
@@ -230,25 +235,25 @@ impl App {
                     },
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
-                            self.pane_event(ev, Instant::now());
+                            dirty |= self.pane_event(ev, Instant::now());
                         }
                     },
                     _ = tokio::time::sleep_until(deadline.into()) => {
-                        self.pane_retry(Instant::now());
+                        dirty |= self.pane_retry(Instant::now());
                     }
                 }
             } else {
                 tokio::select! {
                     ev = events.recv() => match ev {
-                        Some(ev) => self.on_input(ev, self.area.0),
+                        Some(ev) => {
+                            self.on_input(ev, self.area.0);
+                            dirty = true;
+                        }
                         None => break,
                     },
-                    reply = replies.recv(), if replies_open => {
-                        if let Some(reply) = reply {
-                            self.on_host_reply(reply);
-                        } else {
-                            replies_open = false;
-                        }
+                    reply = replies.recv(), if replies_open => match reply {
+                        Some(reply) => dirty |= self.on_host_reply(reply),
+                        None => replies_open = false,
                     },
                     _ = self.watcher.changed_since(self.seen) => self.on_view(),
                     result = Self::operation_result(&mut self.operations) => self.on_operation(result),
@@ -261,7 +266,7 @@ impl App {
                     },
                     ev = self.pane_rx.recv() => {
                         if let Some(ev) = ev {
-                            self.pane_event(ev, Instant::now());
+                            dirty |= self.pane_event(ev, Instant::now());
                         }
                     },
                 }
@@ -272,19 +277,19 @@ impl App {
             if let Some(reason) = self.pane.take_input_rejection() {
                 self.reject_input(&reason);
             }
-            self.expire_notice(now);
-            self.tick_notifications(now);
-            if self.tick_selection(now) | self.tick_copy_feedback(now) {
-                self.sched.mark_dirty(now);
-            }
+            dirty |= self.expire_notice(now);
+            dirty |= self.tick_notifications(now);
+            dirty |= self.tick_selection(now) | self.tick_copy_feedback(now);
             self.drain_bells();
-            self.drain_clipboard_writes();
+            dirty |= self.drain_clipboard_writes();
             self.share_seen();
             self.update_window_title();
             if self.next_tab_status.is_some_and(|due| now >= due) {
-                self.update_tab_status(now);
+                dirty |= self.update_tab_status(now);
             }
-            self.sched.mark_dirty(now);
+            if dirty {
+                self.sched.mark_dirty(now);
+            }
             self.maybe_draw(term, now)?;
             self.sync_target();
             self.sync_observers();

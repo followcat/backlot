@@ -55,12 +55,16 @@ impl App {
             body: body.into(),
             deadline: Instant::now() + Duration::from_secs(3),
         });
+        self.sched.mark_dirty(Instant::now());
     }
 
-    pub(super) fn expire_notice(&mut self, now: Instant) {
+    /// `true` when the visible notice cleared — the card un-paints.
+    pub(super) fn expire_notice(&mut self, now: Instant) -> bool {
         if self.notice.as_ref().is_some_and(|n| now >= n.deadline) {
             self.notice = None;
+            return true;
         }
+        false
     }
 
     /// Installs the one-shot `hc server start` report — `cli` calls it

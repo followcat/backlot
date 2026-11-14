@@ -17,7 +17,8 @@ async fn missing_paint_marker_unblocks_after_deadline_and_flushes_input() {
     assert_eq!(pane.notice().map(|n| n.title), Some("Terminal loading"));
     no_kind(&mut core, CH, &[Kind::Data], 40).await;
     let deadline = pane.next_wake().expect("paint fallback deadline");
-    pane.fire_retry(deadline);
+    assert!(!pane.fire_retry(deadline - Duration::from_millis(1)));
+    assert!(pane.fire_retry(deadline));
     assert!(pane.is_painted());
     assert!(pane.has_fresh_paint());
     assert!(pane.notice().is_none());
@@ -70,7 +71,8 @@ async fn observer_resize_repaint_without_marker_recovers_on_fallback() {
     raw_paint(&mut pane, &mut rx, &mut core, b"hello").await;
     assert!(!pane.has_fresh_paint());
     let deadline = pane.next_wake().expect("repaint fallback deadline");
-    pane.fire_retry(deadline);
+    assert!(pane.fire_retry(deadline));
+    assert!(!pane.fire_retry(deadline));
     assert!(pane.has_fresh_paint());
     assert_eq!(pane.paint_fallback(), Some("paint marker omitted"));
     assert!(vt_text(&mut pane).contains("hello"));
