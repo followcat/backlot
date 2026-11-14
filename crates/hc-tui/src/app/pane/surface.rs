@@ -64,12 +64,16 @@ impl Pane {
 
     /// The terminal+role currently wanted; `None` detaches. A spec
     /// change clears ALL pending input — bytes typed for terminal A
-    /// never flush into terminal B.
+    /// never flush into terminal B, and input queued under one role
+    /// never flushes under another: queued items are bound to the
+    /// wire they were typed for.
     pub fn want(&mut self, spec: Option<Spec>) {
         let current = self.spec().cloned();
         if current == spec {
             return;
         }
+        self.pending.clear();
+        self.pending_bytes = 0;
         // A spec change retires the retained screen only when a *different*
         // terminal follows — re-attaching the same one keeps its last
         // paint until fresh bytes land.
@@ -77,8 +81,6 @@ impl Pane {
             self.vt = None;
             self.incarnation = None;
             self.inventory_incarnation = None;
-            self.pending.clear();
-            self.pending_bytes = 0;
             self.close_error = None;
             self.dropped_drain = None;
         }

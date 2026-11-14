@@ -220,3 +220,6 @@ mod size_tests;
 
 #[path = "quiet_tests.rs"]
 mod quiet_tests;
+
+#[path = "role_switch_tests.rs"]
+mod role_switch_tests;
