@@ -40,6 +40,17 @@ human input, automatic replies, size claims or host facts. A role change
 opens a new attach. A recovered active attach uses `resumed` to avoid
 claiming fresh activity merely because the transport recovered.
 
+Active panes allocate a 256 KiB VT scrollback; observer panes cap it at
+64 KiB. libghostty prunes scrollback at page granularity, so the effective
+bound can exceed the configured cap. A zero cap cannot be used because
+visible tabbed panes render and scroll from the observer VT when painted,
+so setting observer scrollback to zero would drop visible pane history. Up
+to 32 off-tab observers stay live in the LRU: tab switches back onto them
+need no reattach and keep the one-shot cursor and palette state. An
+observer evicted past the LRU drops its attach immediately — it receives
+zero background feeds while evicted — and a revisit opens a fresh observe
+attach that repaints from core history.
+
 The allocated pane grid and rendered inner rectangle share one geometry.
 When the authoritative core grid persistently differs, a source-style
 notice offers a click to take control. Core does not identify the other

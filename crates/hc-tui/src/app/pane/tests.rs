@@ -215,6 +215,9 @@ mod paint_fallback_tests;
 #[path = "generation_tests.rs"]
 mod generation_tests;
 
+#[path = "scrollback_tests.rs"]
+mod scrollback_tests;
+
 #[path = "size_tests.rs"]
 mod size_tests;
 

@@ -409,6 +409,23 @@ impl Vt {
         rc == ffi::SUCCESS && tracking
     }
 
+    /// The configured scrollback byte cap — the value `Vt::new` was
+    /// built with, reported back by the library. `None` when the VT is
+    /// unlimited (or the query fails); note the library enforces byte
+    /// caps at page granularity, so this is the configured bound, not
+    /// the effective retained figure.
+    pub fn scrollback_max_bytes(&self) -> Option<usize> {
+        let mut out: usize = 0;
+        let rc = unsafe {
+            ffi::ghostty_terminal_get(
+                self.raw,
+                ffi::DATA_SCROLLBACK_MAX_BYTES,
+                (&raw mut out).cast(),
+            )
+        };
+        (rc == ffi::SUCCESS).then_some(out)
+    }
+
     /// The viewport's scrollbar state `{total, offset, len}` — `offset`
     /// counts rows from the top of the scrollable area, so "scrolled
     /// back lines" is `total - offset - len`.
