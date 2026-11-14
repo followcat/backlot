@@ -231,22 +231,32 @@ pub(crate) enum Command {
 }
 
 impl Watcher {
-    /// Starts watching `endpoint` with real connections: an RPC client
-    /// for refreshes and the dedicated subscription. `ssh_program`
-    /// overrides the `ssh` name for tests; production passes `None`.
+    /// Starts watching `endpoint` with real connections: the shared
+    /// framed RPC [`shared_rpc`] client for refreshes and the dedicated
+    /// subscription. `ssh_program` overrides the `ssh` name for tests;
+    /// production passes `None`.
+    ///
+    /// [`shared_rpc`]: crate::client::shared_rpc
     pub fn connect(
         endpoint: &Endpoint,
         ssh_program: Option<&OsStr>,
         params: WatchParams,
     ) -> Watcher {
+        let rpc = crate::client::shared_rpc(endpoint.clone(), ssh_program.map(OsStr::to_os_string));
+        Watcher::connect_with_rpc(endpoint, ssh_program, rpc, params)
+    }
+
+    /// Like [`connect`](Self::connect) but the refreshes ride `rpc` —
+    /// the shared single-flight opener this endpoint's other consumers
+    /// (layout actions, seen writes) clone too, so one transport and
+    /// one `hello` serves them all.
+    pub fn connect_with_rpc(
+        endpoint: &Endpoint,
+        ssh_program: Option<&OsStr>,
+        rpc: OpenRpc,
+        params: WatchParams,
+    ) -> Watcher {
         let ssh = ssh_program.map(|s| s.to_os_string());
-        let rpc_endpoint = endpoint.clone();
-        let rpc_ssh = ssh.clone();
-        let rpc: OpenRpc = Arc::new(move || {
-            let endpoint = rpc_endpoint.clone();
-            let ssh = rpc_ssh.clone();
-            Box::pin(async move { Client::connect(&endpoint, ssh.as_deref()).await })
-        });
         let sub_endpoint = endpoint.clone();
         let sub: OpenSub = Arc::new(move |subscribe: SubscribeParams| {
             let endpoint = sub_endpoint.clone();

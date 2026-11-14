@@ -133,6 +133,14 @@ Everything else types into the focused terminal.",
     )
 }
 
+/// The one framed RPC connection every consumer on `endpoint` shares —
+/// the watcher's refreshes, layout actions and background seen writes
+/// all multiplex onto it (one transport, one `hello`): lazy like
+/// `AttachConn`, single-flight, rebuilt once when the wire dies.
+fn shared_rpc(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::watch::OpenRpc {
+    hc_proto::client::shared_rpc(endpoint.clone(), ssh.clone())
+}
+
 /// The hc terminal this client runs inside, verified against the
 /// endpoint it talks to — derived from core's `client.rs::terminal_id`
 /// (Apache-2.0): `HC_TERMINAL_ID` means nothing to another session's
@@ -189,8 +197,11 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         traversal: Some(crate::project::agent_traversal),
         ..WatchParams::default()
     };
-    let watcher = Watcher::connect(endpoint, None, params);
+    // One framed RPC wire: the watcher's refreshes and the operations
+    // + seen workers' calls all ride clones of this single opener.
     let ssh: Option<OsString> = None;
+    let rpc = shared_rpc(endpoint, &ssh);
+    let watcher = Watcher::connect_with_rpc(endpoint, ssh.as_deref(), rpc.clone(), params);
     let caller = self_caller(env, endpoint);
     let attach_endpoint = endpoint.clone();
     let attach_conn = shared_attach(endpoint, &ssh);
@@ -212,15 +223,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
             }
         })
     });
-    let operation_endpoint = endpoint.clone();
-    let operations: hc_proto::watch::OpenRpc = Arc::new(move || {
-        let endpoint = operation_endpoint.clone();
-        Box::pin(async move { hc_proto::client::Client::connect(&endpoint, None).await })
-    });
     let mouse_capture = shell.mouse_capture;
     let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
 
-    app.set_operations(operations);
+    app.set_operations(rpc);
     // `endpoint_accepts_local_images` client arms: a `--remote`
     // endpoint, or this client itself running inside an SSH session.
     app.set_image_paste_context(
@@ -297,91 +303,5 @@ pub async fn run_options(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use hc_proto::endpoint::{Local, Remote};
-    use std::path::PathBuf;
-
-    fn env_with(pairs: &[(&str, &str)]) -> Env {
-        pairs
-            .iter()
-            .map(|(k, v)| (OsString::from(k), OsString::from(v)))
-            .collect()
-    }
-
-    fn local(socket: &str) -> Endpoint {
-        Endpoint::Local(Local {
-            session: "scratch".into(),
-            socket: PathBuf::from(socket),
-            holder_socket: PathBuf::from(format!("{socket}.holder.sock")),
-            state: PathBuf::from("/scratch/state"),
-            config: PathBuf::from("/scratch/config.toml"),
-        })
-    }
-
-    /// The id counts only when socket AND id both match the local core.
-    #[test]
-    fn caller_counts_only_on_a_matching_local_socket() {
-        let env = env_with(&[
-            ("HC_TERMINAL_ID", "t7"),
-            ("HC_TERMINAL_SOCKET", "/run/scratch/hc.sock"),
-        ]);
-        assert_eq!(
-            self_caller(&env, &local("/run/scratch/hc.sock")),
-            Some("t7".into())
-        );
-        // A foreign session's socket: the id means nothing there.
-        assert_eq!(self_caller(&env, &local("/run/other/hc.sock")), None);
-    }
-
-    /// A remote endpoint never inherits a local caller — an equal `tN`
-    /// on the other machine is a different terminal.
-    #[test]
-    fn caller_never_crosses_a_remote_endpoint() {
-        let env = env_with(&[
-            ("HC_TERMINAL_ID", "t7"),
-            ("HC_TERMINAL_SOCKET", "/run/scratch/hc.sock"),
-        ]);
-        let remote = Endpoint::Remote(Remote {
-            target: "host-a".into(),
-            session: "scratch".into(),
-        });
-        assert_eq!(self_caller(&env, &remote), None);
-    }
-
-    /// `--upgrade` is a first-class action — and near-miss flags still
-    /// error rather than silently starting the client.
-    #[test]
-    fn upgrade_is_a_parse_action() {
-        assert!(matches!(
-            parse(vec!["--upgrade".to_owned()]).unwrap(),
-            Action::Upgrade
-        ));
-        assert!(parse(vec!["--upgrde".to_owned()]).is_err());
-        assert!(INSTALL_COMMAND.contains("install.sh"));
-    }
-
-    /// Only a remote endpoint's attaches multiplex onto the shared
-    /// framed connection; a local endpoint keeps `Attach::connect`.
-    #[test]
-    fn only_a_remote_endpoint_gets_the_shared_attach_connection() {
-        let remote = Endpoint::Remote(Remote {
-            target: "host-a".into(),
-            session: "scratch".into(),
-        });
-        assert!(shared_attach(&remote, &None).is_some());
-        assert!(shared_attach(&local("/run/scratch/hc.sock"), &None).is_none());
-    }
-
-    /// Missing socket proof (or missing id) is not a caller.
-    #[test]
-    fn caller_needs_the_verifying_socket_var() {
-        let only_id = env_with(&[("HC_TERMINAL_ID", "t7")]);
-        assert_eq!(self_caller(&only_id, &local("/run/scratch/hc.sock")), None);
-        let only_socket = env_with(&[("HC_TERMINAL_SOCKET", "/run/scratch/hc.sock")]);
-        assert_eq!(
-            self_caller(&only_socket, &local("/run/scratch/hc.sock")),
-            None
-        );
-    }
-}
+#[path = "cli_tests.rs"]
+mod tests;

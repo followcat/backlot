@@ -380,6 +380,9 @@ pub struct App {
     seen_res_tx: mpsc::Sender<seen::SeenResult>,
     seen_rx: mpsc::Receiver<seen::SeenResult>,
     seen_req_rx: Option<mpsc::Receiver<seen::SeenWrite>>,
+    /// The seen writer's task — aborted on drop so its `Client` clone
+    /// never outlives the app.
+    seen_task: Option<tokio::task::JoinHandle<()>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
 }

@@ -19,7 +19,9 @@ mod mouse_selection;
 mod narrow;
 mod page_keys;
 mod reload;
+mod remote_children;
 mod review_regressions;
+mod shared_rpc;
 mod version_badge;
 
 use super::*;
@@ -181,6 +183,19 @@ fn app_with_tabs(tabbed: &[(&str, &str, &str)]) -> App {
     app.view = view;
     app.refresh_projection();
     app
+}
+
+/// A focused live agent on an Online view: `address` in space-a/tab-a,
+/// word `idle`, `turn` — the core id the fake wires answer as.
+fn publish_agent(app: &mut App, address: &str, turn: u64) {
+    let mut term = crate::sidebar::fixture::agent(address, "idle");
+    term.labels.insert("herdr.space".into(), "space-a".into());
+    term.labels.insert("herdr.tab".into(), "tab-a".into());
+    term.turn = turn;
+    app.view = crate::sidebar::fixture::view(vec![term], vec![]);
+    app.view.core.as_mut().unwrap().id = "core-fake-1".into();
+    app.focused = Some(address.into());
+    app.reconcile_published_view();
 }
 
 fn app_with(addresses: &[&str]) -> App {
