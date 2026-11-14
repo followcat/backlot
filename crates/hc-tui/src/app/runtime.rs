@@ -319,3 +319,12 @@ impl App {
         Ok(())
     }
 }
+
+impl App {
+    /// An input drain failure is reported after terminal restoration on exit.
+    pub fn failure(&self) -> Option<&str> {
+        self.pane
+            .close_failure()
+            .or(self.background_failure.as_deref())
+    }
+}

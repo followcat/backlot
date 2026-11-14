@@ -19,16 +19,16 @@ async fn two_views_follow_shared_focus_zoom_and_split_geometry() {
         crate::project::layout_key(None, a.projection.snapshot.focused_tab_id.as_ref().unwrap());
     let value = json!({"schema":1,"focus":"t2","tabs":{key:{"root":{"type":"split","vertical":true,"ratio":0.25,"first":{"type":"pane","terminal":"t1"},"second":{"type":"pane","terminal":"t2"}},"zoomed":"t2"}}});
     for app in [&mut a, &mut b] {
-        app.view.documents.insert(
+        app.view.documents_mut().insert(
             DocKey {
                 machine: None,
                 name: "hc-tui".into(),
             },
-            Document {
+            Arc::new(Document {
                 value: value.clone(),
                 version: 2,
                 ..Default::default()
-            },
+            }),
         );
         app.reconcile_published_view();
         assert_eq!(app.focused.as_deref(), Some("t2"));

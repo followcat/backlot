@@ -1,18 +1,17 @@
 // Derived from herdr-core crates/herdr-core/src/remote.rs (Apache-2.0).
 
-//! The actor's state handlers: wire notifications through the reducer,
-//! facility death and install, fetch completions and the refresh queues
-//! they feed. All `impl Actor` — split from `mod.rs` at the
-//! event-loop/state-application seam.
+//! The actor's state handlers: wire notifications through the reducer
+//! plus facility death and install. Fetch completions and the refresh
+//! queues they feed live in `fetch_done.rs`. All `impl Actor` — split
+//! from `mod.rs` at the event-loop/state-application seam.
 
 use super::Actor;
-use crate::client::{CallError, Client};
+use crate::client::Client;
 use crate::events::ServerNotification;
-use crate::machine::MachineListResult;
+use crate::inventory::Effect;
 use crate::subscribe::SubscribeError;
-use crate::terminal::ListResult;
-use crate::watch::{DocDone, DocKey, Link, SubAttempt};
-use std::collections::BTreeSet;
+use crate::watch::{DocKey, Link, SubAttempt};
+use std::sync::Arc;
 use tokio::task::JoinError;
 
 impl Actor {
@@ -23,7 +22,13 @@ impl Actor {
     pub(super) fn notification(&mut self, note: Result<ServerNotification, SubscribeError>) {
         match note {
             Ok(ServerNotification::Event(event)) => {
-                let effect = self.inventory.apply(&event);
+                // A stale or duplicate `seq` is a no-op for `apply` —
+                // skip the copy-on-write clone entirely.
+                let effect = if event.seq <= self.inventory.seq() {
+                    Effect::default()
+                } else {
+                    Arc::make_mut(&mut self.inventory).apply(&event)
+                };
                 if effect.resync || effect.malformed {
                     self.kill_sub("event stream requires resync");
                 }
@@ -43,7 +48,13 @@ impl Actor {
                 self.publish();
             }
             Ok(ServerNotification::Heartbeat(heartbeat)) => {
-                let effect = self.inventory.heartbeat(&heartbeat);
+                // `heartbeat` only mutates when it detects a gap: the
+                // healthy cadence keeps the shared inventory untouched.
+                let effect = if heartbeat.seq > self.inventory.seq() && !self.inventory.filtered() {
+                    Arc::make_mut(&mut self.inventory).heartbeat(&heartbeat)
+                } else {
+                    Effect::default()
+                };
                 if effect.resync {
                     self.kill_sub("heartbeat beyond the observed stream");
                     self.publish();
@@ -55,7 +66,7 @@ impl Actor {
                 }
             }
             Ok(ServerNotification::Missed(missed)) => {
-                self.inventory.missed(&missed);
+                Arc::make_mut(&mut self.inventory).missed(&missed);
                 self.refresh_docs();
                 self.machines_pending = true;
                 self.publish();
@@ -74,7 +85,9 @@ impl Actor {
         if self.sub_conn.take().is_none() && matches!(self.link, Link::Offline { .. }) {
             return; // already torn down
         }
-        self.inventory.set_offline(true);
+        if !self.inventory.is_offline() {
+            Arc::make_mut(&mut self.inventory).set_offline(true);
+        }
         self.link = Link::Offline {
             attempt: self.sub_backoff.attempts,
             error: reason.into(),
@@ -91,8 +104,12 @@ impl Actor {
         self.rpc_epoch += 1;
         self.fetches.abort_all();
         self.doc_inflight.clear();
-        for slot in self.docs.values_mut() {
-            slot.doc.fetching = false;
+        if self.docs.values().any(|doc| doc.fetching) {
+            for doc in Arc::make_mut(&mut self.docs).values_mut() {
+                if doc.fetching {
+                    Arc::make_mut(doc).fetching = false;
+                }
+            }
         }
         if let Some(handle) = self.machine_fetch.take() {
             handle.abort();
@@ -118,7 +135,7 @@ impl Actor {
         match result {
             Ok(SubAttempt::Subscribed(sub)) => {
                 self.generation += 1;
-                self.inventory = sub.inventory();
+                self.inventory = Arc::new(sub.inventory());
                 self.core = Some(sub.hello().core.clone());
                 self.features = sub.hello().features.clone();
                 self.sub_conn = Some(*sub);
@@ -212,183 +229,5 @@ impl Actor {
             }
         }
         self.publish();
-    }
-
-    /// A bounded `doc.get` completed. Both staleness tags must still be
-    /// current — the connection epoch and this document's fetch
-    /// generation — or the result is discarded, never installed.
-    pub(super) fn doc_done(&mut self, result: Result<DocDone, JoinError>) {
-        let Ok(done) = result else { return };
-        // The epoch check comes first: a completion sent on a dead
-        // connection must not touch this epoch's counters either.
-        if done.rpc_epoch != self.rpc_epoch {
-            return;
-        }
-        // A completed fetch frees its machine's slot whether or not the
-        // result may still land.
-        if let Some(n) = self.doc_inflight.get_mut(&done.key.machine) {
-            *n = n.saturating_sub(1);
-            if *n == 0 {
-                self.doc_inflight.remove(&done.key.machine);
-            }
-        }
-        if self.doc_gens.get(&done.key) != Some(&done.fetch_gen) {
-            return; // superseded — a newer request is pending or in flight
-        }
-        let Some(slot) = self.docs.get_mut(&done.key) else {
-            return; // the machine (and its slots) went away
-        };
-        slot.doc.fetching = false;
-        match done.result {
-            Ok(doc) => {
-                slot.doc.value = doc.value;
-                slot.doc.version = doc.version;
-                slot.doc.error = None;
-                self.notes.remove("doc.get");
-            }
-            Err(CallError::Unsupported { reason, .. }) => {
-                // The method is gone for good: only this feature stops.
-                self.docs_enabled = false;
-                self.doc_pending.clear();
-                self.notes.insert("doc.get".into(), reason.clone());
-                slot.doc.error = Some(reason);
-            }
-            Err(e) => {
-                slot.doc.error = Some(e.to_string());
-            }
-        }
-        self.publish();
-    }
-
-    /// A bounded `machine.list` completed: installs the list, queues
-    /// document fetches on newly seen machines and drops slots whose
-    /// machine went away.
-    pub(super) fn machines_done(
-        &mut self,
-        result: Result<(u64, Result<MachineListResult, CallError>), JoinError>,
-    ) {
-        self.machine_fetch = None;
-        let Ok((epoch, result)) = result else { return };
-        if epoch != self.rpc_epoch {
-            return;
-        }
-        match result {
-            Ok(list) => {
-                let old: BTreeSet<String> = self
-                    .machines
-                    .iter()
-                    .flatten()
-                    .map(|m| m.name.clone())
-                    .collect();
-                let names: BTreeSet<String> =
-                    list.machines.iter().map(|m| m.name.clone()).collect();
-                for name in names.difference(&old) {
-                    for doc in self.params.documents.clone() {
-                        self.request_doc(DocKey {
-                            machine: Some(name.clone()),
-                            name: doc,
-                        });
-                    }
-                }
-                let gone: BTreeSet<String> = old.difference(&names).cloned().collect();
-                if !gone.is_empty() {
-                    let keep =
-                        |key: &DocKey| key.machine.as_ref().is_none_or(|m| !gone.contains(m));
-                    self.docs.retain(|key, _| keep(key));
-                    self.doc_pending.retain(keep);
-                }
-                self.machines = Some(list.machines);
-                self.notes.remove("machine.list");
-            }
-            Err(CallError::Unsupported { reason, .. }) => {
-                self.machines_enabled = false;
-                self.machines = None;
-                self.notes.insert("machine.list".into(), reason);
-            }
-            Err(e) => {
-                self.notes.insert("machine.list".into(), e.to_string());
-            }
-        }
-        self.publish();
-    }
-
-    /// A bounded `terminal.list` for the static fallback completed.
-    pub(super) fn static_done(
-        &mut self,
-        result: Result<(u64, Result<ListResult, CallError>), JoinError>,
-    ) {
-        self.static_fetch = None;
-        let Ok((epoch, result)) = result else { return };
-        if epoch != self.rpc_epoch {
-            return;
-        }
-        match result {
-            Ok(list) => {
-                self.generation += 1;
-                self.inventory.replace(0, list.terminals);
-                self.inventory.set_offline(false);
-                // `terminal.list` carries machine views too: use them
-                // when `machine.list` never produced any.
-                if self.machines.is_none() && !list.machines.is_empty() {
-                    for machine in &list.machines {
-                        for doc in self.params.documents.clone() {
-                            self.request_doc(DocKey {
-                                machine: Some(machine.name.clone()),
-                                name: doc,
-                            });
-                        }
-                    }
-                    self.machines = Some(list.machines);
-                }
-                self.notes.remove("terminal.list");
-            }
-            Err(CallError::Unsupported { reason, .. }) => {
-                self.static_enabled = false;
-                self.notes.insert("terminal.list".into(), reason);
-            }
-            Err(e) => {
-                self.notes.insert("terminal.list".into(), e.to_string());
-            }
-        }
-        self.publish();
-    }
-
-    /// Every watched document on this core and every known machine.
-    pub(super) fn refresh_docs(&mut self) {
-        let mut machines = vec![None];
-        if let Some(list) = &self.machines {
-            machines.extend(list.iter().map(|m| Some(m.name.clone())));
-        }
-        for name in self.params.documents.clone() {
-            for machine in &machines {
-                self.request_doc(DocKey {
-                    machine: machine.clone(),
-                    name: name.clone(),
-                });
-            }
-        }
-    }
-
-    /// Queues a document fetch, bumping the document's generation now —
-    /// an in-flight result becomes stale the moment a newer request
-    /// exists, not only once a slot frees and the next fetch spawns.
-    /// `doc_gens` outlives slot deletion, so a machine alias removed and
-    /// re-added can never match an old fetch's generation again.
-    pub(super) fn request_doc(&mut self, key: DocKey) {
-        if !self.docs_enabled {
-            return;
-        }
-        self.docs.entry(key.clone()).or_default();
-        *self.doc_gens.entry(key.clone()).or_default() += 1;
-        self.doc_pending.insert(key);
-    }
-
-    /// A `Refresh` command or a fresh facility: everything refetches.
-    pub(super) fn refresh_all(&mut self) {
-        self.refresh_docs();
-        self.machines_pending = true;
-        if matches!(self.link, Link::Static { .. }) {
-            self.static_pending = true;
-        }
     }
 }

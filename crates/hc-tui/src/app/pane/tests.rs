@@ -175,7 +175,7 @@ fn view_with(
         machines: Some(vec![]),
         ..Default::default()
     };
-    view.inventory.replace(1, vec![term]);
+    view.inventory_mut().replace(1, vec![term]);
     view
 }
 

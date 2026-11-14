@@ -94,6 +94,6 @@ pub fn view(terminals: Vec<Terminal>, machines: Vec<MachineView>) -> View {
         machines: Some(machines),
         ..View::default()
     };
-    view.inventory.replace(1, terminals);
+    view.inventory_mut().replace(1, terminals);
     view
 }

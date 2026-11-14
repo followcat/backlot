@@ -54,16 +54,16 @@ async fn zoom_always_renders_the_terminal_receiving_input() {
     app.refresh_projection();
     let tab = app.projection.snapshot.focused_tab_id.clone().unwrap();
     let key = crate::project::layout_key(None, &tab);
-    app.view.documents.insert(
+    app.view.documents_mut().insert(
         hc_proto::watch::DocKey {
             machine: None,
             name: "hc-tui".into(),
         },
-        hc_proto::watch::Document {
+        Arc::new(hc_proto::watch::Document {
             value: serde_json::json!({"schema":1,"tabs":{key:{"zoomed":"t2"}}}),
             version: 1,
             ..Default::default()
-        },
+        }),
     );
     app.refresh_projection();
     app.pane = pane::Pane::new(
@@ -87,7 +87,7 @@ async fn inventory_replacement_retires_cached_paint_before_delayed_old_close() {
     let old = app.observers["t1"].generation();
     let mut terminal = app.view.inventory.get("t1").unwrap().clone();
     terminal.pid = Some(999);
-    app.view.inventory.replace(1, vec![terminal]);
+    app.view.inventory_mut().replace(1, vec![terminal]);
     app.sync_observers();
     assert_ne!(app.observers["t1"].generation(), old);
     assert!(!app.observers["t1"].has_fresh_paint());
@@ -295,16 +295,16 @@ async fn zoomed_tab_keeps_covered_pane_lease_at_its_last_allocation() {
         app.maybe_draw(term, now).unwrap();
     };
     let doc = |app: &mut App, value: serde_json::Value, version: u64| {
-        app.view.documents.insert(
+        app.view.documents_mut().insert(
             hc_proto::watch::DocKey {
                 machine: None,
                 name: "hc-tui".into(),
             },
-            hc_proto::watch::Document {
+            Arc::new(hc_proto::watch::Document {
                 value,
                 version,
                 ..Default::default()
-            },
+            }),
         );
         app.reconcile_published_view();
     };
@@ -379,7 +379,7 @@ async fn dead_focus_falls_back_inside_its_tab_not_the_global_first() {
         .iter()
         .map(|id| app.view.inventory.get(id.as_ref()).unwrap().clone())
         .collect();
-    app.view.inventory.replace(2, terms);
+    app.view.inventory_mut().replace(2, terms);
     app.reconcile_published_view();
 
     assert_eq!(app.focused.as_deref(), Some("t2"));

@@ -79,7 +79,7 @@ fn subscription_loss_stales_everything_but_keeps_inventory() {
         attempt: 3,
         error: "gone".into(),
     };
-    v.inventory.set_offline(true);
+    v.inventory_mut().set_offline(true);
     let projected = project(&v, Some("host-b/t1"));
 
     for e in &projected.endpoints {
@@ -160,7 +160,7 @@ fn offline_presents_reconnecting_and_retains_distinct_lifecycles() {
         attempt: 2,
         error: "socket closed".into(),
     };
-    v.inventory.set_offline(true);
+    v.inventory_mut().set_offline(true);
     let projected = project(&v, Some("t4"));
 
     let snapshot = &projected.snapshot;

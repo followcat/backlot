@@ -8,14 +8,14 @@ use crate::input::KeybindAction as A;
 use crate::sidebar::fixture::{agent, machine, term};
 
 /// Attach machinery that never resolves — focus changes still apply.
-fn pending_attach(app: &mut App) {
+pub(super) fn pending_attach(app: &mut App) {
     app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
     app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
 }
 
 /// A view with remote endpoints: `host-a/t7`-style addresses plus their
 /// `machine.list` rows (the state word decides Online vs stale).
-fn app_multi(
+pub(super) fn app_multi(
     terms: Vec<hc_proto::terminal::Terminal>,
     machines: Vec<hc_proto::machine::MachineView>,
 ) -> App {
@@ -31,7 +31,7 @@ fn app_multi(
         machines: Some(machines),
         ..Default::default()
     };
-    view.inventory.replace(1, terms);
+    view.inventory_mut().replace(1, terms);
     app.view = view;
     app.refresh_projection();
     app
@@ -39,7 +39,7 @@ fn app_multi(
 
 /// A live reporting agent in `space`/`tab` — an agent panel row and a
 /// workspace row on its machine.
-fn spaced_agent(address: &str, space: &str) -> hc_proto::terminal::Terminal {
+pub(super) fn spaced_agent(address: &str, space: &str) -> hc_proto::terminal::Terminal {
     let mut t = agent(address, "working");
     t.labels.insert("herdr.space".into(), space.into());
     t.labels.insert("herdr.tab".into(), "tab".into());
@@ -48,20 +48,20 @@ fn spaced_agent(address: &str, space: &str) -> hc_proto::terminal::Terminal {
 
 /// A plain terminal in `space`/`tab` — a pane and workspace row, never
 /// an agent row (no status records).
-fn spaced_term(address: &str, space: &str) -> hc_proto::terminal::Terminal {
+pub(super) fn spaced_term(address: &str, space: &str) -> hc_proto::terminal::Terminal {
     let mut t = term(address);
     t.labels.insert("herdr.space".into(), space.into());
     t.labels.insert("herdr.tab".into(), "tab".into());
     t
 }
 
-fn remote(name: &str) -> ClientEndpointId {
+pub(super) fn remote(name: &str) -> ClientEndpointId {
     ClientEndpointId::Remote(name.into())
 }
 
 /// Local agents `t1`/`t2` and online host-a agents `host-a/t3`/`t4`,
 /// each in its own workspace (`one`/`two`/`three`/`four`).
-fn two_machine_app() -> App {
+pub(super) fn two_machine_app() -> App {
     app_multi(
         vec![
             spaced_agent("t1", "one"),
@@ -74,7 +74,7 @@ fn two_machine_app() -> App {
 }
 
 #[tokio::test]
-async fn next_agent_crosses_into_host_a_and_previous_returns() {
+pub(super) async fn next_agent_crosses_into_host_a_and_previous_returns() {
     let mut app = two_machine_app();
     pending_attach(&mut app);
     app.focused = Some("t2".into());
@@ -339,66 +339,4 @@ async fn agent_row_reveal_uses_the_rendered_index_and_keeps_visible_rows() {
     app.on_action(A::NextAgent, 80);
     assert_eq!(app.focused.as_deref(), Some("host-b/t3"));
     assert_eq!(app.shell_state.agent_scroll, 7);
-}
-
-#[tokio::test]
-async fn next_tab_stays_in_the_workspace() {
-    // Two same-space terminals land in distinct tabs of workspace `one`.
-    let mut t2 = spaced_agent("t2", "one");
-    t2.labels.insert("herdr.tab".into(), "other".into());
-    let mut app = app_multi(
-        vec![
-            spaced_agent("t1", "one"),
-            t2,
-            spaced_agent("host-a/t3", "three"),
-        ],
-        vec![machine("host-a", "connected")],
-    );
-    pending_attach(&mut app);
-    app.focused = Some("t1".into());
-    app.refresh_projection();
-    let ws_one = app.projection.snapshot.focused_workspace_id.clone();
-
-    app.on_action(A::NextTab, 80);
-    assert_eq!(app.focused.as_deref(), Some("t2"));
-    assert_eq!(app.projection.snapshot.focused_workspace_id, ws_one);
-    assert_eq!(app.projection.active_endpoint_id, ClientEndpointId::Local);
-
-    app.on_action(A::NextTab, 80);
-    assert_eq!(
-        app.focused.as_deref(),
-        Some("t1"),
-        "tabs wrap within the workspace"
-    );
-}
-
-#[tokio::test]
-async fn switch_workspace_stays_on_the_active_endpoint() {
-    let mut app = app_multi(
-        vec![
-            spaced_agent("t1", "one"),
-            spaced_agent("t2", "two"),
-            spaced_agent("host-a/t3", "three"),
-        ],
-        vec![machine("host-a", "connected")],
-    );
-    pending_attach(&mut app);
-    app.focused = Some("t1".into());
-    app.refresh_projection();
-
-    // Index 1 names the second workspace of the ACTIVE endpoint only.
-    app.on_action(A::SwitchWorkspace(1), 80);
-    assert_eq!(
-        app.projection.snapshot.focused_workspace_id.as_deref(),
-        Some("space:3:two")
-    );
-    assert_eq!(app.focused.as_deref(), Some("t2"));
-    assert_eq!(app.projection.active_endpoint_id, ClientEndpointId::Local);
-
-    // Out of the active endpoint's range: nothing moves.
-    app.focused = Some("t1".into());
-    app.refresh_projection();
-    app.on_action(A::SwitchWorkspace(5), 80);
-    assert_eq!(app.focused.as_deref(), Some("t1"));
-    assert_eq!(app.projection.active_endpoint_id, ClientEndpointId::Local);
 }

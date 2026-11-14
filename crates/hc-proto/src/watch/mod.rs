@@ -90,19 +90,39 @@ pub struct View {
     pub core: Option<CoreInfo>,
     /// Features advertised by the most recently installed handshake.
     pub features: Vec<String>,
-    /// The authoritative terminal inventory.
-    pub inventory: Inventory,
+    /// The authoritative terminal inventory — `Arc`-shared between
+    /// publishes: a publish that never touched it keeps the exact
+    /// pointer, and [`Watcher::view`] clones cost one refcount bump.
+    pub inventory: Arc<Inventory>,
     /// Display-only receipt ranks captured before publication coalesces views.
     pub activity_receipts: ActivityReceipts,
     /// `machine.list` as last seen. `None` while never fetched or the
     /// method is missing — `notes["machine.list"]` says which.
     pub machines: Option<Vec<MachineView>>,
     /// Watched documents by `(machine, name)`: the last good value plus
-    /// the last fetch's error, if any.
-    pub documents: BTreeMap<DocKey, Document>,
+    /// the last fetch's error, if any. `Arc`-shared like `inventory`,
+    /// and every `Document` is `Arc`-shared too — a publish that only
+    /// changed one document keeps the others' exact pointers.
+    pub documents: Arc<BTreeMap<DocKey, Arc<Document>>>,
     /// Per-feature reasons for degraded state (`doc.get`, `machine.list`,
     /// `events.subscribe`, the rpc link). Removed when the feature works.
     pub notes: BTreeMap<String, String>,
+}
+
+impl View {
+    /// Mutate the shared inventory copy-on-write: cloned only while a
+    /// reader still holds an older publish — never when this view owns
+    /// the last reference.
+    pub fn inventory_mut(&mut self) -> &mut Inventory {
+        Arc::make_mut(&mut self.inventory)
+    }
+
+    /// Mutate the shared documents map under the same copy-on-write
+    /// rule. Entries are `Arc<Document>`: replacing one document must
+    /// not clone the untouched ones.
+    pub fn documents_mut(&mut self) -> &mut BTreeMap<DocKey, Arc<Document>> {
+        Arc::make_mut(&mut self.documents)
+    }
 }
 
 /// One facility's connection state.
