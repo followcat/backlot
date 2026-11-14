@@ -122,7 +122,10 @@ fn opencode_blocked() {
 /// cursor-agent's permission prompt on 2026.11.05 — the S11a
 /// capture, neutralised: the command under a full-width `─` rule,
 /// then `Run this command?`, the `Not in allowlist:` line and the
-/// `→ Run (once) (y)` picker. Blocked needs all three lines.
+/// `→ Run (once) (y)` picker. The shared picker footer — a `→`
+/// option-cursor line plus `Run Everything (shift+tab)` — is the
+/// blocked marker (S12f): the question's own words stay out of it,
+/// so every approval kind blocks, named or not.
 #[test]
 fn cursor_blocked() {
     let screen = "  $ backlot studios 1.2s\n\
@@ -136,14 +139,63 @@ fn cursor_blocked() {
                   \x20   Run Everything (shift+tab)\n\
                   \x20   Skip & tell the agent what to do instead (esc or n)\n";
     assert_eq!(work_state("cursor", screen), Work::Blocked);
-    // Any missing piece is not the prompt.
-    for cut in ["Run this command?", "Not in allowlist:", "→ Run (once) (y)"] {
+    // Without the option cursor or the `Run Everything` footer the
+    // picker is not up.
+    for cut in ["→ Run (once) (y)", "Run Everything", "(shift+tab)"] {
         assert_eq!(
             work_state("cursor", &screen.replacen(cut, "", 1)),
             Work::Waiting,
             "without {cut:?}"
         );
     }
+    // The question's words are not the marker — a picker kind not
+    // yet named still blocks.
+    for cut in ["Run this command?", "Not in allowlist: wc"] {
+        assert_eq!(
+            work_state("cursor", &screen.replacen(cut, "", 1)),
+            Work::Blocked,
+            "without {cut:?}"
+        );
+    }
+}
+
+/// The S12e capture's file picker, neutralised: `Write to this
+/// file?` and the other approval questions share the same footer,
+/// so they block too — `permit` decides whose each is. The
+/// composer's bare ` →` is not an option cursor.
+#[test]
+fn cursor_file_picker_is_blocked() {
+    let write = "some output\n\
+                 ─────────────────────────────────────────\n\
+                 \x20  .../work/scratchpad/plan.md -1\n\
+                 \x20  ─────────────────────────\n\
+                 \x20  + a new line\n\
+                 \x20Write to this file?\n\
+                 \x20 in /home/user/work/scratchpad/plan.md\n\
+                 \x20 → Proceed (y)\n\
+                 \x20   Reject & propose changes (esc or n or p)\n\
+                 \x20   Add Write(/home/user/work/scratchpad/plan.md) to allowlist? (tab)\n\
+                 \x20   Run Everything (shift+tab)\n\
+                 \x20 ←/→ to switch approval\n\
+                 \x20 →\n";
+    assert_eq!(work_state("cursor", write), Work::Blocked);
+    for question in [
+        "Write to this file?",
+        "Read this file?",
+        "Delete this file?",
+        "Proceed with this edit?",
+    ] {
+        assert_eq!(
+            work_state(
+                "cursor",
+                &write.replacen("Write to this file?", question, 1)
+            ),
+            Work::Blocked,
+            "{question}"
+        );
+    }
+    // The bare composer arrow alone is not a picker.
+    assert_eq!(work_state("cursor", " →\n"), Work::Waiting);
 }
 
 /// cursor's workspace-trust dialog is blocked too — `--trust`

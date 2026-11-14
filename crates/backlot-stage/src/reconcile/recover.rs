@@ -44,6 +44,28 @@ pub fn lost_step(role: &RoleState, now_ms: u64) -> Lost {
     }
 }
 
+/// A `role closed` clear for every open attention of a role going
+/// — or already — closed: the prompt or stall it named is gone
+/// with the terminal, just like a loss (S12f). The `Stop` records
+/// `role.closed` itself; an entry already `Closed` — a crashed
+/// stop, or an older ledger's orphan — gets only the clears.
+/// `cleared` keeps a seq from clearing twice in one pass.
+pub fn closed_records(
+    state: &StudioState,
+    key: &str,
+    records: &mut Vec<Action>,
+    cleared: &mut BTreeSet<u64>,
+) {
+    for a in state.open_attention().filter(|a| a.role == key) {
+        if cleared.insert(a.seq) {
+            records.push(Action::ClearAttention {
+                target: a.seq,
+                reason: "role closed".into(),
+            });
+        }
+    }
+}
+
 /// `role.lost` plus a `role lost` clear for every open attention of
 /// the role — the prompt or stall it named is gone with the
 /// terminal, in the same pass. `cleared` keeps a seq from clearing

@@ -10,8 +10,9 @@ use backlot_model::summary::Work;
 
 use crate::notices;
 use crate::permit::{
-    approval_keys, director_notice, episode_due, episode_raised, in_episode, is_actor, needs_user,
-    open_episode, pending_approval, prompt_block, touches_env,
+    CursorAsk, approval_keys, cursor_ask, cursor_needs_user, director_notice, episode_due,
+    episode_raised, in_episode, is_actor, needs_user, open_episode, pending_approval, prompt_block,
+    touches_env,
 };
 
 fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
@@ -484,6 +485,191 @@ fn prompt_block_on_cursor() {
         None,
         "no full-width rule — nothing comparable"
     );
+}
+
+/// A neutral cursor-shaped file-approval picker (the S12e capture,
+/// scrubbed): the `Approval N of M` header under a full-width `─`
+/// rule, the diff preview behind its inner rule, the question, the
+/// ` in <path>` line and the option list every picker shares.
+fn cursor_file_picker(question: &str, path: &str) -> String {
+    format!(
+        "some output\n\
+         ─────────────────────────────────────────\n\
+         \x20  Approval 1 of 3\n\
+         \x20  ...{path} -1\n\
+         \x20  ─────────────────────────\n\
+         \x20  - an old line\n\
+         \x20  + a new line\n\
+         \x20{question}\n\
+         \x20 in {path}\n\
+         \x20 → Proceed (y)\n\
+         \x20   Reject & propose changes (esc or n or p)\n\
+         \x20   Add Write({path}) to allowlist? (tab)\n\
+         \x20   Run Everything (shift+tab)\n\
+         \x20 ←/→ to switch approval\n"
+    )
+}
+
+/// The file picker's block opens at the inner `─` rule above the
+/// `→` cursor — the diff preview is part of what was approved — and
+/// a different question or target is a different block.
+#[test]
+fn prompt_block_on_cursor_file_picker() {
+    let a = cursor_file_picker("Write to this file?", "/home/user/work/t1/plan.md");
+    let block = prompt_block("cursor", &a).expect("a file picker has a block");
+    assert!(block.contains("Write to this file?"), "{block}");
+    assert!(block.contains("in /home/user/work/t1/plan.md"), "{block}");
+    assert!(block.contains("a new line"), "{block}");
+    assert!(!block.contains("some output"), "{block}");
+    let other_path = cursor_file_picker("Write to this file?", "/home/user/work/t1/other.md");
+    assert_ne!(
+        prompt_block("cursor", &a),
+        prompt_block("cursor", &other_path)
+    );
+    let other_question = cursor_file_picker("Delete this file?", "/home/user/work/t1/plan.md");
+    assert_ne!(
+        prompt_block("cursor", &a),
+        prompt_block("cursor", &other_question)
+    );
+    // A screen with no `─` rule above the option cursor maps no
+    // block — the user's raise already follows.
+    assert_eq!(
+        prompt_block(
+            "cursor",
+            "Write to this file?\n in /home/user/x\n → Proceed (y)\n Run Everything (shift+tab)\n"
+        ),
+        None
+    );
+}
+
+/// `cursor_ask` reads the picker's own question: the shell prompt,
+/// each file question with its `Add <Verb>(<path>)` or ` in <path>`
+/// target, an unreadable target, and a picker naming nothing
+/// measured. Off a picker screen there is nothing to read.
+#[test]
+fn cursor_ask_reads_the_pickers_question() {
+    let shell = cursor_screen("wc -l README.md");
+    assert_eq!(cursor_ask(&shell), Some(CursorAsk::Shell));
+    for question in [
+        "Write to this file?",
+        "Write this file?",
+        "Read this file?",
+        "Delete this file?",
+        "Proceed with this edit?",
+    ] {
+        let screen = cursor_file_picker(question, "/home/user/work/t1/plan.md");
+        assert_eq!(
+            cursor_ask(&screen),
+            Some(CursorAsk::File(Some("/home/user/work/t1/plan.md"))),
+            "{question}"
+        );
+    }
+    // The ` in <path>` line alone still names the target when the
+    // allowlist option is not offered.
+    let no_add = cursor_file_picker("Read this file?", "/home/user/work/t1/src/lib.rs").replace(
+        "   Add Write(/home/user/work/t1/src/lib.rs) to allowlist? (tab)\n",
+        "",
+    );
+    assert_eq!(
+        cursor_ask(&no_add),
+        Some(CursorAsk::File(Some("/home/user/work/t1/src/lib.rs")))
+    );
+    // A truncated `...` path counts unread.
+    let truncated = cursor_file_picker("Write to this file?", "/home/user/work/t1/plan.md")
+        .replace(
+            "Add Write(/home/user/work/t1/plan.md) to allowlist?",
+            "Add Write(.../t1/plan.md) to allowlist?",
+        )
+        .replace(" in /home/user/work/t1/plan.md", " in .../t1/plan.md");
+    assert_eq!(cursor_ask(&truncated), Some(CursorAsk::File(None)));
+    // A picker whose question is not measured — an mcp prompt, say.
+    let unknown = "Run this mcp?\n → Proceed (y)\n   Run Everything (shift+tab)\n";
+    assert_eq!(cursor_ask(unknown), Some(CursorAsk::Unknown));
+    // Off a picker there is nothing to read.
+    assert_eq!(cursor_ask("plain output\n"), None);
+}
+
+/// A `Write to this file?` on an actor is the director's only while
+/// the named path resolves strictly inside the role's own work
+/// area — `.git`, `.commandcode`, `.cursor` and `cursor` state, an
+/// outside or unresolvable path, a truncated one, no path at all
+/// and an unmeasured picker are each the user's outright.
+#[test]
+fn cursor_file_picker_needs_user_only_outside_the_area() {
+    let dir = std::env::temp_dir().join(format!("bl-permit-area-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let area = dir.join("work/t1");
+    std::fs::create_dir_all(&area).unwrap();
+    let inside = area.join("plan.md").display().to_string();
+    assert!(
+        !cursor_needs_user(
+            "cursor",
+            &cursor_file_picker("Write to this file?", &inside),
+            &area
+        ),
+        "an in-worktree write is the director's to answer"
+    );
+    for path in [
+        dir.join("other.md"),                      // beside the worktree
+        area.join("../t2/x.md"),                   // `..` escaping it
+        area.join(".git/HEAD"),                    // VCS state
+        area.join(".commandcode/settings.json"),   // runner state
+        area.join(".cursor/config.json"),          // cursor state
+        area.join("cursor/chats/x/meta.json"),     // cursor state
+        area.clone(),                              // the area itself is not inside itself
+        Path::new("~/work/t1/x.md").to_path_buf(), // `~` — unexpandable
+        Path::new("relative/x.md").to_path_buf(),  // relative — where from is unread
+    ] {
+        let screen = cursor_file_picker("Write to this file?", &path.display().to_string());
+        assert!(
+            cursor_needs_user("cursor", &screen, &area),
+            "{} must be the user's",
+            path.display()
+        );
+    }
+    // Unreadable or unmeasured asks are the user's too.
+    let truncated = cursor_file_picker("Write to this file?", &inside)
+        .replace(&format!("Add Write({inside})"), "Add Write(.../plan.md)")
+        .replace(&format!(" in {inside}"), " in .../plan.md");
+    assert!(cursor_needs_user("cursor", &truncated, &area));
+    let no_path = cursor_file_picker("Delete this file?", &inside)
+        .replace(&format!(" in {inside}\n"), "")
+        .replace(&format!("   Add Write({inside}) to allowlist? (tab)\n"), "");
+    assert!(cursor_needs_user("cursor", &no_path, &area));
+    let unknown = "Run this mcp?\n → Proceed (y)\n   Run Everything (shift+tab)\n";
+    assert!(cursor_needs_user("cursor", unknown, &area));
+    // Other runners and the shell picker are read elsewhere.
+    assert!(!cursor_needs_user("claude", unknown, &area));
+    assert!(!cursor_needs_user(
+        "cursor",
+        &cursor_screen("wc -l x"),
+        &area
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A symlink inside the area pointing out still leaves the target
+/// outside: the check resolves what the filesystem can.
+#[test]
+#[cfg(unix)]
+fn cursor_file_picker_target_through_a_symlink_is_the_users() {
+    let dir = std::env::temp_dir().join(format!("bl-permit-link-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let area = dir.join("work/t1");
+    let outside = dir.join("outside");
+    std::fs::create_dir_all(&area).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, area.join("link")).unwrap();
+    let via_link = area.join("link/x.md").display().to_string();
+    assert!(
+        cursor_needs_user(
+            "cursor",
+            &cursor_file_picker("Write to this file?", &via_link),
+            &area
+        ),
+        "a symlink pointing out is outside"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A cursor workspace-trust dialog is the user's even on an actor —

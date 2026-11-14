@@ -196,6 +196,11 @@ pub fn reconcile(
     // Attention seqs already given a clear this pass — one per pass.
     let mut cleared = BTreeSet::new();
 
+    // Task budgets: an over-budget task raises once; a terminal one
+    // clears its raise `done`. Runs before the role pass so the
+    // close-clears there don't take a terminal task's raise first.
+    budget::actions(state, now_ms, &mut records, &mut cleared);
+
     // Existing role entries first.
     for (key, r) in &state.roles {
         if let Some(name) = terminal_name(studio, key) {
@@ -207,6 +212,10 @@ pub fn reconcile(
                             recover::lost_records(state, key, &mut records, &mut cleared);
                         }
                     } else if let Some(address) = term {
+                        // The prompt or stall an open attention
+                        // named is gone with the terminal — clear
+                        // it alongside the close (S12f).
+                        recover::closed_records(state, key, &mut records, &mut cleared);
                         stops.push(Action::Stop {
                             role: key.clone(),
                             terminal: name,
@@ -234,6 +243,11 @@ pub fn reconcile(
                             reason: String::new(),
                         });
                     }
+                    // An open attention left on an already-closed
+                    // role — an older ledger's orphan, or a raise
+                    // that raced the close — is dead weight the
+                    // same way (S12f).
+                    recover::closed_records(state, key, &mut records, &mut cleared);
                 }
                 // A wanted lost role comes back into its recorded
                 // session; without one — or once the loss guard trips —
@@ -305,10 +319,6 @@ pub fn reconcile(
             }
         }
     }
-
-    // Task budgets: an over-budget task raises once; a terminal one
-    // clears its raise `done`.
-    budget::actions(state, now_ms, &mut records, &mut cleared);
 
     // Runner limits (S9e): a held start waits — no event, retried
     // next tick. `limits::held` reads the ledger the same way the
