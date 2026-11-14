@@ -30,6 +30,7 @@ use crate::deliver;
 use crate::discover;
 use crate::doc;
 use crate::link;
+use crate::ratelimit;
 use crate::reconcile;
 use crate::signals;
 use crate::store::{self, StoreError};
@@ -77,6 +78,9 @@ async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
                 argv: t.argv,
                 cwd: t.cwd,
                 labels: t.labels,
+                status: t.status,
+                waiting_for_person: t.waiting_for_person,
+                activity_revision: t.activity.map(|a| a.revision),
             });
         }
     }
@@ -189,6 +193,20 @@ pub(crate) struct Stage {
     /// session (S9f) — the first work source, the signal stall's
     /// clock and the approval bind's request identity.
     pub(crate) last_signal: std::cell::RefCell<BTreeMap<(String, String), signals::Signal>>,
+    /// `(studio, role)` → `(activity revision, first-seen ms)` —
+    /// the structured stall's clock (S12d): a terminal reporting
+    /// `working` must keep its revision moving.
+    pub(crate) revision_since: std::cell::RefCell<BTreeMap<(String, String), (u64, u64)>>,
+    /// `(studio, role)` → the rate-limit retry exchange (S12d):
+    /// `continue`s already sent and when the next is due. An entry
+    /// that outlives its attention marks the episode adjudicated —
+    /// a manually cleared or escalated limit never re-raises while
+    /// it holds.
+    pub(crate) rate_pace: std::cell::RefCell<BTreeMap<(String, String), ratelimit::RatePace>>,
+    /// `(studio, role)` pairs whose session-less state passed the
+    /// default window and already logged its soft warning — the
+    /// runner's own window still bounds the attention.
+    pub(crate) session_warned: std::cell::RefCell<std::collections::BTreeSet<(String, String)>>,
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
@@ -442,6 +460,9 @@ impl Stage {
             unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
             last_signal: std::cell::RefCell::new(BTreeMap::new()),
+            revision_since: std::cell::RefCell::new(BTreeMap::new()),
+            rate_pace: std::cell::RefCell::new(BTreeMap::new()),
+            session_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
             broken: BTreeMap::new(),
@@ -518,6 +539,9 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
         last_signal: std::cell::RefCell::new(BTreeMap::new()),
+        revision_since: std::cell::RefCell::new(BTreeMap::new()),
+        rate_pace: std::cell::RefCell::new(BTreeMap::new()),
+        session_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),
         broken: BTreeMap::new(),

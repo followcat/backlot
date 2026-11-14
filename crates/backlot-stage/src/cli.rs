@@ -20,9 +20,29 @@ use crate::store::{self, StoreError};
 /// First argument words handled by the studio layer. Anything else is
 /// left for the TUI's own argument parsing.
 const COMMANDS: &[&str] = &[
-    "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "deliver",
-    "block", "review", "correct", "status", "records", "finding", "stage", "priority", "reopen",
-    "close", "approve", "hook",
+    "studio",
+    "req",
+    "plan",
+    "dispatch",
+    "report",
+    "ask",
+    "tell",
+    "task",
+    "cast",
+    "deliver",
+    "block",
+    "review",
+    "correct",
+    "status",
+    "records",
+    "finding",
+    "stage",
+    "priority",
+    "reopen",
+    "close",
+    "approve",
+    "attention",
+    "hook",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
@@ -251,6 +271,10 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
         Cmd::StageRun => {
             check_stage_caller(&common, env)?;
             return crate::stage::run(&common, env);
+        }
+        Cmd::StageWatch { ref target } => {
+            check_stage_caller(&common, env)?;
+            return crate::watchdog::watch(&common, env, target.clone());
         }
         _ => {}
     }

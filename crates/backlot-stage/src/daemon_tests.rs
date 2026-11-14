@@ -233,7 +233,7 @@ fn actor() -> backlot_model::event::ActorIdentity {
         runner: "fake".into(),
         runner_version: None,
         model: "plain".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }
@@ -407,6 +407,7 @@ fn a_failed_refresh_keeps_the_last_inventory() {
                 argv: Vec::new(),
                 cwd: String::new(),
                 labels: BTreeMap::new(),
+                ..Default::default()
             })
             .collect(),
         doing: BTreeMap::new(),

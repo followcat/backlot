@@ -135,6 +135,7 @@ fn read_cast(path: &Path) -> Result<CastFile, Fail> {
             .iter()
             .map(|c| (c.name.as_str(), &c.runner, &c.effort)),
     ) {
+        let effort = effort.as_deref().unwrap_or_default();
         if runner.as_str() == "cursor" && !effort.is_empty() {
             return Err(Fail::usage(format!(
                 "{who}: runner 'cursor' has no effort flag — \
@@ -230,7 +231,11 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
     let by = caller.by();
     match cmd {
         Cmd::Help(_) => unreachable!("help is answered in cli::run"),
-        Cmd::Status { .. } | Cmd::Records { .. } | Cmd::StageStart | Cmd::StageRun => {
+        Cmd::Status { .. }
+        | Cmd::Records { .. }
+        | Cmd::StageStart
+        | Cmd::StageRun
+        | Cmd::StageWatch { .. } => {
             unreachable!("commands without a ledger event do not append")
         }
         Cmd::StudioNew {
@@ -438,6 +443,27 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                     EventKind::RoleApproval {
                         role: person,
                         decision,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
+        // `attention clear` resolves a still-open attention by hand:
+        // stage-restart leftovers and prompts the passes could not
+        // prove gone (S12d). Clearing one that is not open — or a
+        // seq that was never an attention — is refused.
+        Cmd::AttentionClear { target } => {
+            person_gate(caller)?;
+            let who = caller.role.clone();
+            Ok(Box::new(move |state, _| {
+                if !state.open_attention().any(|a| a.seq == target) {
+                    return Err(Fail::refused(format!("no open attention {target}")));
+                }
+                Ok(pending(
+                    EventKind::AttentionCleared {
+                        target,
+                        reason: Some(format!("cleared by {who}")),
                     },
                     by,
                     Vec::new(),

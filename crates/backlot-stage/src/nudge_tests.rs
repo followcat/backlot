@@ -124,6 +124,7 @@ fn term(studio: &str, role: &str) -> LiveTerminal {
         argv: Vec::new(),
         cwd: String::new(),
         labels: BTreeMap::new(),
+        ..Default::default()
     }
 }
 

@@ -95,16 +95,16 @@ timeout_s = 120
 | `[limits]` | Live-role cap per runner in this studio — `claude = 3` starts no fourth live role on `claude` until a slot frees. Fixed roles and actors count alike, a role being started counts, and a runner with no entry is unlimited. Held starts go producer, director, writer, then actors by task priority and seq, and the waiting role shows `waiting for a <runner> slot`. Per studio: two studios on one account each count only their own roles. A `0` is refused — a runner is limited by a real number or absent. The cap must seat its fixed roles first — the producer and the director stay live for the studio's whole run — so `studio new` refuses a cap under their count on the runner, or at their count while the writer or a candidate shares it: nobody else could ever sit. |
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin`, `opencode` or `cursor`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. |
-| `effort` | Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; OpenCode has no flag). `cursor` and `devin` carry the depth in the model id and may omit it — a set `effort` on `cursor` is refused. |
+| `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; OpenCode has no flag). `cursor` and `devin` carry the depth in the model id and `cmd`'s flag writes global config, so all three omit it — a set `effort` on any of them is refused. |
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
 | `mode` | Optional. `standard` is the default and the only process that exists; `experimental` is a reserved name (R14, not built). |
 | `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
 | `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. |
 
-The three fixed roles and every `[[candidates]]` entry each need `runner`, `model`, `effort` and
-`permission_profile`. The candidates are the pool the director picks actors from — it cannot cast
-anyone else.
+The three fixed roles and every `[[candidates]]` entry each need `runner`, `model` and
+`permission_profile`; `effort` is required only on a runner that takes one. The candidates are the
+pool the director picks actors from — it cannot cast anyone else.
 
 ## Starting
 
@@ -130,6 +130,18 @@ then reads the ledger and starts the producer and the director as `bl-acme-shop-
 `bl-acme-shop-director`; the writer joins when a plan is wanted, and an actor's terminal is named
 for its task (`bl-acme-shop-t1`). Role terminals are ordinary `hc` terminals: they show in the
 sidebar under the `backlot` space, and `hc ls` lists them.
+
+The stage has no heartbeat of its own — `backlot stage watch` is the external watchdog:
+
+```sh
+backlot stage watch --target bl-acme-shop-producer --session blrun1213a
+```
+
+It polls the core's terminal list and the studio ledgers every few seconds and sends a
+`<watch>` line into `--target` on three edges: the `backlot-stage` terminal dying (and coming
+back), a role terminal disappearing while its ledger still wants it live, and a studio's open
+attention growing. Each condition reports once per edge. Without `--target` the lines go to the
+watch's own stderr; `--studio` narrows the ledgers to one studio.
 
 Run `backlot` to open the UI. Press `Ctrl+B y` — prefix, then `y` — to open the studio panel on
 the right, expanded and focused. Pressing the chord again while it is focused closes it; pressing
@@ -270,7 +282,7 @@ stage can raise:
 | `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's is the director's; anything else is yours. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
 | `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a changed screen or a newer signal clears the attention. |
 | `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — there is no automatic way on for a fixed role. |
-| `session id not found` | A post-launch runner (`codex`, `devin`, `cursor`, `cmd`) gave no session id within 60 seconds of the role starting. | The role still runs and the stage keeps looking for up to ten minutes. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
+| `session id not found` | A post-launch runner (`codex`, `devin`, `cursor`, `cmd`) gave no session id within its discovery window — 60 seconds, 240 for `cmd`, whose session file lands late. | The role still runs and the stage keeps looking for up to ten minutes; a role past the default window but inside its runner's logs a warning only. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
 | `launch refused` | `terminal.run` refused the role's launch — a taken terminal name or an argv the core rejects. | The stage retries each tick; the detail names the refusal. Check the runner exists and the terminal name is free. |
 | `not a git repository` | The studio's `--repo` path is not a git work tree — no director or actor starts. | Point the studio at a real work tree, or make the repo one; the stage retries each tick. |
 | `work area failed` | A git step failed while preparing `work/` — the detail is git's first error line. | Fix what git complained about; the stage retries each tick. |
@@ -283,6 +295,19 @@ stage can raise:
 | `cursor dir was open` | A cursor role's `roles/<role>/cursor/` — the boundary that keeps the agent's `authInfo`-holding files unreachable — carried a group or other permission bit. The stage found it at launch prep or at session discovery and set it back to 700. | Informational only — the detail names the path suffix. Check what set the mode (a loose umask, an outside chmod); a repeat drift raises it again. |
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
 | `cmd prep failed` | A cmd role's per-session setup failed — its workdir `.commandcode/settings.json` could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
+| `rate limited` | Limit text was observed — in the `error` status's message or in the fresh tail of a non-working screen — counted separately from `stalled` and rework. | Usually nothing: the stage waits the parsed reset out and sends `continue`, up to three auto-retries. A successful resume resolves `resumed`; an episode that outlives the budget re-raises `needs the user` — answer it by hand. |
+| `agent error` | The role's terminal reports `error` with no limit text in its message or the screen's fresh tail — a plain agent error, not a limit. | The stage sends nothing: an actor's is the director's to retry, reword or recast; anyone else's is yours. It clears `status recovered` when the status leaves `error`, or `rate limit text observed` if a limit banner shows. |
+
+A stale open attention — one whose condition no longer holds, such as a stage-restart leftover —
+closes by hand:
+
+```sh
+backlot attention clear <seq> --studio acme-shop --as user
+```
+
+The seq is the attention's ledger seq from `backlot status`. Clearing one that is not open — or a
+seq that was never an attention — is refused. The user and the director may clear; the record
+names who did.
 
 The ledger is append-only — a `correction` event changes the view, not the past. To repair a
 recorded fact use `backlot correct --event <seq> --reason <r> --set <key=value> --as user`.

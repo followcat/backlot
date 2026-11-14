@@ -47,4 +47,6 @@ pub const ALL: &[&str] = &[
     CMD_PREP_FAILED,
     OWED,
     OVER_BUDGET,
+    crate::ratelimit::RATE_LIMITED,
+    crate::ratelimit::AGENT_ERROR,
 ];

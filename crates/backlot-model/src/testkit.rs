@@ -28,7 +28,7 @@ pub fn actor(tag: &str) -> ActorIdentity {
         runner: format!("runner-{tag}"),
         runner_version: None,
         model: format!("model-{tag}"),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }

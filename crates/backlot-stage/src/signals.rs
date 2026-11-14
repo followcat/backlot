@@ -222,15 +222,16 @@ pub fn answered_requests(
         .collect()
 }
 
-/// Signals first, the screen as fallback (S9f): `Blocked` wins from
-/// either source — a prompt can come before its signal does —
-/// otherwise the signal's state when there is one, the screen's
-/// when there is none.
-pub fn combine(signal: Option<Work>, screen: Work) -> Work {
-    if signal == Some(Work::Blocked) || screen == Work::Blocked {
+/// The work-map answer from the three sources, in order: the
+/// role's own hook signal (S9f), then the terminal's structured
+/// state (S12d), then the stage's screen read. A `blocked` from
+/// any source wins over everything else — a prompt on any channel
+/// must still open an episode.
+pub fn combine(signal: Option<Work>, structured: Option<Work>, screen: Work) -> Work {
+    if [signal, structured, Some(screen)].contains(&Some(Work::Blocked)) {
         return Work::Blocked;
     }
-    signal.unwrap_or(screen)
+    signal.or(structured).unwrap_or(screen)
 }
 
 /// `role` → StopFailure error for every recorded role whose last

@@ -39,6 +39,38 @@ sees it.
 | cmd | the folder-trust dialog — `Do you trust the files in this folder?` and `Yes, proceed` together; or a permission prompt — `needs to execute`, `needs to run` or `make this edit to` plus a line starting `❯ 1.` | `esc to interrupt` on the status line — the rotating `*ing…` verb and the `✻ Worked for`/`✻ Thought for`/`⎿ Tip:` post-turn lines are not a turn | Measured on 1.88.5 |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
+## Signal matrix
+
+The screen is the fallback, not the first read. Each sample combines three sources in order —
+the role's own hook signal (Claude only, S9f), the terminal's **structured state**, then the
+screen markers above. `blocked` from any source wins; a source that reports nothing is skipped,
+so an upstream core without screen inference still works on markers alone.
+
+| Runner | `waiting_for_person` | `status.state` | `status.kind` | `activity.revision` | How it is filled |
+|---|---|---|---|---|---|
+| Devin | yes | yes — its own words | yes | yes | **Native OSC 7501** — Devin reports itself |
+| Claude Code | yes | yes — the core's words | yes | yes | **Fork screen inference** via `claude.toml` (the runner emits no 7501 of its own; a native `done` record may coexist) |
+| Codex | yes | yes | yes | yes | Fork inference via `codex.toml` |
+| OpenCode | yes | yes | yes | yes | Fork inference via `opencode.toml` |
+| cmd | yes | yes | yes | yes | Fork inference via `command-code.toml` |
+| cursor-agent | yes | yes | yes | yes | Fork inference via `cursor.toml` — lands with the core-side Repo-A work (`feat/cursor-manifest` on followcat/herdr-core); before that, the screen markers carry cursor alone |
+
+How the structured fields are consumed:
+
+- `waiting_for_person` → `blocked`, first. It catches prompt kinds no marker knows (cursor's
+  file-write picker was the S12c gap). When the screen cannot identify the prompt's block, the
+  episode raises `needs the user` and no approval key is ever bound to it.
+- `status.state` → the work map (`working`, `blocked`, `idle`/`done`/`waiting` → waiting) with
+  `status.msg` attached to the summary's doing line. `error` is the rate-limit taxonomy's input:
+  it, or a waiting screen naming a limit, raises `rate limited`, and the stage waits the parsed
+  reset out and sends `continue` — three auto-retries, then the episode escalates.
+- `activity.revision` → the structured stall: a terminal reporting `working` whose revision does
+  not move for `stall_limit_s` stalls exactly like a frozen screen, and a revision that moves
+  after the raise resolves `activity resumed`.
+- On an **upstream hc core** (no screen inference, no fork manifests), cmd and cursor report
+  nothing at all — every structured field stays empty and the screen markers carry them, which
+  is what the stage did before this upgrade.
+
 ## Prompt blocks
 
 Before a recorded approval's key goes out, the screen on show is compared with the screen the

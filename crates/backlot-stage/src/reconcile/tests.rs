@@ -401,6 +401,7 @@ fn the_label_decides_the_studio_view() {
         labels: studio
             .map(|s| BTreeMap::from([("backlot.studio".to_string(), s.to_string())]))
             .unwrap_or_default(),
+        ..Default::default()
     };
     let terms = vec![
         term("bl-acme-producer", "t1", Some("acme")),

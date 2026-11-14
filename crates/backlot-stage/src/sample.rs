@@ -1,29 +1,23 @@
 //! The per-role screen sample: classify the visible screen into the
 //! `work` map for the summary and the send gate's stability track,
-//! then run the D9 and S6 passes on the same text — a `blocked`
-//! screen held for an episode raises `permission prompt`, a
-//! recorded `role.approval` answers it only while the prompt still
-//! shows, and a screen unchanged for the stall limit raises
-//! `stalled`.
+//! then hand the same text to the attention-episode passes — the
+//! `permission prompt` episode in `permission.rs`, the `stalled`
+//! and `rate limited` episodes in `limits.rs`.
 
 use std::path::Path;
 
-use backlot_model::event::{EventKind, PERMISSION_PROMPT, STALLED};
-use backlot_model::state::{StudioState, actor_task};
-use backlot_model::summary::Work;
+use backlot_model::event::EventKind;
+use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
 use hc_proto::terminal::ReadParams;
 
-use crate::act::record;
 use crate::cli::Fail;
 use crate::daemon::Stage;
-use crate::permit;
 use crate::reconcile::LiveTerminal;
 use crate::runners;
 use crate::signals;
-use crate::stall;
 use crate::store::{self, StoreError};
-use crate::watch::work_due;
+use crate::watch::{structured_state, work_due};
 
 /// What a live role's samples need: its ledger view, its identity
 /// and its terminal — bundled so the pass stays readable.
@@ -109,7 +103,12 @@ impl Stage {
                 .insert(pair.clone(), s.clone()),
             None => self.last_signal.borrow_mut().remove(&pair),
         };
-        let work = signals::combine(signal_state, runners::work_state(w.runner, &text));
+        // Structured state sits between the signal and the screen
+        // (S12d): a core that reports — natively or through screen
+        // inference — is believed ahead of the stage's own read;
+        // a `blocked` from any source still wins the map.
+        let screen_work = runners::work_state(w.runner, &text);
+        let work = signals::combine(signal_state, structured_state(w.term), screen_work);
         self.work.borrow_mut().insert(pair.clone(), work);
         // The send gate's screen-stability track — same screen, same
         // `same_since`; a new screen resets the window.
@@ -120,358 +119,8 @@ impl Stage {
         );
         self.permission(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
-        self.stall(studio, w, work, now_ms).await
-    }
-
-    /// The S6 stall pass on the sample just stored: a screen held
-    /// unchanged for the studio's `stall_limit_s` raises `stalled`
-    /// once — one open attention per role and reason — with the
-    /// screen saved under `attention/`; a screen that changed since
-    /// the raise clears the attention. A stage restart loses the
-    /// in-memory track, so the first sample after it reads as a
-    /// fresh screen: an open stall clears and can re-raise one
-    /// limit later — acceptable until S6b's recovery work.
-    ///
-    /// S9f adds the signal half: a role whose last hook signal
-    /// reports Working and is older than the limit is as stalled as
-    /// a frozen screen — the spinner may keep moving while the turn
-    /// itself is dead. Either source can clear an open stall: a new
-    /// screen, or a newer signal.
-    async fn stall(
-        &self,
-        studio: &str,
-        w: &Watched<'_>,
-        work: Work,
-        now_ms: u64,
-    ) -> Result<(), Fail> {
-        let (dir, state, role) = (w.dir, w.state, w.role);
-        let pair = (studio.to_string(), role.to_string());
-        let Some(screen) = self.screens.borrow().get(&pair).cloned() else {
-            return Ok(());
-        };
-        let signal = self.last_signal.borrow().get(&pair).cloned();
-        if let Some(attn) = stall::open_stall(state, role) {
-            // A newer signal — the turn demonstrably alive — or the
-            // screen having moved since the raise ends the episode.
-            let cleared = if signal.as_ref().is_some_and(|s| s.ts_ms > attn.ts_ms) {
-                Some("new hook signal")
-            } else if screen.same_since_ms > attn.ts_ms {
-                Some("screen changed")
-            } else {
-                None
-            };
-            if let Some(reason) = cleared {
-                record(
-                    dir,
-                    EventKind::AttentionCleared {
-                        target: attn.seq,
-                        reason: Some(reason.into()),
-                    },
-                )?;
-            }
-            return Ok(());
-        }
-        let task = actor_task(role)
-            .and_then(|id| state.tasks.get(id))
-            .map(|t| t.status);
-        let limit_ms = u64::from(state.stall_limit_s()) * 1000;
-        if let Some(sig) =
-            signal.filter(|s| stall::signal_stalled(role, task, work, s, limit_ms, now_ms))
-        {
-            let silent_s = now_ms.saturating_sub(sig.ts_ms) / 1000;
-            self.raise_attention(
-                Raise {
-                    dir,
-                    role,
-                    reason: STALLED,
-                    text: &screen.text,
-                    needs_user: false,
-                    bound: None,
-                },
-                move |seq| {
-                    format!("no hook signal for {silent_s}s; screen saved to attention/{seq}.txt")
-                },
-            )
-            .await?;
-            eprintln!("stage: {role} stalled");
-        } else if stall::stalled(role, task, work, &screen, limit_ms) {
-            let held_s = screen.at_ms.saturating_sub(screen.same_since_ms) / 1000;
-            self.raise_attention(
-                Raise {
-                    dir,
-                    role,
-                    reason: STALLED,
-                    text: &screen.text,
-                    needs_user: false,
-                    bound: None,
-                },
-                move |seq| {
-                    format!("screen unchanged for {held_s}s; screen saved to attention/{seq}.txt")
-                },
-            )
-            .await?;
-            eprintln!("stage: {role} stalled");
-        }
-        Ok(())
-    }
-
-    /// The D9 pass on one fresh sample: a `blocked` screen held for
-    /// [`permit::EPISODE_MIN_MS`] raises `permission prompt` once per
-    /// episode with the screen saved under `attention/`; a recorded
-    /// `role.approval` sends the runner's key only while the prompt
-    /// the decision was made on is still the one pending — for a
-    /// signal-bound attention, that the last signal is still the
-    /// bound `PermissionRequest`; otherwise that the saved screen's
-    /// prompt block is still the one on show. A prompt that changed
-    /// under the decision clears `prompt changed` and raises its own
-    /// attention, and a gone prompt clears with no key sent.
-    async fn permission(
-        &self,
-        studio: &str,
-        w: &Watched<'_>,
-        work: Work,
-        text: &str,
-        request: Option<&signals::Signal>,
-        now_ms: u64,
-    ) -> Result<(), Fail> {
-        let (dir, state, role) = (w.dir, w.state, w.role);
-        let pair = (studio.to_string(), role.to_string());
-        // The trust dialog is the trust pass's concern, not a
-        // permission episode — it resets the blocked clock.
-        let ep = permit::in_episode(work, text);
-        let (since, due) =
-            permit::episode_due(ep, self.blocked_since.borrow().get(&pair).copied(), now_ms);
-        match since {
-            Some(since) => {
-                self.blocked_since.borrow_mut().insert(pair.clone(), since);
-                self.unblocked_since.borrow_mut().remove(&pair);
-                if due
-                    && !permit::episode_raised(state, role, since)
-                    && !crate::act::attention_open(state, role, PERMISSION_PROMPT)
-                {
-                    self.raise_permission(dir, role, w.runner, text, request)
-                        .await?;
-                }
-            }
-            None => {
-                self.blocked_since.borrow_mut().remove(&pair);
-                self.unblocked_since
-                    .borrow_mut()
-                    .entry(pair.clone())
-                    .or_insert(now_ms);
-            }
-        }
-        let Some(attn) = permit::open_episode(state, role) else {
-            return Ok(());
-        };
-        let Some(appr) = permit::pending_approval(state, role, attn.ts_ms) else {
-            // No decision recorded: a role out of its blocked episode
-            // for the whole window answered the prompt somewhere else
-            // — the stale attention clears so the next prompt raises
-            // its own instead of inheriting this one's flag.
-            if !ep {
-                let gone = self
-                    .unblocked_since
-                    .borrow()
-                    .get(&pair)
-                    .copied()
-                    .unwrap_or(now_ms);
-                if now_ms.saturating_sub(gone) >= permit::EPISODE_MIN_MS {
-                    record(
-                        dir,
-                        EventKind::AttentionCleared {
-                            target: attn.seq,
-                            reason: Some("prompt answered elsewhere".into()),
-                        },
-                    )?;
-                }
-            }
-            return Ok(());
-        };
-        if !ep {
-            // The prompt went away on its own — nothing to send.
-            record(
-                dir,
-                EventKind::AttentionCleared {
-                    target: attn.seq,
-                    reason: Some("prompt gone before the decision was sent".into()),
-                },
-            )?;
-            return Ok(());
-        }
-        let Some(key) = permit::approval_keys(w.runner, appr.decision) else {
-            // Unmeasured runner: the open attention stays for the user.
-            return Ok(());
-        };
-        // The key answers the prompt the attention saved — the
-        // pending prompt must be that same one. An attention raised
-        // from a `PermissionRequest` signal carries the request in
-        // `<seq>.signal` (S9f): the compare is that the pending
-        // request is still that request — the same `ts_ms` and
-        // `tool_input` — `Notification` chimes skipped — *and* that
-        // the screen still reads Blocked. Claude Code emits no hook
-        // between the answer and the tool's end, so a prompt
-        // answered at the role's terminal leaves its request the
-        // pending one and the screen is the only proof it went:
-        // `prompt gone` then, nothing sent and nothing raised.
-        // Anything else keeps the S9c screen compare — the saved
-        // screen's prompt block must still be the one on show. A
-        // prompt that changed under the recorded decision (an
-        // earlier prompt answered in the terminal, the next one up)
-        // is a different prompt: nothing goes out, the stale
-        // attention clears, and this screen raises its own
-        // attention — `needs_user` computed on it, the director
-        // notified as for any new prompt. A screen with no
-        // comparable block refuses the same way.
-        enum Fresh {
-            Send,
-            Changed,
-            Gone,
-        }
-        let screen_blocked = runners::work_state(w.runner, text) == Work::Blocked;
-        let fresh = if let Ok(bound) =
-            std::fs::read_to_string(dir.join("attention").join(format!("{}.signal", attn.seq)))
-        {
-            let was: Option<signals::Signal> = serde_json::from_str(&bound).ok();
-            match (was, request) {
-                (Some(w), Some(n)) if w.ts_ms == n.ts_ms && w.tool_input == n.tool_input => {
-                    if screen_blocked {
-                        Fresh::Send
-                    } else {
-                        Fresh::Gone
-                    }
-                }
-                (Some(_), Some(_)) => Fresh::Changed,
-                _ => {
-                    if screen_blocked {
-                        Fresh::Changed
-                    } else {
-                        Fresh::Gone
-                    }
-                }
-            }
-        } else {
-            let saved =
-                std::fs::read_to_string(dir.join("attention").join(format!("{}.txt", attn.seq)))
-                    .unwrap_or_default();
-            match (
-                permit::prompt_block(w.runner, &saved),
-                permit::prompt_block(w.runner, text),
-            ) {
-                (Some(was), Some(now)) if was == now => Fresh::Send,
-                _ => Fresh::Changed,
-            }
-        };
-        match fresh {
-            Fresh::Send => {}
-            Fresh::Changed => {
-                record(
-                    dir,
-                    EventKind::AttentionCleared {
-                        target: attn.seq,
-                        reason: Some("prompt changed before the decision was sent".into()),
-                    },
-                )?;
-                self.raise_permission(dir, role, w.runner, text, request)
-                    .await?;
-                return Ok(());
-            }
-            Fresh::Gone => {
-                record(
-                    dir,
-                    EventKind::AttentionCleared {
-                        target: attn.seq,
-                        reason: Some("prompt gone before the decision was sent".into()),
-                    },
-                )?;
-                return Ok(());
-            }
-        }
-        let sent = self
-            .client
-            .call(
-                "terminal.keys",
-                Some(serde_json::json!({
-                    "terminal": w.term.address,
-                    "keys": [key],
-                })),
-            )
-            .await;
-        match sent {
-            Ok(_) => {
-                eprintln!("stage: sent {key} for {}'s permission prompt", role);
-                record(
-                    dir,
-                    EventKind::AttentionCleared {
-                        target: attn.seq,
-                        reason: Some(format!("sent {key}")),
-                    },
-                )?;
-                // The episode ends with the answer: whatever the
-                // screen shows next — the next prompt already up,
-                // or this one still unanswered — starts its own
-                // count instead of riding on the cleared episode's.
-                self.blocked_since.borrow_mut().remove(&pair);
-            }
-            // A terminal that raced away keeps the attention; the
-            // role's loss is reconciled elsewhere.
-            Err(CallError::Rpc(_)) => {}
-            Err(e) => return Err(Fail::call(e)),
-        }
-        Ok(())
-    }
-
-    /// `attention.raised` for a blocked episode: the screen lands at
-    /// `attention/<seq>.txt` via the append's own file copy. When the
-    /// tail's pending request is a `PermissionRequest` (S9f), the
-    /// detail names the request's tool and trimmed command or path
-    /// instead of only pointing at the screen, and the request itself
-    /// rides with the raise as `attention/<seq>.signal` — the
-    /// approve-time freshness compare runs on it. A prompt reaching
-    /// for `BACKLOT_*` or an environment-clearing flag is flagged
-    /// `needs_user` — the director never sees the notice and may not
-    /// answer it; the flag reads the signal's command when there is
-    /// one, else the prompt's own block. An actor's ordinary prompt
-    /// gets the director's detail; anything else says it needs the
-    /// user.
-    async fn raise_permission(
-        &self,
-        dir: &Path,
-        role: &str,
-        runner: &str,
-        text: &str,
-        request: Option<&signals::Signal>,
-    ) -> Result<(), Fail> {
-        let command = request.and_then(|s| s.tool_target());
-        let user_owned = permit::needs_user(role, runner, text, command);
-        // The bound request: `backlot approve` refuses a key when
-        // the last signal is no longer this one.
-        let bound = request.and_then(|s| serde_json::to_string(s).ok());
-        let tool = match (request.and_then(|s| s.tool_name.as_deref()), command) {
-            (Some(name), Some(target)) => format!("{name}: {target}; "),
-            (Some(name), None) => format!("{name}; "),
-            _ => String::new(),
-        };
-        self.raise_attention(
-            Raise {
-                dir,
-                role,
-                reason: PERMISSION_PROMPT,
-                text,
-                needs_user: user_owned,
-                bound,
-            },
-            move |seq| {
-                if user_owned {
-                    format!("{tool}needs the user; screen saved to attention/{seq}.txt")
-                } else {
-                    format!("{tool}screen saved to attention/{seq}.txt")
-                }
-            },
-        )
-        .await?;
-        eprintln!("stage: {role} at a permission prompt");
-        Ok(())
+        self.stall(studio, w, work, now_ms).await?;
+        self.rate_limit(studio, w, &text, screen_work, now_ms).await
     }
 
     /// `attention.raised` with the screen saved to
@@ -481,7 +130,7 @@ impl Stage {
     /// saved to `attention/<seq>.signal` for the approve-time
     /// compare (S9f); `raise.needs_user` marks a `permission
     /// prompt` the director may not answer (S9b).
-    async fn raise_attention(
+    pub(crate) async fn raise_attention(
         &self,
         raise: Raise<'_>,
         detail: impl Fn(u64) -> String + 'static,

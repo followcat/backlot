@@ -631,9 +631,28 @@ permission_profile = "worktree"
 #[test]
 fn every_command_word_is_registered() {
     for word in [
-        "studio", "req", "plan", "dispatch", "report", "ask", "tell", "task", "cast", "priority",
-        "reopen", "close", "approve", "deliver", "block", "review", "finding", "correct", "status",
-        "records", "stage",
+        "studio",
+        "req",
+        "plan",
+        "dispatch",
+        "report",
+        "ask",
+        "tell",
+        "task",
+        "cast",
+        "priority",
+        "reopen",
+        "close",
+        "approve",
+        "attention",
+        "deliver",
+        "block",
+        "review",
+        "finding",
+        "correct",
+        "status",
+        "records",
+        "stage",
     ] {
         assert!(
             crate::cli::maybe_run(&[word.to_string()]).is_some(),

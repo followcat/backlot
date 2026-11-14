@@ -50,7 +50,7 @@ fn seed_studio(dir: &Path) {
             runner: "runner-a".into(),
             runner_version: None,
             model: "model-a".into(),
-            effort: "high".into(),
+            effort: Some("high".into()),
             permission_profile: "standard".into(),
         }],
         rework_cap: 2,
@@ -76,7 +76,7 @@ fn actor() -> backlot_model::ActorIdentity {
         runner: "runner".into(),
         runner_version: None,
         model: "model".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }

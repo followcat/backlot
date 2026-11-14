@@ -155,3 +155,31 @@ fn finish_is_for_user_and_producer() {
     assert!(msg.contains("the user or the producer"), "{msg}");
     ok(&env, "studio finish --as user");
 }
+
+/// `backlot attention clear` resolves a still-open attention by
+/// hand — the stage-restart leftover case (S12d). A cleared or
+/// never-raised seq is refused, and only a person clears.
+#[test]
+fn attention_clear_resolves_an_open_attention() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    raise(&env, "actor-t1-c1", "runner not supported");
+    // seq 1 is studio.created; the raise is seq 2.
+    let out = ok(&env, "attention clear 2 --as user");
+    assert!(out.contains("attention.cleared"), "{out}");
+    // The attention is closed — a second clear is refused.
+    let msg = refused(&env, "attention clear 2 --as user");
+    assert!(msg.contains("no open attention 2"), "{msg}");
+    // A seq that was never an attention is refused the same way.
+    let msg = refused(&env, "attention clear 1 --as user");
+    assert!(msg.contains("no open attention 1"), "{msg}");
+    let msg = refused(&env, "attention clear 99 --as user");
+    assert!(msg.contains("no open attention 99"), "{msg}");
+    // Only a person clears — an actor may not. The second raise is
+    // seq 4: the first clear landed its own event at seq 3.
+    raise(&env, "actor-t1-c1", "runner not supported");
+    let msg = refused(&env, "attention clear 4 --as actor-t1-c1");
+    assert!(msg.contains("cannot do this"), "{msg}");
+    // The director may.
+    ok(&env, "attention clear 4 --as director");
+}

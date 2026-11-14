@@ -142,7 +142,13 @@ fn patch_actor(actor: &mut ActorIdentity, key: &str, value: &str) {
             }
         }
         "model" => actor.model = value.to_string(),
-        "effort" => actor.effort = value.to_string(),
+        "effort" => {
+            actor.effort = if value.is_empty() {
+                None
+            } else {
+                Some(value.to_string())
+            }
+        }
         "permission_profile" => actor.permission_profile = value.to_string(),
         _ => {}
     }

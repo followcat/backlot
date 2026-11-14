@@ -19,7 +19,7 @@ fn close_actor(env: &Env) {
         runner: "runner-a".into(),
         runner_version: None,
         model: "model-a".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "worktree".into(),
     };
     for kind in [

@@ -126,21 +126,40 @@ fn last_ignores_other_sessions_and_bad_lines() {
     assert!(signals::last_work("", "a").is_none());
 }
 
-/// The combine: Blocked wins from either side, otherwise the
-/// signal's state — the screen answers only when there is none.
+/// The combine: Blocked wins from any source, otherwise signal,
+/// then structured, then the screen (S12d).
 #[test]
 fn combine_puts_signals_first_and_blocked_over_all() {
-    for (signal, screen, want) in [
-        (Some(Work::Blocked), Work::Waiting, Work::Blocked),
-        (Some(Work::Waiting), Work::Blocked, Work::Blocked),
-        (Some(Work::Working), Work::Waiting, Work::Working),
-        (Some(Work::Waiting), Work::Working, Work::Waiting),
-        (None, Work::Working, Work::Working),
+    for (signal, structured, screen, want) in [
+        (Some(Work::Blocked), None, Work::Waiting, Work::Blocked),
+        (Some(Work::Waiting), None, Work::Blocked, Work::Blocked),
+        (None, Some(Work::Blocked), Work::Working, Work::Blocked),
+        (
+            Some(Work::Working),
+            Some(Work::Blocked),
+            Work::Waiting,
+            Work::Blocked,
+        ),
+        (
+            Some(Work::Working),
+            Some(Work::Waiting),
+            Work::Waiting,
+            Work::Working,
+        ),
+        (
+            Some(Work::Waiting),
+            Some(Work::Working),
+            Work::Working,
+            Work::Waiting,
+        ),
+        (None, Some(Work::Working), Work::Waiting, Work::Working),
+        (None, None, Work::Working, Work::Working),
+        (None, None, Work::Waiting, Work::Waiting),
     ] {
         assert_eq!(
-            signals::combine(signal, screen),
+            signals::combine(signal, structured, screen),
             want,
-            "{signal:?}/{screen:?}"
+            "{signal:?}/{structured:?}/{screen:?}"
         );
     }
 }
@@ -289,6 +308,7 @@ fn term() -> LiveTerminal {
         argv: Vec::new(),
         cwd: "/home/user/acme-shop".into(),
         labels: BTreeMap::new(),
+        ..Default::default()
     }
 }
 
@@ -350,7 +370,7 @@ fn actor_cfg() -> backlot_model::event::ActorIdentity {
         runner: "fake".into(),
         runner_version: None,
         model: "plain".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }

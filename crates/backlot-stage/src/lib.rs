@@ -18,12 +18,15 @@ mod digest;
 mod discover;
 mod doc;
 pub mod hook;
+mod limits;
 pub mod link;
 mod notices;
 mod nudge;
+mod permission;
 mod permit;
 mod prompts;
 mod range;
+mod ratelimit;
 mod reasons;
 pub mod reconcile;
 pub mod render;
@@ -35,6 +38,7 @@ mod stale;
 mod stall;
 pub mod store;
 mod watch;
+mod watchdog;
 mod workareas;
 
 #[cfg(test)]

@@ -115,13 +115,21 @@ pub enum Action {
 /// One live named terminal as the label view sees it. `argv` and
 /// `cwd` let the watch pass read a chosen session id back and check
 /// the folder a trust dialog guards.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LiveTerminal {
     pub name: String,
     pub address: String,
     pub argv: Vec<String>,
     pub cwd: String,
     pub labels: BTreeMap<String, String>,
+    /// The program's reported or core-inferred status (S12d) —
+    /// `None` on a core that knows nothing about the program.
+    pub status: Option<hc_proto::terminal::Status>,
+    /// The core's blocked flag: the program waits for a person.
+    pub waiting_for_person: bool,
+    /// The terminal record-set revision — advances on each status
+    /// update; a live program's clock for the structured stall.
+    pub activity_revision: Option<u64>,
 }
 
 /// This studio's live terminals by name: only the ones labelled

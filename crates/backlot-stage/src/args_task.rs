@@ -257,6 +257,33 @@ fn parse_decision(v: &str) -> Option<ApprovalDecision> {
     }
 }
 
+/// `backlot attention clear <seq>`: one positional, the attention's
+/// ledger seq. Common flags still apply.
+pub(crate) fn attention_clear(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut target = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_ATTENTION)));
+        }
+        if common_flag(it, common, &arg, U_ATTENTION)? {
+            continue;
+        }
+        if target.is_none()
+            && let Ok(seq) = arg.parse::<u64>()
+        {
+            target = Some(seq);
+            continue;
+        }
+        return Err(usage(format!("unexpected argument '{arg}'"), U_ATTENTION));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::AttentionClear {
+            target: target.ok_or_else(|| usage("missing <seq>", U_ATTENTION))?,
+        },
+    ))
+}
+
 pub(crate) fn block(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut reason = None;
     while let Some(arg) = it.next() {

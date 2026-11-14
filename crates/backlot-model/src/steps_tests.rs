@@ -590,7 +590,7 @@ fn started(seq: u64, role: &str) -> Event {
         runner: "fake".into(),
         runner_version: None,
         model: "m".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     });
     ev(seq, "stage", kind)

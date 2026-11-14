@@ -164,6 +164,25 @@ pub(crate) fn common_only(
     Ok((std::mem::take(common), cmd))
 }
 
+/// `stage watch`: common flags plus an optional `--target`.
+pub(crate) fn stage_watch(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut target = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STAGE)));
+        }
+        if common_flag(it, common, &arg, U_STAGE)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--target" => target = Some(it.value("--target", U_STAGE)?),
+            _ if eq(&arg, "--target").is_some() => target = eq(&arg, "--target").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STAGE)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::StageWatch { target }))
+}
+
 /// Commands taking just `--file`.
 pub(crate) fn one_file(
     common: &mut Common,

@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 
 use crate::watch::{
     DISCOVERY_STOP_MS, SESSION_NOT_FOUND, SESSION_WAIT_MS, TRUST_KEY_GAP_MS, TRUST_SETTLE_MS,
-    TrustPace, WORK_SAMPLE_EVERY_MS, discovery_blocked, discovery_due, session_event, taken_ids,
-    trust_dialog, trust_key, trust_step, work_due,
+    TrustPace, WORK_SAMPLE_EVERY_MS, discovery_blocked, discovery_due, session_event,
+    structured_state, taken_ids, trust_dialog, trust_key, trust_step, work_due,
 };
 
 fn actor(runner: &str) -> ActorIdentity {
@@ -17,7 +17,7 @@ fn actor(runner: &str) -> ActorIdentity {
         runner: runner.into(),
         runner_version: None,
         model: "m".into(),
-        effort: "high".into(),
+        effort: Some("high".into()),
         permission_profile: "standard".into(),
     }
 }
@@ -304,6 +304,64 @@ fn session_event_timing() {
         "a different role's resolved attention does not fire again"
     );
     assert!(!session_event("director", "codex", None, &state, 0, SESSION_WAIT_MS + 1).is_empty());
+}
+
+/// The discovery window is per-runner (S12d): cmd's `.jsonl` lands
+/// late — measured ~175s — so it waits 240s while every other
+/// runner keeps the 60s default. Inside its window a cmd miss
+/// stays quiet; past it the attention names the real window.
+#[test]
+fn session_wait_is_per_runner() {
+    let state = StudioState::default();
+    for age in [SESSION_WAIT_MS, 120_000, 239_999] {
+        assert!(
+            session_event("actor-t1", "cmd", None, &state, 0, age).is_empty(),
+            "cmd at {age}ms stays quiet"
+        );
+    }
+    let raised = session_event("actor-t1", "cmd", None, &state, 0, 240_000);
+    match raised.as_slice() {
+        [EventKind::AttentionRaised { reason, detail, .. }] => {
+            assert_eq!(reason, SESSION_NOT_FOUND);
+            assert!(detail.contains("240s"), "{detail}");
+        }
+        other => panic!("expected one attention, got {other:?}"),
+    }
+    // A late find still clears an open attention as before.
+    let cleared = session_event("actor-t1", "cmd", Some("s2".into()), &state, 0, 300_000);
+    assert!(matches!(
+        cleared.as_slice(),
+        [EventKind::RoleSession { .. }]
+    ));
+}
+
+/// The structured word (S12d): `waiting_for_person` is blocked —
+/// the prompt kind is the markers' business, not the map's — a
+/// `status.state` word maps straight, `error` is not a work state
+/// (the rate-limit pass reads it), and a core that reports nothing
+/// leaves the whole answer to the screen.
+#[test]
+fn structured_state_maps_the_reported_words() {
+    use backlot_model::summary::Work;
+    use hc_proto::terminal::Status;
+    let st = |state: &str| crate::reconcile::LiveTerminal {
+        status: Some(Status {
+            state: state.into(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    assert_eq!(structured_state(&st("working")), Some(Work::Working));
+    assert_eq!(structured_state(&st("blocked")), Some(Work::Blocked));
+    assert_eq!(structured_state(&st("idle")), Some(Work::Waiting));
+    assert_eq!(structured_state(&st("error")), None);
+    assert_eq!(structured_state(&st("something-new")), None);
+    // The blocked flag wins even over a `working` word.
+    let mut t = st("working");
+    t.waiting_for_person = true;
+    assert_eq!(structured_state(&t), Some(Work::Blocked));
+    // A terminal reporting nothing leaves it to the screen.
+    assert_eq!(structured_state(&Default::default()), None);
 }
 
 /// An attention from before `since_ms` — a previous life's — neither

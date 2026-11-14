@@ -220,7 +220,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "--model".into(),
         identity.model.clone(),
         "--effort".into(),
-        identity.effort.clone(),
+        identity.effort.clone().unwrap_or_default(),
         "--permission-mode".into(),
         mode.into(),
     ]);
