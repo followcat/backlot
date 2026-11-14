@@ -139,6 +139,7 @@ impl App {
             seen_res_tx,
             seen_rx,
             seen_req_rx: Some(seen_req_rx),
+            seen_task: None,
             outer_focused: None,
             probe,
         }

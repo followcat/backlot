@@ -3,15 +3,25 @@
 Start a local client with `hc-tui --session <name>`, or use
 `hc-tui --remote <ssh-target> --session <name>`. The remote machine needs
 `hc` on its SSH command path. SSH authentication and host verification use
-normal SSH configuration; hc-tui does not store credentials. On Unix the RPC,
-subscription and attach connections share one SSH login per target through
-hc-tui's own control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, created private),
-kept for 10 minutes after the last connection ends. On top of that shared
-login, every attach on a remote endpoint is a channel on one framed
-`hc connect`, with one transport and one `hello`. It opens with the first
-attach, is shared by concurrent opens, is rebuilt once if it dies and
-closes with its last attach. RPC and subscription streams keep their own
-connections on the same login.
+normal SSH configuration; hc-tui does not store credentials. At steady state
+`--remote` owns three `ssh` children per target: a dedicated plain-mode
+`events.subscribe` stream (`Subscription`); one shared framed RPC `Client`
+(`shared_rpc`) multiplexing the watcher's refreshes (`doc.get`,
+`machine.list`, fallback `terminal.list`), layout and machine
+`operations::Store` mutations and background `herdr.seen` label writes —
+lazy, single-flight, rebuilt once when the wire dies; and one shared framed
+`AttachConn` multiplexer carrying the active, observer and size-lease
+terminal byte channels — opening with the first attach, shared by concurrent
+opens, rebuilt once if it dies and closed with its last attach. Short-lived
+`ssh` children overlap transiently while a reconnect or a graceful close
+replaces a wire; before `shared_rpc` the same wiring ran up to five children
+because refreshes, actions and seen writes each held their own connection.
+All of these streams share one SSH login per target through hc-tui's own
+control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, typically
+`/run/user/*/hc-tui-ssh`, created private): the OpenSSH control-master
+daemon there persists for 10 minutes (`ControlPersist`) after the last
+stream ends — it belongs to OpenSSH, is reused by hc-tui's children, and is
+not itself an hc-tui child process.
 
 The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.

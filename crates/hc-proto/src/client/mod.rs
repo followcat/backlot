@@ -16,12 +16,16 @@ mod attach;
 mod call;
 mod error;
 mod pump;
+mod shared_rpc;
 mod wire;
 
 #[doc(hidden)]
 pub use attach::ConnectParts;
 pub use attach::{Attach, AttachConn, AttachError, CloseReason, Ended, Output};
 pub use error::{CallError, Error};
+pub use shared_rpc::shared_rpc;
+#[doc(hidden)]
+pub use shared_rpc::shared_rpc_with;
 
 use crate::OpenRpcDocument;
 use crate::codec::{Reader, Writer};

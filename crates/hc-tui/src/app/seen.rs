@@ -5,6 +5,7 @@
 //! turn the core already holds. Writes go over a dedicated RPC worker so a
 //! failure only re-arms the pane, never raises an action notice.
 use super::*;
+use hc_proto::client::Client;
 use hc_proto::watch::OpenRpc;
 use serde_json::json;
 
@@ -20,17 +21,19 @@ pub(super) struct SeenResult {
     pub result: Result<(), String>,
 }
 
-/// The write worker: one cached client (reopened after any failure), a
-/// 15s cap per write like the layout store.
+/// The write worker: one cached client (reopened after any failure or
+/// wire death), a 15s cap per write like the layout store. The returned
+/// handle is the app's to abort — dropping it must never leak the
+/// worker's `Client` clone.
 fn spawn_seen_worker(
     open: OpenRpc,
     mut requests: mpsc::Receiver<SeenWrite>,
     results: mpsc::Sender<SeenResult>,
-) {
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut client = None;
         while let Some(request) = requests.recv().await {
-            if client.is_none() {
+            if client.as_ref().is_none_or(Client::is_closed) {
                 client = open().await.ok();
             }
             let outcome = match &client {
@@ -64,14 +67,18 @@ fn spawn_seen_worker(
                 break;
             }
         }
-    });
+    })
 }
 
 impl App {
-    /// `set_operations` also starts the seen writer, once.
+    /// `set_operations` also starts the seen writer, once; a restart
+    /// aborts the previous worker first.
     pub(super) fn start_seen_worker(&mut self, open: OpenRpc) {
         if let Some(requests) = self.seen_req_rx.take() {
-            spawn_seen_worker(open, requests, self.seen_res_tx.clone());
+            if let Some(task) = self.seen_task.take() {
+                task.abort();
+            }
+            self.seen_task = Some(spawn_seen_worker(open, requests, self.seen_res_tx.clone()));
         }
     }
 
@@ -132,6 +139,17 @@ impl App {
             .remove(&(result.terminal.clone(), result.turn));
         if result.result.is_err() && self.seen_looked.get(&result.terminal) == Some(&result.turn) {
             self.seen_looked.remove(&result.terminal);
+        }
+    }
+}
+
+impl Drop for App {
+    /// Dropping the app aborts the seen writer — a detached worker
+    /// would keep its `Client` clone (and any ssh child) alive past
+    /// the app's lifetime.
+    fn drop(&mut self) {
+        if let Some(task) = self.seen_task.take() {
+            task.abort();
         }
     }
 }

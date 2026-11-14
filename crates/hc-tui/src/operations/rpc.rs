@@ -63,7 +63,7 @@ pub(super) async fn run(
     cached: &mut Option<Client>,
     request: Request,
 ) -> Result<Outcome, String> {
-    if cached.is_none() {
+    if cached.as_ref().is_none_or(Client::is_closed) {
         *cached = Some(open().await.map_err(|e| e.to_string())?);
     }
     let client = cached.as_ref().expect("connected above");
