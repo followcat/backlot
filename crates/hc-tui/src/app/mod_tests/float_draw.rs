@@ -46,7 +46,7 @@ fn publish_with_float(app: &mut App, term: hc_proto::terminal::Terminal) {
     let mut terms: Vec<_> = app.view.inventory.terminals().values().cloned().collect();
     terms.push(term);
     let seq = app.view.inventory.seq() + 1;
-    app.view.inventory.replace(seq, terms);
+    app.view.inventory_mut().replace(seq, terms);
     app.reconcile_published_view();
 }
 

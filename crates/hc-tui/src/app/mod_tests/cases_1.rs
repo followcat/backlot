@@ -282,7 +282,7 @@ async fn focus_survives_reorder_and_falls_back_on_removal() {
             t
         })
         .collect();
-    app.view.inventory.replace(2, terms);
+    app.view.inventory_mut().replace(2, terms);
     app.refresh_projection();
     assert_eq!(app.focused.as_deref(), Some("t9"));
 
@@ -293,7 +293,7 @@ async fn focus_survives_reorder_and_falls_back_on_removal() {
         t.labels.insert("herdr.space".into(), "space-t1".into());
         t
     }];
-    app.view.inventory.replace(3, terms);
+    app.view.inventory_mut().replace(3, terms);
     app.mode = Mode::Normal;
     app.reconcile_published_view();
     assert_eq!(app.focused.as_deref(), Some("t1"));

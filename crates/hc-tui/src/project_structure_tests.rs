@@ -1,18 +1,19 @@
 use super::*;
 use crate::sidebar::fixture::{term, view};
 use serde_json::json;
+use std::sync::Arc;
 
 fn doc(view: &mut View, name: &str, machine: Option<&str>, value: serde_json::Value) {
-    view.documents.insert(
+    view.documents_mut().insert(
         hc_proto::watch::DocKey {
             machine: machine.map(str::to_owned),
             name: name.into(),
         },
-        hc_proto::watch::Document {
+        Arc::new(hc_proto::watch::Document {
             value,
             version: 1,
             ..Default::default()
-        },
+        }),
     );
 }
 

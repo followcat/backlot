@@ -56,6 +56,7 @@ mod settings;
 mod shared;
 mod synthesize;
 mod tab_status;
+mod view_sync;
 mod window_title;
 mod word_selection;
 
@@ -172,7 +173,7 @@ pub struct App {
     layout_seen: Option<(String, u64)>,
     operations: Option<crate::operations::Store>,
     pending_actions: usize,
-    layout_confirmed: Option<(String, hc_proto::watch::Document)>,
+    layout_confirmed: Option<(String, Arc<hc_proto::watch::Document>)>,
     prefix: input::Prefix,
     mode: Mode,
     keyboard_locked: bool,
@@ -385,128 +386,6 @@ pub struct App {
     seen_task: Option<tokio::task::JoinHandle<()>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
-}
-
-impl App {
-    /// An input drain failure is reported after terminal restoration on exit.
-    pub fn failure(&self) -> Option<&str> {
-        self.pane
-            .close_failure()
-            .or(self.background_failure.as_deref())
-    }
-
-    /// Recompute the projection for the current focus — finding 12:
-    /// `focused_*` snapshot ids must track the focus without waiting
-    /// for the next watcher publish.
-    fn refresh_projection(&mut self) {
-        if self.focused != self.last_focus {
-            self.previous_pane = self.last_focus.clone();
-            self.last_focus = self.focused.clone();
-        }
-        let old_tab = self.projection.snapshot.focused_tab_id.clone();
-        let old_order = self
-            .projection
-            .snapshot
-            .tabs
-            .iter()
-            .map(|t| t.tab_id.clone())
-            .collect::<Vec<_>>();
-        self.projection = crate::project::project(&self.view, self.focused.as_deref());
-        if old_tab != self.projection.snapshot.focused_tab_id
-            || old_order
-                != self
-                    .projection
-                    .snapshot
-                    .tabs
-                    .iter()
-                    .map(|t| t.tab_id.clone())
-                    .collect::<Vec<_>>()
-        {
-            self.shell_state.reveal_focused_tab = true;
-        }
-
-        self.presentation.project(&self.view, &mut self.projection);
-        self.update_tab_status(Instant::now());
-        self.update_window_title();
-        // The reference's `apply_active_snapshot` copy arms: pane loss
-        // unarms the mode, focus re-arms/disarms it.
-        self.sync_copy_focus();
-        // Focus settled: park the old owner's float, restore the new
-        // one's — before `reconcile_popups` sees the publish.
-        self.sync_float_focus();
-    }
-
-    /// Request a surface draw; Source acknowledges only displayed output.
-    fn mark_active_seen(&mut self) {
-        // A focus request alone cannot acknowledge unseen output. Source only
-        // acknowledges a matching surface after it has actually been drawn.
-        self.sched.mark_dirty(Instant::now());
-    }
-
-    /// A watcher publish: refresh the projection + pane target policy.
-    fn on_view(&mut self) {
-        self.view = self.watcher.view();
-        self.seen = self.view.version;
-        self.retain_confirmed_layout();
-        self.reconcile_published_view();
-    }
-
-    /// Everything `on_view` does after the view lands — split out so
-    /// tests can publish a synthetic `self.view` through the same path.
-    fn reconcile_published_view(&mut self) {
-        self.fence_chrome_core();
-        self.follow_shared_focus();
-        // The dead pane's context survives the reprojection for the
-        // fallback below — a transient inventory view can precede the
-        // layout write that names the real successor.
-        let previous_tab = self.projection.snapshot.focused_tab_id.clone();
-        let previous_workspace = self.projection.snapshot.focused_workspace_id.clone();
-        self.refresh_projection();
-        // If the focused terminal fell out of the inventory entirely,
-        // prefer a sibling in the same tab, then the same workspace —
-        // never a global first pane that could ack another space's work.
-        if self.mode == Mode::Normal
-            && self.focused.as_ref().is_none_or(|f| {
-                self.projection
-                    .snapshot
-                    .panes
-                    .iter()
-                    .all(|p| &p.pane_id != f)
-            })
-        {
-            let panes = &self.projection.snapshot.panes;
-            let fallback = panes
-                .iter()
-                .find(|p| previous_tab.as_ref() == Some(&p.tab_id))
-                .or_else(|| {
-                    panes
-                        .iter()
-                        .find(|p| previous_workspace.as_ref() == Some(&p.workspace_id))
-                })
-                .or_else(|| panes.first())
-                .map(|p| p.pane_id.clone());
-            if fallback != self.focused {
-                self.focused = fallback;
-                self.refresh_projection();
-            }
-        }
-        // Focusing marks the active tab's panes seen — an idle agent
-        // reports `Done` only while its workspace stayed background.
-        self.mark_active_seen();
-        self.refresh_projection();
-        self.sync_target();
-        self.pane.on_view(&self.view);
-        if let Some(popup) = self.popup.as_mut() {
-            popup.pane.on_view(&self.view);
-        }
-        if let Some(peek) = self.peek.as_mut() {
-            peek.pane.on_view(&self.view);
-        }
-        self.sync_observers();
-        self.reconcile_popups();
-        self.synthesize_alerts(Instant::now());
-        self.share_seen();
-    }
 }
 
 #[cfg(test)]

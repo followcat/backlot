@@ -38,7 +38,7 @@ fn update(p: &mut Fixture, terminals: Vec<Terminal>, generation: u64) -> Project
         version: generation,
         ..View::default()
     };
-    view.inventory.replace(generation, terminals);
+    view.inventory_mut().replace(generation, terminals);
     p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("t1"));

@@ -16,7 +16,7 @@ async fn closing_mobile_help_uses_published_focus_after_inventory_removal() {
         app.help = true;
         app.mobile_switcher_suspended = true;
         if removed {
-            app.view.inventory.replace(2, Vec::new());
+            app.view.inventory_mut().replace(2, Vec::new());
             app.reconcile_published_view();
             assert_eq!(app.focused.as_deref(), Some("t1")); // Cache survives Navigate.
             assert!(app.projection.snapshot.focused_workspace_id.is_none());

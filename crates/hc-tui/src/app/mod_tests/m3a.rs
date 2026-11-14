@@ -71,13 +71,13 @@ async fn confirmed_write_survives_older_watcher_and_pending_focus_does_not_roll_
         },
     )))));
     assert_eq!(app.focused.as_deref(), Some("t1"));
-    app.view.documents.insert(
+    app.view.documents_mut().insert(
         super::super::shared::key(),
-        hc_proto::watch::Document {
+        Arc::new(hc_proto::watch::Document {
             value: json!(null),
             version: 4,
             ..Default::default()
-        },
+        }),
     );
     app.retain_confirmed_layout();
     assert_eq!(app.view.documents[&super::super::shared::key()].version, 5);

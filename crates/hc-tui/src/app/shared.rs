@@ -76,13 +76,13 @@ impl App {
                     .map(|d| d.version)
                     .unwrap_or(0);
                 if written.version >= current {
-                    let stored = Document {
+                    let stored = Arc::new(Document {
                         value: serde_json::to_value(written.document).expect("finite layout"),
                         version: written.version,
                         ..Default::default()
-                    };
-                    self.layout_confirmed = Some((written.core, stored.clone()));
-                    self.view.documents.insert(key(), stored);
+                    });
+                    self.layout_confirmed = Some((written.core, Arc::clone(&stored)));
+                    self.view.documents_mut().insert(key(), stored);
                 }
                 if let Some(terminal) = written.created {
                     let observed = self.view.inventory.get(&terminal);
@@ -121,7 +121,7 @@ impl App {
                 .get(&key())
                 .is_none_or(|d| d.version < stored.version)
             {
-                self.view.documents.insert(key(), stored.clone());
+                self.view.documents_mut().insert(key(), Arc::clone(stored));
             } else {
                 self.layout_confirmed = None;
             }

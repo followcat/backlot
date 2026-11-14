@@ -8,6 +8,7 @@ use super::*;
 use crate::sidebar::fixture::{agent, machine, view};
 use hc_proto::watch::{DocKey, Document as WatchedDocument};
 use serde_json::json;
+use std::sync::Arc;
 
 fn document(value: serde_json::Value) -> WatchedDocument {
     WatchedDocument {
@@ -40,12 +41,12 @@ fn app_layout(children: Vec<serde_json::Value>) -> serde_json::Value {
 fn the_herdr_app_schema_orders_the_traversal_not_the_inventory() {
     // Inventory lists t1 first; the app document draws t2 first.
     let mut view = view(vec![agent("t1", "idle"), agent("t2", "idle")], vec![]);
-    view.documents.insert(
+    view.documents_mut().insert(
         DocKey {
             machine: None,
             name: "herdr-app".into(),
         },
-        document(app_layout(vec![block("t2"), block("t1")])),
+        Arc::new(document(app_layout(vec![block("t2"), block("t1")]))),
     );
     assert_eq!(agent_traversal(&view), vec!["t2", "t1"]);
 }
@@ -54,12 +55,12 @@ fn the_herdr_app_schema_orders_the_traversal_not_the_inventory() {
 fn the_own_layout_override_wins_over_the_herdr_app_schema() {
     // The app schema says t2 then t1; the stored hc-tui tab root reverses it.
     let mut view = view(vec![agent("t1", "idle"), agent("t2", "idle")], vec![]);
-    view.documents.insert(
+    view.documents_mut().insert(
         DocKey {
             machine: None,
             name: "herdr-app".into(),
         },
-        document(app_layout(vec![block("t2"), block("t1")])),
+        Arc::new(document(app_layout(vec![block("t2"), block("t1")]))),
     );
     let tab_id = "space:2:s1/tab:4:tab1";
     let root = crate::structure::Tree::split(
@@ -68,17 +69,17 @@ fn the_own_layout_override_wins_over_the_herdr_app_schema() {
         false,
         0.5,
     );
-    view.documents.insert(
+    view.documents_mut().insert(
         DocKey {
             machine: None,
             name: "hc-tui".into(),
         },
-        document(json!({
+        Arc::new(document(json!({
             "schema": 1,
             "tabs": {
                 crate::project::layout_key(None, tab_id): { "root": root },
             },
-        })),
+        }))),
     );
     assert_eq!(agent_traversal(&view), vec!["t1", "t2"]);
 }
