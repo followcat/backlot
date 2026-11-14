@@ -89,7 +89,9 @@ impl Shared {
     /// writer failure, a protocol violation, `close`, last drop. Fails all
     /// pending calls (atomically marking the wire dead), aborts the sibling
     /// tasks so both stream halves drop (the peer sees stdin EOF), and
-    /// hands the backend child to a bounded graceful close.
+    /// hands the backend child to the prompt EOF close: the peer already
+    /// ended, so a hung child is killed inside the EOF grace rather than
+    /// riding the full close timeout.
     fn shutdown(&self, reason: Option<String>) {
         pump::fail(&self.wire.pending, reason);
         for task in lock(&self.tasks).iter() {
@@ -99,7 +101,7 @@ impl Shared {
             && let Ok(rt) = tokio::runtime::Handle::try_current()
         {
             rt.spawn(async move {
-                let _ = guard.close().await;
+                let _ = guard.close_eof().await;
             });
         }
     }
@@ -198,10 +200,11 @@ impl Client {
 
     /// A negotiation failure with a backend behind it. The codec halves are
     /// dropped first — otherwise the child never sees stdin EOF and
-    /// `guard.close()` can only end it at the kill timeout. Then the child's
-    /// own exit status and stderr tail are kept when the peer actually died
-    /// (auth refused, no hc there). A real protocol answer — an error reply,
-    /// a generation mismatch — is never replaced by cleanup diagnostics.
+    /// `guard.close_eof()` can only end it at its kill budget. Then the
+    /// child's own exit status and stderr tail are kept when the peer
+    /// actually died (auth refused, no hc there). A real protocol answer —
+    /// an error reply, a generation mismatch — is never replaced by
+    /// cleanup diagnostics.
     async fn hello_failed(
         err: Error,
         reader: Reader<ReadHalf>,
@@ -211,7 +214,7 @@ impl Client {
         drop(reader);
         drop(writer);
         let Some(guard) = guard else { return err };
-        let closed = guard.close().await;
+        let closed = guard.close_eof().await;
         match err {
             Error::Closed | Error::Codec(_) => match closed {
                 Err(transport) => Error::Transport(transport),
