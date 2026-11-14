@@ -77,6 +77,24 @@ fn fixtures() -> &'static Fixtures {
             "ssh-garbage",
             "#!/bin/sh\nprintf 'garbage\\n'\ncat >/dev/null\nexit 42\n".into(),
         );
+        // stdout closes before any hello reply, then the child ignores
+        // stdin EOF: a hung ssh the EOF-grace close must reap promptly.
+        write(
+            "ssh-eof-hello",
+            format!(
+                "#!/bin/sh\nprintf '%s' $$ > '{}'\nexec 1>&-\nexec sleep 60\n",
+                dir.join("ssh-eof-hello.pid").display()
+            ),
+        );
+        // Answers hello framed, then closes stdout and ignores stdin EOF —
+        // the live wire's reader EOF must reap the hung child promptly.
+        write(
+            "ssh-eof-live",
+            format!(
+                "#!/bin/sh\nprintf '%s' $$ > '{}'\nIFS= read -r line\nprintf '%s\\n' '{reply}'\nexec 1>&-\nexec sleep 60\n",
+                dir.join("ssh-eof-live.pid").display()
+            ),
+        );
         // A generation-2 hello reply, then nonzero exit.
         let reply = serde_json::to_string(&json!({
             "jsonrpc": "2.0", "id": 0,
@@ -128,6 +146,19 @@ async fn deadline_wait(done: impl Fn() -> bool) {
         }
     })
     .await;
+}
+
+/// Reads a case's own `{name}.pid` file once its script published it —
+/// the returned pid is captured immutably so a reaping poll can never be
+/// redirected by a parallel test's child.
+async fn pid_of(case: &str) -> i32 {
+    let path = fixtures().dir.join(format!("{case}.pid"));
+    deadline_wait(|| path.exists()).await;
+    std::fs::read_to_string(path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
 }
 
 #[tokio::test]
@@ -223,4 +254,52 @@ async fn a_generation_mismatch_is_not_masked_by_cleanup() {
         .await
         .unwrap_err();
     assert!(matches!(err, Error::Generation(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn a_stdout_eof_hello_failure_kills_the_child_promptly() {
+    // The child closes stdout without answering, then ignores stdin EOF
+    // (`sleep 60` never reads): the open failure must not wait the full
+    // close timeout — the EOF-grace close kills and reaps it promptly.
+    let ssh = fake("ssh-eof-hello");
+    let start = std::time::Instant::now();
+    let err = timeout(Client::connect(&endpoint(), Some(ssh.as_os_str())))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, Error::Transport(transport::Error::Exit { .. })),
+        "a killed child reports its own status: {err:?}"
+    );
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "hello EOF waited on a hung child: {:?}",
+        start.elapsed()
+    );
+    let pid = pid_of("ssh-eof-hello").await;
+    deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "child {pid} was still running: {:?}",
+        start.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn a_live_wire_eof_kills_the_child_promptly() {
+    // hello succeeded, then the child closes stdout and ignores stdin
+    // EOF: the reader-EOF shutdown must reap it inside the EOF grace,
+    // not keep the hung child around for the full close timeout.
+    let ssh = fake("ssh-eof-live");
+    let start = std::time::Instant::now();
+    let client = timeout(Client::connect(&endpoint(), Some(ssh.as_os_str())))
+        .await
+        .unwrap();
+    let pid = pid_of("ssh-eof-live").await;
+    timeout(client.closed()).await;
+    deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "reader EOF left the child alive: {:?}",
+        start.elapsed()
+    );
 }

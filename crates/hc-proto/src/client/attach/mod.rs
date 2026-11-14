@@ -18,6 +18,7 @@
 //! bookkeeping while the stream lives.
 
 mod conn;
+mod diag;
 mod error;
 mod mux;
 mod open;
