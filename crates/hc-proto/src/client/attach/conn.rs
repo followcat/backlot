@@ -251,7 +251,20 @@ impl Conn {
         params.quiet_human_release = quiet_human_release;
         let params = serde_json::to_value(params).map_err(CallError::Shape)?;
         let result = self.attach_call(params).await?;
-        let result: AttachResult = serde_json::from_value(result).map_err(CallError::Shape)?;
+        // The core allocated the reply's channel already: read it
+        // leniently so a failed `AttachResult` shape still owes that
+        // channel a CLOSE — a bare error would leak the viewer for the
+        // shared connection's whole life.
+        let channel = mux::reply_channel(&result);
+        let result: AttachResult = match serde_json::from_value(result) {
+            Ok(result) => result,
+            Err(err) => {
+                if let Some(channel) = channel {
+                    mux::queue_close(&self.wire, channel);
+                }
+                return Err(AttachError::Call(CallError::Shape(err)));
+            }
+        };
         if result.channel == 0 {
             return Err(AttachError::Protocol("attach returned channel 0".into()));
         }
