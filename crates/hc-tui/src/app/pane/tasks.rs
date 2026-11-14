@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
-use hc_proto::client::{Attach, AttachError};
+use hc_proto::client::{Attach, AttachError, Output};
 use hc_proto::terminal::AttachParams;
 use tokio::sync::mpsc;
 
-use super::{OpenAttach, PaneEv};
+use super::{OpenAttach, PaneEv, Role};
 
 /// Work for the writer task, in send order.
 #[derive(Clone)]
@@ -104,10 +104,15 @@ pub(crate) async fn writer_task(
 }
 
 /// One attach attempt: open, announce, then forward the stream until it
-/// ends. Owns the wire; the app only sees `PaneEv`s.
+/// ends. Owns the wire; the app only sees `PaneEv`s. A size holder's
+/// DATA is consumed in line here — its credit must flow, but the bytes
+/// themselves never cross `ev`, so background panes cannot wake the UI
+/// loop per chunk. A consume failure surfaces as `Failed` so the pane
+/// retries cleanly; control noise stays on the wire too.
 pub async fn attach_task(
     open: OpenAttach,
     params: AttachParams,
+    role: Role,
     generation: u64,
     ev: mpsc::Sender<PaneEv>,
 ) {
@@ -142,6 +147,20 @@ pub async fn attach_task(
         return;
     }
     while let Some(out) = attach.recv().await {
+        if role == Role::SizeLease {
+            match out {
+                Output::Data(bytes) => {
+                    if let Err(error) = attach.consume(bytes.len()) {
+                        let out = Output::Failed(format!("credit: {error}"));
+                        let _ = ev.send(PaneEv::Out { generation, out }).await;
+                        return;
+                    }
+                    continue;
+                }
+                Output::Control { .. } => continue,
+                _ => {}
+            }
+        }
         if ev.send(PaneEv::Out { generation, out }).await.is_err() {
             return;
         }

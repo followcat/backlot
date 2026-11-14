@@ -79,8 +79,9 @@ connects to an existing session.
 
 Visible panes keep silent size-holder connections, including the focused pane,
 so a focus switch cannot leave a visible terminal without a size lease. These
-connections send geometry and measured display facts, consume output credit,
-and allocate no VT. They never send human input, focus or automatic replies.
+connections send geometry and measured display facts, consume output credit
+inside the attach actor — size-holder DATA never crosses the pane event
+channel — and allocate no VT. They never send human input, focus or automatic replies.
 A pane that leaves the visible layout loses its size holder. Zoom-hidden panes
 retain pinned current-tab observers; off-tab observers enter the bounded LRU,
 strictly observe-only. Resize requests follow layout
