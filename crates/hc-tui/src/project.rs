@@ -45,6 +45,12 @@ pub(crate) struct Projection {
     pub layouts: BTreeMap<String, crate::structure::TabLayout>,
 }
 
+/// One endpoint's raw snapshot plus the tab layouts that describe it.
+pub(crate) type EndpointSnapshot = (
+    ClientShellSnapshot,
+    BTreeMap<String, crate::structure::TabLayout>,
+);
+
 /// The resolved agent draw order for ingestion-time receipt allocation:
 /// the same `project` traversal the shell draws — hc-tui layout overrides,
 /// then the `herdr-app` structure order, then label/repository/cwd
@@ -206,18 +212,39 @@ fn remote_status(state: &str) -> ClientEndpointStatus {
 /// active snapshot), then `machine.list` entries and stray prefixes,
 /// remote rows sorted by name like the previous sidebar's grouping.
 pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
+    let own = layout_document(view).unwrap_or_default();
+    project_with(view, selected, &own, |machine, terms, selected_here| {
+        structured_snapshot(
+            terms,
+            selected_here,
+            view.generation,
+            view.version,
+            app_document(view, machine),
+            &own,
+            machine,
+        )
+    })
+}
+
+/// The projection loop with the per-endpoint builder injected: `build`
+/// gets a machine key (`None` = local), that endpoint's filtered
+/// terminals and its effective selection, and returns its raw snapshot +
+/// tab layouts. `ProjectCache` reuses untouched endpoints through here.
+pub(crate) fn project_with(
+    view: &View,
+    selected: Option<&str>,
+    own: &crate::structure::Document,
+    mut build: impl FnMut(Option<&str>, &[&Terminal], Option<&str>) -> EndpointSnapshot,
+) -> Projection {
     // Source client/shell/endpoints.rs local_endpoint has a fixed label.
     let local_name = "Local".to_string();
 
     let stream_offline =
         !matches!(view.link, Link::Online | Link::Static { .. }) || view.inventory.is_offline();
-    // `machine.list` refreshes over rpc; the terminal stream does not.
-    // A dead rpc lane marks remote rows stale (Attention — the shared
-    // `stale() == !Online` rule then dims their agents) while their
-    // snapshots and terminals stay live.
+    // `machine.list` refreshes over rpc; the terminal stream does not —
+    // a dead rpc lane dims remote rows while their terminals stay live.
     let rpc_offline = matches!(view.rpc, Link::Offline { .. } | Link::Stopped);
 
-    let own = layout_document(view).unwrap_or_default();
     let mut by_machine: BTreeMap<String, Vec<&Terminal>> = BTreeMap::new();
     for term in view.inventory.terminals().values() {
         if own.closed.get(&term.address) == Some(&term.created_ms) {
@@ -252,15 +279,7 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
     let local_terms = by_machine.remove("").unwrap_or_default();
     // A remote selection can never match a local bare `tN`, so focus ids
     // land only where the selected terminal actually lives.
-    let (local_snapshot, mut layouts) = structured_snapshot(
-        &local_terms,
-        selected,
-        view.generation,
-        view.version,
-        &app_document(view, None),
-        &own,
-        None,
-    );
+    let (local_snapshot, mut layouts) = build(None, &local_terms, selected);
     let active_snapshot = local_snapshot.clone();
     let local_recency = recency_of(&local_snapshot);
     endpoints.push(ClientShellEndpoint {
@@ -301,15 +320,7 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
             remote_status(state)
         };
         let selected_here = selected.filter(|address| terms.iter().any(|t| t.address == *address));
-        let (snapshot, remote_layouts) = structured_snapshot(
-            &terms,
-            selected_here,
-            view.generation,
-            view.version,
-            &app_document(view, Some(&name)),
-            &own,
-            Some(&name),
-        );
+        let (snapshot, remote_layouts) = build(Some(&name), &terms, selected_here);
         if selected_machine.as_deref() == Some(&name) {
             layouts = remote_layouts;
         }
@@ -343,6 +354,8 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
     }
 }
 
+#[path = "project_cache.rs"]
+pub(crate) mod cache;
 #[path = "project_snapshot.rs"]
 mod snapshot_builder;
 #[cfg(test)]
@@ -359,23 +372,26 @@ pub(crate) fn layout_document(view: &View) -> Result<crate::structure::Document,
         machine: None,
         name: "hc-tui".into(),
     };
-    crate::structure::Document::decode(
+    crate::structure::Document::decode_ref(
         view.documents
             .get(&key)
-            .map(|d| d.value.clone())
-            .unwrap_or_default(),
+            .map(|d| &d.value)
+            .unwrap_or(&NULL_DOC),
     )
 }
 
-fn app_document(view: &View, machine: Option<&str>) -> serde_json::Value {
+/// A missing `herdr-app` read and an explicit `null` are the same input.
+static NULL_DOC: serde_json::Value = serde_json::Value::Null;
+
+fn app_document<'a>(view: &'a View, machine: Option<&str>) -> &'a serde_json::Value {
     let key = hc_proto::watch::DocKey {
         machine: machine.map(str::to_owned),
         name: "herdr-app".into(),
     };
     view.documents
         .get(&key)
-        .map(|d| d.value.clone())
-        .unwrap_or_default()
+        .map(|d| &d.value)
+        .unwrap_or(&NULL_DOC)
 }
 
 #[cfg(test)]

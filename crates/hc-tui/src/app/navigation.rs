@@ -216,7 +216,6 @@ impl App {
                         self.focused = Some(terminal);
                         self.refresh_projection();
                         self.mark_active_seen();
-                        self.refresh_projection();
                     }
                     self.navigate_target = None;
                     self.mode = Mode::Normal;
@@ -245,7 +244,6 @@ impl App {
                     self.focused = Some(terminal);
                     self.refresh_projection();
                     self.mark_active_seen();
-                    self.refresh_projection();
                 }
                 self.navigate_target = None;
                 self.mode = Mode::Normal;
@@ -331,7 +329,6 @@ impl App {
             self.focused = Some(pane_id);
             self.refresh_projection();
             self.mark_active_seen();
-            self.refresh_projection();
             self.navigate_target = None;
             self.mode = Mode::Normal;
             self.sync_target();

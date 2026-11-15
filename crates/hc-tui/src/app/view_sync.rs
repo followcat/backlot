@@ -22,19 +22,30 @@ fn tab_focus_or_order_changed(
 impl App {
     /// Recompute the projection for the current focus — finding 12:
     /// `focused_*` snapshot ids must track the focus without waiting
-    /// for the next watcher publish.
+    /// for the next watcher publish. A publish whose projection inputs
+    /// are unchanged skips the rebuild but still runs the cheap
+    /// post-steps (title, copy/float focus).
     pub(super) fn refresh_projection(&mut self) {
         if self.focused != self.last_focus {
             self.previous_pane = self.last_focus.clone();
             self.last_focus = self.focused.clone();
         }
-        let new_projection = crate::project::project(&self.view, self.focused.as_deref());
-        let old_projection = std::mem::replace(&mut self.projection, new_projection);
-        if tab_focus_or_order_changed(&old_projection.snapshot, &self.projection.snapshot) {
-            self.shell_state.reveal_focused_tab = true;
+        if !self
+            .project_cache
+            .is_unchanged(&self.view, self.focused.as_deref())
+        {
+            let new_projection = self
+                .project_cache
+                .project(&self.view, self.focused.as_deref());
+            let old_projection = std::mem::replace(&mut self.projection, new_projection);
+            if tab_focus_or_order_changed(&old_projection.snapshot, &self.projection.snapshot) {
+                self.shell_state.reveal_focused_tab = true;
+            }
+            self.presentation.project(&self.view, &mut self.projection);
+            self.probe
+                .projections
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-
-        self.presentation.project(&self.view, &mut self.projection);
         self.update_tab_status(Instant::now());
         self.update_window_title();
         // The reference's `apply_active_snapshot` copy arms: pane loss
@@ -65,20 +76,24 @@ impl App {
         // layout write that names the real successor.
         let previous_tab = self.projection.snapshot.focused_tab_id.clone();
         let previous_workspace = self.projection.snapshot.focused_workspace_id.clone();
-        self.refresh_projection();
-        // If the focused terminal fell out of the inventory entirely,
+        // If the focused terminal fell out of the projected panes,
         // prefer a sibling in the same tab, then the same workspace —
         // never a global first pane that could ack another space's work.
-        if self.mode == Mode::Normal
-            && self.focused.as_ref().is_none_or(|f| {
-                self.projection
-                    .snapshot
-                    .panes
-                    .iter()
-                    .all(|p| &p.pane_id != f)
-            })
-        {
-            let panes = &self.projection.snapshot.panes;
+        // Resolve it before the single finalizing refresh below; the
+        // provisional `project` runs through the incremental cache so an
+        // unchanged endpoint never re-reads its structure.
+        if self.mode == Mode::Normal && self.focus_missing() {
+            let provisional = (!self
+                .project_cache
+                .is_unchanged(&self.view, self.focused.as_deref()))
+            .then(|| {
+                self.project_cache
+                    .preview(&self.view, self.focused.as_deref())
+            });
+            let panes = match &provisional {
+                Some(p) => &p.snapshot.panes,
+                None => &self.projection.snapshot.panes,
+            };
             let fallback = panes
                 .iter()
                 .find(|p| previous_tab.as_ref() == Some(&p.tab_id))
@@ -91,13 +106,12 @@ impl App {
                 .map(|p| p.pane_id.clone());
             if fallback != self.focused {
                 self.focused = fallback;
-                self.refresh_projection();
             }
         }
+        self.refresh_projection();
         // Focusing marks the active tab's panes seen — an idle agent
         // reports `Done` only while its workspace stayed background.
         self.mark_active_seen();
-        self.refresh_projection();
         self.sync_target();
         self.pane.on_view(&self.view);
         if let Some(popup) = self.popup.as_mut() {
@@ -111,6 +125,25 @@ impl App {
         self.synthesize_alerts(Instant::now());
         self.share_seen();
         self.reap_exited();
+    }
+
+    /// `self.focused` fell out of the publish's projected panes — gone
+    /// from the inventory, closed by the layout document, or a
+    /// popup-owned terminal the projection never lists.
+    fn focus_missing(&mut self) -> bool {
+        let Some(focused) = self.focused.clone() else {
+            return true;
+        };
+        match self.view.inventory.get(&focused) {
+            None => true,
+            Some(term) => {
+                if term.labels.contains_key(crate::app::popup::POPUP_LABEL) {
+                    return true;
+                }
+                let own = self.project_cache.own_document(&self.view);
+                own.closed.get(&focused) == Some(&term.created_ms)
+            }
+        }
     }
 
     /// Request a surface draw; Source acknowledges only displayed output.

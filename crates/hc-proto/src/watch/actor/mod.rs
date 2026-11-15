@@ -209,8 +209,10 @@ impl Actor {
     }
 
     /// Spawns due reconnect attempts, then drains pending refreshes into
-    /// their bounded in-flight slots.
+    /// their bounded in-flight slots. Both facilities arming in the same
+    /// pass coalesce into one publish.
     fn pump(&mut self) {
+        let mut opened = false;
         if self.sub_backoff.take_due()
             && self.sub_open.is_none()
             && self.sub_conn.is_none()
@@ -225,7 +227,7 @@ impl Actor {
             let open = Arc::clone(&self.sub);
             let subscribe = self.params.subscribe.clone();
             self.sub_open = Some(tokio::spawn(async move { open(subscribe).await }));
-            self.publish();
+            opened = true;
         }
         if self.rpc_backoff.take_due() && self.rpc_open.is_none() && self.client.is_none() {
             self.rpc_backoff.attempts += 1;
@@ -236,6 +238,9 @@ impl Actor {
             }
             let open = Arc::clone(&self.rpc);
             self.rpc_open = Some(tokio::spawn(async move { open().await }));
+            opened = true;
+        }
+        if opened {
             self.publish();
         }
         self.drain_refreshes();
@@ -319,22 +324,24 @@ impl Actor {
             core: self.core.clone(),
             features: self.features.clone(),
             inventory: Arc::clone(&self.inventory),
-            activity_receipts: self.activity_receipts.clone(),
+            activity_receipts: ActivityReceipts::default(),
             machines: self.machines.clone(),
             documents: Arc::clone(&self.docs),
             notes: self.notes.clone(),
         };
         // Receipts ingest on the authoritative candidate: the resolved
         // traversal orders boundary reallocation; machine lifecycle
-        // retires origin slots before the new ingest extends them.
-        let traversal = self
-            .params
-            .traversal
-            .map(|resolve| resolve(&view))
-            .unwrap_or_default();
+        // retires origin slots before the new ingest extends them. The
+        // closure only fires when a publish carries two or more boundary
+        // entries — an epoch boundary is the only spot that needs it.
         self.activity_receipts
             .sync_machines(self.machines.as_deref());
-        self.activity_receipts.ingest(&self.inventory, &traversal);
+        self.activity_receipts.ingest_with(&self.inventory, || {
+            self.params
+                .traversal
+                .map(|resolve| resolve(&view))
+                .unwrap_or_default()
+        });
         view.activity_receipts = self.activity_receipts.clone();
         *self.view.lock().unwrap_or_else(|p| p.into_inner()) = view;
         // `send_replace` stores unconditionally — `send` would drop the

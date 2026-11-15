@@ -16,13 +16,16 @@ use tokio::task::JoinError;
 impl Actor {
     /// A bounded `doc.get` completed. Both staleness tags must still be
     /// current — the connection epoch and this document's fetch
-    /// generation — or the result is discarded, never installed.
-    pub(super) fn doc_done(&mut self, result: Result<DocDone, JoinError>) {
-        let Ok(done) = result else { return };
+    /// generation — or the result is discarded, never installed. Returns
+    /// `true` when the completion landed *and* no queued fetches remain
+    /// for its machine — the endpoint's document burst is settled, which
+    /// is the only moment worth publishing.
+    pub(super) fn apply_doc_done(&mut self, result: Result<DocDone, JoinError>) -> bool {
+        let Ok(done) = result else { return false };
         // The epoch check comes first: a completion sent on a dead
         // connection must not touch this epoch's counters either.
         if done.rpc_epoch != self.rpc_epoch {
-            return;
+            return false;
         }
         // A completed fetch frees its machine's slot whether or not the
         // result may still land.
@@ -33,10 +36,10 @@ impl Actor {
             }
         }
         if self.doc_gens.get(&done.key) != Some(&done.fetch_gen) {
-            return; // superseded — a newer request is pending or in flight
+            return false; // superseded — a newer request is pending or in flight
         }
         if !self.docs.contains_key(&done.key) {
-            return; // the machine (and its slots) went away
+            return false; // the machine (and its slots) went away
         }
         // Two copy-on-write steps: the map clone only when the key is
         // really present, then this document's own `Document` clone —
@@ -65,7 +68,27 @@ impl Actor {
                 slot.error = Some(e.to_string());
             }
         }
-        self.publish();
+        let can_drain = self.docs_enabled
+            && self.client.is_some()
+            && matches!(self.link, Link::Online | Link::Static { .. });
+        !can_drain
+            || !self
+                .doc_pending
+                .iter()
+                .any(|key| key.machine == done.key.machine)
+    }
+
+    /// Applies this wakeup's completion plus every other already-finished
+    /// fetch, then publishes once — an endpoint's watched pair settles in
+    /// a single publish instead of one `doc_done` publish per document.
+    pub(super) fn doc_done(&mut self, first: Result<DocDone, JoinError>) {
+        let mut settled = self.apply_doc_done(first);
+        while let Some(result) = self.fetches.try_join_next() {
+            settled |= self.apply_doc_done(result);
+        }
+        if settled {
+            self.publish();
+        }
     }
 
     /// A bounded `machine.list` completed: installs the list, queues

@@ -110,6 +110,8 @@ pub struct Probe {
     pub timers: std::sync::atomic::AtomicU64,
     /// Times a changed `HostFacts` bundle actually re-seeded panes.
     pub host_facts: std::sync::atomic::AtomicU64,
+    /// Projection rebuilds actually run for a publish or focus change.
+    pub projections: std::sync::atomic::AtomicU64,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
@@ -332,6 +334,8 @@ pub struct App {
     next_dispatch_id: u64,
     /// Last watcher view.
     view: View,
+    /// Incremental per-endpoint projection cache for `refresh_projection`.
+    project_cache: crate::project::cache::ProjectCache,
     /// View version cursor for `changed_since`.
     seen: u64,
     /// The area the pane was last allocated (for spec sizing).

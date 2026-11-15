@@ -17,6 +17,24 @@ pub(super) fn structured_snapshot(
     BTreeMap<String, crate::structure::TabLayout>,
 ) {
     let spaces = crate::structure::read(terms, app, machine);
+    structured_snapshot_from_spaces(&spaces, terms, selected, generation, revision, own, machine)
+}
+
+/// `structured_snapshot` on precomputed `spaces` — the incremental cache
+/// reuses one endpoint's `structure::read` output while focus or the
+/// `hc-tui` layout document changes around it.
+pub(super) fn structured_snapshot_from_spaces(
+    spaces: &[crate::structure::Space],
+    terms: &[&Terminal],
+    selected: Option<&str>,
+    generation: u64,
+    revision: u64,
+    own: &crate::structure::Document,
+    machine: Option<&str>,
+) -> (
+    ClientShellSnapshot,
+    BTreeMap<String, crate::structure::TabLayout>,
+) {
     let term_by_id = terms
         .iter()
         .copied()

@@ -148,6 +148,17 @@ impl Inventory {
         self.stale
     }
 
+    /// Whether every projection-visible fact matches — terminals, draw
+    /// order and the stale/offline marks. A `seq`-only bump (a `doc` wire
+    /// event or an unknown-kind event) compares equal, so consumers can
+    /// skip work a bare sequence advance cannot change.
+    pub fn same_projection_state(&self, other: &Inventory) -> bool {
+        self.offline == other.offline
+            && self.stale == other.stale
+            && self.order == other.order
+            && self.terminals == other.terminals
+    }
+
     /// The subscription filtered its stream (see [`filtered`](Self::filtered)).
     pub fn filtered(&self) -> bool {
         self.filtered
