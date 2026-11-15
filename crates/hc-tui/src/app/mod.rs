@@ -57,6 +57,7 @@ mod shared;
 mod synthesize;
 mod tab_status;
 mod view_sync;
+mod wake;
 mod window_title;
 mod word_selection;
 
@@ -107,6 +108,8 @@ pub struct Probe {
     pub wakeups: std::sync::atomic::AtomicU64,
     /// Times a deadline sleep was armed.
     pub timers: std::sync::atomic::AtomicU64,
+    /// Times a changed `HostFacts` bundle actually re-seeded panes.
+    pub host_facts: std::sync::atomic::AtomicU64,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
@@ -330,11 +333,8 @@ pub struct App {
     /// Pane-bound forwarded presses — the reference's `InputLeaseTable`
     /// scoped to one local source and one attach. A press routed to
     /// the terminal keeps a lease: repeats keep routing while it
-    /// lives, releases close it, and a detach/target move synthesizes
-    /// the release the program would otherwise never see.
-    /// Forwarded pane presses, bound to the terminal they went out on:
-    /// a held key's release returns to that wire even after the pane
-    /// switches away and parks the attach for drain.
+    /// lives, releases close it, and a detach or target move parks
+    /// the wire for drain so the program still sees its release.
     pane_leases: KeyLeases,
     next_dispatch_id: u64,
     /// Last watcher view.

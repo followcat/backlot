@@ -1,4 +1,5 @@
 // Derived from herdr src/client/shell/input.rs and composition.rs (Apache-2.0).
+use super::wake::{self, WakeKind};
 use super::*;
 
 impl App {
@@ -182,119 +183,95 @@ impl App {
         self.on_view();
         self.sched.mark_dirty(Instant::now());
         let mut replies_open = true;
+        let mut seen_open = true;
+        let mut pane_open = true;
+        let mut need_pane_sync = true;
         while !self.quitting {
-            let wake = {
-                let pane_wake = self.pane_wake();
-                let draw_due = self.sched.deadline();
-                let due = match (pane_wake, draw_due) {
-                    (Some(a), Some(b)) => Some(a.min(b)),
-                    (a, b) => a.or(b),
-                };
-                due.into_iter()
-                    .chain(self.notice.as_ref().map(|n| n.deadline))
-                    .chain(self.notification_deadline())
-                    .chain(self.next_tab_status)
-                    .chain(self.selection_autoscroll_deadline)
-                    .chain(self.selection_highlight_clear_deadline)
-                    .chain(self.copy_feedback_deadline)
-                    .min()
-            };
+            let wake = self.wake_deadline();
             self.probe
                 .wakeups
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if wake.is_some() {
+                self.probe
+                    .timers
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.sched.armed_timer();
+            }
             // A wakeup alone is never a draw reason — each arm reports
             // whether it changed state the frame can show. `on_view`,
             // `on_operation` and `show_notice` mark the scheduler
             // themselves (seen-ack, published projection, notices).
             let mut dirty = false;
-            if let Some(deadline) = wake {
-                self.probe
-                    .timers
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                self.sched.armed_timer();
-                tokio::select! {
-                    ev = events.recv() => match ev {
-                        Some(ev) => {
-                            self.on_input(ev, self.area.0);
-                            dirty = true;
-                        }
-                        None => break, // input source ended: clean exit
-                    },
-                    reply = replies.recv(), if replies_open => match reply {
-                        Some(reply) => dirty |= self.on_host_reply(reply),
-                        None => replies_open = false,
-                    },
-                    _ = self.watcher.changed_since(self.seen) => self.on_view(),
-                    result = Self::operation_result(&mut self.operations) => self.on_operation(result),
-                    report = Self::core_start_report(&mut self.core_start) => self.on_core_start(report),
-                    report = Self::update_check_report(&mut self.update_check) => self.on_update_check(report),
-                    seen = self.seen_rx.recv() => {
-                        if let Some(seen) = seen {
-                            self.on_seen_result(seen);
-                        }
-                    },
-                    ev = self.pane_rx.recv() => {
-                        if let Some(ev) = ev {
-                            dirty |= self.pane_event(ev, Instant::now());
-                        }
-                    },
-                    _ = tokio::time::sleep_until(deadline.into()) => {
-                        dirty |= self.pane_retry(Instant::now());
+            let mut kind = WakeKind::None;
+            tokio::select! {
+                biased;
+                ev = events.recv() => match ev {
+                    Some(ev) => {
+                        self.on_input(ev, self.area.0);
+                        dirty = true;
+                        kind = WakeKind::Input;
                     }
-                }
-            } else {
-                tokio::select! {
-                    ev = events.recv() => match ev {
-                        Some(ev) => {
-                            self.on_input(ev, self.area.0);
-                            dirty = true;
-                        }
-                        None => break,
-                    },
-                    reply = replies.recv(), if replies_open => match reply {
-                        Some(reply) => dirty |= self.on_host_reply(reply),
-                        None => replies_open = false,
-                    },
-                    _ = self.watcher.changed_since(self.seen) => self.on_view(),
-                    result = Self::operation_result(&mut self.operations) => self.on_operation(result),
-                    report = Self::core_start_report(&mut self.core_start) => self.on_core_start(report),
-                    report = Self::update_check_report(&mut self.update_check) => self.on_update_check(report),
-                    seen = self.seen_rx.recv() => {
-                        if let Some(seen) = seen {
+                    None => break, // input source ended: clean exit
+                },
+                reply = replies.recv(), if replies_open => match reply {
+                    Some(first) => {
+                        let batch = wake::drain_replies(replies, first, &mut replies_open);
+                        dirty |= self.on_host_replies(batch);
+                        kind = WakeKind::Replies;
+                    }
+                    None => replies_open = false,
+                },
+                _ = self.watcher.changed_since(self.seen) => {
+                    self.on_view();
+                    kind = WakeKind::View;
+                },
+                result = Self::operation_result(&mut self.operations) => {
+                    self.on_operation(result);
+                    kind = WakeKind::View;
+                },
+                report = Self::core_start_report(&mut self.core_start) => {
+                    self.on_core_start(report);
+                    kind = WakeKind::View;
+                },
+                report = Self::update_check_report(&mut self.update_check) => {
+                    self.on_update_check(report);
+                    kind = WakeKind::View;
+                },
+                seen = self.seen_rx.recv(), if seen_open => match seen {
+                    Some(first) => {
+                        self.on_seen_result(first);
+                        while let Ok(seen) = self.seen_rx.try_recv() {
                             self.on_seen_result(seen);
                         }
-                    },
-                    ev = self.pane_rx.recv() => {
-                        if let Some(ev) = ev {
-                            dirty |= self.pane_event(ev, Instant::now());
-                        }
-                    },
+                        kind = WakeKind::Seen;
+                    }
+                    None => seen_open = false,
+                },
+                ev = self.pane_rx.recv(), if pane_open => match ev {
+                    Some(first) => {
+                        dirty |= self.drain_pane_events(first, wake, events, &mut pane_open);
+                        kind = WakeKind::Pane;
+                    }
+                    None => pane_open = false,
+                },
+                _ = async {
+                    match wake {
+                        Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
+                        None => std::future::pending::<()>().await,
+                    }
+                }, if wake.is_some() => {
+                    dirty |= self.pane_retry(Instant::now());
+                    kind = WakeKind::Deadline;
                 }
             }
-            self.reconcile_key_routes();
-            // Drained work is dirty; draw only if a frame slot is free.
-            let now = Instant::now();
-            if let Some(reason) = self.pane.take_input_rejection() {
-                self.reject_input(&reason);
+            // A liveness-only wake maintains nothing; a deadline that
+            // already passed is taken by the next select's arm.
+            if matches!(kind, WakeKind::None) {
+                continue;
             }
-            dirty |= self.expire_notice(now);
-            dirty |= self.tick_notifications(now);
-            dirty |= self.tick_selection(now) | self.tick_copy_feedback(now);
-            self.drain_bells();
-            dirty |= self.drain_clipboard_writes();
-            self.share_seen();
-            self.update_window_title();
-            if self.next_tab_status.is_some_and(|due| now >= due) {
-                dirty |= self.update_tab_status(now);
-            }
-            if dirty {
-                self.sched.mark_dirty(now);
-            }
-            self.maybe_draw(term, now)?;
-            self.sync_target();
-            self.sync_observers();
-            self.sync_keyboard_report_all();
-            self.sync_pixel_mouse();
+            self.housekeeping(kind, wake, dirty);
+            self.maybe_draw(term, Instant::now())?;
+            self.post_draw_sync(kind, &mut need_pane_sync);
             if self.pane.attaches > 0 {
                 self.probe
                     .attaches
