@@ -4,6 +4,7 @@ mod adoption;
 mod edit;
 mod rebase;
 mod rpc;
+mod rpc_actions;
 
 use crate::structure::Document;
 pub use edit::{Change, Edit, tab_key};
@@ -241,6 +242,9 @@ mod tests;
 
 #[cfg(test)]
 mod action_tests;
+
+#[cfg(test)]
+mod machine_tests;
 
 #[cfg(test)]
 mod creation_tests;

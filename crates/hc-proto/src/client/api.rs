@@ -119,6 +119,11 @@ impl Client {
         self.call_typed(method::TERMINAL_KILL, &params).await
     }
 
+    /// `terminal.rm`: remove a finished terminal record.
+    pub async fn terminal_rm(&self, params: TerminalParams) -> Result<Value, CallError> {
+        self.call_typed(method::TERMINAL_RM, &params).await
+    }
+
     /// `machine.list`: machines this core has added.
     pub async fn machine_list(&self) -> Result<MachineListResult, CallError> {
         let result = self.call(method::MACHINE_LIST, None).await?;

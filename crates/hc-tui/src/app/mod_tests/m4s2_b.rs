@@ -163,8 +163,15 @@ async fn created_terminals_carry_the_herdr_env_marker() {
     app.refresh_projection();
     let creation = app.creation(None, false).unwrap();
     assert_eq!(creation.params.env.get("HERDR_ENV"), Some(&"1".into()));
+    assert!(
+        creation.params.rm,
+        "shell spawns remove their record on exit"
+    );
+    assert!(creation.params.keep);
     let (creation, _) = app.workspace_creation().unwrap();
     assert_eq!(creation.params.env.get("HERDR_ENV"), Some(&"1".into()));
+    assert!(creation.params.rm);
+    assert!(creation.params.keep);
 }
 
 #[tokio::test]

@@ -1,8 +1,7 @@
 //! The interactive client: owns inventory, shared layout, pane connections
-//! and the draw scheduler. One owner for all
-//! UI/VT state; the loop awaits input, protocol notifications and
-//! bounded actor results, and redraws only when dirty under the ~60 Hz
-//! cap — there is no idle poll timer.
+//! and the draw scheduler. One owner for all UI/VT state; the loop awaits
+//! input, protocol notifications and bounded actor results, and redraws
+//! only when dirty under the ~60 Hz cap — there is no idle poll timer.
 //!
 //! M3a implements structure, layout/tab operations and bindings plus lock.
 //! Custom commands, notifications and remaining actions belong to M4.
@@ -46,6 +45,7 @@ mod pane_selection;
 pub(crate) mod popup;
 mod popup_selection;
 mod presentation;
+mod reap;
 mod reload;
 mod routing;
 mod runtime;
@@ -114,12 +114,11 @@ pub struct Probe {
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
 /// notifications): the outer terminal in production, a test recorder
-/// otherwise. A plain boxed `FnMut` keeps the app free of
-/// crossterm/global-IO calls.
+/// otherwise. A boxed `FnMut` keeps the app free of global-IO calls.
 pub type HostControlSink = Box<dyn FnMut(&[u8]) -> std::io::Result<()>>;
 
-/// The mutable chrome state `ShellRenderState` borrows each frame —
-/// scroll offsets, collapse sets, reveal flags and the sidebar split.
+/// The chrome state `ShellRenderState` borrows each frame — scroll
+/// offsets, collapse sets, reveal flags and the sidebar split.
 #[derive(Default)]
 pub(crate) struct ShellState {
     pub collapsed_endpoints: std::collections::HashSet<ClientEndpointId>,
@@ -144,11 +143,9 @@ pub(crate) struct ShellState {
 }
 
 /// A forwarded press and the wire it went out on. `route` binds the
-/// attach generation — a reincarnated terminal is a different route,
-/// so a release can never land on a replacement wire for the same
-/// address. Repeats route only while the lease's wire is still the
-/// active attach — releases for a pane the client no longer views
-/// still pass, but its repeats do not.
+/// attach generation so a release can never land on a replacement
+/// wire. Repeats route only while the lease's wire is still active —
+/// releases for an unviewed pane still pass, its repeats do not.
 type PaneLease = key_leases::ForwardedInputLease<u64>;
 type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
 
@@ -299,10 +296,9 @@ pub struct App {
     image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
-    /// The host was told to report every key as an escape code —
-    /// the reference's `keyboard_report_all_active`, upgraded while
-    /// the pane negotiates report-all or a binding mode is active so
-    /// IME/text commits stay distinguishable from typed keys.
+    /// The host reports every key as an escape code — the reference's
+    /// `keyboard_report_all_active`, upgraded while the pane negotiates
+    /// report-all or a binding mode for IME/text commits.
     host_reports_all_keys: bool,
     /// The host reports key releases (the startup keyboard push
     /// succeeded) — `host_reports_key_releases`.
@@ -316,25 +312,22 @@ pub struct App {
     probe_keyboard_flags: Option<u16>,
     probe_device_attributes: bool,
     /// DECRPM `?1016$p` answer — the reference's `sgr_pixel_mouse`:
-    /// `Some(true)` only when the host reports the mode recognized and
-    /// reset; `None` when it never answered (keep pixel mouse off).
-    /// `?1016h` itself stays off until inner-negotiated cell geometry
-    /// exists to translate pixel coordinates (the FACTS surface).
+    /// `Some(true)` only on a recognized-and-reset report; `None` when
+    /// it never answered. `?1016h` stays off until cell geometry can
+    /// translate pixel coordinates (the FACTS surface).
     host_sgr_pixel_mouse: Option<bool>,
     host_pixel_mouse_active: bool,
     host_mouse_capture_active: bool,
     host_mouse_pixels: Option<crate::mouse_geometry::HostPixels>,
     host_appearance: Option<crate::chrome::palette::HostAppearance>,
     host_appearance_explicit: bool,
-    /// Host-mode control writes (keyboard pop/push). Injected by cli —
-    /// headless tests get the no-op default so they never touch the
-    /// real terminal's modes.
+    /// Host-mode control writes (keyboard pop/push), injected by cli —
+    /// headless tests get the no-op default.
     host_control: HostControlSink,
     /// Pane-bound forwarded presses — the reference's `InputLeaseTable`
-    /// scoped to one local source and one attach. A press routed to
-    /// the terminal keeps a lease: repeats keep routing while it
-    /// lives, releases close it, and a detach or target move parks
-    /// the wire for drain so the program still sees its release.
+    /// scoped to one local source and one attach. A routed press keeps
+    /// a lease: repeats keep routing, releases close it, and a detach
+    /// or target move parks the wire for drain so releases land.
     pane_leases: KeyLeases,
     next_dispatch_id: u64,
     /// Last watcher view.
@@ -352,8 +345,7 @@ pub struct App {
     /// Probed host-terminal facts (colors, cell pitch) — late replies
     /// update it and re-seed panes.
     host_facts: crate::host::HostFacts,
-    /// Panes the focused workspace's active tab marked seen — the
-    /// reference's `mark_active_tab_seen`/`apply_pane_state_change`:
+    /// The reference's `mark_active_tab_seen`/`apply_pane_state_change`:
     /// an idle agent reports `Done` only while unseen; focusing its
     /// workspace marks every active-tab pane seen at once.
     presentation: presentation::Presentation,
@@ -375,8 +367,7 @@ pub struct App {
     /// Seen writes in flight — the same (pane, turn) never double-sends.
     seen_inflight: std::collections::HashSet<(String, u64)>,
     /// The dedicated label-write worker: fire-and-forget `terminal.label`
-    /// RPCs with failures reported back for retry, kept off the layout
-    /// store so a background write can't surface an action notice.
+    /// RPCs, kept off the layout store so a write can't raise a notice.
     seen_tx: mpsc::Sender<seen::SeenWrite>,
     seen_res_tx: mpsc::Sender<seen::SeenResult>,
     seen_rx: mpsc::Receiver<seen::SeenResult>,
@@ -384,6 +375,14 @@ pub struct App {
     /// The seen writer's task — aborted on drop so its `Client` clone
     /// never outlives the app.
     seen_task: Option<tokio::task::JoinHandle<()>>,
+    /// `(terminal, created_ms)` reaps queued for the worker — `None`
+    /// until `set_operations` starts it.
+    reap_tx: Option<mpsc::Sender<(String, u64)>>,
+    /// The reaper's task — aborted on drop like the seen writer's.
+    reap_task: Option<tokio::task::JoinHandle<()>>,
+    /// `(address, created_ms)` pairs already queued or handled — pruned
+    /// as records leave the inventory, cleared on worker restart.
+    reaped_exited: Arc<std::sync::Mutex<std::collections::HashSet<(String, u64)>>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
 }

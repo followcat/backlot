@@ -113,7 +113,12 @@ pub enum CallError {
 impl CallError {
     /// `true` when the core answered a `not_found` error.
     pub fn is_not_found(&self) -> bool {
-        matches!(self, CallError::Rpc(e) if e.is_kind(crate::jsonrpc::error_kind::NOT_FOUND))
+        self.is_kind(crate::jsonrpc::error_kind::NOT_FOUND)
+    }
+
+    /// `true` when the core answered an RPC error of this kind.
+    pub fn is_kind(&self, kind: &str) -> bool {
+        matches!(self, CallError::Rpc(e) if e.is_kind(kind))
     }
 }
 

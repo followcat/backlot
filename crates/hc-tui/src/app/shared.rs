@@ -13,6 +13,7 @@ pub(super) fn key() -> DocKey {
 impl App {
     pub fn set_operations(&mut self, open: OpenRpc) {
         self.start_seen_worker(open.clone());
+        self.start_reap_worker(open.clone());
         self.operations = Some(Store::new(open));
     }
 
