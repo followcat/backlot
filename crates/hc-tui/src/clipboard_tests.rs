@@ -237,6 +237,117 @@ fn hung_tool_is_killed_and_is_unavailable() {
     assert!(start.elapsed() < Duration::from_secs(5));
 }
 
+/// Wayland+XWayland: `wl-paste` stalls on a dead Wayland offer while
+/// the image sits on the X11 side. The hang must not stop the X11
+/// tool from answering.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_hung_wayland_tool_still_falls_back_to_x11() {
+    let dir = StubDir::new();
+    let payload = dir.write("payload", PNG);
+    dir.stub("wl-paste", "sleep 30");
+    dir.stub(
+        "xclip",
+        &format!(
+            "case \"$4\" in image/png) cat \"{}\" ;; *) exit 1 ;; esac",
+            payload.display()
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        display: true,
+        ..dir.env()
+    };
+    let start = Instant::now();
+    let ClipboardRead::Image(image) = linux::read(&env, Duration::from_millis(150)) else {
+        panic!("expected the X11 image, got nothing")
+    };
+    assert_eq!(image.extension, "png");
+    assert_eq!(image.bytes, PNG);
+    assert!(start.elapsed() < Duration::from_secs(5));
+}
+
+/// The same fallback when `wl-paste` answers quickly with its "not
+/// available in the requested format" error: the X11 read runs next.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_failing_wayland_tool_still_falls_back_to_x11() {
+    let dir = StubDir::new();
+    let payload = dir.write("payload", PNG);
+    dir.stub(
+        "wl-paste",
+        "echo 'The clipboard contents were not available in the requested format or the clipboard is empty.' >&2\nexit 1",
+    );
+    dir.stub(
+        "xclip",
+        &format!(
+            "case \"$4\" in image/png) cat \"{}\" ;; *) exit 1 ;; esac",
+            payload.display()
+        ),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        display: true,
+        ..dir.env()
+    };
+    assert_eq!(linux_image(&env).bytes, PNG);
+}
+
+/// A hung wl-paste with an empty X11 clipboard: the Wayland side went
+/// unread, so the read is `Unavailable`, not a guessed "no image".
+#[cfg(target_os = "linux")]
+#[test]
+fn a_hung_wayland_tool_with_empty_x11_is_unavailable() {
+    let dir = StubDir::new();
+    dir.stub("wl-paste", "sleep 30");
+    dir.stub("xclip", "exit 1");
+    let env = ClipboardEnv {
+        wayland: true,
+        display: true,
+        ..dir.env()
+    };
+    assert!(matches!(
+        linux::read(&env, Duration::from_millis(150)),
+        ClipboardRead::Unavailable(_)
+    ));
+}
+
+/// Both displays' tools hung: the read stays `Unavailable`, and each
+/// tool is spawned only once — a hung owner stalls every later read
+/// the same way, so retrying it would just multiply the wait.
+#[cfg(target_os = "linux")]
+#[test]
+fn every_hung_tool_stays_unavailable_and_is_not_retried() {
+    let dir = StubDir::new();
+    let calls = dir.0.join("calls");
+    dir.stub(
+        "wl-paste",
+        &format!("echo wl-paste >> \"{}\"\nsleep 30", calls.display()),
+    );
+    dir.stub(
+        "xclip",
+        &format!("echo xclip >> \"{}\"\nsleep 30", calls.display()),
+    );
+    let env = ClipboardEnv {
+        wayland: true,
+        display: true,
+        ..dir.env()
+    };
+    let start = Instant::now();
+    assert!(matches!(
+        linux::read(&env, Duration::from_millis(150)),
+        ClipboardRead::Unavailable(_)
+    ));
+    assert!(start.elapsed() < Duration::from_secs(5));
+    let mut calls: Vec<_> = std::fs::read_to_string(&calls)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    calls.sort();
+    assert_eq!(calls, ["wl-paste", "xclip"]);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn invalid_signature_is_skipped() {

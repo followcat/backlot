@@ -57,6 +57,11 @@ specific core that you manage yourself.
   a status if they report it through OSC 7501. See [Core compatibility](compatibility.md).
 - **A pane shows a size notice.** Another client, such as herdr-app, may own that terminal's size. Click the notice to
   take control.
+- **`Ctrl+V` says `No image to paste` or `Image paste unavailable` though you copied an image.** The clipboard read
+  needs `wl-paste` under Wayland or `xclip` under X11; install whichever your display uses. When both displays are
+  reachable (Wayland with XWayland) both tools are tried, so an image only reachable through X11 still pastes.
+  `The clipboard owner stopped answering` means a tool hit its deadline — the clipboard owner or the XWayland
+  bridge is wedged. Check `wl-paste --list-types` and `xclip -selection clipboard -t TARGETS -o` by hand.
 - **Shortcuts do nothing and every key goes to the program.** The keyboard lock is on. Press `Ctrl+G` to turn it off.
   The tab bar shows when it's on.
 - **On macOS, `Ctrl+B q` doesn't exit.** Known issue. Automated tests on macOS see hc-tui keep running after this key
