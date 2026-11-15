@@ -19,6 +19,8 @@ mod digest;
 mod discover;
 mod doc;
 mod draft;
+mod hcard;
+mod hcard_new;
 mod hdeliver;
 mod hlife;
 mod hnotice;
@@ -83,6 +85,8 @@ mod docs_tests;
 #[cfg(test)]
 mod draft_tests;
 
+#[cfg(test)]
+mod hcard_tests;
 #[cfg(test)]
 mod hnotice_tests;
 #[cfg(test)]

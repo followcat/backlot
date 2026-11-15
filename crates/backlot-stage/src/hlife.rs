@@ -51,11 +51,12 @@ impl Stage {
         }
     }
 
-    /// The once-a-tick Hollywood pass: lifecycle, then the inbox —
-    /// notices and `tell hollywood` — under the guarded send. Config
-    /// errors log once; no `[hollywood]` means no terminal and no
-    /// inbox work. A dead wire is fatal like any studio's; every
-    /// other failure is logged once.
+    /// The once-a-tick Hollywood pass: lifecycle, then card
+    /// execution (Part B), then the inbox — notices and `tell
+    /// hollywood` — under the guarded send. Config errors log once;
+    /// no `[hollywood]` means no terminal and no inbox work, though
+    /// applied cards still execute. A dead wire is fatal like any
+    /// studio's; every other failure is logged once.
     pub(crate) async fn hollywood(
         &self,
         terminals: &[LiveTerminal],
@@ -79,6 +80,9 @@ impl Stage {
             Err(e @ Fail::Core(_)) => return Err(e),
             Err(e) => self.hlog(&format!("reconcile: {}", e.message())),
             Ok(()) => {}
+        }
+        if let Err(e) = self.hcards(&hdir) {
+            self.hlog(&format!("cards: {}", e.message()));
         }
         let Some(cfg) = &cfg else {
             return Ok(());
