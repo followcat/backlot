@@ -14,6 +14,12 @@ use serde::{Deserialize, Serialize};
 use crate::event::{Priority, StudioMode};
 use crate::state::{RoleLifecycle, StudioState, TaskStatus, actor_task};
 
+// Hollywood's section types live beside this file; the
+// `summary::` path keeps them all.
+pub use crate::hollywood_summary::{
+    CardSummary, HEADLINE_CHARS, HollywoodSummary, MAX_OPEN_CARDS, hollywood_section,
+};
+
 /// The `schema` value this generation writes.
 pub const SUMMARY_SCHEMA: &str = "backlot/1";
 
@@ -115,6 +121,10 @@ pub struct Summary {
     pub updated_ms: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub studios: Vec<StudioSummary>,
+    /// Hollywood's section — absent before it is configured; older
+    /// documents without it still parse.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hollywood: Option<HollywoodSummary>,
 }
 
 impl Summary {
@@ -128,7 +138,7 @@ impl Summary {
     }
 }
 
-fn cap(s: &str) -> String {
+pub(crate) fn cap(s: &str) -> String {
     s.chars().take(CAP).collect()
 }
 
@@ -437,5 +447,6 @@ pub fn summary(
         schema: SUMMARY_SCHEMA.into(),
         updated_ms,
         studios: out,
+        hollywood: None,
     }
 }

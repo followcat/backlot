@@ -8,10 +8,16 @@
 //! - [`correct`]: which fields a `correction` event changes in the view.
 //! - [`records`]: per-actor records across studios (D4, D8).
 //! - [`steps`]: the next steps each role owes, derived from state (S9a).
+//! - [`hollywood`]: the overseer's own ledger — cards, headlines,
+//!   messages — its own kinds so no studio list or rule sees it.
 
 pub mod budget;
 pub mod correct;
 pub mod event;
+pub mod hollywood;
+mod hollywood_state;
+mod hollywood_summary;
+mod hollywood_validate;
 pub mod limits;
 pub mod records;
 pub mod reduce;
@@ -40,6 +46,14 @@ mod budget_tests;
 mod cap_tests;
 #[cfg(test)]
 mod checks_tests;
+#[cfg(test)]
+mod hollywood_card_tests;
+#[cfg(test)]
+mod hollywood_summary_tests;
+#[cfg(test)]
+mod hollywood_tests;
+#[cfg(test)]
+mod hollywood_validate_tests;
 #[cfg(test)]
 mod limits_tests;
 #[cfg(test)]

@@ -117,6 +117,7 @@ mod tests {
                     roles: Vec::new(),
                 })
                 .collect(),
+            hollywood: None,
         }
     }
 
