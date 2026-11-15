@@ -157,14 +157,14 @@ async fn key_and_ui_events_precede_queued_host_replies_and_data_bursts() {
     let mut run_fut = Box::pin(app.run(&mut terminal, &mut ui, &mut replies));
     // t1 focused on tab "one", t2 moved to tab "two" — the snapshot
     // publishes both, the active pane plus observers and size leases
-    // attach: five conns, like the app_loop off-tab test.
+    // attach: four conns, like the app_loop off-tab test.
     let session_task = tokio::spawn(async move {
         let mut subs = subs;
         let mut attaches = attaches;
         loopcore::Session::connect(
             &mut subs,
             &mut attaches,
-            5,
+            4,
             serde_json::json!({
                 "seq": 1,
                 "terminals": [

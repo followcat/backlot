@@ -161,8 +161,20 @@ impl App {
             .chain(current.iter().cloned())
             .collect::<std::collections::HashSet<_>>();
         self.observer_mru.retain(|id| keep.contains(id));
-        self.observers.retain(|id, _| keep.contains(id));
+        // The focused terminal paints through its own active attach — a
+        // duplicate observer would feed a second VT for nothing. One
+        // opened before the focus moved stays only until the active
+        // wire finishes its first paint, so a switch never flashes a
+        // blank pane; a new one for the focused terminal never opens.
+        let focused_ready = self.pane.has_fresh_paint();
+        let active_target = self.pane.target();
+        self.observers.retain(|id, _| {
+            keep.contains(id) && (active_target != Some(id.as_str()) || !focused_ready)
+        });
         for id in keep {
+            if active_target == Some(id.as_str()) && !self.observers.contains_key(&id) {
+                continue;
+            }
             let pane = self.observers.entry(id.clone()).or_insert_with(|| {
                 let mut pane = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
                 pane.set_host_facts(self.host_facts.clone());
@@ -183,7 +195,16 @@ impl App {
     pub(super) fn pane_event(&mut self, event: PaneEv, now: Instant) -> bool {
         let route = event.route();
         if self.pane.owns_route(route) {
-            return visible_pane_event(&mut self.pane, event, now);
+            let dirty = visible_pane_event(&mut self.pane, event, now);
+            // The focused wire's fresh paint retires the stale observer
+            // kept warm for the switch — close it now instead of
+            // waiting for the next view publish.
+            if self.pane.has_fresh_paint()
+                && let Some(id) = self.pane.target()
+            {
+                self.observers.remove(id);
+            }
+            return dirty;
         }
         if let Some(popup) = self
             .popup
@@ -262,16 +283,19 @@ impl App {
         dirty
     }
 
-    /// The pane whose screen to draw: whichever has a complete paint. While
-    /// neither has one, a retained observer screen beats an attach with
-    /// nothing to show, so a switch or resize never flashes an empty pane.
+    /// The pane whose screen to draw: whichever has a complete paint —
+    /// the focused wire wins a tie since its stream is the one input
+    /// sees. While neither has one, a retained observer screen beats an
+    /// attach with nothing to show, so a switch or resize never
+    /// flashes an empty pane.
     pub(super) fn displayed_pane(&self, id: &str) -> Option<&pane::Pane> {
         let observer = self.observers.get(id);
         let active = (self.pane.target() == Some(id)).then_some(&self.pane);
-        observer
+        active
             .filter(|p| p.has_fresh_paint())
-            .or_else(|| active.filter(|p| p.has_fresh_paint()))
+            .or_else(|| observer.filter(|p| p.has_fresh_paint()))
             .or_else(|| observer.filter(|p| p.vt_ref().is_some()))
+            .or_else(|| active.filter(|p| p.vt_ref().is_some()))
             .or(active)
             .or(observer)
     }
@@ -287,3 +311,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "multipane_tests.rs"]
+mod tests;

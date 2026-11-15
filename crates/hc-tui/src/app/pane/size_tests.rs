@@ -90,6 +90,24 @@ async fn resize_only(core: &mut FakeCore) -> hc_proto::frame::Frame {
     .expect("resize deadline")
 }
 
+/// A size holder discards everything the wire sends, so asking the core
+/// to serialize scrollback on its attach is pure waste: only input and
+/// observe wires pay for `history`.
+#[tokio::test]
+async fn only_input_and_observe_attaches_ask_for_history() {
+    for (role, history) in [
+        (Role::Active, HISTORY),
+        (Role::Observe, HISTORY),
+        (Role::SizeLease, 0),
+    ] {
+        let (mut pane, _rx, mut accept) = rig();
+        pane.want(Some(spec(role)));
+        let (_core, params) = timeout(T, accept.recv()).await.unwrap().unwrap();
+        assert_eq!(params.history, history, "{role:?}");
+        pane.want(None);
+    }
+}
+
 #[tokio::test]
 async fn allocation_changed_while_opening_is_sent_before_focus_even_when_reply_matches() {
     for role in [Role::Active, Role::SizeLease] {

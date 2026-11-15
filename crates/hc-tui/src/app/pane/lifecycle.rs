@@ -30,7 +30,13 @@ impl Pane {
             observe: spec.role == Role::Observe,
             resize_notifications: true,
             quiet_human_release: spec.role == Role::Active,
-            history: HISTORY,
+            // A size holder discards wire DATA at the actor — paying for
+            // serialized scrollback on its attach is pure waste.
+            history: if spec.role == Role::SizeLease {
+                0
+            } else {
+                HISTORY
+            },
             cols,
             rows,
             display: if spec.role != Role::Observe {

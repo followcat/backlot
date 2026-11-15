@@ -343,11 +343,11 @@ fn seed_host(vt: &mut Vt, host: &crate::host::HostFacts) -> Option<hc_vt::Colors
     let (w, h) = host.cell_px.unwrap_or((8, 16));
     vt.set_cell_px(w, h);
     let palette = vt
-        .frame(0)
+        .colors()
         .ok()
         .filter(|_| host.theme.palette.iter().any(Option::is_some))
-        .map(|frame| {
-            let mut p = frame.colors.palette;
+        .map(|colors| {
+            let mut p = colors.palette;
             for (index, color) in host.theme.palette.iter().enumerate() {
                 if let Some(color) = color {
                     p[index] = *color;
@@ -365,7 +365,7 @@ fn seed_host(vt: &mut Vt, host: &crate::host::HostFacts) -> Option<hc_vt::Colors
     {
         return None;
     }
-    vt.frame(0).ok().map(|frame| frame.colors)
+    vt.colors().ok()
 }
 
 /// Keep switch-time focus behind accepted input and before later releases.
