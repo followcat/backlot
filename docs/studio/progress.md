@@ -1,5 +1,41 @@
 # Studio progress
 
+## H2: two live studios on one core, fake runner only (2026-11-16)
+
+- Done: `real_two_studios_side_by_side` under `crates/hc-tui/tests/` — one scratch core, one
+  stage, two studios on their own scratch repositories: `acme-shop` and `acme`, names that
+  share a prefix, both carrying task `t1` and the same role names (`producer`, `actor-a` →
+  `actor-t1-c1`) under `[limits] fake = 3` casts. The run interleaves their whole
+  productions — requirement, plan request and publish, dispatch, `task new`, `cast`, a
+  `tell` to each producer, a permission prompt on each actor, `deliver`, the declared
+  check, `review`, merge to integration and `studio.finished` — with a stage-only restart
+  in the middle of it. The shared harness it drives moved out of `real_stage.rs` into
+  `tests/common/real_kit.rs` studio-parameterized (`bl`/`ledger`/`wait_*` take the studio),
+  so the file did not grow; the fake runner now writes `fake-inbox-<studio>-<role>` beside
+  the legacy `fake-inbox-<role>`, since a shared state dir would collide the role key.
+  No bug in `backlot-stage` or `backlot-model` surfaced — the test is the deliverable.
+- Measured: terminal ownership asserted over the whole inventory — every `bl-` terminal's
+  `backlot.studio` label matches a `bl-<studio>-` name and the exact expected set, nothing
+  shared or borrowed — six live `fake` roles over two `fake = 3` caps prove the cap counts
+  per studio. Each ledger held only its own events: `role.started` session ids all
+  `fake-bl-<studio>-*`, `task.delivered` its own repo's `b1..b2`/`a1..a2`, every
+  `message.delivered` targeting a seq its own ledger queued. Each `tell` reached one
+  producer's studio-keyed inbox and one `messages/` dir only. With both actors blocked at
+  once, `acme`'s delivery and `units` check ran while `acme-shop`'s prompt still held —
+  `task.checked`'s log shows the delivery's own end sha and repo — and `approve` sent
+  `enter` to one actor's terminal, `esc` to the other's, each screen clean of the other's
+  key. `acme-shop`'s `studio finish` was refused while its `t1` was open, then closed its
+  roles and finished while `acme` stayed `live`; `acme` finished after. The stage restart
+  adopted all six terminals — same addresses, no `role.lost`/`role.resumed` in either
+  ledger. `status --all` and the document showed one `finished`, one `live`, then both
+  `finished`. Run 7 times on the pinned `herdr-core` (5 in a row): ~29 s each, all green;
+  the whole ignored real-core suite — `integration` 5, `real_core_smoke` 1, `real_stage`
+  22 — passes beside it, plus `cargo fmt --check`, `clippy -D warnings` and
+  `cargo test --workspace` (1605).
+- Not verified: real agents in two studios — the fake runner is the only runner that has
+  run, and its studio-keyed inbox is the test's own seam. A third live studio, two studios
+  on real-runner caps, and the panel drawn on two live studios are all untried.
+
 ## H1: Hollywood — model and CLI, fake runner only (2026-11-16)
 
 - Done: `backlot_model::hollywood` holds the overseer's own ledger model — `card.proposed`,

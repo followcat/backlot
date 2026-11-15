@@ -217,8 +217,23 @@ re-raise one `stall_limit_s` later.
 
 ## Scale and platforms
 
-- **One studio at a time is what has been tried.** The stage loop reconciles every studio it
-  finds and the panel scrolls, but a second live studio has never run.
+- **Two live studios on one core ran the whole loop side by side — on the fake runner.** The
+  `real_two_studios_side_by_side` integration test drives `acme-shop` and `acme` — names that
+  share a prefix, the worst case for name-keyed ownership — each on its own repository with
+  the same task id and the same role names, steps interleaved through requirement, plan,
+  dispatch, cast, a blocked prompt, delivery, the declared checks, review, merge and
+  `studio.finished`, with a stage-only restart mid-production. It holds: every terminal
+  belongs to exactly one studio by name and `backlot.studio` label and none is shared,
+  reused or closed by the other studio's events; each ledger holds only its own events; a
+  `tell` lands in one studio's `messages/` and one producer's inbox only; a blocked prompt
+  in one studio leaves the other delivering; an `approve` key reaches only that studio's
+  terminal; `[limits]` count per studio — six `fake` roles live over two `fake = 3` caps;
+  checks run in the delivery's own repository and log so; merges land on each repo's own
+  `backlot/<studio>/` branches; one studio finishing leaves the other live and intact; the
+  restart adopts every role of both with no `role.lost`/`role.resumed`; and the summary
+  document plus `status --all` show both studios with the right state at each step. What
+  has not run: real agents in two studios — the fake runner is all the proof carries — and
+  a third live studio has never run.
 - **Later, not built:** experimental production (`mode = "experimental"`, R14) is a reserved
   name only.
 - **macOS builds and tests pass in CI; nobody has run it on a real Mac.** `docs/troubleshooting.md`
