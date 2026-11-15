@@ -61,6 +61,7 @@ fn the_envelope_matches_the_studio_ledger() {
                 studio: None,
                 text: Some("hello".into()),
                 file: None,
+                source_seq: None,
             },
             "message.sent",
         ),
@@ -110,6 +111,7 @@ fn replay_equals_incremental_apply() {
                 studio: None,
                 text: Some("thanks".into()),
                 file: None,
+                source_seq: None,
             },
         ),
     ];

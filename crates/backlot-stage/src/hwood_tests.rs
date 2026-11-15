@@ -284,6 +284,7 @@ fn tell_hollywood_records_for_later() {
             studio,
             text,
             file,
+            ..
         } => {
             assert_eq!(to, "hollywood");
             assert_eq!(*studio, None);
