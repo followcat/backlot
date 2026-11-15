@@ -1,6 +1,6 @@
 //! Colors, styles and the packed-background path of `Vt::frame`.
 
-use hc_vt::{CellColor, Rgb, Underline, Vt};
+use hc_vt::{CellColor, Dirty, Rgb, Underline, Vt};
 
 fn vt() -> Vt {
     Vt::new(80, 24, 0)
@@ -163,6 +163,35 @@ fn underline_color_is_default_unless_explicit() {
         "unset underline color must stay Default"
     );
     assert_eq!(b.underline_color, CellColor::Rgb(rgb(200, 100, 50)));
+}
+
+/// `Vt::colors` reads defaults and the live palette without scanning a
+/// single row or cell — and without consuming dirty state a real frame
+/// still owes its consumer.
+#[test]
+fn colors_reads_defaults_without_a_row_scan_or_eating_dirty_state() {
+    let mut t = vt();
+    let defaults = t.colors().unwrap();
+    assert_eq!(defaults.foreground, rgb(255, 255, 255));
+    assert_eq!(defaults.background, rgb(0, 0, 0));
+    assert_eq!(defaults.palette.len(), 256);
+    assert_eq!(defaults.cursor, None);
+
+    // Seeded host defaults and program OSC 4 overrides are both live.
+    t.set_default_colors(Some(rgb(1, 2, 3)), Some(rgb(4, 5, 6)), None)
+        .unwrap();
+    let seeded = t.colors().unwrap();
+    assert_eq!(seeded.foreground, rgb(1, 2, 3));
+    assert_eq!(seeded.background, rgb(4, 5, 6));
+    t.feed(b"\x1b]4;1;rgb:aa/bb/cc\x07");
+    assert_eq!(t.colors().unwrap().palette[1], rgb(0xaa, 0xbb, 0xcc));
+
+    // Dirty state a frame owes its consumer survives a `colors` read.
+    t.frame(0).unwrap();
+    t.clean().unwrap();
+    t.feed(b"x");
+    t.colors().unwrap();
+    assert_ne!(t.frame(0).unwrap().dirty, Dirty::Clean);
 }
 
 #[test]

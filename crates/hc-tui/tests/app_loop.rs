@@ -335,11 +335,11 @@ async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
     let counters = probe.clone();
     let driver = tokio::spawn(async move {
         // The snapshot publishes t1+t2 on one tab; the active pane,
-        // both visible observers and both size leases attach — 5 conns.
+        // t2's observer and both size leases attach — 4 conns.
         let mut session = loopcore::Session::connect(
             &mut subs,
             &mut attaches,
-            5,
+            4,
             serde_json::json!({
                 "seq": 1,
                 "terminals": [

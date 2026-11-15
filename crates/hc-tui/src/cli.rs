@@ -162,21 +162,13 @@ pub fn self_caller(env: &Env, endpoint: &Endpoint) -> Option<String> {
         .filter(|id| !id.is_empty())
 }
 
-/// The one framed attach connection a remote endpoint multiplexes its
-/// attaches onto — `None` for a local endpoint, whose attaches keep
-/// opening their own sockets (`Attach::connect`). Watch and RPC stay
-/// on their own connections either way.
-fn shared_attach(
-    endpoint: &Endpoint,
-    ssh: &Option<OsString>,
-) -> Option<hc_proto::client::AttachConn> {
-    match endpoint {
-        Endpoint::Remote(_) => Some(hc_proto::client::AttachConn::new(
-            endpoint.clone(),
-            ssh.clone(),
-        )),
-        Endpoint::Local(_) => None,
-    }
+/// The one framed attach connection every attach on `endpoint`
+/// multiplexes onto: a remote's attaches share one ssh child, a
+/// local's share one Unix socket — either way a burst of attaches
+/// costs one transport and one `hello`. Watch and RPC stay on their
+/// own connections either way.
+fn shared_attach(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::client::AttachConn {
+    hc_proto::client::AttachConn::new(endpoint.clone(), ssh.clone())
 }
 
 /// Builds the app over the endpoint's real connections and runs it
@@ -203,10 +195,8 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     let rpc = shared_rpc(endpoint, &ssh);
     let watcher = Watcher::connect_with_rpc(endpoint, ssh.as_deref(), rpc.clone(), params);
     let caller = self_caller(env, endpoint);
-    let attach_endpoint = endpoint.clone();
     let attach_conn = shared_attach(endpoint, &ssh);
     let open: OpenAttach = Arc::new(move |params| {
-        let endpoint = attach_endpoint.clone();
         let conn = attach_conn.clone();
         let caller = caller.clone();
         Box::pin(async move {
@@ -215,12 +205,9 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
             // refuses a terminal attaching to itself, so no nested
             // hc-tui can echo its own output back.
             params.caller = caller;
-            match conn {
-                // A remote attach rides the one framed connection every
-                // remote attach shares — one ssh child, one `hello`.
-                Some(conn) => conn.attach(&params).await,
-                None => hc_proto::client::Attach::connect(&endpoint, None, &params).await,
-            }
+            // Every attach rides the one framed connection — remote or
+            // local, a burst of attaches shares one transport + `hello`.
+            conn.attach(&params).await
         })
     });
     let mouse_capture = shell.mouse_capture;

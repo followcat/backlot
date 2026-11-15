@@ -63,16 +63,121 @@ fn upgrade_is_a_parse_action() {
     assert!(INSTALL_COMMAND.contains("install.sh"));
 }
 
-/// Only a remote endpoint's attaches multiplex onto the shared
-/// framed connection; a local endpoint keeps `Attach::connect`.
+/// Both endpoint kinds multiplex their attaches onto one shared
+/// framed connection: a remote's share one ssh child, a local's one
+/// Unix socket — either way a burst costs one transport + `hello`.
 #[test]
-fn only_a_remote_endpoint_gets_the_shared_attach_connection() {
+fn local_and_remote_endpoints_get_the_shared_attach_connection() {
     let remote = Endpoint::Remote(Remote {
         target: "host-a".into(),
         session: "scratch".into(),
     });
-    assert!(shared_attach(&remote, &None).is_some());
-    assert!(shared_attach(&local("/run/scratch/hc.sock"), &None).is_none());
+    let _ = shared_attach(&remote, &None);
+    let _ = shared_attach(&local("/run/scratch/hc.sock"), &None);
+}
+
+/// Two concurrent attaches on a local endpoint ride one socket: the
+/// listener accepts once, `hello` negotiates once, and both
+/// `terminal.attach` calls multiplex their own channels over it.
+#[cfg(unix)]
+#[tokio::test]
+async fn local_attaches_share_one_socket_hello_and_two_channels() {
+    use hc_proto::codec::Reader;
+    use hc_proto::frame::{Frame, Kind};
+    use hc_proto::terminal::AttachParams;
+    use tokio::io::AsyncWriteExt;
+
+    let dir = std::env::temp_dir().join(format!("hc-tui-cli-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let socket = dir.join("shared-attach.sock");
+    let _ = std::fs::remove_file(&socket);
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let endpoint = local(socket.to_str().unwrap());
+    let conn = shared_attach(&endpoint, &None);
+    let terminal = serde_json::json!({
+        "address": "t7",
+        "labels": {},
+        "argv": ["sh"],
+        "cwd": "/home/user",
+        "state": "live",
+        "created_ms": 1,
+        "screen": "exact",
+        "cols": 80,
+        "rows": 24,
+    });
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let (read, mut write) = stream.into_split();
+        let mut reader = Reader::new(read);
+        let hello: serde_json::Value =
+            serde_json::from_slice(&reader.read_line().await.unwrap().unwrap()).unwrap();
+        assert_eq!(hello["method"], "hello");
+        let mut reply = serde_json::to_vec(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 0,
+            "result": {
+                "generation": 1, "version": "fake 0", "framed": true,
+                "core": {"id": "c", "name": "c"},
+                "methods": ["terminal.attach"], "features": [],
+            }
+        }))
+        .unwrap();
+        reply.push(b'\n');
+        write.write_all(&reply).await.unwrap();
+        // Both attach calls arrive on channel 0 of the same conn —
+        // each answer names the stream channel it was allocated.
+        for channel in 1u32..=2 {
+            loop {
+                let frame = reader.read_frame().await.unwrap().unwrap();
+                if frame.channel == 0 && frame.kind == Kind::Data {
+                    let request: serde_json::Value =
+                        serde_json::from_slice(&frame.payload).unwrap();
+                    assert_eq!(request["method"], "terminal.attach");
+                    let reply = Frame::data(
+                        0,
+                        serde_json::to_vec(&serde_json::json!({
+                            "jsonrpc": "2.0", "id": request["id"],
+                            "result": {
+                                "channel": channel, "terminal": &terminal,
+                                "resize_notifications": true,
+                                "automatic_input": false,
+                            }
+                        }))
+                        .unwrap(),
+                    );
+                    write.write_all(&reply.encode()).await.unwrap();
+                    break;
+                }
+            }
+        }
+        // No second connection may open for a second attach.
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(200), listener.accept())
+                .await
+                .is_err(),
+            "a second attach opened its own socket"
+        );
+    });
+    let params = |observe: bool| AttachParams {
+        terminal: "t7".into(),
+        observe,
+        resize_notifications: true,
+        quiet_human_release: !observe,
+        history: 0,
+        cols: 80,
+        rows: 24,
+        display: None,
+        resumed: false,
+        caller: None,
+    };
+    let active_params = params(false);
+    let observer_params = params(true);
+    let (active, observer) =
+        tokio::join!(conn.attach(&active_params), conn.attach(&observer_params));
+    let active = active.expect("active attach");
+    let observer = observer.expect("observer attach");
+    assert_ne!(active.channel(), observer.channel(), "two channels");
+    server.await.unwrap();
+    let _ = std::fs::remove_file(&socket);
 }
 
 /// The opener `run` hands to both the watcher and the operations

@@ -75,18 +75,27 @@ impl Vt {
             cols,
             rows: out,
             cursor,
-            colors: Colors {
-                background: colors.background.into(),
-                foreground: colors.foreground.into(),
-                cursor: colors.cursor_has_value.then(|| colors.cursor.into()),
-                palette: colors.palette.map(Rgb::from),
-            },
+            colors: colors.into(),
             dirty: match dirty {
                 ffi::DIRTY_FULL => Dirty::Full,
                 ffi::DIRTY_PARTIAL => Dirty::Partial,
                 _ => Dirty::Clean,
             },
         })
+    }
+
+    /// Current default colors + the 256-entry palette — no row or cell
+    /// scan, and dirty state stays armed for the next `frame`.
+    pub fn colors(&mut self) -> Result<Colors, Error> {
+        unsafe {
+            ok(ffi::ghostty_render_state_update(self.render, self.raw))?;
+        }
+        let mut colors = ffi::RenderStateColors {
+            size: size_of::<ffi::RenderStateColors>(),
+            ..zeroed()
+        };
+        self.rs_get(ffi::RS_COLORS, (&raw mut colors).cast())?;
+        Ok(colors.into())
     }
 
     /// Mark all dirty state consumed; call after a frame is painted.
@@ -249,6 +258,17 @@ impl Vt {
         ok(rc)?;
         out.truncate(buf.len);
         Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+}
+
+impl From<ffi::RenderStateColors> for Colors {
+    fn from(c: ffi::RenderStateColors) -> Colors {
+        Colors {
+            background: c.background.into(),
+            foreground: c.foreground.into(),
+            cursor: c.cursor_has_value.then(|| c.cursor.into()),
+            palette: c.palette.map(Rgb::from),
+        }
     }
 }
 

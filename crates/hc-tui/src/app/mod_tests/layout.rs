@@ -33,7 +33,8 @@ async fn two_views_follow_shared_focus_zoom_and_split_geometry() {
         app.reconcile_published_view();
         assert_eq!(app.focused.as_deref(), Some("t2"));
         assert_eq!(app.visible_panes(), ["t2"]);
-        assert_eq!(app.observers.len(), 2, "zoom keeps all tab panes attached");
+        // t2 rides its active wire; only the covered t1 keeps an observer.
+        assert_eq!(app.observers.len(), 1);
         let infos =
             super::super::pane_geometry::pane_infos(app, ratatui::layout::Rect::new(0, 0, 80, 24));
         assert_eq!(infos.len(), 1);

@@ -73,11 +73,26 @@ impl App {
     /// counts them and the client writes them here — a documented
     /// core/data difference (docs/parity.md).
     pub(super) fn drain_bells(&mut self) {
+        // A bell both wires saw rings once: while the focused pane is
+        // painted, its retained duplicate observer's bells are drained
+        // but never added — the live wire already reported them.
+        let painted = self
+            .pane
+            .is_painted()
+            .then(|| self.pane.target().map(str::to_owned))
+            .flatten();
         let count = self.pane.take_bells().saturating_add(
             self.observers
-                .values_mut()
-                .map(pane::Pane::take_bells)
-                .sum(),
+                .iter_mut()
+                .map(|(id, pane)| {
+                    let bells = pane.take_bells();
+                    if painted.as_deref() == Some(id.as_str()) {
+                        0
+                    } else {
+                        bells
+                    }
+                })
+                .sum::<u64>(),
         );
         if count > 0 {
             let _ = (self.host_control)(&crate::terminal_notify::terminal_bells(count));

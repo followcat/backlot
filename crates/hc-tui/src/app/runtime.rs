@@ -52,6 +52,7 @@ impl App {
                 && (infos.iter().any(|info| &info.id == id)
                     || covered.contains(id)
                     || self.observers.contains_key(id)
+                    || self.pane.target() == Some(id.as_str())
                     || self.floats.values().any(|entry| &entry.terminal == id))
         });
         // While a layout write is in flight, inventory can publish a new

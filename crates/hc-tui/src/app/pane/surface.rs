@@ -283,6 +283,24 @@ impl Pane {
         self.vt.as_mut()
     }
 
+    /// The retained screen handed to a new owner: the VT and its
+    /// `initial` baseline move together so the receiver keeps the last
+    /// paint — cursor shape, palette overrides and all — while its own
+    /// attach opens. `None` when there is no screen to hand over.
+    pub(crate) fn take_retained(&mut self) -> Option<(Vt, Option<hc_vt::Colors>)> {
+        self.vt.take().map(|vt| (vt, self.initial.take()))
+    }
+
+    /// Accepts a screen `take_retained` produced: it stays up until
+    /// this pane's first authoritative paint replaces it.
+    pub(crate) fn seed_retained(&mut self, vt: Vt, initial: Option<hc_vt::Colors>) {
+        if let Ok(grid) = vt.size() {
+            self.vt_grid = grid;
+        }
+        self.initial = initial;
+        self.vt = Some(vt);
+    }
+
     #[cfg(test)]
     pub(crate) fn install_vt(&mut self, vt: Vt) {
         self.vt = Some(vt);
