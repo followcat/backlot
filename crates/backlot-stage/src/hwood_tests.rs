@@ -381,8 +381,32 @@ fn the_reserved_name_is_no_studio() {
 fn a_studio_role_cannot_be_hollywood() {
     let (scratch, env) = scratch();
     running(&scratch, &env);
-    // Message/report to the producer lands (R26); every other
-    // studio event refuses.
+    // `tell producer` is Hollywood's one write into a studio (R26);
+    // `ask` and `report` record no event it may make, and refuse at
+    // the command — `ask` builds the same event `tell` does.
+    let file = fixture(&scratch, "note.md", "word\n");
+    let msg = refused(&env, &format!("ask --file {file} --as hollywood"));
+    assert!(
+        msg.contains("in a studio it may only 'tell <studio> producer'"),
+        "{msg}"
+    );
+    let msg = refused(
+        &env,
+        &format!("report --node weekly --file {file} --as hollywood"),
+    );
+    assert!(
+        msg.contains("in a studio it may only 'tell <studio> producer'"),
+        "{msg}"
+    );
+    // `--all` is no report flag at all.
+    assert!(
+        usage(
+            &env,
+            &format!("report --node n --file {file} --all --as hollywood")
+        )
+        .contains("--all")
+    );
+    // Every other studio event refuses at the ledger's role gate.
     let acc = fixture(&scratch, "accx.md", "# acc\n");
     let msg = refused(
         &env,

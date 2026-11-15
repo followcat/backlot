@@ -216,7 +216,6 @@ pub(crate) fn one_file(
 pub(crate) fn report(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut node = None;
     let mut file = None;
-    let mut all = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_REPORT)));
@@ -229,19 +228,14 @@ pub(crate) fn report(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), 
             _ if eq(&arg, "--node").is_some() => node = eq(&arg, "--node").map(String::from),
             "--file" => file = Some(PathBuf::from(it.value("--file", U_REPORT)?)),
             _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
-            "--all" => all = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REPORT)),
         }
-    }
-    if all && common.studio.is_some() {
-        return Err(usage("--all and --studio do not mix", U_REPORT));
     }
     Ok((
         std::mem::take(common),
         Cmd::Report {
             node: node.ok_or_else(|| usage("missing --node", U_REPORT))?,
             file: file.ok_or_else(|| usage("missing --file", U_REPORT))?,
-            all,
         },
     ))
 }

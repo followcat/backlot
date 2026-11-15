@@ -1,34 +1,25 @@
 //! The cross-studio reads Hollywood and the user share: `card list`,
-//! `status --all` and `report --all` (R24). Reads are anyone's; the
-//! write (`report --all` records `report.sent` in every studio's
-//! ledger) is Hollywood's alone.
+//! `status --all` and `records --all`/`--studio` (R24).
 
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::args::{Cmd, Common};
-use crate::cli::{Caller, Env, Fail};
-use crate::commands;
+use crate::cli::{Env, Fail};
 use crate::config;
 use crate::hrender;
-use crate::hwood::{base_of, role, store_fail};
+use crate::hwood::{base_of, store_fail};
 use crate::render;
 use crate::store::{self, StoreError};
 
 /// The read side of `cli::run`'s dispatch: the commands that never
-/// append a studio event — `status`, `records`, `report --all` and
-/// `studio new --dry-run` (D19, R24). `None` falls through to the
-/// append path.
+/// append a studio event — `status`, `records` and `studio new
+/// --dry-run` (D19, R24). `None` falls through to the append path.
 pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result<String, Fail>> {
     match cmd {
         Cmd::Status { json, all: true } => Some(status_all(env, base, *json)),
         Cmd::Status { json, .. } => Some(status(common, env, base, *json)),
         Cmd::Records { json, all } => Some(records(common, env, base, *json, *all)),
-        Cmd::Report {
-            all: true,
-            node,
-            file,
-        } => Some(report_all(common, env, base, node, file)),
         Cmd::StudioNew {
             dry_run: true,
             title,
@@ -166,47 +157,4 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
         blocks.push(hrender::hollywood_block(&hstate, &cfg));
         Ok(blocks.join("\n"))
     }
-}
-
-/// `report --all`: one `report.sent` to every studio's producer —
-/// Hollywood's way of reporting across the lot (R24, R26).
-pub fn report_all(
-    common: &Common,
-    env: &Env,
-    base: &Path,
-    node: &str,
-    file: &Path,
-) -> Result<String, Fail> {
-    let r = role(common, env);
-    if r != "hollywood" {
-        return Err(Fail::refused(format!(
-            "role '{r}' cannot do this; the hollywood role can"
-        )));
-    }
-    commands::must_exist(file, "--file")?;
-    let names = store::studios(base).map_err(|e| Fail::refused(e.to_string()))?;
-    if names.is_empty() {
-        return Err(Fail::refused("no studios to report to"));
-    }
-    let mut out = Vec::new();
-    for name in names {
-        let caller = Caller {
-            studio: name.clone(),
-            role: r.clone(),
-            task: None,
-            session: env.get("HC_TERMINAL_ID").map(String::from),
-        };
-        let built = commands::build(
-            &caller,
-            Cmd::Report {
-                node: node.to_string(),
-                file: file.to_path_buf(),
-                all: true,
-            },
-        )?;
-        let dir = store::studio_dir(base, &name);
-        let event = store::append(&dir, |s, seq| built(s, seq)).map_err(store_fail)?;
-        out.push(format!("{name}: {}", render::confirm(&event)));
-    }
-    Ok(out.join("\n"))
 }

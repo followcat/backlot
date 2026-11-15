@@ -49,9 +49,6 @@ pub enum Cmd {
     Report {
         node: String,
         file: PathBuf,
-        /// `--all`: the report lands in every studio's ledger —
-        /// Hollywood's way in.
-        all: bool,
     },
     Ask {
         file: PathBuf,
@@ -154,7 +151,7 @@ pub(crate) const U_REQ: &str = "usage: backlot req revise --file <f> --summary <
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
 pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
-pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f> [--all]";
+pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
 pub(crate) const U_TELL: &str =
     "usage: backlot tell <role> --file <f>\n       backlot tell hollywood \"<text>\"";

@@ -25,7 +25,7 @@ $XDG_STATE_HOME/backlot/<core id>/
   hollywood/          the overseer's own ledger — beside studios/, never inside one (D13)
     events.jsonl      same envelope, own kinds and own sequence
     events.lock
-    messages/         its copies of the `tell producer`/`ask` files it sent studios (R26)
+    messages/         its copies of the `tell producer` files it sent studios (R26)
     reports/          bodies of its `hollywood.reported` headlines
     drafts/<studio>/  a studio-new card's draft — cast.toml and brief.md (D19)
     AGENTS.md         its role prompt        (H3)
@@ -167,8 +167,8 @@ close the usual way and keep their sessions. `role.reopen` still works after fin
 The overseer keeps its own log at `hollywood/events.jsonl` beside `studios/` — the same envelope
 (`seq`, `ts_ms`, `by`, `kind`), the same lock-and-fsync append, its own sequence, and a strict
 append-time validation of its own. It is not a studio: `studios/` lists never contain it, the name
-`hollywood` is reserved for it, and a studio's role rules see it only as a writer of plain messages
-and producer reports (R26).
+`hollywood` is reserved for it, and a studio's role rules see it only as a writer of a plain `tell`
+message to the producer (R26).
 
 | Kind | Main fields |
 |---|---|
@@ -187,7 +187,7 @@ pure read of the card against the studio's state at apply time, and a moved base
 `card.stale` instead of `card.applied`. `card.done`/`card.failed` are refused on a card that is not
 `applied`.
 
-Hollywood's `message.sent` to a producer is its own copy of a `tell producer`/`ask` — the studio's
+Hollywood's `message.sent` to a producer is its own copy of a `tell producer` — the studio's
 `message.queued` remains the delivery record; the file lands under Hollywood's `messages/` too.
 
 ## Task states

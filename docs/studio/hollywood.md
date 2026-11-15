@@ -110,36 +110,37 @@ backlot tell hollywood "watch acme-shop for stalls"
 ```
 
 Hollywood's own words come back through `backlot hollywood report` — a headline the strip and
-panel will read from the ledger (D21). It may also talk *to* a studio's producer on your behalf:
-`tell producer` or `ask` sent `--as hollywood` records the studio's `message.queued` as the
-delivery record, and mirrors `message.sent` into Hollywood's own ledger.
+panel will read from the ledger (D21). It may also talk *to* a studio's producer on your behalf —
+its one write into a studio: `tell producer` sent `--as hollywood` records the studio's
+`message.queued` as the delivery record, and mirrors `message.sent` into Hollywood's own ledger.
 
 ```sh
 backlot hollywood report "two studios idle, one card open" --as hollywood
 backlot tell producer --file /home/user/note.md --studio acme-shop --as hollywood
-backlot report --node weekly --file /home/user/weekly.md --all --as hollywood
 ```
 
 ## What Hollywood may and may not do
 
 Its role rules, enforced at append:
 
-- **Reads everything**: `status`, `records`, `report --all` and `studio new --dry-run` — with
-  `--studio <name>` to pick one studio (`status --all` shows every studio then Hollywood's cards
-  and headline).
+- **Reads everything**: `status`, `records` and `studio new --dry-run` — with `--studio <name>`
+  or `--all` to pick (`status --all` shows every studio then Hollywood's cards and headline).
 - **Writes only its own ledger**: card proposals, reports, and the message mirror. Inside a
-  studio's ledger the only events it may record are a plain message or a report *to the
-  producer* — never to directors, writers or actors, and never any other studio event (R26).
+  studio's ledger the only event it may record is a plain `tell` *to the producer* — never to
+  directors, writers or actors, never an `ask` or a report, and never any other studio event
+  (R26).
 - **Cannot act for you**: `card apply` and `card cancel` refuse whenever `BACKLOT_ROLE` is set —
   a role terminal is never the user. And the stage is never Hollywood's either.
 - **`hollywood` is a reserved name**: no studio can take it; its ledger is not a studio.
 
 And the honesty note (D17a): the card gate is a **working rule, not a security boundary**. Identity
 in backlot comes from the environment (`BACKLOT_ROLE`, `--as`), so the CLI cannot *prove* an apply
-was yours — a role terminal could forge `--as user`. What holds in practice is the pair of rules
-above plus the runner's own permission prompt: Hollywood's launch pre-allows only `status`,
-`records`, `report`, `tell`, `hollywood propose`, `hollywood report` and `studio new --dry-run`, so
-anything else it types stops at a prompt you see.
+was yours. `--as user` in a role terminal is refused — it disagrees with the `BACKLOT_ROLE` pin —
+but a role terminal that unsets `BACKLOT_ROLE` looks like yours, and that is what could run
+`card apply`. What holds in practice is the pair of rules above plus the runner's own permission
+prompt: Hollywood's launch pre-allows only `status`, `records`, `tell <studio> producer`,
+`hollywood propose`, `hollywood report` and `studio new --dry-run`, so anything else it types
+stops at a prompt you see.
 
 ## What is not here yet
 

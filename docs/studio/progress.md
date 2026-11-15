@@ -8,16 +8,16 @@
   closed cards, capped headlines, messages), its strict append-time validation (who may write
   which kind, action/base coherence), and `stale`, the pure base check. The stage appends it at
   `<state dir>/hollywood/events.jsonl` beside `studios/`, never inside one, and `hollywood` is a
-  reserved studio name. `roles::check` lets Hollywood record only a plain message or a report to
-  a studio's producer (R26); the summary document's optional `hollywood` object (200-char
+  reserved studio name. `roles::check` lets Hollywood record only a plain `tell` message to a
+  studio's producer (R26); the summary document's optional `hollywood` object (200-char
   headline, 10 open cards) stays inside `backlot/1` and under 64 KiB. The CLI:
   `hollywood propose <action>` for every D18 action (`studio-new` accepts only a draft that
   passes the shared `studio new --dry-run` check — name, reserved name, taken name, git repo,
   cast and check declarations, supported and installed runners, caps that seat the fixed
   roles), `hollywood report`, `card list|apply|cancel` (apply records `card.applied` or
-  `card.stale` and stops — execution is H3), `tell hollywood`, `status --all`, `records` and
-  `report --all`/`--studio`, and the `[hollywood]` config section (`runner`, `model`, `effort`,
-  `key`, `default_cast`, secret-safe parse errors). A Hollywood `tell producer`/`ask` mirrors
+  `card.stale` and stops — execution is H3), `tell hollywood`, `status --all` and
+  `records --all`/`--studio`, and the `[hollywood]` config section (`runner`, `model`, `effort`,
+  `key`, `default_cast`, secret-safe parse errors). A Hollywood `tell producer` mirrors
   `message.sent` into its own ledger. Docs: R21–R27 and D13–D21 in requirements.md,
   `hollywood.md`, the ledger's Hollywood section, and H1–H5 in plan.md.
 - Measured: 18 model tests cover the envelope's wire shape, replay-equals-apply, every

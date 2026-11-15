@@ -191,11 +191,10 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, flag: &str) -> Result<T,
     serde_json::from_str(&text).map_err(|e| Fail::usage(format!("{flag} {}: {e}", path.display())))
 }
 
-/// Report goes director → producer → user (design.md flow);
-/// Hollywood reports to each studio's producer (R26).
+/// Report goes director → producer → user (design.md flow).
 fn report_to(role: &str) -> Result<String, Fail> {
     match role {
-        "director" | "hollywood" => Ok("producer".into()),
+        "director" => Ok("producer".into()),
         "producer" => Ok("user".into()),
         other => Err(Fail::usage(format!(
             "role '{other}' has no report target; reports flow director → producer → user"

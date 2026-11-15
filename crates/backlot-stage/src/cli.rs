@@ -333,6 +333,15 @@ fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<St
         },
         _ => caller(&common, env, needs_task)?,
     };
+    // Hollywood's one write into a studio is `tell <studio>
+    // producer` (R26). `ask` records the identical event, so the
+    // command — not the ledger's role gate — is where the rest is
+    // refused, ahead of any state read or file copy.
+    if caller.role == "hollywood" && !matches!(&cmd, Cmd::Tell { role, .. } if role == "producer") {
+        return Err(Fail::refused(
+            "role 'hollywood' cannot do this; in a studio it may only 'tell <studio> producer'",
+        ));
+    }
     let dir = store::studio_dir(base, &caller.studio);
     // Only `studio new` may create a studio directory; anything else
     // against a studio with no log is refused without touching disk.

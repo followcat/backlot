@@ -1,9 +1,9 @@
 //! The overseer commands: `hollywood propose`, `hollywood report`,
 //! `tell hollywood`, `card list|apply|cancel`, and the cross-studio
-//! reads `status --all` and `report --all`. Durable output lands in
-//! Hollywood's own ledger at `<base>/hollywood/events.jsonl` or in
-//! the studios' ledgers — nothing here reaches a terminal (that is
-//! the stage's job, H3).
+//! reads `status --all` and `records --all`/`--studio`. Durable
+//! output lands in Hollywood's own ledger at
+//! `<base>/hollywood/events.jsonl` or in the studios' ledgers —
+//! nothing here reaches a terminal (that is the stage's job, H3).
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -204,19 +204,19 @@ fn tell_hollywood(common: &Common, env: &Env, text: &str) -> Result<String, Fail
 }
 
 /// The message file a Hollywood caller just sent a studio — its own
-/// ledger keeps a copy (R26). `tell producer` and `ask` only;
-/// captured before `commands::build` consumes the cmd.
+/// ledger keeps a copy (R26). `tell producer` only — Hollywood's one
+/// write into a studio; captured before `commands::build` consumes
+/// the cmd.
 pub(crate) fn mirror_for(caller: &Caller, cmd: &Cmd) -> Option<PathBuf> {
     match cmd {
         Cmd::Tell { role, file } if caller.role == "hollywood" && role == "producer" => {
             Some(file.clone())
         }
-        Cmd::Ask { file } if caller.role == "hollywood" => Some(file.clone()),
         _ => None,
     }
 }
 
-/// Hollywood's own copy of a `tell producer`/`ask` it recorded in a
+/// Hollywood's own copy of a `tell producer` it recorded in a
 /// studio's ledger (R26): `message.sent` with the studio's name and
 /// the same file under its `messages/` — the studio's
 /// `message.queued` remains the delivery record.

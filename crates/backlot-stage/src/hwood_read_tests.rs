@@ -1,9 +1,9 @@
-//! The cross-studio reads (R24): `status --all`, `report --all`,
+//! The cross-studio reads (R24): `status --all`,
 //! `records --studio/--all` — every studio in one view, then
 //! Hollywood's block. Shared fixtures come from `hwood_tests`.
 
 use crate::cli_testkit::*;
-use crate::hwood_tests::{argv_ok, hwood_env, running, studio_events};
+use crate::hwood_tests::{argv_ok, hwood_env, running};
 
 #[test]
 fn status_all_covers_the_lot() {
@@ -36,36 +36,6 @@ fn status_all_covers_the_lot() {
     let msg = refused(&lenv, "status --studio no-shop");
     assert!(msg.contains("no studio 'no-shop'"), "{msg}");
     assert!(usage(&lenv, "status --all --studio acme-shop").contains("--all"));
-}
-
-#[test]
-fn report_all_lands_in_every_studio() {
-    let (scratch, env) = scratch();
-    running(&scratch, &env);
-    let file = fixture(&scratch, "weekly.md", "# weekly\n");
-    // Not Hollywood's — refused before any ledger is touched.
-    let msg = refused(
-        &env,
-        &format!("report --node w --file {file} --all --as user"),
-    );
-    assert!(msg.contains("the hollywood role can"), "{msg}");
-    let before = studio_events(&scratch).len();
-    let out = ok(
-        &env,
-        &format!("report --node weekly --file {file} --all --as hollywood"),
-    );
-    assert!(out.contains("acme-shop"), "{out}");
-    let events = studio_events(&scratch);
-    assert_eq!(events.len(), before + 1);
-    match &events.last().unwrap().kind {
-        backlot_model::EventKind::ReportSent { to, node, .. } => {
-            assert_eq!(to, "producer");
-            assert_eq!(node, "weekly");
-        }
-        k => panic!("expected report.sent, got {k:?}"),
-    }
-    assert_eq!(events.last().unwrap().by.role, "hollywood");
-    assert!(usage(&env, "report --node n --file f --all --studio acme-shop").contains("--all"));
 }
 
 #[test]

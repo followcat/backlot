@@ -225,14 +225,14 @@ fn message_directions_are_fixed() {
         );
     }
 }
-// ── The studio-side gate (R26, D16a) ───────────────────────────
+// ── The studio-side gate (R26) ─────────────────────────────────
 
 /// Hollywood talks *to* studios, never inside them: a purpose-free
-/// message or a report to the producer lands; every other kind
-/// refuses — a `plan`-purpose message and a report to anyone but
-/// the producer included.
+/// `tell producer` message lands; every other kind refuses — a
+/// `plan`-purpose message, a message to anyone else and a report
+/// to anyone, the producer included.
 #[test]
-fn hollywood_only_messages_or_reports_the_producer() {
+fn hollywood_only_tells_the_producer() {
     let state = running_state();
     assert_eq!(
         studio_validate(
@@ -249,22 +249,8 @@ fn hollywood_only_messages_or_reports_the_producer() {
         ),
         Ok(())
     );
-    assert_eq!(
-        studio_validate(
-            &state,
-            &new_ev(
-                "hollywood",
-                EventKind::ReportSent {
-                    to: "producer".into(),
-                    node: "daily".into(),
-                    file: "reports/9-r.md".into(),
-                },
-            )
-        ),
-        Ok(())
-    );
 
-    let why = "message or report a studio's producer, or read";
+    let why = "its 'tell <studio> producer' or a studio person";
     for kind in [
         // A `plan`-purpose message is the producer's, not Hollywood's.
         EventKind::MessageQueued {
@@ -278,6 +264,13 @@ fn hollywood_only_messages_or_reports_the_producer() {
             file: None,
             purpose: None,
             source_seq: None,
+        },
+        // Reports are the director's and producer's — never Hollywood's,
+        // not even to the producer.
+        EventKind::ReportSent {
+            to: "producer".into(),
+            node: "daily".into(),
+            file: "reports/9-r.md".into(),
         },
         EventKind::ReportSent {
             to: "user".into(),
