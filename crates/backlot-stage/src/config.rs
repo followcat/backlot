@@ -2,8 +2,14 @@
 //! maps hold per-runner settings a role terminal gets through
 //! `terminal.run`'s env — a proxy for Devin, say. Values never reach
 //! labels, the ledger, the summary or logs.
+//!
+//! Also the `[hollywood]` section of the user config
+//! (`$XDG_CONFIG_HOME/backlot/config.toml`, default
+//! `~/.config/backlot/config.toml`): the overseer's runner settings
+//! (D14). Nothing launches from it in H1 — `status --all` shows it.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 /// `line L column C` for a byte offset — the only part of a parse
 /// error that may be reported: the parser's message quotes the
@@ -48,6 +54,98 @@ pub fn runner_env_in(text: &str, runner: &str) -> Result<BTreeMap<String, String
         }
     }
     Ok(env)
+}
+
+/// Hollywood's `[hollywood]` section: its runner identity, like a
+/// role's `ActorIdentity` but with no studio. `key` is the layer's
+/// toggle binding (D15a), `default_cast` the cast template a
+/// `studio-new` draft starts from when the user says nothing (D19).
+#[derive(Debug, Clone, PartialEq)]
+pub struct HollywoodCfg {
+    pub runner: String,
+    pub model: String,
+    pub effort: Option<String>,
+    pub key: Option<String>,
+    pub default_cast: Option<String>,
+}
+
+/// The user config's path: `$XDG_CONFIG_HOME/backlot/config.toml`,
+/// `~/.config/backlot/config.toml` without it — the file the panel
+/// already reads; `[hollywood]` sits beside its sections.
+pub fn config_path(env: &BTreeMap<String, String>) -> PathBuf {
+    let get = |name: &str| env.get(name).filter(|v| !v.is_empty());
+    let root = match get("XDG_CONFIG_HOME") {
+        Some(x) => PathBuf::from(x),
+        None => PathBuf::from(get("HOME").map_or("/", String::as_str)).join(".config"),
+    };
+    root.join("backlot").join("config.toml")
+}
+
+/// The `[hollywood]` section inside `text`. A missing section is
+/// `None` — the layer stays hidden (D15). A malformed file or a bad
+/// value is the error, position only for the parse kind.
+fn hollywood_in(text: &str) -> Result<Option<HollywoodCfg>, String> {
+    let parsed: toml::Value = toml::from_str(text).map_err(|e| match e.span() {
+        Some(span) => format!("config.toml: malformed at {}", line_col(text, span.start)),
+        None => "config.toml: malformed".to_string(),
+    })?;
+    let Some(section) = parsed.get("hollywood") else {
+        return Ok(None);
+    };
+    let table = section
+        .as_table()
+        .ok_or_else(|| "config.toml: hollywood is not a table".to_string())?;
+    let string = |key: &str| -> Result<Option<String>, String> {
+        match table.get(key) {
+            None => Ok(None),
+            Some(v) => match v.as_str() {
+                Some(s) if !s.trim().is_empty() => Ok(Some(s.to_string())),
+                _ => Err(format!(
+                    "config.toml: hollywood.{key} must be a nonempty string"
+                )),
+            },
+        }
+    };
+    let runner =
+        string("runner")?.ok_or_else(|| "config.toml: hollywood.runner is required".to_string())?;
+    if !crate::runners::supported(&runner) {
+        return Err(format!(
+            "config.toml: hollywood.runner '{runner}' is not a supported runner"
+        ));
+    }
+    let model =
+        string("model")?.ok_or_else(|| "config.toml: hollywood.model is required".to_string())?;
+    let effort = string("effort")?;
+    // The cast file's rule: cursor, devin and cmd carry no effort
+    // flag; every other runner needs one declared.
+    if matches!(runner.as_str(), "cursor" | "cmd") && effort.is_some() {
+        return Err(format!(
+            "config.toml: hollywood.runner '{runner}' takes no effort"
+        ));
+    }
+    if !matches!(runner.as_str(), "cursor" | "devin" | "cmd") && effort.is_none() {
+        return Err(format!(
+            "config.toml: hollywood.runner '{runner}' needs an effort"
+        ));
+    }
+    Ok(Some(HollywoodCfg {
+        runner,
+        model,
+        effort,
+        key: string("key")?,
+        default_cast: string("default_cast")?,
+    }))
+}
+
+/// Read `[hollywood]` from the user config; a missing file or section
+/// is `Ok(None)`.
+pub fn hollywood(env: &BTreeMap<String, String>) -> Result<Option<HollywoodCfg>, String> {
+    let path = config_path(env);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => hollywood_in(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("config.toml: {e}")),
+    }
 }
 
 #[cfg(test)]
@@ -97,5 +195,77 @@ mod tests {
         assert!(!err.contains("pw"), "{err}");
         assert!(!err.contains("user"), "{err}");
         assert!(!err.contains("http"), "{err}");
+    }
+
+    /// No `[hollywood]` — the layer stays hidden (D15).
+    #[test]
+    fn absent_hollywood_is_none() {
+        for text in ["", "# nothing\n", "[other]\nx = \"1\"\n"] {
+            assert_eq!(hollywood_in(text).unwrap(), None);
+        }
+    }
+
+    /// A full section parses — runner, model, effort and the two
+    /// optional fields.
+    #[test]
+    fn a_full_hollywood_section_parses() {
+        let text = concat!(
+            "[hollywood]\n",
+            "runner = \"fake\"\n",
+            "model = \"model-h\"\n",
+            "effort = \"high\"\n",
+            "key = \"alt+y\"\n",
+            "default_cast = \"/home/user/cast.toml\"\n",
+        );
+        let cfg = hollywood_in(text).unwrap().unwrap();
+        assert_eq!(
+            cfg,
+            HollywoodCfg {
+                runner: "fake".into(),
+                model: "model-h".into(),
+                effort: Some("high".into()),
+                key: Some("alt+y".into()),
+                default_cast: Some("/home/user/cast.toml".into()),
+            }
+        );
+    }
+
+    /// `runner` and `model` are required; the runner must be one the
+    /// stage has an adapter for.
+    #[test]
+    fn hollywood_requires_runner_and_model() {
+        let err = hollywood_in("[hollywood]\nmodel = \"m\"\n").unwrap_err();
+        assert!(err.contains("runner"), "{err}");
+        let err = hollywood_in("[hollywood]\nrunner = \"fake\"\n").unwrap_err();
+        assert!(err.contains("model"), "{err}");
+        let err = hollywood_in("[hollywood]\nrunner = \"runner-x\"\nmodel = \"m\"\n").unwrap_err();
+        assert!(err.contains("not a supported runner"), "{err}");
+    }
+
+    /// The cast file's effort rule holds here too: `cursor`, `devin`
+    /// and `cmd` carry none; every other runner needs one.
+    #[test]
+    fn hollywood_effort_follows_the_cast_rule() {
+        let err =
+            hollywood_in("[hollywood]\nrunner = \"cursor\"\nmodel = \"m\"\neffort = \"high\"\n")
+                .unwrap_err();
+        assert!(err.contains("takes no effort"), "{err}");
+        let err = hollywood_in("[hollywood]\nrunner = \"fake\"\nmodel = \"m\"\n").unwrap_err();
+        assert!(err.contains("needs an effort"), "{err}");
+        let cfg = hollywood_in("[hollywood]\nrunner = \"devin\"\nmodel = \"m\"\n")
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.effort, None);
+    }
+
+    /// A malformed `[hollywood]` file reports the position only —
+    /// the section may sit beside secrets.
+    #[test]
+    fn a_bad_hollywood_file_reports_position_only() {
+        let err = hollywood_in("[hollywood\n").unwrap_err();
+        assert!(err.contains("line 1"), "{err}");
+        let err = hollywood_in("[hollywood]\nrunner = 3\nmodel = \"m\"\n").unwrap_err();
+        assert!(err.contains("nonempty string"), "{err}");
+        assert!(!err.contains('3'), "{err}");
     }
 }

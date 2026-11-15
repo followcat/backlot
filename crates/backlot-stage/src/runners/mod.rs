@@ -12,9 +12,11 @@ pub mod cursor;
 mod devin;
 mod fake;
 pub mod opencode;
+mod probe;
 pub(crate) mod splice;
 pub(crate) mod work;
 
+pub use probe::{installed, supported};
 pub(crate) use work::work_state;
 
 use std::collections::{BTreeMap, BTreeSet};

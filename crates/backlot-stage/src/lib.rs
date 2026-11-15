@@ -4,6 +4,7 @@
 
 mod act;
 pub mod args;
+mod args_hwood;
 mod args_studio;
 mod args_task;
 mod checkrun;
@@ -17,7 +18,12 @@ mod deliver;
 mod digest;
 mod discover;
 mod doc;
+mod draft;
 pub mod hook;
+mod hrender;
+mod hwood;
+mod hwood_base;
+mod hwood_read;
 mod limits;
 pub mod link;
 mod notices;
@@ -69,9 +75,15 @@ mod digest_tests;
 mod discover_tests;
 #[cfg(test)]
 mod docs_tests;
+#[cfg(test)]
+mod draft_tests;
 
 #[cfg(test)]
 mod hook_tests;
+#[cfg(test)]
+mod hwood_read_tests;
+#[cfg(test)]
+mod hwood_tests;
 #[cfg(test)]
 mod limits_cmd_tests;
 #[cfg(test)]

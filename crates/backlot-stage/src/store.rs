@@ -15,8 +15,11 @@ use std::path::{Path, PathBuf};
 
 use backlot_model::NewEvent;
 use backlot_model::event::Event;
+use backlot_model::hollywood::{self, HRefusal, HollywoodEvent, HollywoodState, NewHollywoodEvent};
 use backlot_model::state::{StudioState, replay};
 use backlot_model::validate::{Refusal, validate};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// A file a command wants copied into the studio directory; `dest` is
 /// relative to the studio dir so the ledger never points elsewhere.
@@ -34,6 +37,12 @@ pub struct Pending {
     pub files: Vec<PendingFile>,
 }
 
+/// The same for Hollywood's ledger.
+pub struct HPending {
+    pub event: NewHollywoodEvent,
+    pub files: Vec<PendingFile>,
+}
+
 /// The last log line was not newline-terminated or could not be parsed;
 /// middle lines are never tolerated.
 #[derive(Debug)]
@@ -48,16 +57,18 @@ impl std::fmt::Display for Corrupt {
     }
 }
 
-/// Append/read failures. `Build` carries the command's own error type.
+/// Append/read failures. `Build` carries the command's own error
+/// type, `Refused` the model's (`Refusal` for studios, `HRefusal`
+/// for Hollywood).
 #[derive(Debug)]
-pub enum StoreError<E> {
+pub enum StoreError<E, V = Refusal> {
     Io(io::Error),
     Corrupt(Corrupt),
-    Refused(Refusal),
+    Refused(V),
     Build(E),
 }
 
-impl<E> From<io::Error> for StoreError<E> {
+impl<E, V> From<io::Error> for StoreError<E, V> {
     fn from(e: io::Error) -> Self {
         StoreError::Io(e)
     }
@@ -65,6 +76,12 @@ impl<E> From<io::Error> for StoreError<E> {
 
 impl<E> From<Refusal> for StoreError<E> {
     fn from(e: Refusal) -> Self {
+        StoreError::Refused(e)
+    }
+}
+
+impl<E> From<HRefusal> for StoreError<E, HRefusal> {
+    fn from(e: HRefusal) -> Self {
         StoreError::Refused(e)
     }
 }
@@ -94,6 +111,13 @@ pub fn base_dir(env: &BTreeMap<String, String>, core_id: &str) -> PathBuf {
 /// `studios/<name>` under the base directory.
 pub fn studio_dir(base: &Path, name: &str) -> PathBuf {
     base.join("studios").join(name)
+}
+
+/// Hollywood's own ledger directory, `<base>/hollywood/` — beside
+/// `studios/`, never inside it, so `studios()` and every studio rule
+/// pass over it (D13).
+pub fn hollywood_dir(base: &Path) -> PathBuf {
+    base.join("hollywood")
 }
 
 /// All known studio names under the base directory.
@@ -135,9 +159,11 @@ pub fn sanitize(name: &str) -> String {
     }
 }
 
-/// Parse log bytes. Returns the events and whether a torn tail was
-/// ignored. A newline-terminated line that does not parse is corrupt.
-pub fn parse_log(bytes: &[u8]) -> Result<(Vec<Event>, bool), Corrupt> {
+/// Parse log bytes — the event type is the caller's: `Event` for a
+/// studio ledger, `HollywoodEvent` for Hollywood's. Returns the
+/// events and whether a torn tail was ignored. A newline-terminated
+/// line that does not parse is corrupt.
+pub fn parse_log<T: DeserializeOwned>(bytes: &[u8]) -> Result<(Vec<T>, bool), Corrupt> {
     let terminated = bytes.ends_with(b"\n");
     let text = String::from_utf8_lossy(bytes);
     let mut events = Vec::new();
@@ -152,7 +178,7 @@ pub fn parse_log(bytes: &[u8]) -> Result<(Vec<Event>, bool), Corrupt> {
             torn = true;
             continue;
         }
-        match serde_json::from_str::<Event>(line) {
+        match serde_json::from_str::<T>(line) {
             Ok(e) => events.push(e),
             Err(err) => {
                 return Err(Corrupt {
@@ -166,7 +192,7 @@ pub fn parse_log(bytes: &[u8]) -> Result<(Vec<Event>, bool), Corrupt> {
 }
 
 /// Read `events.jsonl`; a missing file reads as an empty log.
-pub fn load_events(dir: &Path) -> Result<(Vec<Event>, bool), StoreError<()>> {
+fn load<T: DeserializeOwned>(dir: &Path) -> Result<(Vec<T>, bool), StoreError<()>> {
     let path = dir.join("events.jsonl");
     match fs::read(&path) {
         Ok(bytes) => parse_log(&bytes).map_err(StoreError::Corrupt),
@@ -175,10 +201,26 @@ pub fn load_events(dir: &Path) -> Result<(Vec<Event>, bool), StoreError<()>> {
     }
 }
 
+/// Read a studio's `events.jsonl`.
+pub fn load_events(dir: &Path) -> Result<(Vec<Event>, bool), StoreError<()>> {
+    load(dir)
+}
+
+/// Read Hollywood's `events.jsonl`.
+pub fn load_hevents(dir: &Path) -> Result<(Vec<HollywoodEvent>, bool), StoreError<()>> {
+    load(dir)
+}
+
 /// Replay a studio directory into its state.
 pub fn load_state(dir: &Path) -> Result<StudioState, StoreError<()>> {
     let (events, _) = load_events(dir)?;
     Ok(replay(&events))
+}
+
+/// Replay Hollywood's directory into its state.
+pub fn load_hstate(dir: &Path) -> Result<HollywoodState, StoreError<()>> {
+    let (events, _) = load_hevents(dir)?;
+    Ok(hollywood::replay(&events))
 }
 
 struct LockGuard(File);
@@ -216,12 +258,38 @@ impl Drop for LockGuard {
     }
 }
 
+/// The `seq` accessor `append_locked` needs over both event types.
+trait HasSeq {
+    fn seq(&self) -> u64;
+}
+
+impl HasSeq for Event {
+    fn seq(&self) -> u64 {
+        self.seq
+    }
+}
+
+impl HasSeq for HollywoodEvent {
+    fn seq(&self) -> u64 {
+        self.seq
+    }
+}
+
 /// Append one event under the lock. `build` sees the replayed state
 /// and the seq it will get; it may stage file copies. Order: truncate
 /// a torn tail, build + validate, copy files, write + fsync.
-pub fn append<E, F>(dir: &Path, build: F) -> Result<Event, StoreError<E>>
+/// `reduce`, `stamp` and `check` are the ledger's replay, stamping
+/// and append-time rules — the shared core under `append` (studios)
+/// and `append_hollywood`.
+fn append_locked<Ev, New, S, E, V>(
+    dir: &Path,
+    reduce: impl Fn(&[Ev]) -> S,
+    build: impl FnOnce(&S, u64) -> Result<(New, Vec<PendingFile>), E>,
+    stamp: impl FnOnce(New, u64, u64) -> Ev,
+    check: impl FnOnce(&S, &New) -> Result<(), V>,
+) -> Result<Ev, StoreError<E, V>>
 where
-    F: FnOnce(&StudioState, u64) -> Result<Pending, E>,
+    Ev: DeserializeOwned + Serialize + HasSeq,
 {
     fs::create_dir_all(dir)?;
     let _lock = take_lock(dir)?;
@@ -248,12 +316,12 @@ where
             .set_len(keep)?;
     }
     let (events, _) = parse_log(&bytes[..keep as usize]).map_err(StoreError::Corrupt)?;
-    let state = replay(&events);
-    let next_seq = events.iter().map(|e| e.seq).max().unwrap_or(0) + 1;
-    let pending = build(&state, next_seq).map_err(StoreError::Build)?;
-    validate(&state, &pending.event)?;
+    let state = reduce(&events);
+    let next_seq = events.iter().map(|e| e.seq()).max().unwrap_or(0) + 1;
+    let (new, files) = build(&state, next_seq).map_err(StoreError::Build)?;
+    check(&state, &new).map_err(StoreError::Refused)?;
 
-    for pf in &pending.files {
+    for pf in &files {
         let dest = dir.join(&pf.dest);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
@@ -267,7 +335,8 @@ where
         }
     }
 
-    let event = pending.event.stamp(
+    let event = stamp(
+        new,
         next_seq,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -284,4 +353,36 @@ where
     f.write_all(line.as_bytes())?;
     f.sync_data()?;
     Ok(event)
+}
+
+/// One studio event into `dir`'s `events.jsonl`.
+pub fn append<E, F>(dir: &Path, build: F) -> Result<Event, StoreError<E>>
+where
+    F: FnOnce(&StudioState, u64) -> Result<Pending, E>,
+{
+    append_locked(
+        dir,
+        replay,
+        |state, seq| build(state, seq).map(|p| (p.event, p.files)),
+        |new, seq, ts| new.stamp(seq, ts),
+        validate,
+    )
+}
+
+/// One Hollywood event into Hollywood's own `events.jsonl` — the
+/// overseer's ledger, its own seqs (D13).
+pub fn append_hollywood<E, F>(
+    dir: &Path,
+    build: F,
+) -> Result<HollywoodEvent, StoreError<E, HRefusal>>
+where
+    F: FnOnce(&HollywoodState, u64) -> Result<HPending, E>,
+{
+    append_locked(
+        dir,
+        hollywood::replay,
+        |state, seq| build(state, seq).map(|p| (p.event, p.files)),
+        |new, seq, ts| new.stamp(seq, ts),
+        hollywood::validate,
+    )
 }

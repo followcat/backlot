@@ -24,7 +24,7 @@ fn pending(event: EventKind, by: backlot_model::EventBy, files: Vec<PendingFile>
     }
 }
 
-fn must_exist(path: &Path, flag: &str) -> Result<(), Fail> {
+pub(crate) fn must_exist(path: &Path, flag: &str) -> Result<(), Fail> {
     if path.is_file() {
         Ok(())
     } else {
@@ -65,36 +65,38 @@ fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -> PendingFi
 
 /// `backlot studio new --cast` file: role identities and candidates.
 #[derive(Debug, Deserialize)]
-struct CastFile {
+pub(crate) struct CastFile {
     #[serde(default)]
-    mode: Option<StudioMode>,
+    pub(crate) mode: Option<StudioMode>,
     #[serde(default)]
-    rework_cap: Option<u32>,
+    pub(crate) rework_cap: Option<u32>,
     #[serde(default)]
-    stall_limit_s: Option<u32>,
+    pub(crate) stall_limit_s: Option<u32>,
     #[serde(default)]
-    nudge_after_s: Option<u32>,
+    pub(crate) nudge_after_s: Option<u32>,
     #[serde(default)]
-    escalate_after_s: Option<u32>,
+    pub(crate) escalate_after_s: Option<u32>,
     /// S9e: the per-task running budget in seconds; unset means none.
     #[serde(default)]
-    task_budget_s: Option<u32>,
+    pub(crate) task_budget_s: Option<u32>,
     /// S9e: `[limits]` — runner name → maximum live roles in this
     /// studio; a runner with no entry is unlimited.
     #[serde(default)]
-    limits: std::collections::BTreeMap<String, u32>,
-    producer: ActorIdentity,
-    director: ActorIdentity,
-    writer: ActorIdentity,
+    pub(crate) limits: std::collections::BTreeMap<String, u32>,
+    pub(crate) producer: ActorIdentity,
+    pub(crate) director: ActorIdentity,
+    pub(crate) writer: ActorIdentity,
     #[serde(default)]
-    candidates: Vec<Candidate>,
+    pub(crate) candidates: Vec<Candidate>,
     #[serde(default)]
-    check_env: Vec<String>,
+    pub(crate) check_env: Vec<String>,
     #[serde(default)]
-    checks: Vec<crate::checks::CastCheck>,
+    pub(crate) checks: Vec<crate::checks::CastCheck>,
 }
 
-fn read_cast(path: &Path) -> Result<CastFile, Fail> {
+/// Read and validate a `--cast` file — the same checks `studio new`
+/// runs, shared by `--dry-run` and `hollywood propose studio-new`.
+pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     must_exist(path, "--cast")?;
     let text = fs::read_to_string(path).map_err(|e| Fail::usage(format!("--cast: {e}")))?;
     let cast: CastFile = toml::from_str(&text)
@@ -189,10 +191,11 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, flag: &str) -> Result<T,
     serde_json::from_str(&text).map_err(|e| Fail::usage(format!("{flag} {}: {e}", path.display())))
 }
 
-/// Report goes director → producer → user (design.md flow).
+/// Report goes director → producer → user (design.md flow);
+/// Hollywood reports to each studio's producer (R26).
 fn report_to(role: &str) -> Result<String, Fail> {
     match role {
-        "director" => Ok("producer".into()),
+        "director" | "hollywood" => Ok("producer".into()),
         "producer" => Ok("user".into()),
         other => Err(Fail::usage(format!(
             "role '{other}' has no report target; reports flow director → producer → user"
@@ -235,14 +238,27 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         | Cmd::Records { .. }
         | Cmd::StageStart
         | Cmd::StageRun
-        | Cmd::StageWatch { .. } => {
+        | Cmd::StageWatch { .. }
+        | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
+        }
+        Cmd::Hollywood(..) | Cmd::Card(..) => {
+            unreachable!("Hollywood's own ledger is appended in hwood")
         }
         Cmd::StudioNew {
             title,
             repo,
             cast_file,
+            dry_run,
         } => {
+            debug_assert!(!dry_run, "dry-run is answered in cli::run");
+            // `hollywood` names the overseer's ledger beside
+            // `studios/` — a studio can never take it (D13).
+            if caller.studio == backlot_model::hollywood::HOLLYWOOD {
+                return Err(Fail::refused(
+                    "the name 'hollywood' is reserved for the overseer",
+                ));
+            }
             let cast = read_cast(&cast_file)?;
             let (check_env, checks) = crate::checks::declarations(&cast.check_env, &cast.checks)?;
             Ok(Box::new(move |_, _| {
@@ -326,7 +342,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
         Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
         Cmd::Tell { role, file } => message_cmd(by, file, role, None),
-        Cmd::Report { node, file } => {
+        Cmd::Report { node, file, .. } => {
             must_exist(&file, "--file")?;
             let to = report_to(&caller.role)?;
             Ok(Box::new(move |state, seq| {
