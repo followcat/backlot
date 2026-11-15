@@ -32,6 +32,26 @@ async fn the_running_version_sits_in_the_sidebar_header() {
 }
 
 #[tokio::test]
+async fn the_expanded_machines_header_shows_the_badge() {
+    use super::endpoint_nav::{app_multi, spaced_term};
+    use crate::sidebar::fixture::machine;
+    let mut app = app_multi(
+        vec![spaced_term("t1", "one"), spaced_term("host-a/t2", "two")],
+        vec![machine("host-a", "connected")],
+    );
+    app.update_latest = Some("9.9.9".into());
+    app.sidebar_width = 30;
+    let backend = drawn(&mut app, 80, 24);
+    let header = header(&backend);
+    assert!(header.contains("machines"), "the label stays: {header:?}");
+    assert!(
+        header.contains(&version()),
+        "the running version is missing: {header:?}"
+    );
+    assert!(header.contains("↑ v9.9.9"), "the hint shows: {header:?}");
+}
+
+#[tokio::test]
 async fn a_known_update_adds_an_accent_hint() {
     let mut app = app_with(&["t1"]);
     app.update_latest = Some("9.9.9".into());
