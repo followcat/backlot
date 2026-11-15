@@ -26,6 +26,7 @@ use crate::checkrun;
 use crate::checks;
 use crate::checkwork;
 use crate::cli::{Env, Fail};
+use crate::config;
 use crate::deliver;
 use crate::discover;
 use crate::doc;
@@ -213,7 +214,7 @@ pub(crate) struct Stage {
     seen: BTreeMap<String, Seen>,
     /// Studio → the last load error while its ledger stays unreadable:
     /// the tick skips it and the summary shows it.
-    broken: BTreeMap<String, String>,
+    pub(crate) broken: BTreeMap<String, String>,
     /// Studio → the last pass failure — logged once, shown in the
     /// summary, but the studio still runs next tick. A good pass
     /// clears it; a broken ledger's error shows instead while both
@@ -222,6 +223,18 @@ pub(crate) struct Stage {
     /// Every error line already printed — each distinct message logs
     /// once, whatever its studio.
     logged: BTreeSet<String>,
+    /// Hollywood's reduced state — the overseer is not a studio, so
+    /// it keeps its own ledger, its own state and its own seen mark
+    /// (`hseen`) under `<base>/hollywood/` (D13).
+    pub(crate) hstate: std::cell::RefCell<backlot_model::hollywood::HollywoodState>,
+    /// `events.jsonl` (len, mtime) at `hstate`'s last load.
+    pub(crate) hseen: std::cell::RefCell<(u64, u64)>,
+    /// The `[hollywood]` config the tick last read — the summary's
+    /// runner/model/effort line, and absent means no Hollywood at all.
+    pub(crate) hcfg: std::cell::RefCell<Option<config::HollywoodCfg>>,
+    /// Hollywood-pass error lines already printed — same once-per-
+    /// message rule as `logged`, kept apart so `&self` passes can use it.
+    pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
 }
 
 impl Stage {
@@ -301,6 +314,12 @@ impl Stage {
                 }
             }
         }
+        // Hollywood's own pass after the studios: it reads the fresh
+        // cached states for notices and card bases — and a card's own
+        // studio-new may have just created the ledger the next tick
+        // picks up.
+        self.hollywood(&live.terms, &mut real_slot_free, now_ms)
+            .await?;
         Ok(())
     }
 
@@ -426,7 +445,27 @@ impl Stage {
                 )
             })
             .collect();
-        summary::summary(&owned, doing, &self.work.borrow(), &failed, &errors, 0)
+        let mut s = summary::summary(&owned, doing, &self.work.borrow(), &failed, &errors, 0);
+        // The optional `hollywood` object — absent unless `[hollywood]`
+        // configures the overseer (D16).
+        if let Some(cfg) = self.hcfg.borrow().as_ref() {
+            let hs = self.hstate.borrow();
+            let state = if !hs.role.recorded() || hs.role.closed {
+                "down"
+            } else if hs.role.live {
+                "live"
+            } else {
+                "lost"
+            };
+            s.hollywood = Some(backlot_model::summary::hollywood_section(
+                &hs,
+                state,
+                Some(&cfg.runner),
+                Some(&cfg.model),
+                cfg.effort.as_deref(),
+            ));
+        }
+        s
     }
 }
 
@@ -468,6 +507,10 @@ impl Stage {
             broken: BTreeMap::new(),
             failed: BTreeMap::new(),
             logged: BTreeSet::new(),
+            hstate: std::cell::RefCell::new(Default::default()),
+            hseen: std::cell::RefCell::new((0, 0)),
+            hcfg: std::cell::RefCell::new(None),
+            hlogged: std::cell::RefCell::new(BTreeSet::new()),
         }
     }
 }
@@ -547,6 +590,10 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         broken: BTreeMap::new(),
         failed: BTreeMap::new(),
         logged: BTreeSet::new(),
+        hstate: std::cell::RefCell::new(Default::default()),
+        hseen: std::cell::RefCell::new((0, 0)),
+        hcfg: std::cell::RefCell::new(None),
+        hlogged: std::cell::RefCell::new(BTreeSet::new()),
     };
     // A core without `events.subscribe` still works, polled on TICK.
     let mut sub = Subscription::connect(&link.endpoint, None, &SubscribeParams::default())

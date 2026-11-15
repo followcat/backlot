@@ -1,0 +1,109 @@
+//! Hollywood's watch pass: the post-launch session discovery and
+//! the work sample the summary and the send gate read. No
+//! permission, stall or rate pass runs here — Hollywood's prompts
+//! are the user's, never the stage's to answer (D17a), and the
+//! layer owes no steps.
+
+use std::path::Path;
+use std::path::PathBuf;
+
+use backlot_model::hollywood::{HOLLYWOOD, HOLLYWOOD_TERMINAL, RoleMotion};
+use hc_proto::terminal::ReadParams;
+
+use crate::daemon::Stage;
+use crate::hstage;
+use crate::reconcile::LiveTerminal;
+use crate::runners;
+use crate::watch::{structured_state, work_due};
+
+impl Stage {
+    /// A live session-less role on a post-launch runner: look for
+    /// the session id the way the studios' watch does, and record
+    /// it on the `role.state` it belongs to (Hollywood's ledger has
+    /// no separate `role.session` — a `started` carrying only the
+    /// id is the same fact).
+    pub(crate) fn hdiscover(&self, hdir: &Path, terminals: &[LiveTerminal]) {
+        let role = self.hstate.borrow().role.clone();
+        if !role.live || role.session_id.is_some() {
+            return;
+        }
+        let Some(actor) = role.actor.as_ref() else {
+            return;
+        };
+        if !runners::post_launch_session(&actor.runner) {
+            return;
+        }
+        let Some(term) = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL) else {
+            return;
+        };
+        let home = self
+            .env_vars
+            .get("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let mut taken = crate::watch::taken_ids(&self.cached, &self.found_sessions.borrow());
+        if let Some(id) = &role.session_id {
+            taken.insert(id.clone());
+        }
+        let look = crate::discover::Look {
+            home: &home,
+            role_dir: &hdir.join("roles").join(HOLLYWOOD),
+        };
+        let cwd = hdir.to_string_lossy().into_owned();
+        let found = crate::discover::find_session(
+            &actor.runner,
+            &term.argv,
+            &cwd,
+            role.since_ms,
+            &taken,
+            &look,
+            &*self.exec,
+        );
+        if let Some(id) = found {
+            self.found_sessions.borrow_mut().insert(id.clone());
+            if let Err(e) =
+                hstage::record_role(hdir, RoleMotion::Started, None, None, Some(id), None)
+            {
+                self.hlog(&format!("session record: {}", e.message()));
+            }
+        }
+    }
+
+    /// The work sample: screen classified by the runner's own
+    /// markers plus the core's structured state — the summary and
+    /// the send gate read it. No permission, stall or rate pass:
+    /// Hollywood's prompts are the user's (D17a).
+    pub(crate) async fn hsample(&self, terminals: &[LiveTerminal], runner: &str, now_ms: u64) {
+        let pair = hstage::hkey();
+        if !work_due(self.work_looked.borrow().get(&pair).copied(), now_ms) {
+            return;
+        }
+        self.work_looked.borrow_mut().insert(pair.clone(), now_ms);
+        let Some(t) = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL) else {
+            return;
+        };
+        let text = match self
+            .client
+            .terminal_read(ReadParams {
+                terminal: t.address.clone(),
+                lines: 0,
+                caller: None,
+            })
+            .await
+        {
+            Ok(r) => r.text,
+            Err(_) => return,
+        };
+        let work = crate::signals::combine(
+            None,
+            structured_state(t),
+            runners::work_state(runner, &text),
+        );
+        self.work.borrow_mut().insert(pair.clone(), work);
+        let prev = self.screens.borrow().get(&pair).cloned();
+        self.screens.borrow_mut().insert(
+            pair,
+            crate::deliver::Screen::note(prev.as_ref(), text, now_ms),
+        );
+    }
+}

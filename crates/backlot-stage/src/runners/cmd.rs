@@ -89,6 +89,21 @@ pub fn slug(cwd: &str) -> String {
 /// never a bare command family: `Shell(git:*)` would also allow
 /// `git branch -D`, so it is never emitted (S12a).
 pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
+    if role == "hollywood" {
+        // D17a: exactly the overseer's set — anything else stops at
+        // the prompt, which is the user's to answer.
+        return [
+            "backlot status",
+            "backlot records",
+            "backlot tell producer",
+            "backlot hollywood propose",
+            "backlot hollywood report",
+            "backlot studio new --dry-run",
+        ]
+        .iter()
+        .map(|c| format!("Shell({c}:*)"))
+        .collect();
+    }
     let mut rules = vec!["Shell(backlot)".to_string()];
     let is_actor = actor_task(role).is_some();
     if is_actor {

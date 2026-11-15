@@ -58,13 +58,30 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
 /// match nothing.
 fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
     let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
-    let mut rules = vec!["Bash(backlot *)".to_string(), format!("Read(//{dir}/**)")];
     // One command in both forms Claude's rule syntax takes: bare and
     // with arguments.
     let command = |rules: &mut Vec<String>, cmd: &str| {
         rules.push(format!("Bash({cmd})"));
         rules.push(format!("Bash({cmd} *)"));
     };
+    if role == "hollywood" {
+        // D17a: exactly the overseer's set — anything else stops at
+        // the prompt, which is the user's to answer, never the
+        // stage's.
+        let mut rules = vec![format!("Read(//{dir}/**)")];
+        for cmd in [
+            "backlot status",
+            "backlot records",
+            "backlot tell producer",
+            "backlot hollywood propose",
+            "backlot hollywood report",
+            "backlot studio new --dry-run",
+        ] {
+            command(&mut rules, cmd);
+        }
+        return rules.join(",");
+    }
+    let mut rules = vec!["Bash(backlot *)".to_string(), format!("Read(//{dir}/**)")];
     let is_actor = actor_task(role).is_some();
     if is_actor {
         for cmd in [

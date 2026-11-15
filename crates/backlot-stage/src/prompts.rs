@@ -19,6 +19,10 @@ const DIRECTOR: &str = include_str!("../prompts/director.md");
 const WRITER: &str = include_str!("../prompts/writer.md");
 const ACTOR: &str = include_str!("../prompts/actor.md");
 
+/// Hollywood's own prompt — written to `<base>/hollywood/AGENTS.md`
+/// on first launch (H3). `{core}` is the core's name.
+pub(crate) const HOLLYWOOD: &str = include_str!("../prompts/hollywood.md");
+
 /// The template a start's role renders.
 pub fn template(kind: RoleKind) -> &'static str {
     match kind {

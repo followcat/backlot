@@ -27,7 +27,7 @@ use crate::workareas::{self, AreaFail};
 /// The launch's per-session hook files (S9f): write the settings
 /// file and truncate the signals file — a fresh session starts an
 /// empty stream so a dead turn's last signal cannot read as its own.
-fn prepare_hooks(hooks: &runners::HookSetup) -> std::io::Result<()> {
+pub(crate) fn prepare_hooks(hooks: &runners::HookSetup) -> std::io::Result<()> {
     if let Some(parent) = hooks.settings.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -56,7 +56,7 @@ pub(crate) fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
 /// method's own verdict (usually "no such terminal"), tolerated.
 /// Everything else goes through [`Fail::call`]: only a dead wire is
 /// stage-fatal.
-fn fatal(e: CallError) -> Fail {
+pub(crate) fn fatal(e: CallError) -> Fail {
     Fail::call(e)
 }
 
@@ -178,7 +178,7 @@ pub(crate) fn labels(studio: &str, start: &Start) -> BTreeMap<String, String> {
 impl Stage {
     /// `terminal.kill` then `terminal.rm`, tolerating a terminal that
     /// is already gone. `address` is the hc address (`t7`).
-    async fn remove(&self, address: &str) -> Result<(), Fail> {
+    pub(crate) async fn remove(&self, address: &str) -> Result<(), Fail> {
         let kill = self
             .client
             .terminal_kill(TerminalParams {
@@ -298,7 +298,7 @@ impl Stage {
     /// secrets the terminal gets through `terminal.run` env only. A
     /// missing file is no extra env; a malformed one is the caller's
     /// `attention.raised` detail, so the role starts nothing.
-    fn runner_env(&self, runner: &str) -> Result<BTreeMap<String, String>, String> {
+    pub(crate) fn runner_env(&self, runner: &str) -> Result<BTreeMap<String, String>, String> {
         let path = Path::new(&self.state_dir).join("config.toml");
         let text = match std::fs::read_to_string(&path) {
             Ok(t) => t,
@@ -312,7 +312,7 @@ impl Stage {
     /// program per stage run — the program is `argv[0]`, which the
     /// runner name need not equal (`cursor` launches
     /// `cursor-agent`); a failure stays an empty `runner_version`.
-    fn runner_version(&self, program: &str) -> Option<String> {
+    pub(crate) fn runner_version(&self, program: &str) -> Option<String> {
         if let Some(v) = self.versions.borrow().get(program) {
             return v.clone();
         }
