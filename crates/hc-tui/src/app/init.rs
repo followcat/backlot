@@ -116,6 +116,7 @@ impl App {
             pane_leases: KeyLeases::default(),
             next_dispatch_id: 1,
             view,
+            project_cache: Default::default(),
             seen: 0,
             area: (80, 24),
             want_cursor: draw::CursorWish {

@@ -149,7 +149,6 @@ impl App {
         self.focused = Some(pane_id);
         self.refresh_projection();
         self.mark_active_seen();
-        self.refresh_projection();
         self.sync_target();
     }
 

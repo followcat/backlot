@@ -48,3 +48,51 @@ async fn refresh_projection_arms_reveal_only_on_focus_or_order_change() {
     app.refresh_projection();
     assert!(app.shell_state.reveal_focused_tab);
 }
+
+#[tokio::test]
+async fn empty_focus_reconcile_still_installs_changed_publish() {
+    let mut app = app_with_tabs(&[]);
+    assert_eq!(app.focused, None);
+    let baseline = app
+        .probe
+        .projections
+        .load(std::sync::atomic::Ordering::Relaxed);
+
+    // An empty-pane publish adds a remote machine: `focus_missing` is
+    // true and `fallback` stays `None`, yet the new endpoint must still
+    // land in `app.projection` and count one rebuild.
+    app.view.version += 1;
+    app.view.machines = Some(vec![crate::sidebar::fixture::machine(
+        "host-b",
+        "connected",
+    )]);
+    app.reconcile_published_view();
+    assert_eq!(app.focused, None);
+    assert_eq!(app.projection.endpoints.len(), 2);
+    assert_eq!(
+        app.probe
+            .projections
+            .load(std::sync::atomic::Ordering::Relaxed),
+        baseline + 1,
+    );
+
+    // A bare seq-only republish with `focused == None` runs neither the
+    // fallback preview nor a finalizing rebuild.
+    app.view.version += 1;
+    app.view
+        .inventory_mut()
+        .apply(&hc_proto::events::EventParams {
+            seq: 2,
+            kind: "noop".into(),
+            terminal: None,
+            machine: None,
+            data: json!({}),
+        });
+    app.reconcile_published_view();
+    assert_eq!(
+        app.probe
+            .projections
+            .load(std::sync::atomic::Ordering::Relaxed),
+        baseline + 1,
+    );
+}

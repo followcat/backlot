@@ -108,7 +108,7 @@ impl App {
         if self.layout_seen.as_ref() == Some(&stamp) {
             return;
         }
-        if let Ok(document) = crate::structure::Document::decode(stored.value.clone()) {
+        if let Ok(document) = crate::structure::Document::decode_ref(&stored.value) {
             if let Some(focus) = document.focus {
                 if self.view.inventory.get(&focus).is_none() {
                     return;

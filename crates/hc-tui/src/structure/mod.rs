@@ -69,10 +69,15 @@ impl Document {
     /// Never replace a document using an unknown schema, including malformed
     /// current values. The caller can still render the independent structure.
     pub fn decode(value: Value) -> Result<Self, String> {
+        Self::decode_ref(&value)
+    }
+
+    /// `decode` borrowing the stored JSON in place — no `Value` tree clone.
+    pub fn decode_ref(value: &Value) -> Result<Self, String> {
         if value.is_null() {
             return Ok(Self::default());
         }
-        let document: Self = serde_json::from_value(value).map_err(|e| e.to_string())?;
+        let document: Self = Self::deserialize(value).map_err(|e| e.to_string())?;
         if document.schema != 1 {
             return Err("Unsupported hc-tui layout schema".into());
         }
