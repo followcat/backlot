@@ -16,6 +16,17 @@ rescope. Prefer porting working code over new infrastructure.
 | S6 | Resilience: stall detection, attention reasons, rework cap, restart recovery | In a scratch session: a stuck fake runner raises attention. The cap sends a task to the producer. After the stage and the hc server restart, the studio recovers from the ledger |
 | S7 | First version: install, user docs, known limits | Install on a clean machine. Docs match behaviour. Release only on the user's approval |
 
+Hollywood — one overseer above all studios (R21–R27, D13–D21), one milestone at a time, fake
+runner only:
+
+|| Milestone | Acceptance |
+|---|---|---|
+|| H1 | Model + CLI: Hollywood's own ledger, the `card.*`/`hollywood.reported`/`message.sent` events and reducer, the role rules, `hollywood propose` (incl. `studio-new` with a draft), `hollywood report`, `studio new --dry-run`, `card apply|cancel`, `tell hollywood`, `status --all`, `docs/studio/hollywood.md` | Unit tests for each rule accepted and refused; replay equals apply; `--dry-run` refuses each invalid draft and records nothing; `status --all` on a scripted pair of studios |
+|| H2 | Two live studios on one core (never run before, see limits.md): the stage drives both; names, terminals, limits and notices stay apart | Scratch hc session, fake runner, two studios run to the end side by side; any bug found is fixed here, before Hollywood depends on it |
+|| H3 | Stage: start/resume `bl-hollywood` from `[hollywood]`, its folder, role prompt and pre-allowed commands, notices to it, card execution and outcomes, the summary-doc section | Scratch hc session, fake runner, two studios: Hollywood starts, gets a notice from each, a proposed card applied by the test runs and records `card.done`; a stale card expires |
+|| H4 | TUI layer: hidden / collapsed strip / expanded panel as floats, setup when unset, input line, Apply / Cancel / Show me, focus its terminal, select a studio to focus its producer, full-screen at narrow widths | Real TUI at 200/120/80/40 columns on a scratch core with fake runners; toggling resizes no pane; parity unchanged with the layer hidden and no `[hollywood]` |
+|| H5 | One real run (only with the user's approval): Hollywood on a real runner over two small studios | Reports and one applied card, as visible behaviour |
+
 Later, after real use:
 
 | | Milestone |

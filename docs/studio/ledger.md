@@ -22,6 +22,14 @@ $XDG_STATE_HOME/backlot/<core id>/
     prompts/          the rendered role prompt each fresh start was given
     work/integration  the director's worktree, backlot/<studio>/integration
     work/<task>       each task's actor worktree, backlot/<studio>/<task>
+  hollywood/          the overseer's own ledger — beside studios/, never inside one (D13)
+    events.jsonl      same envelope, own kinds and own sequence
+    events.lock
+    messages/         its copies of the `tell producer`/`ask` files it sent studios (R26)
+    reports/          bodies of its `hollywood.reported` headlines
+    drafts/<studio>/  a studio-new card's draft — cast.toml and brief.md (D19)
+    AGENTS.md         its role prompt        (H3)
+    memory.md         kept across restarts   (H3)
 ```
 
 `work/` trees stay after a task closes — a reopen resumes in the same folder. Removing them is not
@@ -153,6 +161,34 @@ interruption alone leaves the role waiting for input.
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director
 close the usual way and keep their sessions. `role.reopen` still works after finish.
+
+## Hollywood's ledger
+
+The overseer keeps its own log at `hollywood/events.jsonl` beside `studios/` — the same envelope
+(`seq`, `ts_ms`, `by`, `kind`), the same lock-and-fsync append, its own sequence, and a strict
+append-time validation of its own. It is not a studio: `studios/` lists never contain it, the name
+`hollywood` is reserved for it, and a studio's role rules see it only as a writer of plain messages
+and producer reports (R26).
+
+| Kind | Main fields |
+|---|---|
+| `card.proposed` | the exact `action` (D18), a one-line `why`, and the `base` the card was made against — `hollywood` only |
+| `card.applied` | card id — `user` only |
+| `card.cancelled` | card id, reason — `user` only |
+| `card.stale` | card id, reason — `user` at apply time, `stage` on its own pass (H3) |
+| `card.done` / `card.failed` | card id, optional detail / reason — `stage` only (H3) |
+| `hollywood.reported` | headline (one nonempty line), optional body file — `hollywood` only |
+| `message.sent` | to, optional studio, text or file — `user`→`hollywood`, `hollywood`→`user`, or `hollywood`→a studio's `producer` |
+
+A card's **base** is the fact it was proposed against — `studio_absent` for `studio-new`,
+`person_held`/`person_closed` for `close`/`reopen`, `task_priority { was }` for `priority`,
+`task_status { was }` for `pause`/`resume`/`abandon`. The reducer holds cards by seq; staleness is a
+pure read of the card against the studio's state at apply time, and a moved base records
+`card.stale` instead of `card.applied`. `card.done`/`card.failed` are refused on a card that is not
+`applied`.
+
+Hollywood's `message.sent` to a producer is its own copy of a `tell producer`/`ask` — the studio's
+`message.queued` remains the delivery record; the file lands under Hollywood's `messages/` too.
 
 ## Task states
 
