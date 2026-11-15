@@ -182,6 +182,7 @@ impl Pane {
                         scrollback_limit(live.spec.role),
                     );
                     self.initial = seed_host(&mut vt, &self.host);
+                    self.render_cache = None;
                     self.vt = Some(vt);
                 }
                 let Some(vt) = &mut self.vt else {

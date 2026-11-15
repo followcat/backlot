@@ -216,6 +216,78 @@ fn scrollback_max_bytes_reports_the_configured_cap() {
 }
 
 #[test]
+fn viewport_frame_skips_clean_and_reads_only_dirty_rows() {
+    let mut t = Vt::new(20, 6, 0);
+    for i in 0..6u8 {
+        if i > 0 {
+            t.feed(b"\r\n");
+        }
+        t.feed(format!("row{i:02}").as_bytes());
+    }
+
+    // First read is a full rebuild: every viewport cell is visited once.
+    let (f, cells) = t.viewport_frame(20, 6, false, |_| true).unwrap();
+    assert_eq!(f.dirty, Dirty::Full);
+    assert_eq!(f.rows.len(), 6);
+    assert_eq!(cells, 20 * 6);
+
+    // After clean there is nothing to read; cursor/colors stay fresh.
+    t.clean().unwrap();
+    let (f, cells) = t.viewport_frame(20, 6, false, |_| true).unwrap();
+    assert_eq!(f.dirty, Dirty::Clean);
+    assert!(f.rows.is_empty());
+    assert_eq!(cells, 0);
+
+    // Same-row cursor updates (CHA plus DECSCUSR) read zero cells while
+    // cursor state still refreshes.
+    t.feed(b"\x1b[3G\x1b[5 q");
+    let (f, cells) = t.viewport_frame(20, 6, false, |_| true).unwrap();
+    assert_eq!(f.dirty, Dirty::Clean);
+    assert_eq!(cells, 0);
+    assert_eq!(f.cursor.position, Some((2, 5)));
+    assert_eq!(f.cursor.shape, CursorShape::Bar);
+
+    // A cross-row CUP dirties the old and new rows (ligature run
+    // splitting in libghostty): only those two rows are read, not six.
+    t.feed(b"\x1b[3;5H");
+    let (f, cells) = t.viewport_frame(20, 6, false, |_| true).unwrap();
+    assert_eq!(f.dirty, Dirty::Partial);
+    assert_eq!(f.rows.len(), 2);
+    assert_eq!(cells, 2 * 20);
+    assert_eq!(f.cursor.position, Some((4, 2)));
+
+    // A one-row write reads only that row.
+    t.clean().unwrap();
+    t.feed(b"hi");
+    let (f, cells) = t.viewport_frame(20, 6, false, |_| true).unwrap();
+    assert_eq!(f.dirty, Dirty::Partial);
+    assert_eq!(f.rows.len(), 1);
+    assert_eq!(f.rows[0].y, 2);
+    assert_eq!(row_text(&f.rows[0])[4..6], *"hi");
+    assert_eq!(cells, 20);
+
+    // frame(0) still returns every row even on an already-clean VT:
+    // non-draw snapshot callers keep their full snapshots.
+    t.clean().unwrap();
+    let full = t.frame(0).unwrap();
+    assert_eq!(full.rows.len(), 6);
+    assert_eq!(row_text(&full.rows[2])[4..6], *"hi");
+
+    // A colors mismatch forces a full rebuild even while rows are clean.
+    let (f, cells) = t.viewport_frame(20, 6, false, |_| false).unwrap();
+    assert_eq!(f.dirty, Dirty::Full);
+    assert_eq!(f.rows.len(), 6);
+    assert_eq!(cells, 20 * 6);
+
+    // Same for an explicit full request after clean.
+    t.clean().unwrap();
+    let (f, cells) = t.viewport_frame(20, 6, true, |_| true).unwrap();
+    assert_eq!(f.dirty, Dirty::Full);
+    assert_eq!(f.rows.len(), 6);
+    assert_eq!(cells, 20 * 6);
+}
+
+#[test]
 fn bells_are_counted_and_drained() {
     let mut vt = hc_vt::Vt::new(10, 4, 0);
     vt.feed(b"a\x07b\x07\x07");

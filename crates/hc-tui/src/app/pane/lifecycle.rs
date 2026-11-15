@@ -106,6 +106,7 @@ impl Pane {
             self.pending_bytes = 0;
             return None;
         }
+        self.render_cache = None; // the display VT moves into the drain
         if let Some(vt) = self.vt.take() {
             let mut pending_input = VecDeque::new();
             for item in std::mem::take(&mut self.pending) {

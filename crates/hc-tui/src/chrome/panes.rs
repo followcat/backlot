@@ -174,7 +174,7 @@ pub(crate) struct LineCell {
 }
 
 /// A split seam between panes, mirroring `crate::layout::SplitBorder`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SplitBorder {
     pub direction: ratatui::layout::Direction,
     pub pos: u16,

@@ -57,8 +57,30 @@ fn line_cell_symbol(line: LineCell) -> &'static str {
     }
 }
 
+/// Everything the border cell map depends on: a hit means the cached
+/// `Vec` replays without rebuilding or re-hashing the `HashMap`.
+#[derive(PartialEq, Eq)]
+struct BorderKey {
+    area: Rect,
+    pane_borders: PaneBordersConfig,
+    pane_gaps: bool,
+    panes: Vec<(Rect, Borders, bool)>,
+    splits: Vec<SplitBorder>,
+}
+
+/// Cached border line cells — `(x, y, symbol, focused)` — for one
+/// layout. Titles are NOT cached: their labels track live agent state.
+#[derive(Default)]
+pub(crate) struct PaneBorderCache {
+    key: Option<BorderKey>,
+    cells: Vec<(u16, u16, &'static str, bool)>,
+}
+
 /// `render_pane_borders` + `render_pane_border_titles` combined. `titles` maps
 /// pane id → raw border label, formatted with the reference title helper.
+/// The draw path uses `render_pane_borders_cached`; this stays as the
+/// stateless wrapper for callers that hold no cache.
+#[allow(dead_code)]
 pub(crate) fn render_pane_borders(
     buffer: &mut Buffer,
     pane_borders: PaneBordersConfig,
@@ -68,30 +90,75 @@ pub(crate) fn render_pane_borders(
     titles: &dyn Fn(&str) -> Option<String>,
     palette: &Palette,
 ) {
+    render_pane_borders_cached(
+        &mut PaneBorderCache::default(),
+        buffer,
+        pane_borders,
+        pane_gaps,
+        pane_infos,
+        split_borders,
+        titles,
+        palette,
+    );
+}
+
+/// `render_pane_borders` through a reusable cache: an unchanged layout
+/// replays the computed cell list instead of re-hashing every frame.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn render_pane_borders_cached(
+    cache: &mut PaneBorderCache,
+    buffer: &mut Buffer,
+    pane_borders: PaneBordersConfig,
+    pane_gaps: bool,
+    pane_infos: &[PaneInfo],
+    split_borders: &[SplitBorder],
+    titles: &dyn Fn(&str) -> Option<String>,
+    palette: &Palette,
+) {
     if !pane_borders.draws_borders() || pane_infos.iter().all(|info| info.borders.is_empty()) {
+        cache.key = None;
         return;
     }
 
-    let mut cells = std::collections::HashMap::<(u16, u16), LineCell>::new();
-    for info in pane_infos {
-        super::panes::add_pane_border_cells(&mut cells, info);
+    let key = BorderKey {
+        area: buffer.area,
+        pane_borders,
+        pane_gaps,
+        panes: pane_infos
+            .iter()
+            .map(|info| (info.rect, info.borders, info.is_focused))
+            .collect(),
+        splits: split_borders.to_vec(),
+    };
+    if cache.key.as_ref() != Some(&key) {
+        let mut lines = std::collections::HashMap::<(u16, u16), LineCell>::new();
+        for info in pane_infos {
+            super::panes::add_pane_border_cells(&mut lines, info);
+        }
+        super::panes::add_split_border_cells(pane_gaps, split_borders, &mut lines);
+        cache.cells = lines
+            .iter()
+            .filter_map(|(&(x, y), &line)| {
+                let symbol = line_cell_symbol(line);
+                if symbol.is_empty() {
+                    return None;
+                }
+                let focused = pane_infos
+                    .iter()
+                    .any(|info| info.is_focused && line_touches_pane(x, y, info, pane_gaps));
+                Some((x, y, symbol, focused))
+            })
+            .collect();
+        cache.key = Some(key);
     }
-    super::panes::add_split_border_cells(pane_gaps, split_borders, &mut cells);
 
     let area = buffer.area;
-    for ((x, y), line) in cells {
+    for &(x, y, symbol, focused) in &cache.cells {
         if x < area.x
             || x >= area.x.saturating_add(area.width)
             || y < area.y
             || y >= area.y.saturating_add(area.height)
         {
-            continue;
-        }
-        let focused = pane_infos
-            .iter()
-            .any(|info| info.is_focused && line_touches_pane(x, y, info, pane_gaps));
-        let symbol = line_cell_symbol(line);
-        if symbol.is_empty() {
             continue;
         }
         let cell = &mut buffer[(x, y)];

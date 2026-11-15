@@ -112,6 +112,8 @@ pub struct Probe {
     pub host_facts: std::sync::atomic::AtomicU64,
     /// Projection rebuilds actually run for a publish or focus change.
     pub projections: std::sync::atomic::AtomicU64,
+    /// VT cells copied into pane surfaces across all draws.
+    pub cells_painted: std::sync::atomic::AtomicU64,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
@@ -142,6 +144,8 @@ pub(crate) struct ShellState {
     /// Scrolls the switcher to the pending workspace highlight on move.
     pub reveal_mobile_workspace: bool,
     pub machine_diagnostics: crate::chrome::render::MachineDiagnostics,
+    /// Split/pane border cells keyed by the last frame's layout.
+    pub border_cache: crate::chrome::panes_draw::PaneBorderCache,
 }
 
 /// A forwarded press and the wire it went out on. `route` binds the
@@ -183,8 +187,7 @@ pub struct App {
     last_focus: Option<String>,
     dialog: Option<dialogs::Dialog>,
     dialog_hits: crate::chrome::dialogs::DialogRender,
-    /// Open right-click context menu — the reference's
-    /// `ClientShellOverlay::ContextMenu`.
+    /// Open right-click context menu (`ClientShellOverlay::ContextMenu`).
     menu: Option<crate::chrome::menu::ContextMenu>,
     /// Panes whose bare right-click goes to the program instead of the
     /// context menu — the per-pane `right_click_passthrough` toggle.
@@ -194,16 +197,14 @@ pub struct App {
     help_state: crate::chrome::help::HelpState,
     help_hits: crate::chrome::help::HelpRender,
     help_scroll_grab: Option<u16>,
-    /// The "Go to" overlay — the reference's
-    /// `ClientShellOverlay::Navigator`.
+    /// The "Go to" overlay (`ClientShellOverlay::Navigator`).
     navigator: Option<crate::chrome::navigator::NavigatorState>,
     /// Last frame's navigator hit rectangles.
     navigator_hits: crate::chrome::navigator_render::NavigatorRender,
     /// The Settings overlay — the reference's
     /// `ClientShellOverlay::Settings`.
     settings: Option<crate::chrome::settings::SettingsOverlay>,
-    /// Last frame's settings hit rectangles (popup, tabs, choices,
-    /// buttons).
+    /// Last frame's settings hit rectangles.
     settings_hits: crate::chrome::settings_render::SettingsRender,
     /// The floating popup terminal — the reference's `popup_pane`.
     popup: Option<popup::PopupState>,
