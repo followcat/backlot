@@ -94,6 +94,9 @@ pub struct ServedWire {
     core: fakecore::DuplexCore,
     terminal: String,
     observe: bool,
+    /// The attach's quiet-release opt-in — `true` only on the focused
+    /// terminal's active wire, never on observers or size leases.
+    quiet_release: bool,
     channel: u32,
 }
 
@@ -135,6 +138,7 @@ impl Session {
                 core,
                 terminal: params.terminal.clone(),
                 observe: params.observe,
+                quiet_release: params.quiet_human_release,
                 channel,
             });
         }
@@ -147,6 +151,35 @@ impl Session {
             .iter()
             .position(|wire| wire.terminal == terminal && wire.observe == observe)
             .expect("no such attach conn arrived")
+    }
+
+    /// Index of `terminal`'s active (typing) wire — the non-observe
+    /// conn that opted into quiet human releases, unlike a size lease.
+    pub fn active_wire(&self, terminal: &str) -> usize {
+        self.wires
+            .iter()
+            .position(|wire| wire.terminal == terminal && !wire.observe && wire.quiet_release)
+            .expect("no active attach conn arrived")
+    }
+
+    /// Reads `wire` until a stream DATA payload contains `needle` —
+    /// the bytes the program itself would see, in wire order. Other
+    /// channel and control frames are skipped.
+    pub async fn expect_input(&mut self, wire: usize, needle: &[u8]) {
+        let served = &mut self.wires[wire];
+        let channel = served.channel;
+        loop {
+            let frame = served.core.read_frame().await;
+            if frame.channel == channel
+                && frame.kind == hc_proto::frame::Kind::Data
+                && frame
+                    .payload
+                    .windows(needle.len())
+                    .any(|window| window == needle)
+            {
+                return;
+            }
+        }
     }
 
     /// One DATA chunk on a served conn.
