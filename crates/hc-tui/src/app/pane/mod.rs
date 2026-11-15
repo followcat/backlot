@@ -28,9 +28,11 @@ mod open;
 mod paint_gate;
 mod pending_lifecycle;
 mod pending_queue;
+mod render_cache;
 mod repaint;
 mod tasks;
 
+pub(crate) use render_cache::PaneRenderCache;
 pub use tasks::attach_task;
 
 use std::collections::VecDeque;
@@ -243,6 +245,9 @@ pub struct Pane {
     /// The VT/screen — retained across Down and re-Opening for the same
     /// spec; `None` on Idle or after a spec change.
     vt: Option<Vt>,
+    /// The surface `vt` last painted into — moves with the VT so a
+    /// retained screen keeps its warm cache across pane handoffs.
+    render_cache: Option<render_cache::PaneRenderCache>,
     /// The core grid the retained VT renders, when known.
     vt_grid: (u16, u16),
     /// Allocated inner size as last reported by the layout.
@@ -282,7 +287,7 @@ pub struct Pane {
 /// `ghostty_default_fg/bg` + `PaletteOverrides`: the VT's defaults at
 /// creation (detects a program `OSC 10/11/4` change) and the host's
 /// reported defaults (detects "unchanged = transparent over host").
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Paint {
     pub initial_fg: Option<Rgb>,
     pub initial_bg: Option<Rgb>,
@@ -307,6 +312,7 @@ impl Pane {
             ev,
             open,
             vt: None,
+            render_cache: None,
             vt_grid: (80, 24),
             allocated: (80, 24),
             outer_focus: None,

@@ -1,25 +1,26 @@
 // Derived from herdr-core crates/ghostty-vt/src/lib.rs (Apache-2.0).
-//! Terminal ownership and the C callback hooks. Everything the C side can
-//! call back into lives here; the rest of the crate sees only owned data.
+//! Terminal ownership: construction, feeding, options and queries. The
+//! C callback hooks live in `hooks.rs`; the rest of the crate sees only
+//! owned data.
 
 use std::ffi::c_void;
 use std::fmt;
 use std::ptr;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::Rgb;
 use crate::ffi;
+use crate::hooks::{Hooks, on_bell, on_clipboard_write, on_size, on_write_pty};
 use crate::key::{Key, Mods, VtKeyEvent};
-
-/// Bytes the terminal writes to the pty side (query answers, mode
-/// reports) are capped: a hostile stream could otherwise grow this
-/// without bound while the consumer is not looking. On overflow the
-/// latch is set and whole replies are dropped — never partially kept,
-/// so a caller can never see a spliced CSI/OSC/DCS fragment.
-const REPLIES_MAX_BYTES: usize = 256 * 1024;
 
 /// Cell size reported for XTWINOPS pixel queries. There is no real font;
 /// 10x20 is what the core wrapper reports.
 const CELL: (u32, u32) = (10, 20);
+
+/// Identity source for `Vt::id` — each construction takes a fresh value
+/// so a pane cache can tell "same VT, quiet" from "new VT, repaint"
+/// without relying on the render address (a freed handle can repeat).
+static NEXT_VT_ID: AtomicU64 = AtomicU64::new(1);
 
 /// An operation on the terminal failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,160 +45,13 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// State the C callbacks receive through the userdata pointer. Owned by
-/// `Vt`'s `Box`, so it outlives every callback and is never aliased
-/// mutably while C could call in (callbacks only fire during `&mut self`
-/// calls on `Vt`).
-struct Hooks {
-    /// Bytes the terminal wants written back to the pty (query replies,
-    /// mode reports). Separate from input the user produces.
-    replies: Vec<u8>,
-    /// Set when a whole reply was dropped for capacity; cleared when the
-    /// caller drains via `take_replies`.
-    replies_overflowed: bool,
-    /// Reported cell geometry in pixels.
-    cell: (u32, u32),
-    /// BEL characters seen since the last `take_bell_count`.
-    bells: u64,
-    /// Text programs copied since the last `take_clipboard_writes`.
-    clipboard_writes: Vec<Vec<u8>>,
-}
-
-extern "C" fn on_bell(_: ffi::Terminal, ud: *mut c_void) {
-    // SAFETY: `ud` is the `Hooks` pointer installed with OPT_USERDATA,
-    // valid for the terminal's life. Saturating keeps a hostile BEL flood
-    // countable rather than wrapping.
-    unsafe {
-        let hooks = &mut *(ud as *mut Hooks);
-        hooks.bells = hooks.bells.saturating_add(1);
-    }
-}
-
-/// The largest clipboard write kept, the same limit the reference uses.
-const CLIPBOARD_MAX_BYTES: usize = 192 * 1024;
-
-// `on_clipboard_write` and `capture_clipboard_write` are derived from
-// herdr crates/ghostty-vt/src/lib.rs (Apache-2.0).
-extern "C" fn on_clipboard_write(
-    _: ffi::Terminal,
-    ud: *mut c_void,
-    write: *const ffi::ClipboardWrite,
-) {
-    // SAFETY: `ud` is the `Hooks` pointer installed with OPT_USERDATA. The
-    // library keeps the request alive for this callback, and the size check
-    // covers every field read here and in the capture below.
-    unsafe {
-        if write.is_null() || (*write).size < std::mem::size_of::<ffi::ClipboardWrite>() {
-            return;
-        }
-        let Some(reply) = (*write).reply else {
-            return;
-        };
-        let response = ffi::ClipboardWriteReply {
-            size: std::mem::size_of::<ffi::ClipboardWriteReply>(),
-            result: capture_clipboard_write(&mut *(ud as *mut Hooks), &*write),
-            remember: false,
-        };
-        reply(write, &response);
-    }
-}
-
-/// Keeps a plain-text write to the standard clipboard. A request to clear
-/// the clipboard succeeds and does nothing.
-///
-/// # Safety
-/// The request's contents and their strings must be valid for this call.
-unsafe fn capture_clipboard_write(hooks: &mut Hooks, request: &ffi::ClipboardWrite) -> i32 {
-    if request.location != ffi::CLIPBOARD_LOCATION_STANDARD {
-        return ffi::CLIPBOARD_WRITE_UNSUPPORTED;
-    }
-    if request.contents_len == 0 {
-        return ffi::CLIPBOARD_WRITE_SUCCESS;
-    }
-    if request.contents_len != 1 {
-        return ffi::CLIPBOARD_WRITE_UNSUPPORTED;
-    }
-    if request.contents.is_null() {
-        return ffi::CLIPBOARD_WRITE_INVALID_DATA;
-    }
-    // SAFETY: non-null, and valid for this call per the contract above.
-    let content = unsafe { &*request.contents };
-    // SAFETY: as above; both strings are borrowed from the live request.
-    let (Some(mime), Some(bytes)) = (unsafe { borrowed_bytes(&content.mime) }, unsafe {
-        borrowed_bytes(&content.data)
-    }) else {
-        return ffi::CLIPBOARD_WRITE_INVALID_DATA;
-    };
-    let is_text = std::str::from_utf8(mime)
-        .ok()
-        .and_then(|mime| mime.split(';').next())
-        .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/plain"));
-    if !is_text || bytes.is_empty() {
-        return ffi::CLIPBOARD_WRITE_UNSUPPORTED;
-    }
-    if bytes.len() > CLIPBOARD_MAX_BYTES {
-        return ffi::CLIPBOARD_WRITE_INVALID_DATA;
-    }
-    hooks.clipboard_writes.push(bytes.to_vec());
-    ffi::CLIPBOARD_WRITE_SUCCESS
-}
-
-/// # Safety
-/// A non-empty `value` must point at `len` bytes that outlive `'a`.
-unsafe fn borrowed_bytes<'a>(value: &ffi::StringView) -> Option<&'a [u8]> {
-    if value.len == 0 {
-        Some(&[])
-    } else if value.ptr.is_null() {
-        None
-    } else {
-        // SAFETY: per this function's contract.
-        Some(unsafe { std::slice::from_raw_parts(value.ptr, value.len) })
-    }
-}
-
-extern "C" fn on_write_pty(_: ffi::Terminal, ud: *mut c_void, data: *const u8, len: usize) {
-    // SAFETY: `ud` is the `Hooks` pointer installed with OPT_USERDATA,
-    // valid for the terminal's life. `data` is valid for `len` bytes per
-    // the write_pty callback contract. No panics cross the FFI boundary:
-    // Vec growth that fails aborts, which is the intended failure mode.
-    // Replies arrive as whole units; only complete units are kept, so the
-    // buffer can never hold a half-written escape sequence.
-    unsafe {
-        let hooks = &mut *(ud as *mut Hooks);
-        if hooks.replies.len() + len > REPLIES_MAX_BYTES {
-            hooks.replies_overflowed = true;
-            return;
-        }
-        hooks
-            .replies
-            .extend_from_slice(std::slice::from_raw_parts(data, len));
-    }
-}
-
-extern "C" fn on_size(t: ffi::Terminal, ud: *mut c_void, out: *mut ffi::SizeReport) -> bool {
-    // SAFETY: as on_write_pty; `out` is a valid report slot per contract.
-    unsafe {
-        let hooks = &mut *(ud as *mut Hooks);
-        let (mut cols, mut rows) = (0u16, 0u16);
-        let ok = ffi::ghostty_terminal_get(t, ffi::DATA_COLS, (&raw mut cols).cast())
-            == ffi::SUCCESS
-            && ffi::ghostty_terminal_get(t, ffi::DATA_ROWS, (&raw mut rows).cast()) == ffi::SUCCESS;
-        if !ok {
-            return false; // read failure: report "no size", never garbage
-        }
-        *out = ffi::SizeReport {
-            rows,
-            columns: cols,
-            cell_width: hooks.cell.0,
-            cell_height: hooks.cell.1,
-        };
-        true
-    }
-}
-
 /// The owned terminal plus its render state and reusable iterators.
 /// `!Sync` by construction (raw pointers): one owner mutates it.
 pub struct Vt {
+    /// Unique identity — assigned from `NEXT_VT_ID` at construction.
+    /// Cache holders compare it instead of a handle address so an
+    /// ABA reuse of a freed render pointer can never pass for "same VT".
+    id: u64,
     pub(crate) raw: ffi::Terminal,
     pub(crate) cursor_tracker: crate::cursor::DecscusrTracker,
     pub(crate) render: ffi::RenderState,
@@ -244,6 +98,7 @@ impl Vt {
         }
 
         let vt = Vt {
+            id: NEXT_VT_ID.fetch_add(1, Ordering::Relaxed),
             raw,
             cursor_tracker: crate::cursor::DecscusrTracker::default(),
             render,
@@ -305,7 +160,13 @@ impl Vt {
         vt
     }
 
-    /// Feed arbitrary bytes; fragments and mid-sequence splits are fine.
+    /// This terminal's unique identity — a cache keyed on it can never
+    /// confuse a replacement `Vt` for the one its cells came from.
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// Feed arbitrary bytes; mid-sequence splits are fine.
     /// `ghostty_terminal_vt_write` cannot fail.
     pub fn feed(&mut self, bytes: &[u8]) {
         self.cursor_tracker.observe(bytes);
@@ -314,11 +175,9 @@ impl Vt {
     }
 
     /// `keyboard_negotiated_nothing` from herdr src/pane/input.rs
-    /// (Apache-2.0): no Kitty keyboard flags and no modifyOtherKeys2.
-    /// The library exposes no flag getter, so the check is a
-    /// side-effect-free Ctrl+A encode probe — `key_event` builds its
-    /// encoder options from the real terminal flags, and legacy Ctrl+A
-    /// is the only configuration that produces the raw `\x01` byte.
+    /// (Apache-2.0): no Kitty flags and no modifyOtherKeys2. The library
+    /// exposes no flag getter, so a Ctrl+A encode probe answers it —
+    /// legacy encoding is the only mode producing the raw `\x01` byte.
     pub fn keyboard_negotiated_nothing(&self) -> bool {
         if self.kitty_flags().unwrap_or(0) != 0 {
             return false;
@@ -332,8 +191,7 @@ impl Vt {
         self.key_event(&probe).map(|b| b == b"\x01").unwrap_or(true)
     }
 
-    /// Resize the grid; reports the existing cell geometry. Fails only on
-    /// allocation failure inside the library.
+    /// Resize the grid; reports the existing cell geometry.
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<(), Error> {
         let rc = unsafe {
             ffi::ghostty_terminal_resize(
@@ -349,8 +207,7 @@ impl Vt {
             .ok_or(Error::Ghostty(rc))
     }
 
-    /// The content mutation counter — bumps on every `feed` and `resize`.
-    /// Copy mode snapshots it to notice buffer changes under it.
+    /// The content mutation counter — bumps on `feed` and `resize`.
     pub fn content_revision(&self) -> u64 {
         self.content_revision
     }
@@ -410,10 +267,9 @@ impl Vt {
     }
 
     /// The configured scrollback byte cap — the value `Vt::new` was
-    /// built with, reported back by the library. `None` when the VT is
-    /// unlimited (or the query fails); note the library enforces byte
-    /// caps at page granularity, so this is the configured bound, not
-    /// the effective retained figure.
+    /// built with, reported back by the library. `None` on unlimited
+    /// (or query failure); the library enforces at page granularity,
+    /// so this is the configured bound, not the effective figure.
     pub fn scrollback_max_bytes(&self) -> Option<usize> {
         let mut out: usize = 0;
         let rc = unsafe {
@@ -426,9 +282,8 @@ impl Vt {
         (rc == ffi::SUCCESS).then_some(out)
     }
 
-    /// The viewport's scrollbar state `{total, offset, len}` — `offset`
-    /// counts rows from the top of the scrollable area, so "scrolled
-    /// back lines" is `total - offset - len`.
+    /// Scrollbar state `{total, offset, len}` — "scrolled back lines"
+    /// is `total - offset - len`.
     pub fn scrollbar(&self) -> Option<ffi::Scrollbar> {
         let mut bar = ffi::Scrollbar::default();
         let rc = unsafe {
@@ -437,9 +292,8 @@ impl Vt {
         (rc == ffi::SUCCESS).then_some(bar)
     }
 
-    /// Scrolls the viewport by `delta` rows — negative up (toward
-    /// scrollback), positive down. The VT clamps to its scrollable
-    /// area; alt-screen programs report no scrollback so this no-ops.
+    /// Scroll the viewport by `delta` rows — negative up (toward
+    /// scrollback). The VT clamps; alt-screen has no scrollback.
     pub fn scroll_delta(&mut self, delta: isize) {
         unsafe {
             ffi::ghostty_terminal_scroll_viewport(
@@ -452,8 +306,7 @@ impl Vt {
         }
     }
 
-    /// Scrolls the viewport to an absolute row offset (`scrollbar`'s
-    /// row space) — scrollbar drag/jump target.
+    /// Scroll the viewport to an absolute `scrollbar` row offset.
     pub fn scroll_to_row(&mut self, row: usize) {
         unsafe {
             ffi::ghostty_terminal_scroll_viewport(
@@ -466,14 +319,9 @@ impl Vt {
         }
     }
 
-    /// Seed the terminal's default colors with the host terminal's
-    /// answers (`OSC 10`/`OSC 11`/`OSC 4` replies): `CellColor::Default`
-    /// then resolves against the host palette instead of the built-in
-    /// defaults, so unchanged defaults stay transparent over the host's
-    /// own background. `None` parts keep the built-in defaults; a `None`
-    /// palette leaves the built-in 256 entries. Any palette entries the
-    /// program later overrides via `OSC 4` still take precedence over
-    /// the seeded defaults.
+    /// Seed default colors with the host terminal's `OSC 10`/`OSC 11`/
+    /// `OSC 4` answers so `CellColor::Default` resolves against the
+    /// host palette. `None` parts keep the built-ins.
     pub fn set_default_colors(
         &mut self,
         foreground: Option<Rgb>,
@@ -533,10 +381,8 @@ impl Vt {
     }
 
     /// Bytes the terminal generated for the pty side — query replies and
-    /// mode reports, never user input. Send via `Attach::automatic_input`.
-    /// `ReplyOverflow` reports that whole replies were dropped and the
-    /// buffer is cleared; the caller decides whether the stream is still
-    /// trustworthy.
+    /// mode reports, never user input. `ReplyOverflow` means replies
+    /// were dropped and the buffer cleared.
     pub fn take_replies(&mut self) -> Result<Vec<u8>, Error> {
         if self.hooks.replies_overflowed {
             self.hooks.replies_overflowed = false;
@@ -550,18 +396,3 @@ impl Vt {
 fn ok(rc: i32) -> Result<(), Error> {
     (rc == ffi::SUCCESS).then_some(()).ok_or(Error::Ghostty(rc))
 }
-
-impl Drop for Vt {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::ghostty_render_state_row_cells_free(self.cells);
-            ffi::ghostty_render_state_row_iterator_free(self.rows);
-            ffi::ghostty_render_state_free(self.render);
-            ffi::ghostty_terminal_free(self.raw);
-        }
-    }
-}
-
-// The owning side may move between threads; the C handles are used only
-// under &mut self / &self and callbacks only fire inside those calls.
-unsafe impl Send for Vt {}

@@ -82,7 +82,7 @@ pub enum Underline {
     Dashed,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cursor {
     /// `None` when the cursor is outside the viewport (scrolled back).
     pub position: Option<(u16, u16)>,
@@ -106,7 +106,7 @@ pub enum CursorShape {
 }
 
 /// Default colors and the live 256-entry palette (with OSC overrides).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Colors {
     pub background: Rgb,
     pub foreground: Rgb,
@@ -119,6 +119,36 @@ pub enum Dirty {
     Clean,
     Partial,
     Full,
+}
+
+impl From<ffi::RenderStateColors> for Colors {
+    fn from(c: ffi::RenderStateColors) -> Colors {
+        Colors {
+            background: c.background.into(),
+            foreground: c.foreground.into(),
+            cursor: c.cursor_has_value.then(|| c.cursor.into()),
+            palette: c.palette.map(Rgb::from),
+        }
+    }
+}
+
+impl From<ffi::RenderStateCursor> for Cursor {
+    fn from(c: ffi::RenderStateCursor) -> Cursor {
+        Cursor {
+            position: c.viewport_has_value.then_some((c.viewport_x, c.viewport_y)),
+            visible: c.visible,
+            blinking: c.blinking,
+            password_input: c.password_input,
+            wide_tail: c.wide_tail,
+            shape_overridden: false,
+            shape: match c.visual_style {
+                ffi::CURSOR_BAR => CursorShape::Bar,
+                ffi::CURSOR_UNDERLINE => CursorShape::Underline,
+                ffi::CURSOR_BLOCK_HOLLOW => CursorShape::BlockHollow,
+                _ => CursorShape::Block,
+            },
+        }
+    }
 }
 
 impl From<ffi::Rgb> for Rgb {

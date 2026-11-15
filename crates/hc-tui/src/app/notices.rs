@@ -121,7 +121,9 @@ impl App {
     }
 }
 
-pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {
+/// `true` when a notice or notification card painted — the draw pass
+/// counts it as overlay damage over the pane surfaces.
+pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
     app.take_control_hit = Rect::default();
     app.notification_hit = Rect::default();
     let pane = app.pane.notice();
@@ -197,4 +199,5 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {
             )
         };
     }
+    notice.is_some() || app.notifications.visible.is_some()
 }

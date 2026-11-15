@@ -24,6 +24,7 @@
 mod cursor;
 mod data;
 mod ffi;
+mod hooks;
 mod key;
 mod mouse;
 mod render;

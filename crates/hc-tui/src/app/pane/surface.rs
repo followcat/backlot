@@ -79,6 +79,7 @@ impl Pane {
         // paint until fresh bytes land.
         if spec.as_ref().map(|s| &s.terminal) != current.as_ref().map(|s| &s.terminal) {
             self.vt = None;
+            self.render_cache = None;
             self.incarnation = None;
             self.inventory_incarnation = None;
             self.close_error = None;
@@ -135,6 +136,7 @@ impl Pane {
         {
             self.teardown(false);
             self.vt = None;
+            self.render_cache = None;
             self.initial = None;
             self.discard_pending_incarnation();
             self.spawn(spec, true, 0);
@@ -283,26 +285,64 @@ impl Pane {
         self.vt.as_mut()
     }
 
-    /// The retained screen handed to a new owner: the VT and its
-    /// `initial` baseline move together so the receiver keeps the last
-    /// paint — cursor shape, palette overrides and all — while its own
-    /// attach opens. `None` when there is no screen to hand over.
-    pub(crate) fn take_retained(&mut self) -> Option<(Vt, Option<hc_vt::Colors>)> {
-        self.vt.take().map(|vt| (vt, self.initial.take()))
+    /// The retained screen handed to a new owner: the VT, its `initial`
+    /// baseline and its painted-surface cache move together so the
+    /// receiver keeps the last paint — cursor shape, palette overrides,
+    /// warm cells and all — while its own attach opens. `None` when
+    /// there is no screen to hand over.
+    pub(crate) fn take_retained(
+        &mut self,
+    ) -> Option<(
+        Vt,
+        Option<hc_vt::Colors>,
+        Option<render_cache::PaneRenderCache>,
+    )> {
+        self.vt
+            .take()
+            .map(|vt| (vt, self.initial.take(), self.render_cache.take()))
     }
 
     /// Accepts a screen `take_retained` produced: it stays up until
     /// this pane's first authoritative paint replaces it.
-    pub(crate) fn seed_retained(&mut self, vt: Vt, initial: Option<hc_vt::Colors>) {
+    pub(crate) fn seed_retained(
+        &mut self,
+        vt: Vt,
+        initial: Option<hc_vt::Colors>,
+        cache: Option<render_cache::PaneRenderCache>,
+    ) {
         if let Ok(grid) = vt.size() {
             self.vt_grid = grid;
         }
         self.initial = initial;
+        self.render_cache = cache;
         self.vt = Some(vt);
+    }
+
+    /// The live VT and the surface cache it paints through, mutably
+    /// paired so the draw layer updates both inside one borrow. A
+    /// cache without a VT can never be valid — it clears with it.
+    pub(crate) fn vt_and_cache(
+        &mut self,
+    ) -> (
+        Paint,
+        Option<(&mut Vt, &mut Option<render_cache::PaneRenderCache>)>,
+    ) {
+        if self.vt.is_none() {
+            self.render_cache = None;
+            return (self.paint(), None);
+        }
+        (
+            self.paint(),
+            Some((
+                self.vt.as_mut().expect("checked above"),
+                &mut self.render_cache,
+            )),
+        )
     }
 
     #[cfg(test)]
     pub(crate) fn install_vt(&mut self, vt: Vt) {
+        self.render_cache = None;
         self.vt = Some(vt);
     }
 
