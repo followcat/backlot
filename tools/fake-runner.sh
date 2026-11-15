@@ -187,9 +187,16 @@ while :; do
             "")
                 ;; # a send's own trailing CR, not a message
             *)
-                [ -n "${BACKLOT_STATE_DIR:-}" ] &&
+                if [ -n "${BACKLOT_STATE_DIR:-}" ]; then
                     printf '%s\n' "$line" \
                         >>"$BACKLOT_STATE_DIR/fake-inbox-${BACKLOT_ROLE:-role}"
+                    # Two studios share the state dir: the
+                    # studio-keyed file is what keeps their inboxes
+                    # apart — the role key alone collides.
+                    [ -n "${BACKLOT_STUDIO:-}" ] &&
+                        printf '%s\n' "$line" \
+                            >>"$BACKLOT_STATE_DIR/fake-inbox-${BACKLOT_STUDIO}-${BACKLOT_ROLE:-role}"
+                fi
                 ;;
         esac
     fi
