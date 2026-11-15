@@ -105,6 +105,9 @@ impl Pane {
             }
             _ => {} // stale generation: a newer switch owns the pane
         }
+        // Paint/state transitions move the paced flag: a completed
+        // `?9001` release arms pacing, a Down/Gone disarms it.
+        self.sync_pacing();
     }
 
     /// One parked-lease-drain stream event: DATA feeds that wire's VT
