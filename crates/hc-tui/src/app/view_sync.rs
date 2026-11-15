@@ -110,6 +110,7 @@ impl App {
         self.reconcile_popups();
         self.synthesize_alerts(Instant::now());
         self.share_seen();
+        self.reap_exited();
     }
 
     /// Request a surface draw; Source acknowledges only displayed output.

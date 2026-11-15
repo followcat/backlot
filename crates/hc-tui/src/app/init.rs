@@ -140,6 +140,9 @@ impl App {
             seen_rx,
             seen_req_rx: Some(seen_req_rx),
             seen_task: None,
+            reap_tx: None,
+            reap_task: None,
+            reaped_exited: Default::default(),
             outer_focused: None,
             probe,
         }
