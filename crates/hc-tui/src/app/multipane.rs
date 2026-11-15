@@ -186,6 +186,12 @@ impl App {
             });
             pane.on_view(&self.view);
         }
+        // Off-tab observers pace their DATA onto the shared flush grid;
+        // visible ones are rendered surfaces and stay live.
+        let visible = self.visible_panes();
+        for (id, pane) in &mut self.observers {
+            pane.set_off_tab(!visible.iter().any(|v| v == id));
+        }
     }
 
     /// Route an attach-actor report to its owning pane; `true` only

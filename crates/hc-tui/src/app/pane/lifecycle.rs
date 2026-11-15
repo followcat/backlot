@@ -6,12 +6,11 @@ impl Pane {
     /// Opens a fresh attach for `spec` at the next generation.
     /// `resumed` marks wire recovery (no fresh ownership activity);
     /// `attempts` carries the backoff count a Down retry accumulated.
-    /// A new incarnation drops `Encoded` leftovers — bytes bound to the
-    /// dead wire are never replayed; `Key`/`Paste` items re-encode
-    /// under the fresh post-paint VT.
+    /// A new incarnation drops `Encoded` leftovers — bytes bound to a
+    /// dead wire are never replayed; `Key`/`Paste` re-encode fresh.
     pub(super) fn spawn(&mut self, spec: Spec, resumed: bool, attempts: u32) {
-        // All visible panes share an event channel. A wire identity is unique
-        // across panes and reincarnations, including retired observer events.
+        // All visible panes share an event channel; a wire identity is
+        // unique across panes and reincarnations.
         static NEXT_ROUTE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         self.generation = NEXT_ROUTE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.attaches += 1;
@@ -51,7 +50,11 @@ impl Pane {
         let ev = self.ev.clone();
         let open = Arc::clone(&self.open);
         let (out, out_rx) = mpsc::channel(OUT_QUEUE);
-        let task = tokio::spawn(attach_task(open, params, spec.role, generation, ev));
+        let paced = self.pacing.subscribe();
+        self.sync_pacing();
+        let task = tokio::spawn(tasks::attach_task_paced(
+            open, params, spec.role, generation, ev, paced,
+        ));
         self.state = State::Opening {
             generation,
             spec,
@@ -65,8 +68,7 @@ impl Pane {
     }
 
     /// Drops the current attach attempt/stream. `graceful` spawns the
-    /// CLOSE handshake when the Arc is already sole-owned; either way
-    /// `Attach::drop` bounds the teardown — the program is never killed.
+    /// CLOSE handshake when sole-owned; `Attach::drop` bounds teardown.
     pub(super) fn teardown(&mut self, graceful: bool) {
         let state = std::mem::replace(&mut self.state, State::Idle);
         match state {
@@ -81,13 +83,13 @@ impl Pane {
             }
             State::Idle | State::Down { .. } | State::Gone { .. } => {}
         }
+        self.sync_pacing();
     }
 
     /// Parks the live attach for input-lease drain on a pane switch:
     /// it keeps its writer and the VT that encodes releases under this
-    /// wire's live modes. `Some(route)` binds the attach's generation —
-    /// a reincarnated terminal is a different route. `None` when
-    /// nothing live could be parked.
+    /// wire's live modes. `Some(route)` binds the attach's generation;
+    /// `None` when nothing live could be parked.
     pub fn park_outgoing(&mut self) -> Option<u64> {
         self.sweep_parked();
         let State::Live(_) = &self.state else {
@@ -205,8 +207,6 @@ impl Pane {
     /// transport-write fence confirms every DATA frame is on the wire
     /// (CLOSE rides the control queue and would otherwise overtake it),
     /// then the attach detaches and `RouteClosed` retires the entry.
-    /// The task stays owned — `writer_abort` cancels a blocked writer
-    /// on teardown since aborting `done` alone would only detach it.
     pub fn unpark(&mut self, route: u64) {
         let Some(parked) = self.take_parked(route) else {
             return;

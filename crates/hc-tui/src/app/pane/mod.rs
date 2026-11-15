@@ -25,6 +25,7 @@ mod down;
 mod held;
 mod notices;
 mod open;
+mod pacing;
 mod paint_gate;
 mod pending_lifecycle;
 mod pending_queue;
@@ -33,6 +34,7 @@ mod repaint;
 mod tasks;
 
 pub(crate) use render_cache::PaneRenderCache;
+#[allow(unused_imports)]
 pub use tasks::attach_task;
 
 use std::collections::VecDeque;
@@ -279,6 +281,8 @@ pub struct Pane {
     /// Text the program copied (OSC 52) since the app last drained.
     /// `pub(crate)` so the app-level byte test can seed it.
     pub(crate) pending_clipboard: Vec<Vec<u8>>,
+    /// Off-tab pacing; the watched flag is `off_tab && fresh paint`.
+    pacing: pacing::Pacing,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -327,6 +331,7 @@ impl Pane {
             initial: None,
             pending_bells: 0,
             pending_clipboard: Vec::new(),
+            pacing: pacing::Pacing::default(),
             attaches: 0,
         }
     }

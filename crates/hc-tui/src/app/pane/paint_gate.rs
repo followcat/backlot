@@ -140,6 +140,7 @@ impl Pane {
         };
         if released {
             self.flush_pending();
+            self.sync_pacing();
         }
         released
     }
