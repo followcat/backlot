@@ -126,11 +126,8 @@ async fn timeout_releases_capacity_and_late_replies_are_dropped() {
             match req["method"].as_str().unwrap() {
                 "machine.list" => core.reply(&req["id"], json!({"machines": []})).await,
                 "terminal.list" => {
-                    core.reply(
-                        &req["id"],
-                        json!({"terminals": [], "hidden_finished": 0}),
-                    )
-                    .await;
+                    core.reply(&req["id"], json!({"terminals": [], "hidden_finished": 0}))
+                        .await;
                 }
                 other => panic!("unexpected request {other}"),
             }
