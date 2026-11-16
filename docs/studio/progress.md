@@ -111,6 +111,28 @@
   The card gate is a working rule (D17a), not yet backed by a pre-allowed launch (H3). No real
   runner and no live studios; H2 and H3 carry the behaviour.
 
+## S12: the cmd adapter and two mixed-cast real runs (2026-11-13, 2026-11-14)
+
+- Done: `runners/cmd.rs` launches Command Code (`cmd`) for a role, with its work states, its
+  prompt block and a per-worktree `.commandcode/settings.json` (mode 600) that pre-allows
+  `backlot`, the actor's git subcommands and the declared check. `effort` is optional in the
+  cast: `cursor`, `devin` and `cmd` take none. Work detection reads the structured status
+  a terminal reports first and the screen second. Session discovery has a window per runner
+  (cmd 240 s). New commands: `backlot attention clear <seq>` and `backlot stage watch`. A rate
+  limit is told apart from other agent errors and retried a bounded number of times.
+- Run (S12c): Devin as director, cursor-agent as writer, one cmd actor, the producer on `fake`.
+  The loop completed up to the user's `finish`: 83 ledger events, one task delivered, checked
+  by the stage, accepted and merged. The director answered the actor's four prompts.
+- Run (S12e): the same cast with two cmd actors at once, 323 ledger events in 1 h 48 min, to
+  `studio.finished`. 86 attentions raised and 86 cleared. Devin and cmd were read from their
+  structured status, cursor from its screen.
+- Found: cursor's `Write to this file?` picker was not a prompt to the stage in either run and
+  was answered by hand; a role closed by `studio.finished` could keep an open attention. Both
+  fixed afterwards (S12f): every cursor picker of that shape reads as a prompt, and closing a
+  role clears what it had open. The fixes have not been through a real run.
+- Not verified: restart recovery, stalls and the rate-limit retry on these three runners; a
+  real producer other than Claude Code.
+
 ## S11: the cursor-agent adapter (2026-11-11)
 
 - Measured first (S11a): cursor-agent 2026.11.05 was probed live in a scratch hc session —

@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560" role="img" aria-labelledby="t d">
+  <title id="t">How a backlot studio works</title>
+  <desc id="d">You give a requirement to the producer. The producer and the writer agree on a plan, the director splits it into tasks and casts actors, each actor works in its own git worktree, the stage runs checks on every delivery, the director reviews it, and accepted work is merged. Hollywood watches every studio and proposes cards that you apply.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8892ad"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#f0b24a"/>
+    </marker>
+    <style>
+      text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+      .h { font-size: 13px; font-weight: 700; letter-spacing: 2px; }
+      .n { font-size: 15px; font-weight: 700; fill: #ece5d3; }
+      .s { font-size: 12px; fill: #8892ad; }
+      .l { font-size: 12px; fill: #b9b3a4; }
+      .box { fill: #1b2030; stroke: #39425c; stroke-width: 1; }
+      .w { fill: none; stroke: #8892ad; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="560" rx="10" fill="#11141d"/>
+
+  <!-- Hollywood -->
+  <rect x="40" y="28" width="1120" height="72" rx="6" fill="#171b28" stroke="#f0b24a" stroke-width="1" stroke-dasharray="6 4"/>
+  <text x="64" y="58" class="h" fill="#f0b24a">HOLLYWOOD</text>
+  <text x="64" y="82" class="l">one agent above every studio: it watches, reports and proposes cards</text>
+  <text x="1136" y="58" class="s" text-anchor="end">pause · resume · priority · close · new studio</text>
+  <text x="1136" y="82" class="l" text-anchor="end">a card does nothing until you apply it</text>
+  <path d="M600 100V134" stroke="#f0b24a" stroke-width="1.5" stroke-dasharray="4 4" fill="none" marker-end="url(#g)"/>
+
+  <!-- the studio -->
+  <rect x="40" y="136" width="1120" height="272" rx="6" fill="none" stroke="#39425c" stroke-width="1"/>
+  <text x="64" y="164" class="h" fill="#8892ad">A STUDIO</text>
+  <text x="170" y="164" class="s">one requirement, one cast, one ledger</text>
+
+  <g>
+    <rect x="60" y="196" width="120" height="64" rx="6" fill="none" stroke="#ece5d3" stroke-width="1.5"/>
+    <text x="120" y="233" class="n" text-anchor="middle">You</text>
+
+    <rect x="220" y="196" width="120" height="64" rx="6" class="box"/>
+    <text x="280" y="224" class="n" text-anchor="middle">Producer</text>
+    <text x="280" y="244" class="s" text-anchor="middle">you talk to it</text>
+
+    <rect x="220" y="316" width="120" height="64" rx="6" class="box"/>
+    <text x="280" y="344" class="n" text-anchor="middle">Writer</text>
+    <text x="280" y="364" class="s" text-anchor="middle">plan, acceptance</text>
+
+    <rect x="380" y="196" width="120" height="64" rx="6" class="box"/>
+    <text x="440" y="224" class="n" text-anchor="middle">Director</text>
+    <text x="440" y="244" class="s" text-anchor="middle">tasks, casting</text>
+
+    <rect x="540" y="190" width="120" height="26" rx="5" class="box" style="stroke:#f0b24a"/>
+    <text x="600" y="208" class="l" text-anchor="middle">actor · t1</text>
+    <rect x="540" y="222" width="120" height="26" rx="5" class="box" style="stroke:#f0b24a"/>
+    <text x="600" y="240" class="l" text-anchor="middle">actor · t2</text>
+    <rect x="540" y="254" width="120" height="26" rx="5" class="box" style="stroke:#f0b24a"/>
+    <text x="600" y="272" class="l" text-anchor="middle">actor · t3</text>
+
+    <rect x="700" y="196" width="120" height="64" rx="6" class="box"/>
+    <text x="760" y="224" class="n" text-anchor="middle">Checks</text>
+    <text x="760" y="244" class="s" text-anchor="middle">run by the stage</text>
+
+    <rect x="860" y="196" width="120" height="64" rx="6" class="box"/>
+    <text x="920" y="224" class="n" text-anchor="middle">Review</text>
+    <text x="920" y="244" class="s" text-anchor="middle">by the director</text>
+
+    <rect x="1020" y="196" width="120" height="64" rx="6" class="box" style="stroke:#8fd694"/>
+    <text x="1080" y="224" class="n" text-anchor="middle" style="fill:#8fd694">Merged</text>
+    <text x="1080" y="244" class="s" text-anchor="middle">integration</text>
+  </g>
+
+  <!-- the path of the work -->
+  <g class="w">
+    <path d="M180 228H218" marker-end="url(#a)"/>
+    <path d="M280 262V314" marker-start="url(#a)" marker-end="url(#a)"/>
+    <path d="M340 228H378" marker-end="url(#a)"/>
+    <path d="M500 228H538" marker-end="url(#a)"/>
+    <path d="M660 228H698" marker-end="url(#a)"/>
+    <path d="M820 228H858" marker-end="url(#a)"/>
+    <path d="M980 228H1018" marker-end="url(#a)"/>
+    <path d="M920 262V332H600V284" marker-end="url(#a)"/>
+  </g>
+  <text x="200" y="182" class="s" text-anchor="middle">requirement</text>
+  <text x="360" y="182" class="s" text-anchor="middle">dispatch</text>
+  <text x="520" y="182" class="s" text-anchor="middle">cast</text>
+  <text x="680" y="182" class="s" text-anchor="middle">deliver</text>
+  <text x="1000" y="182" class="s" text-anchor="middle">accepted</text>
+  <text x="760" y="352" class="s" text-anchor="middle">changes requested: rework, a capped number of rounds</text>
+  <text x="440" y="296" class="s" text-anchor="middle">each actor in its</text>
+  <text x="440" y="312" class="s" text-anchor="middle">own git worktree</text>
+  <path d="M506 300H520Q530 300 530 290V270H538" class="w" stroke-dasharray="3 3"/>
+
+  <!-- what holds it together -->
+  <rect x="40" y="432" width="548" height="96" rx="6" fill="#171b28" stroke="#39425c" stroke-width="1"/>
+  <text x="64" y="462" class="h" fill="#f0b24a">THE STAGE</text>
+  <text x="64" y="486" class="l">starts every role as an ordinary hc terminal, delivers</text>
+  <text x="64" y="506" class="l">messages when a role is idle, and tells you what needs you</text>
+
+  <rect x="612" y="432" width="548" height="96" rx="6" fill="#171b28" stroke="#39425c" stroke-width="1"/>
+  <text x="636" y="462" class="h" fill="#f0b24a">THE LEDGER</text>
+  <text x="636" y="486" class="l">every step is a recorded event: talking never moves a task,</text>
+  <text x="636" y="506" class="l">a backlot command does</text>
+</svg>
