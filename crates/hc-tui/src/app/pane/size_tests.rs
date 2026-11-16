@@ -21,11 +21,14 @@ async fn size_holder_resizes_without_input_focus_emulator_or_replies() {
     assert!(!pane.key(&key('x')));
     pane.paste(b"unwanted");
     pane.focused(true);
-    // The holder returns credit at the wire: no emulator, no replies,
+    // The holder returns credit at the wire — in 64 KiB steps, so a
+    // full step of bytes follows the queries: no emulator, no replies,
     // and the bytes never cross the pane event channel.
     let queries = b"\x1b[6n\x1b[c\x1b[?9001l";
     core.send_stream(CH, Kind::Data, queries).await;
-    await_credit(&mut core, queries.len() as u64).await;
+    core.send_stream(CH, Kind::Data, &vec![b'x'; 64 * 1024])
+        .await;
+    await_credit(&mut core, 64 * 1024).await;
     drain_no_data(&mut pane, &mut rx);
     assert!(pane.vt().is_none());
     pane.allocated(84, 47);
@@ -293,6 +296,33 @@ async fn size_holder_data_credit_flows_without_waking_the_ui() {
     })
     .await
     .expect("down deadline");
+}
+
+/// Discarded size-lease bytes still owe the core credit, but it goes
+/// back in 64 KiB steps (`INITIAL_CREDIT / 4`), not one CREDIT frame
+/// per DATA chunk: 63 KiB releases nothing yet, the 64th KiB releases
+/// exactly one CREDIT for the whole batch — the core's 256 KiB window
+/// never dips below 192 KiB.
+#[tokio::test]
+async fn size_holder_credit_returns_in_64kib_steps() {
+    let (mut pane, mut rx, mut accept) = rig();
+    pane.want(Some(spec(Role::SizeLease)));
+    let mut core = serve(&mut accept, true).await;
+    step_until_live(&mut pane, &mut rx).await;
+    let chunk = vec![b'x'; 1024];
+    for _ in 0..63 {
+        core.send_stream(CH, Kind::Data, &chunk).await;
+    }
+    // Below the step: the consumed bytes owe no CREDIT frame yet.
+    no_kind(&mut core, CH, &[Kind::Credit], 200).await;
+    core.send_stream(CH, Kind::Data, &chunk).await;
+    // The accumulated 64 KiB releases one CREDIT for the batch.
+    let credit = read_kind(&mut core, CH, Kind::Credit).await;
+    assert_eq!(
+        u32::from_le_bytes(credit.payload[..4].try_into().unwrap()),
+        64 * 1024
+    );
+    no_kind(&mut core, CH, &[Kind::Credit], 200).await;
 }
 
 #[tokio::test]
