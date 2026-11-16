@@ -79,8 +79,14 @@ labels.
 
 Herdr's display priority is `Blocked > Done > Working > Idle > Unknown`.
 Workspace and tab aggregates use that priority. The default agent sort is
-herdr's configured default (space order); an explicit priority sort uses
-the activity chronology and deterministic receipt rule below.
+`priority` (an hc-tui difference from herdr, whose configured default is
+space order); an explicit `agent_panel_sort = "spaces"` keeps space order.
+The priority sort uses the activity chronology and deterministic receipt
+rule below. Chrome choices the user makes by hand — the sort toggle,
+sidebar width, section split, collapse state and workspace group
+collapses — persist per endpoint under
+`$XDG_STATE_HOME/hc-tui/client-shell/` and win over config at the next
+start, as herdr does.
 
 Completion comes only from a present root or named record's non-null
 `activity.records[record].completion_ordinal`. Idle/done without a new marker

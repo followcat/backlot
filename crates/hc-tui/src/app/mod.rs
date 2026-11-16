@@ -44,6 +44,7 @@ mod pane_mouse;
 mod pane_selection;
 pub(crate) mod popup;
 mod popup_selection;
+mod preferences;
 mod presentation;
 mod reap;
 mod reload;
@@ -54,6 +55,7 @@ mod seen;
 mod selection_copy;
 mod settings;
 mod shared;
+mod shell_state;
 mod synthesize;
 mod tab_status;
 mod view_sync;
@@ -63,6 +65,7 @@ mod word_selection;
 
 pub use input::UiEvent;
 pub use pane::{OpenAttach, PaneEv, Role, Spec};
+pub(crate) use shell_state::ShellState;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -120,33 +123,6 @@ pub struct Probe {
 /// notifications): the outer terminal in production, a test recorder
 /// otherwise. A boxed `FnMut` keeps the app free of global-IO calls.
 pub type HostControlSink = Box<dyn FnMut(&[u8]) -> std::io::Result<()>>;
-
-/// The chrome state `ShellRenderState` borrows each frame — scroll
-/// offsets, collapse sets, reveal flags and the sidebar split.
-#[derive(Default)]
-pub(crate) struct ShellState {
-    pub collapsed_endpoints: std::collections::HashSet<ClientEndpointId>,
-    pub collapsed_groups: std::collections::HashSet<String>,
-    pub remote_collapsed_groups:
-        std::collections::HashMap<ClientEndpointId, std::collections::HashSet<String>>,
-    pub workspace_scroll: usize,
-    pub agent_scroll: usize,
-    pub tab_scroll: usize,
-    pub reveal_focused_workspace: bool,
-    pub reveal_focused_tab: bool,
-    pub sidebar_collapsed: bool,
-    /// Expanded sidebar's spaces:agents split, `0.0..=1.0`.
-    pub sidebar_section_split: f32,
-    pub reveal_navigation_workspace: bool,
-    /// Mobile switcher viewport scroll (Navigate mode under
-    /// `mobile_width_threshold` — the switcher is the mobile picker).
-    pub mobile_switcher_scroll: usize,
-    /// Scrolls the switcher to the pending workspace highlight on move.
-    pub reveal_mobile_workspace: bool,
-    pub machine_diagnostics: crate::chrome::render::MachineDiagnostics,
-    /// Split/pane border cells keyed by the last frame's layout.
-    pub border_cache: crate::chrome::panes_draw::PaneBorderCache,
-}
 
 /// A forwarded press and the wire it went out on. `route` binds the
 /// attach generation so a release can never land on a replacement
@@ -244,6 +220,12 @@ pub struct App {
     /// divider; the reference's `sidebar_width` runtime field.
     sidebar_width: u16,
     sidebar_width_manual: bool,
+    /// `shell_state.sidebar_collapsed` was toggled by hand — persisted
+    /// as `preferences.sidebar_collapsed`.
+    sidebar_collapsed_manual: bool,
+    /// `shell_state.sidebar_section_split` was dragged by hand —
+    /// persisted as `preferences.sidebar_section_split`.
+    sidebar_section_split_manual: bool,
     agent_panel_sort_manual: bool,
     /// Active chrome drag grab (`ChromeDrag`).
     chrome_drag: Option<mouse::ChromeDrag>,

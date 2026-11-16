@@ -34,6 +34,10 @@ impl App {
         }
         // Reload does not reset startup preferences or a user's current collapse state.
         next.sidebar_start_collapsed = previous.sidebar_start_collapsed;
+        // The endpoint's preferences file and its loaded choices carry
+        // over: `from_config` starts them empty.
+        next.preferences = previous.preferences.clone();
+        next.preferences_path = previous.preferences_path.clone();
         next.keybinds = previous.keybinds.clone();
         if invalid("keys") {
             next.remote_image_paste_key = previous.remote_image_paste_key;

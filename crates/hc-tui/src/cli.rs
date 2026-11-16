@@ -185,6 +185,15 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         crate::config::config_diagnostic_summary(&loaded.diagnostics),
         config_path,
     );
+    // Chrome preferences key on the endpoint's own identity — the
+    // local core's socket, or a remote's target + session — so two
+    // endpoints never share a file.
+    let shell = match endpoint {
+        Endpoint::Local(local) => shell.with_local_endpoint(env, &local.socket),
+        Endpoint::Remote(remote) => {
+            shell.with_remote_endpoint(env, &remote.target, &remote.session)
+        }
+    };
     let params = WatchParams {
         traversal: Some(crate::project::agent_traversal),
         ..WatchParams::default()

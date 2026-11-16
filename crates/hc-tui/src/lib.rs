@@ -18,6 +18,7 @@ pub(crate) mod copy_window;
 pub mod core_start;
 pub mod host;
 pub mod input;
+pub mod preferences;
 pub mod project;
 
 pub mod raw_events;

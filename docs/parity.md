@@ -737,6 +737,22 @@ Everything else on the compared surfaces still diffs normally.
   navigator checkpoint — each filter, search-without-results, movement
   and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.
+- **Agent-panel sort default and remembered chrome choices.** Deliberate:
+  hc-tui's `[ui] agent_panel_sort` defaults to `priority`, where the
+  reference's configured default is `spaces`; an explicit `spaces`
+  (or the `workspaces` alias) still selects space order. Like the
+  reference, hc-tui persists the manually chosen chrome state —
+  `agent_panel_sort`, `sidebar_width`, `sidebar_section_split`,
+  `sidebar_collapsed`, `collapsed_groups`, `remote_collapsed_groups` —
+  as one JSON file per endpoint under its own state root
+  (`$XDG_STATE_HOME/hc-tui/client-shell/`, else
+  `~/.local/state/hc-tui/client-shell/`), keyed by the local socket
+  path or the remote target+session, written atomically through a temp
+  file and rename. A saved choice wins over config at start and a
+  config reload keeps it; a missing or malformed file is ignored and a
+  failed write is a notice. `collapsed_endpoints` is not persisted —
+  the reference does not persist it either. The file lives in hc-tui's
+  state root, never herdr's.
 
 ## Slice 5 — popups, peek and custom commands
 

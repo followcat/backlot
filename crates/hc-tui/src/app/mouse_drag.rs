@@ -80,6 +80,14 @@ impl App {
         if matches!(self.chrome_drag, Some(ChromeDrag::PaneSplit { .. })) {
             self.drag_split(point, true);
         }
+        // A sidebar width/section drag persists once at its end —
+        // the reference's mouse-release preference write.
+        if matches!(
+            self.chrome_drag,
+            Some(ChromeDrag::SidebarWidth) | Some(ChromeDrag::SidebarSection)
+        ) {
+            self.persist_chrome_preferences();
+        }
         self.chrome_drag = None;
         if let Some(press) = self.workspace_press.take() {
             let moved = point.0.abs_diff(press.start_column) > DRAG_THRESHOLD
@@ -140,6 +148,7 @@ impl App {
         }
         let ratio = (row.saturating_sub(divider.y) as f32 / divider.height as f32).clamp(0.1, 0.9);
         self.shell_state.sidebar_section_split = ratio;
+        self.sidebar_section_split_manual = true;
     }
 
     /// Focus helpers — a "focus" is the single attach: the terminal
@@ -230,7 +239,7 @@ impl App {
     }
 
     /// Agent-panel sort toggle: flips the runtime sort between the
-    /// two reference orders.
+    /// two reference orders and remembers the choice.
     pub(in crate::app) fn flip_agent_sort(&mut self) {
         self.agent_panel_sort_manual = true;
         use crate::config::AgentPanelSortConfig as S;
@@ -238,6 +247,7 @@ impl App {
             S::Spaces => S::Priority,
             S::Priority => S::Spaces,
         };
+        self.persist_chrome_preferences();
     }
 
     /// Sidebar group collapse toggle — local groups land on
@@ -266,5 +276,6 @@ impl App {
                 }
             }
         }
+        self.persist_chrome_preferences();
     }
 }

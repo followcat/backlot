@@ -23,6 +23,7 @@ mod mouse_selection;
 mod narrow;
 mod observer_policy_tests;
 mod page_keys;
+mod preferences;
 mod reload;
 mod remote_children;
 mod review_regressions;

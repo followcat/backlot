@@ -46,6 +46,29 @@ fn known_deferred_sections_do_not_hide_unknown_root_keys() {
 }
 
 #[test]
+fn agent_panel_sort_defaults_to_priority_with_explicit_values_intact() {
+    use crate::config::{AgentPanelSortConfig, UiConfig};
+    assert_eq!(
+        UiConfig::default().agent_panel_sort,
+        AgentPanelSortConfig::Priority
+    );
+    // A config without the key gets the same new default.
+    let loaded = load_text("[ui]\nsidebar_width = 30\n");
+    assert_eq!(
+        loaded.config.ui.agent_panel_sort,
+        AgentPanelSortConfig::Priority
+    );
+    for (value, expected) in [
+        ("spaces", AgentPanelSortConfig::Spaces),
+        ("workspaces", AgentPanelSortConfig::Spaces),
+        ("priority", AgentPanelSortConfig::Priority),
+    ] {
+        let loaded = load_text(&format!("[ui]\nagent_panel_sort = '{value}'\n"));
+        assert_eq!(loaded.config.ui.agent_panel_sort, expected, "{value}");
+    }
+}
+
+#[test]
 fn herdr_only_experimental_keys_are_accepted_and_ignored() {
     let loaded = load_text("[experimental]\npane_history = true\n");
     assert!(loaded.diagnostics.is_empty());
