@@ -73,7 +73,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // U1: studio mode replaces the agents section with the current
     // studio's cast — borrowed views only.
     let summary = app.panel_summary();
-    let cast = if app.studio.active {
+    let cast = app.studio.active.then(|| {
         crate::cast::CastView::build(
             summary.as_ref(),
             &app.projection.snapshot,
@@ -84,9 +84,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             app.focused.as_deref(),
             app.panel.spin,
         )
-    } else {
-        None
-    };
+    });
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -185,6 +183,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         || app.navigator.is_some()
         || app.settings.is_some()
         || app.panel_fullscreen()
+        || app.opening_visible()
         || app.mode == Mode::Copy
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
     let scrollbars = app.shell.pane_scrollbars;
@@ -296,6 +295,16 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             track,
             &app.shell.palette,
             info.is_focused,
+        );
+    }
+    // U2: the opening page covers the pane surface while it is up —
+    // the terminals beneath stay attached, overlays still paint on top.
+    if app.opening_visible() {
+        crate::opening::render_opening(
+            buf,
+            layout.pane_surface,
+            &app.shell.palette,
+            app.opening_opts(),
         );
     }
     let (mode_bar, overlay_painted) = draw_overlays::render_overlays_and_cursor(

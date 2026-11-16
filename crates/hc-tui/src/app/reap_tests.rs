@@ -28,6 +28,7 @@ fn app_with(terms: Vec<Terminal>) -> App {
         shell,
         Arc::new(Probe::default()),
     );
+    app.set_plain(true);
     app.view = crate::sidebar::fixture::view(terms, vec![]);
     app
 }

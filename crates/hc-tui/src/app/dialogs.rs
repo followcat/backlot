@@ -62,6 +62,13 @@ impl App {
         });
     }
     pub(super) fn new_tab(&mut self) {
+        // U2: outside `--plain` every new terminal is a studio shell —
+        // a `shell <n>` tab in the current studio, or the opening
+        // page when no studio exists yet.
+        if !self.plain {
+            self.new_tab_studio();
+            return;
+        }
         let creation = match self.creation(None, false) {
             Ok(c) => c,
             Err(e) => {
@@ -95,7 +102,13 @@ impl App {
     /// `new_workspace` binding: prompt with the derived label when
     /// `prompt_new_workspace_name` is set, else create directly — matching
     /// the reference's `open_new_workspace_overlay`/direct create.
+    /// Outside `--plain` there are no empty workspaces (U2): the key
+    /// brings the opening page's new-studio flow up instead.
     pub(super) fn new_workspace(&mut self) {
+        if !self.plain {
+            self.opening_show();
+            return;
+        }
         let (creation, suggested) = match self.workspace_creation() {
             Ok(pair) => pair,
             Err(e) => {

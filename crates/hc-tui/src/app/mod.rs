@@ -39,6 +39,7 @@ mod navigator;
 mod notices;
 pub(crate) mod notifications;
 mod notifications_focus;
+mod opening;
 mod pane;
 mod pane_geometry;
 mod pane_mouse;
@@ -57,6 +58,7 @@ mod selection_copy;
 mod settings;
 mod shared;
 mod studio;
+mod studio_shell;
 mod synthesize;
 mod tab_status;
 mod view_sync;
@@ -242,9 +244,17 @@ pub struct App {
     panel_rx: mpsc::Receiver<(String, Result<(), String>)>,
     /// Endpoint flags (`--session`/`--remote`) for spawned actions.
     panel_endpoint_args: Vec<String>,
+    /// `--plain` (U2): the plain multiplexer — studio mode never
+    /// latches, so the cast, the opening page and every studio key
+    /// stay off and the frame is Herdr's, cell-identical to `main`.
+    plain: bool,
     /// Studio mode's client-local state (U1): the mode latch, the
     /// current studio and per-studio remembered persons.
     studio: crate::studio::Studio,
+    /// The opening page's client-local state (U2) — dismissed by Esc,
+    /// re-shown by `new_workspace`; drawn while studio mode is off
+    /// and `--plain` was not given.
+    opening: crate::opening::Opening,
     /// The Hollywood layer's client-local state (H4) — `Hidden` by
     /// default and whenever `[hollywood]` is absent, so a stock frame
     /// is cell-identical to before the layer existed.

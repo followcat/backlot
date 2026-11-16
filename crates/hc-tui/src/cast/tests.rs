@@ -74,7 +74,7 @@ fn cast_view<'a>(
     focused: Option<&'a str>,
 ) -> CastView<'a> {
     CastView {
-        studio: &summary.studios[0],
+        studio: Some(&summary.studios[0]),
         index: 0,
         total: 1,
         focused_terminal: focused,
@@ -84,6 +84,7 @@ fn cast_view<'a>(
         ]
         .into_iter()
         .collect(),
+        shells: Vec::new(),
         others,
         others_expanded,
         spin: 0,

@@ -29,6 +29,10 @@ pub struct Options {
     pub session: Option<OsString>,
     /// SSH target (`--remote`); a local endpoint when `None`.
     pub remote: Option<String>,
+    /// `--plain`: the plain multiplexer from `main` — no studio mode,
+    /// no opening page. For the parity harness and troubleshooting;
+    /// general users wanting this shape should run `hc-tui`.
+    pub plain: bool,
 }
 
 /// Parses `args` (the program's argv tail). Errors are user-facing.
@@ -36,6 +40,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
     let mut options = Options {
         session: None,
         remote: None,
+        plain: false,
     };
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -43,6 +48,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Action, String> {
             "-h" | "--help" => return Ok(Action::Help),
             "-V" | "--version" => return Ok(Action::Version),
             "--upgrade" => return Ok(Action::Upgrade),
+            "--plain" => options.plain = true,
             "--session" => {
                 let Some(value) = args.next() else {
                     return Err("--session needs a value".into());
@@ -118,6 +124,8 @@ Options:
       --remote <TARGET>  Connect over SSH: `ssh TARGET hc connect`; one
                          shared login and one attach connection per
                          target (login kept 10 minutes)
+      --plain            Plain multiplexer — no studio mode, no opening
+                         page (hc-tui is the general client)
   -h, --help             Print this help
   -V, --version          Print the version
       --upgrade          Run the official installer to upgrade to the
@@ -176,9 +184,11 @@ fn shared_attach(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::clien
 }
 
 /// Builds the app over the endpoint's real connections and runs it
-/// until detach. Errors are user-facing strings — a failure leaves the
-/// terminal restored by the caller's guard.
-pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
+/// until detach. `plain` keeps the client exactly as `main` outside
+/// studio mode: Herdr's agents list, keys and layout — no studio
+/// cast, no opening page. Errors are user-facing strings — a failure
+/// leaves the terminal restored by the caller's guard.
+pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
     let mut loaded = crate::config::load(&config_path);
@@ -223,6 +233,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     });
     let mouse_capture = shell.mouse_capture;
     let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
+    app.set_plain(plain);
 
     app.set_operations(rpc);
     // `endpoint_accepts_local_images` client arms: a `--remote`
@@ -319,7 +330,7 @@ pub async fn run_options(
         platform,
     )
     .map_err(|e| format!("endpoint: {e}"))?;
-    run(&endpoint, env).await
+    run(&endpoint, env, options.plain).await
 }
 
 #[cfg(test)]

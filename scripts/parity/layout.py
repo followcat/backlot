@@ -105,7 +105,8 @@ def run(args,size,binary):
         core.rpc('doc.set',{'name':'herdr-app','version':0,'value':foreign})
         reference=Reference(binary,args.config,out)
         for owner,executable in [(reference,binary),(core,args.hc_tui)]:
-            owner.ui=Pty([str(executable),'--session',owner.session],owner.env,owner.cwd,*size,cell_px=(10,20))
+            extra=['--plain'] if executable==args.hc_tui else []
+            owner.ui=Pty([str(executable),*extra,'--session',owner.session],owner.env,owner.cwd,*size,cell_px=(10,20))
             owner.ui.keyboard_flags_reply=7;owner.ui.sgr_pixel_mouse_reply=2
             owner.initial_size=size;owner.resizes=[]
         reference.ready()
@@ -244,7 +245,7 @@ def run(args,size,binary):
         # conflicts deterministically; here simultaneous edits must converge.
         from types import SimpleNamespace
         second=SimpleNamespace(kind='core-second',out=out,initial_size=size,resizes=[])
-        second.ui=Pty([str(args.hc_tui),'--session',core.session],core.env,core.cwd,*size,cell_px=(10,20))
+        second.ui=Pty([str(args.hc_tui),'--plain','--session',core.session],core.env,core.cwd,*size,cell_px=(10,20))
         second.ui.keyboard_flags_reply=7;second.ui.sgr_pixel_mouse_reply=2
         deadline=time.monotonic()+8
         while 'fixture gamma' not in text(checkpoint(second,'second-ready',size,args.decoder)):

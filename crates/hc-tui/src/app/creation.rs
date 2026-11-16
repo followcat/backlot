@@ -239,6 +239,12 @@ impl App {
         Ok((creation, suggested))
     }
     pub(super) fn split_pane(&mut self, vertical: bool) {
+        // U2: outside `--plain` a split creates a studio shell that
+        // joins the focused tab — or shows the opening page.
+        if !self.plain {
+            self.split_pane_studio(vertical);
+            return;
+        }
         match self.creation(Some(vertical), false) {
             Ok(creation) => self.submit_action(Action::Create(Box::new(creation))),
             Err(error) => self.show_notice("Split unavailable", &error),

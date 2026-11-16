@@ -61,6 +61,7 @@ fn two_studio_json() -> serde_json::Value {
 /// the real path.
 pub(super) fn two_studio_app() -> App {
     let mut app = app_with(&["t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t99"]);
+    app.set_plain(false);
     let mut stage = crate::sidebar::fixture::term("t9");
     stage.name = Some("backlot-stage".into());
     stage.state = "live".into();
@@ -125,7 +126,7 @@ async fn a_document_with_studios_latches_studio_mode_and_the_cast() {
 }
 
 #[tokio::test]
-async fn a_malformed_read_keeps_the_mode_a_zero_studio_doc_leaves_it() {
+async fn a_missing_or_empty_document_keeps_the_mode() {
     let mut app = two_studio_app();
     assert!(app.studio.active);
     // A malformed read: the document slot vanishes (the watcher's
@@ -134,7 +135,9 @@ async fn a_malformed_read_keeps_the_mode_a_zero_studio_doc_leaves_it() {
     app.view.documents_mut().remove(&doc_key());
     app.refresh_projection();
     assert!(app.studio.active, "a missing/bad read keeps studio mode");
-    // A good document with zero studios leaves it.
+    // U2: a good document with zero studios keeps it too — the cast
+    // is the no-studio view (its `others` row), and the opening page
+    // covers the panes. Only `--plain` leaves studio mode.
     app.view.documents_mut().insert(
         doc_key(),
         Document {
@@ -146,31 +149,27 @@ async fn a_malformed_read_keeps_the_mode_a_zero_studio_doc_leaves_it() {
         .into(),
     );
     app.refresh_projection();
-    assert!(!app.studio.active, "zero studios leaves studio mode");
+    assert!(app.studio.active, "zero studios keeps studio mode");
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("agents"), "{text}");
+    assert!(text.contains("cast"), "{text}");
+    assert!(text.contains("others"), "{text}");
     assert!(!text.contains("cast ·"), "{text}");
 }
 
 #[tokio::test]
 async fn the_sidebar_width_follows_the_mode_unless_dragged() {
+    // `--plain` keeps herdr's width throughout.
+    let mut plain = app();
+    plain.refresh_projection();
+    let herdr = plain.shell.sidebar_width;
+    assert_eq!(plain.sidebar_width, herdr, "--plain keeps herdr's width");
+    // Studio mode (non-`--plain`) → backlot's width, documents or not.
     let mut app = two_studio_app();
-    // Studio mode latched at first publish → backlot's width.
     assert_eq!(app.sidebar_width, 26);
-    let herdr = app.shell.sidebar_width;
-    app.view.documents_mut().insert(
-        doc_key(),
-        Document {
-            value: serde_json::json!({
-                "schema": "backlot/1", "updated_ms": 2, "studios": []
-            }),
-            ..Document::default()
-        }
-        .into(),
-    );
+    app.view.documents_mut().remove(&doc_key());
     app.refresh_projection();
-    assert_eq!(app.sidebar_width, herdr, "leaving restores herdr's width");
+    assert_eq!(app.sidebar_width, 26, "no document keeps backlot's width");
 }
 
 // ---------- the four keys ----------

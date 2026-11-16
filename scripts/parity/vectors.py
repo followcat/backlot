@@ -60,7 +60,7 @@ def replay(args, fixture, reference=False):
             program.send(setup)
             wait_program(core, program, program.serial)
         if not reference:
-            core.ui = Pty([str(args.hc_tui), '--session', core.session], core.env,
+            core.ui = Pty([str(args.hc_tui), '--plain', '--session', core.session], core.env,
                           core.cwd, 120, 40, cell_px=expected.get('host_cell_px', (10, 20)))
         core.ui.keyboard_flags_reply = expected.get('host_keyboard_flags_reply', 0)
         core.ui.sgr_pixel_mouse_reply = expected.get('host_sgr_pixel_mouse_reply', 0)

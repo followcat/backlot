@@ -15,8 +15,14 @@ impl App {
     /// focus moves both land here. A mode flip re-derives the sidebar
     /// width unless the user dragged it this session.
     pub(super) fn sync_studio(&mut self) {
-        let summary = self.panel_summary();
+        // U2: unadorned `backlot` is always in studio mode — the cast
+        // (with its `others` row) replaces the agents list even while
+        // no studio exists and the opening page covers the panes.
+        // `--plain` is Herdr's exactly: no cast, no studio keys —
+        // the parity harness measures that client.
         let was = self.studio.active;
+        self.studio.active = !self.plain;
+        let summary = self.panel_summary();
         self.studio.sync(summary.as_ref(), self.focused.as_deref());
         if self.studio.active != was && !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
@@ -30,6 +36,16 @@ impl App {
             self.panel_config.sidebar_width
         } else {
             self.shell.sidebar_width
+        }
+    }
+
+    /// `--plain` (U2) — install the flag before the run loop so the
+    /// first `sync_studio` already refuses to latch studio mode.
+    pub(crate) fn set_plain(&mut self, plain: bool) {
+        self.plain = plain;
+        self.studio.active = !plain;
+        if !self.sidebar_width_manual {
+            self.sidebar_width = self.configured_sidebar_width();
         }
     }
 
@@ -67,34 +83,33 @@ impl App {
                     return;
                 };
                 let studio = &summary.studios[index];
+                // The cycle: the live people in cast order, then the
+                // studio's shells in shell-number order.
+                let cycle: Vec<String> = studio::cast_order(studio)
+                    .into_iter()
+                    .filter_map(|role| studio::live_terminal(role).map(str::to_owned))
+                    .chain(self.focused_studio_shells())
+                    .collect();
                 // A first press while the focus is outside the current
                 // studio lands on its remembered person.
-                let inside = self.focused.as_deref().is_some_and(|terminal| {
-                    studio
-                        .roles
-                        .iter()
-                        .any(|role| role.terminal.as_deref() == Some(terminal))
-                });
+                let inside = self
+                    .focused
+                    .as_deref()
+                    .is_some_and(|terminal| cycle.iter().any(|t| t == terminal));
                 if !inside {
                     let id = studio.id.clone();
                     self.focus_studio(&id);
                     return;
                 }
-                let live: Vec<&RoleSummary> = studio::cast_order(studio)
-                    .into_iter()
-                    .filter(|role| studio::live_terminal(role).is_some())
-                    .collect();
-                if live.is_empty() {
+                if cycle.is_empty() {
                     return;
                 }
-                let position = live
+                let position = cycle
                     .iter()
-                    .position(|role| role.terminal.as_deref() == self.focused.as_deref())
+                    .position(|t| Some(t.as_str()) == self.focused.as_deref())
                     .unwrap_or(0) as isize;
-                let next = live[(position + dir).rem_euclid(live.len() as isize) as usize];
-                if let Some(terminal) = next.terminal.clone() {
-                    self.focus_pane(terminal);
-                }
+                let next = &cycle[(position + dir).rem_euclid(cycle.len() as isize) as usize];
+                self.focus_pane(next.clone());
             }
         }
     }

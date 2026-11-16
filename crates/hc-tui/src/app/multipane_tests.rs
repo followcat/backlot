@@ -42,6 +42,7 @@ fn two_pane_app() -> App {
         shell,
         Arc::new(Probe::default()),
     );
+    app.set_plain(true);
     let terms: Vec<_> = ["t1", "t2"]
         .iter()
         .enumerate()

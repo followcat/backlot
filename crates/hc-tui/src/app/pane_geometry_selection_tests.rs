@@ -26,6 +26,7 @@ fn app_with(term: CoreTerminal) -> App {
         shell,
         Arc::new(Probe::default()),
     );
+    app.set_plain(true);
     app.view = view(vec![term], vec![]);
     app.refresh_projection();
     app

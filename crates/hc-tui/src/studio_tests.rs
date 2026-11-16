@@ -43,11 +43,10 @@ fn summary() -> Summary {
 }
 
 #[test]
-fn a_document_with_studios_latches_the_mode_and_the_first_is_current() {
+fn a_document_with_studios_makes_the_first_current() {
     let summary = summary();
     let mut studio = Studio::default();
     studio.sync(Some(&summary), None);
-    assert!(studio.active);
     assert_eq!(studio.current.as_deref(), Some("acme-shop"));
     assert_eq!(studio.current_index(&summary), Some(0));
 }
@@ -55,7 +54,12 @@ fn a_document_with_studios_latches_the_mode_and_the_first_is_current() {
 #[test]
 fn a_missing_or_bad_document_never_flips_the_latch() {
     let summary = summary();
-    let mut studio = Studio::default();
+    // `active` is `sync_studio`'s own latch (`!plain`) — documents
+    // never touch it, good or bad.
+    let mut studio = Studio {
+        active: true,
+        ..Studio::default()
+    };
     studio.sync(Some(&summary), Some("t1"));
     // `None` — a missing, malformed or foreign-schema read — keeps
     // every latch exactly as it was.
@@ -65,15 +69,20 @@ fn a_missing_or_bad_document_never_flips_the_latch() {
 }
 
 #[test]
-fn a_good_document_with_zero_studios_leaves_the_mode() {
-    let mut studio = Studio::default();
+fn a_good_document_with_zero_studios_keeps_the_mode() {
+    // U2: unadorned `backlot` is always in studio mode — the cast's
+    // `others` row is the no-studio view, not the agents list.
+    let mut studio = Studio {
+        active: true,
+        ..Studio::default()
+    };
     studio.sync(Some(&summary()), Some("t1"));
     let empty: Summary = serde_json::from_value(serde_json::json!({
         "schema": "backlot/1", "updated_ms": 2, "studios": []
     }))
     .unwrap();
     studio.sync(Some(&empty), Some("t1"));
-    assert!(!studio.active);
+    assert!(studio.active);
     assert_eq!(studio.current_index(&empty), None);
 }
 

@@ -239,8 +239,9 @@ impl App {
     }
 
     /// Spawn the action off the event loop through the injected
-    /// runner; the result comes back on `panel_rx`.
-    fn run_panel_action(&mut self, action: PanelAction) {
+    /// runner; the result comes back on `panel_rx`. The opening
+    /// page's `s` runs `stage start` through the same path.
+    pub(crate) fn run_panel_action(&mut self, action: PanelAction) {
         let future = (self.panel_runner)(action.argv);
         let tx = self.panel_action_tx.clone();
         let label = action.label;
