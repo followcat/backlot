@@ -75,12 +75,7 @@ fn blocked(runner: &str, screen: &str) -> bool {
             has_line_containing(screen, "Permission required")
                 && has_line_containing(screen, "Allow once")
         }
-        "cursor" => {
-            cursor_trust_dialog(screen)
-                || (has_line_containing(screen, "Run this command?")
-                    && has_line_starting(screen, "Not in allowlist:")
-                    && has_line_containing(screen, "→ Run (once) (y)"))
-        }
+        "cursor" => cursor_trust_dialog(screen) || cursor_approval_picker(screen),
         // Command Code's permission prompt: the `needs to …`
         // sentence plus the numbered picker cursor (S12a). The
         // folder-trust dialog is blocked too — `--trust` should
@@ -146,6 +141,57 @@ fn cursor_spinner_line(l: &str) -> bool {
 /// prompt, never something the stage answers.
 pub(crate) fn cursor_trust_dialog(text: &str) -> bool {
     text.contains("Workspace Trust Required") && text.contains("Trust this workspace")
+}
+
+/// A separator drawn the full width of the screen: only `─` after
+/// trimming. A diff preview inside a picker draws its own `─`
+/// rule — it divides the block it sits in, same test.
+pub(crate) fn is_full_width_rule(l: &str) -> bool {
+    let t = l.trim();
+    t.chars().count() >= 3 && t.chars().all(|c| c == '─')
+}
+
+/// Any cursor approval picker — `Run this command?`, `Write to
+/// this file?`, `Proceed with this edit?`, the lot: below the last
+/// full-width `─` divider an option `→` cursor line, the `Run
+/// Everything (shift+tab)` footer every picker shares, and
+/// allowlist/approval wording or a tool question (S12f; hc's
+/// `cursor.toml` maps the same shape). Below the divider is where
+/// pickers live — an answered one's scrollback above it and the
+/// composer's bare ` →` input row both stay out. The question's
+/// own words stay out of the match so a picker kind not yet named
+/// still blocks — `permit` decides whose it is.
+pub(crate) fn cursor_approval_picker(text: &str) -> bool {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines
+        .iter()
+        .rposition(|l| is_full_width_rule(l))
+        .map_or(0, |i| i + 1);
+    let region = &lines[start..];
+    region.iter().any(|l| l.trim_start().starts_with("→ "))
+        && region
+            .iter()
+            .any(|l| l.contains("Run Everything") && l.contains("(shift+tab)"))
+        && region
+            .iter()
+            .any(|l| l.contains("allowlist") || l.contains("approval") || cursor_picker_question(l))
+}
+
+/// A tool-question line in a picker region — `Write to this
+/// file?`, `Run this command?`, `Proceed with this edit?` and the
+/// other shapes the manifest names — matched case-insensitively on
+/// the phrase, not the verb.
+fn cursor_picker_question(l: &str) -> bool {
+    const WORDS: &[&str] = &[
+        "this command",
+        "this file",
+        "this mcp",
+        "proceed with this edit",
+        "allow this web",
+        "outside the sandbox",
+    ];
+    let l = l.to_lowercase();
+    WORDS.iter().any(|w| l.contains(w))
 }
 
 /// Command Code's folder-trust dialog — `Do you trust the files in

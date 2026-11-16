@@ -64,8 +64,9 @@ fn a_flagged_prompt_is_the_users_to_answer() {
     assert_eq!(
         msg,
         "the permission prompt on 'actor-t1-c1' is the user's — its screen \
-         reached for BACKLOT_* or an environment-clearing env flag; the \
-         director cannot answer it"
+         reached for BACKLOT_* or an environment-clearing env flag, or \
+         asked for a target the stage could not verify inside the work \
+         area; the director cannot answer it"
     );
     ok(
         &env,

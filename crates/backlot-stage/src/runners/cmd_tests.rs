@@ -47,6 +47,18 @@ fn slug_is_command_codes() {
     );
 }
 
+/// The S12e run's real slugs: `AIcontrol` is `a-icontrol` — the
+/// acronym's last capital starts the lowercase word, so the split
+/// lands before `Icontrol`, not after `AI`. The external run
+/// harness's ad-hoc `tr` acronym computed `aicontrol` and missed
+/// the session; the adapter's own function was never wrong.
+#[test]
+fn slug_splits_an_acronym_boundary() {
+    assert_eq!(slug("/home/user/AIcontrol"), "home-user-a-icontrol");
+    assert_eq!(slug("/home/user/s12e"), "home-user-s12e");
+    assert_eq!(slug("/home/user/acme-shop"), "home-user-acme-shop");
+}
+
 /// `Shell(...)` rules per role: the base `Shell(backlot)`; an
 /// actor's six git commands; the director's read-only set and
 /// `git merge`, never `git branch`; the declared checks verbatim —

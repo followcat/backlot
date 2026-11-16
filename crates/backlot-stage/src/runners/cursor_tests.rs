@@ -14,7 +14,8 @@ use super::cursor::{
     CursorPrep, allow_rules, config_content, dir_open_event, ensure_private, prepare, session_at,
     slug,
 };
-use super::{ActorIdentity, LaunchCtx, Prep, plan};
+use super::{ActorIdentity, LaunchCtx, Prep, plan, work_state};
+use crate::permit::{cursor_needs_user, prompt_block};
 
 fn tmp(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("bl-cursor-{tag}-{}", std::process::id()));
@@ -527,4 +528,61 @@ fn plan_carries_its_prep() {
         ]
     );
     assert_eq!(p.global_mcp, Path::new("/home/user/.cursor/mcp.json"));
+}
+
+/// The S12e gap, closed (S12f): a `Write to this file?` picker —
+/// the screen the real run left at `attention: none`, scrubbed —
+/// reads `blocked` like the shell picker, anchors a prompt block
+/// on its `→` option cursor, and is the director's to answer only
+/// while its target resolves strictly inside the role's own work
+/// area. Anything outside, protected or unread stays the user's.
+#[test]
+fn the_s12e_file_picker_is_a_bounded_prompt() {
+    let screen = "  ⠘⠤ Composing\n\
+                  ────────────────────────────────────────────────────────────────────────────────────────────────────────────\n\
+                  \x20  Approval 1 of 3\n\
+                  \x20  .../work/t1/plan.md -1\n\
+                  \x20  ────────────────────────────────────────────────────────────────────────────────────────────────\n\
+                  \x20  - the old draft\n\
+                  \x20  + the new draft\n\
+                  \x20Write to this file?\n\
+                  \x20 in /home/user/state/studios/acme-shop/work/t1/plan.md\n\
+                  \x20 → Proceed (y)\n\
+                  \x20   Reject & propose changes (esc or n or p)\n\
+                  \x20   Add Write(/home/user/state/studios/acme-shop/work/t1/plan.md) to allowlist? (tab)\n\
+                  \x20   Run Everything (shift+tab)\n\
+                  \x20 ←/→ to switch approval\n";
+    assert_eq!(
+        work_state("cursor", screen),
+        backlot_model::summary::Work::Blocked,
+        "the file picker is a blocked episode"
+    );
+    let block = prompt_block("cursor", screen).expect("a comparable block");
+    assert!(block.contains("Write to this file?"), "{block}");
+
+    // The target check: the worktree's own files are the
+    // director's; the state dir beside it is not.
+    let dir = tmp("picker");
+    let area = dir.join("work/t1");
+    fs::create_dir_all(&area).unwrap();
+    let inside = cursor_needs_user("cursor", screen, &area);
+    // The fixture's target is not under this test area, so it is
+    // the user's; rewrite it inside and it becomes the director's.
+    assert!(inside, "a target outside the work area is the user's");
+    let in_area = screen.replace(
+        "/home/user/state/studios/acme-shop/work/t1/plan.md",
+        &area.join("plan.md").display().to_string(),
+    );
+    assert!(
+        !cursor_needs_user("cursor", &in_area, &area),
+        "a target inside the work area is the director's"
+    );
+    let state_file = in_area.replace(
+        &area.join("plan.md").display().to_string(),
+        &area.join("cursor/config/x.json").display().to_string(),
+    );
+    assert!(
+        cursor_needs_user("cursor", &state_file, &area),
+        "a `cursor` state component inside the area is the user's"
+    );
 }

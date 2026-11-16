@@ -119,8 +119,10 @@ If an actor goes quiet without delivering, the stage reminds it once and then ra
   `report.sent` to a role delivers the same way. The stage's own notices (see ledger.md `source_seq`) queue as
   ordinary messages with a generated body file under `messages/`.
 - **Only what is still true is sent (S9d).** Before a send, every queued message carrying a `source_seq` — a stage
-  notice or a nudge — is checked against the event it relays. When the source no longer stands the stage records
-  `message.dropped` with a short reason and sends nothing:
+  notice or a nudge — is checked against the event it relays. An addressee check runs first: a notice to a role the
+  ledger no longer wants live — a released writer, an actor whose task closed, every role once `studio.finished`
+  lands — is dead mail whatever its label and drops `no longer wanted` (`user` is always wanted, and a person held
+  for reopening keeps its mail). Then the label table:
 
   | label / purpose | stale when | reason |
   |---|---|---|
@@ -312,6 +314,11 @@ resume flag into the recorded session ID as `role.resumed` with reason `recovere
 notice path, that its terminal was lost, the session was resumed, anything running then has stopped and a
 permission-prompted command must be run again.
 
+A role closed on purpose — a stop, a recast, `studio.finished` releasing everyone — gets the same treatment in the
+same pass, with reason `role closed`, and an attention left open on an already-closed entry clears on the next pass:
+the prompt it named lived on that terminal and there is nothing left to answer, so it cannot dangle — a user-owned
+one included.
+
 A crash loop is bounded: the reducer keeps every `role.lost` time, so the guard survives the restart, and a third loss
 inside ten minutes — or a lost role with no recorded session — raises a `cannot resume` attention instead of starting,
 routed to the role's reviewer like a stalled one. A live terminal already carrying the role's name is re-joined by
@@ -420,9 +427,12 @@ it, noticed like any new prompt. A screen with no comparable block refuses the s
 keys is untouched. A prompt answered in the terminal itself — no decision recorded and the role out of its blocked
 episode for a whole episode window — clears `prompt answered elsewhere`, so the next prompt always raises fresh.
 
-Two prompts are the user's outright (S9b), and the director's `role.approval` on either is refused: a prompt on a role
-that is not an actor — the director answers only an actor's — and a prompt whose own block reaches for the
-role-identity variables or the environment-clearing env flags. The stage reads the block — the whole screen when the
+Three prompts are the user's outright (S9b, S12f), and the director's `role.approval` on each is refused: a prompt on
+a role that is not an actor — the director answers only an actor's; a prompt whose own block reaches for the
+role-identity variables or the environment-clearing env flags; and a cursor file picker whose target the stage cannot
+vouch for — `runners.md` lists the shapes — because the target must resolve strictly inside the role's own work area
+and name no protected state, and anything outside, escaping, relative, `~`-rooted, truncated or unreadable is the
+user's, as is a picker question the stage cannot name. The env-flag check reads the block — the whole screen when the
 runner maps none — with whitespace and box-drawing characters removed, so a wrapped prompt box cannot hide a mid-word
 `BACKLOT_`, `env -i` or `--ignore-environment`, and an earlier prompt's line still scrolling above cannot flag the new
 prompt. It flags the attention `needs_user`: no notice to the director, `backlot status` and the panel mark it as the
