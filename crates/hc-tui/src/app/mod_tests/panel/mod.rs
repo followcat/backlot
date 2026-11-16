@@ -2,6 +2,7 @@
 //! `prefix+y` toggle and the closed-panel identity guarantee. Focused
 //! keys live in `keys`, mouse in `mouse`. Neutral fixtures only
 //! (`acme-shop`, `alice`).
+mod draw;
 mod keys;
 mod merge;
 mod mouse;
