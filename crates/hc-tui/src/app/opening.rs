@@ -12,13 +12,20 @@ use super::popup::{POPUP_LABEL, PopupPending};
 use super::{App, creation::program_env};
 use crate::operations::Action;
 
+/// POSIX single-quote escaping for one shell word — a `'` becomes
+/// `'\''`: close the quote, literal quote, reopen. Every word the
+/// wizard line hands the shell passes through it.
+fn sh_quote(word: &str) -> String {
+    format!("'{}'", word.replace('\'', "'\\''"))
+}
+
 /// The wizard's command line inside the popup: `backlot studio new
 /// --interactive` plus the endpoint flags — a pure function so tests
 /// assert the argv without a `current_exe`.
 fn wizard_line(exe: &str, endpoint_args: &[String]) -> String {
-    let mut line = format!("'{exe}' studio new --interactive");
+    let mut line = format!("{} studio new --interactive", sh_quote(exe));
     for arg in endpoint_args {
-        line.push_str(&format!(" '{arg}'"));
+        line.push_str(&format!(" {}", sh_quote(arg)));
     }
     line
 }
