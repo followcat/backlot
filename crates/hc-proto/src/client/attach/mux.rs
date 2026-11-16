@@ -15,8 +15,9 @@
 //! bounded batch per round, so one backed-up channel cannot starve
 //! another channel's input or CLOSE.
 
+use super::calls::{AttachCalls, Taken};
 use super::pump::CTRL_QUEUE;
-use super::table::{AttachCalls, Channels, Route};
+use super::table::{Channels, Route};
 use crate::client::call;
 use crate::client::error::CallError;
 use crate::client::lock;
@@ -59,9 +60,10 @@ pub(super) fn reply_channel(value: &Value) -> Option<u32> {
 }
 
 /// One channel-0 frame: attach replies go to their call — a dead
-/// receiver means the open was cancelled, so the reply's channel gets a
-/// CLOSE — and everything else is a plain pending-table reply. `Err` is
-/// a connection-level protocol violation, exactly as on an RPC wire.
+/// receiver or an orphan means the open is gone, so the reply's channel
+/// gets a CLOSE — and everything else is a plain pending-table reply.
+/// `Err` is a connection-level protocol violation, exactly as on an RPC
+/// wire.
 fn dispatch(
     frame: Frame,
     pending: &Pending,
@@ -78,24 +80,37 @@ fn dispatch(
     let Some(id) = response.id().cloned() else {
         return Err("response with a null id on the control channel".into());
     };
-    if !attach_calls.contains(&id) {
-        // Not an attach reply: the shared pending-table path handles it.
-        pump::dispatch(frame, pending)?;
-        return Ok(Dispatch::Done);
+    match attach_calls.take(&id) {
+        Taken::Waiting(sender) => {
+            let result = match response {
+                Response::Ok(r) => Ok(r.result),
+                Response::Err(r) => Err(CallError::Rpc(r.error)),
+            };
+            Ok(match sender.send(result) {
+                Ok(()) => Dispatch::Done,
+                Err(Ok(value)) => match reply_channel(&value) {
+                    Some(channel) => Dispatch::CloseChannel(channel),
+                    None => Dispatch::Done,
+                },
+                Err(Err(_)) => Dispatch::Done,
+            })
+        }
+        // A sent call whose caller went away: the reply still names a
+        // channel the core allocated — it gets its CLOSE like any late
+        // reply would, never a leaked viewer.
+        Taken::Orphan => Ok(match response {
+            Response::Ok(r) => match reply_channel(&r.result) {
+                Some(channel) => Dispatch::CloseChannel(channel),
+                None => Dispatch::Done,
+            },
+            Response::Err(_) => Dispatch::Done,
+        }),
+        Taken::Unknown => {
+            // Not an attach reply: the shared pending-table path handles it.
+            pump::dispatch(frame, pending)?;
+            Ok(Dispatch::Done)
+        }
     }
-    let sender = attach_calls.take(&id).expect("id checked present");
-    let result = match response {
-        Response::Ok(r) => Ok(r.result),
-        Response::Err(r) => Err(CallError::Rpc(r.error)),
-    };
-    Ok(match sender.send(result) {
-        Ok(()) => Dispatch::Done,
-        Err(Ok(value)) => match reply_channel(&value) {
-            Some(channel) => Dispatch::CloseChannel(channel),
-            None => Dispatch::Done,
-        },
-        Err(Err(_)) => Dispatch::Done,
-    })
 }
 
 /// Queues one channel CLOSE without awaiting — the synchronous half of

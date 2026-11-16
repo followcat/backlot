@@ -118,6 +118,24 @@ impl AttachConn {
         }
     }
 
+    /// Test access: entries in the live connection's channel table.
+    #[doc(hidden)]
+    pub fn channel_map_len(&self) -> usize {
+        match &*lock(&self.inner.slot) {
+            Stage::Live(conn) => conn.channel_map_len(),
+            _ => 0,
+        }
+    }
+
+    /// Test access: attach calls registered on the live connection.
+    #[doc(hidden)]
+    pub fn attach_call_count(&self) -> usize {
+        match &*lock(&self.inner.slot) {
+            Stage::Live(conn) => conn.attach_call_count(),
+            _ => 0,
+        }
+    }
+
     /// The live shared connection, or one freshly established. The
     /// `OnceCell` makes a burst of opens share a single connect —
     /// including the reconnect many panes trigger after a death.

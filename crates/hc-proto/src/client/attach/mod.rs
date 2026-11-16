@@ -17,6 +17,7 @@
 //! synchronous, so a cancelled caller can never lose or duplicate credit
 //! bookkeeping while the stream lives.
 
+mod calls;
 mod conn;
 mod diag;
 mod error;
