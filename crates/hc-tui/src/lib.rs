@@ -48,3 +48,4 @@ pub mod own_theme;
 mod panel;
 pub mod popup_size;
 pub mod structure;
+mod studio;

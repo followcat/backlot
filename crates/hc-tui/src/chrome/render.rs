@@ -248,7 +248,7 @@ pub(crate) fn render_shell(
     hits
 }
 
-pub(super) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, style: Style) {
+pub(crate) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, style: Style) {
     let width = display_width(text).min(area.width);
     put_text(
         buffer,
@@ -273,7 +273,7 @@ pub(super) fn put_segment(
     x.saturating_add(width)
 }
 
-pub(super) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
+pub(crate) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
     if width == 0 || y >= buffer.area.bottom() || x >= buffer.area.right() {
         return;
     }

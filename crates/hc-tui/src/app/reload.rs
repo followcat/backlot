@@ -67,7 +67,13 @@ impl App {
         next.startup_config_diagnostic = crate::config::config_diagnostic_summary(&diagnostics);
         self.live = next.keybinds.clone();
         if !self.sidebar_width_manual {
-            self.sidebar_width = next.sidebar_width;
+            // U1: the studio-mode width comes from backlot's
+            // `[sidebar] width`; outside it herdr's `ui.sidebar_width`.
+            self.sidebar_width = if self.studio.active {
+                self.panel_config.sidebar_width
+            } else {
+                next.sidebar_width
+            };
         }
         if self.agent_panel_sort_manual {
             next.agent_panel_sort = previous.agent_panel_sort;

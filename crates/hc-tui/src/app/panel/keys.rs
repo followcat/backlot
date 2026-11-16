@@ -97,9 +97,10 @@ impl App {
     }
 
     /// Enter/left-click on the selected row: the title flips the mode,
-    /// a collapsed-mode working group expands, a group header
-    /// collapses, an open person focuses their terminal, a studio its
-    /// producer's, and a closed person runs the two-step reopen.
+    /// a block top border or strip line makes that studio current
+    /// through the studio-nav path, a stacked block expands, an open
+    /// person focuses their terminal, and a closed person runs the
+    /// two-step reopen.
     pub(super) fn panel_activate(&mut self) {
         let summary = self.panel_summary();
         let targets = self.panel_targets();
@@ -109,27 +110,17 @@ impl App {
         let confirm = self.panel.reopen_confirm.take();
         match targets.get(index).cloned() {
             Some(Target::Title) => self.panel_flip_mode(),
-            Some(Target::WorkingGroup(_)) => self.panel.mode = crate::panel::PanelMode::Expanded,
-            Some(Target::Group(studio, group)) => {
-                let key = (studio, group);
-                if !self.panel.collapsed_groups.remove(&key) {
-                    self.panel.collapsed_groups.insert(key);
-                }
+            Some(Target::Studio(id) | Target::Strip(id)) => {
+                self.focus_studio(&id);
+                self.panel_leave();
             }
-            Some(Target::Studio(studio_id)) => {
-                let producer = summary
-                    .as_ref()
-                    .and_then(|s| s.studios.iter().find(|st| st.id == studio_id))
-                    .and_then(|st| {
-                        st.roles
-                            .iter()
-                            .find(|r| r.role == "producer" && r.state == "live")
-                    })
-                    .and_then(|r| r.terminal.clone());
-                if let Some(terminal) = producer {
-                    self.focus_pane(terminal);
-                    self.panel_leave();
-                }
+            Some(Target::Block(id)) => {
+                // A single-line block expands — the same manual
+                // override Space writes; the selection follows the
+                // block's new identity.
+                self.panel.collapsed_blocks.remove(&id);
+                self.panel.expanded_blocks.insert(id.clone());
+                self.panel.selected = Some(Target::Studio(id));
             }
             Some(Target::Person(studio, role_name)) => {
                 let role = summary.as_ref().and_then(|s| {

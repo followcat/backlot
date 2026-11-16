@@ -75,6 +75,7 @@ impl App {
             panel_action_tx,
             panel_rx,
             panel_endpoint_args: Vec::new(),
+            studio: crate::studio::Studio::default(),
             sched: sched::Scheduler::default(),
             focused: None,
             before_navigate: None,

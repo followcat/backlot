@@ -91,6 +91,8 @@ pub(super) fn render_overlays_and_cursor(
             summary.as_ref(),
             crate::panel::stage_running(&app.view),
             &app.panel,
+            app.studio.current.as_deref(),
+            &app.panel_config.keys,
             &app.shell.palette,
         );
         if hits.working_drawn {

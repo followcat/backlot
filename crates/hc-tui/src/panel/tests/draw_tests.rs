@@ -1,15 +1,21 @@
-//! The renderer: the five state marks and colors, the animating
-//! working mark, the scrollbar on overflow and the hit map.
+//! The U1 renderer: bordered studio blocks, `studios n` title,
+//! attention count on the frame, one-line people, stacking lines,
+//! the shortcuts row and the collapsed strip.
 use super::*;
 use crate::chrome::palette::Palette;
+use crate::panel::config::StudioKeys;
 use crate::panel::rows::Mark;
-use crate::panel::{Panel, PanelMode, mark_color, mark_symbol, render};
+use crate::panel::{Panel, PanelMode, Target, mark_color, mark_symbol, render};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 fn palette() -> Palette {
     Palette::from_name("catppuccin").unwrap()
+}
+
+fn keys() -> StudioKeys {
+    StudioKeys::default()
 }
 
 fn panel(mode: PanelMode) -> Panel {
@@ -29,6 +35,26 @@ fn lines(buf: &Buffer, area: Rect) -> Vec<String> {
                 .to_string()
         })
         .collect()
+}
+
+fn draw(
+    area: Rect,
+    summary: Option<&Summary>,
+    panel: &Panel,
+    current: Option<&str>,
+) -> (Buffer, crate::panel::PanelRender) {
+    let mut buf = Buffer::empty(area);
+    let hits = render(
+        &mut buf,
+        area,
+        summary,
+        true,
+        panel,
+        current,
+        &keys(),
+        &palette(),
+    );
+    (buf, hits)
 }
 
 #[test]
@@ -62,231 +88,256 @@ fn the_working_mark_changes_between_frames() {
         seen.insert(mark_symbol(Mark::Working, spin));
     }
     assert!(seen.len() > 1, "the working mark animates");
-    // The other marks never move.
     for mark in [Mark::Waiting, Mark::Blocked, Mark::Lost, Mark::Closed] {
         assert_eq!(mark_symbol(mark, 0), mark_symbol(mark, 7));
     }
 }
 
 #[test]
-fn expanded_draw_shows_groups_people_and_their_lines() {
+fn expanded_block_draws_frame_people_dividers_and_state_words() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 30, 30);
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let text = lines(&buf, area).join("\n");
-    assert!(text.contains("working: producer, actors 2"), "{text}");
-    assert!(text.contains("acme-shop"), "{text}");
-    assert!(text.contains("▾ actors 5"), "{text}");
-    assert!(text.contains("alice"), "{text}");
-    assert!(text.contains("writes code"), "{text}");
-    assert!(text.contains("agent-a/m"), "{text}");
-    assert!(hits.working_drawn, "a working mark was drawn");
-    assert!(hits.scrollbar.is_empty(), "no overflow → no scrollbar");
-    assert!(hits.title.height == 1);
+    for width in [26u16, 22, 40] {
+        let area = Rect::new(0, 0, width, 30);
+        let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
+        let text = lines(&buf, area).join("\n");
+        assert!(text.contains("studios 1"), "w{width}: {text}");
+        assert!(text.contains("╭"), "w{width}: {text}");
+        assert!(text.contains("╰"), "w{width}: {text}");
+        assert!(text.contains("├"), "w{width}: {text}");
+        assert!(text.contains("acme-shop"), "w{width}: {text}");
+        assert!(text.contains("working"), "w{width}: {text}");
+        assert!(text.contains("alice"), "w{width}: {text}");
+        assert!(hits.working_drawn, "w{width}: a working mark was drawn");
+        // Dividers only between groups: 4 groups → 3 `├` rows.
+        let divider_rows = (area.y..area.y + area.height)
+            .filter(|&y| buf[(area.x, y)].symbol() == "├")
+            .count();
+        assert_eq!(divider_rows, 3, "w{width}");
+    }
 }
 
-/// The summary builds `task t1 · behind v2` for an actor whose task
-/// trails the current requirement — the panel draws the `doing` line
-/// verbatim, so the marker needs no panel code of its own.
 #[test]
-fn a_behind_actor_draws_its_doing_line() {
+fn the_current_studio_frame_is_accent_others_are_muted() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 26, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, Some("acme-shop"));
+    let top_y = 1; // title row 0, the block's top border row 1
+    assert_eq!(buf[(area.x, top_y)].fg, palette().accent);
+    // Without a current studio the frame is muted surface.
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    assert_eq!(buf[(area.x, top_y)].fg, palette().surface_dim);
+}
+
+#[test]
+fn the_attention_count_shows_only_above_zero() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 26, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    assert!(
+        !lines(&buf, area)[1].contains('!'),
+        "no attention → no bang on the border"
+    );
     let mut value = summary_json();
-    value["studios"][0]["roles"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "role": "actor-t1-c1", "name": "actor-t1-c1", "terminal": "t9",
-            "state": "live", "task": "t1", "doing": "task t1 · behind v2",
-        }));
+    value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
+    value["studios"][0]["roles"][4]["attention"] = serde_json::json!("needs permission");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let top = &lines(&buf, area)[1];
+    assert!(top.contains("!2"), "{top}");
+}
+
+#[test]
+fn a_person_draws_one_line_with_the_state_word_right() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.contains("alice task-1"), "{line}");
+    assert!(line.trim_end().ends_with("working│"), "{line}");
+    // No runner/model/doing on the person line.
+    assert!(!line.contains("agent-a"), "{line}");
+    assert!(!line.contains("writes code"), "{line}");
+}
+
+#[test]
+fn an_attention_adds_a_bang_line_under_the_person() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 40);
-    let mut buf = Buffer::empty(area);
-    render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let text = lines(&buf, area).join("\n");
-    assert!(text.contains("task t1 · behind v2"), "{text}");
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y + 1)].symbol())
+        .collect::<String>();
+    assert!(line.contains("! needs permission"), "{line}");
 }
 
-/// S9f: a role whose last hook signal was a StopFailure draws
-/// `! last turn failed: <error>` under its name — a line, not an
-/// attention.
 #[test]
-fn a_stop_failed_role_draws_its_failed_line() {
+fn a_failed_role_draws_its_failed_line_when_no_attention() {
     let mut value = summary_json();
-    value["studios"][0]["roles"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "role": "actor-zed", "name": "zed", "terminal": "t9",
-            "state": "live", "work": "waiting", "failed": "rate_limit",
-        }));
+    value["studios"][0]["roles"][3]["failed"] = serde_json::json!("rate_limit");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 40);
-    let mut buf = Buffer::empty(area);
-    render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let text = lines(&buf, area).join("\n");
-    assert!(text.contains("! last turn failed: rate_limit"), "{text}");
+    let area = Rect::new(0, 0, 40, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y + 1)].symbol())
+        .collect::<String>();
+    assert!(line.contains("! last turn failed: rate_limit"), "{line}");
 }
 
 #[test]
-fn collapsed_draw_lists_working_groups() {
+fn short_height_stacks_other_blocks_to_single_lines() {
+    // Two studios: the fixture plus a second one.
+    let mut value = summary_json();
+    let mut second = value["studios"][0].clone();
+    second["id"] = serde_json::json!("second-studio");
+    value["studios"].as_array_mut().unwrap().push(second);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    // Tall enough for one expanded block but not two → the
+    // non-current studio draws its `╶` line with mark counts.
+    let area = Rect::new(0, 0, 30, 20);
+    let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("╶ second-studio"), "{text}");
+    assert!(
+        hits.rows
+            .iter()
+            .any(|(_, t)| matches!(t, Target::Block(id) if id == "second-studio")),
+        "a single-line block hit"
+    );
+    // The stacked line carries mark counts.
+    let stacked = lines(&buf, area)
+        .iter()
+        .find(|l| l.contains("╶ second-studio"))
+        .cloned()
+        .unwrap();
+    assert!(stacked.contains("3"), "working count: {stacked}");
+    // And at even shorter heights the body must scroll.
+    let area = Rect::new(0, 0, 30, 6);
+    let (_, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
+    assert!(
+        hits.metrics.map(|m| m.max_offset_from_bottom).unwrap_or(0) > 0,
+        "short body scrolls"
+    );
+}
+
+#[test]
+fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
+    let summary = summary();
+    let unfocused = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 20);
+    let (buf, _) = draw(area, Some(&summary), &unfocused, None);
+    let last = &lines(&buf, area)[area.height as usize - 1];
+    assert!(last.contains("alt"), "{last}");
+    assert!(last.contains("studio"), "{last}");
+    assert!(last.contains("role"), "{last}");
+    // Focused panel shows its own keys.
+    let mut focused = panel(PanelMode::Expanded);
+    focused.focused = true;
+    let (buf, _) = draw(area, Some(&summary), &focused, None);
+    let last = &lines(&buf, area)[area.height as usize - 1];
+    assert!(last.contains("⏎ open"), "{last}");
+    // Under 8 rows the line is dropped.
+    let area = Rect::new(0, 0, 30, 7);
+    let (buf, _) = draw(area, Some(&summary), &unfocused, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(!text.contains("studio  ←"), "{text}");
+    assert!(!text.contains("⏎ open"), "{text}");
+}
+
+#[test]
+fn collapsed_strip_draws_id_working_count_and_attention() {
     let summary = summary();
     let panel = panel(PanelMode::Collapsed);
     let area = Rect::new(0, 0, 16, 12);
-    let mut buf = Buffer::empty(area);
-    render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    // The title is cut to the 16-column strip.
-    assert!(text.contains("working:"), "{text}");
-    assert!(text.contains("producer"), "{text}");
-    assert!(text.contains("actors 2"), "{text}");
-    assert!(!text.contains("alice"), "{text}");
-}
-
-#[test]
-fn an_overflowing_body_draws_a_scrollbar() {
-    // Many actors → more rows than the body fits.
+    assert!(text.contains("studios"), "{text}");
+    assert!(text.contains("acme-shop"), "{text}");
+    assert!(
+        hits.rows
+            .iter()
+            .any(|(_, t)| matches!(t, Target::Strip(id) if id == "acme-shop")),
+        "strip hit"
+    );
+    // `3` working, no `!` (no attention in the fixture).
+    let strip = lines(&buf, area)
+        .iter()
+        .find(|l| l.contains("acme-shop"))
+        .cloned()
+        .unwrap();
+    assert!(strip.trim_end().ends_with('3'), "{strip}");
+    assert!(!strip.contains('!'), "{strip}");
+    // With attention `!n` joins the tail.
     let mut value = summary_json();
-    let roles = value["studios"][0]["roles"].as_array_mut().unwrap();
-    for i in 0..12 {
-        roles.push(serde_json::json!({
-            "role": format!("actor-extra-{i}"), "name": format!("extra-{i}"),
-            "state": "live", "work": "waiting",
-        }));
-    }
+    value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     let summary: Summary = serde_json::from_value(value).unwrap();
-    let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 30, 10);
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    assert!(!hits.scrollbar.is_empty(), "overflow draws the track");
-    let text = lines(&buf, area).join("\n");
-    assert!(text.contains('▕'), "scrollbar cells: {text}");
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let strip = lines(&buf, area)
+        .iter()
+        .find(|l| l.contains("acme-shop"))
+        .cloned()
+        .unwrap();
+    assert!(strip.contains("!1"), "{strip}");
 }
 
 #[test]
 fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
-    // The frame underneath wrote text into the same rect — full-screen
-    // at 40 columns is exactly this shape.
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 40, 20);
     let mut buf = Buffer::empty(area);
     for y in area.y..area.y + area.height {
-        // Only glyphs the panel itself can never draw, so a leak is
-        // unambiguous.
-        buf.set_string(area.x, y, "│9│8│6│4", Style::default());
+        // `█` is a glyph the panel itself can never draw, so a leak
+        // is unambiguous (`│` is a real border glyph now).
+        buf.set_string(area.x, y, "█9█8█6█4", Style::default());
     }
-    render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    render(
+        &mut buf,
+        area,
+        Some(&summary),
+        true,
+        &panel,
+        None,
+        &keys(),
+        &palette(),
+    );
     for y in area.y..area.y + area.height {
         for x in area.x..area.x + area.width {
             let symbol = buf[(x, y)].symbol();
             assert!(
-                !"│9864".contains(symbol),
+                !"█9864".contains(symbol),
                 "frame symbol {symbol:?} leaked at ({x},{y})"
             );
         }
     }
-}
-
-#[test]
-fn a_wide_name_pushes_the_runner_past_its_display_width() {
-    // "\u{738B}\u{4E94}" is two characters but four cells: the runner
-    // text must start after the display width, not the char count.
-    let mut value = summary_json();
-    value["studios"][0]["roles"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "role": "actor-we", "name": "\u{738B}\u{4E94}", "state": "live",
-            "work": "waiting", "runner": "agent-a",
-        }));
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let y = hits
-        .rows
-        .iter()
-        .find(|(_, t)| matches!(t, crate::panel::Target::Person(_, r) if r == "actor-we"))
-        .map(|(rect, _)| rect.y)
-        .expect("the actor row drew");
-    // mark at 0, name at 2 covering four cells, runner's 'a' at 7 —
-    // a char-count advance would put it at 5, over the name's tail.
-    assert_eq!(buf[(7, y)].symbol(), "a");
-}
-
-/// A studio the stage flags with `error` draws it on its own line
-/// under the studio row, the way a person's attention draws.
-#[test]
-fn a_studio_error_draws_a_bang_line_under_the_studio() {
-    let mut value = summary_json();
-    value["studios"][0]["error"] = serde_json::json!("ledger unreadable");
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let y = hits
-        .rows
-        .iter()
-        .find(|(_, t)| matches!(t, crate::panel::Target::Studio(id) if id == "acme-shop"))
-        .map(|(rect, _)| rect.y)
-        .expect("the studio row drew");
-    let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, y + 1)].symbol())
-        .collect::<String>();
-    assert_eq!(line.trim(), "! ledger unreadable", "{line:?}");
-}
-
-/// A studio with an owed step draws it on its own line under the
-/// studio row — after the `error` line when both stand.
-#[test]
-fn a_studio_next_draws_an_arrow_line_under_the_studio() {
-    let mut value = summary_json();
-    value["studios"][0]["next"] = serde_json::json!("dispatch — producer");
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    let panel = panel(PanelMode::Expanded);
-    let area = Rect::new(0, 0, 40, 30);
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let y = hits
-        .rows
-        .iter()
-        .find(|(_, t)| matches!(t, crate::panel::Target::Studio(id) if id == "acme-shop"))
-        .map(|(rect, _)| rect.y)
-        .expect("the studio row drew");
-    let line = (area.x..area.x + area.width)
-        .map(|x| buf[(x, y + 1)].symbol())
-        .collect::<String>();
-    assert_eq!(line.trim(), "→ dispatch — producer", "{line:?}");
-
-    // With an error too the `next` line sits one row lower.
-    let mut value = summary_json();
-    value["studios"][0]["error"] = serde_json::json!("ledger unreadable");
-    value["studios"][0]["next"] = serde_json::json!("dispatch — producer");
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
-    let y = hits
-        .rows
-        .iter()
-        .find(|(_, t)| matches!(t, crate::panel::Target::Studio(id) if id == "acme-shop"))
-        .map(|(rect, _)| rect.y)
-        .expect("the studio row drew");
-    let lines: Vec<String> = (1..=2)
-        .map(|dy| {
-            (area.x..area.x + area.width)
-                .map(|x| buf[(x, y + dy)].symbol())
-                .collect::<String>()
-        })
-        .collect();
-    assert_eq!(lines[0].trim(), "! ledger unreadable", "{lines:?}");
-    assert_eq!(lines[1].trim(), "→ dispatch — producer", "{lines:?}");
 }
 
 #[test]
@@ -295,7 +346,16 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 10);
     let mut buf = Buffer::empty(area);
-    render(&mut buf, area, Some(&summary), false, &panel, &palette());
+    render(
+        &mut buf,
+        area,
+        Some(&summary),
+        false,
+        &panel,
+        None,
+        &keys(),
+        &palette(),
+    );
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("stage not running"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
@@ -305,17 +365,13 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
 fn a_selected_row_is_highlighted() {
     let summary = summary();
     let mut panel = panel(PanelMode::Expanded);
-    panel.selected = Some(crate::panel::Target::Person(
-        "acme-shop".into(),
-        "actor-alice".into(),
-    ));
+    panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
     let area = Rect::new(0, 0, 30, 20);
-    let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, Some(&summary), true, &panel, &palette());
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let alice = hits
         .rows
         .iter()
-        .find(|(_, t)| matches!(t, crate::panel::Target::Person(_, r) if r == "actor-alice"))
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
     let cell = &buf[(alice.x, alice.y)];

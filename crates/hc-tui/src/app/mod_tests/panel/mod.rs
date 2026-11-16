@@ -70,6 +70,8 @@ fn app_with_panel_doc() -> App {
     );
     app.focused = Some("t1".into());
     app.sync_target();
+    // Latch studio mode the way a publish does: active + current.
+    app.refresh_projection();
     app
 }
 
@@ -158,7 +160,7 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
     let mut app = app_with_panel_doc();
     app.panel.mode = PanelMode::Expanded;
     // 200 and 120 leave ≥60 for the panes past the mobile threshold.
-    for (cols, pane_w) in [(200u16, 170), (120, 90)] {
+    for cols in [200u16, 120] {
         app.area = (cols, 24);
         assert!(app.panel_beside(cols), "cols {cols}");
         let layout = app.chrome_layout(cols, 24);
@@ -170,7 +172,8 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
             app.sidebar_width,
         );
         assert_eq!(layout.pane_surface, direct.pane_surface, "cols {cols}");
-        assert_eq!(layout.pane_surface.width, pane_w - app.sidebar_width);
+        let region = cols - app.panel_width();
+        assert_eq!(layout.pane_surface.width, region - app.sidebar_width);
         assert!(!app.panel_fullscreen());
     }
     // A collapsed strip is 16 wide.
@@ -182,10 +185,10 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
 #[tokio::test]
 async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
     let mut app = app_with_panel_doc();
-    // 80 − 16 = 64 and 92 − 30 = 62 dip under the 64-column mobile
+    // 80 − 16 = 64 and 88 − 26 = 62 dip under the 64-column mobile
     // threshold; the window itself is still desktop-width, so the
     // chrome must keep its desktop layout and sidebar.
-    for (cols, width) in [(80u16, PanelMode::Collapsed), (92, PanelMode::Expanded)] {
+    for (cols, width) in [(80u16, PanelMode::Collapsed), (88, PanelMode::Expanded)] {
         app.panel.mode = width;
         app.area = (cols, 24);
         assert!(app.panel_beside(cols), "cols {cols}");
@@ -217,7 +220,7 @@ async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
 async fn a_panel_that_cannot_fit_draws_full_screen() {
     let mut app = app_with_panel_doc();
     app.panel.mode = PanelMode::Expanded;
-    // 80 − 30 = 50 < 60: full-screen. 40 is under the mobile threshold.
+    // 80 − 26 = 54 < 60: full-screen. 40 is under the mobile threshold.
     for cols in [80u16, 40] {
         app.area = (cols, 24);
         assert!(!app.panel_beside(cols), "cols {cols}");
@@ -293,7 +296,7 @@ async fn a_closed_panel_is_identical_in_geometry_keys_and_cells() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!right.contains("acme-shop"), "{right}");
-    assert!(!right.contains("working:"), "{right}");
+    assert!(!right.contains("studios"), "{right}");
     // And a second draw is byte-identical: no panel state leaks a frame.
     let backend2 = draw_to(&mut app, 120, 24);
     assert_eq!(backend.buffer(), backend2.buffer());
@@ -306,7 +309,7 @@ async fn an_open_panel_draws_its_column_and_fullscreen_covers() {
     open_panel(&mut app);
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("working: producer, actors"));
+    assert!(text.contains("studios 1"), "{text}");
     assert!(text.contains("acme-shop"));
     // At 80 the same panel covers the frame instead.
     app.area = (80, 24);

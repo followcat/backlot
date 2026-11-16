@@ -5,25 +5,173 @@
 
 use std::path::{Path, PathBuf};
 
-/// `[panel]` defaults: expanded width 30 (clamped 24–60), toggle key
+use crate::config::KeyCombo;
+
+/// `[panel]` defaults: expanded width 26 (clamped 22–60), toggle key
 /// `y` (chorded as `prefix+y`; the reference leaves `y` unbound).
+/// `[sidebar] width` (clamped 20–60) applies only in studio mode —
+/// outside it herdr's `ui.sidebar_width` rules the sidebar exactly as
+/// before. `[keys]` binds the four direct studio keys.
 #[derive(Debug, Clone)]
 pub(crate) struct PanelConfig {
     /// Expanded width after clamping.
     pub width: u16,
     /// The chord tail — matched like a herdr keybind string.
     pub key: String,
+    /// Studio-mode sidebar width after clamping.
+    pub sidebar_width: u16,
+    /// The four direct studio navigation keys.
+    pub keys: StudioKeys,
 }
 
-pub(crate) const WIDTH_MIN: u16 = 24;
+pub(crate) const WIDTH_MIN: u16 = 22;
 pub(crate) const WIDTH_MAX: u16 = 60;
-const WIDTH_DEFAULT: u16 = 30;
+const WIDTH_DEFAULT: u16 = 26;
+
+pub(crate) const SIDEBAR_WIDTH_MIN: u16 = 20;
+pub(crate) const SIDEBAR_WIDTH_MAX: u16 = 60;
+const SIDEBAR_WIDTH_DEFAULT: u16 = 26;
+
+/// A studio key a `[keys]` entry names — `alt+arrow` by default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StudioNav {
+    PreviousStudio,
+    NextStudio,
+    PreviousRole,
+    NextRole,
+}
+
+/// The four direct studio keys: `alt+up/down` move between studios,
+/// `alt+left/right` between the current studio's people. `None` is an
+/// unbound key (`""` in the file).
+#[derive(Debug, Clone)]
+pub(crate) struct StudioKeys {
+    pub previous_studio: Option<KeyCombo>,
+    pub next_studio: Option<KeyCombo>,
+    pub previous_role: Option<KeyCombo>,
+    pub next_role: Option<KeyCombo>,
+}
+
+impl Default for StudioKeys {
+    fn default() -> StudioKeys {
+        StudioKeys {
+            previous_studio: crate::config::parse_key_combo("alt+up"),
+            next_studio: crate::config::parse_key_combo("alt+down"),
+            previous_role: crate::config::parse_key_combo("alt+left"),
+            next_role: crate::config::parse_key_combo("alt+right"),
+        }
+    }
+}
+
+impl StudioKeys {
+    /// The studio action a key combo resolves to — checked before
+    /// herdr's own direct bindings, so a studio key wins in studio
+    /// mode even when it shadows one.
+    pub(crate) fn nav(&self, key: &crate::config::TerminalKey) -> Option<StudioNav> {
+        let matched = |combo: Option<KeyCombo>| {
+            combo.is_some_and(|combo| crate::config::terminal_key_matches_combo(key, combo))
+        };
+        if matched(self.previous_studio) {
+            Some(StudioNav::PreviousStudio)
+        } else if matched(self.next_studio) {
+            Some(StudioNav::NextStudio)
+        } else if matched(self.previous_role) {
+            Some(StudioNav::PreviousRole)
+        } else if matched(self.next_role) {
+            Some(StudioNav::NextRole)
+        } else {
+            None
+        }
+    }
+
+    /// The unfocused panel's shortcuts row: `alt ↑↓ studio  ←→ role`
+    /// when the configured keys are all arrows sharing one modifier —
+    /// the pair's individual labels otherwise.
+    pub(crate) fn shortcut_label(&self) -> String {
+        use crossterm::event::KeyCode;
+        let four = [
+            self.previous_studio,
+            self.next_studio,
+            self.previous_role,
+            self.next_role,
+        ];
+        let arrows = four.iter().all(|combo| {
+            combo.is_some_and(|(code, _)| {
+                matches!(
+                    code,
+                    KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right
+                )
+            })
+        });
+        let mods = four
+            .iter()
+            .filter_map(|combo| combo.map(|c| c.1))
+            .fold(None, |seen, mods| match seen {
+                None => Some(mods),
+                Some(seen) if seen == mods => Some(seen),
+                Some(_) => Some(crossterm::event::KeyModifiers::empty()),
+            });
+        if arrows && mods.is_some_and(|m| !m.is_empty()) {
+            return format!(
+                "{} ↑↓ studio  ←→ role",
+                mods_label(mods.unwrap_or(crossterm::event::KeyModifiers::ALT))
+            );
+        }
+        let pair = |a: Option<KeyCombo>, b: Option<KeyCombo>| {
+            let labels: Vec<String> = [a, b]
+                .into_iter()
+                .flatten()
+                .map(|(code, mods)| format!("{}{}", mods_label(mods), code_label(code)))
+                .collect();
+            if labels.is_empty() {
+                "—".to_string()
+            } else {
+                labels.join("/")
+            }
+        };
+        format!(
+            "{} studio  {} role",
+            pair(self.previous_studio, self.next_studio),
+            pair(self.previous_role, self.next_role)
+        )
+    }
+}
+
+/// A modifier set's label for the shortcuts row (`alt`, `ctrl`, …).
+fn mods_label(mods: crossterm::event::KeyModifiers) -> &'static str {
+    use crossterm::event::KeyModifiers as M;
+    match mods {
+        m if m == M::ALT => "alt",
+        m if m == M::CONTROL => "ctrl",
+        m if m == M::SHIFT => "shift",
+        m if m == (M::CONTROL | M::ALT) => "ctrl+alt",
+        m if m == (M::CONTROL | M::SHIFT) => "ctrl+shift",
+        m if m == (M::ALT | M::SHIFT) => "alt+shift",
+        m if m == M::SUPER => "super",
+        _ => "mod",
+    }
+}
+
+/// A key code's label for the pair fallback (`↑`, `pageup`, `x`, …).
+fn code_label(code: crossterm::event::KeyCode) -> String {
+    use crossterm::event::KeyCode;
+    match code {
+        KeyCode::Up => "↑".to_string(),
+        KeyCode::Down => "↓".to_string(),
+        KeyCode::Left => "←".to_string(),
+        KeyCode::Right => "→".to_string(),
+        KeyCode::Char(c) => c.to_string(),
+        other => format!("{other:?}").to_lowercase(),
+    }
+}
 
 impl Default for PanelConfig {
     fn default() -> PanelConfig {
         PanelConfig {
             width: WIDTH_DEFAULT,
             key: "y".into(),
+            sidebar_width: SIDEBAR_WIDTH_DEFAULT,
+            keys: StudioKeys::default(),
         }
     }
 }
@@ -31,12 +179,27 @@ impl Default for PanelConfig {
 #[derive(serde::Deserialize)]
 struct File {
     panel: Option<Section>,
+    sidebar: Option<SidebarSection>,
+    keys: Option<KeysSection>,
 }
 
 #[derive(serde::Deserialize)]
 struct Section {
     width: Option<i64>,
     key: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct SidebarSection {
+    width: Option<i64>,
+}
+
+#[derive(serde::Deserialize)]
+struct KeysSection {
+    previous_studio: Option<String>,
+    next_studio: Option<String>,
+    previous_role: Option<String>,
+    next_role: Option<String>,
 }
 
 /// The config's own path: `$XDG_CONFIG_HOME/backlot/config.toml`,
@@ -50,6 +213,28 @@ pub(crate) fn config_path(env: &hc_proto::endpoint::Env) -> PathBuf {
     let home = get("HOME").unwrap_or_else(|| "/".into());
     let root = get("XDG_CONFIG_HOME").unwrap_or_else(|| format!("{home}/.config"));
     PathBuf::from(root).join("backlot").join("config.toml")
+}
+
+/// One studio key value: missing → the default; `""` → unbound; a
+/// value that does not parse → the default and the file's one notice.
+fn studio_key(
+    raw: Option<String>,
+    default: &str,
+    name: &str,
+    path: &Path,
+    notice: &mut Option<String>,
+) -> Option<KeyCombo> {
+    match raw {
+        None => crate::config::parse_key_combo(default),
+        Some(value) if value.trim().is_empty() => None,
+        Some(value) => match crate::config::parse_key_combo(&value) {
+            Some(combo) => Some(combo),
+            None => {
+                *notice = Some(format!("{path:?} ignored: invalid keys.{name}"));
+                crate::config::parse_key_combo(default)
+            }
+        },
+    }
 }
 
 /// Load the file: `(config, notice)`. A missing file is defaults. A
@@ -85,6 +270,39 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
                 // notice names the file, never the value.
                 return (config, Some(format!("{path:?} ignored: invalid panel.key")));
             }
+        }
+    }
+    if let Some(width) = parsed.sidebar.and_then(|s| s.width) {
+        config.sidebar_width = (width.clamp(1, i64::from(u16::MAX)) as u16)
+            .clamp(SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX);
+    }
+    if let Some(keys) = parsed.keys {
+        let mut notice = None;
+        config.keys.previous_studio = studio_key(
+            keys.previous_studio,
+            "alt+up",
+            "previous_studio",
+            path,
+            &mut notice,
+        );
+        config.keys.next_studio = studio_key(
+            keys.next_studio,
+            "alt+down",
+            "next_studio",
+            path,
+            &mut notice,
+        );
+        config.keys.previous_role = studio_key(
+            keys.previous_role,
+            "alt+left",
+            "previous_role",
+            path,
+            &mut notice,
+        );
+        config.keys.next_role =
+            studio_key(keys.next_role, "alt+right", "next_role", path, &mut notice);
+        if notice.is_some() {
+            return (config, notice);
         }
     }
     (config, None)

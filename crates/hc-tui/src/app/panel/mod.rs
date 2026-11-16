@@ -97,13 +97,17 @@ impl App {
     }
 
     /// The row targets as they would draw now — selection works on
-    /// stable identities, never positions.
+    /// stable identities, never positions. The stacking decision
+    /// needs the drawn body's height; pre-first-draw it is zero, and
+    /// `rows` reads that as "no constraint" so every block opens.
     fn panel_targets(&self) -> Vec<Target> {
         let summary = self.panel_summary();
         panel::rows(
             summary.as_ref(),
             panel::stage_running(&self.view),
             &self.panel,
+            self.studio.current.as_deref(),
+            self.panel_hits.body.height,
         )
         .iter()
         .map(|r| r.target())
@@ -169,23 +173,35 @@ impl App {
     }
 
     /// j/k/arrows and paging: move the selection by `delta` rows and
-    /// keep it visible. Moving clears an armed reopen.
+    /// keep it visible. A block's frame rows share one `Studio`
+    /// target — a move always lands on a different target, so the
+    /// selection visibly steps. Moving clears an armed reopen.
     fn panel_move(&mut self, delta: isize) {
         let summary = self.panel_summary();
         let rows = panel::rows(
             summary.as_ref(),
             panel::stage_running(&self.view),
             &self.panel,
+            self.studio.current.as_deref(),
+            self.panel_hits.body.height,
         );
         if rows.len() <= 1 {
             return;
         }
         let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
-        let current = self.panel_selected_index(&targets) as isize;
-        let next = current
-            .saturating_add(delta)
-            .clamp(0, targets.len().saturating_sub(1) as isize) as usize;
-        self.panel.selected = Some(targets[next].clone());
+        let mut index = self.panel_selected_index(&targets);
+        for _ in 0..delta.unsigned_abs() {
+            let next = if delta > 0 {
+                (index + 1..targets.len()).find(|&i| targets[i] != targets[index])
+            } else {
+                (0..index).rev().find(|&i| targets[i] != targets[index])
+            };
+            match next {
+                Some(next) => index = next,
+                None => break,
+            }
+        }
+        self.panel.selected = Some(targets[index].clone());
         self.panel.reopen_confirm = None;
         // Keep the selection inside the scrolled body (title is fixed).
         let body_height = self.panel_hits.body.height.max(1);
@@ -195,7 +211,7 @@ impl App {
             &[],
             body_height,
             self.panel.scroll,
-            next.saturating_sub(1),
+            index.saturating_sub(1),
         );
     }
 
@@ -221,17 +237,40 @@ impl App {
         self.panel.selected = targets.get(selected).cloned();
     }
 
-    /// Space — collapse the selected group header (only a group row
-    /// carries a group; person rows use Enter for their own action).
+    /// Space — collapse or expand the block the selected row belongs
+    /// to, by hand. A `Studio`/`Block` target's own studio, a person's
+    /// block through `Person(studio, _)`; the rest do nothing.
     fn panel_collapse_selected(&mut self) {
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        let Some(Target::Group(studio, group)) = targets.get(index).cloned() else {
-            return;
+        let studio = match targets.get(index) {
+            Some(Target::Studio(id) | Target::Block(id) | Target::Strip(id)) => id.clone(),
+            Some(Target::Person(id, _)) => id.clone(),
+            _ => return,
         };
-        let key = (studio, group);
-        if !self.panel.collapsed_groups.remove(&key) {
-            self.panel.collapsed_groups.insert(key);
+        // A block is open when `expanded_set` says so — toggling
+        // writes the opposite manual override.
+        let summary = self.panel_summary();
+        let rows = panel::rows(
+            summary.as_ref(),
+            panel::stage_running(&self.view),
+            &self.panel,
+            self.studio.current.as_deref(),
+            self.panel_hits.body.height,
+        );
+        let open = rows
+            .iter()
+            .any(|r| matches!(r, panel::Row::BlockTop(s) if s.id == studio));
+        if open {
+            self.panel.expanded_blocks.remove(&studio);
+            self.panel.collapsed_blocks.insert(studio.clone());
+            // The block's identity changes with its shape — ride the
+            // `╶` line so the next Space toggles it back open.
+            self.panel.selected = Some(Target::Block(studio));
+        } else {
+            self.panel.collapsed_blocks.remove(&studio);
+            self.panel.expanded_blocks.insert(studio.clone());
+            self.panel.selected = Some(Target::Studio(studio));
         }
     }
 
