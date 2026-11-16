@@ -42,7 +42,8 @@ fn update(p: &mut Fixture, terminals: Vec<Terminal>, generation: u64) -> Project
     p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
-    p.presentation.project(&view, &mut projection);
+    p.presentation
+        .project(&view, &mut projection, &Default::default());
     projection
 }
 fn state(projection: &Projection, id: &str) -> AgentStatus {
@@ -149,7 +150,7 @@ fn ordinary_same_epoch_completions_and_acknowledgement_are_unchanged() {
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
     assert!(
         p.presentation
-            .acknowledge(&mut projection, "t1", Some(true))
+            .acknowledge(&mut projection, "t1", Some(true), &Default::default())
     );
     assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
     assert_eq!(state(&update(&mut p, vec![t], 3), "t1"), AgentStatus::Idle);
@@ -167,7 +168,7 @@ fn a_coalesced_post_epoch_completion_survives_the_acknowledgement_cycle() {
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
     assert!(
         p.presentation
-            .acknowledge(&mut projection, "t1", Some(true))
+            .acknowledge(&mut projection, "t1", Some(true), &Default::default())
     );
     assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
     assert_eq!(state(&update(&mut p, vec![t], 4), "t1"), AgentStatus::Idle);
@@ -204,7 +205,7 @@ fn an_activity_loss_and_regain_rebaselines_the_regained_completions() {
     let mut projection = update(&mut p, vec![t.clone()], 2);
     assert!(
         p.presentation
-            .acknowledge(&mut projection, "t1", Some(true))
+            .acknowledge(&mut projection, "t1", Some(true), &Default::default())
     );
     t.activity = None;
     ingest_only(&mut p, vec![t.clone()], 3);
@@ -225,7 +226,7 @@ fn a_genuinely_later_completion_after_a_regain_stays_visible() {
     let mut projection = update(&mut p, vec![t.clone()], 2);
     assert!(
         p.presentation
-            .acknowledge(&mut projection, "t1", Some(true))
+            .acknowledge(&mut projection, "t1", Some(true), &Default::default())
     );
     t.activity = None;
     ingest_only(&mut p, vec![t.clone()], 3);

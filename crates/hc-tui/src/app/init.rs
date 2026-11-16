@@ -12,6 +12,8 @@ impl App {
         let (pane_tx, pane_rx) = mpsc::channel(64);
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
+        let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
+        let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         // Saved per-endpoint chrome choices win over config; each
@@ -186,6 +188,13 @@ impl App {
             seen_rx,
             seen_req_rx: Some(seen_req_rx),
             seen_task: None,
+            waiting: Default::default(),
+            waiting_tx,
+            waiting_res_tx,
+            waiting_rx,
+            waiting_req_rx: Some(waiting_req_rx),
+            waiting_task: None,
+            waiting_due: None,
             reap_tx: None,
             reap_task: None,
             reaped_exited: Default::default(),

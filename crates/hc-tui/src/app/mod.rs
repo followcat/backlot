@@ -59,6 +59,7 @@ mod shell_state;
 mod synthesize;
 mod tab_status;
 mod view_sync;
+mod waiting;
 mod wake;
 mod window_title;
 mod word_selection;
@@ -362,6 +363,20 @@ pub struct App {
     /// The seen writer's task — aborted on drop so its `Client` clone
     /// never outlives the app.
     seen_task: Option<tokio::task::JoinHandle<()>>,
+    /// Live Waiting verdicts by terminal address — presentation-only
+    /// evidence, pinned to the fingerprint it was probed for.
+    waiting: crate::waiting::Verdicts,
+    /// Probe cycles queued for the worker; the worker exists only
+    /// after `set_operations` (`waiting_req_rx` holds its request end
+    /// until then).
+    waiting_tx: mpsc::Sender<waiting::Cycle>,
+    waiting_res_tx: mpsc::Sender<waiting::Outcome>,
+    waiting_rx: mpsc::Receiver<waiting::Outcome>,
+    waiting_req_rx: Option<mpsc::Receiver<waiting::Cycle>>,
+    /// The probe worker's task — aborted on drop like the seen writer.
+    waiting_task: Option<tokio::task::JoinHandle<()>>,
+    /// The armed re-probe cadence deadline (`wake_deadline` picks it up).
+    waiting_due: Option<Instant>,
     /// `(terminal, created_ms)` reaps queued for the worker — `None`
     /// until `set_operations` starts it.
     reap_tx: Option<mpsc::Sender<(String, u64)>>,

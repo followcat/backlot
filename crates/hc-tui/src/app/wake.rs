@@ -20,6 +20,8 @@ pub(super) enum WakeKind {
     View,
     /// A `herdr.seen` label-write result.
     Seen,
+    /// A Waiting probe verdict.
+    Waiting,
     /// Attach-actor reports, drained as a bounded batch.
     Pane,
     /// The armed one-shot deadline.
@@ -52,7 +54,7 @@ impl WakeKind {
 
     /// The window title tracks what the user can see or drive.
     fn title(self) -> bool {
-        matches!(self, Self::View | Self::Input | Self::Pane)
+        matches!(self, Self::View | Self::Input | Self::Pane | Self::Waiting)
     }
 
     /// Pane targets and observers re-aim only on view or input —
@@ -110,6 +112,7 @@ impl App {
             .chain(self.selection_autoscroll_deadline)
             .chain(self.selection_highlight_clear_deadline)
             .chain(self.copy_feedback_deadline)
+            .chain(self.waiting_due)
             .min()
     }
 
@@ -171,6 +174,11 @@ impl App {
             if self.next_tab_status.is_some_and(|due| now >= due) {
                 dirty |= self.update_tab_status(now);
             }
+        }
+        // The armed re-probe cadence fires through the same deadline;
+        // publish-driven ticks already ran inside `on_view`.
+        if deadline_due {
+            self.tick_waiting(now);
         }
         if kind.drains() {
             self.drain_bells();

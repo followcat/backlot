@@ -30,6 +30,7 @@ mod review_regressions;
 mod shared_rpc;
 mod version_badge;
 mod view_sync;
+mod waiting;
 
 use super::*;
 use ratatui::backend::TestBackend;

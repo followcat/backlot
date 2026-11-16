@@ -753,6 +753,19 @@ Everything else on the compared surfaces still diffs normally.
   failed write is a notice. `collapsed_endpoints` is not persisted —
   the reference does not persist it either. The file lives in hc-tui's
   state root, never herdr's.
+- **Waiting status overlay.** Deliberate: the reference has no Waiting
+  state. hc-tui adds `AgentStatus::Waiting` between Working and Idle in
+  display priority — `◌`/`waiting`/peach in every status surface — but
+  never as a core word: it overlays a *shown* `Idle` only while probe
+  evidence says background work outlives the agent's turn (a `-c` tool
+  shell still a descendant of the foreground pid past a ~20 s start
+  window, via one `machine.exec` `ps` listing per machine per cycle —
+  and for `claude-code`, `file.read` of `~/.claude/sessions/<pid>.json`
+  with `status` `shell`). Seen, attention, notifications and raw
+  status are untouched; an unseen completion stays `Done` until
+  visited. On a core that offers neither `machine.exec` nor
+  `file.read`, or for agents with no background work in flight, every
+  rendered cell is identical to the reference.
 
 ## Slice 5 — popups, peek and custom commands
 

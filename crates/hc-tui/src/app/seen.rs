@@ -144,11 +144,14 @@ impl App {
 }
 
 impl Drop for App {
-    /// Dropping the app aborts the seen writer and the reaper — a
-    /// detached worker would keep its `Client` clone (and any ssh
-    /// child) alive past the app's lifetime.
+    /// Dropping the app aborts the seen writer, the probe worker and
+    /// the reaper — a detached worker would keep its `Client` clone
+    /// (and any ssh child) alive past the app's lifetime.
     fn drop(&mut self) {
         if let Some(task) = self.seen_task.take() {
+            task.abort();
+        }
+        if let Some(task) = self.waiting_task.take() {
             task.abort();
         }
         if let Some(task) = self.reap_task.take() {

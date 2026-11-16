@@ -34,6 +34,7 @@ pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
 pub mod update_check;
+pub(crate) mod waiting;
 mod word_select;
 
 mod mouse_geometry;

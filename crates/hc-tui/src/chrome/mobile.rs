@@ -272,6 +272,7 @@ fn render_agent_summary(
         (AgentStatus::Blocked, "blocked"),
         (AgentStatus::Done, "done"),
         (AgentStatus::Working, "working"),
+        (AgentStatus::Waiting, "waiting"),
         (AgentStatus::Idle, "idle"),
     ]
     .map(|(status, label)| {
@@ -286,7 +287,7 @@ fn render_agent_summary(
         )
     });
     let total = counts.iter().map(|(_, _, count)| count).sum::<usize>();
-    let pending = counts[..3].iter().map(|(_, _, count)| count).sum::<usize>();
+    let pending = counts[..4].iter().map(|(_, _, count)| count).sum::<usize>();
     if total == 0 {
         put_text(
             buffer,

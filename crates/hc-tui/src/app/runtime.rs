@@ -189,6 +189,7 @@ impl App {
         self.sched.mark_dirty(Instant::now());
         let mut replies_open = true;
         let mut seen_open = true;
+        let mut waiting_open = true;
         let mut pane_open = true;
         let mut need_pane_sync = true;
         while !self.quitting {
@@ -251,6 +252,16 @@ impl App {
                         kind = WakeKind::Seen;
                     }
                     None => seen_open = false,
+                },
+                outcome = self.waiting_rx.recv(), if waiting_open => match outcome {
+                    Some(first) => {
+                        self.on_waiting_result(first);
+                        while let Ok(outcome) = self.waiting_rx.try_recv() {
+                            self.on_waiting_result(outcome);
+                        }
+                        kind = WakeKind::Waiting;
+                    }
+                    None => waiting_open = false,
                 },
                 ev = self.pane_rx.recv(), if pane_open => match ev {
                     Some(first) => {

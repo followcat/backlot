@@ -46,7 +46,7 @@ fn update(p: &mut Fixture, terminals: Vec<Terminal>, generation: u64) -> Project
     p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
-    p.project(&view, &mut projection);
+    p.project(&view, &mut projection, &Default::default());
     projection
 }
 fn state(projection: &Projection, id: &str) -> AgentStatus {
@@ -95,9 +95,9 @@ fn core_completion_survives_coalesced_work_without_a_turn_or_word_change() {
     t.activity = Some(activity("boot-a", 1, Some(20), Some(20)));
     let mut projection = update(&mut p, vec![t.clone()], 2);
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
-    assert!(!p.acknowledge(&mut projection, "t1", Some(false)));
+    assert!(!p.acknowledge(&mut projection, "t1", Some(false), &Default::default()));
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
-    assert!(p.acknowledge(&mut projection, "t1", Some(true)));
+    assert!(p.acknowledge(&mut projection, "t1", Some(true), &Default::default()));
     assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
     assert_eq!(
         state(&update(&mut p, vec![t.clone()], 3), "t1"),
@@ -194,7 +194,7 @@ fn transport_reconnect_keeps_ack_but_revision_and_metadata_do_not_advance_order(
     assert!(rank(&same, "t2") > rank(&same, "t1"));
     a.activity = Some(activity("boot-a", 1, Some(20), Some(20)));
     let mut completed = update(&mut p, vec![a.clone(), b.clone()], 100);
-    p.acknowledge(&mut completed, "t1", Some(true));
+    p.acknowledge(&mut completed, "t1", Some(true), &Default::default());
     assert_eq!(
         state(&update(&mut p, vec![a, b], 101), "t1"),
         AgentStatus::Idle
@@ -222,7 +222,7 @@ fn named_record_completions_are_independent_and_removal_clears_their_markers() {
     );
     let mut completed = update(&mut p, vec![t.clone()], 2);
     assert_eq!(state(&completed, "t1"), AgentStatus::Done);
-    p.acknowledge(&mut completed, "t1", Some(true));
+    p.acknowledge(&mut completed, "t1", Some(true), &Default::default());
     t.records.remove("build/test");
     t.activity.as_mut().unwrap().records.remove("build/test");
     assert_eq!(
@@ -301,7 +301,7 @@ fn acknowledgement_is_local_and_only_covers_the_rendered_pane() {
     let b = terminal("t2", "idle", 20, Some(20));
     let mut viewed = update(&mut p, vec![a.clone(), b.clone()], 2);
     let background = update(&mut other, vec![a, b], 2);
-    p.acknowledge(&mut viewed, "t1", Some(true));
+    p.acknowledge(&mut viewed, "t1", Some(true), &Default::default());
     assert_eq!(state(&viewed, "t1"), AgentStatus::Idle);
     assert_eq!(state(&viewed, "t2"), AgentStatus::Done);
     assert_eq!(state(&background, "t1"), AgentStatus::Done);
@@ -347,7 +347,7 @@ fn presentation_consumes_precoalesced_receipts_without_reallocating_at_draw() {
     p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("a20"));
-    p.project(&view, &mut projection);
+    p.project(&view, &mut projection, &Default::default());
     assert_eq!(
         (
             rank(&projection, "a20"),
