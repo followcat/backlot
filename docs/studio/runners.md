@@ -35,7 +35,7 @@ sees it.
 | Codex | a line containing `Would you like to` and a line trimmed to `› 1.` | `esc to interrupt` | An older capture — not measured on 0.166.0 |
 | Devin | an `Allow` picker line — an optional `❭` cursor, `← ◼◼◼◼ →` and any scope word after the arrows — plus a `Deny` option line, cursor optional on both | `to interrupt` | Live 3000.12.32 screens — `esc twice to interrupt`, the `❭ Allow ← ◼◼◼◼ → Once`/`Deny` prompt with the cursor on `Allow` |
 | OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
-| cursor-agent | the workspace-trust dialog — `Workspace Trust Required` and `Trust this workspace` together; or a permission prompt — `Run this command?`, a line starting `Not in allowlist:` and `→ Run (once) (y)` | `ctrl+c to stop`, or a spinner line — one or two braille glyphs, a space, then `Composing` or `Running … tokens`. A transcript line starting `Running the` is not one | Measured on 2026.11.05 |
+| cursor-agent | the workspace-trust dialog — `Workspace Trust Required` and `Trust this workspace` together; or any approval picker below the last full-width `─` divider — a `→ ` option-cursor line, a `Run Everything (shift+tab)` footer, and `allowlist`/`approval` wording or a tool question (`… this file?`, `… this command?`, `Proceed with this edit?`). The question's own words are not the marker, so a picker kind not yet named still blocks | `ctrl+c to stop`, or a spinner line — one or two braille glyphs, a space, then `Composing` or `Running … tokens`. A transcript line starting `Running the` is not one | Shell picker measured on 2026.11.05; the generic picker shape — `Write to this file?` and the rest — from the S12e run and the fork's `cursor.toml` |
 | cmd | the folder-trust dialog — `Do you trust the files in this folder?` and `Yes, proceed` together; or a permission prompt — `needs to execute`, `needs to run` or `make this edit to` plus a line starting `❯ 1.` | `esc to interrupt` on the status line — the rotating `*ing…` verb and the `✻ Worked for`/`✻ Thought for`/`⎿ Tip:` post-turn lines are not a turn | Measured on 1.88.5 |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
@@ -85,7 +85,7 @@ answer. Lines that move while the prompt waits are dropped first.
 | Codex | From the last `Would you like to` line to the end | Unmeasured — best effort from its `blocked` markers |
 | Devin | From the last `●` line above `Approval required` to the end — the command block, the judge's sentence and the picker with its `❭` cursor and scope word | Built from a live 3000.12.32 prompt read; Devin has not yet run as a studio role — only Claude has |
 | OpenCode | none | No approval key is ever sent, so no block is mapped |
-| cursor-agent | From the last full-width `─` rule above `Run this command?` to the end — the `$ <command>` line, the allowlist sentence and the picker | Measured on 2026.11.05 |
+| cursor-agent | From the last `─` rule above the picker's `→ ` option-cursor line to the end — the `$ <command>` or the diff preview, the question, the ` in <path>`/`Add <Verb>(<path>)` target and the options. A diff preview's own `─` rule can open the block; the `Approval N of M` header stays out of it | Shell picker measured on 2026.11.05; file pickers from the S12e run and the fork's `cursor.toml` |
 | cmd | From the last full-width `─` rule above the `❯ 1.` picker to the end — the tool title, the `needs to …` sentence, the command and the picker | Measured on 1.88.5 |
 | Anything else | none | — |
 
@@ -101,9 +101,20 @@ A recorded `role.approval` sends one key while the saved prompt block is still t
 | Codex | `enter` | `esc` | From its `› 1.` picker — still to be measured |
 | Devin | `enter` | `esc` | Observed on 3000.12.32 — `enter` takes the highlighted `Once`, `esc` cancels |
 | OpenCode | none sent | none sent | Not measured — the attention stays open for the user |
-| cursor-agent | `y` | none sent | `y` takes `Run (once)` — measured on 2026.11.05. A denied command is retried by the runner (it re-asked four times, then read the file itself), so no deny key is mapped and the attention stays open for the user |
+| cursor-agent | `y` | none sent | `y` takes the highlighted allow option — `Run (once)` on the shell picker, `Proceed` on a file picker — shell measured on 2026.11.05, the file picker's `(y)` from the S12e capture. A denied command is retried by the runner (it re-asked four times, then read the file itself), so no deny key is mapped and the attention stays open for the user |
 | cmd | `enter` | `esc` | Both measured on 1.88.5 — `enter` takes `❯ 1. Yes` (run-once); `esc` or `3` ends the turn and the agent does not retry. Option `2` ("don't ask again") is never sent — it writes a project allow rule |
 | Anything else | none sent | none sent | — |
+
+### What a cursor file picker reaches for (S12f)
+
+A `Write to this file?`-family picker names its target twice — the ` in <path>` line under the
+question and the `Add <Verb>(<path>) to allowlist?` option — and the stage reads both (`Add` first).
+An actor's `y` is the director's only while the displayed path is absolute and resolves — the deepest
+existing ancestor canonicalised, so `..` and symlinks are real — strictly inside the role's own work
+area, naming no `.git`, `.commandcode`, `.cursor` or `cursor` component. Anything else flags
+`needs_user`: a target outside or escaping the area, a `~` or relative or empty path, a `…`-truncated
+one, no path at all, and a picker whose question names nothing measured (`Run this mcp?`, a web
+prompt). The shell picker is not path-checked — its command is read by the usual env-flag scan.
 
 ## Rules for adapters
 

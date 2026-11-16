@@ -37,11 +37,23 @@ fn change_at(state: &StudioState, seq: u64) -> Option<&Task> {
 }
 
 /// Why `m` no longer stands — the phrase `message.dropped` records —
-/// or `None` when its source still says what it said. An unknown
-/// label or a missing source record is left alone: the table drops
-/// only what it can prove.
+/// or `None` when its source still says what it said. A notice
+/// addressed to a role the ledger no longer wants live — a closed
+/// actor, or everyone once `studio.finished` lands — is dead mail
+/// whatever its label (S12f): nothing is coming back to read it,
+/// so it drops `no longer wanted` instead of sitting in the
+/// outbox forever. `user` is always there. Otherwise an unknown
+/// label or a missing source record is left alone: the table
+/// drops only what it can prove.
 pub(crate) fn stale_reason(state: &StudioState, m: &Message) -> Option<&'static str> {
     let seq = m.source_seq?;
+    if m.to != "user"
+        && !backlot_model::wanted::wanted_roles(state)
+            .iter()
+            .any(|r| r.role == m.to)
+    {
+        return Some("no longer wanted");
+    }
     match notices::label(m)? {
         // The attention family all die the same death: the raise
         // they point at cleared.
