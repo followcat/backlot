@@ -206,6 +206,33 @@ fn attention_wins_over_failed_and_both_replace_the_title() {
 }
 
 #[test]
+fn an_alert_takes_the_whole_second_row_at_the_default_width() {
+    // At the default 26 columns a model beside the alert left
+    // `! permissi…`: the alert replaces row two, model included.
+    let mut value = summary_json();
+    value["studios"][0]["roles"][1]["attention"] = serde_json::json!("permission prompt");
+    value["studios"][0]["roles"][0]["failed"] = serde_json::json!("rate_limit");
+    let alerted: Summary = serde_json::from_value(value).unwrap();
+    let view = cast_view(&alerted, vec![], false, None);
+    let (buf, ..) = draw(&view, 26, 20);
+    let rows = lines(&buf, Rect::new(0, 0, 26, 20));
+    let below = |name: &str| rows[rows.iter().position(|l| l.contains(name)).unwrap() + 1].clone();
+    let alice = below("alice");
+    assert!(alice.contains("! permission prompt"), "{alice}");
+    assert!(!alice.contains("sonnet"), "{alice}");
+    let producer = below("producer");
+    assert!(producer.contains("last turn failed"), "{producer}");
+    assert!(!producer.contains("opus"), "{producer}");
+    // Without an alert the model keeps its place.
+    let plain = summary();
+    let view = cast_view(&plain, vec![], false, None);
+    let (buf, ..) = draw(&view, 26, 20);
+    let rows = lines(&buf, Rect::new(0, 0, 26, 20));
+    let alice = rows[rows.iter().position(|l| l.contains("alice")).unwrap() + 1].clone();
+    assert!(alice.contains("sonnet-4-5"), "{alice}");
+}
+
+#[test]
 fn the_focused_person_gets_the_accent_bar_and_active_background() {
     let summary = summary();
     let view = cast_view(&summary, vec![], false, Some("t4"));

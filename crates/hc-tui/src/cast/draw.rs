@@ -149,7 +149,8 @@ pub(crate) fn render_cast(
 /// A person's two rows: mark, `name task`, runner — over the
 /// terminal's title (or its fallbacks) and the short model. Focus
 /// paints the active-row background and the accent `▌`; an
-/// `attention` (else a `failed` turn) replaces the title text.
+/// `attention` (else a `failed` turn) replaces the whole second row,
+/// model included.
 fn draw_person(
     buffer: &mut Buffer,
     rect: Rect,
@@ -218,13 +219,15 @@ fn draw_person(
     }
 
     // Row 2: `! <attention>` wins, then `last turn failed`, else the
-    // title → doing → state-word fallback. The model stays at the
-    // right edge on every variant.
+    // title → doing → state-word fallback with the model at the right
+    // edge. An alert takes the whole row: beside a model it was cut to
+    // a word at the default width.
+    let alert = role.attention.is_some() || role.failed.is_some();
     let model = role
         .model
         .as_deref()
         .map(short_model)
-        .filter(|model| !model.is_empty());
+        .filter(|model| !alert && !model.is_empty());
     let model_width = model
         .as_deref()
         .map(display_width)
