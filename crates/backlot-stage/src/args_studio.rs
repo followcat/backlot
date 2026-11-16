@@ -13,6 +13,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
     let mut repo = None;
     let mut cast_file = None;
     let mut dry_run = false;
+    let mut interactive = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -28,14 +29,29 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             "--cast" => cast_file = Some(PathBuf::from(it.value("--cast", U_STUDIO)?)),
             _ if eq(&arg, "--cast").is_some() => cast_file = eq(&arg, "--cast").map(PathBuf::from),
             "--dry-run" => dry_run = true,
+            "--interactive" => interactive = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
         }
     }
-    let cmd = Cmd::StudioNew {
-        title: title.ok_or_else(|| usage("missing --title", U_STUDIO))?,
-        repo: repo_path(&repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?)?,
-        cast_file: cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?,
-        dry_run,
+    let cmd = match interactive {
+        // The wizard resolves whatever the flags left unset — the
+        // only pre-checks here are the ones that always hold.
+        true => Cmd::StudioNew {
+            title,
+            repo: repo.map(|r| repo_path(&r)).transpose()?,
+            cast_file,
+            dry_run,
+            interactive: true,
+        },
+        false => Cmd::StudioNew {
+            title: Some(title.ok_or_else(|| usage("missing --title", U_STUDIO))?),
+            repo: Some(repo_path(
+                &repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?,
+            )?),
+            cast_file: Some(cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?),
+            dry_run,
+            interactive: false,
+        },
     };
     Ok((std::mem::take(common), cmd))
 }

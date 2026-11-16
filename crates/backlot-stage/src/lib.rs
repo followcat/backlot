@@ -54,6 +54,7 @@ mod stall;
 pub mod store;
 mod watch;
 mod watchdog;
+mod wizard;
 mod workareas;
 
 #[cfg(test)]
@@ -140,6 +141,8 @@ mod stall_tests;
 mod store_tests;
 #[cfg(test)]
 mod watch_tests;
+#[cfg(test)]
+mod wizard_tests;
 #[cfg(test)]
 mod workareas_tests;
 

@@ -263,7 +263,7 @@ fn load(dir: &Path) -> Result<StudioState, Fail> {
 
 /// The state base for one command: the override, else one connection
 /// for the core id (`--session`/`--remote` apply as the TUI's do).
-fn base(env: &Env, common: &Common) -> Result<PathBuf, Fail> {
+pub(crate) fn base(env: &Env, common: &Common) -> Result<PathBuf, Fail> {
     link::state_dir_sync(
         env,
         common.session.as_deref().map(std::ffi::OsStr::new),
@@ -278,6 +278,28 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
         return Ok(format!("{u}\n{}", crate::args::COMMON));
     }
     check_identity(&common, env)?;
+    if let Cmd::StudioNew {
+        interactive: true,
+        title,
+        repo,
+        cast_file,
+        dry_run,
+    } = &cmd
+    {
+        // The wizard resolves the answers itself, then runs the
+        // ordinary `studio new` write — `exec_event` never sees
+        // `interactive`.
+        return crate::wizard::run(
+            common,
+            crate::wizard::WizardArgs {
+                title: title.clone(),
+                repo: repo.clone(),
+                cast_file: cast_file.clone(),
+                dry_run: *dry_run,
+            },
+            env,
+        );
+    }
     match cmd {
         // The stage connects itself; no ledger command needs it here.
         Cmd::StageStart => {
@@ -307,7 +329,12 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     exec_event(common, cmd, env, &base)
 }
 
-fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<String, Fail> {
+pub(crate) fn exec_event(
+    common: Common,
+    mut cmd: Cmd,
+    env: &Env,
+    base: &Path,
+) -> Result<String, Fail> {
     let needs_task = matches!(
         cmd,
         Cmd::Deliver { .. }

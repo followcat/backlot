@@ -23,10 +23,18 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
         Cmd::Records { json, all } => Some(records(common, env, base, *json, *all)),
         Cmd::StudioNew {
             dry_run: true,
+            interactive: false,
             title,
             repo,
             cast_file,
-        } => Some(dry_run(common, env, base, title, repo, cast_file)),
+        } => Some(dry_run(
+            common,
+            env,
+            base,
+            &title.clone().unwrap_or_default(),
+            &repo.clone().unwrap_or_default(),
+            &cast_file.clone().unwrap_or_default(),
+        )),
         _ => None,
     }
 }

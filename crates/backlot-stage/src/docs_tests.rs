@@ -214,10 +214,11 @@ fn guide_cast_file_parses_through_studio_new() {
     let build = commands::build(
         &caller,
         Cmd::StudioNew {
-            title: "Shop".into(),
-            repo: "/home/user/acme-shop".into(),
-            cast_file,
+            title: Some("Shop".into()),
+            repo: Some("/home/user/acme-shop".into()),
+            cast_file: Some(cast_file),
             dry_run: false,
+            interactive: false,
         },
     )
     .expect("the guide's cast file fails the `studio new` build");
