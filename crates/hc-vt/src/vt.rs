@@ -307,6 +307,9 @@ impl Vt {
     }
 
     /// Scroll the viewport to an absolute `scrollbar` row offset.
+    /// Row 0 is the buffer's top — calling it with "no scrollback"
+    /// pins the viewport there, so use [`Vt::scroll_to_bottom`] for
+    /// "follow the tail" instead of `scroll_to_row(total - len)`.
     pub fn scroll_to_row(&mut self, row: usize) {
         unsafe {
             ffi::ghostty_terminal_scroll_viewport(
@@ -314,6 +317,21 @@ impl Vt {
                 ffi::ScrollViewport {
                     tag: ffi::SCROLL_ROW,
                     value: ffi::ScrollViewportValue { row },
+                },
+            );
+        }
+    }
+
+    /// Scroll the viewport to the active area — the bottom — from any
+    /// position. Unlike `scroll_to_row`, this never pins the top when
+    /// the scrollback is empty.
+    pub fn scroll_to_bottom(&mut self) {
+        unsafe {
+            ffi::ghostty_terminal_scroll_viewport(
+                self.raw,
+                ffi::ScrollViewport {
+                    tag: ffi::SCROLL_BOTTOM,
+                    value: ffi::ScrollViewportValue { delta: 0 },
                 },
             );
         }
