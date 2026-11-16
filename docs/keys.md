@@ -38,20 +38,53 @@ still wins whenever the panel does not own the keys. The chord's tail is `panel.
 `~/.config/backlot/config.toml`.
 
 The panel has three modes: closed (the default — zero width, no keys), a 16-column collapsed
-strip, and an expanded column (`[panel] width`, default 30, clamped to 24–60). While it is
-focused it owns these keys:
+strip, and an expanded column (`[panel] width`, default 26, clamped to 22–60) of bordered studio
+blocks. While it is focused it owns these keys:
 
 | Keys | Action |
 |---|---|
 | `j`/`k`, arrows | Move the selection |
 | `PageUp`/`PageDown` | Scroll |
-| `Enter` | Act on the row (focus a terminal, collapse a group, reopen a closed person) |
-| `Space` | Collapse the selected group |
+| `Enter` | Act on the row (focus a terminal, make a studio current, reopen a closed person) |
+| `Space` | Collapse or expand the selected studio's block |
 | `c` | Switch collapsed and expanded |
 | `+`/`-` | Raise or lower a task's priority |
 | `Esc` | Unfocus the panel (close it when it covers the whole frame) |
 
-[docs/studio/guide.md](studio/guide.md) explains what the panel's marks mean.
+[docs/studio/guide.md](studio/guide.md) explains what the panel's marks and blocks mean.
+
+## Studio keys
+
+When the last good `backlot` document lists at least one studio, four direct keys — no prefix —
+move between studios and roles. They are bound in `~/.config/backlot/config.toml` and default to
+the `Alt+arrow` chords:
+
+```toml
+[keys]
+previous_studio = "alt+up"
+next_studio = "alt+down"
+previous_role = "alt+left"
+next_role = "alt+right"
+```
+
+| Keys | Action |
+|---|---|
+| `Alt+Up`, `Alt+Down` | Previous or next studio in document order. Wraps around. Focuses the person last used there, else the studio's producer, else its first live role. A studio with no live terminal still becomes current — the cast and the panel frame follow — and a notice says so. |
+| `Alt+Left`, `Alt+Right` | Previous or next person of the current studio in cast order. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered person. |
+
+Focusing goes through the panel's existing focus path (workspace, tab, pane): it only moves the
+focus — no pane and no program is resized.
+
+These keys exist only in studio mode. There they win over a Herdr binding on the same key — the
+usual Herdr config binds `previous_tab = "alt+left"` and friends — so set different chords in
+either file if you want both. Outside studio mode Herdr's bindings, or the program, get the keys
+exactly as before. An empty string unbinds a key; a value that does not parse falls back to the
+default with one notice naming the file.
+
+They also work while the studio panel or a persistent float has the focus — the float parks on
+its tab and keeps running, as it does for the tab and agent keys below. While the keyboard is
+locked (`Ctrl+G`) the program gets them instead, and in copy mode they do what Herdr's
+`previous_tab` does there.
 
 ## Scrolling a pane
 

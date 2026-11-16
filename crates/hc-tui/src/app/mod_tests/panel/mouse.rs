@@ -41,7 +41,7 @@ async fn a_click_outside_a_focused_panel_returns_focus_to_the_panes() {
     app.area = (120, 24);
     open_panel(&mut app);
     draw_to(&mut app, 120, 24);
-    // Column 0 is far left of the 30-column panel.
+    // Column 0 is far left of the 26-column panel.
     app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), 0, 10));
     assert!(!app.panel.focused);
     assert_eq!(app.panel.mode, PanelMode::Expanded);
@@ -121,17 +121,17 @@ async fn the_scrollbar_drags_the_body() {
 }
 
 #[tokio::test]
-async fn the_wheel_reaches_the_bottom_when_rows_are_two_lines_tall() {
+async fn the_wheel_reaches_the_bottom() {
     let mut app = app_with_panel_doc();
-    // A `doing` line makes a person row two lines tall on screen:
-    // scroll is a line offset, so a row-count bound would strand the
-    // wheel above the bottom.
+    // One-line rows now — a tall cast still overflows a short body:
+    // scroll is a line offset bounded by the drawn metrics, so the
+    // wheel lands exactly on the bottom.
     let mut value = summary_json();
     let roles = value["studios"][0]["roles"].as_array_mut().unwrap();
-    for i in 0..10 {
+    for i in 0..16 {
         roles.push(serde_json::json!({
             "role": format!("actor-t{i}"), "name": format!("t{i}"),
-            "state": "live", "work": "waiting", "doing": "busy",
+            "state": "live", "work": "waiting",
         }));
     }
     app.view.documents_mut().insert(
@@ -146,7 +146,7 @@ async fn the_wheel_reaches_the_bottom_when_rows_are_two_lines_tall() {
     open_panel(&mut app);
     draw_to(&mut app, 120, 10);
     let max = app.panel_hits.metrics.unwrap().max_offset_from_bottom;
-    assert!(max > 0, "two-line rows overflow the body");
+    assert!(max > 0, "the cast overflows the body");
     let body = app.panel_hits.body;
     for _ in 0..max + 4 {
         app.on_mouse(mouse(MouseEventKind::ScrollDown, body.x, body.y));

@@ -22,7 +22,7 @@ async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
     key(&mut app, hc_vt::Key::PageDown);
     assert!(matches!(
         app.panel.selected,
-        Some(Target::Group(..) | Target::Person(..))
+        Some(Target::Studio(..) | Target::Block(..) | Target::Person(..))
     ));
     // c collapses the panel to its strip.
     key(&mut app, hc_vt::Key::Char('c'));
@@ -34,19 +34,18 @@ async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
 }
 
 #[tokio::test]
-async fn space_collapses_the_selected_group() {
+async fn space_collapses_and_expands_the_selected_block() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     open_panel(&mut app);
-    app.panel.selected = Some(Target::Group("acme-shop".into(), "actors".into()));
+    // Draw once so `panel_hits.body` carries a real height — the
+    // stacking decision reads it.
+    draw_to(&mut app, 120, 24);
+    app.panel.selected = Some(Target::Studio("acme-shop".into()));
     key(&mut app, hc_vt::Key::Char(' '));
-    assert!(
-        app.panel
-            .collapsed_groups
-            .contains(&("acme-shop".into(), "actors".into()))
-    );
+    assert!(app.panel.collapsed_blocks.contains("acme-shop"));
     key(&mut app, hc_vt::Key::Char(' '));
-    assert!(app.panel.collapsed_groups.is_empty());
+    assert!(app.panel.expanded_blocks.contains("acme-shop"));
 }
 
 #[tokio::test]

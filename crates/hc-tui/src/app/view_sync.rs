@@ -54,6 +54,9 @@ impl App {
         // Focus settled: park the old owner's float, restore the new
         // one's — before `reconcile_popups` sees the publish.
         self.sync_float_focus();
+        // U1: the studio-mode latch follows the last good document and
+        // the focus; a flip re-derives the sidebar width.
+        self.sync_studio();
     }
 
     /// A watcher publish: refresh the projection + pane target policy.

@@ -37,7 +37,12 @@ impl App {
                         grab_row_offset,
                     );
                     let next = metrics.max_offset_from_bottom.saturating_sub(offset);
-                    self.shell_state.agent_scroll = next;
+                    // U1: the cast section's scrollbar, same slot.
+                    if self.studio.active {
+                        self.studio.cast_scroll = next;
+                    } else {
+                        self.shell_state.agent_scroll = next;
+                    }
                 }
             }
             Some(ChromeDrag::NavigatorScrollbar { grab_row_offset }) => {

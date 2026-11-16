@@ -55,6 +55,7 @@ mod seen;
 mod selection_copy;
 mod settings;
 mod shared;
+mod studio;
 mod synthesize;
 mod tab_status;
 mod view_sync;
@@ -240,6 +241,9 @@ pub struct App {
     panel_rx: mpsc::Receiver<(String, Result<(), String>)>,
     /// Endpoint flags (`--session`/`--remote`) for spawned actions.
     panel_endpoint_args: Vec<String>,
+    /// Studio mode's client-local state (U1): the mode latch, the
+    /// current studio and per-studio remembered persons.
+    studio: crate::studio::Studio,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,

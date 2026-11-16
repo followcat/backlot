@@ -7,6 +7,7 @@
 //! geometry and lifecycle code is separated from I/O for tests.
 
 pub mod app;
+mod cast;
 pub mod chrome;
 pub mod cli;
 mod clipboard;
@@ -48,3 +49,4 @@ pub mod own_theme;
 mod panel;
 pub mod popup_size;
 pub mod structure;
+mod studio;

@@ -100,6 +100,8 @@ pub(crate) struct ShellHitMap {
     pub global_launcher: Rect,
     /// Row hit areas of the open context menu, filled during draw.
     pub context_menu_rows: Vec<(Rect, usize)>,
+    /// The studio cast's `others` toggle row (empty in herdr mode).
+    pub cast_others: Rect,
 }
 
 /// Diagnostics shown on endpoint rows. hc-tui has no saved-endpoint auth
@@ -144,6 +146,11 @@ pub(crate) struct ShellRenderState<'a> {
     /// A newer release's bare version once the background check
     /// reported one — the badge's update hint.
     pub update_latest: Option<&'a str>,
+    /// The studio cast's frame input — `Some` replaces the agents
+    /// section in the expanded sidebar (studio mode).
+    pub cast: Option<crate::cast::CastView<'a>>,
+    /// The cast section's scroll — written back like `agent_scroll`.
+    pub cast_scroll: &'a mut usize,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
@@ -248,7 +255,7 @@ pub(crate) fn render_shell(
     hits
 }
 
-pub(super) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, style: Style) {
+pub(crate) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str, style: Style) {
     let width = display_width(text).min(area.width);
     put_text(
         buffer,
@@ -273,7 +280,7 @@ pub(super) fn put_segment(
     x.saturating_add(width)
 }
 
-pub(super) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
+pub(crate) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &str, style: Style) {
     if width == 0 || y >= buffer.area.bottom() || x >= buffer.area.right() {
         return;
     }

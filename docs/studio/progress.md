@@ -1,5 +1,50 @@
 # Studio progress
 
+## U1: the studio layout — cast, blocks and Alt-arrow navigation (2026-11-16)
+
+- Done: studio mode, latched while the last good `backlot/1` document lists a studio —
+  a missing, malformed or foreign document and a stopped stage keep the mode; only a
+  good document with zero studios leaves it. The sidebar's agents section becomes the
+  current studio's **cast** (`src/cast/`): header `cast · <id>` + `<n>/<total>`, two rows
+  per person (mark, name and task with the runner at the right; the terminal's title —
+  `doing`, then the state word as fallbacks — with a short model), `! <attention>` or
+  `last turn failed` second rows, the focused person's `▌` active rows, closed people
+  last and dimmed, and an `others <n> ▸` row expanding herdr's agent rows for the
+  unseated. The spaces section caps at a third of the sidebar height; the cast's wheel,
+  scrollbar and click hits are its own. The panel is a narrow column (`[panel] width`
+  default 26, was 30, clamp 22–60) of bordered studio blocks — `╭ <id> ── !<n> ╮` in the
+  accent for the current studio, `├──┤` rules between the role groups, one line per
+  person with the state word right-aligned and an attention line under it — with
+  stacking (`╶ <id> ⠿2 ○3 ×1 !<n>`) when the blocks do not fit, a dim shortcuts line
+  (dropped under 8 rows) and a per-studio line in the collapsed strip. Four direct keys
+  (`[keys] previous_studio`/`next_studio`/`previous_role`/`next_role`, alt+arrows by
+  default) move between studios in document order and between the current cast's live
+  people through the existing focus path — no pane resizes — landing on each studio's
+  remembered person. They win over herdr bindings in studio mode only, fire while the
+  panel or a persistent float is focused (the float parks), go to the program while the
+  keyboard is locked, and unbind on `""` or fall back with a file-naming notice on a bad
+  value. `Space` toggles a block's collapse; a block's top border and a stacked line are
+  click targets. New `[sidebar] width` (26, clamp 20–60) applies in studio mode; a drag
+  still overrides it for the session. No lines changed outside `hc-tui`.
+- Measured: ~70 new or rewritten tests — `cargo test --workspace` 1798 passed across 75
+  binaries, 826 of them hc-tui's; `cargo fmt --all -- --check` and
+  `cargo clippy --workspace --all-targets -- -D warnings` clean. Real-core:
+  `real_u1_studio_layout_screens` on the pinned `herdr-core` — one scratch core, two
+  studios, the fake runner, a `work:blocked` actor — captures the cast, the bordered
+  blocks, stacking at short height, the `!1`/`! permission prompt` attention on both
+  surfaces and Alt+down/up/right switching at widths 200, 120, 80 and 40 (mobile chrome,
+  no sidebar, as designed under 65 columns); the captures sit in
+  `backlot-work/briefs/U1-screens/`. The ignored real-core suite passes beside it
+  (`integration` 5, `real_core_smoke` 1, `real_stage` 22, `real_two_studios` 1). Parity
+  outside studio mode: this tree and a branch-point (`cce69a3`) build produce
+  byte-identical parity logs against the herdr reference — 79 checkpoints, the constant
+  7-cell backlot signature, the same environmental `popup-open` timeout the recorded S13
+  run hit — and `outside_studio_mode_the_herdr_binding_gets_the_key` proves `alt+left`
+  reaches `previous_tab` with no studio.
+- Not verified: a real runner under the layout; three or more studios; the `others` row
+  on a long agent list. Entering or leaving studio mode can resize the panes once — the
+  sidebar width switches between herdr's `ui.sidebar_width` and `[sidebar] width`.
+
 ## H3: Hollywood — the stage, fake runner only (2026-11-16)
 
 - Done: with `[hollywood]` in the user config the stage runs one terminal `bl-hollywood`

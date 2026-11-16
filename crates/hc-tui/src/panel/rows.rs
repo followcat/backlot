@@ -1,7 +1,7 @@
-//! The panel's row model: a pure `(Summary, panel state)` → rows map.
-//! The summary's own order is kept — it already sorts people by
-//! priority and puts closed people last; the panel only groups and
-//! collapses on top of it.
+//! The panel's row model (U1): a pure `(Summary, Panel, current,
+//! body height)` → one-line rows map. Every row is a single line — a
+//! block border, a person, a `├──┤` divider or a stacked block's
+//! `╶ id …` line — so the scroll math stays in one-line steps.
 
 use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
 
@@ -33,14 +33,27 @@ pub(crate) enum Target {
     StageDown,
     /// The empty-state line — shown, not actionable.
     Empty,
-    Idle,
+    /// Any chrome row of an expanded block — top border, divider,
+    /// error/next line or bottom. Enter/click makes the studio
+    /// current.
     Studio(String),
-    /// `(studio, group)` — an expanded-mode group header.
-    Group(String, String),
-    /// A collapsed-mode "working" group row (aggregated over studios).
-    WorkingGroup(String),
-    /// `(studio, role)` — a person.
+    /// A stacked block's `╶ id …` line — Enter/click expands it.
+    Block(String),
+    /// A collapsed-strip row — Enter/click expands the panel.
+    Strip(String),
+    /// `(studio, role)` — a person row or one of its extra lines.
     Person(String, String),
+}
+
+/// An extra line under a person.
+#[derive(Debug)]
+pub(crate) enum PersonLine {
+    /// `! <attention>` — the blocked colour.
+    Attention,
+    /// `! last turn failed: <e>` — only when no attention shows.
+    Failed,
+    /// The armed two-step reopen hint.
+    Confirm,
 }
 
 /// One display row, borrowing its data from the summary.
@@ -50,26 +63,31 @@ pub(crate) enum Row<'a> {
     StageDown,
     /// No `backlot` document or an unparseable one — "no studios".
     Empty,
-    /// Nothing working (collapsed mode's dim row).
-    Idle,
-    Studio(&'a StudioSummary),
-    Group {
-        studio: &'a StudioSummary,
-        group: &'static str,
-        collapsed: bool,
-        count: usize,
-    },
+    /// `╭ <id> ── !<n> ╮` — the studio id in the top border.
+    BlockTop(&'a StudioSummary),
+    /// `│ ! <error> │`
+    BlockError(&'a StudioSummary),
+    /// `│ → <next> │`
+    BlockNext(&'a StudioSummary),
+    /// `├──┤` between role groups.
+    Divider(&'a StudioSummary),
+    /// `╰──╯`
+    BlockBottom(&'a StudioSummary),
+    /// `│ <mark> <name> <task> <flag>   <state> │`
     Person {
         studio: &'a StudioSummary,
         role: &'a RoleSummary,
-        /// The two-step reopen hint is armed on this row.
-        confirm: bool,
     },
-    /// Collapsed mode: one line per group with someone working.
-    WorkingGroup {
-        group: &'static str,
-        working: usize,
+    /// A person's attention/failed/confirm extra line.
+    PersonLine {
+        studio: &'a StudioSummary,
+        role: &'a RoleSummary,
+        kind: PersonLine,
     },
+    /// A stacked block's single line: `╶ <id> ⠿2 ○3 ×1 !<n>`.
+    Stacked(&'a StudioSummary),
+    /// The collapsed strip's one line per studio.
+    Strip(&'a StudioSummary),
 }
 
 impl Row<'_> {
@@ -79,33 +97,23 @@ impl Row<'_> {
             Row::Title => Target::Title,
             Row::StageDown => Target::StageDown,
             Row::Empty => Target::Empty,
-            Row::Idle => Target::Idle,
-            Row::Studio(studio) => Target::Studio(studio.id.clone()),
-            Row::Group { studio, group, .. } => Target::Group(studio.id.clone(), (*group).into()),
-            Row::WorkingGroup { group, .. } => Target::WorkingGroup((*group).into()),
-            Row::Person { studio, role, .. } => {
+            Row::BlockTop(studio)
+            | Row::BlockError(studio)
+            | Row::BlockNext(studio)
+            | Row::Divider(studio)
+            | Row::BlockBottom(studio) => Target::Studio(studio.id.clone()),
+            Row::Person { studio, role } | Row::PersonLine { studio, role, .. } => {
                 Target::Person(studio.id.clone(), role.role.clone())
             }
+            Row::Stacked(studio) => Target::Block(studio.id.clone()),
+            Row::Strip(studio) => Target::Strip(studio.id.clone()),
         }
     }
 
-    /// Rendered lines: a person may carry a `doing` line, an attention
-    /// line, a `last turn failed` line and the armed reopen hint; a
-    /// studio may carry an `error` line and a `next` step line; every
-    /// other row is one line.
+    /// Rendered lines — every row is one line, so scroll metrics stay
+    /// in line steps.
     pub fn height(&self) -> u16 {
-        match self {
-            Row::Studio(studio) => {
-                1 + u16::from(studio.error.is_some()) + u16::from(studio.next.is_some())
-            }
-            Row::Person { role, confirm, .. } => {
-                1 + u16::from(role.doing.is_some())
-                    + u16::from(role.attention.is_some())
-                    + u16::from(role.failed.is_some())
-                    + u16::from(*confirm)
-            }
-            _ => 1,
-        }
+        1
     }
 }
 
@@ -134,6 +142,18 @@ impl Mark {
                 Some(Work::Blocked) => Mark::Blocked,
                 _ => Mark::Waiting,
             },
+        }
+    }
+
+    /// The one-line block's state word (R17): `working`, `idle`,
+    /// `blocked`, `lost` or `closed`.
+    pub fn word(self) -> &'static str {
+        match self {
+            Mark::Working => "working",
+            Mark::Waiting => "idle",
+            Mark::Blocked => "blocked",
+            Mark::Lost => "lost",
+            Mark::Closed => "closed",
         }
     }
 }
@@ -168,41 +188,159 @@ pub(crate) fn mark_symbol(mark: Mark, spin: usize) -> &'static str {
     }
 }
 
-/// The title line (R17): names what is working — each group with a
-/// working person, `actors 2` style — or `idle` when nothing is.
-pub(crate) fn title_text(summary: Option<&Summary>) -> String {
-    let working = |group: &str| -> usize {
-        summary
-            .map(|s| {
-                s.studios
-                    .iter()
-                    .flat_map(|st| &st.roles)
-                    .filter(|r| group_of(r) == group && r.work == Some(Work::Working))
-                    .count()
-            })
-            .unwrap_or(0)
-    };
-    let parts: Vec<String> = GROUPS
-        .iter()
-        .filter_map(|group| match working(group) {
-            0 => None,
-            1 => Some((*group).into()),
-            n => Some(format!("{group} {n}")),
+/// The mark order a stacked block's counts follow.
+const MARK_ORDER: [Mark; 5] = [
+    Mark::Working,
+    Mark::Waiting,
+    Mark::Blocked,
+    Mark::Lost,
+    Mark::Closed,
+];
+
+/// A stacked block's mark counts — `(mark, n)` for each nonzero mark
+/// in `MARK_ORDER`.
+pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Mark, usize)> {
+    MARK_ORDER
+        .into_iter()
+        .filter_map(|mark| {
+            let n = studio
+                .roles
+                .iter()
+                .filter(|role| Mark::of(role) == mark)
+                .count();
+            (n > 0).then_some((mark, n))
         })
-        .collect();
-    match parts.is_empty() {
-        true => "idle".into(),
-        false => format!("working: {}", parts.join(", ")),
-    }
+        .collect()
 }
 
-/// The whole row list for the current mode (R17/R18). `None` summary
-/// — a missing, malformed or foreign-schema document — is the
+/// A person's line count: itself plus an attention-or-failed line and
+/// the armed reopen hint.
+fn person_height(studio: &StudioSummary, role: &RoleSummary, panel: &Panel) -> usize {
+    1 + usize::from(role.attention.is_some() || role.failed.is_some())
+        + usize::from(
+            panel
+                .reopen_confirm
+                .as_ref()
+                .is_some_and(|(s, r)| s == &studio.id && r == &role.role),
+        )
+}
+
+/// An expanded block's height: top + bottom borders, the `error` and
+/// `next` lines when present, each non-empty group's people, and a
+/// divider between groups.
+fn block_height(studio: &StudioSummary, panel: &Panel) -> usize {
+    let mut height = 2 + usize::from(studio.error.is_some()) + usize::from(studio.next.is_some());
+    let mut groups = 0usize;
+    for group in GROUPS {
+        let people = studio.roles.iter().filter(|r| group_of(r) == group);
+        let mut counted = false;
+        for role in people {
+            counted = true;
+            height += person_height(studio, role, panel);
+        }
+        groups += usize::from(counted);
+    }
+    height + groups.saturating_sub(1)
+}
+
+/// Which studios draw an expanded block: all of them while every
+/// expanded block fits the body; past that, the current studio and any
+/// block `Space` opened by hand — `collapsed_blocks` wins either way.
+fn expanded_set<'a>(
+    summary: &'a Summary,
+    panel: &Panel,
+    current: Option<&str>,
+    body_height: u16,
+) -> std::collections::BTreeSet<&'a str> {
+    // `body_height == 0` means the body was never drawn — no
+    // constraint measured, so every block opens.
+    let fits = body_height == 0
+        || summary
+            .studios
+            .iter()
+            .map(|studio| block_height(studio, panel))
+            .sum::<usize>()
+            <= body_height as usize;
+    summary
+        .studios
+        .iter()
+        .filter_map(|studio| {
+            let open = if panel.expanded_blocks.contains(&studio.id) {
+                true
+            } else if panel.collapsed_blocks.contains(&studio.id) {
+                false
+            } else {
+                fits || current == Some(studio.id.as_str())
+            };
+            open.then_some(studio.id.as_str())
+        })
+        .collect()
+}
+
+/// One studio's expanded block: `╭ id ╮`, `error`/`next` lines, the
+/// groups divided by `├──┤` rules — empty groups skipped — `╰──╯`.
+fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: &'a StudioSummary, panel: &Panel) {
+    out.push(Row::BlockTop(studio));
+    if studio.error.is_some() {
+        out.push(Row::BlockError(studio));
+    }
+    if studio.next.is_some() {
+        out.push(Row::BlockNext(studio));
+    }
+    let mut first_group = true;
+    for group in GROUPS {
+        let people: Vec<&RoleSummary> = studio
+            .roles
+            .iter()
+            .filter(|r| group_of(r) == group)
+            .collect();
+        if people.is_empty() {
+            continue;
+        }
+        if !first_group {
+            out.push(Row::Divider(studio));
+        }
+        first_group = false;
+        for role in people {
+            let confirm = panel
+                .reopen_confirm
+                .as_ref()
+                .is_some_and(|(s, r)| s == &studio.id && r == &role.role);
+            out.push(Row::Person { studio, role });
+            if role.attention.is_some() {
+                out.push(Row::PersonLine {
+                    studio,
+                    role,
+                    kind: PersonLine::Attention,
+                });
+            } else if role.failed.is_some() {
+                out.push(Row::PersonLine {
+                    studio,
+                    role,
+                    kind: PersonLine::Failed,
+                });
+            }
+            if confirm {
+                out.push(Row::PersonLine {
+                    studio,
+                    role,
+                    kind: PersonLine::Confirm,
+                });
+            }
+        }
+    }
+    out.push(Row::BlockBottom(studio));
+}
+
+/// The whole row list for the current mode. `None` summary — a
+/// missing, malformed or foreign-schema document — is the
 /// "no studios" state, never an error row.
 pub(crate) fn rows<'a>(
     summary: Option<&'a Summary>,
     stage_running: bool,
     panel: &Panel,
+    current: Option<&str>,
+    body_height: u16,
 ) -> Vec<Row<'a>> {
     let mut out = vec![Row::Title];
     if !stage_running {
@@ -214,58 +352,15 @@ pub(crate) fn rows<'a>(
     };
     match panel.mode {
         PanelMode::Closed | PanelMode::Collapsed => {
-            // One row per group with someone working; `idle` when none.
-            let mut any = false;
-            for group in GROUPS {
-                let working = summary
-                    .studios
-                    .iter()
-                    .flat_map(|s| &s.roles)
-                    .filter(|r| group_of(r) == group && r.work == Some(Work::Working))
-                    .count();
-                if working > 0 {
-                    any = true;
-                    out.push(Row::WorkingGroup { group, working });
-                }
-            }
-            if !any {
-                out.push(Row::Idle);
-            }
+            out.extend(summary.studios.iter().map(Row::Strip));
         }
         PanelMode::Expanded => {
+            let open = expanded_set(summary, panel, current, body_height);
             for studio in &summary.studios {
-                out.push(Row::Studio(studio));
-                for group in GROUPS {
-                    let people: Vec<&RoleSummary> = studio
-                        .roles
-                        .iter()
-                        .filter(|r| group_of(r) == group)
-                        .collect();
-                    if people.is_empty() {
-                        continue;
-                    }
-                    let collapsed = panel
-                        .collapsed_groups
-                        .contains(&(studio.id.clone(), group.into()));
-                    out.push(Row::Group {
-                        studio,
-                        group,
-                        collapsed,
-                        count: people.len(),
-                    });
-                    if collapsed {
-                        continue;
-                    }
-                    for role in people {
-                        out.push(Row::Person {
-                            studio,
-                            role,
-                            confirm: panel
-                                .reopen_confirm
-                                .as_ref()
-                                .is_some_and(|(s, r)| s == &studio.id && r == &role.role),
-                        });
-                    }
+                if open.contains(studio.id.as_str()) {
+                    block_rows(&mut out, studio, panel);
+                } else {
+                    out.push(Row::Stacked(studio));
                 }
             }
         }

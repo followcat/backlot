@@ -1,7 +1,8 @@
-//! The pure row model: order, counts, collapse, the title text and
-//! the collapsed-mode working rows.
+//! The U1 row model: bordered blocks, dividers between groups only,
+//! stacking when the blocks stop fitting, manual overrides and the
+//! collapsed strip.
 use super::*;
-use crate::panel::rows::{GROUPS, Row, Target, rows, title_text};
+use crate::panel::rows::{Mark, Target, mark_counts, rows};
 use crate::panel::{Panel, PanelMode};
 
 fn panel(mode: PanelMode) -> Panel {
@@ -11,146 +12,154 @@ fn panel(mode: PanelMode) -> Panel {
     }
 }
 
-fn targets(summary: Option<&Summary>, stage: bool, panel: &Panel) -> Vec<Target> {
-    rows(summary, stage, panel)
+fn targets(
+    summary: Option<&Summary>,
+    stage: bool,
+    panel: &Panel,
+    current: Option<&str>,
+    body_height: u16,
+) -> Vec<Target> {
+    rows(summary, stage, panel, current, body_height)
         .iter()
         .map(|r| r.target())
         .collect()
 }
 
-#[test]
-fn expanded_rows_keep_summary_order_and_counts() {
-    let summary = summary();
-    let panel = panel(PanelMode::Expanded);
-    assert_eq!(
-        targets(Some(&summary), true, &panel),
-        vec![
-            Target::Title,
-            Target::Studio("acme-shop".into()),
-            Target::Group("acme-shop".into(), "producer".into()),
-            Target::Person("acme-shop".into(), "producer".into()),
-            Target::Group("acme-shop".into(), "director".into()),
-            Target::Person("acme-shop".into(), "director".into()),
-            Target::Group("acme-shop".into(), "writer".into()),
-            Target::Person("acme-shop".into(), "writer".into()),
-            Target::Group("acme-shop".into(), "actors".into()),
-            Target::Person("acme-shop".into(), "actor-alice".into()),
-            Target::Person("acme-shop".into(), "actor-erin".into()),
-            Target::Person("acme-shop".into(), "actor-bob".into()),
-            Target::Person("acme-shop".into(), "actor-carol".into()),
-            Target::Person("acme-shop".into(), "actor-dave".into()),
-        ]
-    );
-    // The actors group header carries its people count.
-    let all = rows(Some(&summary), true, &panel);
-    let actors = all.iter().find_map(|r| match r {
-        Row::Group {
-            group: "actors",
-            count,
-            collapsed,
-            ..
-        } => Some((*count, *collapsed)),
-        _ => None,
-    });
-    assert_eq!(actors, Some((5, false)));
-    // An empty group is skipped entirely.
-    assert!(
-        !all.iter().any(|r| matches!(
-            r,
-            Row::Group {
-                group: g,
-                ..
-            } if !GROUPS.contains(g)
-        )),
-        "unknown group leaked"
-    );
-}
-
-#[test]
-fn collapsing_one_group_hides_only_its_people() {
-    let summary = summary();
-    let mut panel = panel(PanelMode::Expanded);
-    panel
-        .collapsed_groups
-        .insert(("acme-shop".into(), "actors".into()));
-    let all = rows(Some(&summary), true, &panel);
-    let collapsed = all.iter().any(|r| {
-        matches!(
-            r,
-            Row::Group {
-                group: "actors",
-                collapsed: true,
-                count: 5,
-                ..
-            }
-        )
-    });
-    assert!(collapsed, "actors header should show collapsed");
-    assert!(
-        !all.iter()
-            .any(|r| matches!(r, Row::Person { role, .. } if role.name == "alice")),
-        "a collapsed group's people are hidden"
-    );
-    // The producer's row survives.
-    assert!(
-        all.iter()
-            .any(|r| matches!(r, Row::Person { role, .. } if role.role == "producer"))
-    );
-}
-
-#[test]
-fn collapsed_mode_lists_one_row_per_working_group() {
-    let summary = summary();
-    assert_eq!(
-        targets(Some(&summary), true, &panel(PanelMode::Collapsed)),
-        vec![
-            Target::Title,
-            Target::WorkingGroup("producer".into()),
-            Target::WorkingGroup("actors".into()),
-        ]
-    );
-    // The working counts feed `actors 2` style labels at draw time.
-    let all = rows(Some(&summary), true, &panel(PanelMode::Collapsed));
-    let working = all
+fn people(targets: &[Target]) -> Vec<String> {
+    targets
         .iter()
-        .filter_map(|r| match r {
-            Row::WorkingGroup { group, working } => Some((*group, *working)),
+        .filter_map(|t| match t {
+            Target::Person(_, role) => Some(role.clone()),
             _ => None,
         })
-        .collect::<Vec<_>>();
-    assert_eq!(working, vec![("producer", 1), ("actors", 2)]);
+        .collect()
 }
 
 #[test]
-fn collapsed_mode_with_nothing_working_shows_idle() {
-    let mut value = summary_json();
-    for role in value["studios"][0]["roles"].as_array_mut().unwrap() {
-        role["work"] = serde_json::Value::Null;
-    }
-    let summary: Summary = serde_json::from_value(value).unwrap();
+fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
+    let summary = summary();
+    let t = targets(
+        Some(&summary),
+        true,
+        &panel(PanelMode::Expanded),
+        Some("acme-shop"),
+        100,
+    );
+    assert_eq!(t.first(), Some(&Target::Title));
+    // Studio targets: top border + 3 dividers (4 non-empty groups) +
+    // bottom border = 5.
     assert_eq!(
-        targets(Some(&summary), true, &panel(PanelMode::Collapsed)),
-        vec![Target::Title, Target::Idle]
+        t.iter()
+            .filter(|x| **x == Target::Studio("acme-shop".into()))
+            .count(),
+        5,
+        "{t:?}"
+    );
+    assert_eq!(
+        people(&t),
+        vec![
+            "producer",
+            "director",
+            "writer",
+            "actor-alice",
+            "actor-erin",
+            "actor-bob",
+            "actor-carol",
+            "actor-dave"
+        ]
+    );
+    // A person's extra line shares the Person target — attention.
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let t2 = targets(
+        Some(&summary),
+        true,
+        &panel(PanelMode::Expanded),
+        Some("acme-shop"),
+        100,
+    );
+    assert_eq!(
+        t2.iter()
+            .filter(|x| **x == Target::Person("acme-shop".into(), "actor-alice".into()))
+            .count(),
+        2,
+        "attention adds a second row with the same target: {t2:?}"
     );
 }
 
 #[test]
-fn title_names_working_groups_or_idle() {
+fn stacking_kicks_in_when_blocks_do_not_fit_and_keeps_current_open() {
     let summary = summary();
-    assert_eq!(title_text(Some(&summary)), "working: producer, actors 2");
-    let mut value = summary_json();
-    for role in value["studios"][0]["roles"].as_array_mut().unwrap() {
-        role["work"] = serde_json::Value::Null;
-    }
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    assert_eq!(title_text(Some(&summary)), "idle");
-    assert_eq!(title_text(None), "idle");
+    // Body too short for the expanded block → only the current studio
+    // stays expanded, everything else is a `╶` line.
+    let t = targets(
+        Some(&summary),
+        true,
+        &panel(PanelMode::Expanded),
+        Some("acme-shop"),
+        5,
+    );
+    assert!(
+        t.iter().any(|x| matches!(x, Target::Person(..))),
+        "current stays expanded: {t:?}"
+    );
+    // No current → the block stacks to a single Block row.
+    let t = targets(Some(&summary), true, &panel(PanelMode::Expanded), None, 5);
+    assert_eq!(
+        t,
+        vec![Target::Title, Target::Block("acme-shop".into())],
+        "{t:?}"
+    );
+}
+
+#[test]
+fn space_overrides_the_automatic_block_state() {
+    let summary = summary();
+    // Manual collapse wins over the everything-fits expansion.
+    let mut p = panel(PanelMode::Expanded);
+    p.collapsed_blocks.insert("acme-shop".into());
+    let t = targets(Some(&summary), true, &p, Some("acme-shop"), 100);
+    assert_eq!(t, vec![Target::Title, Target::Block("acme-shop".into())]);
+    // Manual expand wins over the stacking collapse.
+    let mut p = panel(PanelMode::Expanded);
+    p.expanded_blocks.insert("acme-shop".into());
+    let t = targets(Some(&summary), true, &p, None, 5);
+    assert!(
+        t.iter().any(|x| matches!(x, Target::Person(..))),
+        "manual expand reopens the block: {t:?}"
+    );
+}
+
+#[test]
+fn collapsed_strip_lists_one_row_per_studio() {
+    let summary = summary();
+    assert_eq!(
+        targets(Some(&summary), true, &panel(PanelMode::Collapsed), None, 0),
+        vec![Target::Title, Target::Strip("acme-shop".into())]
+    );
+}
+
+#[test]
+fn mark_counts_follow_the_mark_order() {
+    let summary = summary();
+    let counts = mark_counts(&summary.studios[0]);
+    assert_eq!(
+        counts,
+        vec![
+            (Mark::Working, 3),
+            (Mark::Waiting, 2),
+            (Mark::Blocked, 1),
+            (Mark::Lost, 1),
+            (Mark::Closed, 1),
+        ]
+    );
 }
 
 #[test]
 fn missing_document_is_title_plus_no_studios() {
     assert_eq!(
-        targets(None, true, &panel(PanelMode::Expanded)),
+        targets(None, true, &panel(PanelMode::Expanded), None, 0),
         vec![Target::Title, Target::Empty]
     );
 }
@@ -158,12 +167,21 @@ fn missing_document_is_title_plus_no_studios() {
 #[test]
 fn a_dead_stage_adds_one_line_and_keeps_the_rows() {
     let summary = summary();
+    let alive = targets(
+        Some(&summary),
+        true,
+        &panel(PanelMode::Expanded),
+        Some("acme-shop"),
+        100,
+    );
     assert_eq!(
-        targets(Some(&summary), false, &panel(PanelMode::Expanded)),
-        [
-            vec![Target::Title, Target::StageDown],
-            targets(Some(&summary), true, &panel(PanelMode::Expanded))[1..].to_vec(),
-        ]
-        .concat()
+        targets(
+            Some(&summary),
+            false,
+            &panel(PanelMode::Expanded),
+            Some("acme-shop"),
+            100,
+        ),
+        [vec![Target::Title, Target::StageDown], alive[1..].to_vec()].concat()
     );
 }

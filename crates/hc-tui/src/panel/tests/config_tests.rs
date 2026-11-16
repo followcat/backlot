@@ -16,8 +16,25 @@ fn a_missing_file_is_defaults() {
     let dir = std::env::temp_dir().join(format!("panel-none-{}", std::process::id()));
     let (config, notice) = load(&dir.join("config.toml"));
     assert!(notice.is_none());
-    assert_eq!(config.width, 30);
+    assert_eq!(config.width, 26);
     assert_eq!(config.key, "y");
+    assert_eq!(config.sidebar_width, 26);
+    assert_eq!(
+        config.keys.previous_studio,
+        crate::config::parse_key_combo("alt+up")
+    );
+    assert_eq!(
+        config.keys.next_studio,
+        crate::config::parse_key_combo("alt+down")
+    );
+    assert_eq!(
+        config.keys.previous_role,
+        crate::config::parse_key_combo("alt+left")
+    );
+    assert_eq!(
+        config.keys.next_role,
+        crate::config::parse_key_combo("alt+right")
+    );
 }
 
 #[test]
@@ -43,13 +60,47 @@ fn write(dir: &std::path::Path, text: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn width_clamps_into_the_24_60_band() {
+fn width_clamps_into_the_22_60_band() {
     let dir = std::env::temp_dir().join(format!("panel-w-{}", std::process::id()));
     for (given, want) in [(12, WIDTH_MIN), (40, 40), (90, WIDTH_MAX)] {
         let (config, notice) = load(&write(&dir, &format!("[panel]\nwidth = {given}\n")));
         assert!(notice.is_none());
         assert_eq!(config.width, want, "width {given}");
     }
+}
+
+#[test]
+fn the_sidebar_width_clamps_into_the_20_60_band() {
+    let dir = std::env::temp_dir().join(format!("panel-sw-{}", std::process::id()));
+    for (given, want) in [(8, 20), (40, 40), (90, 60)] {
+        let (config, notice) = load(&write(&dir, &format!("[sidebar]\nwidth = {given}\n")));
+        assert!(notice.is_none());
+        assert_eq!(config.sidebar_width, want, "sidebar width {given}");
+    }
+}
+
+#[test]
+fn studio_keys_parse_unbind_and_fall_back() {
+    let dir = std::env::temp_dir().join(format!("panel-sk-{}", std::process::id()));
+    let path = write(
+        &dir,
+        "[keys]\nprevious_studio = \"alt+u\"\nnext_studio = \"\"\nprevious_role = \"nope+\"\n",
+    );
+    let (config, notice) = load(&path);
+    assert_eq!(
+        config.keys.previous_studio,
+        crate::config::parse_key_combo("alt+u")
+    );
+    assert_eq!(config.keys.next_studio, None, "an empty string unbinds");
+    assert_eq!(
+        config.keys.previous_role,
+        crate::config::parse_key_combo("alt+left"),
+        "an invalid value keeps the default"
+    );
+    let notice = notice.expect("the ignored key notices once");
+    assert!(notice.contains("config.toml"), "{notice}");
+    assert!(notice.contains("keys.previous_role"), "{notice}");
+    assert!(!notice.contains("nope"), "{notice}");
 }
 
 #[test]

@@ -192,6 +192,19 @@ impl App {
                 return None;
             }
             self.clear_popup_selection();
+            // U1: the four studio keys precede the float's herdr
+            // direct-binding intercept — in studio mode they win over
+            // a herdr binding on the same key, and the float parks
+            // through the usual focus path. Persistent floats only:
+            // an ephemeral popup owns its keys, like herdr's tab keys.
+            if self.studio.active
+                && self.popup.as_ref().is_some_and(|popup| popup.persistent)
+                && let Some(nav) = self.panel_config.keys.nav(&popup_combo)
+            {
+                self.popup_key_suppress.insert(press.identity());
+                self.studio_nav(nav);
+                return None;
+            }
             let intercepted = self
                 .popup
                 .as_ref()
@@ -320,6 +333,23 @@ impl App {
                 self.panel_toggle();
                 return None;
             }
+        }
+        // U1: the four studio keys bind in studio mode only — they win
+        // over a herdr direct binding on the same key and still fire
+        // while the panel owns the keys. Outside studio mode the key
+        // falls through to herdr's bindings or the program unchanged.
+        if self.studio.active
+            && let Some(nav) = self
+                .panel_config
+                .keys
+                .nav(&crate::input::terminal_key_of(&press))
+        {
+            // Like the panel chord: an armed prefix disarms on the
+            // intercepted press.
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.studio_nav(nav);
+            return None;
         }
         // A focused panel owns every key like the navigator does; the
         // prefix itself still arms so the toggle chord stays reachable.

@@ -29,6 +29,8 @@ mod reload;
 mod remote_children;
 mod review_regressions;
 mod shared_rpc;
+mod studio;
+mod studio_mouse;
 mod version_badge;
 mod view_sync;
 

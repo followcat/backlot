@@ -43,8 +43,10 @@ what. backlot takes that job:
   restarts.
 - **Attention.** A permission prompt, a stalled role, a step nobody took, a task at its rework cap: each is
   raised once, routed to the director when it may answer and to you when it may not.
-- **The studio panel** (`Ctrl+B y`): every studio, its people and their state, what they work on, what is
-  owed, what needs you. Enter opens a person's terminal; `+` and `-` change a task's priority.
+- **The studio panel and cast**: the sidebar lists the current studio's people; `Ctrl+B y` opens a
+  column of bordered blocks, one per studio — people, state, what is owed, what needs you.
+  `Alt+arrows` move between studios and roles; Enter opens a person's terminal; `+` and `-`
+  change a task's priority.
 - **Several studios on one core**, each with its own repository, cast, ledger and limits.
 - **Limits and budgets**: a cap of live roles per agent CLI, a running-time budget per task.
 - **Hollywood, the overseer** (on `main`, not in a release yet): one agent above all studios. The stage tells it
@@ -131,8 +133,10 @@ backlot stage start
 backlot
 ```
 
-`Ctrl+B y` opens the studio panel. Enter on the studio's row focuses its producer: type what you want built,
-as you would tell a person. From there the cast works; you watch the panel and answer what needs you.
+The sidebar shows the current studio's cast. `Ctrl+B y` opens the studio panel — one bordered block
+per studio — and Enter on a studio focuses its producer: type what you want built, as you would
+tell a person. From there the cast works; `Alt+Up`/`Alt+Down` switch studios, `Alt+Left`/`Alt+Right`
+switch roles, and you watch the panel and answer what needs you.
 
 The commands you will use most:
 
