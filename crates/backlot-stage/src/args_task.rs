@@ -83,7 +83,7 @@ pub(crate) fn task_state(
 }
 
 /// `low|normal|high` for `--priority` and `--level`.
-fn parse_level(v: &str, u: &'static str) -> Result<Priority, Fail> {
+pub(crate) fn parse_level(v: &str, u: &'static str) -> Result<Priority, Fail> {
     v.parse::<Priority>()
         .map_err(|_| usage(format!("bad level '{v}', want low|normal|high"), u))
 }
@@ -475,14 +475,17 @@ pub(crate) fn correct(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     ))
 }
 
-/// `status` / `records`: only `--json` on top of the common flags.
+/// `status` / `records`: `--json` and `--all` on top of the common
+/// flags. `--all` and `--studio` do not mix — the flag means every
+/// studio, the common flag one.
 pub(crate) fn flags_only(
     common: &mut Common,
     it: &mut It,
     u: &'static str,
-    make: impl FnOnce(bool) -> Cmd,
+    make: impl FnOnce(bool, bool) -> Cmd,
 ) -> Result<(Common, Cmd), Fail> {
     let mut json = false;
+    let mut all = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(u)));
@@ -492,8 +495,12 @@ pub(crate) fn flags_only(
         }
         match arg.as_str() {
             "--json" => json = true,
+            "--all" => all = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), u)),
         }
     }
-    Ok((std::mem::take(common), make(json)))
+    if all && common.studio.is_some() {
+        return Err(usage("--all and --studio do not mix", u));
+    }
+    Ok((std::mem::take(common), make(json, all)))
 }

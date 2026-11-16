@@ -1,0 +1,324 @@
+//! Hollywood's ledger (R21-R27, D13-D21): the overseer's own log at
+//! `<state base>/hollywood/` — the same envelope as a studio's
+//! (`seq`, `ts_ms`, `by`, `kind`) but its own kinds, so no studio
+//! replay, list or limit ever sees it.
+//!
+//! - A **card** is a proposed change to a studio (D17): Hollywood
+//!   proposes, the user applies or cancels, the stage carries it out
+//!   (H3) and marks it done or failed. A card whose base no longer
+//!   holds records `card.stale` and stays closed.
+//! - `hollywood.reported` is Hollywood's own headline — the line its
+//!   layer and the summary show.
+//! - `message.sent` covers Hollywood's messages — from the user, to
+//!   the user or to a studio's producer (R26).
+
+use serde::{Deserialize, Serialize};
+
+use crate::event::{EventBy, Priority};
+use crate::state::{RoleLifecycle, StudioState, TaskStatus};
+
+// The reduced state and the append rules live in the two sibling
+// files; the `hollywood::` path keeps them all.
+pub use crate::hollywood_state::{
+    Card, CardState, HMessage, HReport, HollywoodState, apply, replay,
+};
+pub use crate::hollywood_validate::{HRefusal, validate};
+
+/// The role key Hollywood records under — and the reserved studio
+/// name, since its ledger sits beside the studios' at `<base>/hollywood`.
+pub const HOLLYWOOD: &str = "hollywood";
+
+/// The last headlines kept in state (D15's collapsed layer shows one).
+pub const HEADLINE_CAP: usize = 10;
+
+// ── Events ─────────────────────────────────────────────────────
+
+/// A stamped Hollywood ledger line — same envelope as [`crate::Event`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HollywoodEvent {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub by: EventBy,
+    #[serde(flatten)]
+    pub kind: HollywoodKind,
+}
+
+/// A Hollywood event before the store stamps it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NewHollywoodEvent {
+    pub by: EventBy,
+    #[serde(flatten)]
+    pub kind: HollywoodKind,
+}
+
+impl NewHollywoodEvent {
+    pub fn new(by: impl Into<EventBy>, kind: HollywoodKind) -> Self {
+        NewHollywoodEvent {
+            by: by.into(),
+            kind,
+        }
+    }
+
+    pub fn stamp(self, seq: u64, ts_ms: u64) -> HollywoodEvent {
+        HollywoodEvent {
+            seq,
+            ts_ms,
+            by: self.by,
+            kind: self.kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum HollywoodKind {
+    /// A proposed change; `action`, `why` and `base` are the card.
+    #[serde(rename = "card.proposed")]
+    CardProposed {
+        action: CardAction,
+        why: String,
+        base: CardBase,
+    },
+    /// The user confirmed the card — execution is the stage's (H3).
+    #[serde(rename = "card.applied")]
+    CardApplied { card: u64 },
+    /// The user dropped the card; `reason` is optional.
+    #[serde(rename = "card.cancelled")]
+    CardCancelled {
+        card: u64,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    /// The stage carried the action out (H3); `note` is optional.
+    #[serde(rename = "card.done")]
+    CardDone {
+        card: u64,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        note: String,
+    },
+    /// The stage tried and failed; `reason` is required.
+    #[serde(rename = "card.failed")]
+    CardFailed { card: u64, reason: String },
+    /// The base no longer held at apply time; `reason` says what moved.
+    #[serde(rename = "card.stale")]
+    CardStale {
+        card: u64,
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        reason: String,
+    },
+    /// Hollywood's headline, plus an optional body file under `reports/`.
+    #[serde(rename = "hollywood.reported")]
+    Reported {
+        headline: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        body: Option<String>,
+    },
+    /// A message to or from Hollywood. From the user it carries `text`;
+    /// to a studio's producer it carries `studio` and a `file` under
+    /// `messages/` (the studio ledger's `message.queued` is the actual
+    /// delivery record — this is Hollywood's own copy, R26).
+    #[serde(rename = "message.sent")]
+    MessageSent {
+        to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        studio: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<String>,
+    },
+}
+
+impl HollywoodKind {
+    /// The ledger's `kind` string — the confirmation line's first word.
+    pub fn name(&self) -> &'static str {
+        match self {
+            HollywoodKind::CardProposed { .. } => "card.proposed",
+            HollywoodKind::CardApplied { .. } => "card.applied",
+            HollywoodKind::CardCancelled { .. } => "card.cancelled",
+            HollywoodKind::CardDone { .. } => "card.done",
+            HollywoodKind::CardFailed { .. } => "card.failed",
+            HollywoodKind::CardStale { .. } => "card.stale",
+            HollywoodKind::Reported { .. } => "hollywood.reported",
+            HollywoodKind::MessageSent { .. } => "message.sent",
+        }
+    }
+}
+
+/// What the card does when the stage carries it out (D18): the whole
+/// action set, and nothing else — no card answers a permission prompt.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum CardAction {
+    /// A complete `studio new` draft (D19): the cast and brief paths
+    /// point at files in Hollywood's own `drafts/` folder.
+    StudioNew {
+        studio: String,
+        title: String,
+        repo: String,
+        cast: String,
+        brief: String,
+    },
+    /// Stop a finished person (`role.closed`) — frees the terminal.
+    Close { studio: String, person: String },
+    /// Ask a closed person back (`role.reopen`).
+    Reopen { studio: String, person: String },
+    /// Change a task's display priority (D11).
+    Priority {
+        studio: String,
+        task: String,
+        level: Priority,
+    },
+    /// Pause a running task.
+    Pause { studio: String, task: String },
+    /// Resume a paused or blocked task.
+    Resume { studio: String, task: String },
+    /// Abandon a task that is not terminal.
+    Abandon { studio: String, task: String },
+}
+
+impl CardAction {
+    /// The studio the action touches.
+    pub fn studio(&self) -> &str {
+        match self {
+            CardAction::StudioNew { studio, .. }
+            | CardAction::Close { studio, .. }
+            | CardAction::Reopen { studio, .. }
+            | CardAction::Priority { studio, .. }
+            | CardAction::Pause { studio, .. }
+            | CardAction::Resume { studio, .. }
+            | CardAction::Abandon { studio, .. } => studio,
+        }
+    }
+
+    /// `close c3` — the one-line action `card list` and the summary show.
+    pub fn label(&self) -> String {
+        match self {
+            CardAction::StudioNew { studio, title, .. } => {
+                format!("studio-new {studio} '{title}'")
+            }
+            CardAction::Close { person, .. } => format!("close {person}"),
+            CardAction::Reopen { person, .. } => format!("reopen {person}"),
+            CardAction::Priority { task, level, .. } => format!("priority {task} {level}"),
+            CardAction::Pause { task, .. } => format!("pause {task}"),
+            CardAction::Resume { task, .. } => format!("resume {task}"),
+            CardAction::Abandon { task, .. } => format!("abandon {task}"),
+        }
+    }
+}
+
+/// What a card was proposed against — the fact that must still hold
+/// when the user applies it. [`stale`] re-checks it against the
+/// studio's state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "base", rename_all = "snake_case")]
+pub enum CardBase {
+    /// No such studio existed — a `studio-new` goes stale the moment
+    /// the name is taken by any path.
+    StudioAbsent,
+    /// The person was `held` — a `close` that lands on a live,
+    /// released or lost role no longer frees anything.
+    PersonHeld,
+    /// The person was closed and free — a `reopen` that lands on a
+    /// live or already-held role is stale.
+    PersonClosed,
+    /// The task had this priority — a `priority` card only re-states
+    /// what it saw; a different one since makes it stale.
+    TaskPriority { was: Priority },
+    /// The task had this status.
+    TaskStatus { was: TaskStatus },
+}
+
+// ── Staleness ──────────────────────────────────────────────────
+
+/// `Some(reason)` when `base` no longer holds against `studio`
+/// (`None` = the studio's ledger has no events). A card whose base
+/// still stands answers `None` — the apply may proceed.
+pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>) -> Option<String> {
+    let name = action.studio();
+    match base {
+        CardBase::StudioAbsent => studio
+            .is_some()
+            .then(|| format!("studio '{name}' exists now")),
+        CardBase::PersonHeld => {
+            let CardAction::Close { person, .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            match s.roles.get(person) {
+                None => Some(format!("no role '{person}'")),
+                Some(r) if r.held => None,
+                Some(r) => Some(format!("'{person}' is {}", lifecycle_str(r.lifecycle()))),
+            }
+        }
+        CardBase::PersonClosed => {
+            let CardAction::Reopen { person, .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            match s.roles.get(person) {
+                None => Some(format!("no role '{person}'")),
+                Some(r) if r.held => Some(format!("'{person}' is held again")),
+                Some(r) if r.lifecycle() == RoleLifecycle::Closed => None,
+                Some(r) => Some(format!("'{person}' is {}", lifecycle_str(r.lifecycle()))),
+            }
+        }
+        CardBase::TaskPriority { was } => {
+            let CardAction::Priority { task, .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            match s.tasks.get(task) {
+                None => Some(format!("no task '{task}'")),
+                Some(t) if t.priority == *was => None,
+                Some(t) => Some(format!("'{task}' priority is {} now", t.priority)),
+            }
+        }
+        CardBase::TaskStatus { was } => {
+            let (CardAction::Pause { task, .. }
+            | CardAction::Resume { task, .. }
+            | CardAction::Abandon { task, .. }) = action
+            else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            match s.tasks.get(task) {
+                None => Some(format!("no task '{task}'")),
+                Some(t) if t.status == *was => None,
+                Some(t) => Some(format!("'{task}' is {} now", status_str(t.status))),
+            }
+        }
+    }
+}
+
+fn lifecycle_str(l: RoleLifecycle) -> &'static str {
+    match l {
+        RoleLifecycle::Live => "live",
+        RoleLifecycle::Lost => "lost",
+        RoleLifecycle::Closed => "closed",
+    }
+}
+
+/// A task status as one word — refusals and card details share it.
+pub fn status_str(s: TaskStatus) -> &'static str {
+    match s {
+        TaskStatus::Created => "created",
+        TaskStatus::Running => "running",
+        TaskStatus::Delivered => "delivered",
+        TaskStatus::Accepted => "accepted",
+        TaskStatus::PartiallyAccepted => "partially accepted",
+        TaskStatus::Paused => "paused",
+        TaskStatus::Blocked => "blocked",
+        TaskStatus::Abandoned => "abandoned",
+        TaskStatus::AtCap => "at cap",
+        TaskStatus::TakenOver => "taken over",
+    }
+}

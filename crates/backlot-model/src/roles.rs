@@ -9,6 +9,9 @@
 //!   kind refuses, pointing at the key an actor records under.
 //! - The writer may record only `plan.published` and the same
 //!   messages.
+//! - `hollywood` — the overseer — may record only a plain `tell`
+//!   message to a studio's producer (R26); its own ledger holds
+//!   everything else it says.
 //! - `task.delivered` from anyone who is not that task's current
 //!   actor is the user's alone — producer and director do not
 //!   deliver.
@@ -59,6 +62,20 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
     // record the forbidden kinds under it otherwise (S9g).
     if role == "actor" {
         return Err(Refusal::BareActor);
+    }
+    // Hollywood talks *to* studios, never inside them: the plain
+    // `tell producer` message is all a studio ledger takes from
+    // it (R26) — no reports, no other kind.
+    if role == crate::hollywood::HOLLYWOOD {
+        return match &new.kind {
+            EventKind::MessageQueued {
+                to, purpose: None, ..
+            } if to == "producer" => Ok(()),
+            _ => Err(cannot(
+                role,
+                "its 'tell <studio> producer' or a studio person",
+            )),
+        };
     }
     if let Some(own) = actor_task(role) {
         return match &new.kind {

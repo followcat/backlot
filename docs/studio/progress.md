@@ -1,5 +1,37 @@
 # Studio progress
 
+## H1: Hollywood — model and CLI, fake runner only (2026-11-16)
+
+- Done: `backlot_model::hollywood` holds the overseer's own ledger model — `card.proposed`,
+  `card.applied`, `card.cancelled`, `card.stale`, `card.done`, `card.failed`,
+  `hollywood.reported` and `message.sent` in the studio envelope — with its reducer (open and
+  closed cards, capped headlines, messages), its strict append-time validation (who may write
+  which kind, action/base coherence), and `stale`, the pure base check. The stage appends it at
+  `<state dir>/hollywood/events.jsonl` beside `studios/`, never inside one, and `hollywood` is a
+  reserved studio name. `roles::check` lets Hollywood record only a plain `tell` message to a
+  studio's producer (R26); the summary document's optional `hollywood` object (200-char
+  headline, 10 open cards) stays inside `backlot/1` and under 64 KiB. The CLI:
+  `hollywood propose <action>` for every D18 action (`studio-new` accepts only a draft that
+  passes the shared `studio new --dry-run` check — name, reserved name, taken name, git repo,
+  cast and check declarations, supported and installed runners, caps that seat the fixed
+  roles), `hollywood report`, `card list|apply|cancel` (apply records `card.applied` or
+  `card.stale` and stops — execution is H3), `tell hollywood`, `status --all` and
+  `records --all`/`--studio`, and the `[hollywood]` config section (`runner`, `model`, `effort`,
+  `key`, `default_cast`, secret-safe parse errors). A Hollywood `tell producer` mirrors
+  `message.sent` into its own ledger. Docs: R21–R27 and D13–D21 in requirements.md,
+  `hollywood.md`, the ledger's Hollywood section, and H1–H5 in plan.md.
+- Measured: 18 model tests cover the envelope's wire shape, replay-equals-apply, every
+  card-state transition and staleness row, every role rule accepted and refused, the summary's
+  back-compat and 64 KiB cap. 21 stage CLI tests cover the ledger path and independent seqs,
+  propose's base checks, the card gate (apply/cancel refused under `BACKLOT_ROLE`, list open),
+  `tell hollywood` and its role refusals, the producer mirror, the cross-studio reads, the
+  reserved name, and each `--dry-run` refusal kind with nothing written. 5 config tests cover
+  the section, its runner/effort rules and position-only errors.
+- Not verified: no stage loop, terminal or layer exists — `card apply` records the intent only,
+  `tell hollywood` lands in the ledger undelivered, and `[hollywood]` is read, not launched.
+  The card gate is a working rule (D17a), not yet backed by a pre-allowed launch (H3). No real
+  runner and no live studios; H2 and H3 carry the behaviour.
+
 ## S11: the cursor-agent adapter (2026-11-11)
 
 - Measured first (S11a): cursor-agent 2026.11.05 was probed live in a scratch hc session —

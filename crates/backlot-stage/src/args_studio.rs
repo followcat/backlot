@@ -12,6 +12,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
     let mut title = None;
     let mut repo = None;
     let mut cast_file = None;
+    let mut dry_run = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -26,6 +27,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             _ if eq(&arg, "--repo").is_some() => repo = eq(&arg, "--repo").map(String::from),
             "--cast" => cast_file = Some(PathBuf::from(it.value("--cast", U_STUDIO)?)),
             _ if eq(&arg, "--cast").is_some() => cast_file = eq(&arg, "--cast").map(PathBuf::from),
+            "--dry-run" => dry_run = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
         }
     }
@@ -33,6 +35,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
         title: title.ok_or_else(|| usage("missing --title", U_STUDIO))?,
         repo: repo_path(&repo.ok_or_else(|| usage("missing --repo", U_STUDIO))?)?,
         cast_file: cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?,
+        dry_run,
     };
     Ok((std::mem::take(common), cmd))
 }
@@ -42,7 +45,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
 /// is canonicalized so `..` and symlink spellings of one folder
 /// cannot masquerade as two; a path that does not exist yet is kept
 /// as spelled.
-fn repo_path(repo: &str) -> Result<String, Fail> {
+pub(crate) fn repo_path(repo: &str) -> Result<String, Fail> {
     let path = Path::new(repo);
     if !path.is_absolute() {
         return Err(usage(
@@ -240,6 +243,7 @@ pub(crate) fn report(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), 
 pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut role = None;
     let mut file = None;
+    let mut text = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_TELL)));
@@ -254,8 +258,25 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
                 return Err(usage(format!("unexpected argument '{arg}'"), U_TELL));
             }
             _ if role.is_none() => role = Some(arg),
+            _ if text.is_none() => text = Some(arg),
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_TELL)),
         }
+    }
+    // `tell hollywood "<text>"` is the user's line to the overseer —
+    // its own ledger, no file, no studio.
+    if role.as_deref() == Some("hollywood") {
+        if file.is_some() {
+            return Err(usage("--file does not apply to tell hollywood", U_TELL));
+        }
+        return Ok((
+            std::mem::take(common),
+            Cmd::TellHollywood {
+                text: text.ok_or_else(|| usage("missing <text>", U_TELL))?,
+            },
+        ));
+    }
+    if let Some(extra) = text {
+        return Err(usage(format!("unexpected argument '{extra}'"), U_TELL));
     }
     Ok((
         std::mem::take(common),

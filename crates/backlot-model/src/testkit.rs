@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::event::*;
-use crate::state::{StudioState, apply, replay};
+use crate::state::{StudioState, TaskStatus, apply, replay};
 
 pub fn by(role: &str) -> EventBy {
     EventBy::role(role)
@@ -206,4 +206,46 @@ pub fn running_state() -> StudioState {
     let mut base = base_events();
     base.push(ev(4, "director", task_created("t2", "fix", 1)));
     state_with(&base, vec![("director", cast("t1", "actor-a", "a"))])
+}
+
+// ── Hollywood builders ─────────────────────────────────────────
+
+/// A stamped Hollywood event; ts derives from seq like `ev`'s.
+pub fn hev(
+    seq: u64,
+    role: &str,
+    kind: crate::hollywood::HollywoodKind,
+) -> crate::hollywood::HollywoodEvent {
+    crate::hollywood::NewHollywoodEvent { by: by(role), kind }.stamp(seq, seq * 1000)
+}
+
+pub fn nhw(
+    role: &str,
+    kind: crate::hollywood::HollywoodKind,
+) -> crate::hollywood::NewHollywoodEvent {
+    crate::hollywood::NewHollywoodEvent { by: by(role), kind }
+}
+
+/// A `pause <task>` card action on acme-shop.
+pub fn hpause(task: &str) -> crate::hollywood::CardAction {
+    crate::hollywood::CardAction::Pause {
+        studio: "acme-shop".into(),
+        task: task.into(),
+    }
+}
+
+/// The base a pause proposes against: the task was running.
+pub fn hpause_base() -> crate::hollywood::CardBase {
+    crate::hollywood::CardBase::TaskStatus {
+        was: TaskStatus::Running,
+    }
+}
+
+/// A `card.proposed` for `pause <task>` — the workhorse card.
+pub fn hpropose(task: &str) -> crate::hollywood::HollywoodKind {
+    crate::hollywood::HollywoodKind::CardProposed {
+        action: hpause(task),
+        why: "actor is looping".into(),
+        base: hpause_base(),
+    }
 }

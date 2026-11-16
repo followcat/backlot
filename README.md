@@ -102,6 +102,7 @@ The default prefix is Ctrl+B: `q` detaches, `w` opens workspace navigation, `b` 
 ## Docs
 
 - [Run a studio](docs/studio/guide.md)
+- [Hollywood, the overseer](docs/studio/hollywood.md)
 - [Studio: what has and has not been tried](docs/studio/limits.md)
 - [Install, upgrade, uninstall](docs/install.md)
 - [Keys](docs/keys.md)

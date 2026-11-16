@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use backlot_model::event::{ApprovalDecision, Check, PlanKind, Priority, TaskStateChange, Verdict};
 
 use crate::cli::Fail;
-use crate::{args_studio, args_task};
+use crate::{args_hwood, args_studio, args_task};
 
 #[derive(Default)]
 pub struct Common {
@@ -29,6 +29,10 @@ pub enum Cmd {
         title: String,
         repo: String,
         cast_file: PathBuf,
+        /// `--dry-run`: every `studio new` check plus the draft's own
+        /// (name free, repo is git, runners installed, caps seat the
+        /// fixed roles) — nothing recorded, nothing created.
+        dry_run: bool,
     },
     ReqRevise {
         file: PathBuf,
@@ -52,6 +56,10 @@ pub enum Cmd {
     Tell {
         role: String,
         file: PathBuf,
+    },
+    /// `tell hollywood "<text>"`: the user's line to the overseer.
+    TellHollywood {
+        text: String,
     },
     TaskNew {
         title: String,
@@ -113,29 +121,40 @@ pub enum Cmd {
     },
     Status {
         json: bool,
+        /// `--all`: every studio, then Hollywood's cards.
+        all: bool,
     },
     Records {
         json: bool,
+        /// `--all`: every studio's log (the default without a pin).
+        all: bool,
     },
     StageStart,
     StageRun,
     StageWatch {
         target: Option<String>,
     },
+    /// `backlot hollywood propose|report` — Hollywood's own ledger.
+    Hollywood(HollywoodCmd),
+    /// `backlot card list|apply|cancel` — the card gate (D17a).
+    Card(CardCmd),
 }
+
+pub use crate::args_hwood::{CardCmd, HollywoodCmd};
 
 /// Tail line of every command's usage text.
 pub const COMMON: &str =
     "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t>";
 
-pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml>\n       backlot studio finish [--reason <r>]";
+pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--dry-run]\n       backlot studio finish [--reason <r>]";
 pub(crate) const U_REQ: &str = "usage: backlot req revise --file <f> --summary <s>";
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
 pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
 pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
-pub(crate) const U_TELL: &str = "usage: backlot tell <role> --file <f>";
+pub(crate) const U_TELL: &str =
+    "usage: backlot tell <role> --file <f>\n       backlot tell hollywood \"<text>\"";
 pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]\n       backlot task pause|resume|abandon|takeover --task <id> --reason <r>";
 pub(crate) const U_CAST: &str =
     "usage: backlot cast --task <id> --actor <name> [--reason <r>] [--priority low|normal|high]";
@@ -155,8 +174,8 @@ pub(crate) const U_FINDING: &str =
     "usage: backlot finding --task <id> --delivery <n> --findings <file.json>";
 pub(crate) const U_CORRECT: &str =
     "usage: backlot correct --event <seq> --reason <r> --set <key=value> [--set ...]";
-pub(crate) const U_STATUS: &str = "usage: backlot status [--json]";
-pub(crate) const U_RECORDS: &str = "usage: backlot records [--json]";
+pub(crate) const U_STATUS: &str = "usage: backlot status [--studio <name>] [--all] [--json]";
+pub(crate) const U_RECORDS: &str = "usage: backlot records [--studio <name>] [--all] [--json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>]";
 
 pub(crate) fn usage(msg: impl Into<String>, u: &'static str) -> Fail {
@@ -345,12 +364,14 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "review" => args_task::review(&mut common, &mut it),
         "finding" => args_task::finding(&mut common, &mut it),
         "correct" => args_task::correct(&mut common, &mut it),
-        "status" => {
-            args_task::flags_only(&mut common, &mut it, U_STATUS, |json| Cmd::Status { json })
-        }
-        "records" => args_task::flags_only(&mut common, &mut it, U_RECORDS, |json| Cmd::Records {
-            json,
+        "status" => args_task::flags_only(&mut common, &mut it, U_STATUS, |json, all| {
+            Cmd::Status { json, all }
         }),
+        "records" => args_task::flags_only(&mut common, &mut it, U_RECORDS, |json, all| {
+            Cmd::Records { json, all }
+        }),
+        "hollywood" => args_hwood::hollywood(&mut common, &mut it),
+        "card" => args_hwood::card(&mut common, &mut it),
         "stage" => {
             let Some(sub) = it.next() else {
                 return Err(usage("missing stage subcommand", U_STAGE));

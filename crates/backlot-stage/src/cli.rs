@@ -43,6 +43,8 @@ const COMMANDS: &[&str] = &[
     "approve",
     "attention",
     "hook",
+    "hollywood",
+    "card",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
@@ -115,7 +117,7 @@ pub fn valid_studio_name(name: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-'))
 }
 
-fn check_studio_name(name: &str) -> Result<String, Fail> {
+pub(crate) fn check_studio_name(name: &str) -> Result<String, Fail> {
     if valid_studio_name(name) {
         Ok(name.to_string())
     } else {
@@ -195,7 +197,7 @@ fn caller(common: &Common, env: &Env, need_task: bool) -> Result<Caller, Fail> {
 }
 
 /// Studio name only (for `studio new` and `status`).
-fn studio_name(common: &Common, env: &Env) -> Result<String, Fail> {
+pub(crate) fn studio_name(common: &Common, env: &Env) -> Result<String, Fail> {
     check_studio_name(
         &common
             .studio
@@ -216,8 +218,11 @@ fn check_stage_caller(common: &Common, env: &Env) -> Result<(), Fail> {
         .role
         .clone()
         .or_else(|| env.get("BACKLOT_ROLE").map(String::from));
+    // Hollywood is an overseer, never the stage (D13).
     if let Some(role) = role
-        && (role == "writer" || backlot_model::state::actor_task(&role).is_some())
+        && (role == "writer"
+            || role == "hollywood"
+            || backlot_model::state::actor_task(&role).is_some())
     {
         return Err(Fail::refused(format!(
             "role '{role}' cannot do this; the user, the producer or the director can"
@@ -228,6 +233,17 @@ fn check_stage_caller(common: &Common, env: &Env) -> Result<(), Fail> {
 
 impl From<StoreError<Fail>> for Fail {
     fn from(e: StoreError<Fail>) -> Fail {
+        match e {
+            StoreError::Io(e) => refused(e),
+            StoreError::Corrupt(c) => refused(c),
+            StoreError::Refused(r) => refused(r),
+            StoreError::Build(f) => f,
+        }
+    }
+}
+
+impl From<StoreError<Fail, backlot_model::hollywood::HRefusal>> for Fail {
+    fn from(e: StoreError<Fail, backlot_model::hollywood::HRefusal>) -> Fail {
         match e {
             StoreError::Io(e) => refused(e),
             StoreError::Corrupt(c) => refused(c),
@@ -276,58 +292,19 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
             check_stage_caller(&common, env)?;
             return crate::watchdog::watch(&common, env, target.clone());
         }
+        // Hollywood's own ledger needs no studio at all (D13).
+        Cmd::Hollywood(..) | Cmd::Card(..) | Cmd::TellHollywood { .. } => {
+            return crate::hwood::run(common, cmd, env);
+        }
         _ => {}
     }
     let base = base(env, &common)?;
-    match cmd {
-        Cmd::Status { json } => {
-            let name = studio_name(&common, env)?;
-            let dir = store::studio_dir(&base, &name);
-            if !dir.join("events.jsonl").exists() {
-                return Err(Fail::refused(format!("no studio '{name}'")));
-            }
-            let state = load(&dir)?;
-            Ok(if json {
-                serde_json::to_string_pretty(&state).map_err(refused)?
-            } else {
-                let now_ms = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-                render::status(
-                    &name,
-                    &state,
-                    &crate::signals::failed_roles(&dir, &state),
-                    now_ms,
-                )
-            })
-        }
-        Cmd::Records { json } => {
-            let mut logs = Vec::new();
-            for name in store::studios(&base).map_err(refused)? {
-                let (events, _) =
-                    store::load_events(&store::studio_dir(&base, &name)).map_err(|e| {
-                        let detail = match e {
-                            StoreError::Io(e) => e.to_string(),
-                            StoreError::Corrupt(c) => c.to_string(),
-                            _ => "unexpected error".to_string(),
-                        };
-                        Fail::refused(format!("studio '{name}': {detail}"))
-                    })?;
-                logs.push(backlot_model::StudioLog {
-                    studio: name,
-                    events,
-                });
-            }
-            let recs = backlot_model::records(&logs);
-            Ok(if json {
-                serde_json::to_string_pretty(&recs).map_err(refused)?
-            } else {
-                render::records(&recs)
-            })
-        }
-        _ => exec_event(common, cmd, env, &base),
+    // The reads — including the cross-studio `--all` forms and the
+    // `studio new` dry run — append nothing (R24, D19).
+    if let Some(out) = crate::hwood_read::read(&common, &cmd, env, &base) {
+        return out;
     }
+    exec_event(common, cmd, env, &base)
 }
 
 fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<String, Fail> {
@@ -356,6 +333,15 @@ fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<St
         },
         _ => caller(&common, env, needs_task)?,
     };
+    // Hollywood's one write into a studio is `tell <studio>
+    // producer` (R26). `ask` records the identical event, so the
+    // command — not the ledger's role gate — is where the rest is
+    // refused, ahead of any state read or file copy.
+    if caller.role == "hollywood" && !matches!(&cmd, Cmd::Tell { role, .. } if role == "producer") {
+        return Err(Fail::refused(
+            "role 'hollywood' cannot do this; in a studio it may only 'tell <studio> producer'",
+        ));
+    }
     let dir = store::studio_dir(base, &caller.studio);
     // Only `studio new` may create a studio directory; anything else
     // against a studio with no log is refused without touching disk.
@@ -392,9 +378,20 @@ fn exec_event(common: Common, mut cmd: Cmd, env: &Env, base: &Path) -> Result<St
         let state = load(&dir)?;
         crate::range::check_dependencies(&dir, &caller.studio, &state, &task)?;
     }
+    // Hollywood's own ledger keeps its copy of a message it sent a
+    // studio's producer (R26) — the `message.queued` just recorded is
+    // the delivery record. Captured before `build` consumes the cmd.
+    let h_mirror = crate::hwood::mirror_for(&caller, &cmd);
     let built = commands::build(&caller, cmd)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;
-    Ok(render::confirm(&event))
+    let mut out = render::confirm(&event);
+    if let Some(file) = h_mirror {
+        out.push_str(&format!(
+            "\n{}",
+            crate::hwood::mirror_tell(base, &caller.by(), &caller.studio, &file)?
+        ));
+    }
+    Ok(out)
 }
 
 /// Entry point for `main`: `None` unless argv[1] is a studio command.

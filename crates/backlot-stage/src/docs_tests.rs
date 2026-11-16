@@ -175,6 +175,13 @@ fn guide_commands_parse() {
     assert_commands_parse("guide.md", &backlot_lines(&guide));
 }
 
+/// Same for the Hollywood doc — its propose/card/tell lines.
+#[test]
+fn hollywood_commands_parse() {
+    let doc = repo_file("docs/studio/hollywood.md");
+    assert_commands_parse("hollywood.md", &backlot_lines(&doc));
+}
+
 /// Same for the README's "Run a studio" section.
 #[test]
 fn readme_run_a_studio_commands_parse() {
@@ -210,6 +217,7 @@ fn guide_cast_file_parses_through_studio_new() {
             title: "Shop".into(),
             repo: "/home/user/acme-shop".into(),
             cast_file,
+            dry_run: false,
         },
     )
     .expect("the guide's cast file fails the `studio new` build");
