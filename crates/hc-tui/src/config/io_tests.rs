@@ -46,6 +46,12 @@ fn known_deferred_sections_do_not_hide_unknown_root_keys() {
 }
 
 #[test]
+fn herdr_only_experimental_keys_are_accepted_and_ignored() {
+    let loaded = load_text("[experimental]\npane_history = true\n");
+    assert!(loaded.diagnostics.is_empty());
+}
+
+#[test]
 fn unknown_section_uses_the_reference_hint_once() {
     let loaded = load_text("[toast]\ndelivery = 'system'\n");
     assert_eq!(

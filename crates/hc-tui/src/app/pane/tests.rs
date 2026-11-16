@@ -88,7 +88,8 @@ async fn paint(
     bytes: &[u8],
 ) {
     let mut payload = bytes.to_vec();
-    if matches!(&pane.state, State::Live(live) if live.await_paint || live.repaint.is_some()) {
+    if matches!(&pane.state, State::Live(live) if live.paint_gate.await_paint() || live.repaint.is_some())
+    {
         payload.extend_from_slice(b"\x1b[?9001l");
     }
     raw_paint(pane, rx, core, &payload).await;
@@ -174,7 +175,7 @@ fn view_with(
         machines: Some(vec![]),
         ..Default::default()
     };
-    view.inventory.replace(1, vec![term]);
+    view.inventory_mut().replace(1, vec![term]);
     view
 }
 
@@ -208,11 +209,20 @@ mod cases_2;
 #[path = "recovery_tests.rs"]
 mod recovery_tests;
 
+#[path = "paint_fallback_tests.rs"]
+mod paint_fallback_tests;
+
 #[path = "generation_tests.rs"]
 mod generation_tests;
+
+#[path = "scrollback_tests.rs"]
+mod scrollback_tests;
 
 #[path = "size_tests.rs"]
 mod size_tests;
 
 #[path = "quiet_tests.rs"]
 mod quiet_tests;
+
+#[path = "role_switch_tests.rs"]
+mod role_switch_tests;

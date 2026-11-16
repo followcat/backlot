@@ -8,11 +8,13 @@
 //! control-socket directory prepared here (10-minute persist; askpass
 //! prompts are disabled), and stderr is kept as a bounded diagnostic tail.
 
+mod control;
+
 use crate::endpoint::{Endpoint, Remote};
 use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
@@ -38,6 +40,13 @@ const CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 /// child is dead. A descendant process can outlive the child while holding
 /// the stderr write end open — that must not hang the close.
 const STDERR_DRAIN: Duration = Duration::from_secs(5);
+
+/// How long an unexpected-EOF close still lets a child that is already
+/// dying on its own report its real status — real ssh writes its stderr
+/// diagnostic and `exit(255)` within microseconds of closing stdout, and
+/// that status must beat the kill — before `start_kill` reaps a hung
+/// child that ignored stdin EOF.
+const EOF_EXIT_GRACE: Duration = Duration::from_millis(100);
 
 /// One open connection.
 pub struct Connection {
@@ -138,8 +147,8 @@ impl From<io::Error> for Error {
 /// Opens a connection for a resolved [`Endpoint`]. `ssh_program` overrides
 /// the `ssh` name — tests inject a scripted helper; production passes `None`.
 /// Each call opens its own ssh child; on Unix the child's argv asks ssh to
-/// share one login per target through [`control_dir`]'s socket, so a burst
-/// of streams costs one TCP/key exchange instead of one each.
+/// share one login per target through [`control::control_dir`]'s socket, so
+/// a burst of streams costs one TCP/key exchange instead of one each.
 pub async fn connect(
     endpoint: &Endpoint,
     ssh_program: Option<&OsStr>,
@@ -167,79 +176,12 @@ async fn unix(path: &Path) -> Result<Connection, Error> {
     })
 }
 
-/// The control-socket directory every remote stream shares its login
-/// through: `$XDG_RUNTIME_DIR/hc-tui-ssh` when the variable is set, else
-/// `hc-tui-ssh-<uid>` under the temp dir (`/tmp` on macOS). `None` —
-/// always off Unix, or whenever no private directory is usable — leaves
-/// every stream its own login (the user's ssh config may still share it).
-fn control_dir() -> Option<PathBuf> {
-    #[cfg(unix)]
-    {
-        control_dir_in(&crate::endpoint::env_snapshot())
-    }
-    #[cfg(not(unix))]
-    {
-        None
-    }
-}
-
-/// Resolves and prepares the control dir for `env`.
-#[cfg(unix)]
-fn control_dir_in(env: &crate::endpoint::Env) -> Option<PathBuf> {
-    let dir = match env.get(OsStr::new("XDG_RUNTIME_DIR")) {
-        Some(runtime) if !runtime.is_empty() => {
-            PathBuf::from(runtime.as_os_str()).join("hc-tui-ssh")
-        }
-        _ => control_parent().join(format!("hc-tui-ssh-{}", unsafe { libc::getuid() })),
-    };
-    private_dir(dir)
-}
-
-/// The fallback parent of the control dir. macOS has no
-/// `XDG_RUNTIME_DIR`, and `$TMPDIR` is a long per-user path that pushes
-/// `dir/%C` past `CONTROL_PATH_MAX` — `control_options` would drop the
-/// options and every stream would silently become its own SSH login.
-/// `/tmp` keeps the socket name short; `private_dir` still enforces a
-/// user-owned 0700 directory.
-#[cfg(target_os = "macos")]
-fn control_parent() -> PathBuf {
-    PathBuf::from("/tmp")
-}
-
-/// Everywhere else the system temp dir is short enough.
-#[cfg(all(unix, not(target_os = "macos")))]
-fn control_parent() -> PathBuf {
-    std::env::temp_dir()
-}
-
-/// Creates `dir` private to this user (0700) and returns it, or `None`
-/// when it exists and this user does not own it or group/other can
-/// write it — a control socket in such a directory could be taken over.
-#[cfg(unix)]
-fn private_dir(dir: PathBuf) -> Option<PathBuf> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    let safe = |meta: &std::fs::Metadata| {
-        meta.is_dir()
-            && meta.uid() == unsafe { libc::getuid() }
-            && meta.permissions().mode() & 0o022 == 0
-    };
-    if let Ok(meta) = std::fs::metadata(&dir)
-        && !safe(&meta)
-    {
-        return None;
-    }
-    std::fs::create_dir_all(&dir).ok()?;
-    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).ok()?;
-    let meta = std::fs::metadata(&dir).ok()?;
-    safe(&meta).then_some(dir)
-}
-
 /// Runs `ssh <target> 'hc connect …'` as an owned child: stdin/stdout are the
 /// protocol pipe, stderr drains into a bounded tail so a flood cannot
 /// deadlock the pipe. Batch mode plus askpass disabled means ssh can only
 /// fail, never prompt our UI.
 async fn ssh(remote: &Remote, program: &OsStr) -> Result<Connection, Error> {
-    let control = control_dir();
+    let control = control::control_dir();
     let mut cmd = Command::new(program);
     cmd.args(remote.argv(control.as_deref()))
         .env_remove("SSH_ASKPASS")
@@ -346,6 +288,18 @@ impl Guard {
             Some(ssh) => ssh.finish().await,
         }
     }
+
+    /// Prompt close after an unexpected reader EOF or a failed open: the
+    /// peer is already gone or never answered, so unlike [`close`](Self::close)
+    /// the child gets only [`EOF_EXIT_GRACE`] to report a natural exit —
+    /// enough for a dying ssh's `exit(255)` and stderr tail — before it is
+    /// killed and reaped.
+    pub(crate) async fn close_eof(self) -> Result<Closed, Error> {
+        match self.ssh {
+            None => Ok(Closed::default()),
+            Some(ssh) => ssh.finish_with(EOF_EXIT_GRACE).await,
+        }
+    }
 }
 
 impl Ssh {
@@ -359,9 +313,17 @@ impl Ssh {
     /// [`STDERR_DRAIN`] — a descendant can outlive the child holding the
     /// write end. The handle stays owned by `self` while it is awaited, so
     /// dropping this future mid-await still lets [`Drop`] abort the task.
-    async fn finish(mut self) -> Result<Closed, Error> {
+    async fn finish(self) -> Result<Closed, Error> {
+        self.finish_with(CLOSE_TIMEOUT).await
+    }
+
+    /// `finish` with `timeout` as the child's natural-exit budget: on
+    /// expiry the child is killed, then reaped; the stderr drain bound is
+    /// unchanged. A short `timeout` still reports a child that was already
+    /// exiting on its own — its waitpid lands well inside the budget.
+    async fn finish_with(mut self, timeout: Duration) -> Result<Closed, Error> {
         let mut child = self.child.take().expect("child present until finish");
-        let status = match tokio::time::timeout(CLOSE_TIMEOUT, child.wait()).await {
+        let status = match tokio::time::timeout(timeout, child.wait()).await {
             Ok(status) => status.map_err(Error::Io)?,
             Err(_) => {
                 child.start_kill().map_err(Error::Io)?;

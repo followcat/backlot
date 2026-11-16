@@ -23,7 +23,7 @@ impl Pane {
             ("Input drain failed", dropped.clone(), false)
         } else {
             match &self.state {
-                State::Live(live) if live.await_paint => (
+                State::Live(live) if live.paint_gate.await_paint() => (
                     "Terminal loading",
                     "Waiting for terminal state before forwarding input".into(),
                     false,

@@ -137,8 +137,11 @@ M3a retains observe-only VTs for every pane in the current tab, plus an LRU
 of 32 off-tab panes. The focused terminal has a separate active input wire.
 Rendering prefers the persistent observer's completed paint, so routine cached
 switching preserves live cursor style, OSC 12 and OSC 4 state. The observer
-connections send no input, resize, focus or display-fact claims. Each VT keeps bounded
-256 KiB scrollback; the off-tab cache has a fixed entry budget. Current-tab
+connections send no input, resize, focus or display-fact claims. VT scrollback
+is bounded per role: 256 KiB for the active pane and 64 KiB for observers; the
+off-tab cache is a fixed 32-entry LRU. An observer evicted past the LRU drops
+its attach at once — it receives no background output while evicted — and a
+revisit reattaches and repaints from core history. Current-tab
 panes are pinned, so memory also scales with the explicitly displayed layout.
 
 Visible current-tab panes also hold silent size leases, including the focused
@@ -292,7 +295,13 @@ request/hello/reply combinations retain the unconfirmed DATA fallback.
 
 The two pinned cores terminate initial attach paint with `CSI ?9001h/l`,
 after the restored keyboard and paste modes. Human input waits for that
-marker, including when paint and marker span DATA chunks. Viewer state is
+marker, including when paint and marker span DATA chunks. The marker is
+also the observer-resize repaint gate. A core that omits it cannot hold
+either gate forever: the first DATA chunk arms a bounded fallback —
+200 ms after paint starts, or 256 KiB scanned without the marker —
+which releases queued input and the fresh surface state, flushes a
+repaint's held tail as live bytes, and notes "paint marker omitted" on
+the status line instead of the error card. Viewer state is
 synchronized before initial input; live focus/resize/facts and human input
 then share a FIFO. The writer crosses a DATA fence before priority controls
 and CLOSE. An actual resize during fragmented paint is applied at the gate.

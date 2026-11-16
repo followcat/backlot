@@ -5,9 +5,9 @@
 //! notification, a wire death, a joined handle, a queued command, the
 //! stop latch or a backoff deadline; nothing polls while idle.
 
-use super::refresh::{self, Backoff, DocSlot};
+use super::refresh::{self, Backoff};
 use super::{
-    ActivityReceipts, Command, DocDone, DocKey, Link, OpenRpc, OpenSub, SubAttempt, View,
+    ActivityReceipts, Command, DocDone, DocKey, Document, Link, OpenRpc, OpenSub, SubAttempt, View,
     WatchParams,
 };
 use crate::client::{CallError, Client};
@@ -23,6 +23,7 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::Instant;
 
 mod apply;
+mod fetch_done;
 
 /// In-flight `doc.get` bound per machine: a dead or slow machine can
 /// never fill the whole `doc_concurrency` budget.
@@ -46,7 +47,10 @@ pub(crate) struct Actor {
     pub(super) rpc_open: Option<JoinHandle<Result<Client, crate::client::Error>>>,
     pub(super) sub_open: Option<JoinHandle<SubAttempt>>,
     // Authoritative state.
-    pub(super) inventory: Inventory,
+    /// `Arc`-shared with every published `View`: handlers mutate it
+    /// copy-on-write, so a publish that only bumps link state or
+    /// document progress shares the exact pointer.
+    pub(super) inventory: Arc<Inventory>,
     activity_receipts: ActivityReceipts,
     /// Subscription epoch: bumps when a fresh snapshot (subscription or
     /// static list) replaces the inventory.
@@ -58,7 +62,10 @@ pub(crate) struct Actor {
     pub(super) core: Option<CoreInfo>,
     pub(super) features: Vec<String>,
     pub(super) machines: Option<Vec<MachineView>>,
-    pub(super) docs: BTreeMap<DocKey, DocSlot>,
+    /// The `View::documents` map itself — copy-on-write like
+    /// `inventory`: untouched documents keep their `Arc` across
+    /// consecutive publishes.
+    pub(super) docs: Arc<BTreeMap<DocKey, Arc<Document>>>,
     pub(super) notes: BTreeMap<String, String>,
     // Refresh scheduling.
     pub(super) doc_pending: BTreeSet<DocKey>,
@@ -106,7 +113,7 @@ impl Actor {
             sub_conn: None,
             rpc_open: None,
             sub_open: None,
-            inventory: Inventory::default(),
+            inventory: Arc::new(Inventory::default()),
             activity_receipts: ActivityReceipts::default(),
             generation: 0,
             rpc_epoch: 0,
@@ -115,7 +122,7 @@ impl Actor {
             core: None,
             features: vec![],
             machines: None,
-            docs: BTreeMap::new(),
+            docs: Arc::new(BTreeMap::new()),
             notes: BTreeMap::new(),
             doc_pending: BTreeSet::new(),
             doc_inflight: BTreeMap::new(),
@@ -202,8 +209,10 @@ impl Actor {
     }
 
     /// Spawns due reconnect attempts, then drains pending refreshes into
-    /// their bounded in-flight slots.
+    /// their bounded in-flight slots. Both facilities arming in the same
+    /// pass coalesce into one publish.
     fn pump(&mut self) {
+        let mut opened = false;
         if self.sub_backoff.take_due()
             && self.sub_open.is_none()
             && self.sub_conn.is_none()
@@ -218,7 +227,7 @@ impl Actor {
             let open = Arc::clone(&self.sub);
             let subscribe = self.params.subscribe.clone();
             self.sub_open = Some(tokio::spawn(async move { open(subscribe).await }));
-            self.publish();
+            opened = true;
         }
         if self.rpc_backoff.take_due() && self.rpc_open.is_none() && self.client.is_none() {
             self.rpc_backoff.attempts += 1;
@@ -229,6 +238,9 @@ impl Actor {
             }
             let open = Arc::clone(&self.rpc);
             self.rpc_open = Some(tokio::spawn(async move { open().await }));
+            opened = true;
+        }
+        if opened {
             self.publish();
         }
         self.drain_refreshes();
@@ -276,8 +288,14 @@ impl Actor {
                 };
                 self.doc_pending.remove(&key);
                 *self.doc_inflight.entry(key.machine.clone()).or_default() += 1;
-                let slot = self.docs.entry(key.clone()).or_default();
-                slot.doc.fetching = true;
+                // Skip the map clone when the slot already flags a
+                // fetch — a superseded in-flight result leaves it set.
+                if self.docs.get(&key).is_none_or(|doc| !doc.fetching) {
+                    let slot = Arc::make_mut(&mut self.docs)
+                        .entry(key.clone())
+                        .or_default();
+                    Arc::make_mut(slot).fetching = true;
+                }
                 let fetch_gen = self.doc_gens.get(&key).copied().unwrap_or_default();
                 let fetch =
                     refresh::doc_fetch(client.clone(), key, self.rpc_epoch, fetch_gen, doc_timeout);
@@ -305,27 +323,25 @@ impl Actor {
             rpc: self.rpc_link.clone(),
             core: self.core.clone(),
             features: self.features.clone(),
-            inventory: self.inventory.clone(),
-            activity_receipts: self.activity_receipts.clone(),
+            inventory: Arc::clone(&self.inventory),
+            activity_receipts: ActivityReceipts::default(),
             machines: self.machines.clone(),
-            documents: self
-                .docs
-                .iter()
-                .map(|(key, slot)| (key.clone(), slot.doc.clone()))
-                .collect(),
+            documents: Arc::clone(&self.docs),
             notes: self.notes.clone(),
         };
         // Receipts ingest on the authoritative candidate: the resolved
         // traversal orders boundary reallocation; machine lifecycle
-        // retires origin slots before the new ingest extends them.
-        let traversal = self
-            .params
-            .traversal
-            .map(|resolve| resolve(&view))
-            .unwrap_or_default();
+        // retires origin slots before the new ingest extends them. The
+        // closure only fires when a publish carries two or more boundary
+        // entries — an epoch boundary is the only spot that needs it.
         self.activity_receipts
             .sync_machines(self.machines.as_deref());
-        self.activity_receipts.ingest(&self.inventory, &traversal);
+        self.activity_receipts.ingest_with(&self.inventory, || {
+            self.params
+                .traversal
+                .map(|resolve| resolve(&view))
+                .unwrap_or_default()
+        });
         view.activity_receipts = self.activity_receipts.clone();
         *self.view.lock().unwrap_or_else(|p| p.into_inner()) = view;
         // `send_replace` stores unconditionally — `send` would drop the

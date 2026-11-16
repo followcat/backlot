@@ -6,7 +6,7 @@ use hc_proto::watch::{DocKey, Document, View};
 
 fn view_with_document(value: serde_json::Value) -> View {
     let mut view = View::default();
-    view.documents.insert(
+    view.documents_mut().insert(
         DocKey {
             machine: None,
             name: "backlot".into(),
@@ -14,7 +14,8 @@ fn view_with_document(value: serde_json::Value) -> View {
         Document {
             value,
             ..Document::default()
-        },
+        }
+        .into(),
     );
     view
 }
@@ -41,7 +42,7 @@ fn a_wrong_schema_is_no_studios() {
 #[test]
 fn a_machine_scoped_document_is_not_this_cores() {
     let mut view = View::default();
-    view.documents.insert(
+    view.documents_mut().insert(
         DocKey {
             machine: Some("host-a".into()),
             name: "backlot".into(),
@@ -49,7 +50,8 @@ fn a_machine_scoped_document_is_not_this_cores() {
         Document {
             value: summary_json(),
             ..Document::default()
-        },
+        }
+        .into(),
     );
     assert!(summary(&view).is_none());
 }
@@ -75,10 +77,10 @@ fn stage_running_needs_a_live_named_terminal() {
     let mut stage = crate::sidebar::fixture::term("t9");
     stage.name = Some("backlot-stage".into());
     stage.state = "live".into();
-    view.inventory.replace(1, vec![stage.clone()]);
+    view.inventory_mut().replace(1, vec![stage.clone()]);
     assert!(stage_running(&view));
     // A finished stage terminal does not count.
     stage.state = "finished".into();
-    view.inventory.replace(1, vec![stage]);
+    view.inventory_mut().replace(1, vec![stage]);
     assert!(!stage_running(&view));
 }

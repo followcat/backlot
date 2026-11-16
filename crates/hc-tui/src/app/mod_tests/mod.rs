@@ -2,26 +2,35 @@
 mod cases_1;
 mod cases_2;
 mod endpoint_nav;
+mod endpoint_nav_b;
 mod float_draw;
 mod float_takeover;
 mod floats;
+mod floats_lifecycle;
 mod image_paste;
+mod image_paste_upload;
 mod layout;
 mod layout_regressions;
 mod m3a;
 mod m3a_review;
 mod m4s1;
 mod m4s2;
+mod m4s2_b;
 mod m4s3;
 mod m4s4;
 mod m4s5;
 mod mouse_selection;
 mod narrow;
+mod observer_policy_tests;
 mod own_theme;
 mod page_keys;
 mod panel;
 mod reload;
+mod remote_children;
 mod review_regressions;
+mod shared_rpc;
+mod version_badge;
+mod view_sync;
 
 use super::*;
 use ratatui::backend::TestBackend;
@@ -178,10 +187,23 @@ fn app_with_tabs(tabbed: &[(&str, &str, &str)]) -> App {
         machines: Some(vec![]),
         ..Default::default()
     };
-    view.inventory.replace(1, terms);
+    view.inventory_mut().replace(1, terms);
     app.view = view;
     app.refresh_projection();
     app
+}
+
+/// A focused live agent on an Online view: `address` in space-a/tab-a,
+/// word `idle`, `turn` — the core id the fake wires answer as.
+fn publish_agent(app: &mut App, address: &str, turn: u64) {
+    let mut term = crate::sidebar::fixture::agent(address, "idle");
+    term.labels.insert("herdr.space".into(), "space-a".into());
+    term.labels.insert("herdr.tab".into(), "tab-a".into());
+    term.turn = turn;
+    app.view = crate::sidebar::fixture::view(vec![term], vec![]);
+    app.view.core.as_mut().unwrap().id = "core-fake-1".into();
+    app.focused = Some(address.into());
+    app.reconcile_published_view();
 }
 
 fn app_with(addresses: &[&str]) -> App {
@@ -231,7 +253,7 @@ fn app_with_terms(terms: Vec<hc_proto::terminal::Terminal>) -> App {
         machines: Some(vec![]),
         ..Default::default()
     };
-    view.inventory.replace(1, terms);
+    view.inventory_mut().replace(1, terms);
     app.view = view;
     app.refresh_projection();
     app

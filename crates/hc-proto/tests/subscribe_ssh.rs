@@ -72,6 +72,21 @@ fn fixtures() -> &'static PathBuf {
             &dir.join("ssh-sub-stage"),
             &format!("{opener}dd bs=1 count=1 of=/dev/null 2>/dev/null\nprintf x > '{seen}'\nexec sleep 60\n", opener = opener("ssh-sub-stage"), seen = dir.join("ssh-sub-stage.seen").display()),
         );
+        // `ssh-sub-eof-hello`: closes stdout before any hello reply, then
+        // ignores stdin EOF — a hung ssh the open failure must reap promptly.
+        script(
+            &dir.join("ssh-sub-eof-hello"),
+            &format!(
+                "#!/bin/sh\nprintf '%s' $$ > '{}.pid'\nexec 1>&-\nexec sleep 60\n",
+                dir.join("ssh-sub-eof-hello").display()
+            ),
+        );
+        // `ssh-sub-eof-live`: subscribes, then closes stdout and ignores
+        // stdin EOF — the reader EOF must kill the hung child promptly.
+        script(
+            &dir.join("ssh-sub-eof-live"),
+            &format!("{opener}IFS= read -r line\nprintf '%s\\n' '{sub}'\nexec 1>&-\nexec sleep 60\n", opener = opener("ssh-sub-eof-live")),
+        );
         unsafe {
             libc::atexit(remove_fixtures);
         }
@@ -219,6 +234,64 @@ async fn close_releases_a_child_blocked_on_unread_stdout() {
         .await
         .expect("close hung on a stdout-blocked child");
     deadline_wait(|| reaped(pid)).await;
+}
+
+#[tokio::test]
+async fn a_stdout_eof_open_failure_kills_the_child_promptly() {
+    // The child closes stdout without answering hello, then ignores
+    // stdin EOF: the failed open must not wait the full close timeout —
+    // the EOF-grace close kills and reaps it promptly.
+    let ssh = fake("ssh-sub-eof-hello");
+    let p = params();
+    let start = std::time::Instant::now();
+    let err = timeout(Subscription::connect(
+        &endpoint(),
+        Some(ssh.as_os_str()),
+        &p,
+    ))
+    .await
+    .unwrap_err();
+    assert!(matches!(err, SubscribeError::Open(_)), "{err:?}");
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "open EOF waited on a hung child: {:?}",
+        start.elapsed()
+    );
+    let pid = pid_of("ssh-sub-eof-hello").await;
+    deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "child {pid} was still running: {:?}",
+        start.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn a_reader_eof_kills_the_ssh_child_promptly() {
+    // Subscribed, then the child closes stdout and ignores stdin EOF:
+    // the latched `Closed` drops the owned backend, killing and reaping
+    // the hung child instead of leaving it for its `sleep` to finish.
+    let ssh = fake("ssh-sub-eof-live");
+    let p = params();
+    let mut sub = timeout(Subscription::connect(
+        &endpoint(),
+        Some(ssh.as_os_str()),
+        &p,
+    ))
+    .await
+    .expect("subscribe failed");
+    let pid = pid_of("ssh-sub-eof-live").await;
+    let start = std::time::Instant::now();
+    let err = timeout(sub.recv())
+        .await
+        .expect_err("the closed stdout had to end the stream");
+    assert!(matches!(err, SubscribeError::Closed), "{err:?}");
+    deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "reader EOF left the child alive: {:?}",
+        start.elapsed()
+    );
 }
 
 #[tokio::test]

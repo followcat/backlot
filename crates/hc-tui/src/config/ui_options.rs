@@ -139,4 +139,6 @@ pub struct ExperimentalConfig {
     pub kitty_graphics: Option<bool>,
     /// While prefix mode is active, switch the host input source to ASCII.
     pub switch_ascii_input_source_in_prefix: bool,
+    /// Herdr-side session history flag; hc-tui accepts and ignores it.
+    pub pane_history: Option<bool>,
 }

@@ -6,12 +6,11 @@ impl Pane {
     /// Opens a fresh attach for `spec` at the next generation.
     /// `resumed` marks wire recovery (no fresh ownership activity);
     /// `attempts` carries the backoff count a Down retry accumulated.
-    /// A new incarnation drops `Encoded` leftovers — bytes bound to the
-    /// dead wire are never replayed; `Key`/`Paste` items re-encode
-    /// under the fresh post-paint VT.
+    /// A new incarnation drops `Encoded` leftovers — bytes bound to a
+    /// dead wire are never replayed; `Key`/`Paste` re-encode fresh.
     pub(super) fn spawn(&mut self, spec: Spec, resumed: bool, attempts: u32) {
-        // All visible panes share an event channel. A wire identity is unique
-        // across panes and reincarnations, including retired observer events.
+        // All visible panes share an event channel; a wire identity is
+        // unique across panes and reincarnations.
         static NEXT_ROUTE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         self.generation = NEXT_ROUTE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.attaches += 1;
@@ -30,7 +29,13 @@ impl Pane {
             observe: spec.role == Role::Observe,
             resize_notifications: true,
             quiet_human_release: spec.role == Role::Active,
-            history: HISTORY,
+            // A size holder discards wire DATA at the actor — paying for
+            // serialized scrollback on its attach is pure waste.
+            history: if spec.role == Role::SizeLease {
+                0
+            } else {
+                HISTORY
+            },
             cols,
             rows,
             display: if spec.role != Role::Observe {
@@ -45,7 +50,11 @@ impl Pane {
         let ev = self.ev.clone();
         let open = Arc::clone(&self.open);
         let (out, out_rx) = mpsc::channel(OUT_QUEUE);
-        let task = tokio::spawn(attach_task(open, params, generation, ev));
+        let paced = self.pacing.subscribe();
+        self.sync_pacing();
+        let task = tokio::spawn(tasks::attach_task_paced(
+            open, params, spec.role, generation, ev, paced,
+        ));
         self.state = State::Opening {
             generation,
             spec,
@@ -59,8 +68,7 @@ impl Pane {
     }
 
     /// Drops the current attach attempt/stream. `graceful` spawns the
-    /// CLOSE handshake when the Arc is already sole-owned; either way
-    /// `Attach::drop` bounds the teardown — the program is never killed.
+    /// CLOSE handshake when sole-owned; `Attach::drop` bounds teardown.
     pub(super) fn teardown(&mut self, graceful: bool) {
         let state = std::mem::replace(&mut self.state, State::Idle);
         match state {
@@ -75,13 +83,13 @@ impl Pane {
             }
             State::Idle | State::Down { .. } | State::Gone { .. } => {}
         }
+        self.sync_pacing();
     }
 
     /// Parks the live attach for input-lease drain on a pane switch:
     /// it keeps its writer and the VT that encodes releases under this
-    /// wire's live modes. `Some(route)` binds the attach's generation —
-    /// a reincarnated terminal is a different route. `None` when
-    /// nothing live could be parked.
+    /// wire's live modes. `Some(route)` binds the attach's generation;
+    /// `None` when nothing live could be parked.
     pub fn park_outgoing(&mut self) -> Option<u64> {
         self.sweep_parked();
         let State::Live(_) = &self.state else {
@@ -90,7 +98,7 @@ impl Pane {
         let State::Live(mut live) = std::mem::replace(&mut self.state, State::Idle) else {
             unreachable!()
         };
-        if live.await_paint {
+        if live.paint_gate.await_paint() {
             leave_live(&live);
             if !self.pending.is_empty() {
                 self.input_rejection =
@@ -100,10 +108,11 @@ impl Pane {
             self.pending_bytes = 0;
             return None;
         }
+        self.render_cache = None; // the display VT moves into the drain
         if let Some(vt) = self.vt.take() {
             let mut pending_input = VecDeque::new();
             for item in std::mem::take(&mut self.pending) {
-                if let Some(id) = dispatch_id(&item) {
+                if let Some(id) = pending_queue::dispatch_id(&item) {
                     self.record_dispatch(id);
                 }
                 if let Pending::Control(out) = item {
@@ -198,8 +207,6 @@ impl Pane {
     /// transport-write fence confirms every DATA frame is on the wire
     /// (CLOSE rides the control queue and would otherwise overtake it),
     /// then the attach detaches and `RouteClosed` retires the entry.
-    /// The task stays owned — `writer_abort` cancels a blocked writer
-    /// on teardown since aborting `done` alone would only detach it.
     pub fn unpark(&mut self, route: u64) {
         let Some(parked) = self.take_parked(route) else {
             return;
@@ -266,7 +273,7 @@ impl Pane {
     }
 
     fn record_dispatch(&mut self, id: u64) {
-        record_dispatch(&mut self.dispatched, id, self.generation);
+        pending_queue::record_dispatch(&mut self.dispatched, id, self.generation);
     }
 
     /// The pane's allocated inner area changed (window resize, sidebar
@@ -362,7 +369,7 @@ impl Pane {
             self.input_rejection = Some("Terminal input is unavailable in this view".into());
             return false;
         }
-        let bytes = charge(&item);
+        let bytes = pending_queue::charge(&item);
         if self.pending.len() >= PENDING_MAX_ITEMS || self.pending_bytes + bytes > PENDING_MAX_BYTES
         {
             self.dropped_input += 1;
@@ -389,21 +396,4 @@ impl Pane {
             self.push_controls();
         }
     }
-}
-
-pub(super) fn dispatch_id(item: &Pending) -> Option<u64> {
-    match item {
-        Pending::Key(key) if key.input.action == hc_vt::Action::Press && key.dispatch_id != 0 => {
-            Some(key.dispatch_id)
-        }
-        Pending::Encoded(_, id, _) => *id,
-        Pending::Prepared(_, key) => dispatch_id(&Pending::Key(key.clone())),
-        _ => None,
-    }
-}
-pub(super) fn record_dispatch(records: &mut VecDeque<(u64, u64)>, id: u64, generation: u64) {
-    if records.len() >= PENDING_MAX_ITEMS {
-        records.pop_front();
-    }
-    records.push_back((id, generation));
 }

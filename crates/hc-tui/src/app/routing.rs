@@ -61,6 +61,26 @@ impl App {
                     self.pane_leases.remove(&key);
                 }
             }
+            // A still-visible old target gains an observer that inherits
+            // the retained screen: unfocusing a split pane never flashes
+            // blank while the observe wire opens, and the handed-over VT
+            // keeps its one-shot cursor/palette state.
+            if let Some(old_target) = self.pane.target().map(str::to_owned)
+                && self.view.inventory.get(&old_target).is_some()
+                && !self.observers.contains_key(&old_target)
+                && (self.visible_panes().contains(&old_target)
+                    || self.observer_mru.contains(&old_target))
+                && let Some((vt, initial, cache)) = self.pane.take_retained()
+            {
+                let mut observer = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
+                observer.want(Some(Spec {
+                    terminal: old_target.clone(),
+                    role: Role::Observe,
+                }));
+                observer.seed_retained(vt, initial, cache);
+                observer.set_host_facts(self.host_facts.clone());
+                self.observers.insert(old_target, observer);
+            }
             // Retire the old target before applying the new target's geometry:
             // opening at the previous pane's size can resize its program and
             // race a concurrent visible size holder before the first draw.

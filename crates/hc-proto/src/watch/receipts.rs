@@ -79,7 +79,7 @@ fn completions_at(term: &Terminal) -> BTreeMap<String, u64> {
         .collect()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Observation {
     clock: Option<Clock>,
     created_ms: u64,
@@ -96,7 +96,7 @@ struct Observation {
 
 /// Local presentation metadata, never a core fact or completion authority.
 /// Only current live reporters are retained; there is no lifetime counter/log.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ActivityReceipts {
     observed: BTreeMap<String, Observation>,
     /// Allocation serial for `Observation::epoch_token`.
@@ -147,6 +147,13 @@ impl ActivityReceipts {
     /// allocate by traversal index, untraversed ones fall back to incoming
     /// order; everything else keeps the incoming-slot discipline.
     pub fn ingest(&mut self, inventory: &Inventory, traversal: &[String]) {
+        self.ingest_with(inventory, || traversal.to_vec());
+    }
+
+    /// `ingest` with the traversal resolved lazily: only two or more
+    /// boundary entries give an ordering decision — zero or one sort as
+    /// an identity either way, so `resolve` is never invoked for them.
+    pub fn ingest_with(&mut self, inventory: &Inventory, resolve: impl FnOnce() -> Vec<String>) {
         if inventory.is_stale() || inventory.is_offline() {
             return;
         }
@@ -241,27 +248,32 @@ impl ActivityReceipts {
         }
         // Boundary-class entries order by the resolved traversal among their
         // own positions; untraversed entries keep incoming order (stable, last).
-        if !traversal.is_empty() {
-            let order: BTreeMap<&str, usize> = traversal
-                .iter()
-                .enumerate()
-                .map(|(index, address)| (address.as_str(), index))
-                .collect();
-            let positions = (0..pending.len())
-                .filter(|index| pending[*index].4)
-                .collect::<Vec<_>>();
-            let mut batch = positions
-                .iter()
-                .map(|index| pending[*index].clone())
-                .collect::<Vec<_>>();
-            batch.sort_by_key(|entry| {
-                order
-                    .get(entry.0.address.as_str())
-                    .copied()
-                    .unwrap_or(usize::MAX)
-            });
-            for (index, entry) in positions.into_iter().zip(batch) {
-                pending[index] = entry;
+        // Fewer than two of them cannot reorder, so the traversal is only
+        // resolved there.
+        let positions = (0..pending.len())
+            .filter(|index| pending[*index].4)
+            .collect::<Vec<_>>();
+        if positions.len() >= 2 {
+            let traversal = resolve();
+            if !traversal.is_empty() {
+                let order: BTreeMap<&str, usize> = traversal
+                    .iter()
+                    .enumerate()
+                    .map(|(index, address)| (address.as_str(), index))
+                    .collect();
+                let mut batch = positions
+                    .iter()
+                    .map(|index| pending[*index].clone())
+                    .collect::<Vec<_>>();
+                batch.sort_by_key(|entry| {
+                    order
+                        .get(entry.0.address.as_str())
+                        .copied()
+                        .unwrap_or(usize::MAX)
+                });
+                for (index, entry) in positions.into_iter().zip(batch) {
+                    pending[index] = entry;
+                }
             }
         }
         for (term, clock, epoch_completions, epoch_token, _) in pending {

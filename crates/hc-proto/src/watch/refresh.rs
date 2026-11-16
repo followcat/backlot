@@ -6,7 +6,7 @@
 //! connection epoch it was sent on, so a result from a dead connection
 //! can never land as current.
 
-use super::{DocDone, DocKey, Document};
+use super::{DocDone, DocKey};
 use crate::client::{CallError, Client};
 use crate::doc::DocGetParams;
 use crate::machine::MachineListResult;
@@ -14,15 +14,6 @@ use crate::method;
 use crate::terminal::{ListParams, ListResult};
 use std::time::Duration;
 use tokio::time::Instant;
-
-/// One watched document's scheduler state: just the published
-/// `Document`. The generation invalidating in-flight results lives in
-/// `Actor::doc_gens` — it must survive this slot being deleted with a
-/// machine.
-#[derive(Debug, Default)]
-pub(crate) struct DocSlot {
-    pub doc: Document,
-}
 
 /// One bounded `doc.get`. `DocDone` carries the two staleness tags:
 /// `rpc_epoch` (the connection this was sent on) and `fetch_gen` (which

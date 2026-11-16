@@ -123,6 +123,14 @@ impl App {
             self.new_tab();
             return;
         }
+        // The badge's update hint re-raises the toast; the version
+        // itself stays inert — the hit only covers the hint.
+        if self.update_latest.is_some() && contains(hits.update_badge, point) {
+            let (title, body) =
+                crate::update_check::toast(self.update_latest.as_deref().unwrap_or_default());
+            self.show_notice(&title, &body);
+            return;
+        }
         // The `+ new workspace` sidebar row — same surface the mobile
         // switcher exposes as `ClientMobileTarget::NewWorkspace`.
         if contains(hits.new_workspace, point) {

@@ -114,7 +114,7 @@ impl Pane {
                         _ => None,
                     }));
                 }
-                if !live.await_paint
+                if !live.paint_gate.await_paint()
                     && let Some(vt) = self.vt.as_ref()
                 {
                     pending.extend(live.pending_reply.into_iter().map(Out::Reply));
@@ -142,7 +142,7 @@ impl Pane {
                         "Detached before queued input could reach a fresh terminal paint".into(),
                     );
                 }
-                if !live.await_paint
+                if !live.paint_gate.await_paint()
                     && let Some(vt) = self.vt.as_ref()
                 {
                     live.held

@@ -57,6 +57,8 @@ pub mod method {
     pub const TERMINAL_READ: &str = "terminal.read";
     /// End a terminal's program.
     pub const TERMINAL_KILL: &str = "terminal.kill";
+    /// Remove a finished terminal record from the core.
+    pub const TERMINAL_RM: &str = "terminal.rm";
     /// Open a raw stream to a live terminal (framed connections only).
     pub const TERMINAL_ATTACH: &str = "terminal.attach";
     /// Snapshot of matching terminals, then change notifications.

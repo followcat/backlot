@@ -22,6 +22,7 @@ impl App {
             notice: None,
             core_start: None,
             update_check: None,
+            update_latest: None,
             background_failure: None,
             next_tab_status: None,
             last_window_title: None,
@@ -130,6 +131,7 @@ impl App {
             pane_leases: KeyLeases::default(),
             next_dispatch_id: 1,
             view,
+            project_cache: Default::default(),
             seen: 0,
             area: (80, 24),
             want_cursor: draw::CursorWish {
@@ -153,6 +155,10 @@ impl App {
             seen_res_tx,
             seen_rx,
             seen_req_rx: Some(seen_req_rx),
+            seen_task: None,
+            reap_tx: None,
+            reap_task: None,
+            reaped_exited: Default::default(),
             outer_focused: None,
             probe,
         }

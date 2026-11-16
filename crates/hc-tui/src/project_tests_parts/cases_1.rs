@@ -106,7 +106,7 @@ fn aggregate_priority_retains_the_endpoint_recency_map() {
     let mut remote = local.clone();
     remote.address = "host-b/t2".into();
     let mut view = View::default();
-    view.inventory.replace(1, vec![local, remote]);
+    view.inventory_mut().replace(1, vec![local, remote]);
     let mut projected = project(&view, Some("t1"));
     for endpoint in &mut projected.endpoints {
         endpoint.status = ClientEndpointStatus::Online;

@@ -54,13 +54,13 @@ async fn every_final_operation_result_reconciles_skipped_focus_without_another_p
         let mut app = app_with_spaces(&[("t1", "work"), ("t2", "work")]);
         pending(&mut app);
         app.pending_actions = 1;
-        app.view.documents.insert(
+        app.view.documents_mut().insert(
             super::super::shared::key(),
-            hc_proto::watch::Document {
+            Arc::new(hc_proto::watch::Document {
                 value: json!({"schema":1,"focus":"t2"}),
                 version: 5,
                 ..Default::default()
-            },
+            }),
         );
         app.on_operation(Some(result));
         assert_eq!(app.focused.as_deref(), Some("t2"));
@@ -77,7 +77,7 @@ async fn a_moved_confirmation_target_is_rejected_and_mouse_cancel_stays_in_termi
     assert!(app.close_membership_valid(action));
     let mut term = app.view.inventory.get("t1").unwrap().clone();
     term.labels.insert("herdr.tab".into(), "moved".into());
-    app.view.inventory.replace(2, vec![term]);
+    app.view.inventory_mut().replace(2, vec![term]);
     app.refresh_projection();
     let super::super::dialogs::Target::Close(action) = &app.dialog.as_ref().unwrap().target else {
         panic!()

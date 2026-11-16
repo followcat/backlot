@@ -1,8 +1,7 @@
 //! The interactive client: owns inventory, shared layout, pane connections
-//! and the draw scheduler. One owner for all
-//! UI/VT state; the loop awaits input, protocol notifications and
-//! bounded actor results, and redraws only when dirty under the ~60 Hz
-//! cap — there is no idle poll timer.
+//! and the draw scheduler. One owner for all UI/VT state; the loop awaits
+//! input, protocol notifications and bounded actor results, and redraws
+//! only when dirty under the ~60 Hz cap — there is no idle poll timer.
 //!
 //! M3a implements structure, layout/tab operations and bindings plus lock.
 //! Custom commands, notifications and remaining actions belong to M4.
@@ -47,6 +46,7 @@ mod panel;
 pub(crate) mod popup;
 mod popup_selection;
 mod presentation;
+mod reap;
 mod reload;
 mod routing;
 mod runtime;
@@ -57,6 +57,8 @@ mod settings;
 mod shared;
 mod synthesize;
 mod tab_status;
+mod view_sync;
+mod wake;
 mod window_title;
 mod word_selection;
 
@@ -107,16 +109,21 @@ pub struct Probe {
     pub wakeups: std::sync::atomic::AtomicU64,
     /// Times a deadline sleep was armed.
     pub timers: std::sync::atomic::AtomicU64,
+    /// Times a changed `HostFacts` bundle actually re-seeded panes.
+    pub host_facts: std::sync::atomic::AtomicU64,
+    /// Projection rebuilds actually run for a publish or focus change.
+    pub projections: std::sync::atomic::AtomicU64,
+    /// VT cells copied into pane surfaces across all draws.
+    pub cells_painted: std::sync::atomic::AtomicU64,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
 /// notifications): the outer terminal in production, a test recorder
-/// otherwise. A plain boxed `FnMut` keeps the app free of
-/// crossterm/global-IO calls.
+/// otherwise. A boxed `FnMut` keeps the app free of global-IO calls.
 pub type HostControlSink = Box<dyn FnMut(&[u8]) -> std::io::Result<()>>;
 
-/// The mutable chrome state `ShellRenderState` borrows each frame —
-/// scroll offsets, collapse sets, reveal flags and the sidebar split.
+/// The chrome state `ShellRenderState` borrows each frame — scroll
+/// offsets, collapse sets, reveal flags and the sidebar split.
 #[derive(Default)]
 pub(crate) struct ShellState {
     pub collapsed_endpoints: std::collections::HashSet<ClientEndpointId>,
@@ -138,14 +145,14 @@ pub(crate) struct ShellState {
     /// Scrolls the switcher to the pending workspace highlight on move.
     pub reveal_mobile_workspace: bool,
     pub machine_diagnostics: crate::chrome::render::MachineDiagnostics,
+    /// Split/pane border cells keyed by the last frame's layout.
+    pub border_cache: crate::chrome::panes_draw::PaneBorderCache,
 }
 
 /// A forwarded press and the wire it went out on. `route` binds the
-/// attach generation — a reincarnated terminal is a different route,
-/// so a release can never land on a replacement wire for the same
-/// address. Repeats route only while the lease's wire is still the
-/// active attach — releases for a pane the client no longer views
-/// still pass, but its repeats do not.
+/// attach generation so a release can never land on a replacement
+/// wire. Repeats route only while the lease's wire is still active —
+/// releases for an unviewed pane still pass, its repeats do not.
 type PaneLease = key_leases::ForwardedInputLease<u64>;
 type KeyLeases = key_leases::InputLeaseTable<u8, key_routing::Context, u64>;
 
@@ -155,6 +162,9 @@ pub struct App {
     /// The one-shot `hc server start` report — `Some` until it lands.
     core_start: Option<crate::core_start::Report>,
     update_check: Option<crate::update_check::Report>,
+    /// The last known newer release's bare version — feeds the
+    /// sidebar/mobile version badge after the toast expires.
+    pub update_latest: Option<String>,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,
@@ -170,7 +180,7 @@ pub struct App {
     layout_seen: Option<(String, u64)>,
     operations: Option<crate::operations::Store>,
     pending_actions: usize,
-    layout_confirmed: Option<(String, hc_proto::watch::Document)>,
+    layout_confirmed: Option<(String, Arc<hc_proto::watch::Document>)>,
     prefix: input::Prefix,
     mode: Mode,
     keyboard_locked: bool,
@@ -178,8 +188,7 @@ pub struct App {
     last_focus: Option<String>,
     dialog: Option<dialogs::Dialog>,
     dialog_hits: crate::chrome::dialogs::DialogRender,
-    /// Open right-click context menu — the reference's
-    /// `ClientShellOverlay::ContextMenu`.
+    /// Open right-click context menu (`ClientShellOverlay::ContextMenu`).
     menu: Option<crate::chrome::menu::ContextMenu>,
     /// Panes whose bare right-click goes to the program instead of the
     /// context menu — the per-pane `right_click_passthrough` toggle.
@@ -189,16 +198,14 @@ pub struct App {
     help_state: crate::chrome::help::HelpState,
     help_hits: crate::chrome::help::HelpRender,
     help_scroll_grab: Option<u16>,
-    /// The "Go to" overlay — the reference's
-    /// `ClientShellOverlay::Navigator`.
+    /// The "Go to" overlay (`ClientShellOverlay::Navigator`).
     navigator: Option<crate::chrome::navigator::NavigatorState>,
     /// Last frame's navigator hit rectangles.
     navigator_hits: crate::chrome::navigator_render::NavigatorRender,
     /// The Settings overlay — the reference's
     /// `ClientShellOverlay::Settings`.
     settings: Option<crate::chrome::settings::SettingsOverlay>,
-    /// Last frame's settings hit rectangles (popup, tabs, choices,
-    /// buttons).
+    /// Last frame's settings hit rectangles.
     settings_hits: crate::chrome::settings_render::SettingsRender,
     /// The floating popup terminal — the reference's `popup_pane`.
     popup: Option<popup::PopupState>,
@@ -311,10 +318,9 @@ pub struct App {
     image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
-    /// The host was told to report every key as an escape code —
-    /// the reference's `keyboard_report_all_active`, upgraded while
-    /// the pane negotiates report-all or a binding mode is active so
-    /// IME/text commits stay distinguishable from typed keys.
+    /// The host reports every key as an escape code — the reference's
+    /// `keyboard_report_all_active`, upgraded while the pane negotiates
+    /// report-all or a binding mode for IME/text commits.
     host_reports_all_keys: bool,
     /// The host reports key releases (the startup keyboard push
     /// succeeded) — `host_reports_key_releases`.
@@ -328,32 +334,28 @@ pub struct App {
     probe_keyboard_flags: Option<u16>,
     probe_device_attributes: bool,
     /// DECRPM `?1016$p` answer — the reference's `sgr_pixel_mouse`:
-    /// `Some(true)` only when the host reports the mode recognized and
-    /// reset; `None` when it never answered (keep pixel mouse off).
-    /// `?1016h` itself stays off until inner-negotiated cell geometry
-    /// exists to translate pixel coordinates (the FACTS surface).
+    /// `Some(true)` only on a recognized-and-reset report; `None` when
+    /// it never answered. `?1016h` stays off until cell geometry can
+    /// translate pixel coordinates (the FACTS surface).
     host_sgr_pixel_mouse: Option<bool>,
     host_pixel_mouse_active: bool,
     host_mouse_capture_active: bool,
     host_mouse_pixels: Option<crate::mouse_geometry::HostPixels>,
     host_appearance: Option<crate::chrome::palette::HostAppearance>,
     host_appearance_explicit: bool,
-    /// Host-mode control writes (keyboard pop/push). Injected by cli —
-    /// headless tests get the no-op default so they never touch the
-    /// real terminal's modes.
+    /// Host-mode control writes (keyboard pop/push), injected by cli —
+    /// headless tests get the no-op default.
     host_control: HostControlSink,
     /// Pane-bound forwarded presses — the reference's `InputLeaseTable`
-    /// scoped to one local source and one attach. A press routed to
-    /// the terminal keeps a lease: repeats keep routing while it
-    /// lives, releases close it, and a detach/target move synthesizes
-    /// the release the program would otherwise never see.
-    /// Forwarded pane presses, bound to the terminal they went out on:
-    /// a held key's release returns to that wire even after the pane
-    /// switches away and parks the attach for drain.
+    /// scoped to one local source and one attach. A routed press keeps
+    /// a lease: repeats keep routing, releases close it, and a detach
+    /// or target move parks the wire for drain so releases land.
     pane_leases: KeyLeases,
     next_dispatch_id: u64,
     /// Last watcher view.
     view: View,
+    /// Incremental per-endpoint projection cache for `refresh_projection`.
+    project_cache: crate::project::cache::ProjectCache,
     /// View version cursor for `changed_since`.
     seen: u64,
     /// The area the pane was last allocated (for spec sizing).
@@ -367,8 +369,7 @@ pub struct App {
     /// Probed host-terminal facts (colors, cell pitch) — late replies
     /// update it and re-seed panes.
     host_facts: crate::host::HostFacts,
-    /// Panes the focused workspace's active tab marked seen — the
-    /// reference's `mark_active_tab_seen`/`apply_pane_state_change`:
+    /// The reference's `mark_active_tab_seen`/`apply_pane_state_change`:
     /// an idle agent reports `Done` only while unseen; focusing its
     /// workspace marks every active-tab pane seen at once.
     presentation: presentation::Presentation,
@@ -390,136 +391,24 @@ pub struct App {
     /// Seen writes in flight — the same (pane, turn) never double-sends.
     seen_inflight: std::collections::HashSet<(String, u64)>,
     /// The dedicated label-write worker: fire-and-forget `terminal.label`
-    /// RPCs with failures reported back for retry, kept off the layout
-    /// store so a background write can't surface an action notice.
+    /// RPCs, kept off the layout store so a write can't raise a notice.
     seen_tx: mpsc::Sender<seen::SeenWrite>,
     seen_res_tx: mpsc::Sender<seen::SeenResult>,
     seen_rx: mpsc::Receiver<seen::SeenResult>,
     seen_req_rx: Option<mpsc::Receiver<seen::SeenWrite>>,
+    /// The seen writer's task — aborted on drop so its `Client` clone
+    /// never outlives the app.
+    seen_task: Option<tokio::task::JoinHandle<()>>,
+    /// `(terminal, created_ms)` reaps queued for the worker — `None`
+    /// until `set_operations` starts it.
+    reap_tx: Option<mpsc::Sender<(String, u64)>>,
+    /// The reaper's task — aborted on drop like the seen writer's.
+    reap_task: Option<tokio::task::JoinHandle<()>>,
+    /// `(address, created_ms)` pairs already queued or handled — pruned
+    /// as records leave the inventory, cleared on worker restart.
+    reaped_exited: Arc<std::sync::Mutex<std::collections::HashSet<(String, u64)>>>,
     outer_focused: Option<bool>,
     probe: Arc<Probe>,
-}
-
-impl App {
-    /// An input drain failure is reported after terminal restoration on exit.
-    pub fn failure(&self) -> Option<&str> {
-        self.pane
-            .close_failure()
-            .or(self.background_failure.as_deref())
-    }
-
-    /// Recompute the projection for the current focus — finding 12:
-    /// `focused_*` snapshot ids must track the focus without waiting
-    /// for the next watcher publish.
-    fn refresh_projection(&mut self) {
-        if self.focused != self.last_focus {
-            self.previous_pane = self.last_focus.clone();
-            self.last_focus = self.focused.clone();
-        }
-        let old_tab = self.projection.snapshot.focused_tab_id.clone();
-        let old_order = self
-            .projection
-            .snapshot
-            .tabs
-            .iter()
-            .map(|t| t.tab_id.clone())
-            .collect::<Vec<_>>();
-        self.projection = crate::project::project(&self.view, self.focused.as_deref());
-        if old_tab != self.projection.snapshot.focused_tab_id
-            || old_order
-                != self
-                    .projection
-                    .snapshot
-                    .tabs
-                    .iter()
-                    .map(|t| t.tab_id.clone())
-                    .collect::<Vec<_>>()
-        {
-            self.shell_state.reveal_focused_tab = true;
-        }
-
-        self.presentation.project(&self.view, &mut self.projection);
-        self.update_tab_status(Instant::now());
-        self.update_window_title();
-        // The reference's `apply_active_snapshot` copy arms: pane loss
-        // unarms the mode, focus re-arms/disarms it.
-        self.sync_copy_focus();
-        // Focus settled: park the old owner's float, restore the new
-        // one's — before `reconcile_popups` sees the publish.
-        self.sync_float_focus();
-    }
-
-    /// Request a surface draw; Source acknowledges only displayed output.
-    fn mark_active_seen(&mut self) {
-        // A focus request alone cannot acknowledge unseen output. Source only
-        // acknowledges a matching surface after it has actually been drawn.
-        self.sched.mark_dirty(Instant::now());
-    }
-
-    /// A watcher publish: refresh the projection + pane target policy.
-    fn on_view(&mut self) {
-        self.view = self.watcher.view();
-        self.seen = self.view.version;
-        self.retain_confirmed_layout();
-        self.reconcile_published_view();
-    }
-
-    /// Everything `on_view` does after the view lands — split out so
-    /// tests can publish a synthetic `self.view` through the same path.
-    fn reconcile_published_view(&mut self) {
-        self.fence_chrome_core();
-        self.follow_shared_focus();
-        // The dead pane's context survives the reprojection for the
-        // fallback below — a transient inventory view can precede the
-        // layout write that names the real successor.
-        let previous_tab = self.projection.snapshot.focused_tab_id.clone();
-        let previous_workspace = self.projection.snapshot.focused_workspace_id.clone();
-        self.refresh_projection();
-        // If the focused terminal fell out of the inventory entirely,
-        // prefer a sibling in the same tab, then the same workspace —
-        // never a global first pane that could ack another space's work.
-        if self.mode == Mode::Normal
-            && self.focused.as_ref().is_none_or(|f| {
-                self.projection
-                    .snapshot
-                    .panes
-                    .iter()
-                    .all(|p| &p.pane_id != f)
-            })
-        {
-            let panes = &self.projection.snapshot.panes;
-            let fallback = panes
-                .iter()
-                .find(|p| previous_tab.as_ref() == Some(&p.tab_id))
-                .or_else(|| {
-                    panes
-                        .iter()
-                        .find(|p| previous_workspace.as_ref() == Some(&p.workspace_id))
-                })
-                .or_else(|| panes.first())
-                .map(|p| p.pane_id.clone());
-            if fallback != self.focused {
-                self.focused = fallback;
-                self.refresh_projection();
-            }
-        }
-        // Focusing marks the active tab's panes seen — an idle agent
-        // reports `Done` only while its workspace stayed background.
-        self.mark_active_seen();
-        self.refresh_projection();
-        self.sync_target();
-        self.pane.on_view(&self.view);
-        if let Some(popup) = self.popup.as_mut() {
-            popup.pane.on_view(&self.view);
-        }
-        if let Some(peek) = self.peek.as_mut() {
-            peek.pane.on_view(&self.view);
-        }
-        self.sync_observers();
-        self.reconcile_popups();
-        self.synthesize_alerts(Instant::now());
-        self.share_seen();
-    }
 }
 
 #[cfg(test)]

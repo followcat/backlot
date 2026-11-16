@@ -8,7 +8,7 @@ mod common;
 
 use common::attach::params;
 use common::fakecore;
-use hc_proto::client::Attach;
+use hc_proto::client::{Attach, AttachConn, AttachError};
 use hc_proto::endpoint::{Endpoint, Remote};
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
@@ -66,6 +66,29 @@ fn fixtures() -> &'static Fixtures {
         )
         .unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // stdout closes before any hello reply, then the child ignores
+        // stdin EOF: a hung ssh the EOF-grace close must reap promptly.
+        let write_eof = |name: &str, answer_hello: bool| {
+            let path = dir.join(name);
+            let hello = if answer_hello {
+                format!("IFS= read -r line\nprintf '%s\\n' '{reply}'\n")
+            } else {
+                String::new()
+            };
+            std::fs::write(
+                &path,
+                format!(
+                    "#!/bin/sh\nprintf '%s' $$ > '{pid}'\n{hello}exec 1>&-\nexec sleep 60\n",
+                    pid = dir.join(format!("{name}.pid")).display(),
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        write_eof("attach-eof-hello", false);
+        // Answers hello framed, then closes stdout and ignores stdin EOF —
+        // the shared wire's reader EOF must reap the hung child promptly.
+        write_eof("attach-eof-live", true);
         unsafe {
             libc::atexit(remove_fixtures);
         }
@@ -105,6 +128,19 @@ async fn deadline_wait(done: impl Fn() -> bool) {
     .await;
 }
 
+/// Reads a case's own `{name}.pid` file once its script published it —
+/// the returned pid is captured immutably so a reaping poll can never be
+/// redirected by a parallel test's child.
+async fn pid_of(case: &str) -> i32 {
+    let path = fixtures().dir.join(format!("{case}.pid"));
+    deadline_wait(|| path.exists()).await;
+    std::fs::read_to_string(path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+}
+
 /// Aborts the spawned connect if the test fails before awaiting it —
 /// a leaked task would hold the ssh child past the test.
 struct AbortOnDrop(Option<tokio::task::JoinHandle<()>>);
@@ -122,10 +158,7 @@ async fn cancelled_open_kills_and_reaps_the_ssh_child() {
     let pidfile = fixtures().pidfile.clone();
     let marker = fixtures().attach_seen.clone();
     let ssh = fake("ssh-attach-sleep");
-    let endpoint = Endpoint::Remote(Remote {
-        target: "test-host".into(),
-        session: "test".into(),
-    });
+    let endpoint = endpoint();
     let mut opening = AbortOnDrop(Some(tokio::spawn(async move {
         let p = params();
         let _ = Attach::connect(&endpoint, Some(ssh.as_os_str()), &p).await;
@@ -151,4 +184,59 @@ async fn cancelled_open_kills_and_reaps_the_ssh_child() {
         .parse()
         .unwrap();
     deadline_wait(|| reaped(pid)).await;
+}
+
+#[tokio::test]
+async fn a_stdout_eof_open_failure_kills_the_child_promptly() {
+    // The child closes stdout without answering hello, then ignores
+    // stdin EOF: the failed open must not wait the full close timeout —
+    // the EOF-grace close kills and reaps it promptly.
+    let ssh = fake("attach-eof-hello");
+    let conn = AttachConn::new(endpoint(), Some(ssh.into_os_string()));
+    let start = std::time::Instant::now();
+    let err = timeout(conn.attach(&params())).await.unwrap_err();
+    assert!(matches!(err, AttachError::Open(_)), "{err:?}");
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "open EOF waited on a hung child: {:?}",
+        start.elapsed()
+    );
+    let pid = pid_of("attach-eof-hello").await;
+    deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "child {pid} was still running: {:?}",
+        start.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn a_live_wire_eof_reports_attach_failure_promptly() {
+    // hello succeeded, then the child closes stdout and ignores stdin
+    // EOF: `diagnose` awaits the spawned backend close, so a hung child
+    // must die inside the EOF grace or attach error reporting blocks.
+    let ssh = fake("attach-eof-live");
+    let conn = AttachConn::new(endpoint(), Some(ssh.into_os_string()));
+    let start = std::time::Instant::now();
+    let err = timeout(conn.attach(&params())).await.unwrap_err();
+    assert!(matches!(err, AttachError::Open(_)), "{err:?}");
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "diagnose waited on a hung child: {:?}",
+        start.elapsed()
+    );
+    let pid = pid_of("attach-eof-live").await;
+    deadline_wait(|| reaped(pid)).await;
+    assert!(
+        start.elapsed() < Duration::from_secs(2),
+        "child {pid} was still running: {:?}",
+        start.elapsed()
+    );
+}
+
+fn endpoint() -> Endpoint {
+    Endpoint::Remote(Remote {
+        target: "test-host".into(),
+        session: "test".into(),
+    })
 }

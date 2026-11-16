@@ -27,8 +27,24 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// matching the `HERDR_DISABLE_SOUND` kill-switch convention.
 const ENV_OPT_OUT: &str = "BACKLOT_NO_UPDATE_CHECK";
 
-/// A notice for the app to show: title and body.
-pub type Notice = (String, String);
+/// A notice for the app to show, plus the bare latest version so the
+/// sidebar badge can outlive the toast.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Notice {
+    pub title: String,
+    pub body: String,
+    pub latest: String,
+}
+
+/// The shared toast wording — the report path and the badge's
+/// re-raise click both use it.
+pub(crate) fn toast(version: &str) -> (String, String) {
+    (
+        "Update available".into(),
+        format!("backlot v{version} is out — run: backlot --upgrade"),
+    )
+}
+
 /// The one-shot report. `Some(notice)` only when a release newer than
 /// `CARGO_PKG_VERSION` is known — freshly fetched or remembered.
 pub type Report = oneshot::Receiver<Option<Notice>>;
@@ -64,10 +80,12 @@ async fn check(
         }
     };
     newer_release(&tag).map(|version| {
-        (
-            "Update available".into(),
-            format!("backlot v{version} is out — run: backlot --upgrade"),
-        )
+        let (title, body) = toast(&version);
+        Notice {
+            title,
+            body,
+            latest: version,
+        }
     })
 }
 
@@ -265,7 +283,9 @@ mod tests {
         let cache = scratch.0.join("update-check.json");
         let notice = check(Some(&cache), tag("v999.0.0")).await;
         assert!(notice.is_some(), "the future tag should notify");
-        assert!(notice.unwrap().1.contains("999.0.0"));
+        let notice = notice.unwrap();
+        assert!(notice.body.contains("999.0.0"));
+        assert_eq!(notice.latest, "999.0.0");
         assert!(cache.exists(), "the fetch was cached");
 
         // A cached "newer" tag still notifies — and never refetches

@@ -19,21 +19,22 @@ async fn two_views_follow_shared_focus_zoom_and_split_geometry() {
         crate::project::layout_key(None, a.projection.snapshot.focused_tab_id.as_ref().unwrap());
     let value = json!({"schema":1,"focus":"t2","tabs":{key:{"root":{"type":"split","vertical":true,"ratio":0.25,"first":{"type":"pane","terminal":"t1"},"second":{"type":"pane","terminal":"t2"}},"zoomed":"t2"}}});
     for app in [&mut a, &mut b] {
-        app.view.documents.insert(
+        app.view.documents_mut().insert(
             DocKey {
                 machine: None,
                 name: "hc-tui".into(),
             },
-            Document {
+            Arc::new(Document {
                 value: value.clone(),
                 version: 2,
                 ..Default::default()
-            },
+            }),
         );
         app.reconcile_published_view();
         assert_eq!(app.focused.as_deref(), Some("t2"));
         assert_eq!(app.visible_panes(), ["t2"]);
-        assert_eq!(app.observers.len(), 2, "zoom keeps all tab panes attached");
+        // t2 rides its active wire; only the covered t1 keeps an observer.
+        assert_eq!(app.observers.len(), 1);
         let infos =
             super::super::pane_geometry::pane_infos(app, ratatui::layout::Rect::new(0, 0, 80, 24));
         assert_eq!(infos.len(), 1);

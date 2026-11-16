@@ -42,8 +42,7 @@ fn activity_event(seq: u64, id: &str, activity: Value) -> ServerNotification {
 #[test]
 fn a_coalesced_epoch_boundary_and_later_work_each_reallocate() {
     let mut actor = actor();
-    actor
-        .inventory
+    Arc::make_mut(&mut actor.inventory)
         .replace(1, vec![term("a", "boot", 1), term("b", "peer", 5)]);
     actor.publish();
     // A genuine epoch boundary lands, then real post-boundary work — both
@@ -84,14 +83,12 @@ fn publish_orders_boundary_reallocation_by_the_resolved_traversal() {
         order.reverse();
         order
     });
-    actor
-        .inventory
+    Arc::make_mut(&mut actor.inventory)
         .replace(1, vec![term("a", "boot", 1), term("b", "peer", 5)]);
     actor.publish();
     // Both boundaries land in ONE replacement snapshot: traversal [b, a]
     // allocates b before a, opposite of incoming order.
-    actor
-        .inventory
+    Arc::make_mut(&mut actor.inventory)
         .replace(2, vec![term("a", "boot-2", 4), term("b", "peer-2", 6)]);
     actor.publish();
     let view = actor.view.lock().unwrap().clone();
@@ -104,12 +101,10 @@ fn publish_orders_boundary_reallocation_by_the_resolved_traversal() {
 #[test]
 fn an_unchanged_epoch_in_a_replacement_snapshot_keeps_every_receipt() {
     let mut actor = actor();
-    actor
-        .inventory
+    Arc::make_mut(&mut actor.inventory)
         .replace(1, vec![term("a", "boot", 1), term("b", "peer", 5)]);
     actor.publish();
-    actor
-        .inventory
+    Arc::make_mut(&mut actor.inventory)
         .replace(2, vec![term("a", "boot", 1), term("b", "peer", 5)]);
     actor.publish();
     let view = actor.view.lock().unwrap().clone();

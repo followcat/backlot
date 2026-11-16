@@ -7,7 +7,8 @@
 //! its claims keep it alive, its `died` is the one shared shutdown every
 //! attach on it ends through.
 
-use super::error::{AttachError, with_transport_diagnostics};
+use super::diag::open_failed;
+use super::error::AttachError;
 use super::mux::{self, Cells};
 use super::pump::{CTRL_QUEUE, DataQueue};
 use super::stream::Stream;
@@ -60,7 +61,7 @@ pub(super) struct Conn {
     guard: Mutex<Option<Guard>>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
     /// The spawned backend close, once `died` started it.
-    close_task: Mutex<Option<JoinHandle<Result<transport::Closed, transport::Error>>>>,
+    pub(super) close_task: Mutex<Option<JoinHandle<Result<transport::Closed, transport::Error>>>>,
 }
 
 /// One claim keeping the connection alive: an open in flight or an
@@ -165,7 +166,7 @@ impl Conn {
             let weak = Arc::downgrade(conn);
             move |reason: Option<String>| {
                 if let Some(conn) = weak.upgrade() {
-                    conn.died(reason);
+                    conn.died(reason, true);
                 }
             }
         };
@@ -179,7 +180,7 @@ impl Conn {
             let weak = Arc::downgrade(&conn);
             move || {
                 if let Some(conn) = weak.upgrade() {
-                    conn.died(None);
+                    conn.died(None, true);
                 }
             }
         };
@@ -221,7 +222,7 @@ impl Conn {
             *count == 0
         };
         if last {
-            self.died(None);
+            self.died(None, false);
         }
         last
     }
@@ -250,7 +251,20 @@ impl Conn {
         params.quiet_human_release = quiet_human_release;
         let params = serde_json::to_value(params).map_err(CallError::Shape)?;
         let result = self.attach_call(params).await?;
-        let result: AttachResult = serde_json::from_value(result).map_err(CallError::Shape)?;
+        // The core allocated the reply's channel already: read it
+        // leniently so a failed `AttachResult` shape still owes that
+        // channel a CLOSE — a bare error would leak the viewer for the
+        // shared connection's whole life.
+        let channel = mux::reply_channel(&result);
+        let result: AttachResult = match serde_json::from_value(result) {
+            Ok(result) => result,
+            Err(err) => {
+                if let Some(channel) = channel {
+                    mux::queue_close(&self.wire, channel);
+                }
+                return Err(AttachError::Call(CallError::Shape(err)));
+            }
+        };
         if result.channel == 0 {
             return Err(AttachError::Protocol("attach returned channel 0".into()));
         }
@@ -323,11 +337,16 @@ impl Conn {
     }
 
     /// The connection's own end — a dead transport, a channel-0 protocol
-    /// violation, or the last claim leaving. Idempotent: fails pending
-    /// calls and in-flight attach opens, fails every live channel with the
-    /// same reason, aborts both halves so the streams drop (the peer sees
-    /// stdin EOF) and hands the backend to the spawned close.
-    fn died(&self, reason: Option<String>) {
+    /// violation, or the last claim leaving. `eof` picks the backend's
+    /// exit grace: transport ends (`true`) get the prompt EOF close — the
+    /// peer already stopped speaking, so a hung child is killed inside
+    /// the grace rather than blocking `diagnose` — while the last claim's
+    /// clean leave (`false`) keeps the full graceful close. Idempotent:
+    /// fails pending calls and in-flight attach opens, fails every live
+    /// channel with the same reason, aborts both halves so the streams
+    /// drop (the peer sees stdin EOF) and hands the backend to the
+    /// spawned close.
+    fn died(&self, reason: Option<String>, eof: bool) {
         if self.dead.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -340,30 +359,13 @@ impl Conn {
         if let Some(guard) = lock(&self.guard).take()
             && let Ok(rt) = tokio::runtime::Handle::try_current()
         {
-            *lock(&self.close_task) = Some(rt.spawn(guard.close()));
-        }
-    }
-
-    /// The spawned backend close's report — `Some` once `died` started
-    /// it; an abort/panic reports as a clean default rather than failing.
-    pub(super) async fn close_report(&self) -> Option<Result<transport::Closed, transport::Error>> {
-        let task = lock(&self.close_task).take()?;
-        Some(
-            task.await
-                .unwrap_or_else(|_| Ok(transport::Closed::default())),
-        )
-    }
-
-    /// A dead connection's attach error gets the backend's real status
-    /// and stderr tail when the peer plainly died — a real protocol
-    /// answer is never replaced.
-    pub(super) async fn diagnose(&self, err: AttachError) -> AttachError {
-        if !self.dead() {
-            return err;
-        }
-        match self.close_report().await {
-            Some(report) => with_transport_diagnostics(err, report),
-            None => err,
+            *lock(&self.close_task) = Some(rt.spawn(async move {
+                if eof {
+                    guard.close_eof().await
+                } else {
+                    guard.close().await
+                }
+            }));
         }
     }
 }
@@ -390,20 +392,4 @@ impl Drop for Conn {
                 .take(),
         );
     }
-}
-
-/// A negotiation failure with a backend behind it: the codec halves drop
-/// first — otherwise the child never sees stdin EOF and `guard.close()`
-/// can only end it at the kill timeout — then the child's own exit
-/// status and stderr tail are kept when the peer actually died.
-async fn open_failed(
-    err: AttachError,
-    reader: Reader<ReadHalf>,
-    writer: Writer<WriteHalf>,
-    guard: Option<Guard>,
-) -> AttachError {
-    drop(reader);
-    drop(writer);
-    let Some(guard) = guard else { return err };
-    with_transport_diagnostics(err, guard.close().await)
 }

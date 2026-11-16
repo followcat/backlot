@@ -9,7 +9,7 @@ use hc_proto::client::{Attach, AttachError};
 use hc_proto::terminal::AttachParams;
 use tokio::sync::mpsc;
 
-use super::{OpenAttach, PaneEv};
+use super::{OpenAttach, PaneEv, Role};
 
 /// Work for the writer task, in send order.
 #[derive(Clone)]
@@ -104,12 +104,34 @@ pub(crate) async fn writer_task(
 }
 
 /// One attach attempt: open, announce, then forward the stream until it
-/// ends. Owns the wire; the app only sees `PaneEv`s.
+/// ends. Owns the wire; the app only sees `PaneEv`s. A size holder's
+/// DATA is consumed in line here — its credit must flow, but the bytes
+/// themselves never cross `ev`, so background panes cannot wake the UI
+/// loop per chunk. A consume failure surfaces as `Failed` so the pane
+/// retries cleanly; control noise stays on the wire too.
+/// `Pane::spawn` drives `attach_task_paced`; this unpaced wrapper stays
+/// for callers that predate the pacing receiver.
+#[allow(dead_code)]
 pub async fn attach_task(
     open: OpenAttach,
     params: AttachParams,
+    role: Role,
     generation: u64,
     ev: mpsc::Sender<PaneEv>,
+) {
+    let (_tx, rx) = tokio::sync::watch::channel(false);
+    attach_task_paced(open, params, role, generation, ev, rx).await
+}
+
+/// `attach_task` with the pane's pacing receiver: the forward loop
+/// coalesces off-tab observer DATA onto the shared flush grid.
+pub(super) async fn attach_task_paced(
+    open: OpenAttach,
+    params: AttachParams,
+    role: Role,
+    generation: u64,
+    ev: mpsc::Sender<PaneEv>,
+    paced: tokio::sync::watch::Receiver<bool>,
 ) {
     let attach = match open(params).await {
         Ok(attach) => Arc::new(attach),
@@ -141,10 +163,5 @@ pub async fn attach_task(
     {
         return;
     }
-    while let Some(out) = attach.recv().await {
-        if ev.send(PaneEv::Out { generation, out }).await.is_err() {
-            return;
-        }
-    }
-    let _ = ev.send(PaneEv::Ended { generation }).await;
+    super::pacing::forward_stream(&attach, role, generation, &ev, paced).await;
 }

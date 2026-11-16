@@ -22,7 +22,7 @@ fn update(
         generation: 1,
         ..View::default()
     };
-    view.inventory.replace(
+    view.inventory_mut().replace(
         1,
         values
             .into_iter()

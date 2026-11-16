@@ -15,7 +15,8 @@ impl App {
     /// while the observer stays painted — an opening or reattaching wire
     /// clears its captures on first paint, so then the active wire is the
     /// only live copy and its writes go instead.
-    pub(super) fn drain_clipboard_writes(&mut self) {
+    /// `true` when a forwarded copy raised the feedback card.
+    pub(super) fn drain_clipboard_writes(&mut self) -> bool {
         let mut writes = self.pane.take_clipboard_writes();
         if let Some(peek) = self.peek.as_mut() {
             peek.pane.take_clipboard_writes();
@@ -35,16 +36,16 @@ impl App {
                 .flat_map(|pane| pane.take_clipboard_writes()),
         );
         let mut seen = std::collections::HashSet::new();
+        let mut shown = false;
         for content in writes {
             if !seen.insert(content.clone()) {
                 continue;
             }
             let sequence = crate::selection::osc52_sequence(&content);
             let _ = (self.host_control)(sequence.as_bytes());
-            if self.show_copy_feedback(Instant::now()) {
-                self.sched.mark_dirty(Instant::now());
-            }
+            shown |= self.show_copy_feedback(Instant::now());
         }
+        shown
     }
 
     /// Extract the selection's text from the pane's own displayed VT —

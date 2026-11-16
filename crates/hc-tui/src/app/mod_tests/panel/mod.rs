@@ -47,17 +47,16 @@ fn app_with_panel_doc() -> App {
     let mut stage = crate::sidebar::fixture::term("t9");
     stage.name = Some("backlot-stage".into());
     stage.state = "live".into();
-    app.view.inventory.replace(
-        2,
-        app.view
-            .inventory
-            .terminals()
-            .values()
-            .cloned()
-            .chain(std::iter::once(stage))
-            .collect(),
-    );
-    app.view.documents.insert(
+    let terminals: Vec<_> = app
+        .view
+        .inventory
+        .terminals()
+        .values()
+        .cloned()
+        .chain(std::iter::once(stage))
+        .collect();
+    app.view.inventory_mut().replace(2, terminals);
+    app.view.documents_mut().insert(
         DocKey {
             machine: None,
             name: "backlot".into(),
@@ -65,7 +64,8 @@ fn app_with_panel_doc() -> App {
         Document {
             value: summary_json(),
             ..Document::default()
-        },
+        }
+        .into(),
     );
     app.focused = Some("t1".into());
     app.sync_target();

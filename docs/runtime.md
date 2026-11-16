@@ -3,15 +3,25 @@
 Start a local client with `backlot --session <name>`, or use
 `backlot --remote <ssh-target> --session <name>`. The remote machine needs
 `hc` on its SSH command path. SSH authentication and host verification use
-normal SSH configuration; backlot does not store credentials. On Unix the RPC,
-subscription and attach connections share one SSH login per target through
-backlot's own control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, created private),
-kept for 10 minutes after the last connection ends. On top of that shared
-login, every attach on a remote endpoint is a channel on one framed
-`hc connect`, with one transport and one `hello`. It opens with the first
-attach, is shared by concurrent opens, is rebuilt once if it dies and
-closes with its last attach. RPC and subscription streams keep their own
-connections on the same login.
+normal SSH configuration; backlot does not store credentials. At steady state
+`--remote` owns three `ssh` children per target: a dedicated plain-mode
+`events.subscribe` stream (`Subscription`); one shared framed RPC `Client`
+(`shared_rpc`) multiplexing the watcher's refreshes (`doc.get`,
+`machine.list`, fallback `terminal.list`), layout and machine
+`operations::Store` mutations and background `herdr.seen` label writes —
+lazy, single-flight, rebuilt once when the wire dies; and one shared framed
+`AttachConn` multiplexer carrying the active, observer and size-lease
+terminal byte channels — opening with the first attach, shared by concurrent
+opens, rebuilt once if it dies and closed with its last attach. Short-lived
+`ssh` children overlap transiently while a reconnect or a graceful close
+replaces a wire; before `shared_rpc` the same wiring ran up to five children
+because refreshes, actions and seen writes each held their own connection.
+All of these streams share one SSH login per target through backlot's own
+control socket (`$XDG_RUNTIME_DIR/hc-tui-ssh`, typically
+`/run/user/*/hc-tui-ssh`, created private): the OpenSSH control-master
+daemon there persists for 10 minutes (`ControlPersist`) after the last
+stream ends — it belongs to OpenSSH, is reused by backlot's children, and is
+not itself a backlot child process.
 
 The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.
@@ -31,6 +41,17 @@ retain the current tab and 32 most recent off-tab panes. An observer never sends
 human input, automatic replies, size claims or host facts. A role change
 opens a new attach. A recovered active attach uses `resumed` to avoid
 claiming fresh activity merely because the transport recovered.
+
+Active panes allocate a 256 KiB VT scrollback; observer panes cap it at
+64 KiB. libghostty prunes scrollback at page granularity, so the effective
+bound can exceed the configured cap. A zero cap cannot be used because
+visible tabbed panes render and scroll from the observer VT when painted,
+so setting observer scrollback to zero would drop visible pane history. Up
+to 32 off-tab observers stay live in the LRU: tab switches back onto them
+need no reattach and keep the one-shot cursor and palette state. An
+observer evicted past the LRU drops its attach immediately — it receives
+zero background feeds while evicted — and a revisit opens a fresh observe
+attach that repaints from core history.
 
 The allocated pane grid and rendered inner rectangle share one geometry.
 When the authoritative core grid persistently differs, a source-style
@@ -71,8 +92,9 @@ connects to an existing session.
 
 Visible panes keep silent size-holder connections, including the focused pane,
 so a focus switch cannot leave a visible terminal without a size lease. These
-connections send geometry and measured display facts, consume output credit,
-and allocate no VT. They never send human input, focus or automatic replies.
+connections send geometry and measured display facts, consume output credit
+inside the attach actor — size-holder DATA never crosses the pane event
+channel — and allocate no VT. They never send human input, focus or automatic replies.
 A pane that leaves the visible layout loses its size holder. Zoom-hidden panes
 retain pinned current-tab observers; off-tab observers enter the bounded LRU,
 strictly observe-only. Resize requests follow layout

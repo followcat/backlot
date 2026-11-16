@@ -105,6 +105,9 @@ impl Pane {
             }
             _ => {} // stale generation: a newer switch owns the pane
         }
+        // Paint/state transitions move the paced flag: a completed
+        // `?9001` release arms pacing, a Down/Gone disarms it.
+        self.sync_pacing();
     }
 
     /// One parked-lease-drain stream event: DATA feeds that wire's VT
@@ -165,8 +168,9 @@ impl Pane {
         };
         match out {
             Output::Data(bytes) => {
-                // A size holder needs neither an emulator nor query replies.
-                // Credit still flows so it cannot block the program.
+                // Defensive: attach_task consumes size-holder DATA at the
+                // wire and never forwards it — a stray chunk still returns
+                // its credit here so nothing can stall the stream.
                 if live.spec.role == Role::SizeLease {
                     if let Err(error) = live.attach.consume(bytes.len()) {
                         live.vt_broken = Some(format!("credit: {error}"));
@@ -175,17 +179,26 @@ impl Pane {
                 }
                 if !live.paint_started {
                     live.paint_started = true;
-                    let mut vt = Vt::new(live.core_grid.0, live.core_grid.1, SCROLLBACK);
+                    let mut vt = Vt::new(
+                        live.core_grid.0,
+                        live.core_grid.1,
+                        scrollback_limit(live.spec.role),
+                    );
                     self.initial = seed_host(&mut vt, &self.host);
+                    self.render_cache = None;
                     self.vt = Some(vt);
                 }
                 let Some(vt) = &mut self.vt else {
                     return;
                 };
                 if let Some(repaint) = &mut live.repaint {
-                    match repaint.feed(vt, &bytes) {
-                        Ok(true) => live.repaint = None,
-                        Ok(false) => {}
+                    match repaint.feed(vt, &bytes, now) {
+                        Ok(repaint::Release::Marker) => live.repaint = None,
+                        Ok(repaint::Release::Fallback) => {
+                            live.repaint = None;
+                            live.paint_fallback = Some(paint_gate::PAINT_FALLBACK_REASON);
+                        }
+                        Ok(repaint::Release::Waiting) => {}
                         Err(error) => {
                             live.repaint = None;
                             live.vt_broken = Some(format!("appearance restore: {error}"));
@@ -194,26 +207,20 @@ impl Pane {
                 } else {
                     vt.feed(&bytes);
                 }
-                if live.await_paint {
-                    // Both supported core pins serialize this mode after all
-                    // keyboard/paste state (viewers.rs::paint_state). DATA
-                    // chunk boundaries are not initial-paint boundaries.
-                    live.paint_tail.extend_from_slice(&bytes);
-                    if live
-                        .paint_tail
-                        .windows(8)
-                        .any(|part| part == b"\x1b[?9001h" || part == b"\x1b[?9001l")
+                // Both supported core pins serialize this mode after all
+                // keyboard/paste state (viewers.rs::paint_state). DATA
+                // chunk boundaries are not initial-paint boundaries — and
+                // a core that omits `?9001` releases on the bounded
+                // fallback instead of holding the gate forever.
+                let released = live.paint_gate.feed(&bytes, now);
+                if let Some(end) = released {
+                    if matches!(end, paint_gate::GateEnd::Fallback) {
+                        live.paint_fallback = Some(paint_gate::PAINT_FALLBACK_REASON);
+                    }
+                    if vt.size() != Ok(live.core_grid)
+                        && let Err(error) = vt.resize(live.core_grid.0, live.core_grid.1)
                     {
-                        live.await_paint = false;
-                        live.paint_tail.clear();
-                        if vt.size() != Ok(live.core_grid)
-                            && let Err(error) = vt.resize(live.core_grid.0, live.core_grid.1)
-                        {
-                            live.vt_broken = Some(format!("resize: {error}"));
-                        }
-                    } else if live.paint_tail.len() > 7 {
-                        let keep = live.paint_tail.len() - 7;
-                        live.paint_tail.drain(..keep);
+                        live.vt_broken = Some(format!("resize: {error}"));
                     }
                 }
                 if let Err(e) = live.attach.consume(bytes.len()) {
@@ -222,7 +229,9 @@ impl Pane {
                 let bells = vt.take_bell_count();
                 // A paint redraws state. Only live output is a program copying.
                 let mut clipboard = vt.take_clipboard_writes();
-                if live.await_paint {
+                if live.paint_gate.await_paint()
+                    || matches!(released, Some(paint_gate::GateEnd::Fallback))
+                {
                     clipboard.clear();
                 }
                 match vt.take_replies() {
@@ -250,13 +259,14 @@ impl Pane {
                 // before the bytes arrive.
                 let grid = (cols.max(1), rows.max(1));
                 if live.spec.role == Role::Observe
-                    && !live.await_paint
+                    && !live.paint_gate.await_paint()
                     && let Some(vt) = &mut self.vt
                 {
                     if let Some(repaint) = &mut live.repaint {
                         repaint.flush_tail(vt);
+                        repaint.reset(now);
                     } else {
-                        match repaint::Repaint::new(vt) {
+                        match repaint::Repaint::new(vt, now) {
                             Ok(repaint) => live.repaint = Some(repaint),
                             Err(error) => {
                                 live.vt_broken = Some(format!("appearance snapshot: {error}"))
@@ -267,7 +277,7 @@ impl Pane {
                 live.core_grid = grid;
                 self.vt_grid = grid;
                 if let Some(vt) = &mut self.vt
-                    && !live.await_paint
+                    && !live.paint_gate.await_paint()
                     && let Err(e) = vt.resize(grid.0, grid.1)
                 {
                     live.vt_broken = Some(format!("resize: {e}"));
@@ -323,55 +333,6 @@ impl Pane {
             }
         }
     }
-
-    /// The open failed: bounded backoff (carrying prior attempts) before
-    /// the next try. An `unsupported` answer means the core cannot
-    /// attach at all — the pane parks Gone with the reason visible
-    /// instead of retrying forever; the inventory view reconciles it.
-    pub(super) fn on_failed(&mut self, why: String, unsupported: bool, now: Instant) {
-        let State::Opening { spec, attempts, .. } = &self.state else {
-            return;
-        };
-        let (spec, attempts) = (spec.clone(), *attempts);
-        self.state = State::Idle;
-        if unsupported {
-            self.state = State::Gone {
-                spec,
-                reason: why,
-                permanent: true,
-            };
-        } else {
-            self.arm_down(spec, why, attempts, now);
-        }
-    }
-
-    /// The wire ended mid-stream: the next retry reattaches with
-    /// `resumed` so recovery doesn't stamp fresh size-ownership
-    /// activity. Owned tasks are aborted so nothing outlives the pane.
-    pub(super) fn on_ended(&mut self, now: Instant) {
-        let State::Live(live) = &self.state else {
-            return; // already Down/Gone — keep the recorded reason
-        };
-        let spec = live.spec.clone();
-        leave_live(live);
-        self.arm_down(spec, "the attach stream ended".into(), 0, now);
-    }
-
-    /// Parks `spec` in `Down` with exponential backoff.
-    pub(super) fn arm_down(&mut self, spec: Spec, reason: String, attempts: u32, now: Instant) {
-        if matches!(self.state, State::Live(_)) {
-            self.discard_pending_incarnation();
-        }
-        let delay = RETRY_MIN
-            .saturating_mul(1u32 << attempts.min(10))
-            .min(RETRY_MAX);
-        self.state = State::Down {
-            spec,
-            reason,
-            retry_at: now + delay,
-            attempts: attempts + 1,
-        };
-    }
 }
 
 /// Seeds a fresh VT with the probed host facts — the cell pixel pitch
@@ -386,11 +347,11 @@ fn seed_host(vt: &mut Vt, host: &crate::host::HostFacts) -> Option<hc_vt::Colors
     let (w, h) = host.cell_px.unwrap_or((8, 16));
     vt.set_cell_px(w, h);
     let palette = vt
-        .frame(0)
+        .colors()
         .ok()
         .filter(|_| host.theme.palette.iter().any(Option::is_some))
-        .map(|frame| {
-            let mut p = frame.colors.palette;
+        .map(|colors| {
+            let mut p = colors.palette;
             for (index, color) in host.theme.palette.iter().enumerate() {
                 if let Some(color) = color {
                     p[index] = *color;
@@ -408,7 +369,7 @@ fn seed_host(vt: &mut Vt, host: &crate::host::HostFacts) -> Option<hc_vt::Colors
     {
         return None;
     }
-    vt.frame(0).ok().map(|frame| frame.colors)
+    vt.colors().ok()
 }
 
 /// Keep switch-time focus behind accepted input and before later releases.

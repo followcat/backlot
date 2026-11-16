@@ -32,7 +32,9 @@ fn app_with(term: CoreTerminal) -> App {
 }
 
 fn replace(app: &mut App, generation: u64, term: &CoreTerminal) {
-    app.view.inventory.replace(generation, vec![term.clone()]);
+    app.view
+        .inventory_mut()
+        .replace(generation, vec![term.clone()]);
     app.refresh_projection();
 }
 
