@@ -119,6 +119,57 @@ async fn with_source_herdr_the_list_and_the_save_are_the_references() {
     assert_eq!(app.shell.theme_name, next);
 }
 
+/// A reload that swaps the theme repaints every palette cell: the
+/// panel's background and the frame's mode bar take the new palette
+/// while a warm pane-surface cache keeps its own VT colours — neither
+/// cache may hold the old theme's.
+#[tokio::test]
+async fn a_theme_reload_repaints_the_drawn_frame() {
+    let mut app = app_with_terms(vec![{
+        let mut t = crate::sidebar::fixture::term("t1");
+        t.labels.insert("herdr.space".into(), "space-a".into());
+        t.labels.insert("herdr.tab".into(), "tab-a".into());
+        t
+    }]);
+    let (_root, own) = files(&mut app, "", None);
+    // A parked attach keeps the pane's VT as a retained screen — the
+    // render cache then has real content to hold across the reload.
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    app.focused = Some("t1".into());
+    app.sync_target();
+    let mut vt = hc_vt::Vt::new(90, 22, 0);
+    vt.feed(b"\x1b[31mPANE-RED\x1b[0m");
+    app.pane.install_vt(vt);
+    app.area = (120, 24);
+    app.panel.mode = crate::panel::PanelMode::Expanded;
+    let backlot_bg = crate::chrome::palette::Palette::backlot().panel_bg;
+    let dracula_bg = crate::chrome::palette::Palette::dracula().panel_bg;
+    assert_ne!(backlot_bg, dracula_bg, "the probe must differ");
+
+    let before = draw_to(&mut app, 120, 24);
+    let inner = app.hit_map.panes[0].inner_rect;
+    let pane_cell = |b: &TestBackend| b.buffer()[(inner.x, inner.y)].fg;
+    let panel_cell = |b: &TestBackend| b.buffer()[(110, 10)].bg;
+    assert_eq!(panel_cell(&before), backlot_bg);
+    let vt_red = pane_cell(&before);
+
+    std::fs::create_dir_all(own.parent().unwrap()).unwrap();
+    std::fs::write(&own, "[theme]\nname = \"dracula\"\n").unwrap();
+    app.reload_config();
+    let after = draw_to(&mut app, 120, 24);
+    assert_eq!(
+        panel_cell(&after),
+        dracula_bg,
+        "the redrawn frame kept the old palette"
+    );
+    assert_eq!(
+        pane_cell(&after),
+        vt_red,
+        "the cached pane surface lost its own colours"
+    );
+}
+
 #[tokio::test]
 async fn the_other_settings_still_go_to_herdrs_file() {
     let mut app = app();
