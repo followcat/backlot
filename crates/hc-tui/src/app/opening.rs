@@ -104,22 +104,84 @@ impl App {
         if self.popup.is_some() || self.popup_pending.is_some() {
             self.dismiss_popup();
         }
-        let Ok(exe) = std::env::current_exe() else {
-            self.show_notice("New studio", "cannot find this executable");
-            return;
+        let params = match self.wizard_params() {
+            Ok(params) => params,
+            Err(message) => {
+                self.show_notice("New studio", &message);
+                return;
+            }
         };
-        // The spawned terminal inherits the core's env, not ours —
-        // hand it a state dir override when this client has one so
-        // the wizard writes the same ledgers `backlot` reads.
+        self.popup_pending = Some(PopupPending {
+            width: None,
+            height: None,
+            persistent: false,
+            owner: String::new(),
+            command: String::new(),
+        });
+        self.submit_action(Action::RunPopup { params });
+    }
+
+    /// The wizard's `terminal.run` parameters — split out so tests
+    /// assert them without a wire. `on` is never set: the wizard must
+    /// write where `backlot <endpoint args> studio new` writes, and
+    /// that is the host the popup itself lands on.
+    ///
+    /// Local endpoint: this exe, this cwd — the user's launch
+    /// directory is the wizard's repository default — and the
+    /// client's `BACKLOT_STATE_DIR` forwarded (the spawned terminal
+    /// inherits the core's env, not ours).
+    ///
+    /// Remote endpoint: the popup already runs on the core's host —
+    /// the SSH target — where this exe's path, this cwd and
+    /// `--remote <target>` all mean nothing. There `backlot
+    /// --session <s>` (from that host's PATH) reaches the same
+    /// ledger: `link::state_dir` keys the base dir by the core id
+    /// `hello` reports, and the same core answers `--session`. The
+    /// line says so when `backlot` is missing rather than failing
+    /// silently.
+    pub(crate) fn wizard_params(&self) -> Result<hc_proto::terminal::RunParams, String> {
         let mut env = program_env();
-        if let Ok(dir) = std::env::var("BACKLOT_STATE_DIR") {
-            env.insert("BACKLOT_STATE_DIR".into(), dir);
-        }
+        let (line, cwd) = if self.panel_endpoint_args.iter().any(|a| a == "--remote") {
+            // Drop `--remote <target>` — on that host the pair is a
+            // loop back out. Everything else (`--session`) survives.
+            let mut args = Vec::with_capacity(self.panel_endpoint_args.len());
+            let mut skip = false;
+            for arg in &self.panel_endpoint_args {
+                if skip {
+                    skip = false;
+                    continue;
+                }
+                if arg == "--remote" {
+                    skip = true;
+                    continue;
+                }
+                args.push(arg.clone());
+            }
+            (
+                format!(
+                    "if ! command -v backlot >/dev/null 2>&1; then \
+                     echo 'studio new needs backlot on this host — \
+                     install it or run it where it is'; \
+                     exec ${{SHELL:-sh}}; fi; {}",
+                    wizard_line("backlot", &args)
+                ),
+                None,
+            )
+        } else {
+            if let Ok(dir) = std::env::var("BACKLOT_STATE_DIR") {
+                env.insert("BACKLOT_STATE_DIR".into(), dir);
+            }
+            let exe =
+                std::env::current_exe().map_err(|_| "cannot find this executable".to_string())?;
+            (
+                wizard_line(&exe.to_string_lossy(), &self.panel_endpoint_args),
+                std::env::current_dir()
+                    .ok()
+                    .map(|dir| dir.to_string_lossy().into_owned()),
+            )
+        };
         let mut params = hc_proto::terminal::RunParams {
-            line: Some(wizard_line(
-                &exe.to_string_lossy(),
-                &self.panel_endpoint_args,
-            )),
+            line: Some(line),
             rm: true,
             keep: false,
             no_notify: true,
@@ -127,20 +189,9 @@ impl App {
             env,
             labels: BTreeMap::from([(POPUP_LABEL.into(), "1".into())]),
             display: self.host_facts.display(),
-            // The wizard's "current directory" default is the user's:
-            // this client's launch cwd, not the core's.
-            cwd: std::env::current_dir()
-                .ok()
-                .map(|dir| dir.to_string_lossy().into_owned()),
+            cwd,
             ..Default::default()
         };
-        if let Some(machine) = self
-            .focused
-            .as_deref()
-            .and_then(|s| s.split_once('/').map(|(m, _)| m.to_owned()))
-        {
-            params.on = Some(machine);
-        }
         // The program's pty must start at the popup's cells, like
         // `spawn_popup`: left unset it takes the client's display and
         // the wizard's output never scrolls into the visible rows.
@@ -152,14 +203,7 @@ impl App {
                 rows: geometry.terminal_rows,
             });
         }
-        self.popup_pending = Some(PopupPending {
-            width: None,
-            height: None,
-            persistent: false,
-            owner: String::new(),
-            command: String::new(),
-        });
-        self.submit_action(Action::RunPopup { params });
+        Ok(params)
     }
 
     /// `s`: `backlot stage start` through the panel's injected

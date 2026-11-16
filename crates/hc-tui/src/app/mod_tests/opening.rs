@@ -167,6 +167,72 @@ async fn n_arms_the_wizard_popup() {
     // in tests, to a notice; the pending geometry is what matters.
 }
 
+// ---------- the wizard's RunParams (U2 round 1) ----------
+
+#[tokio::test]
+async fn the_wizard_never_targets_the_focused_machine() {
+    let mut app = no_doc_app();
+    // A focused terminal on another host must not pull the wizard
+    // onto that machine: it writes where `backlot` runs it.
+    app.focused = Some("host-b/tab:2:work".into());
+    let params = app.wizard_params().expect("params build");
+    assert!(params.on.is_none(), "{:?}", params.on);
+}
+
+#[tokio::test]
+async fn a_local_endpoint_wizard_uses_this_exe_and_cwd() {
+    let mut app = no_doc_app();
+    app.panel_endpoint_args = vec!["--session".into(), "s1".into()];
+    let params = app.wizard_params().expect("params build");
+    let line = params.line.expect("a line");
+    let exe = std::env::current_exe()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    assert!(
+        line.starts_with(&format!("'{exe}' studio new --interactive")),
+        "{line}"
+    );
+    assert!(line.contains("'--session' 's1'"), "{line}");
+    assert_eq!(
+        params.cwd.as_deref(),
+        Some(std::env::current_dir().unwrap().to_str().unwrap())
+    );
+    assert!(params.on.is_none());
+}
+
+#[tokio::test]
+async fn a_remote_endpoint_wizard_uses_that_hosts_backlot() {
+    let mut app = no_doc_app();
+    app.panel_endpoint_args = vec![
+        "--remote".into(),
+        "host-a".into(),
+        "--session".into(),
+        "s1".into(),
+    ];
+    let params = app.wizard_params().expect("params build");
+    let line = params.line.expect("a line");
+    // The popup runs on the core's host — the SSH target: this
+    // exe's path, this cwd and `--remote <target>` all mean nothing
+    // there. `backlot` from that host's PATH with `--session` alone
+    // reaches the same ledger.
+    assert!(!line.contains("--remote"), "{line}");
+    assert!(!line.contains("host-a"), "{line}");
+    let exe = std::env::current_exe()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    assert!(!line.contains(&exe), "{line}");
+    assert!(
+        line.contains("'backlot' studio new --interactive '--session' 's1'"),
+        "{line}"
+    );
+    // A missing `backlot` there is said, not failed silently.
+    assert!(line.contains("command -v backlot"), "{line}");
+    assert!(params.cwd.is_none(), "{:?}", params.cwd);
+    assert!(params.on.is_none(), "{:?}", params.on);
+}
+
 #[tokio::test]
 async fn s_runs_stage_start_through_the_panel_runner() {
     let mut app = no_doc_app();
