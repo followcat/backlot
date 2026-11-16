@@ -31,7 +31,8 @@ and every attention raised was cleared by the end of the second run. Neither run
 to recover from or a rate limit to retry, and the producer was never a real agent.
 
 What has not run on real agents: stall detection, the at-cap notice, going on after a block,
-the rate-limit retry, and everything of Hollywood.
+the rate-limit retry, and everything of Hollywood — the layer, its cards and `bl-hollywood`
+have only ever run on `fake` (H4's real-TUI proof is a fake-runner run; a real agent is H5).
 
 Codex and OpenCode were launched and their session IDs captured, no more — `runners.md` says
 exactly what was measured for each runner. Per runner:
@@ -209,6 +210,22 @@ re-raise one `stall_limit_s` later.
   `backlot status` reads the ledger, but the panel can be a couple of seconds behind it.
 - **The summary document has a 1 MiB hard limit.** A live studio is written even past the 64 KiB
   target, but past 1 MiB the document is not; a finished studio is dropped for size instead.
+
+## The Hollywood layer
+
+- **Everything of Hollywood runs on `fake` only.** The layer, `hollywood setup`, `card show`,
+  card apply/cancel from the panel and `tell hollywood` from its input line are unit-, draw- and
+  real-TUI-tested against the fake runner; no real agent has been Hollywood yet (H5).
+- **The layer reads only the summary document** — its studios, headline and open cards inherit
+  the document's ≤2 s lag and its caps (≤10 open cards, ≤200 headline chars). A headline or card
+  that just landed can lag the ledger by a couple of seconds.
+- **`Alt+Y` is a direct key while `[hollywood]` exists.** While bound it no longer reaches the
+  pane (readline `M-y`); without the kitty keyboard protocol an Esc then `y` inside the escape
+  window reads as Alt+Y; macOS needs Option-as-Meta. `key = "prefix+h"` or removing the section
+  is the way out — `[hollywood]` absent takes no key at all.
+- **Card actions from the layer run as the user** through spawned `backlot` commands — the same
+  D17a honesty note applies: the commands are exactly what you could type, and a failure lands
+  as a notice in the client, not in the ledger.
 
 ## Files and records
 

@@ -1,5 +1,53 @@
 # Studio progress
 
+## H4: Hollywood — the floating layer in the TUI, fake runner only (2026-11-16)
+
+- Done: `src/hollywood/` (model, rows, draw, keys, actions, the read-only card view) and
+  `src/app/hollywood/` give the client a per-client layer with three states — hidden,
+  a collapsed strip at the top row's right end (`✦ hollywood live · 2 live · 1 card ·
+  <headline>`, content-sized, capped at a third of the width) and an expanded panel
+  dropping from the top (capped at half the height, scrollable, full-screen at narrow
+  widths). It draws over the panes, the cast sidebar and the studio panel and reserves
+  nothing — no resize, ever. `alt+y` (direct, no prefix) cycles the states only while
+  `[hollywood]` exists; without the table it reaches the program untouched and no timer
+  runs. `[hollywood] key` rebinds it — direct or `prefix+<key>` chord — with parse,
+  bare-printable and studio-key/panel-chord collisions falling back to `alt+y` under a
+  file-naming notice that never echoes the value. Expanded owns its keys like the
+  focused panel: j/k/arrows/PageUp/PageDown, Enter activates (studio row → producer,
+  title → `bl-hollywood`, card → Show me, input → edit), `a`/`c`/`s` apply/cancel/show
+  the selected card, `i` edits the `tell hollywood` line, `x` hides, `Esc` collapses.
+  Mouse: strip click expands, rows/buttons/input/scrollbar/wheel all hit, an outside
+  click falls through and leaves the panel open. Show me on a `studio-new` card opens
+  `backlot card show` output in a scrollable read-only view; on another card it focuses
+  the studio. Actions spawn `backlot` as the user off the event loop through an
+  injectable runner; failures notice. All content is the summary document plus the
+  stage flag — studio rows read even with Hollywood down, and a stopped stage gets its
+  own line. `backlot hollywood setup` writes/replaces the `[hollywood]` table atomically,
+  keeps the rest of the file byte for byte and refuses every bad input before writing;
+  the expanded studio panel's last row names the command while the table is absent.
+  `backlot card show <id>` prints a card's full read — a `studio-new`'s draft cast and
+  brief included. A running stage picks the table up on its next tick; a client at its
+  next start — no file watcher.
+- Measured: 22 `hollywood::tests` (rows/keys/draw at 200/120/80/40, both themes) and 28
+  `app::tests::hollywood` (keys, actions, mouse, no-resize, absent parity, the setup
+  hint); 6 `hsetup_tests` on the stage side. `real_h4_hollywood_layer` on the pinned
+  `herdr-core`: the strip with the headline at all four widths, the expanded rows with
+  both studios and card `c3`, `j` + `a` applying it to `card.done` (`by: user`, the
+  stage's `card c3 done` log visible in the pane), the input line's `hold the line`
+  delivered to Hollywood's inbox (`message.sent` + `message.delivered`), `x` hiding
+  everything; captures under `backlot-work/briefs/H4-screens/`. Parity: the harness's
+  config carries no `[hollywood]` — this tree's run and a clean `9aa0660` build's run
+  are byte-identical signature runs to the recorded U1 logs apart from worktree paths
+  (79 checkpoints, the same `popup-open` environmental timeout; the navigator
+  checkpoints' ±1 style-cell count is a run-to-run flake — the same base binary showed
+  19 on U1's recorded run and 18 on this one, all blank cells in the known
+  theme-delta region). `without_the_table_alt_y_reaches_the_pane_and_no_cell_changes`
+  proves the key and the cells. Gates all green.
+- Not verified: a real agent in `bl-hollywood` (H5); `hollywood setup` on an installed
+  release (the runner-installation probes are argv-only); the chord form of
+  `[hollywood] key` on a real terminal (unit-covered only); the layer under a remote
+  core (the panel's `local_documents` limit applies to it alike).
+
 ## U1: the studio layout — cast, blocks and Alt-arrow navigation (2026-11-16)
 
 - Done: studio mode, latched while the last good `backlot/1` document lists a studio —

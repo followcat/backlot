@@ -245,6 +245,36 @@ switches collapsed and expanded, `+`/`-` raise and lower a task's priority, `Esc
 the keys — `Ctrl+B y` again closes it — except the four `Alt+arrow` studio keys, which still
 switch studios and roles.
 
+## Hollywood above the studios
+
+Hollywood is the overseer: one agent above all studios on a core — see
+[hollywood.md](hollywood.md) for its model and rules. In the TUI it is a floating layer over
+everything: a collapsed strip at the top right (`✦ hollywood live · 2 live · 1 card · …`), an
+expanded panel dropped from the top on `Alt+Y`, and hidden. It floats — nothing resizes when it
+moves — and with no `[hollywood]` section in the config it draws nothing and takes no key.
+
+Set the section up by hand or let the command write it:
+
+```sh
+backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
+```
+
+`setup` refuses a runner that is not supported or not installed before it touches the file, and
+keeps every other line as it was. A running stage starts `bl-hollywood` on its next tick; a
+running client picks the table up at its next start. Until a section exists, the expanded studio
+panel's last row names this command.
+
+`Alt+Y` cycles hidden → strip → panel → strip (rebind with `[hollywood] key = "prefix+h"`). In
+the expanded panel: `j`/`k` or the arrows move, `Enter` acts (studio row → its producer, title →
+`bl-hollywood`, card → Show me), `a` applies and `c` cancels the selected card, `s` is Show me,
+`i` edits the `tell hollywood` line, `x` hides, `Esc` collapses. The card buttons
+`apply`/`cancel`/`show`, the strip and the scrollbar take the mouse. Show me on a `studio-new`
+card opens the draft's cast and brief read-only (`backlot card show <id>` prints the same);
+on any other card it focuses the studio.
+
+The layer only ever shows what the `backlot` document says and only ever acts through `backlot`
+commands — `backlot card apply c3` from the panel is the same command you would type.
+
 ## Permission prompts
 
 A role whose screen sits on a permission prompt for two seconds raises a `permission prompt`
@@ -440,8 +470,19 @@ the factual record, with no score.
 [panel]
 width = 30   # expanded column width, clamped to 24-60
 key = "y"    # the chord tail after the prefix
+
+[hollywood]
+runner = "claude"          # required; `backlot hollywood setup` writes this table
+model = "claude-sonnet-5-5" # required
+effort = "high"            # the cast file's effort rule applies
+# key = "alt+y"            # optional — the layer's toggle: a direct key or prefix+<key>
+# default_cast = "/home/user/cast.toml"  # optional
 ```
 
 A missing file means defaults; a malformed one means defaults plus a notice carrying only the
 line and column. The panel's open/closed state is per client and in memory only — nothing is
 saved.
+
+With no `[hollywood]` the layer is absent: hidden, no `Alt+Y`, no timer — the screen is the
+herdr screen. A `key` value that cannot be bound falls back to `alt+y` with a notice naming the
+file, never echoing the value.
