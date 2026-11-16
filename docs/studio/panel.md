@@ -1,7 +1,7 @@
 # Studio panel
 
-The right-hand studio column (S4b, reworked by U1). Everything below is client-local state — per
-client, in memory only. With the panel closed the client is cell-identical to herdr.
+The right-hand studio column (S4b, reworked by U1 and U2). Everything below is client-local state — per
+client, in memory only. Under `backlot --plain` the client is cell-identical to herdr.
 
 The panel and the sidebar's cast are viewers: what they show comes from the `backlot` document and
 the terminal inventory; what they change goes through `backlot` commands and the existing focus
@@ -9,11 +9,12 @@ path.
 
 ## Studio mode
 
-Everything on this page applies only in **studio mode**: the last good `backlot` document
-(`schema = "backlot/1"`) lists at least one studio. A missing, malformed or foreign-schema
-document, or a stopped stage, never flips the mode — the panel keeps the last document. Only a
-good document with zero studios leaves it. Outside studio mode the client is exactly herdr: the
-agents list, herdr's sidebar width, herdr's key bindings.
+Since U2, `backlot` is **always** in studio mode — the mode is `not --plain`, it does not depend
+on the document. A missing, malformed or foreign-schema document, a good one with zero studios,
+or a stopped stage never flips it: the cast then shows its no-studio view (the header alone,
+then `others`) and the opening page covers the panes. The only way out is `backlot --plain`:
+there the client is exactly herdr — the agents list, herdr's sidebar width, herdr's key
+bindings.
 
 The **current studio** is the studio whose person owns the focused terminal. When the focus
 belongs to no studio the current studio stays what it was; at the start it is the first studio in
@@ -94,9 +95,17 @@ mark, name and task with the runner right-aligned; then the terminal's title —
 two into `! <attention>` in the blocked colour; a failed turn says `last turn failed`. Either takes
 the whole row, model included, so it stays readable at the default width. The person
 whose terminal is focused gets the active-row background on both rows and an accent `▌` in the
-first column. Closed people stay listed, dimmed, after the live ones. At the bottom one row
-`others <n> ▸` expands in place to herdr's own agent rows — the agents in no studio (the stage
-terminal is never listed). Enter or a click toggles it; collapsed by default.
+first column. Closed people stay listed, dimmed, after the live ones.
+
+After the people, a `shells` header groups the studio's **shells** — the user's own terminals
+opened with `Ctrl+B c` or a split (labelled `backlot.shell=<n>`). Two rows each like a person: a
+dim `$` (or the agent status when the shell runs one), `shell <n>`, the program on the right;
+then the terminal title and the working directory's last component. The role keys reach them
+after the people.
+
+At the bottom one row `others <n> ▸` expands in place to herdr's own agent rows — every terminal
+that is neither a studio person, a studio shell, the stage nor Hollywood (what hc-tui, wherdr or
+`hc run` created in the same session). Enter or a click toggles it; collapsed by default.
 
 ## Mouse
 
@@ -129,8 +138,8 @@ next_role = "alt+right"
 A missing file means defaults. A malformed file means defaults plus one notice carrying only
 the line and column — file contents never reach the screen. A `key` that does not parse falls
 back to `y` with one notice naming the file; an unparseable studio key falls back to its default
-the same way — the invalid value is never echoed. An empty string unbinds a studio key. Outside
-studio mode the sidebar follows herdr's `ui.sidebar_width`, as before; a drag on the edge still
+the same way — the invalid value is never echoed. An empty string unbinds a studio key. Under
+`--plain` the sidebar follows herdr's `ui.sidebar_width`, as before; a drag on the edge still
 resizes it for the session. herdr's own `config.toml` is read exactly as before, except for its
 `[theme]`: the same file holds backlot's own ([Theme](../theme.md)).
 

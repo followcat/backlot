@@ -16,8 +16,8 @@ The defaults you'll use most:
 | `Ctrl+B b` | Show or hide the sidebar |
 | `Ctrl+B ?` | Search the key bindings |
 | `Ctrl+B s` | Settings |
-| `Ctrl+B c` | New tab |
-| `Ctrl+B v`, `Ctrl+B -` | Split right, split down |
+| `Ctrl+B c` | New tab — a studio shell in the focused person's worktree |
+| `Ctrl+B v`, `Ctrl+B -` | Split right, split down — a studio shell joining the focused tab |
 | `Ctrl+B h/j/k/l` | Move focus |
 | `Ctrl+B z` | Zoom the pane |
 | `Ctrl+B r` | Resize mode |
@@ -53,11 +53,27 @@ blocks. While it is focused it owns these keys:
 
 [docs/studio/guide.md](studio/guide.md) explains what the panel's marks and blocks mean.
 
+## The opening page
+
+With no studio (no `backlot` document, or a good one with zero studios) an opening page covers
+the pane area and owns these keys:
+
+| Keys | Action |
+|---|---|
+| `n` | New studio — a popup running `backlot studio new --interactive` |
+| `h` | Tell Hollywood — the input line, only when `[hollywood]` is configured |
+| `s` | Start the stage, only when it is not running |
+| `q` | Detach |
+| `Esc` | Hide the page for this session; `new_workspace` brings it back |
+
+`new_workspace` opens the page instead of an empty workspace — in studio mode every new terminal
+belongs to a studio, so the empty-workspace flow does not apply.
+
 ## Studio keys
 
-When the last good `backlot` document lists at least one studio, four direct keys — no prefix —
-move between studios and roles. They are bound in `~/.config/backlot/config.toml` and default to
-the `Alt+arrow` chords:
+backlot is always in studio mode (start it with `--plain` for the plain multiplexer), so four
+direct keys — no prefix — move between studios and roles. They are bound in
+`~/.config/backlot/config.toml` and default to the `Alt+arrow` chords:
 
 ```toml
 [keys]
@@ -70,16 +86,16 @@ next_role = "alt+right"
 | Keys | Action |
 |---|---|
 | `Alt+Up`, `Alt+Down` | Previous or next studio in document order. Wraps around. Focuses the person last used there, else the studio's producer, else its first live role. A studio with no live terminal still becomes current — the cast and the panel frame follow — and a notice says so. |
-| `Alt+Left`, `Alt+Right` | Previous or next person of the current studio in cast order. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered person. |
+| `Alt+Left`, `Alt+Right` | Previous or next person of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered person. |
 
 Focusing goes through the panel's existing focus path (workspace, tab, pane): it only moves the
 focus — no pane and no program is resized.
 
-These keys exist only in studio mode. There they win over a Herdr binding on the same key — the
-usual Herdr config binds `previous_tab = "alt+left"` and friends — so set different chords in
-either file if you want both. Outside studio mode Herdr's bindings, or the program, get the keys
-exactly as before. An empty string unbinds a key; a value that does not parse falls back to the
-default with one notice naming the file.
+These keys exist only in studio mode — that is, always unless you run `backlot --plain`. They
+win over a Herdr binding on the same key — the usual Herdr config binds `previous_tab = "alt+left"`
+and friends — so set different chords in either file if you want both. Under `--plain` Herdr's
+bindings, or the program, get the keys exactly as before. An empty string unbinds a key; a value
+that does not parse falls back to the default with one notice naming the file.
 
 They also work while the studio panel or a persistent float has the focus — the float parks on
 its tab and keeps running, as it does for the tab and agent keys below. While the keyboard is

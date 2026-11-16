@@ -1,5 +1,12 @@
 # Herdr parity
 
+> **U2 — `backlot --plain`.** Since U2 the `backlot` binary is a studio tool by
+> default; the client measured by this document is `backlot --plain`, which is
+> the plain multiplexer cell-identical to `main` before U2. The parity harness
+> (`scripts/parity/`) spawns the candidate with `--plain` in `run.py`,
+> `vectors.py` and `layout.py`. Every reference, fixture and rule below applies
+> to `backlot --plain` exactly as it applied to `backlot` before.
+
 The acceptance target is **herdr 0.9.5-followcat**, source revision
 `d00953e081389eb5f8ea006896fbf4a17b2f9dfc`. With the same configuration,
 terminal size, programs and states, matching surfaces must produce the same

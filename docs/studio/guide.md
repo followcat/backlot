@@ -108,28 +108,44 @@ pool the director picks actors from — it cannot cast anyone else.
 
 ## Starting
 
+The easiest start is the client itself:
+
 ```sh
 hc server start
-backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml
-backlot stage start
 backlot
 ```
+
+With no studio, `backlot` opens on the **opening page**: one line of what it is, then its
+actions. Press `n` — a popup runs `backlot studio new --interactive`, which asks for the
+repository (the directory you launched `backlot` from, when it is a git repository with a
+commit), the studio id (the repository's directory name), the title and the cast. The cast is
+drafted from the agent CLIs installed on the machine, shown to you, and you accept it, edit it
+in `$EDITOR` or refuse it — nothing is written before you accept. The wizard then offers to
+start the stage. When a studio exists, the page is gone and the studio is current.
 
 `hc server start` brings a core up first, because the studio commands need one and do not start
 it themselves. If `backlot` (the TUI) is already open, a core is already running and you can skip
 that line.
 
+The command-line path is unchanged:
+
+```sh
+backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml
+backlot stage start
+```
+
 `backlot studio new` records `studio.created` in the studio's ledger and prints it back.
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
 `--studio` flag or reads `BACKLOT_STUDIO`. `--repo` must be an absolute path. `--title` is a
-display name.
+display name. With `--interactive` instead, whatever the flags leave out is asked for on the
+terminal with the same defaults as the opening-page wizard.
 
 `backlot stage start` starts `backlot-stage`, a terminal on the same core that runs the
 scheduling loop. It is idempotent — a second `stage start` says it is already running. The stage
 then reads the ledger and starts the producer and the director as `bl-acme-shop-producer` and
 `bl-acme-shop-director`; the writer joins when a plan is wanted, and an actor's terminal is named
-for its task (`bl-acme-shop-t1`). Role terminals are ordinary `hc` terminals: they show in the
-sidebar under the `backlot` space, and `hc ls` lists them.
+for its task (`bl-acme-shop-t1`). Role terminals are ordinary `hc` terminals: each studio is its
+own space in the client with its people as tabs, and `hc ls` lists them all.
 
 The stage has no heartbeat of its own — `backlot stage watch` is the external watchdog:
 
@@ -143,17 +159,26 @@ back), a role terminal disappearing while its ledger still wants it live, and a 
 attention growing. Each condition reports once per edge. Without `--target` the lines go to the
 watch's own stderr; `--studio` narrows the ledgers to one studio.
 
-Run `backlot` to open the UI. Once a studio exists the client is in studio mode: the sidebar's
-agents section becomes the **cast** of the current studio — one two-line entry per person, live
-ones first — and `Ctrl+B y` — prefix, then `y` — opens the studio panel on the right as a column
+Run `backlot` to open the UI. The client is always in studio mode: the sidebar's agents section
+is the **cast** of the current studio — one two-line entry per person, live ones first — and
+`Ctrl+B y` — prefix, then `y` — opens the studio panel on the right as a column
 of bordered blocks, one per studio. Pressing the chord again while it is focused closes it;
 pressing it while the panel is open but unfocused focuses it again. A herdr binding on `y` still
-wins while the panel does not own the keys.
+wins while the panel does not own the keys. With no studio yet the opening page covers the pane
+area (`Esc` peeks underneath; the cast's `others` row still lists what other clients created).
+The former plain multiplexer is `backlot --plain`.
+
+A new tab (`Ctrl+B c`) or a split opens a **studio shell**: your own terminal, started in the
+worktree of the focused person (an actor's `work/<task>`, the director's `work/integration`) or
+in the studio's repository. Shells are listed under a `shells` group in the cast after the
+people, the role keys reach them after the people, and the stage never touches them — messaging,
+nudging, sampling, counting, reaping, relabelling all skip a `backlot.shell` terminal. A finished
+studio keeps its shells for as long as it stays in the document.
 
 Four direct keys move around without the prefix: `Alt+Up`/`Alt+Down` step to the previous or
-next studio, `Alt+Left`/`Alt+Right` to the previous or next person of the current studio's cast.
-They exist only in studio mode — outside it the same chords reach herdr's bindings or the
-program — and their defaults are `keys.previous_studio` and friends in backlot's config.
+next studio, `Alt+Left`/`Alt+Right` to the previous or next person of the current studio's cast —
+live people first, then the shells. Their defaults are `keys.previous_studio` and friends in
+backlot's config.
 
 Every studio command also accepts `--session <s>` and `--remote <t>` to reach another core, the
 same flags the TUI takes.
