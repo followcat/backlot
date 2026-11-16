@@ -43,6 +43,9 @@ pub(crate) enum Target {
     Strip(String),
     /// `(studio, role)` — a person row or one of its extra lines.
     Person(String, String),
+    /// H4: the expanded panel's "no hollywood" hint — shown, not
+    /// actionable.
+    SetupHint,
 }
 
 /// An extra line under a person.
@@ -88,6 +91,9 @@ pub(crate) enum Row<'a> {
     Stacked(&'a StudioSummary),
     /// The collapsed strip's one line per studio.
     Strip(&'a StudioSummary),
+    /// H4: `no hollywood — backlot hollywood setup …` — the expanded
+    /// panel's last row while `[hollywood]` is absent (R22).
+    SetupHint,
 }
 
 impl Row<'_> {
@@ -107,6 +113,7 @@ impl Row<'_> {
             }
             Row::Stacked(studio) => Target::Block(studio.id.clone()),
             Row::Strip(studio) => Target::Strip(studio.id.clone()),
+            Row::SetupHint => Target::SetupHint,
         }
     }
 
@@ -362,6 +369,11 @@ pub(crate) fn rows<'a>(
                 } else {
                     out.push(Row::Stacked(studio));
                 }
+            }
+            // H4: with no `[hollywood]` the expanded panel's last row
+            // names the setup command (R22).
+            if panel.hollywood_hint {
+                out.push(Row::SetupHint);
             }
         }
     }

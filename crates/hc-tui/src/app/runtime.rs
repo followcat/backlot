@@ -259,6 +259,12 @@ impl App {
                         kind = WakeKind::Panel;
                     }
                 },
+                result = self.hwood_rx.recv() => {
+                    if let Some(result) = result {
+                        self.on_hollywood_action(result);
+                        kind = WakeKind::Hollywood;
+                    }
+                },
                 _ = async {
                     match wake {
                         Some(deadline) => tokio::time::sleep_until(deadline.into()).await,

@@ -22,6 +22,7 @@ mod float;
 mod float_draw;
 mod float_reconcile;
 mod help;
+mod hollywood;
 mod host;
 mod image_paste;
 mod init;
@@ -244,6 +245,24 @@ pub struct App {
     /// Studio mode's client-local state (U1): the mode latch, the
     /// current studio and per-studio remembered persons.
     studio: crate::studio::Studio,
+    /// The Hollywood layer's client-local state (H4) — `Hidden` by
+    /// default and whenever `[hollywood]` is absent, so a stock frame
+    /// is cell-identical to before the layer existed.
+    hollywood: crate::hollywood::Hollywood,
+    /// The resolved toggle binding — `None` without `[hollywood]`, so
+    /// Alt+Y reaches the focused program exactly as before.
+    hollywood_key: Option<crate::hollywood::HollywoodKey>,
+    /// Whether a `[hollywood]` table exists — the expanded studio
+    /// panel shows the setup hint only without one.
+    has_hollywood_cfg: bool,
+    /// Last frame's layer hit rectangles (`HollywoodRender`).
+    hollywood_hits: crate::hollywood::HollywoodRender,
+    /// Injectable `backlot …` runner for card actions and the input
+    /// line — tests record argv, production spawns `current_exe()`.
+    hollywood_runner: crate::hollywood::HollywoodRunner,
+    /// `(label, result, view)` — `view` opens the "Show me" read on Ok.
+    hwood_tx: mpsc::Sender<(String, Result<String, String>, bool)>,
+    hwood_rx: mpsc::Receiver<(String, Result<String, String>, bool)>,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,

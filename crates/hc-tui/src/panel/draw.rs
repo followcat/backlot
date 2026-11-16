@@ -235,6 +235,16 @@ pub(crate) fn render(
             Row::Strip(studio) => {
                 draw_strip(buf, rect, studio, palette);
             }
+            Row::SetupHint => {
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    &truncate_end("'backlot hollywood setup'", rect.width as usize),
+                    dim,
+                );
+            }
         }
         hits.rows.push((rect, target));
         y += height;

@@ -20,6 +20,7 @@ pub(super) struct Context {
     navigator: bool,
     settings: bool,
     panel: bool,
+    hollywood: bool,
 }
 
 impl App {
@@ -34,6 +35,7 @@ impl App {
             navigator: self.navigator.is_some(),
             settings: self.settings.is_some(),
             panel: self.panel_focused(),
+            hollywood: self.hollywood.expanded(),
         }
     }
 
@@ -205,6 +207,18 @@ impl App {
                 self.studio_nav(nav);
                 return None;
             }
+            // H4: Hollywood's direct toggle parks a persistent float
+            // exactly like the studio keys — ephemeral popups keep it.
+            if matches!(
+                self.hollywood_key,
+                Some(crate::hollywood::HollywoodKey::Direct(_))
+            ) && self.popup.as_ref().is_some_and(|popup| popup.persistent)
+                && self.hollywood_key_press(&press)
+            {
+                self.popup_key_suppress.insert(press.identity());
+                self.hollywood_toggle();
+                return None;
+            }
             let intercepted = self
                 .popup
                 .as_ref()
@@ -349,6 +363,25 @@ impl App {
             self.prefix.reset();
             self.prefix.swallow(&press);
             self.studio_nav(nav);
+            return None;
+        }
+        // H4: Hollywood's own binding — `alt+y` direct by default, or
+        // the `[hollywood] key` override as a direct binding or a
+        // `prefix+` chord. Intercepted exactly like the studio keys:
+        // it wins over a herdr direct binding, fires while the panel
+        // or the layer itself owns keys, and an armed prefix disarms
+        // and swallows on the press. `hollywood_key_press` is false
+        // without `[hollywood]`, so Alt+Y reaches the program then.
+        if self.hollywood_key_press(&press) {
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.hollywood_toggle();
+            return None;
+        }
+        // The expanded layer owns every key like the focused panel
+        // does; the toggle and the studio keys already took theirs.
+        if self.hollywood.expanded() {
+            self.handle_hollywood_key(&press);
             return None;
         }
         // A focused panel owns every key like the navigator does; the

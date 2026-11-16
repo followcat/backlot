@@ -27,6 +27,9 @@ pub(super) enum WakeKind {
     /// A studio-panel action result — the notice it may show marks
     /// the scheduler itself, so no housekeeping follows it.
     Panel,
+    /// A Hollywood action result — same no-housekeeping rule as
+    /// `Panel`: the notice or view it lands marks the scheduler.
+    Hollywood,
 }
 
 impl WakeKind {

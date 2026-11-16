@@ -13,6 +13,7 @@ impl App {
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
         let (panel_action_tx, panel_rx) = mpsc::channel(16);
+        let (hwood_tx, hwood_rx) = mpsc::channel(16);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         let sidebar_collapsed = shell.sidebar_start_collapsed;
@@ -76,6 +77,17 @@ impl App {
             panel_rx,
             panel_endpoint_args: Vec::new(),
             studio: crate::studio::Studio::default(),
+            hollywood: crate::hollywood::Hollywood::new(),
+            hollywood_key: None,
+            has_hollywood_cfg: false,
+            hollywood_hits: crate::hollywood::HollywoodRender::default(),
+            // Never spawn here — cli installs `spawn_runner` like the
+            // panel's before the loop starts.
+            hollywood_runner: std::sync::Arc::new(|_| {
+                Box::pin(async { Err("hollywood actions unavailable".into()) })
+            }),
+            hwood_tx,
+            hwood_rx,
             sched: sched::Scheduler::default(),
             focused: None,
             before_navigate: None,
