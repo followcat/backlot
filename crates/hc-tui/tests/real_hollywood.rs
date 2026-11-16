@@ -374,7 +374,7 @@ async fn real_hollywood_oversees_two_studios() {
         .expect("no brief message queued");
     assert_eq!(queued["to"], "producer", "{queued}");
     wait_terminal(&client, "bl-acme-beta-producer").await;
-    wait_inbox(&state, "fake-inbox-acme-beta-producer", "-brief.md");
+    wait_inbox(&state, "fake-inbox-acme-beta-producer", "-brief-c");
 
     drop(client);
     scratch.finish().expect("scratch teardown");

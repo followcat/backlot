@@ -62,7 +62,9 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
             };
             s.tasks.get(task).is_some_and(|t| {
                 t.state_changes.iter().any(|c| {
-                    c.state == change && c.reason.starts_with(&format!("card c{}", card.seq))
+                    // The colon is part of the tag: `card c1:` must
+                    // not match card c12's marker (R1-2).
+                    c.state == change && c.reason.starts_with(&format!("card c{}:", card.seq))
                 })
             })
         }
@@ -71,7 +73,7 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
         }
         CardAction::Close { person, .. } => s.roles.get(person).is_some_and(|r| !r.held),
         CardAction::Reopen { person, .. } => s.roles.get(person).is_some_and(|r| r.held),
-        CardAction::StudioNew { .. } => studio_new_done(s),
+        CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
     }
 }
 

@@ -258,9 +258,15 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 state.role.losses.push(e.ts_ms);
             }
             RoleMotion::Closed => {
-                state.role.live = false;
-                state.role.closed = true;
-                state.role.closed_reason = reason.clone();
+                let r = &mut state.role;
+                r.live = false;
+                r.closed = true;
+                r.closed_reason = reason.clone();
+                // The close's own ts: a stage process born after it
+                // may revive a `cannot resume` give-up (R1-4), and the
+                // crash history ends with the lifecycle it counted.
+                r.since_ms = e.ts_ms;
+                r.losses.clear();
             }
         },
         HollywoodKind::MessageDelivered { target } => {

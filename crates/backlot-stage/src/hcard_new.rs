@@ -21,11 +21,12 @@ impl Stage {
     /// The studio-new card's step: the draft re-validated now (the
     /// dry run again at apply time), then `studio.created` — cast
     /// file copied in — and the brief queued to the producer. A
-    /// studio the card already made (its brief message is the
-    /// marker) is `Done`; one made any other way is `Stale` — a
+    /// studio this card finished (its own brief message is the
+    /// marker) is `Done`; any other brief means a studio-new ran
+    /// here without this card — the base moved (R1-3). A
     /// `studio.created` newer than the card's own `card.applied`
-    /// lands just the missing brief (the crash window), anything
-    /// else stands as a moved base.
+    /// with this card's title is the crash window: land just the
+    /// missing brief. Anything else stands as a moved base.
     pub(crate) fn studio_new_step(
         &self,
         hdir: &Path,
@@ -46,20 +47,29 @@ impl Stage {
         let cast_path = resolve_draft(hdir, cast);
         let brief_path = resolve_draft(hdir, brief);
         if let Some(s) = sstate {
-            if studio_new_done(&s) {
+            if studio_new_done(&s, card.seq) {
                 return Step::Done;
             }
-            // Created after this card was applied: this card's own
-            // earlier pass got it that far — land the brief that
-            // completes it. Created before, or with no marker —
-            // someone else's studio: the base moved.
+            // A brief that isn't this card's — another studio-new
+            // completed here: ours would double the producer's
+            // brief, so the base moved (R1-3).
+            if any_brief(&s) {
+                return Step::Stale(format!("studio '{studio}' has its brief already"));
+            }
+            // Created after this card was applied, under this card's
+            // title: this card's own earlier pass got it that far —
+            // land the brief that completes it. Created before, or
+            // another title — someone else's studio: the base moved.
             let applied_ms = applied_ts(hdir, card);
             let created_ms = studio_created_ts(sdir);
+            let ours = s.studio.as_ref().is_some_and(|c| c.title == *title);
             return match (applied_ms, created_ms) {
-                (Some(a), Some(c)) if c >= a => match queue_brief(sdir, &brief_path) {
-                    Ok(()) => Step::Done,
-                    Err(e) => Step::Fail(e),
-                },
+                (Some(a), Some(c)) if c >= a && ours => {
+                    match queue_brief(sdir, &brief_path, card.seq) {
+                        Ok(()) => Step::Done,
+                        Err(e) => Step::Fail(e),
+                    }
+                }
                 _ => Step::Stale(format!("studio '{studio}' exists now")),
             };
         }
@@ -87,7 +97,7 @@ impl Stage {
             }],
         ) {
             Err(e) => Step::Fail(e),
-            Ok(()) => match queue_brief(sdir, &brief_path) {
+            Ok(()) => match queue_brief(sdir, &brief_path, card.seq) {
                 Ok(()) => Step::Done,
                 Err(e) => Step::Fail(e),
             },
@@ -95,9 +105,23 @@ impl Stage {
     }
 }
 
-/// The studio-new marker: the brief became the producer's first
-/// message — `purpose: "brief"` is the card path's alone.
-pub(crate) fn studio_new_done(s: &StudioState) -> bool {
+/// This card's studio-new marker: its brief became the producer's
+/// first message. `purpose: "brief"` alone belongs to whatever card
+/// ran first — the file name carries the card id so a second
+/// studio-new for the same name sees the studio moved, not done
+/// (R1-3).
+pub(crate) fn studio_new_done(s: &StudioState, card_seq: u64) -> bool {
+    let tag = format!("-brief-c{card_seq}.");
+    s.messages.iter().any(|m| {
+        m.to == "producer"
+            && m.purpose.as_deref() == Some("brief")
+            && m.file.as_deref().is_some_and(|f| f.contains(&tag))
+    })
+}
+
+/// Any brief at all — the "someone else's studio" check: whoever
+/// landed it, this card is not the studio's maker.
+fn any_brief(s: &StudioState) -> bool {
     s.messages
         .iter()
         .any(|m| m.to == "producer" && m.purpose.as_deref() == Some("brief"))
@@ -182,10 +206,12 @@ fn studio_created_kind(
 /// (the role gate's rule), so the stage records this one: the
 /// card's own action stays `by: user`, the brief is delivery
 /// plumbing.
-fn queue_brief(sdir: &Path, brief: &Path) -> Result<(), String> {
+fn queue_brief(sdir: &Path, brief: &Path, card_seq: u64) -> Result<(), String> {
     let src = brief.to_path_buf();
     store::append(sdir, move |_, seq| {
-        let dest = format!("messages/{seq}-brief.md");
+        // The file name carries the card id — it is `studio_new_done`'s
+        // marker, the "which card made me" answer a restart reads.
+        let dest = format!("messages/{seq}-brief-c{card_seq}.md");
         Ok::<_, std::convert::Infallible>(store::Pending {
             event: backlot_model::NewEvent::new(
                 backlot_model::EventBy::role("stage"),

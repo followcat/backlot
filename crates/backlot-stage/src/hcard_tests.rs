@@ -272,6 +272,43 @@ fn git_repo(dir: &Path) {
     assert!(out.status.success());
 }
 
+/// `studio.created` under the card's own title — what this card's
+/// earlier pass left before the crash, never someone else's studio.
+fn studio_kind_titled(title: &str) -> EventKind {
+    let mut k = tk::studio_kind();
+    if let EventKind::StudioCreated { title: t, .. } = &mut k {
+        *t = title.into();
+    }
+    k
+}
+
+/// A studio-new card's two ledger events — proposal then apply;
+/// returns the card's seq (its proposal's).
+fn propose_studio_new(hdir: &Path, studio: &str, repo: &Path, why: &str) -> u64 {
+    let draft = format!("drafts/{studio}");
+    fs::create_dir_all(hdir.join(&draft)).unwrap();
+    fs::write(hdir.join(format!("{draft}/cast.toml")), CAST).unwrap();
+    fs::write(hdir.join(format!("{draft}/brief.md")), "the brief\n").unwrap();
+    happend(
+        hdir,
+        "hollywood",
+        HollywoodKind::CardProposed {
+            action: backlot_model::hollywood::CardAction::StudioNew {
+                studio: studio.into(),
+                title: studio.into(),
+                repo: repo.to_string_lossy().into_owned(),
+                cast: format!("{draft}/cast.toml"),
+                brief: format!("{draft}/brief.md"),
+            },
+            why: why.into(),
+            base: backlot_model::hollywood::CardBase::StudioAbsent,
+        },
+    );
+    let card = hevents(hdir).last().unwrap()["seq"].as_u64().unwrap();
+    happend(hdir, "user", HollywoodKind::CardApplied { card });
+    card
+}
+
 /// A studio-new card: the draft re-validates, `studio.created`
 /// lands with the cast copied in, and the brief queues as the
 /// producer's first message — `purpose: "brief"` marks it.
@@ -363,7 +400,7 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
     happend(&hdir2, "user", HollywoodKind::CardApplied { card: 1 });
     store::append(&sdir2, move |_, _| {
         Ok::<_, std::convert::Infallible>(Pending {
-            event: NewEvent::new(EventBy::role("user"), tk::studio_kind()),
+            event: NewEvent::new(EventBy::role("user"), studio_kind_titled("acme-gamma")),
             files: Vec::new(),
         })
     })
@@ -380,6 +417,69 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
     );
     let last = hevents(&hdir2).pop().unwrap();
     assert_eq!(last["kind"], "card.done", "{last}");
+}
+
+/// R1-2: the marker match ends at the colon — card c1 does not
+/// claim card c12's `task.state`. The base it did move lands the
+/// card `stale`, never a borrowed `card.done`.
+#[tokio::test]
+async fn another_cards_marker_is_not_this_cards() {
+    let base = tmp();
+    running_studio(&base);
+    let hdir = store::hollywood_dir(&base);
+    happend(&hdir, "hollywood", tk::hpropose("t1"));
+    happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
+    // Card c12 paused the task already — not this card's doing.
+    append(
+        &base,
+        "user",
+        tk::task_state(
+            "t1",
+            backlot_model::event::TaskStateChange::Paused,
+            "card c12: on hold",
+        ),
+    );
+    let mut stage = new_stage().await;
+    stage.base = base.clone();
+
+    stage.hcards(&hdir).unwrap();
+    let last = hevents(&hdir).pop().unwrap();
+    assert_eq!(last["kind"], "card.stale", "{last}");
+    assert_eq!(
+        sevents(&base)
+            .iter()
+            .filter(|e| e["kind"] == "task.state")
+            .count(),
+        1,
+        "card c1 claimed c12's action"
+    );
+}
+
+/// R1-3: a second studio-new card for the same name is not "done" —
+/// the first card's brief is not its own, so the base moved and the
+/// card ends `stale` with nothing appended.
+#[tokio::test]
+async fn a_second_studio_new_card_is_stale_not_done() {
+    let base = tmp();
+    let hdir = store::hollywood_dir(&base);
+    let repo = tmp().join("repo-beta");
+    git_repo(&repo);
+    let c1 = propose_studio_new(&hdir, "acme-beta", &repo, "a second shop");
+    let mut stage = new_stage().await;
+    stage.base = base.clone();
+    stage.hcards(&hdir).unwrap();
+    assert_eq!(hevents(&hdir).last().unwrap()["kind"], "card.done");
+
+    let c2 = propose_studio_new(&hdir, "acme-beta", &repo, "again");
+    assert_ne!(c1, c2);
+    stage.hcards(&hdir).unwrap();
+    let last = hevents(&hdir).pop().unwrap();
+    assert_eq!(last["kind"], "card.stale", "{last}");
+    // Nothing appended — no second created, no second brief.
+    let sdir = store::studio_dir(&base, "acme-beta");
+    let (sev, _) = store::load_events(&sdir).unwrap();
+    let kinds: Vec<&str> = sev.iter().map(|e| e.kind.name()).collect();
+    assert_eq!(kinds, vec!["studio.created", "message.queued"], "{kinds:?}");
 }
 
 /// An applied card runs whether or not `[hollywood]` is configured

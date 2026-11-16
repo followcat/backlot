@@ -50,11 +50,11 @@ fn live(runner: &str) -> HWRole {
 fn without_config_the_layer_comes_down() {
     let bare = HWRole::default();
     assert_eq!(
-        hplan(None, &live("fake"), true, 0),
+        hplan(None, &live("fake"), true, 0, 0),
         vec![HMove::Close("not configured")]
     );
-    assert_eq!(hplan(None, &bare, true, 0), vec![HMove::Drop]);
-    assert_eq!(hplan(None, &bare, false, 0), Vec::<HMove>::new());
+    assert_eq!(hplan(None, &bare, true, 0, 0), vec![HMove::Drop]);
+    assert_eq!(hplan(None, &bare, false, 0, 0), Vec::<HMove>::new());
 }
 
 /// A live record with a live terminal holds — unless the config's
@@ -62,9 +62,12 @@ fn without_config_the_layer_comes_down() {
 #[test]
 fn a_runner_change_is_a_new_conversation() {
     let c = cfg("fake");
-    assert_eq!(hplan(Some(&c), &live("fake"), true, 0), Vec::<HMove>::new());
     assert_eq!(
-        hplan(Some(&c), &live("claude"), true, 0),
+        hplan(Some(&c), &live("fake"), true, 0, 0),
+        Vec::<HMove>::new()
+    );
+    assert_eq!(
+        hplan(Some(&c), &live("claude"), true, 0, 0),
         vec![HMove::Close("runner changed"), HMove::Start]
     );
 }
@@ -74,7 +77,10 @@ fn a_runner_change_is_a_new_conversation() {
 #[test]
 fn a_live_record_without_a_terminal_is_lost() {
     let c = cfg("fake");
-    assert_eq!(hplan(Some(&c), &live("fake"), false, 0), vec![HMove::Lost]);
+    assert_eq!(
+        hplan(Some(&c), &live("fake"), false, 0, 0),
+        vec![HMove::Lost]
+    );
 }
 
 /// A recorded `lost` keeps its session for the resume run; three
@@ -88,21 +94,49 @@ fn the_resume_guard_counts_recent_losses() {
     role.session_id = Some("fake-bl-hollywood".into());
     role.losses = vec![100_000];
     let now = 200_000;
-    assert_eq!(hplan(Some(&c), &role, false, now), vec![HMove::ResumeRun]);
+    assert_eq!(
+        hplan(Some(&c), &role, false, now, 0),
+        vec![HMove::ResumeRun]
+    );
     role.losses = vec![100_000, 150_000, 190_000];
-    assert_eq!(hplan(Some(&c), &role, false, now), vec![HMove::GiveUp]);
+    assert_eq!(hplan(Some(&c), &role, false, now, 0), vec![HMove::GiveUp]);
     // The same count spread past the ten-minute window resumes
     // instead — only `190_000` is recent once `now` reaches 700_000.
     role.losses = vec![1_000, 2_000, 190_000];
     assert_eq!(
-        hplan(Some(&c), &role, false, 700_000),
+        hplan(Some(&c), &role, false, 700_000, 0),
         vec![HMove::ResumeRun]
     );
     // The give-up's closed record stands: nothing starts it again.
     role.live = false;
     role.closed = true;
     role.closed_reason = Some("cannot resume".into());
-    assert_eq!(hplan(Some(&c), &role, false, now), Vec::<HMove>::new());
+    assert_eq!(hplan(Some(&c), &role, false, now, 0), Vec::<HMove>::new());
+}
+
+/// `cannot resume` is this stage process's give-up: the close stamps
+/// `since_ms`, and a stage born after it revives the conversation —
+/// a person restarting the stage is the one way back (R1-4). Within
+/// the same process it stays down.
+#[test]
+fn a_gave_up_hollywood_revives_only_under_a_new_stage() {
+    let c = cfg("fake");
+    let mut gave_up = recorded("fake");
+    gave_up.closed = true;
+    gave_up.closed_reason = Some("cannot resume".into());
+    gave_up.since_ms = 500;
+    // The same stage process — born before the close — holds the
+    // give-up; a process born after it revives.
+    assert_eq!(
+        hplan(Some(&c), &gave_up, false, 600, 400),
+        Vec::<HMove>::new()
+    );
+    assert_eq!(
+        hplan(Some(&c), &gave_up, false, 600, 600),
+        vec![HMove::Revive]
+    );
+    // A stray terminal still drops either way.
+    assert_eq!(hplan(Some(&c), &gave_up, true, 600, 600), vec![HMove::Drop]);
 }
 
 /// A live terminal the ledger never recorded is adopted — the
@@ -112,9 +146,9 @@ fn the_resume_guard_counts_recent_losses() {
 fn a_live_terminal_is_adopted_or_rejoined() {
     let c = cfg("fake");
     let bare = HWRole::default();
-    assert_eq!(hplan(Some(&c), &bare, true, 0), vec![HMove::Adopt]);
+    assert_eq!(hplan(Some(&c), &bare, true, 0, 0), vec![HMove::Adopt]);
     assert_eq!(
-        hplan(Some(&c), &recorded("fake"), true, 0),
+        hplan(Some(&c), &recorded("fake"), true, 0, 0),
         vec![HMove::Rejoin]
     );
 }
@@ -125,13 +159,13 @@ fn a_live_terminal_is_adopted_or_rejoined() {
 fn starts_and_revives() {
     let c = cfg("fake");
     let bare = HWRole::default();
-    assert_eq!(hplan(Some(&c), &bare, false, 0), vec![HMove::Start]);
+    assert_eq!(hplan(Some(&c), &bare, false, 0, 0), vec![HMove::Start]);
     let mut closed = recorded("fake");
     closed.closed = true;
     closed.closed_reason = Some("not configured".into());
-    assert_eq!(hplan(Some(&c), &closed, false, 0), vec![HMove::Revive]);
+    assert_eq!(hplan(Some(&c), &closed, false, 0, 0), vec![HMove::Revive]);
     // …but a stray terminal beside a closed record is still dropped.
-    assert_eq!(hplan(Some(&c), &closed, true, 0), vec![HMove::Drop]);
+    assert_eq!(hplan(Some(&c), &closed, true, 0, 0), vec![HMove::Drop]);
 }
 
 /// The identity `[hollywood]` names — runner, model, effort from

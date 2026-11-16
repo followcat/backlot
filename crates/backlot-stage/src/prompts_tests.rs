@@ -267,6 +267,122 @@ fn every_command_in_the_prompts_parses() {
     }
 }
 
+/// R1-1: Hollywood's prompt — every `backlot` span parses through
+/// the real argument parser, and every line "What you may run" names
+/// is both inside the role's gate (reads, its own ledger, a producer
+/// `tell`, the studio-new dry run) and covered by each pre-allowing
+/// runner's rule list — a command the prompt teaches but the launch
+/// does not allow fails here, not in front of an agent.
+#[test]
+fn hollywood_prompt_commands_parse_and_stay_preallowed() {
+    /// Quotes group words; nothing else is special.
+    fn shell_words(cmd: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut cur = String::new();
+        let mut quote = None;
+        for c in cmd.chars() {
+            match quote {
+                Some(q) if c == q => quote = None,
+                Some(_) => cur.push(c),
+                None if c == '"' || c == '\'' => quote = Some(c),
+                None if c.is_whitespace() => {
+                    if !cur.is_empty() {
+                        out.push(std::mem::take(&mut cur));
+                    }
+                }
+                None => cur.push(c),
+            }
+        }
+        if !cur.is_empty() {
+            out.push(cur);
+        }
+        out
+    }
+
+    /// A pre-allow rule → the command prefix it allows.
+    fn rule_prefix(rule: &str) -> &str {
+        let inner = rule
+            .strip_prefix("Bash(")
+            .or_else(|| rule.strip_prefix("Shell("))
+            .unwrap_or(rule);
+        inner
+            .trim_end_matches(')')
+            .trim_end_matches(":*")
+            .trim_end_matches(" *")
+    }
+
+    let covered = |rules: &[String], cmd: &str| {
+        rules
+            .iter()
+            .any(|p| cmd == *p || cmd.starts_with(&format!("{p} ")))
+    };
+    let claude: Vec<String> =
+        crate::runners::claude::allowed_tools("/state/hollywood", "hollywood", &[])
+            .split(',')
+            .filter(|r| r.starts_with("Bash("))
+            .map(|r| rule_prefix(r).to_string())
+            .collect();
+    let cursor: Vec<String> = crate::runners::cursor::allow_rules("hollywood", &[])
+        .iter()
+        .map(|r| rule_prefix(r).to_string())
+        .collect();
+    let cmd_runner: Vec<String> = crate::runners::cmd::allow_rules("hollywood", &[])
+        .iter()
+        .map(|r| rule_prefix(r).to_string())
+        .collect();
+
+    // Every backticked `backlot` span parses — a renamed flag or
+    // action fails here, not in front of an agent.
+    let mut all = 0;
+    for span in HOLLYWOOD.split('`').skip(1).step_by(2) {
+        if let Some(c) = span.strip_prefix("backlot ") {
+            all += 1;
+            assert!(
+                args::parse(&shell_words(c)).is_ok(),
+                "hollywood.md: `backlot {c}` does not parse"
+            );
+        }
+    }
+    assert!(all > 0, "hollywood.md names no backlot command");
+
+    // "What you may run" is the contract: each line is inside the
+    // role's gate and every pre-allowing runner covers it.
+    let section = HOLLYWOOD
+        .split("## What you may run")
+        .nth(1)
+        .expect("the prompt has a What-you-may-run section")
+        .split("## ")
+        .next()
+        .unwrap();
+    let mut seen = 0;
+    for span in section.split('`').skip(1).step_by(2) {
+        let Some(c) = span.strip_prefix("backlot ") else {
+            continue;
+        };
+        seen += 1;
+        let (_, cmd) = args::parse(&shell_words(c)).unwrap();
+        match cmd {
+            args::Cmd::Status { .. } | args::Cmd::Records { .. } | args::Cmd::Hollywood(_) => {}
+            args::Cmd::Tell { role, .. } => assert_eq!(role, "producer"),
+            args::Cmd::StudioNew { dry_run, .. } => {
+                assert!(dry_run, "`backlot {c}` is not the dry run")
+            }
+            _ => panic!("`backlot {c}` is outside Hollywood's gate"),
+        }
+        for (runner, rules) in [
+            ("claude", &claude),
+            ("cursor", &cursor),
+            ("cmd", &cmd_runner),
+        ] {
+            assert!(
+                covered(rules, &format!("backlot {c}")),
+                "{runner}'s pre-allow misses `backlot {c}`"
+            );
+        }
+    }
+    assert!(seen > 0, "the prompt names no runnable command");
+}
+
 /// Once the plan and the acceptance list are both published, the
 /// writer's last step is telling the producer — the dispatch is
 /// the producer's to send, not the director's to take.

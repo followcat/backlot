@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use backlot_model::state::StudioState;
 use backlot_model::summary::{self, Summary, Work};
@@ -235,6 +235,10 @@ pub(crate) struct Stage {
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
+    /// When this stage process was born — a `cannot resume` close
+    /// older than it means the person restarted the stage, the one
+    /// way the give-up comes back (R1-4).
+    pub(crate) started_ms: u64,
 }
 
 impl Stage {
@@ -511,6 +515,10 @@ impl Stage {
             hseen: std::cell::RefCell::new((0, 0)),
             hcfg: std::cell::RefCell::new(None),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
+            // A test stage is conservative: born at 0, it never reads
+            // a `cannot resume` close as older than itself — no
+            // surprise `terminal.run` inside a unit test.
+            started_ms: 0,
         }
     }
 }
@@ -594,6 +602,10 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hseen: std::cell::RefCell::new((0, 0)),
         hcfg: std::cell::RefCell::new(None),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
+        started_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
     };
     // A core without `events.subscribe` still works, polled on TICK.
     let mut sub = Subscription::connect(&link.endpoint, None, &SubscribeParams::default())

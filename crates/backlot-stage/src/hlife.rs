@@ -115,7 +115,7 @@ impl Stage {
             .unwrap_or(0);
         let term = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL);
         let role = self.hstate.borrow().role.clone();
-        for mv in hstage::hplan(cfg, &role, term.is_some(), now_ms) {
+        for mv in hstage::hplan(cfg, &role, term.is_some(), now_ms, self.started_ms) {
             match mv {
                 HMove::Start | HMove::Revive => {
                     let mut actor = hstage::identity(cfg.expect("a start needs the config"));

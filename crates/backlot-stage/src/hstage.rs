@@ -117,13 +117,17 @@ fn lost_loop(role: &HWRole, now_ms: u64) -> bool {
         >= LOST_LIMIT
 }
 
-/// The reconcile decision — pure: config, the role record and
-/// whether `bl-hollywood` is live go in, moves come out.
+/// The reconcile decision — pure: config, the role record, whether
+/// `bl-hollywood` is live and when this stage process was born go in,
+/// moves come out. `stage_started_ms` is what lets a `cannot resume`
+/// give-up come back: a close older than this process means the
+/// person restarted the stage — the one way back (R1-4).
 pub(crate) fn hplan(
     cfg: Option<&HollywoodCfg>,
     role: &HWRole,
     term: bool,
     now_ms: u64,
+    stage_started_ms: u64,
 ) -> Vec<HMove> {
     match cfg {
         None => {
@@ -148,7 +152,15 @@ pub(crate) fn hplan(
                 if term {
                     vec![HMove::Drop]
                 } else if role.closed_reason.as_deref() == Some("cannot resume") {
-                    vec![]
+                    // The give-up stands while this stage process
+                    // lives; a close older than this process means the
+                    // person restarted the stage — start a new
+                    // conversation, the loss count already reset.
+                    if role.since_ms < stage_started_ms {
+                        vec![HMove::Revive]
+                    } else {
+                        vec![]
+                    }
                 } else {
                     vec![HMove::Revive]
                 }

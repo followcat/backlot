@@ -56,7 +56,7 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
 /// argv. `//` is Claude Code's rule syntax for an absolute path; a
 /// single leading `/` would anchor at the working directory and
 /// match nothing.
-fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
+pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
     let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
     // One command in both forms Claude's rule syntax takes: bare and
     // with arguments.
