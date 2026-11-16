@@ -128,10 +128,10 @@ impl DataQueue {
         let _ = self.room.send(());
     }
 
-    /// One queued frame made it onto the wire — the drain fence counts
-    /// actual transport writes, not queue positions.
-    pub(super) fn mark_written(&self) {
-        self.written.send_modify(|n| *n += 1);
+    /// `count` queued frames made it onto the wire — the drain fence
+    /// counts actual transport writes, not queue positions.
+    pub(super) fn mark_written(&self, count: u64) {
+        self.written.send_modify(|n| *n += count);
     }
 
     /// The writer exited (dead wire or closed queues) — waiters that
