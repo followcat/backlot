@@ -509,7 +509,7 @@ pub fn check_labels(t: &Terminal, studio: &str, role: &str, task: Option<&str>) 
     );
     assert_eq!(
         l.get("herdr.space").map(String::as_str),
-        Some("backlot"),
+        Some(studio),
         "{t:?}"
     );
     assert_eq!(l.get("herdr.seen").map(String::as_str), Some("0"), "{t:?}");

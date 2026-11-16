@@ -153,6 +153,7 @@ fn spawn_tui(scratch: &ScratchCore, stub: &std::path::Path) -> Tui {
     let dup = || unsafe { Stdio::from_raw_fd(libc::dup(sfd)) };
     let mut command = Command::new(tui_bin());
     command
+        .arg("--plain")
         .arg("--remote")
         .arg("host-a")
         .env_clear()

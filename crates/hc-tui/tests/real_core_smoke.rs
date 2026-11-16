@@ -123,7 +123,9 @@ fn spawn_tui(scratch: &ScratchCore) -> Tui {
     let sfd = slave.as_raw_fd();
     let dup = || unsafe { Stdio::from_raw_fd(libc::dup(sfd)) };
     let mut command = Command::new(tui_bin());
+    // The plain multiplexer — `backlot` bare is studio mode since U2.
     command
+        .arg("--plain")
         .env_clear()
         .envs(tui_env(scratch))
         .current_dir(&scratch.work)
