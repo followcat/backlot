@@ -285,12 +285,13 @@ pub(super) fn display_width(text: &str) -> u16 {
 }
 
 /// The badge's two parts: the running `vX.Y.Z`, and — once the
-/// update check reported a newer release — the ` ↑ v…` hint in the
-/// notice toast's accent.
+/// update check reported a newer release — the ` ↑v…` hint in the
+/// notice toast's accent. The hint stays tight so a two-digit pair
+/// still fits the default-width header.
 fn version_badge_text(update_latest: Option<&str>) -> (String, Option<String>) {
     (
         format!("v{}", env!("CARGO_PKG_VERSION")),
-        update_latest.map(|latest| format!(" ↑ v{latest}")),
+        update_latest.map(|latest| format!(" ↑v{latest}")),
     )
 }
 
