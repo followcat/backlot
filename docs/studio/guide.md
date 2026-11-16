@@ -214,8 +214,8 @@ and review the delivery — the same commands, recorded the same way.
 
 The sidebar's cast lists the current studio's people, live first, two lines each: mark, name and
 task, the runner at the right edge; the terminal's title under it with a short model at the
-right. An open attention replaces the second line with `! <attention>`; a failed turn says
-`last turn failed`. The focused person's pair of rows is highlighted with a `▌` marker. A
+right. An open attention replaces the whole second line, model included, with `! <attention>`;
+a failed turn says `last turn failed` the same way. The focused person's pair of rows is highlighted with a `▌` marker. A
 trailing `others` row expands to the agents that belong to no studio.
 
 Expanded, the panel draws one bordered block per studio — the studio's id and its attention

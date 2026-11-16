@@ -91,7 +91,8 @@ In studio mode the sidebar's agents section is the current studio's cast instead
 studio's position in document order. One entry per person, in the summary's order, two rows each:
 mark, name and task with the runner right-aligned; then the terminal's title — falling back to
 `doing`, then the state word — with the model right-aligned in short form. An attention turns row
-two into `! <attention>` in the blocked colour; a failed turn says `last turn failed`. The person
+two into `! <attention>` in the blocked colour; a failed turn says `last turn failed`. Either takes
+the whole row, model included, so it stays readable at the default width. The person
 whose terminal is focused gets the active-row background on both rows and an accent `▌` in the
 first column. Closed people stay listed, dimmed, after the live ones. At the bottom one row
 `others <n> ▸` expands in place to herdr's own agent rows — the agents in no studio (the stage
