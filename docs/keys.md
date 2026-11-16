@@ -27,8 +27,8 @@ The defaults you'll use most:
 
 `Ctrl+B Ctrl+B` sends a literal `Ctrl+B` to the program. Custom commands bound in your Herdr config work here too.
 
-Settings changed with `Ctrl+B s` (theme, status indicators, sound, toast delivery) are saved to your Herdr config.
-Nothing else in that file changes. [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
+Settings changed with `Ctrl+B s` (status indicators, sound, toast delivery) are saved to your Herdr config, and
+nothing else in that file changes. A theme picked there is saved to backlot's own config ([Theme](theme.md)). [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
 
 ## The studio panel
 

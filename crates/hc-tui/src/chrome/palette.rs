@@ -78,6 +78,7 @@ impl Palette {
             "rose-pine" => Some(Self::rose_pine()),
             "rose-pine-dawn" => Some(Self::rose_pine_dawn()),
             "vesper" => Some(Self::vesper()),
+            "backlot" => Some(Self::backlot()),
             _ => None,
         }
     }

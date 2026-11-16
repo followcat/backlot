@@ -41,6 +41,8 @@ pub(crate) fn canonical_theme_name(name: &str) -> Option<&'static str> {
         "rose-pine" | "rosepine" => Some("rose-pine"),
         "rose-pine-dawn" | "rosepine-dawn" | "dawn" => Some("rose-pine-dawn"),
         "vesper" => Some("vesper"),
+        // backlot's own theme (`own_theme.rs`); not in `THEME_NAMES`.
+        "backlot" => Some("backlot"),
         _ => None,
     }
 }

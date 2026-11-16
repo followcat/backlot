@@ -59,6 +59,8 @@ pub(crate) struct SettingsOverlay {
     pub section: SettingsSection,
     pub selected: usize,
     pub original_theme_name: String,
+    /// The theme list shown: the reference's, or backlot's own.
+    pub theme_names: &'static [&'static str],
     pub original_palette: Palette,
     /// Always empty in hc-tui — there is no `integration.list` method to
     /// populate it; the section renders "no integration targets available".
@@ -71,9 +73,9 @@ pub(crate) fn normalized_theme_name(name: &str) -> String {
     name.to_lowercase().replace([' ', '_'], "-")
 }
 
-pub(crate) fn theme_index(name: &str) -> usize {
+pub(crate) fn theme_index(names: &[&str], name: &str) -> usize {
     let normalized = normalized_theme_name(name);
-    crate::config::THEME_NAMES
+    names
         .iter()
         .position(|candidate| normalized_theme_name(candidate) == normalized)
         .unwrap_or(0)

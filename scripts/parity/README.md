@@ -41,6 +41,9 @@ core OSC reports are authoritative fixture actions, never screen detection.
 
 The original configuration is read-only and hash-checked after teardown.
 Only its private copies disable update checks and sound. Each environment
+also gets a `backlot/config.toml` with `[theme] source = "herdr"`, so the
+client is compared in the look it shares with the reference, not in its own
+theme. Each environment
 sets `HERDR_DISABLE_SOUND=1` and an owned `TMPDIR`. Startup/connection
 tables, automatic status commands and custom command bindings are rejected,
 except the specifically audited inert Alt+F binding, which scripts never

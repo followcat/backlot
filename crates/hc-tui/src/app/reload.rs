@@ -3,7 +3,7 @@ use super::*;
 
 impl App {
     pub(super) fn reload_config(&mut self) {
-        let loaded = match crate::config::load_live(&self.shell.local_config_path) {
+        let mut loaded = match crate::config::load_live(&self.shell.local_config_path) {
             Ok(loaded) => loaded,
             Err(diagnostics) => {
                 self.shell.startup_config_diagnostic =
@@ -13,6 +13,7 @@ impl App {
             }
         };
         let previous = self.shell.clone();
+        let own_theme = previous.own_theme.overlay(&mut loaded);
         let mut diagnostics = loaded.diagnostics;
         let invalid = |name: &str| {
             loaded
@@ -62,6 +63,7 @@ impl App {
                 self.host_appearance,
             );
         }
+        next.own_theme = own_theme;
         next.startup_config_diagnostic = crate::config::config_diagnostic_summary(&diagnostics);
         self.live = next.keybinds.clone();
         if !self.sidebar_width_manual {

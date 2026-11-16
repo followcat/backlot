@@ -17,6 +17,7 @@ mod m4s4;
 mod m4s5;
 mod mouse_selection;
 mod narrow;
+mod own_theme;
 mod page_keys;
 mod panel;
 mod reload;

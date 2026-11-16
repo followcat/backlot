@@ -83,8 +83,10 @@ rm ~/.local/bin/backlot
 
 backlot leaves little else behind:
 
-- If you changed the theme, status indicators, sound or toast delivery in Settings, those are saved in your Herdr
+- If you changed the status indicators, sound or toast delivery in Settings, those are saved in your Herdr
   config. Other content in that file isn't touched.
+- backlot's own config is `~/.config/backlot/config.toml` (`$XDG_CONFIG_HOME/backlot/config.toml`): the theme you
+  picked, the studio panel's settings and `[hollywood]`.
 - The SSH control socket lives in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>`. It expires by itself, and
   you can delete the directory.
 - The update-check cache is one JSON file in `$XDG_STATE_HOME/hc-tui/` (`~/.local/state/hc-tui/` when XDG is unset).

@@ -30,8 +30,9 @@ impl App {
         self.release_pane_mouse();
         self.settings = Some(SettingsOverlay {
             section: SettingsSection::Theme,
-            selected: theme_index(&self.shell.theme_name),
+            selected: theme_index(self.shell.own_theme.names(), &self.shell.theme_name),
             original_theme_name: self.shell.theme_name.clone(),
+            theme_names: self.shell.own_theme.names(),
             original_palette: self.shell.palette.clone(),
             integrations: Vec::new(),
             loading_integrations: false,
@@ -41,7 +42,9 @@ impl App {
 
     fn selected_index_for_settings_section(&self, section: SettingsSection) -> usize {
         match section {
-            SettingsSection::Theme => theme_index(&self.shell.theme_name),
+            SettingsSection::Theme => {
+                theme_index(self.shell.own_theme.names(), &self.shell.theme_name)
+            }
             SettingsSection::Indicators => indicator_index(self.shell.status_indicators),
             SettingsSection::Sound => usize::from(!self.shell.sound.enabled),
             SettingsSection::Toast => toast_index(self.shell.toast_delivery),
@@ -76,7 +79,7 @@ impl App {
     fn settings_choice_count(&self) -> usize {
         match self.settings.as_ref() {
             Some(settings) => match settings.section {
-                SettingsSection::Theme => crate::config::THEME_NAMES.len(),
+                SettingsSection::Theme => settings.theme_names.len(),
                 SettingsSection::Indicators | SettingsSection::Sound => 2,
                 SettingsSection::Toast => 4,
                 SettingsSection::Integrations => settings.integrations.len(),
@@ -125,7 +128,7 @@ impl App {
         let Some(settings) = self.settings.as_ref() else {
             return;
         };
-        let Some(name) = crate::config::THEME_NAMES.get(settings.selected) else {
+        let Some(name) = settings.theme_names.get(settings.selected) else {
             return;
         };
         self.shell.theme_name = (*name).to_owned();
@@ -151,8 +154,16 @@ impl App {
     /// config the same way `reload-config` does. hc's core has no
     /// `server.reload-config` method; the reload is client-local.
     fn save_settings_edit(&mut self, edit: crate::config::write::ConfigEdit<'_>) -> bool {
-        if let Err(error) = crate::config::write::write_edit_at(&self.shell.local_config_path, edit)
-        {
+        // A theme goes to the file the theme is read from (backlot's own
+        // unless `source = "herdr"`); everything else stays in herdr's.
+        let path = match edit {
+            crate::config::write::ConfigEdit::Theme(_) => self
+                .shell
+                .own_theme
+                .save_path(&self.shell.local_config_path),
+            _ => &self.shell.local_config_path,
+        };
+        if let Err(error) = crate::config::write::write_edit_at(path, edit) {
             self.show_notice("Settings", &error);
             return false;
         }
@@ -169,7 +180,7 @@ impl App {
         let selected = settings.selected;
         match section {
             SettingsSection::Theme => {
-                let Some(name) = crate::config::THEME_NAMES.get(selected).copied() else {
+                let Some(name) = settings.theme_names.get(selected).copied() else {
                     return;
                 };
                 if self.save_settings_edit(crate::config::write::ConfigEdit::Theme(name)) {
