@@ -113,6 +113,29 @@ fn wherdr_workers_and_coordinators_are_never_reaped() {
 }
 
 #[test]
+fn studio_terminals_are_never_reaped() {
+    let now = 10_000;
+    // The stage reads a role's lost/closed record and owns its resume —
+    // the client must not remove any of them ahead of it.
+    for label in ["backlot.role", "backlot.studio"] {
+        let mut term = exited("t1", 0);
+        term.labels.insert(label.into(), "1".into());
+        assert!(!should_reap_exited(&term, now), "{label} must stay");
+    }
+    // The stage and hollywood are excluded on the bare name too, in
+    // case a record ever reaches the inventory without its labels.
+    for name in ["backlot-stage", "bl-hollywood"] {
+        let mut term = exited("t1", 0);
+        term.name = Some(name.into());
+        assert!(!should_reap_exited(&term, now), "{name} must stay");
+    }
+    // An ordinary terminal named nothing in particular still reaps.
+    let mut plain = exited("t1", 0);
+    plain.name = Some("t1".into());
+    assert!(should_reap_exited(&plain, now));
+}
+
+#[test]
 fn a_wherdr_request_failure_keeps_its_launch_window() {
     // wherdr reads `launchFailure` for 2 s after a quick non-zero exit.
     let mut term = exited("t1", 8_000);
@@ -198,6 +221,24 @@ async fn wherdr_records_never_reach_the_queue() {
     app.reap_tx = Some(tx);
     app.reap_exited();
     assert!(rx.try_recv().is_err(), "no wherdr record may be queued");
+    assert!(app.reaped_exited.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn studio_records_never_reach_the_queue() {
+    let mut role = exited("t1", 7);
+    role.labels.insert("backlot.role".into(), "producer".into());
+    role.labels
+        .insert("backlot.studio".into(), "acme-shop".into());
+    let mut stage = exited("t2", 8);
+    stage.name = Some("backlot-stage".into());
+    let mut hollywood = exited("t3", 9);
+    hollywood.name = Some("bl-hollywood".into());
+    let mut app = app_with(vec![role, stage, hollywood]);
+    let (tx, mut rx) = mpsc::channel(8);
+    app.reap_tx = Some(tx);
+    app.reap_exited();
+    assert!(rx.try_recv().is_err(), "no studio record may be queued");
     assert!(app.reaped_exited.lock().unwrap().is_empty());
 }
 

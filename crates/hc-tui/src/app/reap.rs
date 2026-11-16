@@ -1,7 +1,9 @@
 //! Auto-reap of cleanly finished terminals: while both links are
 //! online, an inventory record that is `finished` with reason `exited`
 //! gets one `terminal.rm` per incarnation. `wherdr.run`/`wherdr.task`/
-//! `wherdr.coordinator` labels are never reaped, and a `wherdr-request`
+//! `wherdr.coordinator` labels and studio-owned terminals (the
+//! `backlot.*` labels, `backlot-stage`, `bl-hollywood`) are never
+//! reaped, and a `wherdr-request`
 //! record keeps wherdr's launch-failure read window on a quick non-zero
 //! exit. The worker connects lazily — no exited terminal, no connection
 //! — and a transient failure re-arms the entry so the next publish
@@ -28,15 +30,26 @@ fn now_ms() -> u64 {
 
 /// `true` only for a cleanly exited record nothing else owns: never
 /// `killed`, `signaled`, `holder_lost`, `server_stop`, `host_shutdown`,
-/// `stopped_by_restart`, `live`, or a wherdr worker/coordinator label.
+/// `stopped_by_restart`, `live`, a wherdr worker/coordinator label, or a
+/// studio terminal — roles, the stage and hollywood are the stage's
+/// records to read and remove, not the client's.
 pub(super) fn should_reap_exited(term: &Terminal, now_ms: u64) -> bool {
     if term.state != "finished" || term.reason.as_deref() != Some("exited") {
         return false;
     }
-    for label in ["wherdr.run", "wherdr.task", "wherdr.coordinator"] {
+    for label in [
+        "wherdr.run",
+        "wherdr.task",
+        "wherdr.coordinator",
+        "backlot.role",
+        "backlot.studio",
+    ] {
         if term.labels.contains_key(label) {
             return false;
         }
+    }
+    if matches!(term.name.as_deref(), Some("backlot-stage" | "bl-hollywood")) {
+        return false;
     }
     !term.labels.contains_key("wherdr-request")
         || term.exit_code.unwrap_or(0) == 0
