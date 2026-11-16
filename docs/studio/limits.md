@@ -202,6 +202,9 @@ re-raise one `stall_limit_s` later.
   cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets
   the variable inside shows only `bash x.sh` on the prompt screen.
+- **Hollywood's exact pre-allow list is wired for `claude`, `cursor` and `cmd` only.** On `devin`,
+  `codex` and `opencode` the runner's own permission mode is the gate — the ledger's role rules
+  still refuse what they must, but nothing trims the prompt set at launch.
 - **A cursor role's `cli-config.json` holds the account's `authInfo`** once the agent has run —
   the agent writes it into the role's isolated `roles/<role>/cursor/config/`. The studio state
   directory is private: do not share or publish it.

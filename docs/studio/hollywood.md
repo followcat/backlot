@@ -56,7 +56,9 @@ With a valid section the stage runs **one terminal named `bl-hollywood`** — la
 `backlot.role=hollywood` and never `backlot.studio` — in `<state dir>/hollywood/` with
 `BACKLOT_ROLE=hollywood`, the state dir, and no `BACKLOT_STUDIO`. It is started, adopted after a
 stage restart, and resumed after a loss the way a producer is (three losses in ten minutes is its
-`cannot resume`). Changing the runner starts a new conversation; removing the section closes it.
+`cannot resume` — that give-up holds while the same stage process lives; restarting the stage is
+the way back, and the loss count starts over). Changing the runner starts a new conversation;
+removing the section closes it.
 Its lifecycle lands in Hollywood's own ledger as `role.state` events — the studios' four role
 events folded into one.
 
@@ -179,6 +181,11 @@ prompt: Hollywood's launch pre-allows exactly `backlot status`, `backlot records
 `backlot tell <studio> producer`, `backlot hollywood propose`, `backlot hollywood report` and
 `backlot studio new --dry-run`, so anything else it types stops at a prompt you see. That prompt
 is yours — the stage never answers a prompt in Hollywood's terminal.
+
+The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
+`devin`, `codex` and `opencode` take no command list — there the runner's own permission mode
+(`smart`, `on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
+the ledger.
 
 ## What is not here yet
 
