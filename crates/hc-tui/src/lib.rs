@@ -18,6 +18,7 @@ pub(crate) mod copy_window;
 pub mod core_start;
 pub mod host;
 pub mod input;
+pub mod preferences;
 pub mod project;
 
 pub mod raw_events;
@@ -33,6 +34,7 @@ pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
 pub mod update_check;
+pub(crate) mod waiting;
 mod word_select;
 
 mod mouse_geometry;

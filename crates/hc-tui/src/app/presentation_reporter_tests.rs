@@ -32,7 +32,7 @@ fn update(
     r.ingest(&view.inventory, &[]);
     view.activity_receipts = r.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
-    p.project(&view, &mut projection);
+    p.project(&view, &mut projection, &Default::default());
     (view, projection)
 }
 
@@ -79,7 +79,7 @@ fn complete_withdrawal_removes_agent_rank_and_presentation_but_keeps_pane() {
         serde_json::to_value(view.inventory.get("t1").unwrap().activity.as_ref().unwrap()).unwrap(),
         value["activity"]
     );
-    assert!(!p.acknowledge(&mut projection, "t1", Some(true)));
+    assert!(!p.acknowledge(&mut projection, "t1", Some(true), &Default::default()));
     value["status"] = json!({"state":"idle","app":"fixture-b"});
     value["activity"]["revision"] = json!(7);
     value["activity"]["records"][""] = json!({"state_ordinal":7,"completion_ordinal":null});
@@ -149,7 +149,7 @@ fn same_address_incarnation_baselines_old_ack_and_has_a_new_receipt() {
     a["activity"]["records"][""] = json!({"state_ordinal":5,"completion_ordinal":5});
     let (_, mut done) = update(&mut p, &mut r, vec![a.clone(), b.clone()]);
     assert_eq!(state(&done), AgentStatus::Done);
-    assert!(p.acknowledge(&mut done, "t1", Some(true)));
+    assert!(p.acknowledge(&mut done, "t1", Some(true), &Default::default()));
     a["activity"]["revision"] = json!(6);
     a["activity"]["records"][""] = json!({"state_ordinal":6,"completion_ordinal":6});
     assert_eq!(

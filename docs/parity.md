@@ -737,6 +737,39 @@ Everything else on the compared surfaces still diffs normally.
   navigator checkpoint — each filter, search-without-results, movement
   and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.
+- **Agent-panel sort default and remembered chrome choices.** Deliberate:
+  hc-tui's `[ui] agent_panel_sort` defaults to `priority`, where the
+  reference's configured default is `spaces`; an explicit `spaces`
+  (or the `workspaces` alias) still selects space order. Like the
+  reference, hc-tui persists the manually chosen chrome state —
+  `agent_panel_sort`, `sidebar_width`, `sidebar_section_split`,
+  `sidebar_collapsed`, `collapsed_groups`, `remote_collapsed_groups` —
+  as one JSON file per endpoint under its own state root
+  (`$XDG_STATE_HOME/hc-tui/client-shell/`, else
+  `~/.local/state/hc-tui/client-shell/`), keyed by the local socket
+  path or the remote target+session, written atomically through a temp
+  file and rename. A saved choice wins over config at start and a
+  config reload keeps it; a missing or malformed file is ignored and a
+  failed write is a notice. `collapsed_endpoints` is not persisted —
+  the reference does not persist it either. The file lives in hc-tui's
+  state root, never herdr's.
+- **Waiting status overlay.** Deliberate: the reference has no Waiting
+  state. hc-tui adds `AgentStatus::Waiting` between Working and Idle in
+  display priority — `◌`/`waiting`/peach in every status surface — but
+  never as a core word: it overlays a *shown* `Idle` only while probe
+  evidence says background work outlives the agent's turn (a `-c` tool
+  shell still a descendant of the foreground pid past a ~20 s start
+  window, via one `machine.exec` `ps` listing per machine per cycle —
+  the same shell pid must appear in two of the terminal's own
+  consecutive listings before it counts — and for `claude-code`,
+  `file.read` of
+  `~/.claude/sessions/<pid>.json` with `status` `shell`). Cycles run
+  ~3 s apart while a candidate or verdict is live, ~10 s once a listing
+  finds nothing. Seen, attention, notifications and raw
+  status are untouched; an unseen completion stays `Done` until
+  visited. On a core that offers neither `machine.exec` nor
+  `file.read`, or for agents with no background work in flight, every
+  rendered cell is identical to the reference.
 
 ## Slice 5 — popups, peek and custom commands
 

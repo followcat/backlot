@@ -8,6 +8,17 @@ fn version() -> String {
     format!("v{}", env!("CARGO_PKG_VERSION"))
 }
 
+/// The running version's next patch — `0.1.10` → `0.1.11`: the hint
+/// a real user of this build would see once a release lands.
+fn next_patch() -> String {
+    let current = env!("CARGO_PKG_VERSION");
+    let (head, patch) = current.rsplit_once('.').expect("semver");
+    format!(
+        "{head}.{}",
+        patch.parse::<u64>().expect("numeric patch") + 1
+    )
+}
+
 fn header(b: &TestBackend) -> String {
     screen_lines(b)[0].clone()
 }
@@ -48,13 +59,13 @@ async fn the_expanded_machines_header_shows_the_badge() {
         header.contains(&version()),
         "the running version is missing: {header:?}"
     );
-    assert!(header.contains("↑ v9.9.9"), "the hint shows: {header:?}");
+    assert!(header.contains("↑v9.9.9"), "the hint shows: {header:?}");
 }
 
 #[tokio::test]
 async fn a_known_update_adds_an_accent_hint() {
     let mut app = app_with(&["t1"]);
-    app.update_latest = Some("9.9.9".into());
+    app.update_latest = Some(next_patch());
     let backend = drawn(&mut app, 80, 24);
     let header = header(&backend);
     let hint_x = header.find('↑').expect("the update hint is missing") as u16;
@@ -66,6 +77,19 @@ async fn a_known_update_adds_an_accent_hint() {
     let hit = app.hit_map.update_badge;
     assert!(hit.x <= hint_x && hint_x < hit.x + hit.width && hit.y == 0);
     assert!(!(hit.x <= ver_x && ver_x < hit.x + hit.width));
+}
+
+#[tokio::test]
+async fn a_two_digit_pair_still_shows_the_hint() {
+    // v0.1.10 → v0.1.11-class pairs: both sides carry two-digit
+    // parts and the badge must still fit at the default width.
+    let mut app = app_with(&["t1"]);
+    app.update_latest = Some("0.11.0".into());
+    let backend = drawn(&mut app, 80, 24);
+    let header = header(&backend);
+    assert!(header.contains(&version()), "the version: {header:?}");
+    assert!(header.contains('↑'), "the hint dropped: {header:?}");
+    assert!(!app.hit_map.update_badge.is_empty());
 }
 
 #[tokio::test]
@@ -89,7 +113,7 @@ async fn the_mobile_header_shows_the_badge_when_it_fits() {
     let backend = drawn(&mut app, 50, 16);
     let header = header(&backend);
     assert!(header.contains(&version()), "mobile header: {header:?}");
-    assert!(header.contains("↑ v9.9.9"), "mobile hint: {header:?}");
+    assert!(header.contains("↑v9.9.9"), "mobile hint: {header:?}");
 }
 
 #[tokio::test]

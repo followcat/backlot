@@ -9,12 +9,12 @@ pub enum UpdateChannelConfig {
     Preview,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentPanelSortConfig {
-    #[default]
     #[serde(alias = "workspaces")]
     Spaces,
+    #[default]
     Priority,
 }
 

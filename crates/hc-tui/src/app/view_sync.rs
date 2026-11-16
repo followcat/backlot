@@ -41,7 +41,8 @@ impl App {
             if tab_focus_or_order_changed(&old_projection.snapshot, &self.projection.snapshot) {
                 self.shell_state.reveal_focused_tab = true;
             }
-            self.presentation.project(&self.view, &mut self.projection);
+            self.presentation
+                .project(&self.view, &mut self.projection, &self.waiting);
             self.probe
                 .projections
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -108,6 +109,9 @@ impl App {
                 self.focused = fallback;
             }
         }
+        // Probe bookkeeping precedes the reprojection so a fingerprint
+        // the publish just invalidated cannot paint a stale Waiting.
+        self.tick_waiting(Instant::now());
         self.refresh_projection();
         // Focusing marks the active tab's panes seen — an idle agent
         // reports `Done` only while its workspace stayed background.

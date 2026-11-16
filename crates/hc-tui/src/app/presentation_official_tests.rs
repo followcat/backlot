@@ -42,7 +42,7 @@ fn update(p: &mut Fixture, terminals: Vec<Terminal>, generation: u64) -> Project
     p.receipts.ingest(&view.inventory, &[]);
     view.activity_receipts = p.receipts.clone();
     let mut projection = crate::project::project(&view, Some("t1"));
-    p.project(&view, &mut projection);
+    p.project(&view, &mut projection, &Default::default());
     projection
 }
 fn state(projection: &Projection, id: &str) -> AgentStatus {
@@ -69,9 +69,9 @@ fn unseen_turn_presents_done_and_acknowledge_reads_it() {
     let mut p = Fixture::default();
     let mut projection = update(&mut p, vec![official("t1", "idle", 2, None)], 1);
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
-    assert!(!p.acknowledge(&mut projection, "t1", Some(false)));
+    assert!(!p.acknowledge(&mut projection, "t1", Some(false), &Default::default()));
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
-    assert!(p.acknowledge(&mut projection, "t1", Some(true)));
+    assert!(p.acknowledge(&mut projection, "t1", Some(true), &Default::default()));
     assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
 }
 
@@ -102,7 +102,7 @@ fn a_new_turn_re_arms_and_repaints_the_badge() {
     // Turn 3 arrives while the label still reads 2: genuinely unseen.
     let mut projection = update(&mut p, vec![official("t1", "idle", 3, Some(2))], 2);
     assert_eq!(state(&projection, "t1"), AgentStatus::Done);
-    assert!(p.acknowledge(&mut projection, "t1", Some(true)));
+    assert!(p.acknowledge(&mut projection, "t1", Some(true), &Default::default()));
     assert_eq!(state(&projection, "t1"), AgentStatus::Idle);
 }
 

@@ -12,10 +12,53 @@ impl App {
         let (pane_tx, pane_rx) = mpsc::channel(64);
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
+        let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
+        let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
         let view = View::default();
         let projection = crate::project::project(&view, None);
-        let sidebar_collapsed = shell.sidebar_start_collapsed;
-        let sidebar_width = shell.sidebar_width;
+        // Saved per-endpoint chrome choices win over config; each
+        // `Some` also marks its manual flag so a reload keeps it —
+        // the reference's `ClientShellState::new` preference block.
+        let preferences = shell.preferences.clone();
+        let sidebar_collapsed = preferences
+            .sidebar_collapsed
+            .unwrap_or(shell.sidebar_start_collapsed);
+        let (min_width, max_width) = crate::config::validated_sidebar_bounds(
+            shell.sidebar_min_width,
+            shell.sidebar_max_width,
+        )
+        .unwrap_or((18, 36));
+        let sidebar_width = preferences
+            .sidebar_width
+            .unwrap_or(shell.sidebar_width)
+            .clamp(min_width, max_width);
+        let sidebar_section_split = preferences
+            .sidebar_section_split
+            .filter(|split| split.is_finite())
+            .map(|split| split.clamp(0.1, 0.9))
+            .unwrap_or(0.5);
+        let mut shell = shell;
+        if let Some(sort) = preferences.agent_panel_sort {
+            shell.agent_panel_sort = sort;
+        }
+        let mut remote_collapsed_groups = std::collections::HashMap::new();
+        for saved in preferences.remote_collapsed_groups {
+            if saved.profile_id.is_empty() {
+                continue;
+            }
+            remote_collapsed_groups
+                .entry(ClientEndpointId::Remote(saved.profile_id))
+                .or_insert_with(std::collections::HashSet::new)
+                .extend(saved.collapsed_groups);
+        }
+        let collapsed_groups = preferences
+            .collapsed_groups
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        let sidebar_collapsed_manual = preferences.sidebar_collapsed.is_some();
+        let sidebar_width_manual = preferences.sidebar_width.is_some();
+        let sidebar_section_split_manual = preferences.sidebar_section_split.is_some();
+        let agent_panel_sort_manual = preferences.agent_panel_sort.is_some();
         let mouse_capture = shell.mouse_capture;
         App {
             notice: None,
@@ -68,13 +111,17 @@ impl App {
             projection,
             navigate_target: None,
             shell_state: ShellState {
+                collapsed_groups,
+                remote_collapsed_groups,
                 sidebar_collapsed,
-                sidebar_section_split: 0.5,
+                sidebar_section_split,
                 ..ShellState::default()
             },
             sidebar_width,
-            sidebar_width_manual: false,
-            agent_panel_sort_manual: false,
+            sidebar_width_manual,
+            sidebar_collapsed_manual,
+            sidebar_section_split_manual,
+            agent_panel_sort_manual,
             chrome_drag: None,
             pane_mouse_gesture: None,
             selection: None,
@@ -141,6 +188,13 @@ impl App {
             seen_rx,
             seen_req_rx: Some(seen_req_rx),
             seen_task: None,
+            waiting: Default::default(),
+            waiting_tx,
+            waiting_res_tx,
+            waiting_rx,
+            waiting_req_rx: Some(waiting_req_rx),
+            waiting_task: None,
+            waiting_due: None,
             reap_tx: None,
             reap_task: None,
             reaped_exited: Default::default(),

@@ -65,8 +65,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         .filter(|id| app.displayed_pane(id).is_some_and(|p| p.has_fresh_paint()))
         .collect::<Vec<_>>();
     for pane_id in painted {
-        app.presentation
-            .acknowledge(&mut app.projection, &pane_id, app.outer_focused);
+        app.presentation.acknowledge(
+            &mut app.projection,
+            &pane_id,
+            app.outer_focused,
+            &app.waiting,
+        );
     }
     let collapsed = app.shell_state.sidebar_collapsed;
     let layout = app.shell.layout_config().layout(

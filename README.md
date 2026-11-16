@@ -21,6 +21,11 @@ terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
 - A release check on startup tells you when a newer hc-tui is out — one cached request a day, disabled with
   `update.version_check = false` or `HC_TUI_NO_UPDATE_CHECK=1`. `hc-tui --upgrade` installs it.
 
+Agents can also show `◌ waiting`: their own turn is quiet, but work they started is still running — a background
+`-c` shell under the agent's process tree, or, for Claude Code, a `shell` status in its own session file. The check
+runs every few seconds through the core (`machine.exec`, `file.read`) and never changes the agent's reported
+status, marks anything seen, or raises a notification.
+
 | Mouse selection | Settings |
 |---|---|
 | ![Text selected with the mouse in a pane](docs/images/selection.png) | ![The settings overlay with its list of themes](docs/images/settings.png) |

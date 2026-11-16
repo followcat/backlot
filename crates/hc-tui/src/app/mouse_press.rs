@@ -23,6 +23,8 @@ impl App {
         }
         if contains(hits.sidebar_toggle, point) {
             self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
+            self.sidebar_collapsed_manual = true;
+            self.persist_chrome_preferences();
             return;
         }
         if contains(hits.sidebar_divider, point) {
@@ -34,6 +36,7 @@ impl App {
             if double {
                 self.sidebar_width = self.shell.sidebar_width;
                 self.sidebar_width_manual = false;
+                self.persist_chrome_preferences();
             } else {
                 self.chrome_drag = Some(ChromeDrag::SidebarWidth);
                 self.set_sidebar_width_from_column(point.0);
