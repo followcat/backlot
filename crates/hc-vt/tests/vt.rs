@@ -311,3 +311,42 @@ fn clipboard_writes_complete_once_and_queries_disclose_nothing() {
         }
     }
 }
+
+/// "Scroll to the tail" by absolute row (`total - len`) degrades to
+/// `scroll_to_row(0)` while the scrollback is empty — and row 0 pins
+/// the buffer top, so output that lands after freezes the head on
+/// screen. `scroll_to_bottom` is the unconditional form.
+#[test]
+fn scroll_to_bottom_never_pins_the_top() {
+    // The trap: `scroll_to_row(0)` on an empty-scrollback VT reads as
+    // "top", not "bottom" — a pinned viewport stays at the head while
+    // fresh output pushes rows into scrollback.
+    let mut pinned = vt(10, 3);
+    pinned.feed(b"prompt> ");
+    pinned.scroll_to_row(0);
+    for i in 0..10 {
+        pinned.feed(format!("line {i}\r\n").as_bytes());
+    }
+    let bar = pinned.scrollbar().unwrap();
+    assert_eq!(bar.offset, 0, "scroll_to_row(0) pinned the top");
+
+    // The same keystroke through `scroll_to_bottom` keeps following.
+    let mut free = vt(10, 3);
+    free.feed(b"prompt> ");
+    free.scroll_to_bottom();
+    for i in 0..10 {
+        free.feed(format!("line {i}\r\n").as_bytes());
+    }
+    let bar = free.scrollbar().unwrap();
+    assert_eq!(bar.offset, bar.total - bar.len, "must follow the tail");
+
+    // And it unpins a viewport parked at the top.
+    let mut parked = vt(10, 3);
+    for i in 0..10 {
+        parked.feed(format!("line {i}\r\n").as_bytes());
+    }
+    parked.scroll_to_row(0);
+    parked.scroll_to_bottom();
+    let bar = parked.scrollbar().unwrap();
+    assert_eq!(bar.offset, bar.total - bar.len, "must unpin the top");
+}
