@@ -6,7 +6,10 @@ measurements.
 
 ## What real agents have run
 
-Claude Code is the only runner that has been through the whole loop. It ran four times on a
+Two casts have been through the whole loop: Claude Code in every role, and a mixed cast of
+Devin, cursor-agent and cmd.
+
+Claude Code ran four times on a
 small sample repository — `claude-haiku-5-5` at low effort, on `hc` from the followcat fork,
 five or six sessions each; Claude Code 2.1.319 for the first three, 2.1.321 for the fourth. The
 first, third and fourth runs finished the loop, from the requirement through plan, tasks,
@@ -14,11 +17,24 @@ deliveries and reviews to an integration branch; the second stopped on a stage b
 before the third. Between them the runs covered permission prompts answered by the director and
 by the person, a denied command, two actors at once, and merging two task branches into the
 integration branch. The fourth stopped the hc core twice: once while both actors were working,
-once while the director was merging. What has not run on real agents: stall detection, the
-at-cap notice and going on after a block.
+once while the director was merging.
 
-Codex, Devin, OpenCode and cursor-agent were launched and their session IDs captured —
-`runners.md` says exactly what was measured for each. Per runner:
+The mixed cast ran twice on a small sample repository, on `hc` from the followcat fork: Devin
+(`swe-2-max`) as the director, cursor-agent (`auto`) as the writer, cmd 1.88.5
+(`deepseek/deepseek-v4.1-flash`) as the actors, and the producer on `fake`. The first run
+(2026-11-13) had one actor and went from the requirement to an accepted, merged task, leaving
+only the user's `finish` owed. The second (2026-11-14) had two actors working at once: 323
+ledger events in 1 h 48 min, two deliveries, the stage's own check on each, two accepted
+reviews, the merge, both reports and `studio.finished`. In both, the director answered the
+actors' prompts with `backlot approve`, the person answered the director's and the writer's,
+and every attention raised was cleared by the end of the second run. Neither run had a stall
+to recover from or a rate limit to retry, and the producer was never a real agent.
+
+What has not run on real agents: stall detection, the at-cap notice, going on after a block,
+the rate-limit retry, and everything of Hollywood.
+
+Codex and OpenCode were launched and their session IDs captured, no more — `runners.md` says
+exactly what was measured for each runner. Per runner:
 
 - **Claude Code** — launch, resume, the base `--allowedTools` pair, the approval keys (`enter`/`esc`)
   and the work-state markers all measured on 2.1.319. The per-role git and check `Bash` rules added
@@ -28,7 +44,10 @@ Codex, Devin, OpenCode and cursor-agent were launched and their session IDs capt
   from an older capture and its approval keys are mapped from its picker, unmeasured.
 - **Devin 3000.12.32** — launched; its permission prompt and `enter`/`esc` keys were observed
   live. `devin list`'s exact JSON field names are as documented, not re-measured, and its
-  resume ignores `--prompt-file` (the stage sends the prompt after the session opens).
+  resume ignores `--prompt-file` (the stage sends the prompt after the session opens). As the
+  director of both mixed-cast runs it created and cast the tasks, approved the actors' prompts,
+  reviewed and merged; its session id was found within seconds and its state came from the
+  structured status it reports. Every one of its own prompts needed the person.
 - **OpenCode 2.2.5** — launched; its replies were not confirmed. Its working marker is guessed,
   not measured, and a recorded approval sends it **no key at all** — there is none mapped, so
   the attention stays open for the user regardless of the decision.
@@ -50,10 +69,24 @@ Codex, Devin, OpenCode and cursor-agent were launched and their session IDs capt
   user's running Cursor IDE. `runner_version` used to ask `cursor --version` and record the IDE's
   version; it now asks the launch program (`cursor-agent --version`), cached per program. A
   denied command is retried by the runner, so deny sends no key and the attention stays open for
-  the user.
+  the user. As the writer of both mixed-cast runs it published the plan and the acceptance list.
+  It reports no structured status, so its state is read from the screen; in both runs its
+  `Write to this file?` picker was not seen as a prompt and was answered by hand in its
+  terminal. The stage now reads every picker of that shape as a prompt (`runners.md`), which has
+  not been through a real run since.
+- **cmd 1.88.5** (Command Code) — measured live, then the actor of both mixed-cast runs. The
+  stage writes `.commandcode/settings.json` (mode 600) into the actor's worktree: `backlot`, the
+  git subcommands an actor needs and the declared check ran with no prompt; reads outside the
+  worktree and file edits prompted, and the director answered them. `enter` takes the picker's
+  run-once option; `esc` ends the turn. cmd writes its session file only when its first turn
+  starts, minutes late when that turn waits on a prompt: its discovery window is 240 s, and the
+  attention raised at that mark cleared itself when the id was found (17 s and 53 s later in
+  the second run). cmd has **no per-role isolation**: its transcripts and `file-history/` land
+  under your real `~/.commandcode`; `auth.json`, `config.json` and `mcp.json` there were
+  byte-identical after both runs.
 
 Stall detection has only run on the fake runner. Restart recovery has run on Claude Code only;
-whether Codex, Devin, OpenCode or cursor-agent pick a stopped core's session back up is untested.
+whether Codex, Devin, OpenCode, cursor-agent or cmd pick a stopped core's session back up is untested.
 A held role whose terminal is lost restarts through the same resume path — unmeasured on a real
 core.
 
