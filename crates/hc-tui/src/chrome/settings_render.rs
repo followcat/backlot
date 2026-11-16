@@ -157,7 +157,8 @@ pub(crate) fn render_settings_overlay(
         SettingsSection::Theme => {
             let visible = usize::from(content.height);
             let scroll = settings.selected.saturating_sub(visible.saturating_sub(1));
-            for (visible_index, (index, name)) in crate::config::THEME_NAMES
+            for (visible_index, (index, name)) in settings
+                .theme_names
                 .iter()
                 .enumerate()
                 .skip(scroll)

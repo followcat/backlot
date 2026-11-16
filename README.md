@@ -8,7 +8,8 @@ desktop, and want the Herdr TUI on top of `hc`:
 - tabs, split panes, zoom and keyboard copy mode; `Ctrl+G` locks the keyboard so every key goes to the
   program;
 - mouse selection that copies on release (through OSC 52, so your terminal has to allow it);
-- Herdr's key bindings, theme and other settings, read from your existing Herdr config;
+- Herdr's key bindings and other settings, read from your existing Herdr config, and a
+  [theme of its own](docs/theme.md);
 - spaces and tabs read from the same `herdr-app` document the desktop app uses;
 - local use, or remote use over plain SSH — where `Ctrl+V` pastes an image from your local clipboard
   into the agent's machine — with the session staying on the server.

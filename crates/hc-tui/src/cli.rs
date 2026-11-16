@@ -181,14 +181,18 @@ fn shared_attach(
 pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
-    let loaded = crate::config::load(&config_path);
+    let mut loaded = crate::config::load(&config_path);
+    // backlot's own `[theme]` goes over herdr's (`own_theme.rs`).
+    let own_theme =
+        crate::own_theme::Shell::at(crate::panel::config_path(env)).overlay(&mut loaded);
     let live = loaded.config.live_keybinds();
-    let shell = crate::chrome::ClientShellConfig::from_config(
+    let mut shell = crate::chrome::ClientShellConfig::from_config(
         &loaded.config,
         None,
         crate::config::config_diagnostic_summary(&loaded.diagnostics),
         config_path,
     );
+    shell.own_theme = own_theme;
     let params = WatchParams {
         traversal: Some(crate::project::agent_traversal),
         // The `backlot` summary document is this core's only — remote

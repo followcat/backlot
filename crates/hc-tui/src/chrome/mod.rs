@@ -99,6 +99,8 @@ pub struct ClientShellConfig {
     pub show_agent_labels_on_pane_borders: bool,
     pub startup_config_diagnostic: Option<String>,
     pub local_config_path: PathBuf,
+    /// backlot's own `[theme]`: its file, and whether it is in force.
+    pub own_theme: crate::own_theme::Shell,
     /// `keys.remote_image_paste` resolved once — `None` disables the
     /// image-paste key trigger (empty or invalid value, diagnosed at
     /// load).
@@ -189,6 +191,7 @@ impl ClientShellConfig {
             show_agent_labels_on_pane_borders: ui.show_agent_labels_on_pane_borders,
             startup_config_diagnostic: diagnostic,
             local_config_path,
+            own_theme: crate::own_theme::Shell::default(),
             remote_image_paste_key: config.remote_image_paste_key().ok().flatten(),
         }
     }

@@ -122,6 +122,8 @@ class SoundSafety(unittest.TestCase):
             copy_config(config, env)
             copied = tomllib.loads((Path(env['XDG_CONFIG_HOME'])/'herdr/config.toml').read_text())
             self.assertIs(copied['ui']['sound']['enabled'], False)
+            own = tomllib.loads((Path(env['XDG_CONFIG_HOME'])/'backlot/config.toml').read_text())
+            self.assertEqual(own, {'theme': {'source': 'herdr'}})
 
 class HostProbeOrder(unittest.TestCase):
     def test_primary_da_does_not_overtake_mode_and_keyboard_replies(self):

@@ -61,7 +61,8 @@ key = "y"   # the chord tail after the prefix
 A missing file means defaults. A malformed file means defaults plus one notice carrying only
 the line and column — file contents never reach the screen. A `key` that does not parse falls
 back to `y` with one notice naming the file; the invalid value is never echoed. herdr's own
-`config.toml` is read exactly as before.
+`config.toml` is read exactly as before, except for its `[theme]`: the same file holds backlot's
+own ([Theme](../theme.md)).
 
 ## Behaviour notes
 

@@ -16,9 +16,11 @@ connections on the same login.
 The default prefix is Ctrl+B. `q` detaches, `w` opens workspace
 navigation, `b` toggles the sidebar and `?` opens searchable keybind help.
 Navigation uses the configured movement keys, Enter to select and Escape
-to cancel. Herdr's configuration supplies the prefix, bindings, theme,
-sidebar, tab bar and pane chrome. Ctrl+B then
-Shift+R, or the mobile reload-config menu, rereads this client's herdr config.
+to cancel. Herdr's configuration supplies the prefix, bindings,
+sidebar, tab bar and pane chrome; the theme is backlot's own
+([Theme](theme.md)). Ctrl+B then
+Shift+R, or the mobile reload-config menu, rereads this client's herdr config
+and backlot's own.
 Bindings, theme, chrome and allocated geometry update immediately. Invalid
 sections keep their current values; valid siblings still reload. A malformed
 or unreadable file keeps the current configuration and shows its diagnostic.

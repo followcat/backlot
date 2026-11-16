@@ -97,6 +97,12 @@ def copy_config(original, env):
     target.parent.mkdir()
     target.write_text(text)
     target.chmod(0o600)
+    # backlot has a theme of its own; parity compares it with the look it
+    # shares with the reference, so it reads herdr's [theme] here.
+    own = Path(env['XDG_CONFIG_HOME']) / 'backlot/config.toml'
+    own.parent.mkdir()
+    own.write_text('[theme]\nsource = "herdr"\n')
+    own.chmod(0o600)
 
 
 class Owned:
