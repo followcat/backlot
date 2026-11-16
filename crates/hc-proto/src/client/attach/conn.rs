@@ -146,6 +146,7 @@ impl Conn {
                 tx: ctrl,
                 pending: pump::Pending::default(),
                 next_id: AtomicI64::new(1),
+                probing: AtomicBool::new(false),
             }),
             channels: Arc::new(Mutex::new(Channels::default())),
             attach_calls: Arc::new(AttachCalls::default()),

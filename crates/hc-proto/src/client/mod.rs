@@ -34,7 +34,7 @@ use crate::hello::{Capabilities, CoreInfo, HelloResult};
 use crate::transport::{self, Guard, ReadHalf, WriteHalf};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -237,6 +237,7 @@ impl Client {
                 tx,
                 pending: pump::Pending::default(),
                 next_id: AtomicI64::new(1),
+                probing: AtomicBool::new(false),
             }),
             guard: Mutex::new(guard),
             tasks: Mutex::new(Vec::new()),

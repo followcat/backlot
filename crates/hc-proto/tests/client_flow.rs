@@ -119,10 +119,22 @@ async fn timeout_releases_capacity_and_late_replies_are_dropped() {
         tokio::time::sleep(Duration::from_millis(200)).await;
         core.reply(&held["id"], json!({"value": null, "version": 0}))
             .await;
-        // Then serve the next call normally.
-        let next = core.read_request().await;
-        core.reply(&next["id"], json!({"terminals": [], "hidden_finished": 0}))
-            .await;
+        // Then serve the liveness probe and the recovery call, in
+        // whichever order they arrive.
+        for _ in 0..2 {
+            let req = core.read_request().await;
+            match req["method"].as_str().unwrap() {
+                "machine.list" => core.reply(&req["id"], json!({"machines": []})).await,
+                "terminal.list" => {
+                    core.reply(
+                        &req["id"],
+                        json!({"terminals": [], "hidden_finished": 0}),
+                    )
+                    .await;
+                }
+                other => panic!("unexpected request {other}"),
+            }
+        }
         core
     });
     let client = client_open(read, write).await;
@@ -135,15 +147,21 @@ async fn timeout_releases_capacity_and_late_replies_are_dropped() {
     .await
     .unwrap_err();
     assert!(matches!(err, CallError::Timeout));
-    // The pending entry is gone and capacity was released.
-    assert_eq!(client.in_flight(), 0);
     // The late reply is dropped safely; the next call still works.
     let list = timeout(client.terminal_list(ListParams::default()))
         .await
         .unwrap();
-    assert_eq!(client.in_flight(), 0);
     assert!(list.terminals.is_empty());
+    // The pending entry was released and the liveness probe the
+    // timeout spawned frees its own slot too.
+    timeout(async {
+        while client.in_flight() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
     timeout(server).await.unwrap();
+    assert_eq!(client.in_flight(), 0);
 }
 
 #[tokio::test]
@@ -273,8 +291,13 @@ async fn enqueue_waits_inside_the_call_deadline() {
         .await
         .unwrap_err();
     assert!(matches!(err, CallError::Timeout), "{err:?}");
-    // Its pending entry is gone; the 66 blocked callers keep their slots.
-    assert_eq!(client.in_flight(), 66);
+    // Its pending entry is gone; the 66 blocked callers keep their
+    // slots — the spawned liveness probe may still be in flight too.
+    assert!(
+        (66..=67).contains(&client.in_flight()),
+        "freed slot, live blockers, at most the probe: {}",
+        client.in_flight()
+    );
     for call in calls {
         call.abort();
     }

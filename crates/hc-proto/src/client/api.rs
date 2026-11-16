@@ -61,7 +61,14 @@ impl Client {
                 reason,
             });
         }
-        call::wire_call(&self.shared.wire, method, params, deadline).await
+        let result = call::wire_call(&self.shared.wire, method, params, deadline).await;
+        // A wire that silently died — a blackholed path — reports
+        // timeouts without ever hanging up. Probe it once before it is
+        // handed out again; a slow but living core keeps its connection.
+        if matches!(result, Err(CallError::Timeout)) {
+            call::liveness_probe(&self.shared);
+        }
+        result
     }
 
     /// Why `method` cannot run, or `None` when it can: `hello`'s list first,
