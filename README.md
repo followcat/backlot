@@ -5,7 +5,7 @@ it into tasks and casts agents onto them, each in its own git worktree; deliveri
 go on a record; and a panel shows who is doing what. Every role is an ordinary terminal you can open and type
 into.
 
-![backlot running a studio: the sidebar lists the current studio's cast with each person's title and model, the producer explains where the work stands, and the studio panel on the right shows one bordered block per studio, its people and what needs attention](docs/images/backlot.png)
+![backlot running two studios: each studio is a space in the sidebar with a tab per role, the cast below lists each person's title and model, the producer explains where the work stands, and the studio panel on the right shows one block per studio, its people and what needs attention](docs/images/backlot.png)
 
 *A demo studio on the test runner, with invented projects and agent output.*
 
@@ -73,13 +73,15 @@ curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install
 
 The script verifies the archive against the release's `sha256sums.txt` and installs to `~/.local/bin` without
 sudo. Pin a release with `BACKLOT_VERSION=v…`, skip the core install with `BACKLOT_SKIP_CORE=1`, or fetch an
-archive from the [Releases page](https://github.com/followcat/backlot/releases) and check it yourself. Upgrade
-by running the script again; uninstall by deleting the binary. Details: [docs/install.md](docs/install.md).
+archive from the [Releases page](https://github.com/followcat/backlot/releases) and check it yourself. The client
+shows its version in the top-left corner and, once a newer release is out, an arrow with that version; upgrade
+with `backlot --upgrade`, which runs the script again. Uninstall by deleting the binary. Details:
+[docs/install.md](docs/install.md).
 
-**Releases lag `main`.** The latest one, v0.1.0, is the first studio release: it has the loop on Claude Code,
-Codex, Devin and OpenCode. The cursor-agent and Command Code runners, stage-run checks, limits and budgets,
-several studios on one core, Hollywood and the `backlot` theme came after it. Until the next release,
-[build from source](#build-from-source) to get what this page describes.
+**v0.2.0 is the studio-first release.** The client opens on your studios, or on a page that creates one, and
+every studio is its own space with a tab per role. Since v0.1.0 it also gained the cursor-agent and Command Code
+runners, stage-run checks, limits and budgets, several studios on one core, Hollywood, the `backlot` theme and the
+update check. `main` can be ahead of the latest release: [build from source](#build-from-source) for the newest.
 
 ## Run a studio
 
@@ -131,6 +133,8 @@ backlot stage start
 Or let the client do it: open `backlot` with no studio and you land on the opening page — press `n` and a
 wizard asks for the repository, the studio name and the cast (it drafts one from the agent CLIs installed on
 the machine), then offers to start the stage.
+
+![The opening page of backlot with no studio yet: n creates a studio, s starts the stage, q detaches, and backlot --plain runs it as a plain multiplexer](docs/images/opening.png)
 
 **3. Open the client and talk to the producer:**
 
