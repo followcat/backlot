@@ -64,21 +64,24 @@ impl Pane {
 
     /// The terminal+role currently wanted; `None` detaches. A spec
     /// change clears ALL pending input — bytes typed for terminal A
-    /// never flush into terminal B.
+    /// never flush into terminal B, and input queued under one role
+    /// never flushes under another: queued items are bound to the
+    /// wire they were typed for.
     pub fn want(&mut self, spec: Option<Spec>) {
         let current = self.spec().cloned();
         if current == spec {
             return;
         }
+        self.pending.clear();
+        self.pending_bytes = 0;
         // A spec change retires the retained screen only when a *different*
         // terminal follows — re-attaching the same one keeps its last
         // paint until fresh bytes land.
         if spec.as_ref().map(|s| &s.terminal) != current.as_ref().map(|s| &s.terminal) {
             self.vt = None;
+            self.render_cache = None;
             self.incarnation = None;
             self.inventory_incarnation = None;
-            self.pending.clear();
-            self.pending_bytes = 0;
             self.close_error = None;
             self.dropped_drain = None;
         }
@@ -133,6 +136,7 @@ impl Pane {
         {
             self.teardown(false);
             self.vt = None;
+            self.render_cache = None;
             self.initial = None;
             self.discard_pending_incarnation();
             self.spawn(spec, true, 0);
@@ -151,7 +155,7 @@ impl Pane {
                 live.core_grid = grid;
                 self.vt_grid = grid;
                 if let Some(vt) = &mut self.vt
-                    && !live.await_paint
+                    && !live.paint_gate.await_paint()
                     && let Err(e) = vt.resize(grid.0, grid.1)
                 {
                     live.vt_broken = Some(format!("resize: {e}"));
@@ -223,17 +227,27 @@ impl Pane {
         }
     }
 
-    /// The next instant the pane needs the loop awake (a Down retry).
+    /// The next instant the pane needs the loop awake: a Down retry,
+    /// or a live wire's armed paint fallback deadline.
     pub fn next_wake(&self) -> Option<Instant> {
         match &self.state {
             State::Down { retry_at, .. } => Some(*retry_at),
+            State::Live(live) => [
+                live.paint_gate.wake(),
+                live.repaint.as_ref().map(repaint::Repaint::deadline),
+            ]
+            .into_iter()
+            .flatten()
+            .min(),
             _ => None,
         }
     }
 
     /// Fires a due retry: a fresh attach for the same spec — `resumed`,
-    /// since nothing about the user's ownership changed.
-    pub fn fire_retry(&mut self, now: Instant) {
+    /// since nothing about the user's ownership changed. On a live
+    /// wire, due paint fallback deadlines release instead. `true` when
+    /// a `Down` pane moved to `Opening` or a paint fallback released.
+    pub fn fire_retry(&mut self, now: Instant) -> bool {
         if let State::Down {
             spec,
             retry_at,
@@ -244,7 +258,9 @@ impl Pane {
         {
             let (spec, attempts) = (spec.clone(), *attempts);
             self.spawn(spec, true, attempts);
+            return true;
         }
+        self.fire_paint_fallback(now)
     }
 
     /// The retained screen, if any — the draw layer clips/pads it.
@@ -253,16 +269,80 @@ impl Pane {
     }
 
     pub(crate) fn has_fresh_paint(&self) -> bool {
-        matches!(&self.state, State::Live(live) if !live.await_paint && live.repaint.is_none())
+        matches!(&self.state, State::Live(live) if !live.paint_gate.await_paint() && live.repaint.is_none())
             && self.vt.is_some()
+    }
+
+    /// Why a paint wait released without `?9001`, when it did.
+    pub fn paint_fallback(&self) -> Option<&str> {
+        match &self.state {
+            State::Live(live) => live.paint_fallback,
+            _ => None,
+        }
     }
 
     pub fn vt(&mut self) -> Option<&mut Vt> {
         self.vt.as_mut()
     }
 
+    /// The retained screen handed to a new owner: the VT, its `initial`
+    /// baseline and its painted-surface cache move together so the
+    /// receiver keeps the last paint — cursor shape, palette overrides,
+    /// warm cells and all — while its own attach opens. `None` when
+    /// there is no screen to hand over.
+    pub(crate) fn take_retained(
+        &mut self,
+    ) -> Option<(
+        Vt,
+        Option<hc_vt::Colors>,
+        Option<render_cache::PaneRenderCache>,
+    )> {
+        self.vt
+            .take()
+            .map(|vt| (vt, self.initial.take(), self.render_cache.take()))
+    }
+
+    /// Accepts a screen `take_retained` produced: it stays up until
+    /// this pane's first authoritative paint replaces it.
+    pub(crate) fn seed_retained(
+        &mut self,
+        vt: Vt,
+        initial: Option<hc_vt::Colors>,
+        cache: Option<render_cache::PaneRenderCache>,
+    ) {
+        if let Ok(grid) = vt.size() {
+            self.vt_grid = grid;
+        }
+        self.initial = initial;
+        self.render_cache = cache;
+        self.vt = Some(vt);
+    }
+
+    /// The live VT and the surface cache it paints through, mutably
+    /// paired so the draw layer updates both inside one borrow. A
+    /// cache without a VT can never be valid — it clears with it.
+    pub(crate) fn vt_and_cache(
+        &mut self,
+    ) -> (
+        Paint,
+        Option<(&mut Vt, &mut Option<render_cache::PaneRenderCache>)>,
+    ) {
+        if self.vt.is_none() {
+            self.render_cache = None;
+            return (self.paint(), None);
+        }
+        (
+            self.paint(),
+            Some((
+                self.vt.as_mut().expect("checked above"),
+                &mut self.render_cache,
+            )),
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn install_vt(&mut self, vt: Vt) {
+        self.render_cache = None;
         self.vt = Some(vt);
     }
 
@@ -294,6 +374,9 @@ impl Pane {
                 };
                 if self.has_size_mismatch() {
                     s.push_str(" · size may be owned by another viewer — click the size notice to take control");
+                }
+                if let Some(why) = self.paint_fallback() {
+                    s.push_str(&format!(" · {why}"));
                 }
                 if let Some(why) = &live.vt_broken {
                     s.push_str(&format!(" · {why}"));

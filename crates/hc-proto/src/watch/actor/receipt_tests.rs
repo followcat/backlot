@@ -42,7 +42,7 @@ fn event(seq: u64, id: &str, kind: &str, data: Value) -> ServerNotification {
 #[test]
 fn coalesced_publication_keeps_a20_b_a10_without_an_intermediate_view_read() {
     let mut actor = actor();
-    actor.inventory.replace(1, vec![term("a20", "a", 20)]);
+    Arc::make_mut(&mut actor.inventory).replace(1, vec![term("a20", "a", 20)]);
     actor.publish();
     actor.notification(Ok(event(2, "b", "created", json!(term("b", "b", 1)))));
     actor.notification(Ok(event(3, "a10", "created", json!(term("a10", "a", 10)))));
@@ -102,12 +102,10 @@ fn coalesced_publication_keeps_a20_b_a10_without_an_intermediate_view_read() {
 fn snapshot_input_order_survives_the_address_map_and_unchanged_reconnect() {
     let mut actor = actor();
     let terms = vec![term("z", "z", u64::MAX), term("a", "a", 1)];
-    actor.inventory.replace(5, terms.clone());
+    Arc::make_mut(&mut actor.inventory).replace(5, terms.clone());
     actor.publish();
     actor.generation += 1;
-    actor
-        .inventory
-        .replace(0, terms.into_iter().rev().collect());
+    Arc::make_mut(&mut actor.inventory).replace(0, terms.into_iter().rev().collect());
     actor.publish();
     let view = actor.view.lock().unwrap().clone();
     assert_eq!(
@@ -122,7 +120,7 @@ fn snapshot_input_order_survives_the_address_map_and_unchanged_reconnect() {
 #[test]
 fn duplicate_malformed_and_stale_events_cannot_allocate_a_receipt() {
     let mut actor = actor();
-    actor.inventory.replace(5, vec![term("a", "a", 1)]);
+    Arc::make_mut(&mut actor.inventory).replace(5, vec![term("a", "a", 1)]);
     actor.publish();
     actor.notification(Ok(event(4, "z", "created", json!(term("z", "z", 1)))));
     actor.notification(Ok(event(6, "a", "status", json!({"status":null}))));
@@ -138,10 +136,8 @@ fn duplicate_malformed_and_stale_events_cannot_allocate_a_receipt() {
     );
     // A malformed stream is closed. Recovery installs a fresh subscription's
     // inventory, rather than accepting a notification from the dead stream.
-    actor.inventory = Inventory::default();
-    actor
-        .inventory
-        .replace(7, vec![term("a", "a", 1), term("z", "z", 1)]);
+    actor.inventory = Arc::new(Inventory::default());
+    Arc::make_mut(&mut actor.inventory).replace(7, vec![term("a", "a", 1), term("z", "z", 1)]);
     actor.generation += 1;
     actor.publish();
     let view = actor.view.lock().unwrap().clone();
@@ -157,7 +153,7 @@ fn duplicate_malformed_and_stale_events_cannot_allocate_a_receipt() {
 #[test]
 fn unseen_restarted_reporter_and_its_later_activity_receive_receipts() {
     let mut actor = actor();
-    actor.inventory.replace(1, vec![]);
+    Arc::make_mut(&mut actor.inventory).replace(1, vec![]);
     actor.publish();
     actor.notification(Ok(event(2, "a", "restarted", json!(term("a", "a", 1)))));
     assert_eq!(actor.view.lock().unwrap().activity_receipts.rank("a"), 1);
@@ -174,9 +170,7 @@ fn unseen_restarted_reporter_and_its_later_activity_receive_receipts() {
 #[test]
 fn fresh_static_fallback_after_subscription_loss_updates_and_prunes_receipts() {
     let mut actor = actor();
-    actor
-        .inventory
-        .replace(1, vec![term("a", "a", 1), term("b", "b", 1)]);
+    Arc::make_mut(&mut actor.inventory).replace(1, vec![term("a", "a", 1), term("b", "b", 1)]);
     actor.link = Link::Online;
     actor.publish();
     actor.notification(Ok(ServerNotification::Heartbeat(
@@ -207,8 +201,7 @@ fn fresh_static_fallback_after_subscription_loss_updates_and_prunes_receipts() {
 #[test]
 fn current_reporter_withdrawal_is_ingested_before_a_coalesced_reacquisition() {
     let mut actor = actor();
-    actor
-        .inventory
+    Arc::make_mut(&mut actor.inventory)
         .replace(1, vec![term("a", "host-a", 1), term("b", "host-b", 1)]);
     actor.publish();
     let mut active = serde_json::to_value(term("a", "host-a", 2)).unwrap();

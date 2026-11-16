@@ -139,6 +139,7 @@ impl App {
                 no_parent: true,
                 no_notify: true,
                 keep: true,
+                rm: true,
                 env: program_env(),
                 labels: BTreeMap::from([
                     ("herdr.space".into(), raw_space.clone()),
@@ -203,6 +204,7 @@ impl App {
                 no_parent: true,
                 no_notify: true,
                 keep: true,
+                rm: true,
                 env: program_env(),
                 labels: BTreeMap::from([
                     ("herdr.space".into(), raw_space.clone()),

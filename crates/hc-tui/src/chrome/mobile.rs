@@ -13,6 +13,9 @@ use super::snapshot::{ClientEndpointStatus, ClientShellSnapshot, ClientShellWork
 use super::status::{AgentStatus, status_color, status_icon};
 
 pub(super) const MOBILE_BUTTON_WIDTH: u16 = 10;
+/// The narrowest status area that still reads — below it the version
+/// badge stays undrawn rather than squeezing the workspace label.
+const MOBILE_STATUS_MIN: u16 = 8;
 
 pub(crate) struct MobileItem {
     pub(crate) lines: Vec<Line<'static>>,
@@ -60,6 +63,7 @@ pub(crate) fn render_mobile_header(
     snapshot: &ClientShellSnapshot,
     config: &super::ClientShellConfig,
     hits: &mut ShellHitMap,
+    update_latest: Option<&str>,
 ) {
     if area.is_empty() {
         return;
@@ -75,9 +79,27 @@ pub(crate) fn render_mobile_header(
     );
     hits.mobile_switch = button;
     let status_width = button.x.saturating_sub(area.x).saturating_sub(1);
-    let status = Rect::new(area.x, area.y, status_width, area.height);
+    // The version badge claims a right slot only when the status keeps
+    // a readable width — the hint drops first, then the whole badge.
+    let full = super::render::version_badge_width(update_latest);
+    let bare = super::render::version_badge_width(None);
+    let badge_w = [full, bare]
+        .into_iter()
+        .find(|w| status_width >= w + 1 + MOBILE_STATUS_MIN)
+        .unwrap_or(0);
+    let status = Rect::new(
+        area.x,
+        area.y,
+        status_width.saturating_sub(if badge_w > 0 { badge_w + 1 } else { 0 }),
+        area.height,
+    );
     render_header_status(buffer, status, snapshot, config);
     render_header_button(buffer, button, snapshot, config);
+    if badge_w > 0 {
+        let slot = Rect::new(status.right().saturating_add(1), area.y, badge_w, 1);
+        hits.update_badge =
+            super::render::put_version_badge(buffer, slot, slot.x, update_latest, palette);
+    }
 }
 
 fn render_header_status(

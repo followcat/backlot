@@ -43,7 +43,7 @@ fn pending(app: &mut App) {
 /// Inventory publish carrying every live record, then reconcile.
 fn publish(app: &mut App, terms: Vec<hc_proto::terminal::Terminal>) {
     let seq = app.view.inventory.seq() + 1;
-    app.view.inventory.replace(seq, terms);
+    app.view.inventory_mut().replace(seq, terms);
     app.reconcile_published_view();
 }
 

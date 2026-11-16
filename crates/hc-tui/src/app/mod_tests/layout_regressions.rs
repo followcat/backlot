@@ -54,16 +54,16 @@ async fn zoom_always_renders_the_terminal_receiving_input() {
     app.refresh_projection();
     let tab = app.projection.snapshot.focused_tab_id.clone().unwrap();
     let key = crate::project::layout_key(None, &tab);
-    app.view.documents.insert(
+    app.view.documents_mut().insert(
         hc_proto::watch::DocKey {
             machine: None,
             name: "hc-tui".into(),
         },
-        hc_proto::watch::Document {
+        Arc::new(hc_proto::watch::Document {
             value: serde_json::json!({"schema":1,"tabs":{key:{"zoomed":"t2"}}}),
             version: 1,
             ..Default::default()
-        },
+        }),
     );
     app.refresh_projection();
     app.pane = pane::Pane::new(
@@ -87,7 +87,7 @@ async fn inventory_replacement_retires_cached_paint_before_delayed_old_close() {
     let old = app.observers["t1"].generation();
     let mut terminal = app.view.inventory.get("t1").unwrap().clone();
     terminal.pid = Some(999);
-    app.view.inventory.replace(1, vec![terminal]);
+    app.view.inventory_mut().replace(1, vec![terminal]);
     app.sync_observers();
     assert_ne!(app.observers["t1"].generation(), old);
     assert!(!app.observers["t1"].has_fresh_paint());
@@ -223,6 +223,49 @@ async fn size_leases_stay_as_long_as_their_observer_is_cached() {
     assert_eq!(leases(&app), ["t2", "t3"]);
 }
 
+/// The real loop's order on a tab switch: `focus_pane` retargets the pane
+/// at once, the frame draws, and only then `sync_observers` opens the
+/// observer for the tab just left. The focused terminal had already
+/// dropped its own observer once its wire painted. On that first frame
+/// the old terminal is not shown, has no observer and is no longer the
+/// target, yet it is still in the observer LRU: its lease must hold, or
+/// the core falls back to the headless size and the program redraws on
+/// every switch.
+#[tokio::test]
+async fn leaving_a_tab_keeps_the_lease_through_the_first_frame() {
+    let mut app = app_with_spaces(&[("t1", "work"), ("t3", "other")]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    app.focus_pane("t1".into());
+    app.sync_observers();
+    // No core acknowledges layout writes here; settle them by hand.
+    app.pending_actions = 0;
+    // After the focus change: it marks the frame dirty at the real now.
+    let now = Instant::now();
+    let draw = |app: &mut App, term: &mut Terminal<TestBackend>, tick: u64| {
+        let now = now + std::time::Duration::from_secs(tick);
+        app.sched.mark_dirty(now);
+        app.maybe_draw(term, now).unwrap();
+    };
+    draw(&mut app, &mut term, 0);
+    let lease = app.size_leases["t1"].generation();
+    // What `pane_event` does once the focused wire has a fresh paint.
+    app.observers.remove("t1");
+
+    app.focus_pane("t3".into());
+    draw(&mut app, &mut term, 1);
+    assert_eq!(
+        app.size_leases.get("t1").map(|l| l.generation()),
+        Some(lease),
+        "the lease of the tab just left must survive the switch's first frame"
+    );
+
+    app.sync_observers();
+    draw(&mut app, &mut term, 2);
+    assert_eq!(app.size_leases["t1"].generation(), lease);
+}
+
 /// While the cached observer repaints for a new size, the attach that just
 /// opened has nothing to show yet. The old screen stays up until one has.
 #[tokio::test]
@@ -295,16 +338,16 @@ async fn zoomed_tab_keeps_covered_pane_lease_at_its_last_allocation() {
         app.maybe_draw(term, now).unwrap();
     };
     let doc = |app: &mut App, value: serde_json::Value, version: u64| {
-        app.view.documents.insert(
+        app.view.documents_mut().insert(
             hc_proto::watch::DocKey {
                 machine: None,
                 name: "hc-tui".into(),
             },
-            hc_proto::watch::Document {
+            Arc::new(hc_proto::watch::Document {
                 value,
                 version,
                 ..Default::default()
-            },
+            }),
         );
         app.reconcile_published_view();
     };
@@ -379,7 +422,7 @@ async fn dead_focus_falls_back_inside_its_tab_not_the_global_first() {
         .iter()
         .map(|id| app.view.inventory.get(id.as_ref()).unwrap().clone())
         .collect();
-    app.view.inventory.replace(2, terms);
+    app.view.inventory_mut().replace(2, terms);
     app.reconcile_published_view();
 
     assert_eq!(app.focused.as_deref(), Some("t2"));

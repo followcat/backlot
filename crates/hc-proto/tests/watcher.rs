@@ -6,9 +6,13 @@ mod common;
 use common::attach::DEADLINE;
 use common::fakecore::DuplexCore;
 use common::minimal_terminal;
-use common::watcher::{await_view, serve_rpc, serve_subscribe, spawn_fake, watcher};
+use common::watcher::{
+    await_view, held_fixture, reply, serve_rpc, serve_subscribe, spawn_fake, watcher,
+};
 use hc_proto::watch::{BoxFuture, DocKey, Link};
 use serde_json::{Value, json};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -239,6 +243,86 @@ async fn missed_replaces_and_refetches_documents() {
         .unwrap();
     assert!(params["on"].is_null(), "refetched on the local core");
     assert!(got_doc.try_recv().is_err(), "extra refetches");
+    fake.abort();
+}
+
+/// Consecutive publishes share unchanged state through `Arc`: an
+/// inventory event replaces only the inventory — the whole documents
+/// map keeps its pointer; a `DocDone` replaces only the fetched
+/// document — the inventory and every untouched document keep theirs.
+#[tokio::test]
+async fn publishes_share_unchanged_inventory_and_documents() {
+    // `doc_a` fetches park only once `hold` is armed — the first
+    // epoch's document reads must complete before the lane freezes.
+    let hold_armed = Arc::new(AtomicBool::new(false));
+    let hold: Arc<dyn Fn(&Value) -> bool + Send + Sync> = {
+        let armed = Arc::clone(&hold_armed);
+        Arc::new(move |params| armed.load(Ordering::SeqCst) && params["name"] == "doc_a")
+    };
+    let (watcher, mut held, replies, events_tx, _machines, fake) =
+        held_fixture(vec!["doc_a".into(), "doc_b".into()], vec![], hold);
+    let key_a = DocKey {
+        machine: None,
+        name: "doc_a".into(),
+    };
+    let key_b = DocKey {
+        machine: None,
+        name: "doc_b".into(),
+    };
+    let v1 = await_view(&watcher, |v| {
+        v.link == Link::Online
+            && v.documents.len() == 2
+            && v.documents.values().all(|d| !d.fetching)
+    })
+    .await;
+
+    // An inventory-only event replaces the inventory `Arc` while the
+    // whole documents map — outer map included — keeps its pointer.
+    events_tx
+        .send((
+            "event".into(),
+            json!({"seq": 2, "type": "title", "terminal": "t7", "data": {"title": "built"}}),
+        ))
+        .await
+        .unwrap();
+    let v2 = await_view(&watcher, |v| v.inventory.seq() == 2).await;
+    assert!(!Arc::ptr_eq(&v1.inventory, &v2.inventory));
+    assert!(Arc::ptr_eq(&v1.documents, &v2.documents));
+
+    // A `doc` event publishes before the refetch it queues: the shared
+    // documents map still keeps its pointer.
+    hold_armed.store(true, Ordering::SeqCst);
+    events_tx
+        .send((
+            "event".into(),
+            json!({"seq": 3, "type": "doc", "data": {"name": "doc_a", "version": 4}}),
+        ))
+        .await
+        .unwrap();
+    let v3 = await_view(&watcher, |v| v.inventory.seq() == 3).await;
+    assert!(!Arc::ptr_eq(&v2.inventory, &v3.inventory));
+    assert!(Arc::ptr_eq(&v2.documents, &v3.documents));
+    let req = tokio::time::timeout(DEADLINE, held.recv())
+        .await
+        .expect("the doc event refetched nothing")
+        .unwrap();
+    assert_eq!(req["params"]["name"], "doc_a");
+
+    // The `DocDone` publish replaces only `doc_a`'s `Document`: the
+    // inventory and `doc_b` keep their exact `Arc`s.
+    replies
+        .send(reply(&req, json!({"value": {"fresh": 1}, "version": 4})))
+        .await
+        .unwrap();
+    let v4 = await_view(&watcher, |v| {
+        v.version > v3.version && v.documents[&key_a].version == 4 && !v.documents[&key_a].fetching
+    })
+    .await;
+    assert!(Arc::ptr_eq(&v3.inventory, &v4.inventory));
+    assert!(Arc::ptr_eq(&v3.documents[&key_b], &v4.documents[&key_b]));
+    assert!(!Arc::ptr_eq(&v3.documents[&key_a], &v4.documents[&key_a]));
+    assert!(!Arc::ptr_eq(&v3.documents, &v4.documents));
+    assert_eq!(v4.documents[&key_a].value["fresh"], 1);
     fake.abort();
 }
 

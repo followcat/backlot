@@ -735,3 +735,52 @@
 - Gates: fmt, all-target clippy with denied warnings and the full suite
   pass on every commit (38c93aa, 33797c8, 4b9c46d). The scratch-core e2e
   remains ignored until `HC_TUI_TEST_CORE` names a pinned binary.
+## Dressed float frame, update check and --upgrade (branches feat/float-ui-polish, feat/float-ui-2)
+
+- The persistent float now draws a dressed frame: a rich left title
+  `float <binding> — <tab> — <program>` and a right hint
+  `<binding> hide · esc sends to program`, dropped entirely when it
+  cannot fit inside the rounded corners; the title ellipsizes with
+  `truncate_end` on tight layouts. Focused floats take the palette
+  accent border; a keyboard-locked visible float dims to
+  `surface_dim`, the pane backdrop is dimmed with `Modifier::DIM`,
+  and a staggered shadow clipped to the pane surface runs under the
+  right and bottom edges — beneath both bottom corners so the frame
+  shows no seam. Ephemeral popups keep their original square frame
+  and semantics unchanged.
+- At startup one asynchronous check resolves `releases/latest`
+  through the redirect (`curl -fsSIL -w %{url_effective}`) at most
+  once per 24-hour cache window under
+  `$XDG_STATE_HOME/hc-tui/update-check.json`. A newer version raises
+  a dismissible notice; `hc-tui --upgrade` runs the official
+  installer and asks for a restart. Opt out with
+  `update.version_check = false` or `HC_TUI_NO_UPDATE_CHECK=1`.
+- Tests: buffer-level assertions cover the title text and
+  truncation, the hint's presence and disappearance, focused and
+  keyboard-locked border states, shadow offsets clipped to the pane
+  surface, rounded corners, the dim's exact region and the
+  ephemeral-popup regression; update-check tests cover cache
+  freshness, malformed state files and the opt-outs.
+- Gates: fmt, all-target clippy with denied warnings and the full
+  suite pass on every commit (cc6b070, 991e6eb, fd2471e, 2cf14ec).
+
+## v0.1.5: version badge in the top-left chrome (branch feat/version-badge)
+
+- The sidebar header's `spaces` row now carries the running `v`
+  version right-aligned in `overlay0`, short of the divider column.
+  Once the startup update check reports a newer release, an accent
+  ` ↑ v<latest>` hint joins it — the hint drops first under width
+  pressure, then the whole badge. The report's `latest` persists on
+  the app, so the hint outlives the one-shot toast; clicking the hint
+  re-raises the existing update notice while the version text itself
+  stays inert. The mobile header draws the same badge in a reserved
+  right slot only while the status keeps a readable width.
+- `update_check::Notice` became a struct `{title, body, latest}`; the
+  check's timing, cache, opt-outs and failure silence are unchanged,
+  and the badge reuses the one report — no extra request.
+- Tests: buffer-level assertions cover the version's presence, the
+  hint's accent and absence, the drop order, the divider column, the
+  mobile fit and skip, and the hit rect covering only the hint; a unit
+  test keeps `latest` through quiet follow-up reports.
+- Gates: fmt, all-target clippy with denied warnings and the full
+  suite pass on every commit (4475fe3, merged as 4aee402).

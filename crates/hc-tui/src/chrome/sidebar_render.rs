@@ -13,7 +13,7 @@ use ratatui::{
 use super::palette::Palette;
 use super::render::{
     ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, put_right_text,
-    put_segment, put_text,
+    put_segment, put_text, put_version_badge,
 };
 use super::snapshot::{ClientEndpointId, ClientShellSnapshot, ClientShellWorkspace};
 use super::spans::{expanded_sidebar_sections, resolved_token_spans, sidebar_section_divider_rect};
@@ -51,6 +51,21 @@ pub(crate) fn render_sidebar(
         Style::default()
             .fg(palette.overlay0)
             .add_modifier(Modifier::BOLD),
+    );
+    // The version badge shares the header row, right-aligned short of
+    // the divider column and never touching the `spaces` label.
+    let badge_row = Rect::new(
+        workspace_area.x,
+        workspace_area.y,
+        workspace_area.width.saturating_sub(2),
+        1,
+    );
+    hits.update_badge = put_version_badge(
+        buffer,
+        badge_row,
+        workspace_area.x.saturating_add(8),
+        state.update_latest,
+        palette,
     );
 
     let entries = workspace_entries(snapshot, state.collapsed_groups);

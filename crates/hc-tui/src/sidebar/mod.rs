@@ -114,7 +114,7 @@ pub(crate) mod fixture {
             machines: Some(machines),
             ..Default::default()
         };
-        view.inventory.replace(1, terms);
+        view.inventory_mut().replace(1, terms);
         view
     }
 }

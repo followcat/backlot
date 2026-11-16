@@ -76,7 +76,9 @@ async fn a_click_on_another_row_disarms_a_pending_reopen() {
 #[tokio::test]
 async fn the_wheel_scrolls_the_body() {
     let mut app = app_with_panel_doc();
-    app.view.documents.insert(doc_key(), overflow_doc());
+    app.view
+        .documents_mut()
+        .insert(doc_key(), overflow_doc().into());
     app.area = (120, 12);
     open_panel(&mut app);
     draw_to(&mut app, 120, 12);
@@ -90,7 +92,9 @@ async fn the_wheel_scrolls_the_body() {
 #[tokio::test]
 async fn the_scrollbar_drags_the_body() {
     let mut app = app_with_panel_doc();
-    app.view.documents.insert(doc_key(), overflow_doc());
+    app.view
+        .documents_mut()
+        .insert(doc_key(), overflow_doc().into());
     app.area = (120, 12);
     open_panel(&mut app);
     draw_to(&mut app, 120, 12);
@@ -130,12 +134,13 @@ async fn the_wheel_reaches_the_bottom_when_rows_are_two_lines_tall() {
             "state": "live", "work": "waiting", "doing": "busy",
         }));
     }
-    app.view.documents.insert(
+    app.view.documents_mut().insert(
         doc_key(),
         Document {
             value,
             ..Document::default()
-        },
+        }
+        .into(),
     );
     app.area = (120, 10);
     open_panel(&mut app);
@@ -215,12 +220,13 @@ async fn the_animation_deadline_only_arms_while_something_works() {
     for role in doc["studios"][0]["roles"].as_array_mut().unwrap() {
         role["work"] = serde_json::Value::Null;
     }
-    app.view.documents.insert(
+    app.view.documents_mut().insert(
         doc_key(),
         Document {
             value: doc,
             ..Document::default()
-        },
+        }
+        .into(),
     );
     draw_to(&mut app, 120, 24);
     assert!(app.panel_anim_deadline.is_none(), "idle panel arms nothing");

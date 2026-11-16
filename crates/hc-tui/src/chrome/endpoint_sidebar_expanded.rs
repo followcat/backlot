@@ -12,7 +12,7 @@ use super::endpoints::collapsed_groups_for_endpoint;
 use super::palette::Palette;
 use super::render::{
     MachineDiagnostics, MachineHit, ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS,
-    WorkspaceHit, display_width, put_right_text, put_text,
+    WorkspaceHit, display_width, put_right_text, put_text, put_version_badge,
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_workspace_rows,
@@ -57,6 +57,21 @@ pub(crate) fn render_expanded(
         Style::default()
             .fg(palette.overlay0)
             .add_modifier(Modifier::BOLD),
+    );
+    // The version badge shares the header row, right-aligned short of
+    // the divider column and never touching the `machines` label.
+    let badge_row = Rect::new(
+        workspace_area.x,
+        workspace_area.y,
+        workspace_area.width.saturating_sub(2),
+        1,
+    );
+    hits.update_badge = put_version_badge(
+        buffer,
+        badge_row,
+        workspace_area.x.saturating_add(10),
+        state.update_latest,
+        palette,
     );
 
     let empty_collapsed_groups = HashSet::new();

@@ -13,6 +13,24 @@ pub enum Role {
     Observe,
 }
 
+/// VT scrollback budgets for the future copy mode: the focused viewer
+/// keeps 256 KiB, a cached observer 64 KiB — off-tab LRU panes
+/// outnumber visible panes, so their cap is tighter. libghostty prunes
+/// scrollback at page granularity with a ~2-standard-page floor, so
+/// today both budgets land on the same effective bound; the observer
+/// cap records the tighter policy and takes effect if the floor moves.
+pub(crate) const ACTIVE_SCROLLBACK: usize = 256 * 1024;
+pub(crate) const OBSERVER_SCROLLBACK: usize = 64 * 1024;
+
+/// The VT scrollback budget for a role. `Role::SizeLease` never builds
+/// a VT — its DATA is consumed inside the attach actor.
+pub(crate) fn scrollback_limit(role: Role) -> usize {
+    match role {
+        Role::Observe => OBSERVER_SCROLLBACK,
+        Role::Active | Role::SizeLease => ACTIVE_SCROLLBACK,
+    }
+}
+
 /// Which terminal, in which role. Size/resume are per-attach details.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spec {

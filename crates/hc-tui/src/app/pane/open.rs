@@ -53,9 +53,9 @@ impl Pane {
             writer,
             core_grid,
             negotiated,
-            await_paint: true,
+            paint_gate: paint_gate::PaintGate::new(),
+            paint_fallback: None,
             paint_started: false,
-            paint_tail: Vec::new(),
             repaint: None,
             // A reply can report another viewer's current grid. If our
             // allocation changed while opening, that does not update the

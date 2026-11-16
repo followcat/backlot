@@ -21,14 +21,20 @@
 //!   under, and encode only under the fresh post-paint VT.
 
 mod close;
+mod down;
 mod held;
 mod notices;
 mod open;
+mod pacing;
+mod paint_gate;
 mod pending_lifecycle;
 mod pending_queue;
+mod render_cache;
 mod repaint;
 mod tasks;
 
+pub(crate) use render_cache::PaneRenderCache;
+#[allow(unused_imports)]
 pub use tasks::attach_task;
 
 use std::collections::VecDeque;
@@ -82,11 +88,14 @@ struct Live {
     /// ordered RESIZE-before-paint. Without it the core grid comes
     /// from inventory sizes (legacy: no cross-connection ordering).
     negotiated: bool,
-    /// No DATA yet on this attach: the retained screen still shows and
-    /// input waits — encoding under the old VT's modes would be wrong.
-    await_paint: bool,
+    /// First-paint gate: the retained screen still shows and input
+    /// waits until `?9001` or the bounded fallback releases it —
+    /// encoding under the old VT's modes would be wrong.
+    paint_gate: paint_gate::PaintGate,
+    /// Why a paint wait released without `?9001`, when it did — a
+    /// status-line diagnostic, never the red error card.
+    paint_fallback: Option<&'static str>,
     paint_started: bool,
-    paint_tail: Vec<u8>,
     repaint: Option<repaint::Repaint>,
     /// The size we last successfully asked the core for.
     sent_size: Option<(u16, u16)>,
@@ -149,10 +158,8 @@ const OUT_QUEUE: usize = 64;
 /// Pending human input bound, in items and bytes.
 const PENDING_MAX_ITEMS: usize = 128;
 const PENDING_MAX_BYTES: usize = crate::app::input::MAX_INPUT_BYTES;
-/// VT scrollback kept for the future copy mode.
-const SCROLLBACK: usize = 256 * 1024;
 /// First-paint history lines requested on a fresh attach.
-const HISTORY: u64 = 200;
+pub(crate) const HISTORY: u64 = 200;
 
 /// A swapped-out attach parked to drain forwarded input leases: the
 /// program saw presses on this wire, so physical key-up releases must
@@ -240,6 +247,9 @@ pub struct Pane {
     /// The VT/screen — retained across Down and re-Opening for the same
     /// spec; `None` on Idle or after a spec change.
     vt: Option<Vt>,
+    /// The surface `vt` last painted into — moves with the VT so a
+    /// retained screen keeps its warm cache across pane handoffs.
+    render_cache: Option<render_cache::PaneRenderCache>,
     /// The core grid the retained VT renders, when known.
     vt_grid: (u16, u16),
     /// Allocated inner size as last reported by the layout.
@@ -271,6 +281,8 @@ pub struct Pane {
     /// Text the program copied (OSC 52) since the app last drained.
     /// `pub(crate)` so the app-level byte test can seed it.
     pub(crate) pending_clipboard: Vec<Vec<u8>>,
+    /// Off-tab pacing; the watched flag is `off_tab && fresh paint`.
+    pacing: pacing::Pacing,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -279,7 +291,7 @@ pub struct Pane {
 /// `ghostty_default_fg/bg` + `PaletteOverrides`: the VT's defaults at
 /// creation (detects a program `OSC 10/11/4` change) and the host's
 /// reported defaults (detects "unchanged = transparent over host").
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Paint {
     pub initial_fg: Option<Rgb>,
     pub initial_bg: Option<Rgb>,
@@ -288,19 +300,6 @@ pub struct Paint {
     pub initial_palette: Option<[Rgb; 256]>,
     pub host_fg: Option<Rgb>,
     pub host_bg: Option<Rgb>,
-}
-
-/// The byte charge of a pending item — keys count their real payload
-/// (generated text + raw sequence + base), so the 256KiB bound still
-/// limits the bytes actually retained.
-fn charge(item: &Pending) -> usize {
-    match item {
-        Pending::Control(_) => 0,
-        Pending::Mouse(_, _) => 32,
-        Pending::Key(k) => 32 + k.text_commit.as_deref().map_or(0, str::len) + k.vt_bytes.len(),
-        Pending::Paste(t) | Pending::Encoded(t, ..) => t.len(),
-        Pending::Prepared(bytes, key) => bytes.len() + charge(&Pending::Key(key.clone())),
-    }
 }
 
 impl Pane {
@@ -317,6 +316,7 @@ impl Pane {
             ev,
             open,
             vt: None,
+            render_cache: None,
             vt_grid: (80, 24),
             allocated: (80, 24),
             outer_focus: None,
@@ -331,6 +331,7 @@ impl Pane {
             initial: None,
             pending_bells: 0,
             pending_clipboard: Vec::new(),
+            pacing: pacing::Pacing::default(),
             attaches: 0,
         }
     }
@@ -352,7 +353,7 @@ impl Pane {
     /// live program output. An opening or reattaching pane is `false` —
     /// and clears captures on the paint that lands.
     pub fn is_painted(&self) -> bool {
-        matches!(&self.state, State::Live(live) if !live.await_paint)
+        matches!(&self.state, State::Live(live) if !live.paint_gate.await_paint())
     }
 }
 

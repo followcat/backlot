@@ -55,12 +55,16 @@ impl App {
             body: body.into(),
             deadline: Instant::now() + Duration::from_secs(3),
         });
+        self.sched.mark_dirty(Instant::now());
     }
 
-    pub(super) fn expire_notice(&mut self, now: Instant) {
+    /// `true` when the visible notice cleared — the card un-paints.
+    pub(super) fn expire_notice(&mut self, now: Instant) -> bool {
         if self.notice.as_ref().is_some_and(|n| now >= n.deadline) {
             self.notice = None;
+            return true;
         }
+        false
     }
 
     /// Installs the one-shot `hc server start` report — `cli` calls it
@@ -110,13 +114,16 @@ impl App {
     /// (up to date, offline, opted out) just disarms the arm.
     pub(super) fn on_update_check(&mut self, report: Option<crate::update_check::Notice>) {
         self.update_check = None;
-        if let Some((title, body)) = report {
-            self.show_notice(&title, &body);
+        if let Some(notice) = report {
+            self.update_latest = Some(notice.latest);
+            self.show_notice(&notice.title, &notice.body);
         }
     }
 }
 
-pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {
+/// `true` when a notice or notification card painted — the draw pass
+/// counts it as overlay damage over the pane surfaces.
+pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
     app.take_control_hit = Rect::default();
     app.notification_hit = Rect::default();
     let pane = app.pane.notice();
@@ -192,4 +199,5 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) {
             )
         };
     }
+    notice.is_some() || app.notifications.visible.is_some()
 }

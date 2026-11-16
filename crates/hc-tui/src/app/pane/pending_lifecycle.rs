@@ -35,7 +35,7 @@ impl Pane {
             Pending::Paste(_) | Pending::Mouse(_, _) | Pending::Control(_) => true,
         });
         let removed = before - self.pending.len();
-        self.pending_bytes = self.pending.iter().map(charge).sum();
+        self.pending_bytes = self.pending.iter().map(pending_queue::charge).sum();
         if removed > 0 {
             self.dropped_input += removed as u64;
             self.input_rejection =

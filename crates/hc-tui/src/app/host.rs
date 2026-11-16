@@ -25,7 +25,16 @@ impl App {
         }
     }
 
-    pub fn set_host_facts(&mut self, facts: HostFacts) {
+    /// `true` when any measured fact moved — default colors, palette
+    /// entries or cell pitch all feed painted cells. An unchanged
+    /// bundle skips the pane/observer/lease re-seed entirely.
+    pub fn set_host_facts(&mut self, facts: HostFacts) -> bool {
+        if self.host_facts == facts {
+            return false;
+        }
+        self.probe
+            .host_facts
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if !self.host_appearance_explicit
             && self.host_facts.theme.background != facts.theme.background
             && let Some(color) = facts.theme.background
@@ -41,38 +50,63 @@ impl App {
         {
             pane.set_host_facts(facts.clone());
         }
+        true
     }
 
-    pub(super) fn on_host_reply(&mut self, reply: HostReply) {
-        match reply {
-            HostReply::KeyboardFlags(flags) if !self.probe_device_attributes => {
-                self.probe_keyboard_flags = Some(flags);
+    /// `true` when the batch changed appearance or measured facts —
+    /// what the frame paints. Capability answers (keyboard flags,
+    /// pixel-mouse, device attributes) feed wire modes, not pixels.
+    /// The whole batch folds into one facts application, so the ~258
+    /// replies of the startup probe storm re-seed pane VTs once;
+    /// appearance ordering and the probe guards are per reply, exactly
+    /// as if each had arrived alone.
+    pub(super) fn on_host_replies<I: IntoIterator<Item = HostReply>>(
+        &mut self,
+        replies: I,
+    ) -> bool {
+        let appearance = self.host_appearance;
+        let mut facts = self.host_facts.clone();
+        let mut query_colors = false;
+        for reply in replies {
+            match reply {
+                HostReply::KeyboardFlags(flags) if !self.probe_device_attributes => {
+                    self.probe_keyboard_flags = Some(flags);
+                }
+                HostReply::PrimaryDeviceAttributes => self.probe_device_attributes = true,
+                HostReply::SgrPixelMouse(supported) => self.host_sgr_pixel_mouse = Some(supported),
+                HostReply::Dark | HostReply::Light => {
+                    self.host_appearance_explicit = true;
+                    self.apply_appearance(if reply == HostReply::Light {
+                        HostAppearance::Light
+                    } else {
+                        HostAppearance::Dark
+                    });
+                    // A color-scheme report also refreshes the defaults/
+                    // palette — batched into one re-query per batch.
+                    query_colors = true;
+                }
+                HostReply::Background(color) if !self.host_appearance_explicit => {
+                    self.apply_appearance(inferred_appearance(color));
+                }
+                _ => {}
             }
-            HostReply::PrimaryDeviceAttributes => self.probe_device_attributes = true,
-            HostReply::SgrPixelMouse(supported) => self.host_sgr_pixel_mouse = Some(supported),
-            HostReply::Dark | HostReply::Light => {
-                self.host_appearance_explicit = true;
-                self.apply_appearance(if reply == HostReply::Light {
-                    HostAppearance::Light
-                } else {
-                    HostAppearance::Dark
-                });
-                // A color-scheme report also refreshes the defaults/palette,
-                // even when UI theme switching was disabled by configuration.
-                let _ = (self.host_control)(crate::host::color_query_sequence().as_bytes());
-            }
-            HostReply::Background(color) if !self.host_appearance_explicit => {
-                self.apply_appearance(inferred_appearance(color));
-            }
-            _ => {}
+            crate::host::apply_reply(reply, &mut facts);
+        }
+        if query_colors {
+            let _ = (self.host_control)(crate::host::color_query_sequence().as_bytes());
         }
         self.host_reports_key_releases = self.probe_device_attributes
             && self
                 .probe_keyboard_flags
                 .is_some_and(|flags| flags & 1 != 0);
-        let mut facts = self.host_facts.clone();
-        crate::host::apply_reply(reply, &mut facts);
-        self.set_host_facts(facts);
+        let facts_changed = self.set_host_facts(facts);
+        appearance != self.host_appearance || facts_changed
+    }
+
+    /// `true` when the reply changed appearance or measured facts —
+    /// the single-reply case of `on_host_replies`.
+    pub(super) fn on_host_reply(&mut self, reply: HostReply) -> bool {
+        self.on_host_replies(std::iter::once(reply))
     }
 }
 
@@ -105,6 +139,34 @@ mod tests {
             shell,
             Arc::new(super::super::Probe::default()),
         )
+    }
+
+    /// The startup probe storm (OSC 10/11 plus OSC 4;0..=255) folds
+    /// into one facts application: pane VTs re-seed once, and a
+    /// capability-only batch never touches the surface facts.
+    #[tokio::test]
+    async fn host_reply_batch_applies_facts_once_and_skips_capability_noop() {
+        use std::sync::atomic::Ordering;
+        let mut app = app(&crate::config::Config::default());
+        let rgb = |v: u8| hc_vt::Rgb { r: v, g: v, b: v };
+        let storm = std::iter::once(HostReply::Foreground(rgb(1)))
+            .chain(std::iter::once(HostReply::Background(rgb(2))))
+            .chain((0u16..=255).map(|i| HostReply::Palette(i as u8, rgb(i as u8))));
+        assert!(app.on_host_replies(storm));
+        assert_eq!(app.probe.host_facts.load(Ordering::Relaxed), 1);
+        assert!(
+            app.host_facts.theme.palette.iter().all(Option::is_some),
+            "the storm left palette slots unset"
+        );
+        // Capability answers feed wire modes, not painted facts: the
+        // unchanged bundle must not re-seed a single pane.
+        assert!(!app.on_host_replies([
+            HostReply::KeyboardFlags(1),
+            HostReply::PrimaryDeviceAttributes,
+            HostReply::SgrPixelMouse(true),
+        ]));
+        assert_eq!(app.probe.host_facts.load(Ordering::Relaxed), 1);
+        assert!(app.host_reports_key_releases);
     }
 
     #[tokio::test]

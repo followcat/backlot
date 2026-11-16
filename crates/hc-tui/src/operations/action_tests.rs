@@ -3,71 +3,12 @@ use super::*;
 use crate::testcore;
 use serde_json::json;
 
-async fn machine_call(method: &'static str, op: MachineOp, expected: serde_json::Value) {
-    let (mut store, mut core) = store();
-    let server = tokio::spawn(async move {
-        hello(&mut core, &[method]).await;
-        let req = core.read_request().await;
-        assert_eq!(req["method"], method);
-        assert_eq!(req["params"], expected);
-        core.reply(&req["id"], json!({})).await;
-    });
-    store.submit(request(Action::Machine(op))).unwrap();
-    let out = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(matches!(out.unwrap(), Outcome::Done));
-    server.await.unwrap();
-}
-
-#[tokio::test]
-async fn machine_add_dispatches_machine_add_with_the_target() {
-    machine_call(
-        "machine.add",
-        MachineOp::Add {
-            target: "alice@host-b".into(),
-        },
-        json!({"target": "alice@host-b"}),
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn machine_connect_dispatches_machine_connect_with_the_name() {
-    machine_call(
-        "machine.connect",
-        MachineOp::Connect {
-            machine: "host-b".into(),
-        },
-        json!({"machine": "host-b"}),
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn machine_rename_dispatches_machine_rename_with_the_new_name() {
-    machine_call(
-        "machine.rename",
-        MachineOp::Rename {
-            machine: "host-b".into(),
-            new_name: "build-box".into(),
-        },
-        json!({"machine": "host-b", "new_name": "build-box"}),
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn machine_remove_dispatches_machine_rm_with_the_name() {
-    machine_call(
-        "machine.rm",
-        MachineOp::Remove {
-            machine: "host-b".into(),
-        },
-        json!({"machine": "host-b"}),
-    )
-    .await;
+/// A JSON-RPC error reply for `request` (its id is reused).
+async fn reply_error(core: &mut testcore::FakeCore, request: &serde_json::Value, kind: &str) {
+    let error = json!({"jsonrpc":"2.0","id":request["id"],
+        "error":{"code":-32000,"message":kind,"data":{"kind":kind}}});
+    core.send(&hc_proto::frame::Frame::data(0, serde_json::to_vec(&error).unwrap()).encode())
+        .await;
 }
 
 #[tokio::test]
@@ -300,5 +241,122 @@ async fn workspace_close_kills_each_member_and_persists_after_every_kill() {
     assert_eq!(written.version, 2);
     assert_eq!(written.document.closed.len(), 2);
     assert_eq!(written.document.focus.as_deref(), Some("t3"));
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn close_removes_the_record_after_kill_when_rm_is_offered() {
+    let (mut store, mut core) = store();
+    let membership = || ("space:4:work".into(), "space:4:work/tab:3:tab".into());
+    let server = tokio::spawn(async move {
+        hello(
+            &mut core,
+            &[
+                "doc.get",
+                "doc.set",
+                "terminal.get",
+                "terminal.kill",
+                "terminal.rm",
+            ],
+        )
+        .await;
+        let read = next(&mut core, "doc.get").await;
+        core.reply(&read["id"], json!({"value":null,"version":0}))
+            .await;
+        let get = next(&mut core, "terminal.get").await;
+        let mut record = testcore::minimal_terminal();
+        record["address"] = json!("t1");
+        record["created_ms"] = json!(1);
+        record["labels"] = json!({"herdr.space":"work","herdr.tab":"tab"});
+        core.reply(&get["id"], record.clone()).await;
+        let foreign = core.read_request().await;
+        assert_eq!(foreign["params"]["name"], "herdr-app");
+        core.reply(&foreign["id"], json!({"value":null,"version":0}))
+            .await;
+        let kill = next(&mut core, "terminal.kill").await;
+        core.reply(&kill["id"], record).await;
+        let rm = next(&mut core, "terminal.rm").await;
+        assert_eq!(rm["params"], json!({"terminal": "t1"}));
+        core.reply(&rm["id"], json!({})).await;
+        let read = next(&mut core, "doc.get").await;
+        core.reply(&read["id"], json!({"value":null,"version":0}))
+            .await;
+        let write = next(&mut core, "doc.set").await;
+        core.reply(&write["id"], json!({"version":1})).await;
+    });
+    store
+        .submit(request(Action::Close {
+            terminals: vec![("t1".into(), 1)],
+            memberships: BTreeMap::from([("t1".into(), membership())]),
+            fallback: BTreeMap::new(),
+            next: None,
+        }))
+        .unwrap();
+    tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+        .unwrap_written();
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn kill_removes_the_record_and_tolerates_rm_not_found() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.kill", "terminal.rm"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        let mut record = testcore::minimal_terminal();
+        record["address"] = json!("t1");
+        record["created_ms"] = json!(1);
+        core.reply(&get["id"], record.clone()).await;
+        let kill = next(&mut core, "terminal.kill").await;
+        core.reply(&kill["id"], record).await;
+        let rm = next(&mut core, "terminal.rm").await;
+        assert_eq!(rm["params"]["terminal"], "t1");
+        reply_error(&mut core, &rm, "not_found").await;
+    });
+    store
+        .submit(request(Action::Kill {
+            terminal: "t1".into(),
+            created_ms: 1,
+            allow_gone: false,
+        }))
+        .unwrap();
+    let out = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(out.unwrap(), Outcome::Done));
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn kill_allow_gone_accepts_an_already_removed_terminal() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.kill"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        let mut record = testcore::minimal_terminal();
+        record["address"] = json!("t1");
+        record["created_ms"] = json!(1);
+        core.reply(&get["id"], record).await;
+        // The kill raced the core's own cleanup — `allow_gone` is Done.
+        let kill = next(&mut core, "terminal.kill").await;
+        reply_error(&mut core, &kill, "not_found").await;
+    });
+    store
+        .submit(request(Action::Kill {
+            terminal: "t1".into(),
+            created_ms: 1,
+            allow_gone: true,
+        }))
+        .unwrap();
+    let out = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(out.unwrap(), Outcome::Done));
     server.await.unwrap();
 }

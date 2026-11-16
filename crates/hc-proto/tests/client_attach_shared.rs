@@ -5,49 +5,16 @@
 
 mod common;
 
-use common::attach::{DEADLINE, joined, observer, params};
-use common::fakecore::{ALL_METHODS, DuplexCore, attach_result, pair};
+use common::attach::{DEADLINE, joined, observer, params, shared, shared_once};
+use common::fakecore::{ALL_METHODS, attach_result, pair};
 use common::minimal_terminal;
-use hc_proto::client::{AttachConn, ConnectParts, Output};
+use hc_proto::client::{ConnectParts, Output};
 use hc_proto::frame::{Frame, Kind};
 use serde_json::json;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
-
-/// An `AttachConn` over injected halves: each `connect` pops the next
-/// prepared transport; `connects` counts how many were taken.
-fn shared(pending: Arc<Mutex<VecDeque<ConnectParts>>>, connects: Arc<AtomicU64>) -> AttachConn {
-    AttachConn::with_connector(move || {
-        let pending = Arc::clone(&pending);
-        let connects = Arc::clone(&connects);
-        async move {
-            connects.fetch_add(1, Ordering::SeqCst);
-            let parts = pending
-                .lock()
-                .unwrap()
-                .pop_front()
-                .expect("a connect with no prepared transport");
-            Ok(parts)
-        }
-    })
-}
-
-/// A one-transport shared connection plus its fake core.
-fn shared_once() -> (AttachConn, DuplexCore, Arc<AtomicU64>) {
-    let (core, read, write) = pair(64 * 1024);
-    let connects = Arc::new(AtomicU64::new(0));
-    let conn = shared(
-        Arc::new(Mutex::new(VecDeque::from([ConnectParts {
-            read,
-            write,
-            guard: None,
-        }]))),
-        Arc::clone(&connects),
-    );
-    (conn, core, connects)
-}
 
 /// Replies to `req` with its attach result plus `paint` in one write —
 /// the reply and the first stream bytes land in a single read.

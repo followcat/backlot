@@ -108,7 +108,7 @@ async fn a_focused_panel_eats_a_host_paste_ahead_of_an_open_popup() {
     popup_term.labels.insert("hc-tui.popup".into(), "1".into());
     let mut terminals: Vec<_> = app.view.inventory.terminals().values().cloned().collect();
     terminals.push(popup_term);
-    app.view.inventory.replace(3, terminals);
+    app.view.inventory_mut().replace(3, terminals);
     app.popup_pending = Some(crate::app::popup::PopupPending {
         width: Some(PopupSize::Percent(80)),
         height: Some(PopupSize::Percent(80)),

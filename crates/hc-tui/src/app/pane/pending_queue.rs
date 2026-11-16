@@ -1,5 +1,4 @@
 //! Semantic input and viewer controls retain one event order under backpressure.
-use super::lifecycle::{dispatch_id, record_dispatch};
 use super::*;
 
 impl Pane {
@@ -98,7 +97,9 @@ impl Pane {
             return;
         }
         while let Some(front) = self.pending.front() {
-            if !matches!(front, Pending::Control(_)) && (live.await_paint || self.vt.is_none()) {
+            if !matches!(front, Pending::Control(_))
+                && (live.paint_gate.await_paint() || self.vt.is_none())
+            {
                 break;
             }
             let item = self.pending.pop_front().expect("front exists");
@@ -109,7 +110,7 @@ impl Pane {
                         Out::Facts(facts) => live.sent_facts = Some(facts),
                         Out::Resize(cols, rows) => {
                             live.sent_size = Some((cols, rows));
-                            if !live.await_paint
+                            if !live.paint_gate.await_paint()
                                 && let Some(vt) = &mut self.vt
                                 && let Err(error) = vt.resize(cols, rows)
                             {
@@ -169,4 +170,34 @@ impl Pane {
             }
         }
     }
+}
+
+/// The byte charge of a pending item — keys count their real payload
+/// (generated text + raw sequence + base), so the 256KiB bound still
+/// limits the bytes actually retained.
+pub(super) fn charge(item: &Pending) -> usize {
+    match item {
+        Pending::Control(_) => 0,
+        Pending::Mouse(_, _) => 32,
+        Pending::Key(k) => 32 + k.text_commit.as_deref().map_or(0, str::len) + k.vt_bytes.len(),
+        Pending::Paste(t) | Pending::Encoded(t, ..) => t.len(),
+        Pending::Prepared(bytes, key) => bytes.len() + charge(&Pending::Key(key.clone())),
+    }
+}
+
+pub(super) fn dispatch_id(item: &Pending) -> Option<u64> {
+    match item {
+        Pending::Key(key) if key.input.action == hc_vt::Action::Press && key.dispatch_id != 0 => {
+            Some(key.dispatch_id)
+        }
+        Pending::Encoded(_, id, _) => *id,
+        Pending::Prepared(_, key) => dispatch_id(&Pending::Key(key.clone())),
+        _ => None,
+    }
+}
+pub(super) fn record_dispatch(records: &mut VecDeque<(u64, u64)>, id: u64, generation: u64) {
+    if records.len() >= PENDING_MAX_ITEMS {
+        records.pop_front();
+    }
+    records.push_back((id, generation));
 }

@@ -10,7 +10,7 @@ async fn fragmented_initial_paint_restores_modes_before_queued_input() {
     let mut history = vec![b'x'; 16 * 1024];
     history[0] = 0x18;
     raw_paint(&mut pane, &mut rx, &mut core, &history).await;
-    assert!(matches!(&pane.state, State::Live(live) if live.await_paint));
+    assert!(matches!(&pane.state, State::Live(live) if live.paint_gate.await_paint()));
     assert!(
         timeout(
             Duration::from_millis(40),
@@ -20,7 +20,7 @@ async fn fragmented_initial_paint_restores_modes_before_queued_input() {
         .is_err()
     );
     raw_paint(&mut pane, &mut rx, &mut core, b"\x1b[?2004h\x1b[?90").await;
-    assert!(matches!(&pane.state, State::Live(live) if live.await_paint));
+    assert!(matches!(&pane.state, State::Live(live) if live.paint_gate.await_paint()));
     raw_paint(&mut pane, &mut rx, &mut core, b"01l").await;
     assert_eq!(
         read_kind(&mut core, CH, Kind::Data).await.payload,

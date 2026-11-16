@@ -8,6 +8,28 @@ use super::*;
 /// cached VT wire is observe-only. Scrollback remains bounded per Pane.
 pub(super) const RECENT_PANES: usize = 32;
 
+/// An event routed to a pane the frame can show. A `RouteClosed`
+/// without error retires a drained wire — bookkeeping only — and a
+/// `WriterProgress` retry is invisible unless the input backlog badge
+/// or the pane notice moved. Everything else can repaint.
+fn visible_pane_event(pane: &mut pane::Pane, event: PaneEv, now: Instant) -> bool {
+    match &event {
+        PaneEv::RouteClosed { error: None, .. } => {
+            pane.on_event(event, now);
+            false
+        }
+        PaneEv::WriterProgress { .. } => {
+            let before = (pane.input_backlog(), pane.notice().is_some());
+            pane.on_event(event, now);
+            (pane.input_backlog(), pane.notice().is_some()) != before
+        }
+        _ => {
+            pane.on_event(event, now);
+            true
+        }
+    }
+}
+
 impl App {
     pub(super) async fn shutdown_panes(&mut self) {
         let mut closing = tokio::task::JoinSet::new();
@@ -86,7 +108,7 @@ impl App {
         if self.layout_seen.as_ref() == Some(&stamp) {
             return;
         }
-        if let Ok(document) = crate::structure::Document::decode(stored.value.clone()) {
+        if let Ok(document) = crate::structure::Document::decode_ref(&stored.value) {
             if let Some(focus) = document.focus {
                 if self.view.inventory.get(&focus).is_none() {
                     return;
@@ -139,8 +161,20 @@ impl App {
             .chain(current.iter().cloned())
             .collect::<std::collections::HashSet<_>>();
         self.observer_mru.retain(|id| keep.contains(id));
-        self.observers.retain(|id, _| keep.contains(id));
+        // The focused terminal paints through its own active attach — a
+        // duplicate observer would feed a second VT for nothing. One
+        // opened before the focus moved stays only until the active
+        // wire finishes its first paint, so a switch never flashes a
+        // blank pane; a new one for the focused terminal never opens.
+        let focused_ready = self.pane.has_fresh_paint();
+        let active_target = self.pane.target();
+        self.observers.retain(|id, _| {
+            keep.contains(id) && (active_target != Some(id.as_str()) || !focused_ready)
+        });
         for id in keep {
+            if active_target == Some(id.as_str()) && !self.observers.contains_key(&id) {
+                continue;
+            }
             let pane = self.observers.entry(id.clone()).or_insert_with(|| {
                 let mut pane = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
                 pane.set_host_facts(self.host_facts.clone());
@@ -152,31 +186,68 @@ impl App {
             });
             pane.on_view(&self.view);
         }
+        // Off-tab observers pace their DATA onto the shared flush grid;
+        // visible ones are rendered surfaces and stay live.
+        let visible = self.visible_panes();
+        for (id, pane) in &mut self.observers {
+            pane.set_off_tab(!visible.iter().any(|v| v == id));
+        }
     }
 
-    pub(super) fn pane_event(&mut self, event: PaneEv, now: Instant) {
+    /// Route an attach-actor report to its owning pane; `true` only
+    /// when the event can change what the frame paints. Off-tab
+    /// observers and size leases update retained state silently —
+    /// their bells and clipboard writes surface through the drains.
+    pub(super) fn pane_event(&mut self, event: PaneEv, now: Instant) -> bool {
         let route = event.route();
         if self.pane.owns_route(route) {
-            self.pane.on_event(event, now);
-        } else if self
+            let dirty = visible_pane_event(&mut self.pane, event, now);
+            // The focused wire's fresh paint retires the stale observer
+            // kept warm for the switch — close it now instead of
+            // waiting for the next view publish.
+            if self.pane.has_fresh_paint()
+                && let Some(id) = self.pane.target()
+            {
+                self.observers.remove(id);
+            }
+            return dirty;
+        }
+        if let Some(popup) = self
             .popup
             .as_mut()
-            .is_some_and(|p| p.pane.owns_route(route))
-            && let Some(popup) = self.popup.as_mut()
+            .filter(|popup| popup.pane.owns_route(route))
         {
-            popup.pane.on_event(event, now);
-        } else if self.peek.as_mut().is_some_and(|p| p.pane.owns_route(route))
-            && let Some(peek) = self.peek.as_mut()
+            return visible_pane_event(&mut popup.pane, event, now);
+        }
+        if let Some(peek) = self
+            .peek
+            .as_mut()
+            .filter(|peek| peek.pane.owns_route(route))
         {
-            peek.pane.on_event(event, now);
-        } else if let Some(pane) = self
-            .observers
+            return visible_pane_event(&mut peek.pane, event, now);
+        }
+        // Size leases never paint; check them before pricing out the
+        // visible set an observer event might need.
+        if let Some(pane) = self
+            .size_leases
             .values_mut()
-            .chain(self.size_leases.values_mut())
-            .find(|p| p.owns_route(route))
+            .find(|pane| pane.owns_route(route))
         {
             pane.on_event(event, now);
+            return false;
         }
+        let visible = self.visible_panes();
+        if let Some((id, pane)) = self
+            .observers
+            .iter_mut()
+            .find(|(_, pane)| pane.owns_route(route))
+        {
+            if visible.iter().any(|pane_id| pane_id == id) {
+                return visible_pane_event(pane, event, now);
+            }
+            pane.on_event(event, now);
+        }
+        false
     }
 
     pub(super) fn pane_wake(&self) -> Option<Instant> {
@@ -194,33 +265,43 @@ impl App {
             .min()
     }
 
-    pub(super) fn pane_retry(&mut self, now: Instant) {
-        self.pane.fire_retry(now);
+    /// `true` when a due retry moved an on-screen pane — the new
+    /// attach state paints next.
+    pub(super) fn pane_retry(&mut self, now: Instant) -> bool {
+        let mut dirty = self.pane.fire_retry(now);
         if let Some(popup) = self.popup.as_mut() {
-            popup.pane.fire_retry(now);
+            dirty |= popup.pane.fire_retry(now);
         }
         if let Some(peek) = self.peek.as_mut() {
-            peek.pane.fire_retry(now);
+            dirty |= peek.pane.fire_retry(now);
         }
-        for pane in self
-            .observers
-            .values_mut()
-            .chain(self.size_leases.values_mut())
-        {
+        let visible = self.visible_panes();
+        for (id, pane) in self.observers.iter_mut() {
+            if visible.iter().any(|pane_id| pane_id == id) {
+                dirty |= pane.fire_retry(now);
+            } else {
+                pane.fire_retry(now);
+            }
+        }
+        for pane in self.size_leases.values_mut() {
             pane.fire_retry(now);
         }
+        dirty
     }
 
-    /// The pane whose screen to draw: whichever has a complete paint. While
-    /// neither has one, a retained observer screen beats an attach with
-    /// nothing to show, so a switch or resize never flashes an empty pane.
+    /// The pane whose screen to draw: whichever has a complete paint —
+    /// the focused wire wins a tie since its stream is the one input
+    /// sees. While neither has one, a retained observer screen beats an
+    /// attach with nothing to show, so a switch or resize never
+    /// flashes an empty pane.
     pub(super) fn displayed_pane(&self, id: &str) -> Option<&pane::Pane> {
         let observer = self.observers.get(id);
         let active = (self.pane.target() == Some(id)).then_some(&self.pane);
-        observer
+        active
             .filter(|p| p.has_fresh_paint())
-            .or_else(|| active.filter(|p| p.has_fresh_paint()))
+            .or_else(|| observer.filter(|p| p.has_fresh_paint()))
             .or_else(|| observer.filter(|p| p.vt_ref().is_some()))
+            .or_else(|| active.filter(|p| p.vt_ref().is_some()))
             .or(active)
             .or(observer)
     }
@@ -236,3 +317,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "multipane_tests.rs"]
+mod tests;

@@ -92,6 +92,9 @@ pub(crate) struct ShellHitMap {
     pub tab_scroll_right: Rect,
     pub mobile_switch: Rect,
     pub mobile_close: Rect,
+    /// The update hint inside the version badge — just the hint, so
+    /// the version text itself stays inert.
+    pub update_badge: Rect,
     pub mobile_targets: Vec<(Rect, ClientMobileTarget)>,
     pub mobile_max_scroll: usize,
     pub global_launcher: Rect,
@@ -138,6 +141,9 @@ pub(crate) struct ShellRenderState<'a> {
     pub reveal_navigation_workspace: &'a mut bool,
     pub dragged_workspace_id: Option<&'a str>,
     pub workspace_drop_indicator_row: Option<u16>,
+    /// A newer release's bare version once the background check
+    /// reported one — the badge's update hint.
+    pub update_latest: Option<&'a str>,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
@@ -166,6 +172,7 @@ pub(crate) fn render_shell(
             snapshot,
             config,
             &mut hits,
+            state.update_latest,
         );
     }
     if layout.sidebar.width > 0 {
@@ -236,6 +243,7 @@ pub(crate) fn render_shell(
         hits.tab_scroll_left = Rect::default();
         hits.tab_scroll_right = Rect::default();
         hits.new_tab = Rect::default();
+        hits.update_badge = Rect::default();
     }
     hits
 }
@@ -274,4 +282,63 @@ pub(super) fn put_text(buffer: &mut Buffer, x: u16, y: u16, width: u16, text: &s
 
 pub(super) fn display_width(text: &str) -> u16 {
     UnicodeWidthStr::width(text).min(u16::MAX as usize) as u16
+}
+
+/// The badge's two parts: the running `vX.Y.Z`, and — once the
+/// update check reported a newer release — the ` ↑ v…` hint in the
+/// notice toast's accent.
+fn version_badge_text(update_latest: Option<&str>) -> (String, Option<String>) {
+    (
+        format!("v{}", env!("CARGO_PKG_VERSION")),
+        update_latest.map(|latest| format!(" ↑ v{latest}")),
+    )
+}
+
+/// Width of the fully drawn badge — callers reserve a slot with it.
+pub(super) fn version_badge_width(update_latest: Option<&str>) -> u16 {
+    let (version, hint) = version_badge_text(update_latest);
+    display_width(&version) + hint.as_deref().map_or(0, display_width)
+}
+
+/// Right-aligns the badge inside `row` without crossing `min_left`:
+/// the update hint drops first under pressure, then the whole badge.
+/// Returns the hint's rect — the clickable slice — empty otherwise.
+pub(super) fn put_version_badge(
+    buffer: &mut Buffer,
+    row: Rect,
+    min_left: u16,
+    update_latest: Option<&str>,
+    palette: &Palette,
+) -> Rect {
+    let (version, hint) = version_badge_text(update_latest);
+    let ver_w = display_width(&version);
+    let hint_w = hint.as_deref().map_or(0, display_width);
+    let right = row.right();
+    let draw_hint = hint.is_some() && right >= min_left.saturating_add(ver_w + hint_w);
+    let total = ver_w + if draw_hint { hint_w } else { 0 };
+    if right < min_left.saturating_add(total) {
+        return Rect::default();
+    }
+    let ver_x = right.saturating_sub(total);
+    put_text(
+        buffer,
+        ver_x,
+        row.y,
+        ver_w,
+        &version,
+        Style::default().fg(palette.overlay0),
+    );
+    if !draw_hint {
+        return Rect::default();
+    }
+    let hint_x = ver_x.saturating_add(ver_w);
+    put_text(
+        buffer,
+        hint_x,
+        row.y,
+        hint_w,
+        hint.as_deref().unwrap_or_default(),
+        Style::default().fg(palette.red),
+    );
+    Rect::new(hint_x, row.y, hint_w, 1)
 }

@@ -103,7 +103,7 @@ async fn popup_eats_keys_and_terminal_loss_closes_with_a_kill() {
     let mut t9 = crate::sidebar::fixture::term("t9");
     t9.created_ms = 9;
     t9.labels.insert("hc-tui.popup".into(), "1".into());
-    app.view.inventory.replace(1, vec![t9]);
+    app.view.inventory_mut().replace(1, vec![t9]);
     app.reconcile_published_view();
     let mut rx = operations(&mut app);
     core_id(&mut app, "core-fake-1");
@@ -154,7 +154,7 @@ async fn paste_to_popup_uses_the_terminals_paste_mode() {
     let mut t9 = crate::sidebar::fixture::term("t9");
     t9.created_ms = 9;
     t9.labels.insert("hc-tui.popup".into(), "1".into());
-    app.view.inventory.replace(1, vec![t9]);
+    app.view.inventory_mut().replace(1, vec![t9]);
     app.reconcile_published_view();
     app.popup_pending = Some(super::super::popup::PopupPending {
         width: Some(PopupSize::Percent(80)),
@@ -263,10 +263,10 @@ async fn pane_command_runs_zoomed_overlay_and_restores_on_exit() {
     let mut t1 = crate::sidebar::fixture::term("t1");
     t1.labels.insert("herdr.space".into(), "work".into());
     t1.labels.insert("herdr.tab".into(), "tab".into());
-    app.view.inventory.replace(2, vec![t1.clone(), t9]);
+    app.view.inventory_mut().replace(2, vec![t1.clone(), t9]);
     app.reconcile_published_view();
     assert!(app.command_overlay.is_some(), "live overlay terminal keeps");
-    app.view.inventory.replace(3, vec![t1]);
+    app.view.inventory_mut().replace(3, vec![t1]);
     app.reconcile_published_view();
     assert!(
         app.command_overlay.is_none(),
