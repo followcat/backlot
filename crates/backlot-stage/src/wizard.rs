@@ -284,50 +284,73 @@ fn draft_text(io: &Io) -> Result<String, Fail> {
     ))
 }
 
+/// The draft's file: `backlot-cast-<pid>-<n>.toml` at the first
+/// free number, `create_new` so a planted or leaked file is never
+/// truncated and a planted symlink never followed — a cast draft is
+/// owner-only, mode `0600`.
+pub(crate) fn create_draft(dir: &Path, text: &str) -> Result<PathBuf, Fail> {
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    for n in 0..16u32 {
+        let path = dir.join(format!("backlot-cast-{}-{n}.toml", std::process::id()));
+        match opts.open(&path) {
+            Ok(mut file) => {
+                file.write_all(text.as_bytes())
+                    .map_err(|e| Fail::refused(format!("draft: {e}")))?;
+                return Ok(path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(Fail::refused(format!("draft: {e}"))),
+        }
+    }
+    Err(Fail::refused(
+        "draft: no free backlot-cast-* name left in the temp directory",
+    ))
+}
+
 /// The cast step: draft, show, `accept`/`edit`/`refuse` — the file
 /// the checks and the write read is a temporary one; `refuse`
 /// writes nothing anywhere.
 fn cast_draft(io: &mut Io) -> Result<PathBuf, Fail> {
-    // A name of its own per draft — parallel wizards (and tests)
-    // must never share the file.
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let path = std::env::temp_dir().join(format!(
-        "backlot-cast-{}-{}.toml",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
     let mut text = draft_text(io)?;
-    let mut written = false;
+    // The file is born only when the draft is accepted or the
+    // editor needs it — a refused cast writes nothing anywhere.
+    let mut path: Option<PathBuf> = None;
     loop {
         writeln!(io.out, "\n{text}").map_err(io_fail)?;
         match ask(io, "cast [accept/edit/refuse]", Some("a"))?.as_str() {
             a if a.eq_ignore_ascii_case("a") || a.eq_ignore_ascii_case("accept") => {
-                // Nothing touched disk before this answer — the
-                // file the checks read is the draft's one write.
-                std::fs::write(&path, &text).map_err(|e| Fail::refused(format!("draft: {e}")))?;
-                return Ok(path);
+                return match path {
+                    // The editor's file already holds `text`.
+                    Some(path) => Ok(path),
+                    None => create_draft(&std::env::temp_dir(), &text),
+                };
             }
             r if r.eq_ignore_ascii_case("r") || r.eq_ignore_ascii_case("refuse") => {
                 return Err(Fail::refused("cast refused — nothing written"));
             }
             _ => {
-                if !written {
-                    std::fs::write(&path, &text)
-                        .map_err(|e| Fail::refused(format!("draft: {e}")))?;
-                    written = true;
+                if path.is_none() {
+                    path = Some(create_draft(&std::env::temp_dir(), &text)?);
                 }
-                match (io.edit)(&path) {
+                let file = path.as_ref().expect("created above");
+                match (io.edit)(file) {
                     Ok(()) => {}
                     Err(e) => {
                         writeln!(io.out, "{e}").map_err(io_fail)?;
                         continue;
                     }
                 }
-                text = std::fs::read_to_string(&path)
+                text = std::fs::read_to_string(file)
                     .map_err(|e| Fail::refused(format!("draft: {e}")))?;
                 // An edit that does not parse is shown and asked
                 // again — the cast checks are `studio new`'s own.
-                if let Err(e) = commands::read_cast(&path) {
+                if let Err(e) = commands::read_cast(file) {
                     writeln!(io.out, "{}", e.message()).map_err(io_fail)?;
                     continue;
                 }

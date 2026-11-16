@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use crate::args::Common;
 use crate::cli::{Env, Fail};
 use crate::cli_testkit::*;
-use crate::wizard::{Io, WizardArgs, run_io};
+use crate::wizard::{Io, WizardArgs, create_draft, run_io};
 
 /// A git repository under `files/` — `draft::check` asks git
 /// itself, so the wizard's answer must be a real one.
@@ -280,3 +280,28 @@ model = "m"
 effort = "medium"
 permission_profile = "standard"
 "#;
+
+/// U2 round 1: a name someone else already took — planted or leaked —
+/// is never truncated: the draft moves to the next free number and
+/// the file is born `0600`, never following a planted symlink.
+#[test]
+fn a_planted_draft_name_is_never_overwritten() {
+    let (scratch, _env) = scratch();
+    let dir = &scratch.files;
+    let planted = dir.join(format!("backlot-cast-{}-0.toml", std::process::id()));
+    fs::write(&planted, "planted").unwrap();
+    let made = create_draft(dir, "drafted").unwrap();
+    assert_ne!(made, planted, "the planted name was taken");
+    assert_eq!(made.extension().and_then(|e| e.to_str()), Some("toml"));
+    assert_eq!(fs::read_to_string(&planted).unwrap(), "planted");
+    assert_eq!(fs::read_to_string(&made).unwrap(), "drafted");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&made).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "the draft file must be owner-only"
+        );
+    }
+}
