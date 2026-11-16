@@ -157,15 +157,53 @@ fn colours_come_from_the_palette() {
         "no accent-painted key cell in:\n{}",
         dump(&buffer, area)
     );
-    // The hint line paints the palette's dim surface colour.
+    // The hint line paints the palette's secondary text colour.
     let mut dim = false;
     'rows: for y in area.y..area.bottom() {
         for x in area.x..area.right() {
-            if buffer[(x, y)].symbol() == "b" && buffer[(x, y)].fg == p.surface_dim {
+            if buffer[(x, y)].symbol() == "b" && buffer[(x, y)].fg == p.overlay0 {
                 dim = true;
                 break 'rows;
             }
         }
     }
     assert!(dim, "no dim hint cell in:\n{}", dump(&buffer, area));
+}
+
+/// The hint used `surface_dim` — a separator colour within a few
+/// RGB steps of the panel background in every theme. It must read
+/// as secondary text instead, in dark and light themes alike.
+#[test]
+fn the_hint_is_legible_in_dark_and_light() {
+    for (name, p) in [
+        ("backlot", Palette::backlot()),
+        ("catppuccin", Palette::catppuccin()),
+        ("catppuccin-latte", Palette::catppuccin_latte()),
+    ] {
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buffer = Buffer::empty(area);
+        render_opening(&mut buffer, area, &p, BOTH);
+        let mut fg = None;
+        'rows: for y in area.y..area.bottom() {
+            for x in area.x..area.right() {
+                if buffer[(x, y)].symbol() == "b"
+                    && buffer[(x, y)].bg == p.panel_bg
+                    && buffer[(x, y)].fg != p.accent
+                {
+                    fg = Some(buffer[(x, y)].fg);
+                    break 'rows;
+                }
+            }
+        }
+        let fg = fg.unwrap_or_else(|| panic!("a hint cell on {name}"));
+        assert_eq!(fg, p.overlay0, "hint colour on {name}");
+        assert_ne!(
+            fg, p.surface_dim,
+            "hint on {name} must not be the separator colour"
+        );
+        assert_ne!(
+            fg, p.panel_bg,
+            "hint on {name} must not match the background"
+        );
+    }
 }

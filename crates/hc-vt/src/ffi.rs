@@ -57,6 +57,7 @@ pub struct StringView {
 pub const DATA_MODE: i32 = 37;
 
 /// `GHOSTTY_SCROLL_VIEWPORT_*` tags.
+pub const SCROLL_BOTTOM: i32 = 1;
 pub const SCROLL_DELTA: i32 = 2;
 pub const SCROLL_ROW: i32 = 3;
 

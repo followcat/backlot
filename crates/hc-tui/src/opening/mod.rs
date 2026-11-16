@@ -67,7 +67,9 @@ fn actions(opts: &OpeningOpts) -> Vec<Action> {
 
 /// The one-line description — fits 40 columns.
 const TAGLINE: &str = "a film studio for coding agents";
-/// The dim last line — names the plain multiplexer.
+/// The dim last line — names the plain multiplexer. Secondary text:
+/// `surface_dim` is a separator colour a step off the panel
+/// background, so it drew this line nearly invisible.
 const PLAIN_HINT: &str = "backlot --plain — a plain multiplexer";
 
 /// Paint the page over `area` (the pane surface). Content keeps to a
@@ -142,7 +144,7 @@ pub(crate) fn render_opening(
             hint_row,
             block,
             &truncate_end(PLAIN_HINT, block as usize),
-            Style::default().fg(palette.surface_dim),
+            Style::default().fg(palette.overlay0),
         );
     }
 }

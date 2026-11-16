@@ -30,6 +30,12 @@ fn wizard_line(exe: &str, endpoint_args: &[String]) -> String {
     line
 }
 
+/// The wizard's draft is meant to be read: a `permission_profile`
+/// line already wraps at the default half-width popup. Ask for the
+/// large-popup size — still frame-clamped, so narrow terminals get
+/// the same shape relative to their pane.
+const WIZARD_POPUP: crate::popup_size::PopupSize = crate::popup_size::PopupSize::Percent(80);
+
 impl App {
     /// The page paints over the pane area while there is no studio —
     /// no `backlot` document yet, or a good one with zero studios —
@@ -112,8 +118,8 @@ impl App {
             }
         };
         self.popup_pending = Some(PopupPending {
-            width: None,
-            height: None,
+            width: Some(WIZARD_POPUP),
+            height: Some(WIZARD_POPUP),
             persistent: false,
             owner: String::new(),
             command: String::new(),
@@ -194,10 +200,14 @@ impl App {
         };
         // The program's pty must start at the popup's cells, like
         // `spawn_popup`: left unset it takes the client's display and
-        // the wizard's output never scrolls into the visible rows.
-        if let Some(geometry) =
-            crate::popup_size::resolve_popup_geometry(None, None, self.frame_area())
-        {
+        // the wizard's output never scrolls into the visible rows. The
+        // size matches the `PopupPending` request — the same geometry
+        // `on_popup_spawned` resolves for the frame.
+        if let Some(geometry) = crate::popup_size::resolve_popup_geometry(
+            Some(WIZARD_POPUP),
+            Some(WIZARD_POPUP),
+            self.frame_area(),
+        ) {
             params.size = Some(hc_proto::terminal::InitialSize {
                 cols: geometry.terminal_cols,
                 rows: geometry.terminal_rows,

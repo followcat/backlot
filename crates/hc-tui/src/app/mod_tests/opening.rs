@@ -202,6 +202,25 @@ async fn a_local_endpoint_wizard_uses_this_exe_and_cwd() {
 }
 
 #[tokio::test]
+async fn the_wizard_pty_starts_at_the_large_popup_size() {
+    let mut app = no_doc_app();
+    app.area = (120, 40);
+    let params = app.wizard_params().expect("params build");
+    let size = params.size.expect("the wizard's pty size");
+    let frame = app.frame_area();
+    // The draft is meant to be read: the popup asks for ~80% of the
+    // frame, not the default half — and it is clamped inside it.
+    assert!(
+        size.cols > frame.width / 2 && size.rows > frame.height / 2,
+        "size {size:?} should beat the half-size default on frame {frame:?}"
+    );
+    assert!(
+        size.cols <= frame.width && size.rows <= frame.height,
+        "size {size:?} must stay inside frame {frame:?}"
+    );
+}
+
+#[tokio::test]
 async fn a_remote_endpoint_wizard_uses_that_hosts_backlot() {
     let mut app = no_doc_app();
     app.panel_endpoint_args = vec![

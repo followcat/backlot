@@ -350,12 +350,16 @@ impl Pane {
         self.push_pending(Pending::Mouse(self.generation, input))
     }
 
+    /// Follow the tail again after user input. `scroll_to_row` cannot
+    /// express this: with no scrollback the bottom offset is row 0,
+    /// which the VT reads as "pin the buffer top" — the pane would
+    /// then draw the oldest lines while the tail keeps scrolling.
+    /// A key into a fresh popup lands exactly there.
     pub(crate) fn reset_scroll(&mut self) {
         if self.spec().is_some_and(|spec| spec.role == Role::Active)
             && let Some(vt) = self.vt.as_mut()
-            && let Some(scroll) = vt.scrollbar()
         {
-            vt.scroll_to_row(scroll.total.saturating_sub(scroll.len) as usize);
+            vt.scroll_to_bottom();
         }
     }
 
