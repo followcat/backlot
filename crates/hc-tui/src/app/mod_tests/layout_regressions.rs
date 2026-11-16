@@ -223,6 +223,49 @@ async fn size_leases_stay_as_long_as_their_observer_is_cached() {
     assert_eq!(leases(&app), ["t2", "t3"]);
 }
 
+/// The real loop's order on a tab switch: `focus_pane` retargets the pane
+/// at once, the frame draws, and only then `sync_observers` opens the
+/// observer for the tab just left. The focused terminal had already
+/// dropped its own observer once its wire painted. On that first frame
+/// the old terminal is not shown, has no observer and is no longer the
+/// target, yet it is still in the observer LRU: its lease must hold, or
+/// the core falls back to the headless size and the program redraws on
+/// every switch.
+#[tokio::test]
+async fn leaving_a_tab_keeps_the_lease_through_the_first_frame() {
+    let mut app = app_with_spaces(&[("t1", "work"), ("t3", "other")]);
+    app.open_attach = Arc::new(|_| Box::pin(std::future::pending()));
+    app.pane = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    app.focus_pane("t1".into());
+    app.sync_observers();
+    // No core acknowledges layout writes here; settle them by hand.
+    app.pending_actions = 0;
+    // After the focus change: it marks the frame dirty at the real now.
+    let now = Instant::now();
+    let draw = |app: &mut App, term: &mut Terminal<TestBackend>, tick: u64| {
+        let now = now + std::time::Duration::from_secs(tick);
+        app.sched.mark_dirty(now);
+        app.maybe_draw(term, now).unwrap();
+    };
+    draw(&mut app, &mut term, 0);
+    let lease = app.size_leases["t1"].generation();
+    // What `pane_event` does once the focused wire has a fresh paint.
+    app.observers.remove("t1");
+
+    app.focus_pane("t3".into());
+    draw(&mut app, &mut term, 1);
+    assert_eq!(
+        app.size_leases.get("t1").map(|l| l.generation()),
+        Some(lease),
+        "the lease of the tab just left must survive the switch's first frame"
+    );
+
+    app.sync_observers();
+    draw(&mut app, &mut term, 2);
+    assert_eq!(app.size_leases["t1"].generation(), lease);
+}
+
 /// While the cached observer repaints for a new size, the attach that just
 /// opened has nothing to show yet. The old screen stays up until one has.
 #[tokio::test]
