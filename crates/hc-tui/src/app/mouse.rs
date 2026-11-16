@@ -311,16 +311,20 @@ impl App {
     fn mouse_scroll(&mut self, point: (u16, u16), dir: isize) {
         let hits = &self.hit_map;
         if contains(hits.agent_body, point) {
-            let next = if dir < 0 {
-                self.shell_state.agent_scroll.saturating_sub(1)
+            // U1: the cast section shares the agents body rect — its
+            // wheel scrolls `studio.cast_scroll` instead.
+            let scroll = if self.studio.active {
+                &mut self.studio.cast_scroll
             } else {
-                self.shell_state
-                    .agent_scroll
-                    .saturating_add(1)
-                    .min(hits.agent_max_scroll)
+                &mut self.shell_state.agent_scroll
             };
-            if next != self.shell_state.agent_scroll {
-                self.shell_state.agent_scroll = next;
+            let next = if dir < 0 {
+                scroll.saturating_sub(1)
+            } else {
+                scroll.saturating_add(1).min(hits.agent_max_scroll)
+            };
+            if next != *scroll {
+                *scroll = next;
             }
             return;
         }

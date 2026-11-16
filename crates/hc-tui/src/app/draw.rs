@@ -70,6 +70,23 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     }
     let collapsed = app.shell_state.sidebar_collapsed;
     let layout = app.chrome_layout(area.width, area.height);
+    // U1: studio mode replaces the agents section with the current
+    // studio's cast — borrowed views only.
+    let summary = app.panel_summary();
+    let cast = if app.studio.active {
+        crate::cast::CastView::build(
+            summary.as_ref(),
+            &app.projection.snapshot,
+            &app.view,
+            app.studio.current.as_deref(),
+            &app.shell,
+            app.studio.others_expanded,
+            app.focused.as_deref(),
+            app.panel.spin,
+        )
+    } else {
+        None
+    };
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -90,6 +107,8 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         dragged_workspace_id: None,
         workspace_drop_indicator_row: None,
         update_latest: app.update_latest.as_deref(),
+        cast,
+        cast_scroll: &mut app.studio.cast_scroll,
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

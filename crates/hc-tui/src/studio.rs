@@ -25,6 +25,11 @@ pub(crate) struct Studio {
     /// `studio id → role`: the person last focused in each studio, so
     /// returning lands on the same person.
     pub remembered: BTreeMap<String, String>,
+    /// The cast's `others` row, expanded in place.
+    pub others_expanded: bool,
+    /// The cast section's scroll offset — its own, so the agents
+    /// list's scroll survives a mode flip either way.
+    pub(crate) cast_scroll: usize,
 }
 
 impl Studio {

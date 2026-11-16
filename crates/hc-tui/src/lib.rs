@@ -7,6 +7,7 @@
 //! geometry and lifecycle code is separated from I/O for tests.
 
 pub mod app;
+mod cast;
 pub mod chrome;
 pub mod cli;
 mod clipboard;

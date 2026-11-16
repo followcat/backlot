@@ -39,45 +39,7 @@ pub(crate) fn render_sidebar(
     } else {
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
-    let (workspace_area, detail_area) =
-        expanded_sidebar_sections(area, state.sidebar_section_split);
-    hits.sidebar_section_divider = sidebar_section_divider_rect(area, state.sidebar_section_split);
-    put_text(
-        buffer,
-        workspace_area.x,
-        workspace_area.y,
-        workspace_area.width,
-        " spaces",
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-    // The version badge shares the header row, right-aligned short of
-    // the divider column and never touching the `spaces` label.
-    let badge_row = Rect::new(
-        workspace_area.x,
-        workspace_area.y,
-        workspace_area.width.saturating_sub(2),
-        1,
-    );
-    hits.update_badge = put_version_badge(
-        buffer,
-        badge_row,
-        workspace_area.x.saturating_add(8),
-        state.update_latest,
-        palette,
-    );
-
     let entries = workspace_entries(snapshot, state.collapsed_groups);
-    let body = Rect::new(
-        workspace_area.x,
-        workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
-        workspace_area.width,
-        workspace_area
-            .height
-            .saturating_sub(WORKSPACE_HEADER_ROWS + 1),
-    );
-    hits.workspace_body = body;
     let row_heights = entries
         .iter()
         .map(|entry| {
@@ -107,6 +69,59 @@ pub(crate) fn render_sidebar(
                 .map_or(0, |next| u16::from(!next.indented) * config.spaces.row_gap)
         })
         .collect::<Vec<_>>();
+    // U1: in studio mode the spaces section takes only the rows it
+    // needs, at most a third of the sidebar — the cast takes the rest
+    // and the section divider goes away.
+    let (workspace_area, detail_area) = if state.cast.is_some() {
+        let needed = row_heights
+            .iter()
+            .chain(gaps.iter())
+            .fold(0u16, |sum, h| sum.saturating_add(*h))
+            .saturating_add(WORKSPACE_HEADER_ROWS + 1);
+        crate::cast::sections(area, needed)
+    } else {
+        expanded_sidebar_sections(area, state.sidebar_section_split)
+    };
+    hits.sidebar_section_divider = if state.cast.is_some() {
+        Rect::default()
+    } else {
+        sidebar_section_divider_rect(area, state.sidebar_section_split)
+    };
+    put_text(
+        buffer,
+        workspace_area.x,
+        workspace_area.y,
+        workspace_area.width,
+        " spaces",
+        Style::default()
+            .fg(palette.overlay0)
+            .add_modifier(Modifier::BOLD),
+    );
+    // The version badge shares the header row, right-aligned short of
+    // the divider column and never touching the `spaces` label.
+    let badge_row = Rect::new(
+        workspace_area.x,
+        workspace_area.y,
+        workspace_area.width.saturating_sub(2),
+        1,
+    );
+    hits.update_badge = put_version_badge(
+        buffer,
+        badge_row,
+        workspace_area.x.saturating_add(8),
+        state.update_latest,
+        palette,
+    );
+
+    let body = Rect::new(
+        workspace_area.x,
+        workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
+        workspace_area.width,
+        workspace_area
+            .height
+            .saturating_sub(WORKSPACE_HEADER_ROWS + 1),
+    );
+    hits.workspace_body = body;
     let mut metrics = super::scroll::list_scroll_metrics(
         &row_heights,
         &gaps,
@@ -249,14 +264,21 @@ pub(crate) fn render_sidebar(
         );
     }
 
-    super::agents::render_agent_panel(
-        buffer,
-        detail_area,
-        snapshot,
-        config,
-        state.agent_scroll,
-        hits,
-    );
+    // U1: studio mode replaces the agents section with the current
+    // studio's cast — everything else keeps herdr's own panel.
+    match &state.cast {
+        Some(cast) => {
+            crate::cast::render_cast(buffer, detail_area, cast, config, state.cast_scroll, hits)
+        }
+        None => super::agents::render_agent_panel(
+            buffer,
+            detail_area,
+            snapshot,
+            config,
+            state.agent_scroll,
+            hits,
+        ),
+    }
 
     hits.sidebar_toggle = Rect::new(
         area.right().saturating_sub(2),

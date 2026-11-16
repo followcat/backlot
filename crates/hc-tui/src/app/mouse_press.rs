@@ -32,7 +32,9 @@ impl App {
                 .is_some_and(|t| now.duration_since(t) <= DOUBLE_CLICK);
             self.last_divider_click = Some(now);
             if double {
-                self.sidebar_width = self.shell.sidebar_width;
+                // U1: the reset lands on the mode's configured width —
+                // backlot's `[sidebar] width` in studio mode.
+                self.sidebar_width = self.configured_sidebar_width();
                 self.sidebar_width_manual = false;
             } else {
                 self.chrome_drag = Some(ChromeDrag::SidebarWidth);
@@ -85,7 +87,12 @@ impl App {
                             point.1,
                         );
                         let next = metrics.max_offset_from_bottom.saturating_sub(offset);
-                        self.shell_state.agent_scroll = next;
+                        // U1: the cast section's scrollbar, same slot.
+                        if self.studio.active {
+                            self.studio.cast_scroll = next;
+                        } else {
+                            self.shell_state.agent_scroll = next;
+                        }
                     }
                 }
             }
@@ -94,6 +101,11 @@ impl App {
         if contains(hits.agent_sort_toggle, point) {
             self.flip_agent_sort();
             self.shell_state.agent_scroll = 0;
+            return;
+        }
+        // U1: the cast's `others` row expands herdr's agents in place.
+        if self.studio.active && contains(hits.cast_others, point) {
+            self.studio.others_expanded = !self.studio.others_expanded;
             return;
         }
         // Machine rows: collapse toggle (or the active endpoint's row)
