@@ -16,7 +16,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use backlot_model::state::StudioState;
 use backlot_model::summary::{self, Summary, Work};
-use hc_proto::client::Client;
+use hc_proto::client::{CallError, Client};
 use hc_proto::events::SubscribeParams;
 use hc_proto::subscribe::Subscription;
 use hc_proto::terminal::ListParams;
@@ -33,6 +33,7 @@ use crate::doc;
 use crate::link;
 use crate::ratelimit;
 use crate::reconcile;
+use crate::relabel;
 use crate::signals;
 use crate::store::{self, StoreError};
 use crate::watch;
@@ -235,6 +236,11 @@ pub(crate) struct Stage {
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
+    /// Whether the core still answers `terminal.label` on a live
+    /// terminal — `false` once a call is refused or unoffered: a core
+    /// that cannot change labels keeps every terminal where it
+    /// launched, and the relabel pass stops asking (U2).
+    pub(crate) labels_ok: std::cell::Cell<bool>,
     /// When this stage process was born — a `cannot resume` close
     /// older than it means the person restarted the stage, the one
     /// way the give-up comes back (R1-4).
@@ -344,9 +350,59 @@ impl Stage {
             self.act(name, &dir, state, &action, real_slot_free, blocked)
                 .await?;
         }
+        self.relabel(name, state, &live.terms).await?;
         self.watch(name, &dir, state, &live.terms, now_ms).await?;
         self.deliver(name, &dir, state, &live.terms, now_ms).await?;
         self.check(name, &dir, state, now_ms)
+    }
+
+    /// The U2 relabel: a live role terminal still carrying the old
+    /// shared `backlot` space gets its studio's own space and the
+    /// person's tab — `relabel::wanted_labels` keeps the pass
+    /// idempotent, and the first refused or unoffered `terminal.label`
+    /// ends it for good (`labels_ok`): a core that cannot change
+    /// labels keeps every terminal where it launched.
+    async fn relabel(
+        &self,
+        name: &str,
+        state: &StudioState,
+        terms: &[reconcile::LiveTerminal],
+    ) -> Result<(), Fail> {
+        if !self.labels_ok.get() {
+            return Ok(());
+        }
+        for term in terms {
+            let Some(patch) = relabel::wanted_labels(name, state, term) else {
+                continue;
+            };
+            match self
+                .client
+                .call(
+                    "terminal.label",
+                    Some(serde_json::json!({
+                        "terminal": term.address,
+                        "labels": patch,
+                    })),
+                )
+                .await
+            {
+                Ok(_) => {}
+                // A timeout is transient — the terminal is asked again
+                // next tick; a dead wire stays fatal.
+                Err(CallError::Timeout) => continue,
+                Err(e @ (CallError::Closed | CallError::Protocol(_))) => {
+                    return Err(Fail::call(e));
+                }
+                Err(e) => {
+                    self.labels_ok.set(false);
+                    let msg = format!("relabel off: {e}");
+                    if self.hlogged.borrow_mut().insert(msg.clone()) {
+                        eprintln!("stage: {msg}");
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The check pass: poll the in-flight run to its `task.checked`
@@ -450,6 +506,26 @@ impl Stage {
             })
             .collect();
         let mut s = summary::summary(&owned, doing, &self.work.borrow(), &failed, &errors, 0);
+        // U2: each role's workarea — the pure `role_dir` answer over
+        // the studio dir, so a studio shell opens where the person it
+        // was focused on works. Waiting rows get theirs too: the dir
+        // is fixed before the role is live.
+        for studio in &mut s.studios {
+            let Some(state) = self.cached.get(&studio.id) else {
+                continue;
+            };
+            let Some(cfg) = &state.studio else {
+                continue;
+            };
+            let dir = store::studio_dir(&self.base, &studio.id);
+            for role in &mut studio.roles {
+                role.workdir = Some(
+                    workareas::role_dir(&dir, &cfg.repo, &role.role)
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
         // The optional `hollywood` object — absent unless `[hollywood]`
         // configures the overseer (D16).
         if let Some(cfg) = self.hcfg.borrow().as_ref() {
@@ -515,6 +591,7 @@ impl Stage {
             hseen: std::cell::RefCell::new((0, 0)),
             hcfg: std::cell::RefCell::new(None),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
+            labels_ok: std::cell::Cell::new(true),
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
             // surprise `terminal.run` inside a unit test.
@@ -602,6 +679,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hseen: std::cell::RefCell::new((0, 0)),
         hcfg: std::cell::RefCell::new(None),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
+        labels_ok: std::cell::Cell::new(true),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

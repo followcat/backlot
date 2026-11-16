@@ -161,18 +161,32 @@ pub(crate) fn start_event(start: &Start, launch: &runners::Launch, address: &str
 }
 
 /// The labels a role terminal carries (design.md "Role terminals").
-pub(crate) fn labels(studio: &str, start: &Start) -> BTreeMap<String, String> {
+/// Since U2 a role lives in its own studio's space under the
+/// person's name — an actor's tab carries its task (`actor-b t2`).
+pub(crate) fn labels(studio: &str, state: &StudioState, start: &Start) -> BTreeMap<String, String> {
+    let tab = role_tab(state, &start.role, start.task.as_deref());
     let mut labels = BTreeMap::from([
         ("backlot.studio".to_string(), studio.to_string()),
         ("backlot.role".to_string(), start.role.clone()),
-        ("herdr.space".to_string(), "backlot".to_string()),
-        ("herdr.tab".to_string(), start.terminal.clone()),
+        ("herdr.space".to_string(), studio.to_string()),
+        ("herdr.tab".to_string(), tab),
         ("herdr.seen".to_string(), "0".to_string()),
     ]);
     if let Some(task) = &start.task {
         labels.insert("backlot.task".to_string(), task.clone());
     }
     labels
+}
+
+/// The `herdr.tab` a role carries: the person's name — the
+/// candidate's for an actor, the key for a fixed role — with the
+/// actor's task after it (`actor-b t2`).
+pub(crate) fn role_tab(state: &StudioState, role: &str, task: Option<&str>) -> String {
+    let name = backlot_model::summary::role_name(state, role);
+    match task {
+        Some(task) => format!("{name} {task}"),
+        None => name,
+    }
 }
 
 impl Stage {
@@ -264,7 +278,7 @@ impl Stage {
                     launch.env.clone(),
                     runner_env,
                 ),
-                labels: labels(studio, start),
+                labels: labels(studio, state, start),
                 no_parent: true,
                 no_notify: true,
                 ..RunParams::default()

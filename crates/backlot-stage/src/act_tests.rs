@@ -58,7 +58,7 @@ fn runner_env_reaches_env_and_nothing_else() {
         runner_env,
     );
     assert_eq!(env["BACKLOT_ROLE"], "producer");
-    let labels = serde_json::to_string(&labels("acme", &start)).unwrap();
+    let labels = serde_json::to_string(&labels("acme", &StudioState::default(), &start)).unwrap();
     assert!(!labels.contains("proxy"), "{labels}");
 }
 

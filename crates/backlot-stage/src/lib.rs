@@ -43,6 +43,7 @@ mod range;
 mod ratelimit;
 mod reasons;
 pub mod reconcile;
+mod relabel;
 pub mod render;
 mod runners;
 mod sample;
