@@ -1,6 +1,7 @@
 //! `ps -A -o pid=,ppid=,etime=,args=` parsing and the tool-shell rule.
 use super::STARTUP_WINDOW_SECS;
 use super::ps::*;
+use std::collections::HashSet;
 
 fn row(pid: u32, ppid: u32, etime: &str, args: &str) -> ProcessRow {
     ProcessRow {
@@ -82,14 +83,14 @@ fn only_shell_descendants_outside_the_start_window_count() {
         // A tool shell that belongs to another agent entirely.
         row(300, 1, "06:00", "bash -lc sleep 9"),
     ];
-    assert!(has_tool_shell_descendant(&rows, 100, STARTUP_WINDOW_SECS));
+    assert!(!tool_shell_descendant_pids(&rows, 100, STARTUP_WINDOW_SECS).is_empty());
 
     // Without the old-enough descendant there is no evidence.
     let rows = rows
         .into_iter()
         .filter(|r| r.pid != 200)
         .collect::<Vec<_>>();
-    assert!(!has_tool_shell_descendant(&rows, 100, STARTUP_WINDOW_SECS));
+    assert!(tool_shell_descendant_pids(&rows, 100, STARTUP_WINDOW_SECS).is_empty());
 }
 
 #[test]
@@ -99,11 +100,28 @@ fn deep_descendants_through_non_shell_helpers_count() {
         row(200, 100, "08:10", "devin acp"),
         row(300, 200, "07:00", "bash -c sleep 30"),
     ];
-    assert!(has_tool_shell_descendant(&rows, 100, STARTUP_WINDOW_SECS));
+    assert!(!tool_shell_descendant_pids(&rows, 100, STARTUP_WINDOW_SECS).is_empty());
 }
 
 #[test]
 fn a_missing_agent_row_yields_no_evidence() {
     let rows = vec![row(200, 100, "07:00", "zsh -c sleep 30")];
-    assert!(!has_tool_shell_descendant(&rows, 100, STARTUP_WINDOW_SECS));
+    assert!(tool_shell_descendant_pids(&rows, 100, STARTUP_WINDOW_SECS).is_empty());
+}
+
+#[test]
+fn the_candidate_set_holds_every_qualifying_shell_pid() {
+    let rows = vec![
+        row(100, 1, "08:20", "devin"),
+        row(200, 100, "07:00", "zsh -c sleep 30"),
+        row(201, 100, "06:50", "sh -c sleep 20"),
+        // Inside the start window — not a candidate.
+        row(202, 100, "08:05", "sh -c true"),
+        // Not a shell — not a candidate.
+        row(203, 100, "07:00", "node server.js"),
+        // Another agent's shell — not this agent's candidate.
+        row(300, 1, "06:00", "bash -lc sleep 9"),
+    ];
+    let pids = tool_shell_descendant_pids(&rows, 100, STARTUP_WINDOW_SECS);
+    assert_eq!(pids, HashSet::from([200, 201]));
 }

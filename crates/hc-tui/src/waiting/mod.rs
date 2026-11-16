@@ -121,8 +121,12 @@ pub(crate) struct Verdict {
     /// The identity it was probed against — a stale verdict never
     /// applies to a changed state, pid, incarnation or record.
     pub fingerprint: Fingerprint,
-    /// Background work was found.
+    /// Background work was found: the same tool shell showed in two
+    /// consecutive listings, or a layer-2 entry reported it.
     pub waiting: bool,
+    /// The last listing sighted a tool shell once — not evidence yet,
+    /// but the next listing decides, so the fast cadence applies.
+    pub candidate: bool,
     /// When the cycle was queued — the re-probe cadence counts from it.
     pub probed_at: Instant,
 }

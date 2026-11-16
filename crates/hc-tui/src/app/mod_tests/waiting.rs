@@ -176,6 +176,13 @@ async fn an_idle_agent_with_a_tool_shell_descendant_shows_waiting() {
     publish(&mut app, vec![waiting_agent("t1", "idle", "devin", 4242)]);
     assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Idle);
 
+    // The shell must show in two consecutive listings — the first is
+    // only a candidate, the second is the evidence.
+    let outcome = waiting_result(&mut app).await;
+    assert!(outcome.candidate && !outcome.waiting);
+    app.on_waiting_result(outcome);
+    let probed = app.waiting["t1"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
     let outcome = waiting_result(&mut app).await;
     assert!(outcome.waiting);
     app.on_waiting_result(outcome);
@@ -216,13 +223,21 @@ async fn one_listing_serves_every_agent_on_a_machine() {
             waiting_agent("t2", "idle", "devin", 5200),
         ],
     );
+    // First listing: both shells are candidates; the second listing
+    // confirms them — still one `ps` per machine per cycle.
+    let first = waiting_result(&mut app).await;
+    let second = waiting_result(&mut app).await;
+    app.on_waiting_result(first);
+    app.on_waiting_result(second);
+    let probed = app.waiting["t1"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
     let first = waiting_result(&mut app).await;
     let second = waiting_result(&mut app).await;
     app.on_waiting_result(first);
     app.on_waiting_result(second);
     assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Waiting);
     assert_eq!(agent_status_of(&app, "t2"), AgentStatus::Waiting);
-    // Both agents on one machine shared a single `ps` this cycle.
+    // Two cycles, one listing each — the terminals always shared it.
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let mut execs = 0;
     while let Ok(req) = recorded.try_recv() {
@@ -230,7 +245,115 @@ async fn one_listing_serves_every_agent_on_a_machine() {
             execs += 1;
         }
     }
-    assert_eq!(execs, 1, "each terminal ran its own listing");
+    assert_eq!(execs, 2, "each terminal ran its own listing");
+    serve.abort();
+}
+
+#[tokio::test]
+async fn a_transient_shell_needs_two_consecutive_listings() {
+    let (mut app, rpc_rx) = waiting_app();
+    let (requests, _recorded) = mpsc::channel(64);
+    // The listing's shell pid changes between cycles — a `sh -c`
+    // helper that lives only milliseconds (a statusLine or hook) must
+    // not flicker the row idle → waiting → idle.
+    let extra = Arc::new(std::sync::Mutex::new(String::from(
+        "  4300    4242       07:00 sh -c sleep 30\n",
+    )));
+    let served = extra.clone();
+    let answers = Arc::new(move |_req: &Value| {
+        let extra = served.lock().unwrap().clone();
+        exec_result(&format!("  4242       1       08:20 devin\n{extra}"))
+    });
+    let serve = serve_all(rpc_rx, requests, METHODS, answers);
+    publish(&mut app, vec![waiting_agent("t1", "idle", "devin", 4242)]);
+
+    // First sighting of pid 4300: a candidate, not yet evidence.
+    let first = waiting_result(&mut app).await;
+    assert!(first.candidate && !first.waiting);
+    app.on_waiting_result(first);
+    assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Idle);
+
+    // The same pid in the next listing is the evidence.
+    let probed = app.waiting["t1"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
+    let second = waiting_result(&mut app).await;
+    assert!(second.waiting);
+    app.on_waiting_result(second);
+    assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Waiting);
+
+    // A different pid is a different shell — the count starts over.
+    *extra.lock().unwrap() = "  4400    4242       07:10 sh -c sleep 30\n".into();
+    let probed = app.waiting["t1"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
+    let third = waiting_result(&mut app).await;
+    assert!(third.candidate && !third.waiting);
+    app.on_waiting_result(third);
+    assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Idle);
+    serve.abort();
+}
+
+#[tokio::test]
+async fn a_candidate_shell_keeps_the_fast_cadence() {
+    let (mut app, rpc_rx) = waiting_app();
+    let (requests, _recorded) = mpsc::channel(64);
+    let answers = Arc::new(|_req: &Value| {
+        exec_result(&ps(
+            4242,
+            "08:20",
+            "  4300    4242       07:00 sh -c sleep 30\n",
+        ))
+    });
+    let serve = serve_all(rpc_rx, requests, METHODS, answers);
+    publish(&mut app, vec![waiting_agent("t1", "idle", "devin", 4242)]);
+
+    // A candidate keeps ~3s so the second sighting shows quickly.
+    let first = waiting_result(&mut app).await;
+    assert!(first.candidate);
+    app.on_waiting_result(first);
+    let probed = app.waiting["t1"].probed_at;
+    assert_eq!(
+        app.waiting_due,
+        Some(probed + std::time::Duration::from_secs(3))
+    );
+
+    // A Waiting verdict also stays fast so it clears quickly.
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
+    let second = waiting_result(&mut app).await;
+    assert!(second.waiting);
+    app.on_waiting_result(second);
+    let probed = app.waiting["t1"].probed_at;
+    assert_eq!(
+        app.waiting_due,
+        Some(probed + std::time::Duration::from_secs(3))
+    );
+    serve.abort();
+}
+
+#[tokio::test]
+async fn an_empty_listing_backs_off_the_next_probe() {
+    let (mut app, rpc_rx) = waiting_app();
+    let (requests, mut recorded) = mpsc::channel(64);
+    let answers = Arc::new(|_req: &Value| exec_result(&ps(4242, "08:20", "")));
+    let serve = serve_all(rpc_rx, requests, METHODS, answers);
+    publish(&mut app, vec![waiting_agent("t1", "idle", "devin", 4242)]);
+
+    // The listing found nothing: the next probe is ~10s out, not ~3s.
+    let outcome = waiting_result(&mut app).await;
+    assert!(!outcome.waiting && !outcome.candidate);
+    app.on_waiting_result(outcome);
+    let probed = app.waiting["t1"].probed_at;
+    assert_eq!(
+        app.waiting_due,
+        Some(probed + std::time::Duration::from_secs(10))
+    );
+
+    // Nothing queues inside the backed-off window.
+    app.tick_waiting(probed + std::time::Duration::from_secs(4));
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let execs = std::iter::from_fn(|| recorded.try_recv().ok())
+        .filter(|req| req["method"] == "machine.exec")
+        .count();
+    assert_eq!(execs, 1, "a probe ran inside the backed-off window");
     serve.abort();
 }
 
@@ -238,17 +361,25 @@ async fn one_listing_serves_every_agent_on_a_machine() {
 async fn an_eligible_terminal_reprobes_on_the_cadence() {
     let (mut app, rpc_rx) = waiting_app();
     let (requests, mut recorded) = mpsc::channel(64);
-    // No shells anywhere — the verdict stays quiet but cycles repeat.
-    let answers = Arc::new(|_req: &Value| exec_result(&ps(4242, "08:20", "")));
+    // A persistent shell keeps the terminal on the fast ~3s cadence.
+    let answers = Arc::new(|_req: &Value| {
+        exec_result(&ps(
+            4242,
+            "08:20",
+            "  4300    4242       07:00 sh -c sleep 30\n",
+        ))
+    });
     let serve = serve_all(rpc_rx, requests, METHODS, answers);
     publish(&mut app, vec![waiting_agent("t1", "idle", "devin", 4242)]);
     // A probe ran at eligibility and armed the cadence deadline.
-    let _ = waiting_result(&mut app).await;
+    let first = waiting_result(&mut app).await;
+    app.on_waiting_result(first);
     assert!(app.wake_deadline().is_some(), "no re-probe deadline armed");
 
     // Inside the window a tick queues nothing; at it, one new cycle.
-    app.tick_waiting(Instant::now() + std::time::Duration::from_secs(1));
-    app.tick_waiting(Instant::now() + std::time::Duration::from_secs(3));
+    let probed = app.waiting["t1"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(1));
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
     let _ = waiting_result(&mut app).await;
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let execs = recorded
@@ -272,6 +403,7 @@ async fn a_result_is_dropped_when_the_terminal_turns_working() {
         address: "t1".into(),
         fingerprint: waiting::Fingerprint::of(&term).unwrap(),
         waiting: true,
+        candidate: true,
     });
     assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Waiting);
 
@@ -298,6 +430,7 @@ async fn an_unseen_completion_stays_done_then_shows_waiting() {
         address: "t1".into(),
         fingerprint: waiting::Fingerprint::of(&term).unwrap(),
         waiting: true,
+        candidate: true,
     });
     // Unseen completion: the overlay never hides `Done`.
     assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Done);

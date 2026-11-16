@@ -760,8 +760,11 @@ Everything else on the compared surfaces still diffs normally.
   evidence says background work outlives the agent's turn (a `-c` tool
   shell still a descendant of the foreground pid past a ~20 s start
   window, via one `machine.exec` `ps` listing per machine per cycle —
-  and for `claude-code`, `file.read` of `~/.claude/sessions/<pid>.json`
-  with `status` `shell`). Seen, attention, notifications and raw
+  the same shell pid must appear in two consecutive listings before it
+  counts — and for `claude-code`, `file.read` of
+  `~/.claude/sessions/<pid>.json` with `status` `shell`). Cycles run
+  ~3 s apart while a candidate or verdict is live, ~10 s once a listing
+  finds nothing. Seen, attention, notifications and raw
   status are untouched; an unseen completion stays `Done` until
   visited. On a core that offers neither `machine.exec` nor
   `file.read`, or for agents with no background work in flight, every

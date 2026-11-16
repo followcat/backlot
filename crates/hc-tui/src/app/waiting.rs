@@ -20,8 +20,11 @@ use std::time::{Duration, Instant};
 /// Per-call deadline for a probe: a stalled exec or read must not
 /// hold the cycle open.
 const OP: Duration = Duration::from_secs(5);
-/// The re-probe cadence while a terminal stays eligible.
-const CADENCE: Duration = Duration::from_secs(3);
+/// The re-probe cadence while a terminal has a candidate shell or a
+/// Waiting verdict — it must show and clear quickly.
+const ACTIVE: Duration = Duration::from_secs(3);
+/// The cadence once a listing found nothing for a terminal.
+const QUIET: Duration = Duration::from_secs(10);
 /// How soon a tick retries after a full request channel.
 const RETRY: Duration = Duration::from_secs(1);
 
@@ -34,6 +37,19 @@ pub(super) struct Outcome {
     pub address: String,
     pub fingerprint: Fingerprint,
     pub waiting: bool,
+    /// The listing sighted a tool shell once — it needs a second
+    /// consecutive sighting before it is evidence.
+    pub candidate: bool,
+}
+
+/// A verdict's re-probe interval: fast while a shell is a candidate
+/// or the verdict is Waiting, quiet once the listing is empty.
+fn cadence_of(verdict: &Verdict) -> Duration {
+    if verdict.waiting || verdict.candidate {
+        ACTIVE
+    } else {
+        QUIET
+    }
 }
 
 /// Standard-alphabet base64 decode — `ExecResult.stdout` arrives
@@ -126,17 +142,25 @@ fn spawn_waiting_worker(
     tokio::spawn(async move {
         let mut client = None;
         let mut homes: BTreeMap<Option<String>, Option<String>> = BTreeMap::new();
+        // One listing's tool shells are candidates: a shell becomes
+        // evidence only when the same pid shows in two consecutive
+        // listings for the same terminal identity — a transient
+        // `sh -c` (a statusLine or a hook) never does.
+        let mut seen_once: BTreeMap<String, (Fingerprint, std::collections::HashSet<u32>)> =
+            BTreeMap::new();
         while let Some(mut cycle) = requests.recv().await {
             while let Ok(newer) = requests.try_recv() {
                 cycle = newer;
             }
             if client.as_ref().is_none_or(Client::is_closed) {
                 homes.clear();
+                seen_once.clear();
                 client = open().await.ok();
             }
             let Some(conn) = client.clone() else {
                 continue;
             };
+            seen_once.retain(|address, _| cycle.iter().any(|plan| &plan.address == address));
             let exec = conn.explain_unavailable("machine.exec").is_none();
             let file = conn.explain_unavailable("file.read").is_none();
             let mut by_machine: BTreeMap<Option<String>, Vec<ProbePlan>> = BTreeMap::new();
@@ -157,16 +181,29 @@ fn spawn_waiting_worker(
                     None
                 };
                 for plan in plans {
-                    let mut waiting = plan.process_tree
-                        && listing.as_ref().is_some_and(|rows| {
-                            u32::try_from(plan.fingerprint.pid).is_ok_and(|pid| {
-                                waiting::ps::has_tool_shell_descendant(
-                                    rows,
-                                    pid,
-                                    waiting::STARTUP_WINDOW_SECS,
-                                )
-                            })
-                        });
+                    let mut candidate = false;
+                    let mut waiting = false;
+                    if plan.process_tree
+                        && let Some(rows) = listing.as_ref()
+                        && let Ok(pid) = u32::try_from(plan.fingerprint.pid)
+                    {
+                        let current = waiting::ps::tool_shell_descendant_pids(
+                            rows,
+                            pid,
+                            waiting::STARTUP_WINDOW_SECS,
+                        );
+                        // A changed fingerprint (state, pid,
+                        // incarnation, record) means a new identity —
+                        // the count starts over for it too.
+                        let prior = seen_once
+                            .get(&plan.address)
+                            .filter(|(fp, _)| fp == &plan.fingerprint)
+                            .map(|(_, pids)| pids);
+                        waiting =
+                            prior.is_some_and(|pids| current.iter().any(|pid| pids.contains(pid)));
+                        candidate = !current.is_empty();
+                        seen_once.insert(plan.address.clone(), (plan.fingerprint.clone(), current));
+                    }
                     if !waiting
                         && file
                         && plan.layer2 == Some(Layer2::ClaudeSessions)
@@ -187,6 +224,7 @@ fn spawn_waiting_worker(
                             address: plan.address,
                             fingerprint: plan.fingerprint,
                             waiting,
+                            candidate,
                         })
                         .await
                         .is_err()
@@ -251,7 +289,7 @@ impl App {
             let due = self
                 .waiting
                 .get(&plan.address)
-                .is_none_or(|v| now.duration_since(v.probed_at) >= CADENCE);
+                .is_none_or(|v| now.duration_since(v.probed_at) >= cadence_of(v));
             if due {
                 cycle.push(plan);
             }
@@ -271,10 +309,21 @@ impl App {
                 .or_insert(Verdict {
                     fingerprint: plan.fingerprint,
                     waiting: false,
+                    candidate: false,
                     probed_at: now,
                 });
         }
-        self.waiting_due = self.waiting.values().map(|v| v.probed_at + CADENCE).min();
+        self.waiting_due = self.waiting_next_due();
+    }
+
+    /// The soonest probe deadline across live verdicts — fast while
+    /// any terminal has a candidate or a Waiting verdict, quiet for
+    /// the ones whose last listing found nothing.
+    fn waiting_next_due(&self) -> Option<Instant> {
+        self.waiting
+            .values()
+            .map(|v| v.probed_at + cadence_of(v))
+            .min()
     }
 
     /// A verdict landed: keep it only while the fingerprint it was
@@ -295,14 +344,17 @@ impl App {
             .or_insert_with(|| Verdict {
                 fingerprint: outcome.fingerprint.clone(),
                 waiting: false,
+                candidate: false,
                 probed_at: Instant::now(),
             });
         entry.fingerprint = outcome.fingerprint;
-        if entry.waiting == outcome.waiting {
-            return;
-        }
+        let flipped = entry.waiting != outcome.waiting;
         entry.waiting = outcome.waiting;
-        if self.apply_waiting_overlay() {
+        entry.candidate = outcome.candidate;
+        // A sighted candidate or a fresh verdict re-arms the deadline —
+        // the next probe may be closer than the armed one.
+        self.waiting_due = self.waiting_next_due();
+        if flipped && self.apply_waiting_overlay() {
             self.sched.mark_dirty(Instant::now());
         }
     }

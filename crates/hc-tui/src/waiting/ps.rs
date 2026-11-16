@@ -88,27 +88,28 @@ pub(crate) fn parse_processes(text: &str) -> Vec<ProcessRow> {
         .collect()
 }
 
-/// Whether `agent_pid` still runs a tool shell: a live descendant at
-/// any depth whose argv matches `tool_shell`, started at least
+/// The pids of `agent_pid`'s tool-shell descendants: live descendants
+/// at any depth whose argv matches `tool_shell`, started at least
 /// `window_secs` after the agent itself (younger shells are startup
 /// helpers). The agent's own row supplies the reference etime; a
-/// missing row yields no evidence.
-pub(crate) fn has_tool_shell_descendant(
+/// missing row yields an empty set.
+pub(crate) fn tool_shell_descendant_pids(
     rows: &[ProcessRow],
     agent_pid: u32,
     window_secs: u64,
-) -> bool {
+) -> HashSet<u32> {
     let Some(agent_etime) = rows
         .iter()
         .find(|row| row.pid == agent_pid)
         .map(|r| r.etime)
     else {
-        return false;
+        return HashSet::new();
     };
     let mut children_of: HashMap<u32, Vec<&ProcessRow>> = HashMap::new();
     for row in rows {
         children_of.entry(row.ppid).or_default().push(row);
     }
+    let mut pids = HashSet::new();
     let mut seen = HashSet::from([agent_pid]);
     let mut frontier: Vec<&ProcessRow> = children_of.get(&agent_pid).cloned().unwrap_or_default();
     while let Some(row) = frontier.pop() {
@@ -116,13 +117,13 @@ pub(crate) fn has_tool_shell_descendant(
             continue;
         }
         // Started after the agent (a descendant must be), outside the
-        // start window, and a tool shell — that's the evidence.
+        // start window, and a tool shell — that's a candidate.
         if agent_etime.saturating_sub(row.etime) >= window_secs && tool_shell(&row.argv) {
-            return true;
+            pids.insert(row.pid);
         }
         if let Some(children) = children_of.get(&row.pid) {
             frontier.extend(children);
         }
     }
-    false
+    pids
 }

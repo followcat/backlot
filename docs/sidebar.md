@@ -30,9 +30,10 @@ There is one deliberate exception to "no inferred status": **Waiting**, an
 overlay that stands in for a shown `Idle` — never a core word, never a core
 state change, and no agent's record maps to it. While evidence says an
 agent's own turn is quiet but work it started still runs, the shown `Idle`
-presents as `waiting`. The evidence, per eligible terminal (live, a
-foreground pid, a current `idle` or `done` effective word — never blocked,
-error, unknown, finished or lost):
+presents as `waiting`. In one line: `◌ waiting` comes from a process check
+every few seconds and Claude Code's own session file. The evidence, per
+eligible terminal (live, a foreground pid, a current `idle` or `done`
+effective word — never blocked, error, unknown, finished or lost):
 
 - **Process tree, every agent.** Once per machine per cycle, `machine.exec`
   runs `ps -A -o pid=,ppid=,etime=,args=` (the `on` field routes to the
@@ -40,7 +41,10 @@ error, unknown, finished or lost):
   whose argv basename is `sh`, `bash`, `zsh`, `dash`, `fish` or `ksh` with a
   `-c`-form argument counts — unless the shell started within ~20 s of the
   agent itself (startup helpers). Long-lived helpers (`node`, `npm exec`,
-  `uvx`) are not shells and never count.
+  `uvx`) are not shells and never count. A sighted shell is only a
+  candidate: it becomes evidence when the same pid shows in two consecutive
+  listings for the same terminal, so a transient `sh -c` (a statusLine, or
+  a Stop/Notification hook that runs as the turn ends) never flips the row.
 - **The agent's own word, the exact layer.** A table keyed by the effective
   record's `app` holds entries verified against the program's own binary or
   docs — today only Claude Code: `file.read` of
@@ -54,7 +58,9 @@ error, unknown, finished or lost):
 
 A verdict is dropped the moment its terminal stops matching the
 fingerprint it was probed for — state word, foreground pid, incarnation or
-winning record — and re-probes every ~3 s while eligible. Probe calls are
+winning record — and re-probes on a two-speed cadence: ~3 s while the
+terminal has a candidate shell or a Waiting verdict (so the row shows and
+clears quickly), ~10 s once a listing found nothing. Probe calls are
 bound to ~5 s, run off the event loop and share the operations opener; a
 connection opens only when a cycle has an eligible terminal, and a method
 the core does not offer turns its layer off quietly. Waiting never mutates
