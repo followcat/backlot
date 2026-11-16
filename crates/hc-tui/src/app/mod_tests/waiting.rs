@@ -293,6 +293,112 @@ async fn a_transient_shell_needs_two_consecutive_listings() {
 }
 
 #[tokio::test]
+async fn out_of_phase_terminals_keep_their_first_sighting() {
+    let (mut app, rpc_rx) = waiting_app();
+    let (requests, _recorded) = mpsc::channel(64);
+    let answers = Arc::new(|_req: &Value| {
+        exec_result(
+            "  4242       1       08:20 devin\n\
+                 4300    4242       07:00 sh -c sleep 30\n\
+                 5200       1       08:30 devin\n\
+                 5300    5200       07:10 sh -c sleep 10\n",
+        )
+    });
+    let serve = serve_all(rpc_rx, requests, METHODS, answers);
+    publish(&mut app, vec![waiting_agent("t1", "idle", "devin", 4242)]);
+    // A's first listing: a sighting, not yet evidence.
+    let first = waiting_result(&mut app).await;
+    assert!(first.candidate && !first.waiting);
+    app.on_waiting_result(first);
+
+    // B becomes eligible mid-phase: its own cycle must not erase A's
+    // sighting — the interleaved case, not an edge case.
+    publish(
+        &mut app,
+        vec![
+            waiting_agent("t1", "idle", "devin", 4242),
+            waiting_agent("t2", "idle", "devin", 5200),
+        ],
+    );
+    let second = waiting_result(&mut app).await;
+    assert_eq!(second.address, "t2");
+    assert!(second.candidate && !second.waiting);
+    app.on_waiting_result(second);
+
+    // A's second own listing reaches Waiting on the kept sighting.
+    let probed = app.waiting["t1"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
+    let third = waiting_result(&mut app).await;
+    assert_eq!(third.address, "t1");
+    assert!(third.waiting, "A's sighting was erased by B's cycle");
+    app.on_waiting_result(third);
+    assert_eq!(agent_status_of(&app, "t1"), AgentStatus::Waiting);
+
+    // B's second own listing reaches Waiting on its kept sighting.
+    let probed = app.waiting["t2"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
+    let fourth = waiting_result(&mut app).await;
+    assert!(fourth.waiting, "B's sighting was erased by A's cycle");
+    app.on_waiting_result(fourth);
+    assert_eq!(agent_status_of(&app, "t2"), AgentStatus::Waiting);
+    serve.abort();
+}
+
+#[tokio::test]
+async fn leaving_eligibility_loses_the_sighting() {
+    let (mut app, rpc_rx) = waiting_app();
+    let (requests, _recorded) = mpsc::channel(64);
+    let answers = Arc::new(|_req: &Value| {
+        exec_result(
+            "  4242       1       08:20 devin\n\
+                 4300    4242       07:00 sh -c sleep 30\n\
+                 5200       1       08:30 devin\n\
+                 5300    5200       07:10 sh -c sleep 10\n",
+        )
+    });
+    let serve = serve_all(rpc_rx, requests, METHODS, answers);
+    publish(
+        &mut app,
+        vec![
+            waiting_agent("t1", "idle", "devin", 4242),
+            waiting_agent("t2", "idle", "devin", 5200),
+        ],
+    );
+    // Both sighted in the shared listing.
+    let first = waiting_result(&mut app).await;
+    let second = waiting_result(&mut app).await;
+    app.on_waiting_result(first);
+    app.on_waiting_result(second);
+
+    // t1 turns working — not probeable — while t2's own cycle runs:
+    // the sighting for t1 must go with its eligibility.
+    publish(
+        &mut app,
+        vec![
+            waiting_agent("t1", "working", "devin", 4242),
+            waiting_agent("t2", "idle", "devin", 5200),
+        ],
+    );
+    let probed = app.waiting["t2"].probed_at;
+    app.tick_waiting(probed + std::time::Duration::from_secs(3));
+    let _ = waiting_result(&mut app).await;
+
+    // Back to idle, t1's next own listing is a fresh first sighting —
+    // the stale one must not count it as the second.
+    publish(
+        &mut app,
+        vec![
+            waiting_agent("t1", "idle", "devin", 4242),
+            waiting_agent("t2", "idle", "devin", 5200),
+        ],
+    );
+    let outcome = waiting_result(&mut app).await;
+    assert_eq!(outcome.address, "t1");
+    assert!(outcome.candidate && !outcome.waiting);
+    serve.abort();
+}
+
+#[tokio::test]
 async fn a_candidate_shell_keeps_the_fast_cadence() {
     let (mut app, rpc_rx) = waiting_app();
     let (requests, _recorded) = mpsc::channel(64);

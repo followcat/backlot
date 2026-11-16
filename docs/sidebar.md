@@ -42,9 +42,10 @@ effective word — never blocked, error, unknown, finished or lost):
   `-c`-form argument counts — unless the shell started within ~20 s of the
   agent itself (startup helpers). Long-lived helpers (`node`, `npm exec`,
   `uvx`) are not shells and never count. A sighted shell is only a
-  candidate: it becomes evidence when the same pid shows in two consecutive
-  listings for the same terminal, so a transient `sh -c` (a statusLine, or
-  a Stop/Notification hook that runs as the turn ends) never flips the row.
+  candidate: it becomes evidence when the same pid shows in two of the
+  terminal's own consecutive listings, so a transient `sh -c` (a
+  statusLine, or a Stop/Notification hook that runs as the turn ends)
+  never flips the row.
 - **The agent's own word, the exact layer.** A table keyed by the effective
   record's `app` holds entries verified against the program's own binary or
   docs — today only Claude Code: `file.read` of

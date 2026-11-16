@@ -60,6 +60,7 @@ mod synthesize;
 mod tab_status;
 mod view_sync;
 mod waiting;
+mod waiting_wire;
 mod wake;
 mod window_title;
 mod word_selection;

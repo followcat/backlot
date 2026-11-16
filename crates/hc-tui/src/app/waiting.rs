@@ -9,17 +9,14 @@
 //! docs/sidebar.md for the semantics).
 
 use super::agent_presentation::project_aggregate_status;
+use super::waiting_wire::{exec_stdout, home_of, read_file};
 use super::*;
 use crate::waiting::{self, Fingerprint, Layer2, ProbePlan, Verdict};
 use hc_proto::client::Client;
 use hc_proto::watch::{Link, OpenRpc};
-use serde_json::json;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-/// Per-call deadline for a probe: a stalled exec or read must not
-/// hold the cycle open.
-const OP: Duration = Duration::from_secs(5);
 /// The re-probe cadence while a terminal has a candidate shell or a
 /// Waiting verdict — it must show and clear quickly.
 const ACTIVE: Duration = Duration::from_secs(3);
@@ -28,8 +25,14 @@ const QUIET: Duration = Duration::from_secs(10);
 /// How soon a tick retries after a full request channel.
 const RETRY: Duration = Duration::from_secs(1);
 
-/// One cycle's request: the eligible terminals to probe now.
-pub(super) type Cycle = Vec<ProbePlan>;
+/// One cycle's request: the terminals due now, plus every eligible
+/// address so the worker can keep the sightings of terminals whose
+/// own cycle runs later (cycles only queue the due ones).
+#[derive(Debug, Clone)]
+pub(super) struct Cycle {
+    pub plans: Vec<ProbePlan>,
+    pub eligible: std::collections::HashSet<String>,
+}
 
 /// A probe's verdict for one terminal.
 #[derive(Debug, Clone)]
@@ -50,84 +53,6 @@ fn cadence_of(verdict: &Verdict) -> Duration {
     } else {
         QUIET
     }
-}
-
-/// Standard-alphabet base64 decode — `ExecResult.stdout` arrives
-/// base64; kept local for the same reason `base64_encode` is.
-fn base64_decode(text: &str) -> Option<Vec<u8>> {
-    fn value(byte: u8) -> Option<u32> {
-        match byte {
-            b'A'..=b'Z' => Some(u32::from(byte - b'A')),
-            b'a'..=b'z' => Some(u32::from(byte - b'a' + 26)),
-            b'0'..=b'9' => Some(u32::from(byte - b'0' + 52)),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-    let bytes: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
-    for chunk in bytes.chunks(4) {
-        let pad = chunk.iter().filter(|b| **b == b'=').count();
-        let data_len = chunk.len() - pad;
-        // Two symbols make a byte; padding only ever ends the stream.
-        if data_len < 2 || pad > 2 || (pad > 0 && chunk.len() != 4) {
-            return None;
-        }
-        let n: u32 = chunk[..data_len]
-            .iter()
-            .try_fold(0u32, |acc, b| value(*b).map(|v| (acc << 6) | v))?;
-        let shifted = n << (6 * (4 - data_len));
-        out.extend(shifted.to_be_bytes()[1..data_len].iter());
-    }
-    Some(out)
-}
-
-/// `ExecResult.stdout` as text, `None` on any failure — a failed exec
-/// is not evidence either way.
-async fn exec_stdout(conn: &Client, machine: &Option<String>, argv: &[&str]) -> Option<String> {
-    let result = conn
-        .call_timeout(
-            "machine.exec",
-            Some(json!({"argv": argv, "on": machine, "timeout": OP.as_secs_f64()})),
-            OP,
-        )
-        .await
-        .ok()?;
-    String::from_utf8(base64_decode(result["stdout"].as_str()?)?).ok()
-}
-
-/// `FileReadResult.text`, `None` on any failure — a missing sessions
-/// file simply means this process has none.
-async fn read_file(conn: &Client, machine: &Option<String>, path: String) -> Option<String> {
-    conn.call_timeout(
-        "file.read",
-        Some(json!({"path": path, "on": machine, "limit": 8192})),
-        OP,
-    )
-    .await
-    .ok()?
-    .get("text")
-    .and_then(|text| text.as_str())
-    .map(str::to_owned)
-}
-
-/// The machine's home directory, probed once per connection: a
-/// relative `file.read` resolves against the core's working
-/// directory, not the home.
-async fn home_of<'a>(
-    conn: &Client,
-    machine: &'a Option<String>,
-    homes: &'a mut BTreeMap<Option<String>, Option<String>>,
-) -> Option<&'a str> {
-    if !homes.contains_key(machine) {
-        let home = exec_stdout(conn, machine, &["sh", "-c", "printf %s \"$HOME\""])
-            .await
-            .map(|out| out.trim().to_owned())
-            .filter(|out| !out.is_empty());
-        homes.insert(machine.clone(), home);
-    }
-    homes.get(machine)?.as_deref()
 }
 
 /// The probe worker: the first queued cycle opens the shared opener,
@@ -160,11 +85,14 @@ fn spawn_waiting_worker(
             let Some(conn) = client.clone() else {
                 continue;
             };
-            seen_once.retain(|address, _| cycle.iter().any(|plan| &plan.address == address));
+            // Drop sightings whose terminal left eligibility; terminals
+            // due in a later cycle keep theirs — one cycle only covers
+            // the terminals that were due for it.
+            seen_once.retain(|address, _| cycle.eligible.contains(address));
             let exec = conn.explain_unavailable("machine.exec").is_none();
             let file = conn.explain_unavailable("file.read").is_none();
             let mut by_machine: BTreeMap<Option<String>, Vec<ProbePlan>> = BTreeMap::new();
-            for plan in cycle {
+            for plan in cycle.plans {
                 by_machine
                     .entry(plan.machine.clone())
                     .or_default()
@@ -281,26 +209,31 @@ impl App {
             self.waiting_due = None;
             return;
         }
-        let mut cycle = Vec::new();
+        let mut plans = Vec::new();
+        let mut eligible = std::collections::HashSet::new();
         for term in self.view.inventory.terminals().values() {
             let Some(plan) = waiting::probe_plan(term) else {
                 continue;
             };
+            // Every eligible address goes with the cycle so the worker
+            // keeps this terminal's sighting until its own turn.
+            eligible.insert(plan.address.clone());
             let due = self
                 .waiting
                 .get(&plan.address)
                 .is_none_or(|v| now.duration_since(v.probed_at) >= cadence_of(v));
             if due {
-                cycle.push(plan);
+                plans.push(plan);
             }
         }
-        if !cycle.is_empty() && self.waiting_tx.try_send(cycle.clone()).is_err() {
+        let cycle = Cycle { plans, eligible };
+        if !cycle.plans.is_empty() && self.waiting_tx.try_send(cycle.clone()).is_err() {
             // A full queue means a cycle is still in flight; retry
             // soon instead of parking on the cadence.
             self.waiting_due = Some(now + RETRY);
             return;
         }
-        for plan in cycle {
+        for plan in cycle.plans {
             // The cycle is queued; stamp `probed_at` so the cadence
             // starts now regardless of the worker's run time.
             self.waiting
@@ -387,21 +320,5 @@ impl App {
             self.presentation.refresh_active(&mut self.projection);
         }
         changed
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn base64_round_trips_through_the_local_encoder() {
-        for bytes in [b"ps listing\n".as_slice(), b"", &[0u8; 7], &[255u8; 5]] {
-            let encoded = crate::selection::base64_encode(bytes);
-            assert_eq!(base64_decode(&encoded).as_deref(), Some(bytes), "{encoded}");
-        }
-        assert_eq!(base64_decode("Zg"), Some(b"f".to_vec()));
-        assert_eq!(base64_decode("Z m 8 ="), Some(b"fo".to_vec()));
-        assert_eq!(base64_decode("!bad"), None);
     }
 }
