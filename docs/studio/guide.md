@@ -143,10 +143,17 @@ back), a role terminal disappearing while its ledger still wants it live, and a 
 attention growing. Each condition reports once per edge. Without `--target` the lines go to the
 watch's own stderr; `--studio` narrows the ledgers to one studio.
 
-Run `backlot` to open the UI. Press `Ctrl+B y` — prefix, then `y` — to open the studio panel on
-the right, expanded and focused. Pressing the chord again while it is focused closes it; pressing
-it while the panel is open but unfocused focuses it again. A herdr binding on `y` still wins
-while the panel does not own the keys.
+Run `backlot` to open the UI. Once a studio exists the client is in studio mode: the sidebar's
+agents section becomes the **cast** of the current studio — one two-line entry per person, live
+ones first — and `Ctrl+B y` — prefix, then `y` — opens the studio panel on the right as a column
+of bordered blocks, one per studio. Pressing the chord again while it is focused closes it;
+pressing it while the panel is open but unfocused focuses it again. A herdr binding on `y` still
+wins while the panel does not own the keys.
+
+Four direct keys move around without the prefix: `Alt+Up`/`Alt+Down` step to the previous or
+next studio, `Alt+Left`/`Alt+Right` to the previous or next person of the current studio's cast.
+They exist only in studio mode — outside it the same chords reach herdr's bindings or the
+program — and their defaults are `keys.previous_studio` and friends in backlot's config.
 
 Every studio command also accepts `--session <s>` and `--remote <t>` to reach another core, the
 same flags the TUI takes.
@@ -203,30 +210,40 @@ In the normal path the steps run in this order:
 The light path skips the ceremony: for a small job the producer can create and cast a task itself
 and review the delivery — the same commands, recorded the same way.
 
-### What the panel shows
+### What the panel and the cast show
 
-Expanded, the panel lists each studio, then the groups `producer`, `director`, `writer`,
-`actors`, then each person with a mark, a priority flag, `runner/model`, a one-line "doing" and
-any attention text. The marks:
+The sidebar's cast lists the current studio's people, live first, two lines each: mark, name and
+task, the runner at the right edge; the terminal's title under it with a short model at the
+right. An open attention replaces the second line with `! <attention>`; a failed turn says
+`last turn failed`. The focused person's pair of rows is highlighted with a `▌` marker. A
+trailing `others` row expands to the agents that belong to no studio.
+
+Expanded, the panel draws one bordered block per studio — the studio's id and its attention
+count in the frame — with its `error` and owed `→` lines inside, then the groups `producer`,
+`director`, `writer`, `actors` divided by rules, each person one line: mark, name and priority
+flag, and the state word at the right. An open attention adds a `! <attention>` line under its
+person. The marks:
 
 | Mark | Meaning |
 |---|---|
 | spinning glyph | `working` — the role's screen shows its runner's working marker |
-| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting). A wanted role a `[limits]` cap holds back shows the same mark with `waiting for a <runner> slot` as its doing line |
+| `○` | `waiting` — live, not known to be working or blocked (an unmatched screen reads as waiting). A wanted role a `[limits]` cap holds back shows the same mark; the cast's second line says `waiting for a <runner> slot` |
 | `×` | `blocked` — the role's screen shows a permission prompt |
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
 
-The title line names what is working (`working: director, actors 2`, else `idle`). `stage not
-running` means no live `backlot-stage` terminal — the panel keeps the last document. With the
-panel collapsed, a narrow strip lists only the groups with someone working.
+The title line counts the studios (`studios 2`). `stage not running` means no live
+`backlot-stage` terminal — the panel and the cast keep the last document. When the blocks do
+not all fit, every block but the current studio's folds to a one-line summary of its marks; with
+the panel collapsed, a narrow strip lists one line per studio.
 
 Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter` acts on the row
-(person → focus its terminal, studio → focus the producer, closed person → arm `enter: reopen`
-then a second Enter runs `backlot reopen`, group → collapse), `Space` collapses a group, `c`
+(person → focus its terminal, studio → focus its producer, closed person → arm `enter: reopen`
+then a second Enter runs `backlot reopen`), `Space` collapses or expands the studio's block, `c`
 switches collapsed and expanded, `+`/`-` raise and lower a task's priority, `Esc` unfocuses it
 (closes it outright when the panel covers the whole frame). While the panel is focused it owns
-the keys — `Ctrl+B y` again closes it.
+the keys — `Ctrl+B y` again closes it — except the four `Alt+arrow` studio keys, which still
+switch studios and roles.
 
 ## Permission prompts
 
