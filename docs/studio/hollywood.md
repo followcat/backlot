@@ -6,27 +6,32 @@ and manages studios through **cards** — proposals you confirm. It is not a stu
 role inside one: it has its own ledger beside `studios/`, in the same format, and studio lists,
 limits and studio rules never see it.
 
-This document covers what exists today (H1–H3: the model, the command line, and the stage's live
-layer) and marks what lands with the floating layer (H4) and real agents (H5).
+This document covers what exists today (H1–H4: the model, the command line, the stage's live
+layer, and the floating layer in the TUI) and marks what lands with real agents (H5).
 
 ## The layer and its key
 
-When the layer is built (H4) it has three states, and it is always a float: it is drawn *over* the
-screen and never takes a row or a column from the panes, so toggling it resizes nothing.
+The layer has three states, and it is always a float: it is drawn *over* the screen — after the
+panes, the cast sidebar and the studio panel — and never takes a row or a column from the pane
+layout, so toggling it resizes nothing.
 
-- **Hidden** draws nothing. Without a `[hollywood]` section in your config this is the default,
-  and the screen is exactly the herdr screen.
-- **Collapsed** is a one-row strip floating at the right end of the top row: Hollywood's state,
-  studio counts, the number of open cards, and its newest headline.
-- **Expanded** is a panel dropping down from the top: one row per studio, Hollywood's last report
-  lines, the open cards with Apply / Cancel / Show me, and an input line. At narrow widths it is a
-  full-screen view, like the studio panel.
+- **Hidden** draws nothing and consumes no key. Without a `[hollywood]` section in your config
+  this is the default, and the screen is exactly the herdr screen.
+- **Collapsed** is a one-row strip floating at the right end of the top row, sized to its content
+  and capped at a third of the width: Hollywood's mark and role state, the studio counts by state,
+  the number of open cards, and its newest headline cut to fit.
+- **Expanded** is a panel dropping down from the top, at most half the height, scrollable: one
+  row per studio (state, attention count, what it is doing), Hollywood's newest headline, the
+  open cards with `apply` / `cancel` / `show` targets, and an input line. At narrow widths it is
+  a full-screen view, like the studio panel.
 
 The key is **`alt+y`**, a direct key with no prefix. It switches collapsed and expanded and shows
-the layer when hidden; `x` in the expanded panel hides it; `Esc` collapses a focused panel.
+the layer when hidden; `x` in the expanded panel hides it; `Esc` collapses it.
 `[hollywood] key` changes it (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
 bound only while `[hollywood]` exists — with no section, Alt+Y reaches the focused program as
-always. Known costs, said plainly:
+always. A key value that does not parse, is a bare printable key, or collides with one of the
+four studio keys or the panel chord falls back to `alt+y` with a notice that names the file and
+never echoes the value. Known costs, said plainly:
 
 1. While bound, **Alt+Y no longer reaches the program in the pane**. Readline and Emacs use `M-y`
    for yank-pop; if you use it, rebind (`key = "prefix+h"`) or unset the layer.
@@ -36,6 +41,31 @@ always. Known costs, said plainly:
 3. On **macOS**, the terminal must send Option as Meta.
 
 The studio panel keeps `prefix+y`.
+
+Inside the expanded panel: arrows / `j` `k` move the selection, `PageUp` / `PageDown` page,
+`Enter` acts on the row (a studio row focuses that studio's producer; the title row focuses
+`bl-hollywood`; a card row is its Show me; the input line opens for editing), `a` applies and
+`c` cancels the selected card, `s` is Show me, `i` opens the input line, `x` hides the layer,
+`Esc` collapses it. The panel owns those keys while it is expanded — an armed prefix disarms
+into it. Mouse does the same: a click on the strip expands it, clicks on rows select and act,
+the card buttons and the input line do what the keys do, the scrollbar and the wheel scroll,
+and a click outside the expanded panel goes to what is under it and leaves the panel open.
+
+Show me on a `studio-new` card opens the draft's cast and brief in a read-only popup
+(`backlot card show` output); on any other card it focuses the studio the card names. The view
+owns its keys until Esc, Enter, `x` or `q` closes it — arrows / `j` `k` scroll.
+
+The input line (`i` or a click) is one line sent with `backlot tell hollywood "<line>"` as the
+user — never written into Hollywood's terminal. Empty sends nothing; `Esc` leaves the line;
+Enter sends and leaves it.
+
+Everything the layer draws comes from the `backlot` summary document plus the stage-running
+flag — the studio rows show even while Hollywood's own agent is down (a `closed` or `lost`
+role state is said in the strip and the title row, and a stopped stage gets its own line).
+Everything it changes goes through `backlot` commands spawned as the user — `card apply`,
+`card cancel`, `card show`, `tell hollywood` — off the event loop, failures surfacing as
+notices. The only client-local state is the mode, the selection, the scroll offset and the
+input line's text.
 
 ## Configuring Hollywood's agent
 
@@ -51,6 +81,22 @@ effort = "high"
 
 `runner` and `model` are required, and the runner must be one backlot supports. `effort` follows
 the cast file's rule: `cursor`, `devin` and `cmd` take none; every other runner needs one.
+
+The section does not have to be written by hand:
+
+```sh
+backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
+```
+
+`hollywood setup` writes the `[hollywood]` table into the user config and keeps every other
+line of the file as it was; it refuses — before touching the file — a runner that is not
+supported or not installed (with the dry run's message), a bad model, an effort the runner's
+rule does not take, a key value the layer could not bind, and a config file that does not
+parse. While no section exists, the expanded studio panel's last row names this command.
+
+Pickup: a running **stage** re-reads the table on its next tick and starts `bl-hollywood`; a
+running **client** reads the config once, at start — a layer appears or its key changes at the
+next client start. There is no file watcher.
 
 With a valid section the stage runs **one terminal named `bl-hollywood`** — labelled
 `backlot.role=hollywood` and never `backlot.studio` — in `<state dir>/hollywood/` with
@@ -147,9 +193,9 @@ undelivered items go as one digest, and a queued notice whose source moved on is
 sent (`message.dropped`). Hollywood's own words — a recovered terminal, each card's outcome —
 join the same inbox.
 
-Hollywood's own reports come back through `backlot hollywood report` — a headline the strip and
-panel will read from the ledger (D21); today it lands in the summary document's `hollywood`
-object. It may also talk *to* a studio's producer on your behalf — its one write into a studio:
+Hollywood's own reports come back through `backlot hollywood report` — the newest headline is
+what the collapsed strip and the expanded panel show, read from the ledger into the summary
+document's `hollywood` object (D21). It may also talk *to* a studio's producer on your behalf — its one write into a studio:
 `tell producer` sent `--as hollywood` records the studio's `message.queued` as the delivery
 record, and mirrors `message.sent` into Hollywood's own ledger.
 
@@ -189,5 +235,4 @@ the ledger.
 
 ## What is not here yet
 
-- **H4**: the floating layer, its keys, the input line, Apply / Cancel / Show me in the panel.
 - **H5**: a real agent under an approved run — everything above is runner-agnostic and fake-tested.

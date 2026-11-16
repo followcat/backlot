@@ -28,13 +28,13 @@ pub(crate) mod write;
 
 pub use io::{LoadedConfig, config_diagnostic_summary, load, load_live};
 
-pub(crate) use keybinds::parse_key_combo;
 pub use keybinds::{
     ActionKeybinds, BindingConfig, BindingTrigger, CustomCommandAction, CustomCommandKeybind,
     IndexedKeybind, KeyCombo, Keybinds, LiveKeybindConfig, NavigateKeybinds, ResolvedBinding,
     TerminalKey, format_key_combo, format_prefix_combos, normalize_key_combo,
     terminal_key_matches_combo,
 };
+pub(crate) use keybinds::{is_unmodified_printable, parse_key_combo};
 pub use sidebar::{
     AgentSidebarToken, AgentsSidebarConfig, SidebarConfig, SidebarTokenColor, SidebarTokenStyle,
     SpaceSidebarToken, SpacesSidebarConfig,

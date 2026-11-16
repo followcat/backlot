@@ -108,6 +108,35 @@ pub(super) fn render_overlays_and_cursor(
         app.panel_anim_deadline = None;
         crate::panel::PanelRender::default()
     };
+    // The Hollywood layer floats over everything the frame owns: the
+    // panes, the cast sidebar and the studio panel — but under the
+    // popup/notice/overlay stack. It reserves nothing: the pane
+    // layout is identical whether it is hidden, a strip or expanded.
+    app.hollywood_hits = if app.hollywood.visible() {
+        overlay_painted = true;
+        let summary = app.hollywood_summary();
+        crate::hollywood::render(
+            buf,
+            area,
+            summary.as_ref(),
+            crate::panel::stage_running(&app.view),
+            &app.hollywood,
+            app.area.0 <= app.shell.mobile_width_threshold,
+            &app.shell.palette,
+        )
+    } else {
+        crate::hollywood::HollywoodRender::default()
+    };
+    // The input line's cursor wins while the line edits — the layer's
+    // own cursor, like the help overlay's.
+    if let Some(cursor) = app.hollywood_hits.cursor.as_ref() {
+        app.want_cursor = CursorWish {
+            pos: cursor.visible.then_some((cursor.x, cursor.y)),
+            anchor: Some((cursor.x, cursor.y)),
+            shape: CursorShape::Default,
+            blinking: true,
+        };
+    }
     // The mobile switcher IS the Navigate surface under the threshold —
     // `composition.rs` renders it over the whole frame, rebuilding the
     // wire frame as ratatui cells (dropping extended underline bits).

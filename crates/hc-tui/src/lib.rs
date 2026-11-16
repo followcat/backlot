@@ -44,6 +44,7 @@ mod keybind_help;
 
 pub mod layout;
 
+mod hollywood;
 pub mod operations;
 pub mod own_theme;
 mod panel;

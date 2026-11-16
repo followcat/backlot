@@ -14,7 +14,9 @@ mod draw_blocks;
 mod rows;
 
 pub(crate) use actions::{PanelAction, PanelRunner, spawn_runner};
-pub(crate) use config::{PanelConfig, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load};
+pub(crate) use config::{
+    PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,
+};
 pub(crate) use data::{stage_running, summary};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use rows::{Mark, Row, Target, mark_color, mark_counts, mark_symbol, rows};
@@ -53,6 +55,10 @@ pub(crate) struct Panel {
     pub reopen_confirm: Option<(String, String)>,
     /// Spinner frame counter for working marks (~120 ms ticks).
     pub spin: usize,
+    /// H4: the expanded panel's last row names `backlot hollywood
+    /// setup` while no `[hollywood]` table exists (R22). Set by
+    /// `set_hollywood` — a client-local flag, never read from a doc.
+    pub hollywood_hint: bool,
 }
 
 #[cfg(test)]
@@ -70,6 +76,9 @@ impl Panel {
             selected: None,
             reopen_confirm: None,
             spin: 0,
+            // The flag stays off until `set_hollywood` reads the
+            // config — panel-only construction draws no hint.
+            hollywood_hint: false,
         }
     }
 

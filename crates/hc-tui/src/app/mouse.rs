@@ -58,6 +58,10 @@ pub(crate) enum ChromeDrag {
     PanelScrollbar {
         grab_row_offset: u16,
     },
+    /// The Hollywood layer's body scrollbar.
+    HollywoodScrollbar {
+        grab_row_offset: u16,
+    },
 }
 
 /// A workspace row press pending release-or-drag — the reference
@@ -153,6 +157,18 @@ impl App {
         // outside-press cancel — the reference's Settings mouse branch.
         if self.settings.is_some() {
             self.handle_settings_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        // The Hollywood layer draws over the panel, so its hits win
+        // theirs: a click on the strip expands it; inside the expanded
+        // panel rows act like Enter, buttons run, the wheel scrolls.
+        // A press outside the expanded panel falls through to whatever
+        // is under it and leaves the panel open — unless the "Show me"
+        // view is open: it owns the pointer until an outside click
+        // closes it.
+        if self.hollywood.view.is_some() || self.hollywood_hits.contains((mouse.col, mouse.row)) {
+            self.hollywood_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
             return;
         }

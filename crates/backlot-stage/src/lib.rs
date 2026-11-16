@@ -12,7 +12,7 @@ mod checks;
 mod checkwork;
 pub mod cli;
 pub mod commands;
-mod config;
+pub mod config;
 mod daemon;
 mod deliver;
 mod digest;
@@ -26,6 +26,7 @@ mod hlife;
 mod hnotice;
 pub mod hook;
 mod hrender;
+mod hsetup;
 mod hstage;
 mod hwatch;
 mod hwood;
@@ -91,6 +92,8 @@ mod hcard_tests;
 mod hnotice_tests;
 #[cfg(test)]
 mod hook_tests;
+#[cfg(test)]
+mod hsetup_tests;
 #[cfg(test)]
 mod hstage_tests;
 #[cfg(test)]

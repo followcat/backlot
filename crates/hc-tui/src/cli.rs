@@ -242,6 +242,19 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         app.set_panel_runner(crate::panel::spawn_runner(exe));
     }
 
+    // The `[hollywood]` table (H4) from the same config file — the
+    // layer starts collapsed with it and stays hidden without it, so
+    // Alt+Y keeps reaching the program exactly as before (D15a).
+    let env_map: std::collections::BTreeMap<String, String> = env
+        .iter()
+        .filter_map(|(k, v)| Some((k.to_str()?.to_string(), v.to_str()?.to_string())))
+        .collect();
+    let hwood_path = backlot_stage::config::config_path(&env_map);
+    app.set_hollywood(backlot_stage::config::hollywood(&env_map), &hwood_path);
+    if let Ok(exe) = std::env::current_exe() {
+        app.set_hollywood_runner(crate::hollywood::spawn_runner(exe));
+    }
+
     // Guard declared before the terminal: the terminal drops first,
     // the guard restores raw mode/modes/cursor last — on success,
     // error and panic paths alike.

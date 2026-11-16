@@ -130,7 +130,7 @@ fn any_brief(s: &StudioState) -> bool {
 /// A draft path on the card: relative paths resolve against
 /// Hollywood's own directory — where `hollywood propose` ran —
 /// absolute ones stay.
-fn resolve_draft(hdir: &Path, p: &str) -> std::path::PathBuf {
+pub(crate) fn resolve_draft(hdir: &Path, p: &str) -> std::path::PathBuf {
     let path = Path::new(p);
     if path.is_absolute() {
         path.to_path_buf()

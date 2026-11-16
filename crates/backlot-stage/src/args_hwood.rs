@@ -10,6 +10,7 @@ use crate::args::*;
 use crate::args_studio::repo_path;
 use crate::args_task;
 use crate::cli::Fail;
+use crate::config::HollywoodCfg;
 
 /// `backlot hollywood`'s subcommands.
 pub enum HollywoodCmd {
@@ -21,22 +22,36 @@ pub enum HollywoodCmd {
         headline: String,
         body: Option<PathBuf>,
     },
+    /// `hollywood setup` (R22) — writes the `[hollywood]` table.
+    Setup { cfg: HollywoodCfg },
 }
 
 /// `backlot card`'s subcommands.
 pub enum CardCmd {
     List,
-    Apply { id: u64 },
-    Cancel { id: u64, reason: String },
+    /// `card show <id>` — one card's full read, a `studio-new`'s
+    /// draft included.
+    Show {
+        id: u64,
+    },
+    Apply {
+        id: u64,
+    },
+    Cancel {
+        id: u64,
+        reason: String,
+    },
 }
 
 pub(crate) const U_HOLLYWOOD: &str = "usage:
   backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] \
 [--level low|normal|high] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] --why <line>
        actions: studio-new | close | reopen | priority | pause | resume | abandon
-  backlot hollywood report \"<headline>\" [--body <f>]";
+  backlot hollywood report \"<headline>\" [--body <f>]
+  backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>]";
 pub(crate) const U_CARD: &str = "usage:
   backlot card list
+  backlot card show <id>
   backlot card apply <id>
   backlot card cancel <id> [--reason <r>]";
 
@@ -48,6 +63,7 @@ pub(crate) fn hollywood(common: &mut Common, it: &mut It) -> Result<(Common, Cmd
     match sub.as_str() {
         "propose" => propose(common, it),
         "report" => hreport(common, it),
+        "setup" => hsetup_args(common, it),
         "-h" | "--help" => Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD))),
         _ => Err(usage(
             format!("unknown hollywood subcommand '{sub}'"),
@@ -63,8 +79,9 @@ pub(crate) fn card(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     };
     match sub.as_str() {
         "list" => crate::args_studio::common_only(common, it, U_CARD, Cmd::Card(CardCmd::List)),
-        "apply" => card_id(common, it, false),
-        "cancel" => card_id(common, it, true),
+        "show" => card_id(common, it, CardKind::Show),
+        "apply" => card_id(common, it, CardKind::Apply),
+        "cancel" => card_id(common, it, CardKind::Cancel),
         "-h" | "--help" => Ok((std::mem::take(common), Cmd::Help(U_CARD))),
         _ => Err(usage(format!("unknown card subcommand '{sub}'"), U_CARD)),
     }
@@ -213,13 +230,62 @@ pub(crate) fn hreport(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     ))
 }
 
-/// `card apply <id>` / `card cancel <id> [--reason <r>]`: the id is
-/// `c<seq>` or a bare seq.
+/// `hollywood setup --runner <r> --model <m> [--effort <e>] [--key
+/// <k>]` — the write is `hsetup`'s; here the flags only.
+fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut runner = None;
+    let mut model = None;
+    let mut effort = None;
+    let mut key = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD)));
+        }
+        if common_flag(it, common, &arg, U_HOLLYWOOD)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--runner" => runner = Some(it.value("--runner", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--runner").is_some() => runner = eq(&arg, "--runner").map(String::from),
+            "--model" => model = Some(it.value("--model", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--model").is_some() => model = eq(&arg, "--model").map(String::from),
+            "--effort" => effort = Some(it.value("--effort", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--effort").is_some() => effort = eq(&arg, "--effort").map(String::from),
+            "--key" => key = Some(it.value("--key", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--key").is_some() => key = eq(&arg, "--key").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_HOLLYWOOD)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Hollywood(HollywoodCmd::Setup {
+            cfg: HollywoodCfg {
+                runner: runner.ok_or_else(|| usage("missing --runner", U_HOLLYWOOD))?,
+                model: model.ok_or_else(|| usage("missing --model", U_HOLLYWOOD))?,
+                effort,
+                key,
+                default_cast: None,
+            },
+        }),
+    ))
+}
+
+/// Which `card <id>` verb is being parsed — `cancel` alone takes
+/// `--reason`.
+pub(crate) enum CardKind {
+    Show,
+    Apply,
+    Cancel,
+}
+
+/// `card show|apply <id>` / `card cancel <id> [--reason <r>]`: the id
+/// is `c<seq>` or a bare seq.
 pub(crate) fn card_id(
     common: &mut Common,
     it: &mut It,
-    cancel: bool,
+    kind: CardKind,
 ) -> Result<(Common, Cmd), Fail> {
+    let cancel = matches!(kind, CardKind::Cancel);
     let mut id = None;
     let mut reason = String::new();
     while let Some(arg) = it.next() {
@@ -243,10 +309,10 @@ pub(crate) fn card_id(
         }
     }
     let id = id.ok_or_else(|| usage("missing <id>", U_CARD))?;
-    let cmd = if cancel {
-        CardCmd::Cancel { id, reason }
-    } else {
-        CardCmd::Apply { id }
+    let cmd = match kind {
+        CardKind::Show => CardCmd::Show { id },
+        CardKind::Apply => CardCmd::Apply { id },
+        CardKind::Cancel => CardCmd::Cancel { id, reason },
     };
     Ok((std::mem::take(common), Cmd::Card(cmd)))
 }
