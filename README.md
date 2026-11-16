@@ -5,7 +5,7 @@ it into tasks and casts agents onto them, each in its own git worktree; deliveri
 go on a record; and a panel shows who is doing what. Every role is an ordinary terminal you can open and type
 into.
 
-![backlot running a studio: the sidebar lists the roles, the producer explains where the work stands, and the studio panel on the right shows two studios, their people and what needs attention](docs/images/backlot.png)
+![backlot running a studio: the sidebar lists the current studio's cast with each person's title and model, the producer explains where the work stands, and the studio panel on the right shows one bordered block per studio, its people and what needs attention](docs/images/backlot.png)
 
 *A demo studio on the test runner, with invented projects and agent output.*
 
