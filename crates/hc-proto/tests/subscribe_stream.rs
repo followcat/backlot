@@ -325,3 +325,63 @@ async fn close_ends_the_wire() {
     assert!(closed.status.is_none());
     joined(server).await;
 }
+
+/// A wire that stays open but sends nothing — no heartbeat, no events —
+/// dies like a clean EOF once three heartbeat periods pass. The core
+/// heartbeats every 15 s, so 45 s of silence is a dead link, never an
+/// idle one: blackholed paths deliver no EOF for `read_line` to see.
+#[tokio::test(start_paused = true)]
+async fn a_silent_wire_ends_closed_after_the_read_deadline() {
+    let (core, read, write) = pair(64 * 1024);
+    let server = tokio::spawn(async move {
+        let mut core = core;
+        serve_subscribe(&mut core, ALL_METHODS, subscribe::snapshot_value(1, vec![])).await;
+        // Open forever, silent forever — the dead link the deadline detects.
+        std::future::pending::<()>().await;
+    });
+    let p = params();
+    let mut sub = opening(read, write, &p).await;
+    let result = tokio::time::timeout(Duration::from_secs(60), sub.recv())
+        .await
+        .expect("a silent wire stayed parked past three heartbeats");
+    assert!(
+        matches!(result, Err(SubscribeError::Closed)),
+        "silence had to end like a clean EOF: {result:?}"
+    );
+    // Latched like every other terminal end.
+    assert!(matches!(sub.recv().await, Err(SubscribeError::Closed)));
+    drop(sub);
+    server.abort();
+}
+
+/// The deadline bounds *silence*, not the stream's age: a heartbeat
+/// landing inside it keeps a healthy wire alive, and silence after it
+/// still ends the wire like a clean EOF.
+#[tokio::test(start_paused = true)]
+async fn a_heartbeat_inside_the_deadline_keeps_the_wire_alive() {
+    let (core, read, write) = pair(64 * 1024);
+    let server = tokio::spawn(async move {
+        let mut core = core;
+        serve_subscribe(&mut core, ALL_METHODS, subscribe::snapshot_value(1, vec![])).await;
+        tokio::time::sleep(Duration::from_secs(30)).await; // inside the deadline
+        core.send_line(&heartbeat_line(7)).await;
+        std::future::pending::<()>().await; // then silence again
+    });
+    let p = params();
+    let mut sub = opening(read, write, &p).await;
+    // Parking on `recv` lets auto-advance fire the fake's 30 s send and
+    // the read deadline in order — no manual `advance` needed.
+    match sub.recv().await {
+        Ok(ServerNotification::Heartbeat(h)) => assert_eq!(h.seq, 7),
+        other => panic!("the heartbeat had to arrive inside the deadline: {other:?}"),
+    }
+    let result = tokio::time::timeout(Duration::from_secs(60), sub.recv())
+        .await
+        .expect("silence after the heartbeat had to end the wire");
+    assert!(
+        matches!(result, Err(SubscribeError::Closed)),
+        "silence after a heartbeat had to end like a clean EOF: {result:?}"
+    );
+    drop(sub);
+    server.abort();
+}
