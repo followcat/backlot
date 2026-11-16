@@ -15,7 +15,7 @@ use std::path::PathBuf;
 /// error that may be reported: the parser's message quotes the
 /// offending line, and a config file may hold secrets (a proxy URL
 /// with credentials, say) that must never reach the ledger.
-fn line_col(text: &str, pos: usize) -> String {
+pub(crate) fn line_col(text: &str, pos: usize) -> String {
     let upto = &text[..pos.min(text.len())];
     let line = upto.bytes().filter(|b| *b == b'\n').count() + 1;
     let col = upto
@@ -116,18 +116,7 @@ fn hollywood_in(text: &str) -> Result<Option<HollywoodCfg>, String> {
     let model =
         string("model")?.ok_or_else(|| "config.toml: hollywood.model is required".to_string())?;
     let effort = string("effort")?;
-    // The cast file's rule: cursor, devin and cmd carry no effort
-    // flag; every other runner needs one declared.
-    if matches!(runner.as_str(), "cursor" | "cmd") && effort.is_some() {
-        return Err(format!(
-            "config.toml: hollywood.runner '{runner}' takes no effort"
-        ));
-    }
-    if !matches!(runner.as_str(), "cursor" | "devin" | "cmd") && effort.is_none() {
-        return Err(format!(
-            "config.toml: hollywood.runner '{runner}' needs an effort"
-        ));
-    }
+    effort_rule(&runner, effort.as_deref()).map_err(|e| format!("config.toml: {e}"))?;
     Ok(Some(HollywoodCfg {
         runner,
         model,
@@ -135,6 +124,20 @@ fn hollywood_in(text: &str) -> Result<Option<HollywoodCfg>, String> {
         key: string("key")?,
         default_cast: string("default_cast")?,
     }))
+}
+
+/// The cast file's effort rule applied to Hollywood's own runner:
+/// `cursor`, `devin` and `cmd` carry no effort flag; every other
+/// runner needs one declared. `hollywood setup` refuses on the same
+/// rule `hollywood_in` rejects with.
+pub(crate) fn effort_rule(runner: &str, effort: Option<&str>) -> Result<(), String> {
+    if matches!(runner, "cursor" | "cmd") && effort.is_some() {
+        return Err(format!("hollywood.runner '{runner}' takes no effort"));
+    }
+    if !matches!(runner, "cursor" | "devin" | "cmd") && effort.is_none() {
+        return Err(format!("hollywood.runner '{runner}' needs an effort"));
+    }
+    Ok(())
 }
 
 /// Read `[hollywood]` from the user config; a missing file or section

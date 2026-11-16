@@ -6,6 +6,7 @@ use std::path::Path;
 
 use crate::args::{Cmd, Common};
 use crate::cli::{Env, Fail};
+use crate::commands;
 use crate::config;
 use crate::hrender;
 use crate::hwood::{base_of, store_fail};
@@ -119,6 +120,119 @@ pub fn card_list(common: &Common, env: &Env) -> Result<String, Fail> {
     let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
     let cfg = config::hollywood(&env.vars);
     Ok(hrender::hollywood_block(&hstate, &cfg))
+}
+
+/// `card show <id>` — one card's full read (D19): the header line,
+/// then a `studio-new` card's draft — the cast's roles, candidates
+/// and limits rendered, and the brief's lines. The TUI's "Show me"
+/// view is this output.
+pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
+    let base = base_of(common, env)?;
+    let hdir = store::hollywood_dir(&base);
+    let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
+    let card = hstate
+        .cards
+        .get(&id)
+        .ok_or_else(|| Fail::refused(format!("no card 'c{id}'")))?;
+    let mut out = format!(
+        "c{} {} · {} — {}",
+        card.seq,
+        card.state.as_str(),
+        card.action.label(),
+        card.why
+    );
+    if !card.detail.is_empty() {
+        out.push_str(&format!(" ({})", card.detail));
+    }
+    out.push_str(&format!("\nproposed by {}", card.by));
+    if let backlot_model::hollywood::CardAction::StudioNew {
+        studio,
+        title,
+        repo,
+        cast,
+        brief,
+    } = &card.action
+    {
+        let cast_path = crate::hcard_new::resolve_draft(&hdir, cast);
+        let brief_path = crate::hcard_new::resolve_draft(&hdir, brief);
+        out.push_str(&format!("\nstudio: {studio}\ntitle: {title}\nrepo: {repo}"));
+        match commands::read_cast(&cast_path) {
+            Ok(cast) => {
+                let role = |name: &str, a: &backlot_model::event::ActorIdentity| {
+                    format!(
+                        "{name}: {}/{}{}",
+                        a.runner,
+                        a.model,
+                        a.effort
+                            .as_deref()
+                            .map(|e| format!("/{e}"))
+                            .unwrap_or_default()
+                    )
+                };
+                out.push_str("\ncast:");
+                for (name, a) in [
+                    ("producer", &cast.producer),
+                    ("director", &cast.director),
+                    ("writer", &cast.writer),
+                ] {
+                    out.push_str(&format!("\n  {}", role(name, a)));
+                }
+                if !cast.candidates.is_empty() {
+                    let names: Vec<String> = cast
+                        .candidates
+                        .iter()
+                        .map(|c| {
+                            format!(
+                                "{} ({}/{}{})",
+                                c.name,
+                                c.runner,
+                                c.model,
+                                c.effort
+                                    .as_deref()
+                                    .map(|e| format!("/{e}"))
+                                    .unwrap_or_default()
+                            )
+                        })
+                        .collect();
+                    out.push_str(&format!("\ncandidates: {}", names.join(", ")));
+                }
+                let mut limits = Vec::new();
+                if let Some(v) = cast.rework_cap {
+                    limits.push(format!("rework_cap {v}"));
+                }
+                if let Some(v) = cast.stall_limit_s {
+                    limits.push(format!("stall_limit_s {v}"));
+                }
+                if let Some(v) = cast.task_budget_s {
+                    limits.push(format!("task_budget_s {v}"));
+                }
+                for (runner, cap) in &cast.limits {
+                    limits.push(format!("{runner} ≤{cap} live"));
+                }
+                if !limits.is_empty() {
+                    out.push_str(&format!("\nlimits: {}", limits.join(" · ")));
+                }
+            }
+            Err(e) => out.push_str(&format!("\ncast {}: {}", cast_path.display(), e.message())),
+        }
+        match std::fs::read_to_string(&brief_path) {
+            Ok(text) => {
+                out.push_str(&format!("\nbrief {}:", brief_path.display()));
+                let mut lines = text.lines();
+                for _ in 0..50 {
+                    match lines.next() {
+                        Some(line) => out.push_str(&format!("\n  {line}")),
+                        None => break,
+                    }
+                }
+                if lines.next().is_some() {
+                    out.push_str("\n  …");
+                }
+            }
+            Err(e) => out.push_str(&format!("\nbrief {}: {e}", brief_path.display())),
+        }
+    }
+    Ok(out)
 }
 
 /// `status --all`: every studio, one block each, then Hollywood's
