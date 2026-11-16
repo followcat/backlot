@@ -227,6 +227,27 @@ re-raise one `stall_limit_s` later.
   D17a honesty note applies: the commands are exactly what you could type, and a failure lands
   as a notice in the client, not in the ledger.
 
+## The client (U2)
+
+- **Everything of U2 runs on `fake` only.** The opening page, `backlot studio new --interactive`,
+  studio shells, the per-studio space and the `shells`/`others` groups are unit-, draw- and
+  real-TUI-tested against the fake runner; no real-agent studio has run under U2 yet.
+- **The relabel pass is once-and-idempotent, and only where the core allows.** Live role
+  terminals get `herdr.space=<studio>` and `herdr.tab=<person>` on the stage's next reconcile —
+  only when they already carry `backlot.studio`+`backlot.role` of a ledger studio, and only when
+  the core can change labels on a live terminal (`terminal.update`). Where it cannot — official
+  `hc` — the pass logs once and backs off: roles launched before U2 keep their old `backlot`
+  space and `bl-…` tab until they are next launched. Terminal *names* never change.
+- **The stage never touches a shell.** No message, nudge, sample, limit count, reap or relabel
+  reaches a `backlot.shell` terminal, and a shell never becomes a role — proven in the stage's
+  tests on `fake`. Only the user closes a shell; a finished studio keeps its shells while it
+  stays in the document.
+- **The wizard writes nothing before the final accept** — repository, id, title and cast are
+  answers and a temporary file until then, and a refused cast leaves no ledger and no studio
+  directory.
+- **`--plain` is untested against a real agent** — it is the pre-U2 multiplexer, and parity
+  covers its cells; a real cast under `--plain` simply shows as `others` in studio clients.
+
 ## Files and records
 
 - **Who may record what is enforced at append; the contents are still trusted.** The ledger

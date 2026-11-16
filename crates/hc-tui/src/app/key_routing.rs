@@ -390,6 +390,14 @@ impl App {
             self.handle_panel_key(&press);
             return None;
         }
+        // U2: the opening page owns every key while it is up, like
+        // the focused panel — the terminals beneath see nothing. The
+        // studio keys, the panel chord and Hollywood's toggle already
+        // took theirs above.
+        if self.opening_visible() {
+            self.opening_key(&press);
+            return None;
+        }
         match (!self.prefix.armed())
             .then(|| {
                 crate::input::resolve_direct_binding(

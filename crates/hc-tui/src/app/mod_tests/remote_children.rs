@@ -136,7 +136,9 @@ fn remote_app(endpoint: &Endpoint, ssh: &std::ffi::OsString, rpc: OpenRpc) -> Ap
         None,
         std::path::PathBuf::new(),
     );
-    App::new(watcher, open, live, shell, Arc::new(Probe::default()))
+    let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
+    app.set_plain(true);
+    app
 }
 
 #[tokio::test]

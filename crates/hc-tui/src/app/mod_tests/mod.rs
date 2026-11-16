@@ -23,6 +23,7 @@ mod m4s5;
 mod mouse_selection;
 mod narrow;
 mod observer_policy_tests;
+mod opening;
 mod own_theme;
 mod page_keys;
 mod panel;
@@ -154,7 +155,12 @@ fn app() -> App {
         None,
         std::path::PathBuf::new(),
     );
-    App::new(watcher, open, live, shell, Arc::new(Probe::default()))
+    let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
+    // U2: unadorned `backlot` is studio-first — the mechanics most
+    // tests exercise are the plain multiplexer's, so the fixture
+    // runs `--plain`; studio fixtures clear the flag themselves.
+    app.set_plain(true);
+    app
 }
 
 fn app_with_spaces(spaced: &[(&str, &str)]) -> App {

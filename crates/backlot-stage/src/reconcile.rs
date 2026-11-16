@@ -133,13 +133,16 @@ pub struct LiveTerminal {
 }
 
 /// This studio's live terminals by name: only the ones labelled
-/// `backlot.studio=<studio>`. The name never confers ownership — a
-/// hand-named `bl-acme-x` or another studio's `bl-acme-shop-*` lands
-/// in no view but its labelled studio's, so it is never stopped,
-/// adopted or dropped here.
+/// `backlot.studio=<studio>`, and never a shell — a `backlot.shell`
+/// terminal is the user's own, so the stage never messages, counts,
+/// reaps, adopts or drops it whatever its name or studio says. The
+/// name never confers ownership — a hand-named `bl-acme-x` or another
+/// studio's `bl-acme-shop-*` lands in no view but its labelled
+/// studio's, so it is never stopped, adopted or dropped here.
 pub fn studio_view(studio: &str, live: &[LiveTerminal]) -> BTreeMap<String, String> {
     live.iter()
         .filter(|t| t.labels.get("backlot.studio").is_some_and(|s| s == studio))
+        .filter(|t| !t.labels.contains_key("backlot.shell"))
         .map(|t| (t.name.clone(), t.address.clone()))
         .collect()
 }

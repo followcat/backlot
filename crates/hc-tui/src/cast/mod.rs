@@ -26,8 +26,10 @@ pub(crate) use draw::render_cast;
 /// What the cast draws with, built per frame: the current studio, its
 /// position, the focused terminal and the stripped terminal titles.
 pub(crate) struct CastView<'a> {
-    /// The current studio.
-    pub(crate) studio: &'a StudioSummary,
+    /// The current studio — `None` while the document lists none:
+    /// the cast still draws, people-less, so the `others` group is
+    /// where stray terminals land (U2's no-studio state).
+    pub(crate) studio: Option<&'a StudioSummary>,
     /// Its position in document order (0-based) and the studio count —
     /// the header's `<n>/<total>`.
     pub(crate) index: usize,
@@ -36,8 +38,12 @@ pub(crate) struct CastView<'a> {
     pub(crate) focused_terminal: Option<&'a str>,
     /// `terminal → stripped title` for a person's second row.
     pub(crate) titles: BTreeMap<String, Option<String>>,
-    /// Herdr's agents that are no studio person — the `others` row's
-    /// count and, expanded, its rows.
+    /// The studio's shells (U2) — the `shells` group after the
+    /// people, in shell-number order.
+    pub(crate) shells: Vec<ShellRow>,
+    /// Herdr's agents that are no studio person, studio shell or
+    /// backlot-owned terminal — the `others` row's count and,
+    /// expanded, its rows.
     pub(crate) others: Vec<AgentRow>,
     /// Whether `others` is expanded in place.
     pub(crate) others_expanded: bool,
@@ -48,9 +54,10 @@ pub(crate) struct CastView<'a> {
 impl<'a> CastView<'a> {
     /// Build the frame's cast: the studio `current` points at (or the
     /// first in document order when it does not resolve), the people
-    /// in cast order and every herdr agent that no studio's person
-    /// seats. `None` outside studio mode — no summary, no studios or
-    /// no resolvable current studio.
+    /// in cast order, its shells and every herdr agent that no
+    /// studio's person seats — `others`. With no studio at all —
+    /// no document, or zero studios — the cast still draws so the
+    /// `others` row exists; only `others` has rows then.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn build(
         summary: Option<&'a Summary>,
@@ -61,50 +68,129 @@ impl<'a> CastView<'a> {
         others_expanded: bool,
         focused: Option<&'a str>,
         spin: usize,
-    ) -> Option<CastView<'a>> {
-        let summary = summary?;
-        if summary.studios.is_empty() {
-            return None;
-        }
-        let index = current
-            .and_then(|id| summary.studios.iter().position(|s| s.id == id))
-            .unwrap_or(0);
-        let studio = &summary.studios[index];
-        // Every person of every studio is out of `others` — its rows
-        // are herdr's agents minus the whole cast of the document.
-        let seated: std::collections::BTreeSet<&str> = summary
-            .studios
-            .iter()
-            .flat_map(|s| s.roles.iter())
-            .filter_map(|role| role.terminal.as_deref())
-            .collect();
+    ) -> CastView<'a> {
+        let index =
+            summary.and_then(|s| current.and_then(|id| s.studios.iter().position(|s| s.id == id)));
+        let (index, studio) = match (index, summary) {
+            (Some(index), Some(summary)) => (index, Some(&summary.studios[index])),
+            (None, Some(summary)) if !summary.studios.is_empty() => (0, Some(&summary.studios[0])),
+            _ => (0, None),
+        };
+        // Every person of every studio is out of `others`, and so is
+        // anything backlot owns: a `backlot.role` (a person, the
+        // stage, Hollywood), a `backlot.shell` or a `backlot.studio`
+        // label keeps a terminal out of the row.
+        let mut seated: std::collections::BTreeSet<&str> = summary
+            .map(|s| {
+                s.studios
+                    .iter()
+                    .flat_map(|s| s.roles.iter())
+                    .filter_map(|role| role.terminal.as_deref())
+                    .collect()
+            })
+            .unwrap_or_default();
+        seated.extend(
+            view.inventory
+                .terminals()
+                .values()
+                .filter(|t| {
+                    t.labels
+                        .keys()
+                        .any(|k| k == crate::shells::SHELL_LABEL || k.starts_with("backlot."))
+                })
+                .map(|t| t.address.as_str()),
+        );
         let others = agent_rows(snapshot, config, None)
             .into_iter()
             .filter(|row| !seated.contains(row.pane_id.as_str()))
             .collect();
         let titles = studio
-            .roles
-            .iter()
-            .filter_map(|role| role.terminal.clone())
-            .map(|terminal| {
-                let title = view
-                    .inventory
-                    .get(&terminal)
-                    .and_then(|term| stripped_terminal_title(&term.title));
-                (terminal, title)
+            .map(|studio| {
+                studio
+                    .roles
+                    .iter()
+                    .filter_map(|role| role.terminal.clone())
+                    .map(|terminal| {
+                        let title = view
+                            .inventory
+                            .get(&terminal)
+                            .and_then(|term| stripped_terminal_title(&term.title));
+                        (terminal, title)
+                    })
+                    .collect()
             })
-            .collect();
-        Some(CastView {
+            .unwrap_or_default();
+        let shells = studio
+            .map(|studio| {
+                crate::shells::studio_shells(view, &studio.id)
+                    .into_iter()
+                    .filter_map(|(n, address)| Some((n, view.inventory.get(&address)?)))
+                    .map(|(n, term)| ShellRow {
+                        n,
+                        terminal: term.address.clone(),
+                        program: term
+                            .argv
+                            .first()
+                            .and_then(|a| a.rsplit('/').next())
+                            .unwrap_or("shell")
+                            .to_owned(),
+                        title: stripped_terminal_title(&term.title),
+                        cwd_tail: term
+                            .cwd
+                            .trim_end_matches('/')
+                            .rsplit('/')
+                            .next()
+                            .unwrap_or(&term.cwd)
+                            .to_owned(),
+                        mark: shell_mark(term),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        CastView {
             studio,
             index,
-            total: summary.studios.len(),
+            total: summary.map(|s| s.studios.len()).unwrap_or_default(),
             focused_terminal: focused,
             titles,
+            shells,
             others,
             others_expanded,
             spin,
-        })
+        }
     }
+}
+
+/// One `shells`-group entry's data — everything the two display
+/// lines need, resolved at build time.
+pub(crate) struct ShellRow {
+    /// `backlot.shell`'s number — `shell <n>`'s `<n>`.
+    pub(crate) n: u32,
+    /// The shell's terminal address.
+    pub(crate) terminal: String,
+    /// argv[0]'s basename — the right-aligned program.
+    pub(crate) program: String,
+    /// The stripped terminal title, when the shell set one.
+    pub(crate) title: Option<String>,
+    /// The working directory's last component.
+    pub(crate) cwd_tail: String,
+    /// The agent-status mark when the shell runs an agent — `None`
+    /// for a plain shell, which shows a dim `$`.
+    pub(crate) mark: Option<crate::panel::Mark>,
+}
+
+/// A shell's mark: the terminal's 7501 status word mapped to a cast
+/// mark — a live agent's working/waiting/blocked — or `None`.
+fn shell_mark(term: &hc_proto::terminal::Terminal) -> Option<crate::panel::Mark> {
+    use crate::panel::Mark;
+    term.status
+        .as_ref()
+        .map(|status| match status.state.as_str() {
+            "working" => Mark::Working,
+            "blocked" => Mark::Blocked,
+            "done" | "closed" => Mark::Closed,
+            _ => Mark::Waiting,
+        })
 }
 
 /// The spaces:cast split in studio mode — the spaces section takes

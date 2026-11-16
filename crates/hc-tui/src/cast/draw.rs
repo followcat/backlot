@@ -63,32 +63,47 @@ pub(crate) fn render_cast(
         return;
     }
     let header = Rect::new(area.x, area.y + 1, area.width, 1);
-    let id_width = header
-        .width
-        .saturating_sub(13) // " cast · " plus the `1/12` tail
-        .max(4);
-    put_text(
-        buffer,
-        header.x,
-        header.y,
-        header.width,
-        &format!(
-            " cast · {}",
-            truncate_end(&view.studio.id, id_width as usize)
-        ),
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-    put_right_text(
-        buffer,
-        header,
-        header.y,
-        &format!("{}/{}", view.index + 1, view.total),
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
+    match view.studio {
+        Some(studio) => {
+            let id_width = header
+                .width
+                .saturating_sub(13) // " cast · " plus the `1/12` tail
+                .max(4);
+            put_text(
+                buffer,
+                header.x,
+                header.y,
+                header.width,
+                &format!(" cast · {}", truncate_end(&studio.id, id_width as usize)),
+                Style::default()
+                    .fg(palette.overlay0)
+                    .add_modifier(Modifier::BOLD),
+            );
+            put_right_text(
+                buffer,
+                header,
+                header.y,
+                &format!("{}/{}", view.index + 1, view.total),
+                Style::default()
+                    .fg(palette.overlay0)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
+        // No studio yet (U2): the header alone — the `others` row is
+        // the whole cast then.
+        None => {
+            put_text(
+                buffer,
+                header.x,
+                header.y,
+                header.width,
+                " cast",
+                Style::default()
+                    .fg(palette.overlay0)
+                    .add_modifier(Modifier::BOLD),
+            );
+        }
+    }
 
     let rows = cast_rows(view);
     let body = Rect::new(
@@ -127,6 +142,11 @@ pub(crate) fn render_cast(
                     hits.agents.push((rect, terminal.clone()));
                 }
                 draw_person(buffer, rect, role, *focused, view, palette);
+            }
+            CastRow::Shells => draw_shells_header(buffer, rect, palette),
+            CastRow::Shell { shell, focused } => {
+                hits.agents.push((rect, shell.terminal.clone()));
+                draw_shell(buffer, rect, shell, *focused, view, palette);
             }
             CastRow::Others { count, expanded } => {
                 hits.cast_others = rect;
@@ -267,6 +287,109 @@ fn draw_person(
             rect.y + 1,
             model_width,
             &model,
+            Style::default().fg(palette.overlay0),
+        );
+    }
+}
+
+/// The `shells` group header — a dim label line between the people
+/// and their shells.
+fn draw_shells_header(buffer: &mut Buffer, rect: Rect, palette: &Palette) {
+    put_text(
+        buffer,
+        rect.x,
+        rect.y,
+        rect.width,
+        " shells",
+        Style::default()
+            .fg(palette.overlay0)
+            .add_modifier(Modifier::BOLD),
+    );
+}
+
+/// A shell's two rows, laid out like a person's: a dim `$` (or the
+/// agent's status mark) and `shell <n>` over the terminal's title,
+/// the program right-aligned on row one and the working directory's
+/// last component on row two.
+fn draw_shell(
+    buffer: &mut Buffer,
+    rect: Rect,
+    shell: &super::ShellRow,
+    focused: bool,
+    view: &CastView<'_>,
+    palette: &Palette,
+) {
+    if rect.height < 2 {
+        return;
+    }
+    if focused {
+        buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
+        put_text(
+            buffer,
+            rect.x,
+            rect.y,
+            1,
+            "▌",
+            Style::default().fg(palette.accent),
+        );
+    }
+    let (symbol, style) = match shell.mark {
+        Some(mark) => (
+            mark_symbol(mark, view.spin),
+            Style::default().fg(mark_color(mark, palette)),
+        ),
+        None => ("$", Style::default().fg(palette.surface_dim)),
+    };
+    put_text(buffer, rect.x + 1, rect.y, 1, symbol, style);
+
+    // Row 1: `shell <n>` left, the program right-aligned.
+    let name = format!("shell {}", shell.n);
+    let program_width =
+        display_width(&shell.program).min(rect.width.saturating_sub(5) as usize) as u16;
+    let name_width = rect
+        .width
+        .saturating_sub(3 + program_width + u16::from(program_width > 0));
+    put_text(
+        buffer,
+        rect.x + 3,
+        rect.y,
+        name_width,
+        &truncate_end(&name, name_width as usize),
+        Style::default().fg(palette.text),
+    );
+    if program_width > 0 {
+        put_text(
+            buffer,
+            rect.right().saturating_sub(program_width),
+            rect.y,
+            program_width,
+            &shell.program,
+            Style::default().fg(palette.overlay0),
+        );
+    }
+
+    // Row 2: the terminal's title, its working directory's last
+    // component at the right edge.
+    let cwd_width =
+        display_width(&shell.cwd_tail).min(rect.width.saturating_sub(5) as usize) as u16;
+    let left_width = rect
+        .width
+        .saturating_sub(3 + cwd_width + u16::from(cwd_width > 0));
+    put_text(
+        buffer,
+        rect.x + 3,
+        rect.y + 1,
+        left_width,
+        &truncate_end(shell.title.as_deref().unwrap_or(""), left_width as usize),
+        Style::default().fg(palette.subtext0),
+    );
+    if cwd_width > 0 {
+        put_text(
+            buffer,
+            rect.right().saturating_sub(cwd_width),
+            rect.y + 1,
+            cwd_width,
+            &shell.cwd_tail,
             Style::default().fg(palette.overlay0),
         );
     }

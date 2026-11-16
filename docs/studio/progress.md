@@ -1,5 +1,46 @@
 # Studio progress
 
+## U2: studio first — every terminal belongs to a studio, fake runner only (2026-11-16)
+
+- Done: `backlot` is a studio tool and nothing else. `backlot --plain` keeps the plain
+  multiplexer exactly as on `main` — the parity harness runs it now. Without `--plain` the
+  client is always in studio mode, document or not: the cast sidebar shows the no-studio view
+  (header, `others`) until a studio exists. With no studio the **opening page** covers the pane
+  area — what backlot is in one line, then `n` (a popup running `backlot studio new
+  --interactive`), `h` (Hollywood's input line, only with `[hollywood]`), `s` (start the stage,
+  only while it is down), `q` detach, and a dim line naming `backlot --plain`; `Esc` hides it
+  for the session, `new_workspace` brings it back. In studio mode `new_tab` and split create a
+  **studio shell**: the user's shell in the focused person's workarea (an actor's `work/<task>`,
+  the director's `work/integration`, else the studio repo), named `bl-<studio>-sh<n>` (a form no
+  role or task id can take), labelled `backlot.studio`+`backlot.shell` plus the studio's space
+  and a `shell <n>` tab. The cast groups them under `shells` after the people, the role keys
+  reach them after the people, the client's reaper treats them like ordinary terminals
+  (`backlot.studio` protection exempts `backlot.shell`), and the stage never messages, nudges,
+  samples, counts, reaps or relabels them — `studio_view` excludes them wholesale. The stage
+  launches roles with `herdr.space=<studio>` and `herdr.tab=<person>` (an actor's task appended:
+  `actor-b t2`) instead of one shared `backlot` space; terminals already live when a stage
+  starts are relabelled on its next reconcile — idempotent, ledger-only, skipped where the core
+  cannot change labels (`CallError::Unsupported` logs once). `others` holds only what is neither
+  a person, a shell, the stage nor Hollywood. The summary keeps schema `backlot/1` with two new
+  optional fields: `repo` on the studio and `workdir` on each role (the daemon fills it from the
+  work-area table). `backlot studio new --interactive` asks on the terminal for what the flags
+  leave out — repository (the cwd when it is a committed git repo), studio id (the repo's
+  directory name), title, cast (drafted from installed runners in `devin, claude, codex, cursor,
+  opencode, cmd, fake` preference order, shown, `accept`/`edit`/`refuse`, `$VISUAL`/`$EDITOR` on
+  a pid-unique temporary file, `draft::check` + the ordinary event path on accept, the stage
+  offered after) — and writes nothing before the final accept; `--dry-run` with it is a usage
+  error.
+- Measured: unit/draw tests across `hc-tui` and `backlot-stage` (907 + 462 + the workspace's
+  other suites; all green). The `--interactive` wizard's scripted-stdin tests cover every
+  prompt, the defaults, an edited cast, a refused cast and each `studio new` refusal. A real
+  PTY run on the pinned `herdr-core` (`real_u2_studio_first`, `fake` only): opening page at
+  200/120/80/40, `n` driving the wizard end to end (repo → id → title → draft accept → stage
+  `y`), the cast and the studio's own space appearing, `prefix+c` opening `bl-acme-shop-sh1` in
+  the actor's worktree under `shells`, and `backlot --plain` on the same core showing the plain
+  agents list; captures under `backlot-work/briefs/U2-screens/`.
+- Not verified: a real-agent studio under U2; the relabel pass against official `hc` (the
+  `Unsupported` back-off is unit-tested only); shells on a remote endpoint's machine.
+
 ## H4: Hollywood — the floating layer in the TUI, fake runner only (2026-11-16)
 
 - Done: `src/hollywood/` (model, rows, draw, keys, actions, the read-only card view) and

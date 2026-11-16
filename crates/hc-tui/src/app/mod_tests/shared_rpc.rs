@@ -54,10 +54,9 @@ fn shared_app(rpc: OpenRpc) -> (App, mpsc::Receiver<FakeCore>) {
         None,
         std::path::PathBuf::new(),
     );
-    (
-        App::new(watcher, open, live, shell, Arc::new(Probe::default())),
-        sub_rx,
-    )
+    let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
+    app.set_plain(true);
+    (app, sub_rx)
 }
 
 /// Serves one accepted RPC conn: framed hello, then answers every

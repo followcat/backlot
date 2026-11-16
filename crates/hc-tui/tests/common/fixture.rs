@@ -322,9 +322,12 @@ pub fn spawn_with_session(
         &local.socket,
     );
     env.push(("PATH".into(), format!("{}:/usr/bin:/bin", stub.display())));
-    let args = remote
-        .map(|host| vec!["--remote".to_string(), host.to_string()])
-        .unwrap_or_default();
+    // These fixtures exercise the plain multiplexer — studio mode
+    // lives behind `backlot` without `--plain` since U2.
+    let mut args = vec!["--plain".to_string()];
+    if let Some(host) = remote {
+        args.extend(["--remote".to_string(), host.to_string()]);
+    }
     pty::spawn_tui(&env, &args, &scratch.work)
 }
 

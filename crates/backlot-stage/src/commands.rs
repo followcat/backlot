@@ -249,8 +249,10 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
             repo,
             cast_file,
             dry_run,
+            interactive,
         } => {
             debug_assert!(!dry_run, "dry-run is answered in cli::run");
+            debug_assert!(!interactive, "--interactive is answered by the wizard");
             // `hollywood` names the overseer's ledger beside
             // `studios/` — a studio can never take it (D13).
             if caller.studio == backlot_model::hollywood::HOLLYWOOD {
@@ -258,13 +260,13 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                     "the name 'hollywood' is reserved for the overseer",
                 ));
             }
-            let cast = read_cast(&cast_file)?;
+            let cast = read_cast(&cast_file.expect("non-interactive parses require --cast"))?;
             let (check_env, checks) = crate::checks::declarations(&cast.check_env, &cast.checks)?;
             Ok(Box::new(move |_, _| {
                 Ok(pending(
                     EventKind::StudioCreated {
-                        title,
-                        repo,
+                        title: title.expect("non-interactive parses require --title"),
+                        repo: repo.expect("non-interactive parses require --repo"),
                         mode: cast.mode.unwrap_or_default(),
                         roles: Box::new(RoleConfigs {
                             producer: cast.producer,

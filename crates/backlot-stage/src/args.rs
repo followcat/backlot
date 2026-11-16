@@ -11,7 +11,7 @@ use backlot_model::event::{ApprovalDecision, Check, PlanKind, Priority, TaskStat
 use crate::cli::Fail;
 use crate::{args_hwood, args_studio, args_task};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Common {
     pub studio: Option<String>,
     pub role: Option<String>,
@@ -26,13 +26,18 @@ pub struct Common {
 pub enum Cmd {
     Help(&'static str),
     StudioNew {
-        title: String,
-        repo: String,
-        cast_file: PathBuf,
+        /// `Some` always without `--interactive`; the wizard asks for
+        /// what the flags left unset.
+        title: Option<String>,
+        repo: Option<String>,
+        cast_file: Option<PathBuf>,
         /// `--dry-run`: every `studio new` check plus the draft's own
         /// (name free, repo is git, runners installed, caps seat the
         /// fixed roles) — nothing recorded, nothing created.
         dry_run: bool,
+        /// `--interactive`: the wizard asks on the terminal for what
+        /// is missing (U2).
+        interactive: bool,
     },
     ReqRevise {
         file: PathBuf,
@@ -146,7 +151,7 @@ pub use crate::args_hwood::{CardCmd, HollywoodCmd};
 pub const COMMON: &str =
     "  common: --studio <name> --as <role> --task <id> --session <s> --remote <t>";
 
-pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--dry-run]\n       backlot studio finish [--reason <r>]";
+pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>]\n       backlot studio finish [--reason <r>]";
 pub(crate) const U_REQ: &str = "usage: backlot req revise --file <f> --summary <s>";
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";

@@ -213,7 +213,7 @@ async fn detach_with_many_held_parked_routes_exits_cleanly() {
 
     let mut tui = Pty::spawn(
         Path::new(tui_bin()),
-        &["--remote", "host-a"],
+        &["--plain", "--remote", "host-a"],
         &tui_env(&scratch, &stub),
         &scratch.work,
         COLS,

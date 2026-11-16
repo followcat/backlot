@@ -154,9 +154,15 @@ fn tui_bin() -> PathBuf {
 }
 
 fn spawn_tui(scratch: &ScratchEnv, args: &[&str], session: &str, extra: &[(&str, &str)]) -> Pty {
+    // The autostart checks exercise the plain multiplexer — `backlot`
+    // bare is studio mode since U2.
+    let args: Vec<&str> = ["--plain"]
+        .into_iter()
+        .chain(args.iter().copied())
+        .collect();
     Pty::spawn(
         &tui_bin(),
-        args,
+        &args,
         &tui_env(scratch, session, extra),
         &scratch.root.join("work"),
         COLS,

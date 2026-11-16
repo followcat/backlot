@@ -63,6 +63,10 @@ pub struct StudioSummary {
     /// `None` while nothing is owed (S9a).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next: Option<String>,
+    /// The studio's repository — a studio shell's fallback working
+    /// directory (U2). Documents an older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
 }
@@ -97,6 +101,12 @@ pub struct RoleSummary {
     /// until the role's next signal (S9f).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed: Option<String>,
+    /// The workarea this person runs in — an actor's worktree, the
+    /// director's integration worktree, the repository otherwise. A
+    /// studio shell opens where the focused person works (U2).
+    /// Documents an older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workdir: Option<String>,
     /// The task an actor works on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
@@ -194,7 +204,8 @@ fn role_priority(state: &StudioState, role: &str) -> Priority {
 }
 
 /// The candidate name for `actor-<task>-c<n>` keys, else the key.
-fn role_name(state: &StudioState, role: &str) -> String {
+/// Public: the stage names a role terminal's `herdr.tab` by it.
+pub fn role_name(state: &StudioState, role: &str) -> String {
     let base = || cap(role);
     let Some(rest) = role.strip_prefix("actor-") else {
         return base();
@@ -299,6 +310,7 @@ fn role_summary(
         doing,
         work,
         failed,
+        workdir: None,
         task: task.map(|t| cap(&t)),
         priority,
         resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
@@ -345,6 +357,7 @@ pub fn summary(
                     waiting: 0,
                     error: Some(error),
                     next: None,
+                    repo: None,
                     roles: Vec::new(),
                 });
             }
@@ -390,6 +403,7 @@ pub fn summary(
                 doing: Some(cap(&format!("waiting for a {runner} slot"))),
                 work: None,
                 failed: None,
+                workdir: None,
                 task: w.task.as_ref().map(|t| cap(t)),
                 priority: w
                     .task
@@ -417,6 +431,7 @@ pub fn summary(
             next: crate::steps::next_steps(state)
                 .first()
                 .map(|s| cap(&format!("{} — {}", s.label, s.owner))),
+            repo: Some(cap(&cfg.repo)),
             roles,
         };
         if done {

@@ -114,6 +114,7 @@ mod tests {
                     waiting: 0,
                     error: None,
                     next: None,
+                    repo: None,
                     roles: Vec::new(),
                 })
                 .collect(),

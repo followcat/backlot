@@ -103,7 +103,9 @@ def one_size(args, size, binary):
         reference.ui.sgr_pixel_mouse_reply = 2
         reference.ready()
         reference_programs = prepare_reference(reference, reference_paths, labelled=not repository_scenario)
-        core.ui = Pty([str(args.hc_tui), '--session', core.session], core.env,
+        # backlot runs with --plain here: parity measures the plain
+        # multiplexer, cell-identical to the reference.
+        core.ui = Pty([str(args.hc_tui), '--plain', '--session', core.session], core.env,
                       core.cwd, *size, cell_px=(10, 20))
         core.ui.keyboard_flags_reply = 7
         core.ui.sgr_pixel_mouse_reply = 2

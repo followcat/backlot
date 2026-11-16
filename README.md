@@ -10,9 +10,10 @@ into.
 *A demo studio on the test runner, with invented projects and agent output.*
 
 backlot runs on [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`), which keeps the terminals alive
-on your machine or a server. The client is a complete terminal multiplexer, a fork of
-[hc-tui](https://github.com/followcat/hc-tui); the studio layer on top of it is backlot's own. Unofficial
-project, not affiliated with or endorsed by the Herdr project.
+on your machine or a server. The client is a studio tool, a fork of
+[hc-tui](https://github.com/followcat/hc-tui): it opens on your studios, every terminal it creates belongs
+to one, and the plain multiplexer lives on behind `backlot --plain` (for a general-purpose client, use
+hc-tui). Unofficial project, not affiliated with or endorsed by the Herdr project.
 
 ## What it is for
 
@@ -127,6 +128,10 @@ backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop
 backlot stage start
 ```
 
+Or let the client do it: open `backlot` with no studio and you land on the opening page — press `n` and a
+wizard asks for the repository, the studio name and the cast (it drafts one from the agent CLIs installed on
+the machine), then offers to start the stage.
+
 **3. Open the client and talk to the producer:**
 
 ```sh
@@ -137,6 +142,10 @@ The sidebar shows the current studio's cast. `Ctrl+B y` opens the studio panel �
 per studio — and Enter on a studio focuses its producer: type what you want built, as you would
 tell a person. From there the cast works; `Alt+Up`/`Alt+Down` switch studios, `Alt+Left`/`Alt+Right`
 switch roles, and you watch the panel and answer what needs you.
+
+Every studio is its own space in the client, its roles are the tabs. A new tab or split opens a *studio
+shell* — your own terminal in the focused person's worktree — listed under `shells` in the cast. The
+stage never touches it, and closing it is your call alone.
 
 The commands you will use most:
 
@@ -175,6 +184,7 @@ against a local core or a remote one over plain SSH:
 ```sh
 backlot --session <name>
 backlot --remote <ssh-target> --session <name>
+backlot --plain                    # the plain multiplexer, as before — no studio mode
 ```
 
 More in [docs/keys.md](docs/keys.md) and [docs/remote.md](docs/remote.md).

@@ -12,10 +12,10 @@ use backlot_model::summary::{RoleSummary, StudioSummary, Summary};
 /// cast's `others` expansion.
 #[derive(Debug, Default)]
 pub(crate) struct Studio {
-    /// True while the last good document lists at least one studio.
-    /// Only a good document flips the latch: a missing, malformed or
-    /// foreign-schema read never turns it off, and only a good one
-    /// with zero studios does.
+    /// The studio-layout latch (U2): on whenever the client is not
+    /// `--plain` — `sync_studio` owns it, so a missing, malformed or
+    /// foreign-schema document never changes it and the cast (with
+    /// its `others` row) shows even with zero studios.
     pub active: bool,
     /// The current studio's id — the studio whose person owns the
     /// focused terminal, or the last such studio while the focus is
@@ -35,9 +35,10 @@ pub(crate) struct Studio {
 impl Studio {
     /// Sync against the last good summary and the focused terminal.
     /// `None` — a missing or unreadable document — keeps every latch.
+    /// The `active` latch itself is `sync_studio`'s (`!plain`), not
+    /// the document's.
     pub(crate) fn sync(&mut self, summary: Option<&Summary>, focused: Option<&str>) {
         let Some(summary) = summary else { return };
-        self.active = !summary.studios.is_empty();
         // A focused terminal owned by a studio person moves the
         // current pointer and remembers the person there.
         if let Some((studio, role)) = studio_of_terminal(summary, focused.unwrap_or_default()) {

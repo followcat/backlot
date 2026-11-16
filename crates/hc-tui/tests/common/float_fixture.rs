@@ -28,7 +28,9 @@ pub fn local_socket(scratch: &ScratchCore) -> PathBuf {
 pub fn spawn_through(scratch: &ScratchCore, stub: &Path, socket: &Path) -> Tui {
     let mut env = pty::env_base(&scratch.root, &scratch.session, socket);
     env.push(("PATH".into(), format!("{}:/usr/bin:/bin", stub.display())));
-    pty::spawn_tui(&env, &[], &scratch.work)
+    // The float checks exercise the plain multiplexer — `backlot`
+    // bare is studio mode since U2.
+    pty::spawn_tui(&env, &["--plain".to_string()], &scratch.work)
 }
 
 /// The documented example, unchanged: a bare interactive shell popup —

@@ -45,6 +45,7 @@ fn summary_json() -> serde_json::Value {
 
 fn app_with_panel_doc() -> App {
     let mut app = app_with(&["t1", "t2", "t3", "t4", "t5"]);
+    app.set_plain(false);
     let mut stage = crate::sidebar::fixture::term("t9");
     stage.name = Some("backlot-stage".into());
     stage.state = "live".into();

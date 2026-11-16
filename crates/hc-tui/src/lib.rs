@@ -45,9 +45,11 @@ mod keybind_help;
 pub mod layout;
 
 mod hollywood;
+mod opening;
 pub mod operations;
 pub mod own_theme;
 mod panel;
 pub mod popup_size;
+mod shells;
 pub mod structure;
 mod studio;

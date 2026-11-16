@@ -42,11 +42,16 @@ pub(super) fn should_reap_exited(term: &Terminal, now_ms: u64) -> bool {
         "wherdr.task",
         "wherdr.coordinator",
         "backlot.role",
-        "backlot.studio",
     ] {
         if term.labels.contains_key(label) {
             return false;
         }
+    }
+    // `backlot.studio` spares studio-owned terminals — a shell is the
+    // user's own though, so `backlot.shell` exempts it: an exited
+    // shell reaps like any plain terminal.
+    if term.labels.contains_key("backlot.studio") && !term.labels.contains_key("backlot.shell") {
+        return false;
     }
     if matches!(term.name.as_deref(), Some("backlot-stage" | "bl-hollywood")) {
         return false;
