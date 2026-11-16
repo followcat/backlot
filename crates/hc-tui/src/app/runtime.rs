@@ -38,14 +38,18 @@ impl App {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        // A lease outlives its tab for as long as the pane's observer is cached:
-        // the program keeps its size while hidden, so coming back resizes nothing.
+        // A lease outlives its tab for as long as the pane stays in the observer
+        // LRU: the program keeps its size while hidden, so coming back resizes
+        // nothing. The LRU, not the observer map: on a switch the pane retargets
+        // and this frame draws before `sync_observers` opens the observer for
+        // the tab just left (the focused terminal drops its own once painted).
         self.size_leases.retain(|id, _| {
             !id.is_empty()
                 && self.view.inventory.get(id).is_some()
                 && (infos.iter().any(|info| &info.id == id)
                     || covered.contains(id)
                     || self.observers.contains_key(id)
+                    || self.observer_mru.contains(id)
                     || self.pane.target() == Some(id.as_str())
                     || self.floats.values().any(|entry| &entry.terminal == id))
         });
