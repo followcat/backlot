@@ -88,6 +88,21 @@ pub fn slug(path: &str) -> String {
 /// or `\` is not expressible — `,` splits rules, the rest are glob
 /// or syntax characters — and is simply never pre-allowed.
 pub fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
+    if role == "hollywood" {
+        // D17a: exactly the overseer's set — anything else stops at
+        // the prompt, which is the user's to answer.
+        return [
+            "backlot status",
+            "backlot records",
+            "backlot tell producer",
+            "backlot hollywood propose",
+            "backlot hollywood report",
+            "backlot studio new --dry-run",
+        ]
+        .iter()
+        .map(|c| format!("Shell({c})"))
+        .collect();
+    }
     let mut rules = vec!["Shell(backlot)".to_string()];
     let is_actor = actor_task(role).is_some();
     if is_actor {

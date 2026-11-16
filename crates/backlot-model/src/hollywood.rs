@@ -14,19 +14,23 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::event::{EventBy, Priority};
+use crate::event::{ActorIdentity, EventBy, Priority};
 use crate::state::{RoleLifecycle, StudioState, TaskStatus};
 
 // The reduced state and the append rules live in the two sibling
 // files; the `hollywood::` path keeps them all.
 pub use crate::hollywood_state::{
-    Card, CardState, HMessage, HReport, HollywoodState, apply, replay,
+    Card, CardState, HMessage, HReport, HWRole, HollywoodState, apply, replay,
 };
 pub use crate::hollywood_validate::{HRefusal, validate};
 
 /// The role key Hollywood records under — and the reserved studio
 /// name, since its ledger sits beside the studios' at `<base>/hollywood`.
 pub const HOLLYWOOD: &str = "hollywood";
+
+/// Hollywood's terminal name (D13): one per core, outside the
+/// studios' `bl-<studio>-<role>` shape.
+pub const HOLLYWOOD_TERMINAL: &str = "bl-hollywood";
 
 /// The last headlines kept in state (D15's collapsed layer shows one).
 pub const HEADLINE_CAP: usize = 10;
@@ -116,7 +120,11 @@ pub enum HollywoodKind {
     /// A message to or from Hollywood. From the user it carries `text`;
     /// to a studio's producer it carries `studio` and a `file` under
     /// `messages/` (the studio ledger's `message.queued` is the actual
-    /// delivery record — this is Hollywood's own copy, R26).
+    /// delivery record — this is Hollywood's own copy, R26). A
+    /// stage-written notice to Hollywood carries `file` under
+    /// `messages/` and, when it relays a ledger event, that event's
+    /// `source_seq` (and `studio` for a studio's) — the dedup key
+    /// that keeps a restart from telling it twice.
     #[serde(rename = "message.sent")]
     MessageSent {
         to: String,
@@ -126,7 +134,55 @@ pub enum HollywoodKind {
         text: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         file: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_seq: Option<u64>,
     },
+    /// The stage's lifecycle word for Hollywood's own terminal (H3):
+    /// `started` when the stage ran or adopted it, `resumed` after a
+    /// loss, `lost` when it vanished, `closed` when the stage stopped
+    /// it on purpose — a studio's four role events folded into one
+    /// kind, which is all one role needs.
+    #[serde(rename = "role.state")]
+    RoleState {
+        state: RoleMotion,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actor: Option<ActorIdentity>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// The stage's guarded send handed the message to the terminal.
+    #[serde(rename = "message.delivered")]
+    MessageDelivered { target: u64 },
+    /// A queued stage notice skipped at send time — the event it
+    /// relayed no longer stands; never pending again.
+    #[serde(rename = "message.dropped")]
+    MessageDropped { target: u64, reason: String },
+}
+
+/// The move one `role.state` records — a studio's `role.started`,
+/// `role.resumed`, `role.lost`, `role.closed` words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleMotion {
+    Started,
+    Resumed,
+    Lost,
+    Closed,
+}
+
+impl RoleMotion {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RoleMotion::Started => "started",
+            RoleMotion::Resumed => "resumed",
+            RoleMotion::Lost => "lost",
+            RoleMotion::Closed => "closed",
+        }
+    }
 }
 
 impl HollywoodKind {
@@ -141,6 +197,9 @@ impl HollywoodKind {
             HollywoodKind::CardStale { .. } => "card.stale",
             HollywoodKind::Reported { .. } => "hollywood.reported",
             HollywoodKind::MessageSent { .. } => "message.sent",
+            HollywoodKind::RoleState { .. } => "role.state",
+            HollywoodKind::MessageDelivered { .. } => "message.delivered",
+            HollywoodKind::MessageDropped { .. } => "message.dropped",
         }
     }
 }

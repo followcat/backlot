@@ -128,27 +128,69 @@ fn only_the_stage_closes_an_applied_card() {
     assert!(matches!(e, Err(HRefusal::BadCard(_))), "{e:?}");
 }
 
-/// `card.stale` is the user's or the stage's, on an open card.
+/// `card.stale` is the user's on an open card (the apply-time
+/// check) and the stage's on an applied one (the execution-time
+/// check — a base may keep moving between the two).
 #[test]
 fn stale_marks_are_user_or_stage() {
     let mut state = HollywoodState::default();
     apply(&mut state, &hev(1, "hollywood", hpropose("t1")));
-    for role in ["user", "stage"] {
-        assert!(
-            validate(
-                &state,
-                &nhw(
-                    role,
-                    HollywoodKind::CardStale {
-                        card: 1,
-                        reason: "t1 moved".into()
-                    }
-                )
+    assert!(
+        validate(
+            &state,
+            &nhw(
+                "user",
+                HollywoodKind::CardStale {
+                    card: 1,
+                    reason: "t1 moved".into()
+                }
             )
-            .is_ok(),
-            "{role}"
-        );
-    }
+        )
+        .is_ok(),
+        "user on open"
+    );
+    // The stage on the still-open card, and anyone on a closed
+    // card, are refused.
+    let e = validate(
+        &state,
+        &nhw(
+            "stage",
+            HollywoodKind::CardStale {
+                card: 1,
+                reason: "t1 moved".into(),
+            },
+        ),
+    );
+    assert!(matches!(e, Err(HRefusal::CardClosed { .. })), "{e:?}");
+    apply(
+        &mut state,
+        &hev(2, "user", HollywoodKind::CardApplied { card: 1 }),
+    );
+    assert!(
+        validate(
+            &state,
+            &nhw(
+                "stage",
+                HollywoodKind::CardStale {
+                    card: 1,
+                    reason: "t1 moved".into()
+                }
+            )
+        )
+        .is_ok(),
+        "stage on applied"
+    );
+    let e = validate(
+        &state,
+        &nhw(
+            "user",
+            HollywoodKind::CardStale {
+                card: 1,
+                reason: "t1 moved".into(),
+            },
+        ),
+    );
+    assert!(matches!(e, Err(HRefusal::CardClosed { .. })), "{e:?}");
     let e = validate(
         &state,
         &nhw(
@@ -199,6 +241,7 @@ fn message_directions_are_fixed() {
         studio: studio.map(str::to_string),
         text: Some("hi".into()),
         file: None,
+        source_seq: None,
     };
     assert!(validate(&state, &nhw("user", msg("hollywood", None))).is_ok());
     assert!(validate(&state, &nhw("hollywood", msg("user", None))).is_ok());

@@ -19,8 +19,15 @@ mod digest;
 mod discover;
 mod doc;
 mod draft;
+mod hcard;
+mod hcard_new;
+mod hdeliver;
+mod hlife;
+mod hnotice;
 pub mod hook;
 mod hrender;
+mod hstage;
+mod hwatch;
 mod hwood;
 mod hwood_base;
 mod hwood_read;
@@ -79,7 +86,13 @@ mod docs_tests;
 mod draft_tests;
 
 #[cfg(test)]
+mod hcard_tests;
+#[cfg(test)]
+mod hnotice_tests;
+#[cfg(test)]
 mod hook_tests;
+#[cfg(test)]
+mod hstage_tests;
 #[cfg(test)]
 mod hwood_read_tests;
 #[cfg(test)]

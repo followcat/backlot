@@ -192,12 +192,21 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
             }
         }
         HollywoodKind::CardStale { card, .. } => {
-            // Recorded at apply time by the user, and by the stage on
-            // its own pass once it executes cards (H3).
+            // The user's apply-time check records on an open card;
+            // the stage's execution-time check on an applied one
+            // (H3) — a base may keep moving between the two.
             if role != "user" && role != "stage" {
                 return Err(role_bound(role, "the user or the stage"));
             }
-            open_card(state, *card)
+            match state.cards.get(card) {
+                None => Err(HRefusal::NoCard(*card)),
+                Some(c) if role == "stage" && c.state == CardState::Applied => Ok(()),
+                Some(c) if role == "user" && c.state == CardState::Open => Ok(()),
+                Some(c) => Err(HRefusal::CardClosed {
+                    card: *card,
+                    state: c.state.as_str(),
+                }),
+            }
         }
         HollywoodKind::Reported { headline, .. } => {
             if role != HOLLYWOOD {
@@ -210,13 +219,42 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
             }
             Ok(())
         }
-        HollywoodKind::MessageSent { to, studio, .. } => match (role, to.as_str()) {
+        HollywoodKind::MessageSent {
+            to, studio, file, ..
+        } => match (role, to.as_str()) {
             ("user", HOLLYWOOD) if studio.is_none() => Ok(()),
             (HOLLYWOOD, "user") if studio.is_none() => Ok(()),
             (HOLLYWOOD, "producer") if studio.is_some() => Ok(()),
+            // The stage's notices to Hollywood always carry a body
+            // file under `messages/` (H3's notice path).
+            ("stage", HOLLYWOOD) if file.is_some() => Ok(()),
             _ => Err(HRefusal::BadMessage(format!(
                 "'{role}' may not send to '{to}'"
             ))),
         },
+        // Hollywood's own lifecycle — the stage's word, the way a
+        // studio's `role.*` events are.
+        HollywoodKind::RoleState { .. } => {
+            if role != "stage" {
+                return Err(role_bound(role, "the stage"));
+            }
+            Ok(())
+        }
+        HollywoodKind::MessageDelivered { target }
+        | HollywoodKind::MessageDropped { target, .. } => {
+            if role != "stage" {
+                return Err(role_bound(role, "the stage"));
+            }
+            match state.messages.iter().find(|m| m.seq == *target) {
+                None => Err(HRefusal::BadMessage(format!("no message '{target}'"))),
+                Some(m) if m.delivered => Err(HRefusal::BadMessage(format!(
+                    "message '{target}' is delivered"
+                ))),
+                Some(m) if m.dropped => Err(HRefusal::BadMessage(format!(
+                    "message '{target}' is dropped"
+                ))),
+                Some(_) => Ok(()),
+            }
+        }
     }
 }

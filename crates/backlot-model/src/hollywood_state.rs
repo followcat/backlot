@@ -6,7 +6,11 @@
 
 use std::collections::BTreeMap;
 
-use crate::hollywood::{CardAction, CardBase, HEADLINE_CAP, HollywoodEvent, HollywoodKind};
+use crate::event::ActorIdentity;
+use crate::hollywood::{
+    CardAction, CardBase, HEADLINE_CAP, HollywoodEvent, HollywoodKind, RoleMotion,
+};
+use crate::state::RoleLifecycle;
 
 /// A card's point in its life.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +53,9 @@ pub struct Card {
     pub detail: String,
     /// The seq that closed the card, if it did.
     pub closed_seq: Option<u64>,
+    /// The `card.applied` seq — the applied notice's dedup key. The
+    /// card's close keeps `closed_seq` instead of overwriting it.
+    pub applied_seq: Option<u64>,
 }
 
 /// One `hollywood.reported` in the capped last-headlines list.
@@ -70,6 +77,58 @@ pub struct HMessage {
     pub studio: Option<String>,
     pub text: Option<String>,
     pub file: Option<String>,
+    /// For a stage notice, the source event's seq — in `studio`'s
+    /// ledger when set, in Hollywood's own when absent. The dedup
+    /// key that keeps a restart from telling it twice.
+    pub source_seq: Option<u64>,
+    pub delivered: bool,
+    /// `message.dropped` landed: a queued notice skipped at send
+    /// time because its source no longer stood.
+    pub dropped: bool,
+}
+
+/// Hollywood's own terminal record, folded from `role.state`
+/// events — the same lifecycle a studio's `RoleState` tracks.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct HWRole {
+    /// True while the role should have a live terminal.
+    pub live: bool,
+    /// The stage closed it on purpose — it stays down until a start
+    /// records it live again.
+    pub closed: bool,
+    /// The `closed` record's reason — `"cannot resume"` marks the
+    /// crash guard's stop, which no config return revives.
+    pub closed_reason: Option<String>,
+    /// When the current lifecycle state began (the `role.state` ts).
+    pub since_ms: u64,
+    pub terminal: Option<String>,
+    pub actor: Option<ActorIdentity>,
+    pub session_id: Option<String>,
+    /// Every `lost` timestamp — the resume guard's crash-loop
+    /// history, kept so a stage restart does not lose the count.
+    pub losses: Vec<u64>,
+    /// The seq of a `resumed` whose reason was `recovered`, while
+    /// its notice is owed — a start or plain resume clears it.
+    pub recovered_seq: Option<u64>,
+}
+
+impl HWRole {
+    /// Live, lost or closed — never more than one.
+    pub fn lifecycle(&self) -> RoleLifecycle {
+        if self.live {
+            RoleLifecycle::Live
+        } else if self.closed {
+            RoleLifecycle::Closed
+        } else {
+            RoleLifecycle::Lost
+        }
+    }
+
+    /// Anything a resume could use — a recorded actor, terminal or
+    /// loss. A bare struct means Hollywood never started.
+    pub fn recorded(&self) -> bool {
+        self.actor.is_some() || self.terminal.is_some() || !self.losses.is_empty()
+    }
 }
 
 /// The reduced view of Hollywood's ledger.
@@ -81,6 +140,9 @@ pub struct HollywoodState {
     pub reports: Vec<HReport>,
     /// Every `message.sent`, in seq order.
     pub messages: Vec<HMessage>,
+    /// Hollywood's own terminal record — nothing before the first
+    /// `role.state`.
+    pub role: HWRole,
     /// Last applied seq — torn-tail replay keeps the maximum.
     pub last_seq: u64,
 }
@@ -115,10 +177,16 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                     state: CardState::Open,
                     detail: String::new(),
                     closed_seq: None,
+                    applied_seq: None,
                 },
             );
         }
-        HollywoodKind::CardApplied { card } => close(state, *card, CardState::Applied, "", e.seq),
+        HollywoodKind::CardApplied { card } => {
+            close(state, *card, CardState::Applied, "", e.seq);
+            if let Some(c) = state.cards.get_mut(card) {
+                c.applied_seq = Some(e.seq);
+            }
+        }
         HollywoodKind::CardCancelled { card, reason } => {
             close(state, *card, CardState::Cancelled, reason, e.seq)
         }
@@ -145,6 +213,7 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
             studio,
             text,
             file,
+            source_seq,
         } => state.messages.push(HMessage {
             seq: e.seq,
             ts_ms: e.ts_ms,
@@ -153,7 +222,63 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
             studio: studio.clone(),
             text: text.clone(),
             file: file.clone(),
+            source_seq: *source_seq,
+            delivered: false,
+            dropped: false,
         }),
+        HollywoodKind::RoleState {
+            state: motion,
+            terminal,
+            actor,
+            session_id,
+            reason,
+        } => match motion {
+            RoleMotion::Started | RoleMotion::Resumed => {
+                let r = &mut state.role;
+                r.live = true;
+                r.closed = false;
+                r.closed_reason = None;
+                r.since_ms = e.ts_ms;
+                if terminal.is_some() {
+                    r.terminal = terminal.clone();
+                }
+                if actor.is_some() {
+                    r.actor = actor.clone();
+                }
+                if session_id.is_some() {
+                    r.session_id = session_id.clone();
+                }
+                r.recovered_seq = (*motion == RoleMotion::Resumed
+                    && reason.as_deref() == Some("recovered"))
+                .then_some(e.seq);
+            }
+            RoleMotion::Lost => {
+                state.role.live = false;
+                state.role.closed = false;
+                state.role.losses.push(e.ts_ms);
+            }
+            RoleMotion::Closed => {
+                let r = &mut state.role;
+                r.live = false;
+                r.closed = true;
+                r.closed_reason = reason.clone();
+                // The close's own ts: a stage process born after it
+                // may revive a `cannot resume` give-up (R1-4), and the
+                // crash history ends with the lifecycle it counted.
+                r.since_ms = e.ts_ms;
+                r.losses.clear();
+            }
+        },
+        HollywoodKind::MessageDelivered { target } => {
+            if let Some(m) = state.messages.iter_mut().find(|m| m.seq == *target) {
+                m.delivered = true;
+            }
+        }
+        HollywoodKind::MessageDropped { target, .. } => {
+            if let Some(m) = state.messages.iter_mut().find(|m| m.seq == *target) {
+                m.dropped = true;
+            }
+        }
     }
 }
 

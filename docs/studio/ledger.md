@@ -172,20 +172,31 @@ message to the producer (R26).
 
 | Kind | Main fields |
 |---|---|
+| `role.state` | lifecycle motion (`started`/`lost`/`resumed`/`closed`), terminal, actor, session, reason — `stage` only; the studios' four role events folded into one (H3) |
 | `card.proposed` | the exact `action` (D18), a one-line `why`, and the `base` the card was made against — `hollywood` only |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |
-| `card.stale` | card id, reason — `user` at apply time, `stage` on its own pass (H3) |
+| `card.stale` | card id, reason — `user` at apply time on an open card, `stage` on an applied one (H3) |
 | `card.done` / `card.failed` | card id, optional detail / reason — `stage` only (H3) |
 | `hollywood.reported` | headline (one nonempty line), optional body file — `hollywood` only |
-| `message.sent` | to, optional studio, text or file — `user`→`hollywood`, `hollywood`→`user`, or `hollywood`→a studio's `producer` |
+| `message.sent` | to, optional studio, text or file, optional `source_seq` — `user`→`hollywood`, `hollywood`→`user`, `stage`→`hollywood` (notices), or `hollywood`→a studio's `producer` |
+| `message.delivered` | target seq — `stage` only, after a successful `terminal.send` (H3) |
+| `message.dropped` | target seq, reason — `stage` only, on a queued notice whose source moved on (H3) |
 
 A card's **base** is the fact it was proposed against — `studio_absent` for `studio-new`,
 `person_held`/`person_closed` for `close`/`reopen`, `task_priority { was }` for `priority`,
 `task_status { was }` for `pause`/`resume`/`abandon`. The reducer holds cards by seq; staleness is a
-pure read of the card against the studio's state at apply time, and a moved base records
-`card.stale` instead of `card.applied`. `card.done`/`card.failed` are refused on a card that is not
-`applied`.
+pure read of the card against the studio's state, checked at apply time (a moved base records
+`card.stale` instead of `card.applied`) and again when the stage executes an applied card.
+`card.done`/`card.failed`/`card.stale`-by-stage are refused on a card that is not `applied`; an
+applied card records `applied_seq`, a closed one `closed_seq`.
+
+`message.sent` may carry `source_seq`, like the studios' `message.queued` — the seq of the event a
+notice relays: in the named studio's ledger, or Hollywood's own for card outcomes and the
+recovered-terminal word. `source_seq` dedups a restart and names what to check for staleness;
+a `failed` notice has no event to point at and carries the stage's error text in `text` instead.
+`message.delivered` marks a sent message, `message.dropped` a queued one whose source no longer
+stands — delivered or dropped, a notice is never owed again.
 
 Hollywood's `message.sent` to a producer is its own copy of a `tell producer` — the studio's
 `message.queued` remains the delivery record; the file lands under Hollywood's `messages/` too.

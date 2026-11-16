@@ -1,5 +1,48 @@
 # Studio progress
 
+## H3: Hollywood — the stage, fake runner only (2026-11-16)
+
+- Done: with `[hollywood]` in the user config the stage runs one terminal `bl-hollywood`
+  (labels `backlot.role=hollywood`, no `backlot.studio`) in `<state dir>/hollywood/` —
+  `AGENTS.md` rewritten each start, `memory.md` made once, `messages/`/`reports/`/`drafts/`
+  created. The lifecycle is H1's model plus one event kind, `role.state`, folding the studios'
+  four role events into one record (`started`/`lost`/`resumed`/`closed`, terminal, actor,
+  session, reason — `stage` only); start, adopt, rejoin, lost, resume, the three-losses-in-
+  ten-minutes `cannot resume`, close-on-config-change and stray drop all go through `hplan`'s
+  pure table. The launch pre-allows exactly `status`, `records`, `tell <studio> producer`,
+  `hollywood propose`, `hollywood report` and `studio new --dry-run` on each adapter (claude,
+  cursor, cmd); the stage never answers a prompt there and owes it no steps. `tell hollywood`
+  delivers through the same guarded send the studios get, and the stage's notices — attention,
+  user-only prompt, finish, failure, accepted delivery, unrouted stall, recovered terminal,
+  every card outcome — queue as `message.sent` with `source_seq` (or the error text for a
+  source-less `failed`), dedup on it across restarts, and drop `message.dropped` when the
+  source moves on. The card pass executes an applied card once: base re-check (`card.stale`
+  and nothing else), the studio event `by: user` through the same validation, `card.done` or
+  `card.failed` with the reason; an effect already in the ledger (the `card c<n>` marker, the
+  priority, the `purpose: "brief"` message) makes a restart repeat nothing. `studio-new`
+  re-runs the dry-run checks, copies the cast, writes `studio.created` and queues the brief
+  `by: stage`. Cards run with or without `[hollywood]`. The summary document carries the
+  optional `hollywood` object — role state, runner, model, headline, open cards.
+- Measured: the 18 model tests now cover `role.state` folding and validation, `applied_seq`/
+  `closed_seq`, the tightened outcome rules (`card.stale` is the user's on an open card, the
+  stage's on an applied one) and `source_seq` on `message.sent`. 21 new stage tests cover
+  `hplan`'s truth table and env, every owed/dedup/stale notice row and `hnotice`'s
+  label shaping, and `hcard`'s execution — done/stale/failed, idempotent restart, the
+  studio-new crash window. The real-core suite `real_hollywood` (2 tests, fake runner,
+  scratch core): two studios overseen, a notice from each naming it, `tell hollywood`
+  delivered (through a digest), the summary object, a proposed+applied pause card carried out
+  as `task.state` `by: user` plus `card.done`, a stage-only restart that adopts nothing and
+  loses nothing, a moved-base card `card.stale` with no studio event, a `studio-new` card
+  that lands `studio.created` and the producer's brief in the fake inbox, and the no-config
+  run where none of it exists. Run 5 times in a row on the pinned `herdr-core`: ~31 s each,
+  all green; `cargo fmt --check`, `clippy -D warnings` and `cargo test --workspace` (1626)
+  pass beside it.
+- Not verified: a real runner has never launched `bl-hollywood` — the pre-allow lists are
+  wired per adapter but only `fake` ran them, and a real overseer answering nothing but
+  status/propose/report is untried (H5). The TUI layer does not exist (H4): `alt+y`, the
+  collapsed strip and the expanded panel are design only. Card outcomes reach Hollywood's
+  inbox but no agent has yet read one and replied.
+
 ## H2: two live studios on one core, fake runner only (2026-11-16)
 
 - Done: `real_two_studios_side_by_side` under `crates/hc-tui/tests/` — one scratch core, one

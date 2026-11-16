@@ -61,6 +61,7 @@ fn the_envelope_matches_the_studio_ledger() {
                 studio: None,
                 text: Some("hello".into()),
                 file: None,
+                source_seq: None,
             },
             "message.sent",
         ),
@@ -110,6 +111,7 @@ fn replay_equals_incremental_apply() {
                 studio: None,
                 text: Some("thanks".into()),
                 file: None,
+                source_seq: None,
             },
         ),
     ];
@@ -129,4 +131,43 @@ fn replay_equals_incremental_apply() {
     assert_eq!(state.messages.len(), 1);
     assert_eq!(state.messages[0].from, "user");
     assert_eq!(state.messages[0].to, "hollywood");
+}
+
+/// R1-4: a `closed` stamps `since_ms` with its own ts and clears the
+/// loss history — the stage's revive check reads "was I born after
+/// this close", and losses from the closed lifecycle never count
+/// toward a new one's guard.
+#[test]
+fn a_close_stamps_since_and_ends_the_loss_count() {
+    let role_state = |state: RoleMotion, reason: Option<&str>| HollywoodKind::RoleState {
+        state,
+        terminal: None,
+        actor: None,
+        session_id: None,
+        reason: reason.map(String::from),
+    };
+    let events = vec![
+        hev(1, "stage", role_state(RoleMotion::Started, None)),
+        hev(2, "stage", role_state(RoleMotion::Lost, None)),
+        hev(3, "stage", role_state(RoleMotion::Lost, None)),
+        hev(
+            4,
+            "stage",
+            role_state(RoleMotion::Closed, Some("cannot resume")),
+        ),
+    ];
+    let state = replay(&events);
+    assert!(state.role.closed);
+    assert!(!state.role.live);
+    assert_eq!(state.role.closed_reason.as_deref(), Some("cannot resume"));
+    assert_eq!(state.role.since_ms, 4000);
+    assert!(state.role.losses.is_empty());
+    // A later `lost` starts a fresh count from zero.
+    let state = replay(&[
+        events[0].clone(),
+        events[1].clone(),
+        events[3].clone(),
+        hev(5, "stage", role_state(RoleMotion::Lost, None)),
+    ]);
+    assert_eq!(state.role.losses, vec![5000]);
 }

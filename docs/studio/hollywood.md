@@ -6,8 +6,8 @@ and manages studios through **cards** — proposals you confirm. It is not a stu
 role inside one: it has its own ledger beside `studios/`, in the same format, and studio lists,
 limits and studio rules never see it.
 
-This document covers what exists today (H1: the model and the command line) and marks what lands
-with the stage loop (H3) and the floating layer (H4).
+This document covers what exists today (H1–H3: the model, the command line, and the stage's live
+layer) and marks what lands with the floating layer (H4) and real agents (H5).
 
 ## The layer and its key
 
@@ -50,16 +50,27 @@ effort = "high"
 ```
 
 `runner` and `model` are required, and the runner must be one backlot supports. `effort` follows
-the cast file's rule: `cursor`, `devin` and `cmd` take none; every other runner needs one. Nothing
-launches from this yet (H3) — `backlot status --all` and `backlot card list` show the configured
-identity meanwhile.
+the cast file's rule: `cursor`, `devin` and `cmd` take none; every other runner needs one.
+
+With a valid section the stage runs **one terminal named `bl-hollywood`** — labelled
+`backlot.role=hollywood` and never `backlot.studio` — in `<state dir>/hollywood/` with
+`BACKLOT_ROLE=hollywood`, the state dir, and no `BACKLOT_STUDIO`. It is started, adopted after a
+stage restart, and resumed after a loss the way a producer is (three losses in ten minutes is its
+`cannot resume` — that give-up holds while the same stage process lives; restarting the stage is
+the way back, and the loss count starts over). Changing the runner starts a new conversation;
+removing the section closes it.
+Its lifecycle lands in Hollywood's own ledger as `role.state` events — the studios' four role
+events folded into one.
+
+The stage owns the folder: `AGENTS.md` (the role prompt, rewritten every start), `memory.md`
+(made once, never overwritten), `drafts/<studio>/` for studio-new work, plus `messages/`,
+`reports/` and `roles/hollywood/`. Hollywood owes no steps and is never nudged.
 
 ## Cards
 
 A card is Hollywood's only way to change anything. `backlot hollywood propose` records it in
-Hollywood's own ledger; you apply or cancel it; only an applied card changes anything — and in H1,
-"applying" records the event only. Carrying the action out is the stage's job (H3), and the
-command's output says so.
+Hollywood's own ledger; you apply or cancel it; only an applied card changes anything — and the
+stage is what carries it out.
 
 ```sh
 backlot hollywood propose pause --studio acme-shop --task t1 --why "actor is looping" --as hollywood
@@ -78,17 +89,29 @@ card records the level it replaces. `propose` refuses a card born stale — prop
 task that is not running fails before the card exists — and `card apply` re-checks: a base that
 moved since proposal records `card.stale` with the reason instead of `card.applied`.
 
+The stage carries an applied card out once: it checks the base **again** (a base that moved since
+the apply records `card.stale` and nothing else happens), then records the action in the studio's
+ledger exactly as your own command would — `by: user`, through the same validation, a refusal
+there landing `card.failed` with the reason. Success is `card.done`. Never twice: before touching
+the studio the stage asks whether the card's effect is already there — the `card c<n>` marker on
+a `task.state`, the priority it wanted, the `purpose: "brief"` message a `studio-new` leaves — and
+an effect already in the ledger records `card.done` without re-appending, so a restart between the
+action and its record repeats nothing. Cards execute whether or not `[hollywood]` is configured:
+the config gates the agent, never the gate.
+
 Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`.
 Nothing else — in particular, no card answers a permission prompt; those stay yours, answered in
 the studio.
+
+Every card outcome reaches Hollywood's inbox as a notice: applied, cancelled, done, failed, stale.
 
 ## Creating a studio in plain words
 
 Tell Hollywood what you want — the goal, the repository, who should work on it — and it writes a
 draft in its own folder, checks it with `studio new --dry-run`, and proposes a `studio-new` card
-only when the draft passes every check `studio new` runs. Applying the card (H3) creates the
-studio; the brief becomes the producer's first message. What you did not say is not guessed: it
-comes from `[hollywood] default_cast`, else the last studio's cast, else Hollywood asks.
+only when the draft passes every check `studio new` runs. Applying the card creates the studio;
+the brief becomes the producer's first message. What you did not say is not guessed: it comes
+from `[hollywood] default_cast`, else the last studio's cast, else Hollywood asks.
 
 ```sh
 backlot studio new --title Shop --repo /home/user/acme-shop --cast /home/user/cast.toml --dry-run --studio acme-shop
@@ -100,19 +123,35 @@ whether the name is taken, whether `--repo` is a git repository, the cast file, 
 checks, every runner supported *and installed*, and the caps seating the fixed roles — and writes
 nothing: no ledger event, no directory. One refusal per kind, each saying what to fix.
 
+The dry run runs again at apply time, inside the card's execution. `studio.created` lands
+`by: user` with the draft's cast file copied into the studio; the brief is queued as a
+`purpose: "brief"` message to the producer — a purpose-bearing message is the stage's or the
+producer's word, so the stage records that one. A studio the card already made (its brief is the
+marker) records `card.done` without repeating; one made any other way is a moved base.
+
 ## Talking to Hollywood, and what it may say
 
-`backlot tell hollywood` records your line in Hollywood's ledger. In H1 that is the whole story —
-delivery to its terminal is the stage's guarded send (H3), never a raw write:
+`backlot tell hollywood` records your line in Hollywood's ledger, and the stage delivers it — the
+same guarded send the studios get: only when `bl-hollywood` is live, waiting, past its
+up-time window and showing a stable screen, never into a dialog. A `message.delivered` records
+the send.
 
 ```sh
 backlot tell hollywood "watch acme-shop for stalls"
 ```
 
-Hollywood's own words come back through `backlot hollywood report` — a headline the strip and
-panel will read from the ledger (D21). It may also talk *to* a studio's producer on your behalf —
-its one write into a studio: `tell producer` sent `--as hollywood` records the studio's
-`message.queued` as the delivery record, and mirrors `message.sent` into Hollywood's own ledger.
+The stage also tells Hollywood, each once and naming the studio: an attention opened, a prompt
+only you may answer, a studio finished or failed, a delivery accepted, a stall it could not
+route. Notices follow the studios' own rules — the body lives under `messages/`, several
+undelivered items go as one digest, and a queued notice whose source moved on is dropped, not
+sent (`message.dropped`). Hollywood's own words — a recovered terminal, each card's outcome —
+join the same inbox.
+
+Hollywood's own reports come back through `backlot hollywood report` — a headline the strip and
+panel will read from the ledger (D21); today it lands in the summary document's `hollywood`
+object. It may also talk *to* a studio's producer on your behalf — its one write into a studio:
+`tell producer` sent `--as hollywood` records the studio's `message.queued` as the delivery
+record, and mirrors `message.sent` into Hollywood's own ledger.
 
 ```sh
 backlot hollywood report "two studios idle, one card open" --as hollywood
@@ -138,14 +177,17 @@ in backlot comes from the environment (`BACKLOT_ROLE`, `--as`), so the CLI canno
 was yours. `--as user` in a role terminal is refused — it disagrees with the `BACKLOT_ROLE` pin —
 but a role terminal that unsets `BACKLOT_ROLE` looks like yours, and that is what could run
 `card apply`. What holds in practice is the pair of rules above plus the runner's own permission
-prompt: Hollywood's launch pre-allows only `status`, `records`, `tell <studio> producer`,
-`hollywood propose`, `hollywood report` and `studio new --dry-run`, so anything else it types
-stops at a prompt you see.
+prompt: Hollywood's launch pre-allows exactly `backlot status`, `backlot records`,
+`backlot tell <studio> producer`, `backlot hollywood propose`, `backlot hollywood report` and
+`backlot studio new --dry-run`, so anything else it types stops at a prompt you see. That prompt
+is yours — the stage never answers a prompt in Hollywood's terminal.
+
+The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
+`devin`, `codex` and `opencode` take no command list — there the runner's own permission mode
+(`smart`, `on-request`, the env defaults) is the gate, and Hollywood's role rules still refuse at
+the ledger.
 
 ## What is not here yet
 
-- **H2**: two live studios on one core.
-- **H3**: the stage starts `bl-hollywood` from `[hollywood]`, writes `AGENTS.md`/`memory.md`,
-  forwards notices, delivers `tell hollywood`, carries applied cards out (`card.done`/`card.failed`),
-  and writes the summary document's `hollywood` object.
 - **H4**: the floating layer, its keys, the input line, Apply / Cancel / Show me in the panel.
+- **H5**: a real agent under an approved run — everything above is runner-agnostic and fake-tested.

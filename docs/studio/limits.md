@@ -165,7 +165,9 @@ re-raise one `stall_limit_s` later.
   the studio: two studios on one account each count only their own roles, so a shared account's
   real ceiling is the sum of the studios' caps, set by the person who writes the casts. `studio
   new` refuses a cap that can never sit its fixed roles — under the producer-and-director count on
-  the runner, or at their count while the writer or a candidate shares it.
+  the runner, or at their count while the writer or a candidate shares it. **Hollywood is outside
+  every cap** — `bl-hollywood` is not a studio role and no cast counts it — but its start still
+  spends the tick's one-real-runner slot like any other launch.
 - **A held role owes nothing until it starts.** A start a `[limits]` cap holds back accrues no
   task budget (the clock opens at the first `role.started`), owes no step, draws no nudge and no
   `owed` attention; once the role starts, an owed step ages from the later of its ordinary
@@ -200,6 +202,9 @@ re-raise one `stall_limit_s` later.
   cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets
   the variable inside shows only `bash x.sh` on the prompt screen.
+- **Hollywood's exact pre-allow list is wired for `claude`, `cursor` and `cmd` only.** On `devin`,
+  `codex` and `opencode` the runner's own permission mode is the gate — the ledger's role rules
+  still refuse what they must, but nothing trims the prompt set at launch.
 - **A cursor role's `cli-config.json` holds the account's `authInfo`** once the agent has run —
   the agent writes it into the role's isolated `roles/<role>/cursor/config/`. The studio state
   directory is private: do not share or publish it.

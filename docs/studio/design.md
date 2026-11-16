@@ -302,6 +302,24 @@ document list is set when it starts, while studios come and go.
 Whether the stage is running comes from the terminal inventory (`backlot-stage` live or not), not from a heartbeat, so a
 liveness signal costs no document writes.
 
+An optional `hollywood` object rides in the same document: the overseer's role state, runner and model, its newest
+headline and its open cards. It appears only while `[hollywood]` is configured.
+
+## Hollywood
+
+One overseer floats above all studios on a core — `docs/studio/hollywood.md` owns the detail; the stage's part is this:
+with `[hollywood]` in the user config it runs one terminal `bl-hollywood` (labelled `backlot.role=hollywood`, never
+`backlot.studio`) in `<state dir>/hollywood/`, started, adopted and resumed by the same rules a producer is, with its
+lifecycle in its own ledger. The stage forwards studio notices to it — an attention opened, a prompt only the user may
+answer, a finish, a failure, an accepted delivery, an unrouted stall — through the same guarded-send path the studios
+get, deduplicated by `source_seq` and dropped when their source moves on. `tell hollywood` lands the same way.
+
+Hollywood changes nothing directly: it proposes **cards**, the user applies or cancels, and the stage carries an
+applied card out exactly once — re-checking the card's base, recording the studio event `by: user` through the same
+validation the user's own command would hit, and recording `card.done`, `card.failed` or `card.stale` back in
+Hollywood's ledger. A `studio-new` card re-runs the `studio new --dry-run` checks, writes `studio.created` and queues
+the brief to the new producer. The config gates the agent terminal, never the card pass.
+
 ## Recovery
 
 An hc server restart ends every terminal, including the stage; the person starts it again with

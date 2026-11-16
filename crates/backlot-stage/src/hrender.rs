@@ -22,6 +22,9 @@ pub fn hconfirm(event: &HollywoodEvent) -> String {
         | HollywoodKind::CardStale { card, .. } => format!(" c{card}"),
         HollywoodKind::Reported { headline, .. } => format!(" \"{headline}\""),
         HollywoodKind::MessageSent { to, .. } => format!(" → {to}"),
+        HollywoodKind::RoleState { state, .. } => format!(" {state:?}"),
+        HollywoodKind::MessageDelivered { target }
+        | HollywoodKind::MessageDropped { target, .. } => format!(" #{target}"),
     };
     format!("event {}: {}{}", event.seq, event.kind.name(), subject)
 }

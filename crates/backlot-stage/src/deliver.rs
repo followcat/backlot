@@ -41,7 +41,7 @@ pub const SEND_GAP_MS: u64 = 5_000;
 pub const SCREEN_STABLE_MS: u64 = 2_000;
 /// `terminal.send` may hold for the person's draft pause — give the
 /// wire a little longer than the core's own three minutes.
-const SEND_DEADLINE: Duration = Duration::from_secs(200);
+pub(crate) const SEND_DEADLINE: Duration = Duration::from_secs(200);
 
 /// One queued thing a role is owed: the items it carries (one, or
 /// the digest's set in digest order), the `[backlot]` line to send,
