@@ -128,3 +128,29 @@ async fn same_terminal_role_change_keeps_the_screen_and_rebuilds_the_vt() {
     );
     assert!(vt_text(&mut pane).contains("fresh paint"));
 }
+
+/// A key while a pane's output still fits its screen must not pin the
+/// viewport to the top: output that then outgrows the screen is
+/// followed. Regression: the reset scrolled to `total - len`, which is
+/// row 0 — the VT's top pin — until scrollback exists.
+#[tokio::test]
+async fn a_key_before_the_screen_fills_keeps_following_the_tail() {
+    let (mut pane, mut rx, mut accept) = rig();
+    pane.want(Some(spec(Role::Active)));
+    let mut core = serve(&mut accept, true).await;
+    step(&mut pane, &mut rx).await;
+    paint(&mut pane, &mut rx, &mut core, b"prompt> ").await;
+    pane.reset_scroll();
+    let mut payload = Vec::new();
+    for i in 0..200 {
+        payload.extend_from_slice(format!("line {i}\r\n").as_bytes());
+    }
+    raw_paint(&mut pane, &mut rx, &mut core, &payload).await;
+    let bar = pane.vt().unwrap().scrollbar().unwrap();
+    assert!(bar.total > bar.len, "the output must outgrow the screen");
+    assert_eq!(
+        bar.offset,
+        bar.total - bar.len,
+        "the viewport must follow the tail, not stay on the head"
+    );
+}

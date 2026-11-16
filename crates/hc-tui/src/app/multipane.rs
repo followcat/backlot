@@ -66,10 +66,8 @@ impl App {
         let Some(id) = self.focused.clone() else {
             return;
         };
-        if let Some(vt) = self.displayed_pane_mut(&id).and_then(|p| p.vt())
-            && let Some(scroll) = vt.scrollbar()
-        {
-            vt.scroll_to_row(scroll.total.saturating_sub(scroll.len) as usize);
+        if let Some(vt) = self.displayed_pane_mut(&id).and_then(|p| p.vt()) {
+            vt.scroll_to_bottom();
         }
     }
 
