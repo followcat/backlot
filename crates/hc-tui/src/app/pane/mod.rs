@@ -259,6 +259,11 @@ pub struct Pane {
     allocation_changed_disconnected: bool,
     incarnation: Option<(u64, Option<u32>)>,
     inventory_incarnation: Option<(u64, Option<u32>)>,
+    /// The `view.generation` this pane last published against: its bump
+    /// means a fresh subscription epoch replaced the link a Down pane
+    /// was backing off on — reason to retry at once, not to keep
+    /// waiting out a dead wire's backoff.
+    view_generation: Option<u64>,
     /// Human input held while attaching / behind a full writer queue.
     /// Bound to this attach generation: a new incarnation drains any
     /// already-encoded leftovers (they belong to the dead wire).
@@ -324,6 +329,7 @@ impl Pane {
             allocation_changed_disconnected: false,
             incarnation: None,
             inventory_incarnation: None,
+            view_generation: None,
             pending: VecDeque::new(),
             pending_bytes: 0,
             dropped_input: 0,

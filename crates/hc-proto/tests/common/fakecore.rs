@@ -257,6 +257,17 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> FakeCore<R, W> {
         }
     }
 
+    /// `try_read_request` without the fake's I/O deadline: a paused-time
+    /// script parks this conn across virtual minutes of silence.
+    pub async fn try_read_request_unbounded(&mut self) -> Option<Value> {
+        loop {
+            let frame = self.reader.read_frame().await.unwrap()?;
+            if frame.channel == 0 && frame.kind == Kind::Data {
+                return Some(serde_json::from_slice(&frame.payload).unwrap());
+            }
+        }
+    }
+
     /// Replies `result` to the request `id` (a parsed `req["id"]` Value).
     pub async fn reply(&mut self, id: &Value, result: Value) {
         self.reply_value(&json!({"jsonrpc": "2.0", "id": id, "result": result}))
