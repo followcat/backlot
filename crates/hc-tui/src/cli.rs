@@ -9,7 +9,7 @@ use std::sync::Arc;
 use hc_proto::endpoint::{self, Endpoint, Env, Platform};
 use hc_proto::watch::{WatchParams, Watcher};
 
-use crate::app::{App, OpenAttach, Probe};
+use crate::app::{App, HostOutput, OpenAttach, Probe};
 
 /// What the command line asked for.
 pub enum Action {
@@ -220,7 +220,8 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         })
     });
     let mouse_capture = shell.mouse_capture;
-    let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
+    let probe = Arc::new(Probe::default());
+    let mut app = App::new(watcher, open, live, shell, Arc::clone(&probe));
 
     app.set_operations(rpc);
     // `endpoint_accepts_local_images` client arms: a `--remote`
@@ -236,22 +237,25 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     // error and panic paths alike.
     let mut guard =
         crate::term::TermGuard::enter(mouse_capture).map_err(|e| format!("terminal setup: {e}"))?;
-    let backend = crate::ansi::AnsiBackend::new(std::io::stdout());
+    let backend =
+        crate::ansi::AnsiBackend::new(HostOutput::new(std::io::stdout(), Arc::clone(&probe)));
     let mut terminal = ratatui::Terminal::new(backend).map_err(|e| format!("terminal: {e}"))?;
     // The single reader owns stdin: user input and the host's query
     // replies share it — write the queries first so the reader decodes
     // replies from its armed reply windows, never as keys.
     let cell_query = crate::host::send_theme_query().map_err(|e| format!("theme query: {e}"))?;
-    let mut reader = crate::reader::spawn_reader(256, mouse_capture, true, cell_query)
-        .map_err(|e| format!("input reader: {e}"))?;
+    let mut reader =
+        crate::reader::spawn_reader(256, mouse_capture, true, cell_query, Arc::clone(&probe))
+            .map_err(|e| format!("input reader: {e}"))?;
     app.set_host_facts(crate::host::unprobed_facts());
     app.set_host_erase_byte(guard.erase_byte());
     // Host-mode control writes (keyboard pop/push) go through the real
     // stdout; the default sink is inert for tests.
     let input_control = reader.host_control();
+    let control_probe = Arc::clone(&probe);
     app.set_host_control(Box::new(move |bytes| {
         use std::io::Write;
-        let mut out = std::io::stdout();
+        let mut out = HostOutput::new(std::io::stdout(), Arc::clone(&control_probe));
         out.write_all(bytes).and_then(|()| out.flush())?;
         input_control.written(bytes);
         Ok(())
