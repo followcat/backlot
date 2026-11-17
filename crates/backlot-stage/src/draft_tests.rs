@@ -200,6 +200,53 @@ fn the_probe_knows_supported_and_installed() {
     assert!(runners::installed("cursor", Some(&path)));
 }
 
+/// U5: a `[runner_env.<runner>]` PATH in the state's `config.toml`
+/// counts toward installed — it is the PATH the role's terminal
+/// would launch with, so the binary the wizard wrote there is
+/// found.
+#[test]
+fn a_configured_runner_path_counts_as_installed() {
+    let (scratch, env) = scratch();
+    let env = free(&env);
+    let repo = repo(&scratch);
+    // A fake `claude` in a directory nothing's PATH knows.
+    let bin = scratch.files.join("agent-bin");
+    fs::create_dir_all(&bin).unwrap();
+    let prog = bin.join("claude");
+    fs::write(&prog, "#!/bin/sh\necho 2.1.330\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&prog, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    // The config reaches it — like the wizard's own write left it.
+    fs::write(
+        scratch.dir.join("config.toml"),
+        format!("[runner_env.claude]\nPATH = \"{}\"\n", bin.display()),
+    )
+    .unwrap();
+    let cast = fixture(
+        &scratch,
+        "claude.toml",
+        &FAKE_CAST.replace("runner = \"fake\"", "runner = \"claude\""),
+    );
+    let mut vars = env.vars.clone();
+    vars.insert("PATH".into(), "/nonexistent-dir".into());
+    let env = Env { vars };
+    let out = ok(
+        &env,
+        &format!("studio new --title S --repo {repo} --cast {cast} --dry-run --studio fresh-cfg"),
+    );
+    assert!(out.contains("dry run"), "{out}");
+    // Without the config the same draft still refuses.
+    fs::remove_file(scratch.dir.join("config.toml")).unwrap();
+    let msg = refused(
+        &env,
+        &format!("studio new --title S --repo {repo} --cast {cast} --dry-run --studio other"),
+    );
+    assert!(msg.contains("not installed"), "{msg}");
+}
+
 #[test]
 fn a_studio_new_card_only_takes_a_passing_draft() {
     let (scratch, env) = scratch();

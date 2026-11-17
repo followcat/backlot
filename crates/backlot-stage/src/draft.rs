@@ -52,13 +52,21 @@ pub fn check(base: &Path, name: &str, repo: &str, cast_path: &Path, env: &Env) -
     for c in &cast.candidates {
         named.insert(c.runner.as_str());
     }
+    // The PATH a launch would get: a configured
+    // `[runner_env.<runner>]` PATH replaces the inherited one — the
+    // wizard's own write counts as installed (U5).
+    let config_text = std::fs::read_to_string(base.join("config.toml")).unwrap_or_default();
     for runner in named {
         if !crate::runners::supported(runner) {
             return Err(Fail::refused(format!(
                 "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd)"
             )));
         }
-        if !crate::runners::installed(runner, env.get("PATH")) {
+        let path = crate::config::runner_env_in(&config_text, runner)
+            .ok()
+            .and_then(|env| env.get("PATH").cloned())
+            .or_else(|| env.get("PATH").map(str::to_string));
+        if !crate::runners::installed(runner, path.as_deref()) {
             let what = if runner == "fake" {
                 "tools/fake-runner.sh"
             } else {

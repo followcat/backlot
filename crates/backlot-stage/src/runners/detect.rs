@@ -74,7 +74,7 @@ pub enum Source {
 }
 
 /// One runner's verdict.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Found {
     /// The binary's absolute path.
     pub path: PathBuf,
@@ -87,6 +87,15 @@ pub struct Found {
 }
 
 impl Found {
+    /// The directory a `[runner_env]` PATH write prepends — the
+    /// binary's own directory first, because a node-based CLI needs
+    /// the `node` next to it.
+    pub fn bin_dir(&self) -> PathBuf {
+        self.path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default()
+    }
     /// A launch with only the inherited PATH cannot reach a
     /// login-shell or known-dir binary.
     pub fn needs_path(&self) -> bool {
@@ -319,7 +328,7 @@ pub fn run_timed(argv: &[String], timeout: Duration) -> Option<RunOut> {
 }
 
 /// `path` under `home` shown as `~/…` — the table stays narrow.
-fn tilde(home: Option<&Path>, path: &Path) -> String {
+pub(crate) fn tilde(home: Option<&Path>, path: &Path) -> String {
     if let Some(home) = home
         && let Ok(rest) = path.strip_prefix(home)
     {

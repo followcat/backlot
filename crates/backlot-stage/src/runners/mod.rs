@@ -20,6 +20,7 @@ mod probe;
 pub(crate) mod splice;
 pub(crate) mod work;
 
+pub(crate) use probe::find_on_path;
 pub use probe::{installed, supported};
 pub(crate) use work::work_state;
 
