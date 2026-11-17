@@ -68,9 +68,51 @@ pub(crate) struct Io<'a> {
     pub pick_repo: Option<PickRepo<'a>>,
 }
 
+/// The "repositories in use" group for the picker (U5): each live
+/// terminal's cwd walked up to its repository root, deduplicated.
+/// The core unreachable, `terminal.list` failing — the group is
+/// simply absent, never an error.
+pub(crate) fn in_use(env: &Env, common: &Common) -> Vec<PathBuf> {
+    let Ok(rt) = crate::link::runtime() else {
+        return Vec::new();
+    };
+    let fetch = async {
+        let link = crate::link::connect(
+            env,
+            common.session.as_deref().map(std::ffi::OsStr::new),
+            common.remote.as_deref(),
+        )
+        .await
+        .ok()?;
+        link.client
+            .terminal_list(hc_proto::terminal::ListParams::default())
+            .await
+            .ok()
+    };
+    let Some(list) = rt.block_on(fetch) else {
+        return Vec::new();
+    };
+    crate::wizard_picker::in_use::collect(
+        list.terminals
+            .into_iter()
+            .map(|t| PathBuf::from(t.cwd))
+            .collect(),
+        &|p| p.join(".git").exists(),
+    )
+}
+
 /// The real seams: git for the default probe, `runners::installed`
 /// for the draft, `$VISUAL`/`$EDITOR` for the edit.
-fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env) -> Io<'a> {
+fn real_io<'a>(
+    input: &'a mut dyn BufRead,
+    out: &'a mut dyn Write,
+    env: &'a Env,
+    common: &Common,
+) -> Io<'a> {
+    let pick_env = Env {
+        vars: env.vars.clone(),
+    };
+    let pick_common = common.clone();
     Io {
         input,
         out,
@@ -90,14 +132,15 @@ fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env)
         }),
         installed: Box::new(move |runner| crate::runners::installed(runner, env.get("PATH"))),
         pick_repo: (std::io::stdin().is_terminal() && std::io::stdout().is_terminal()).then(
-            || -> PickRepo {
-                Box::new(
-                    |start| match crate::wizard_picker::pick(start, Vec::new()) {
+            move || -> PickRepo {
+                Box::new(move |start| {
+                    let in_use = in_use(&pick_env, &pick_common);
+                    match crate::wizard_picker::pick(start, in_use) {
                         Ok(Some(path)) => Ok(path),
                         Ok(None) => Err(Fail::refused("cancelled")),
                         Err(e) => Err(Fail::refused(format!("picker: {e}"))),
-                    },
-                )
+                    }
+                })
             },
         ),
         edit: Box::new(|file| {
@@ -126,7 +169,7 @@ fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env)
 pub(crate) fn run(common: Common, args: WizardArgs, env: &Env) -> Result<String, Fail> {
     let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
-    let mut io = real_io(&mut input, &mut out, env);
+    let mut io = real_io(&mut input, &mut out, env, &common);
     run_io(common, args, env, &mut io)
 }
 

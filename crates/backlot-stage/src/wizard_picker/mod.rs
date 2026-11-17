@@ -13,6 +13,7 @@
 
 mod filter;
 mod fs;
+pub(crate) mod in_use;
 mod render;
 mod state;
 pub(crate) mod term;
@@ -24,6 +25,8 @@ pub(crate) use term::pick;
 mod filter_tests;
 #[cfg(test)]
 mod fs_tests;
+#[cfg(test)]
+mod in_use_tests;
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]

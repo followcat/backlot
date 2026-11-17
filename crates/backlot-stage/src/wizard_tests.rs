@@ -300,6 +300,21 @@ fn a_cancelled_pick_writes_nothing() {
     assert!(!scratch.dir.join("studios").exists());
 }
 
+/// U5: a core that cannot be reached leaves the in-use group
+/// absent — the picker works the same, it just has nothing to
+/// offer on top.
+#[test]
+fn an_unreachable_core_leaves_no_in_use_group() {
+    let (_scratch, env) = scratch();
+    // A session name with no socket: the connect fails fast and
+    // the group is empty — it never touches a real session.
+    let common = Common {
+        session: Some("u5-scratch-none".into()),
+        ..Common::default()
+    };
+    assert!(crate::wizard::in_use(&env, &common).is_empty());
+}
+
 /// A draft-shaped cast on the `fake` runner — the same roles the
 /// wizard drafts, written out for `--cast` and edited-cast tests.
 const CAST_FAKE: &str = r#"
