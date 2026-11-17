@@ -31,6 +31,7 @@ mod reload;
 mod remote_children;
 mod review_regressions;
 mod shared_rpc;
+mod sidebar_edge;
 mod studio;
 mod studio_mouse;
 mod version_badge;

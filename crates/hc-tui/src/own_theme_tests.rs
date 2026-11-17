@@ -43,6 +43,21 @@ fn palette_of(loaded: &LoadedConfig) -> (Palette, String) {
 }
 
 #[test]
+fn the_backlot_sidebar_is_opaque_and_one_step_darker() {
+    // A translucent terminal showed the window behind the sidebar:
+    // the theme's own background is opaque now, a step darker than
+    // the panes so the two surfaces read apart.
+    let p = Palette::backlot();
+    assert_eq!(p.sidebar_bg, Color::Rgb(12, 14, 21));
+    assert_ne!(p.sidebar_bg, Color::Reset);
+    let sum = |c: Color| match c {
+        Color::Rgb(r, g, b) => u32::from(r) + u32::from(g) + u32::from(b),
+        _ => panic!("an opaque RGB background, got {c:?}"),
+    };
+    assert!(sum(p.sidebar_bg) < sum(p.panel_bg));
+}
+
+#[test]
 fn backlot_is_a_theme_of_its_own_and_not_one_of_the_references() {
     assert_eq!(Palette::from_name("backlot"), Some(Palette::backlot()));
     assert_eq!(Palette::from_name("Backlot"), Some(Palette::backlot()));

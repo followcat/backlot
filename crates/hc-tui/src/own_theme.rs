@@ -34,7 +34,10 @@ impl Palette {
         Self {
             accent: Color::Rgb(240, 178, 74),
             panel_bg: Color::Rgb(17, 20, 29),
-            sidebar_bg: Color::Reset,
+            // Opaque and a step darker than the panes: in a
+            // translucent terminal the sidebar must still be a surface
+            // of its own, not a window onto what is behind it.
+            sidebar_bg: Color::Rgb(12, 14, 21),
             active_row_bg: Color::Rgb(27, 32, 48),
             selection_bg: Color::Rgb(44, 53, 80),
             surface0: Color::Rgb(38, 45, 66),
