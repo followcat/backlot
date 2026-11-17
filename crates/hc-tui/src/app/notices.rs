@@ -171,6 +171,7 @@ impl App {
         self.maybe_toast_update();
         // Prefetch the notes so the modal opens instantly from cache.
         self.kick_notes_fetch(false);
+        self.maybe_open_whats_new();
     }
 }
 

@@ -74,6 +74,8 @@ impl App {
             notes_fetch: update_flow::default_notes_fetch(),
             update_tx,
             update_rx,
+            update_modal: None,
+            running_exe: None,
             background_failure: None,
             next_tab_status: None,
             last_window_title: None,

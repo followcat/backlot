@@ -60,6 +60,7 @@ mod shell_state;
 mod synthesize;
 mod tab_status;
 mod update_flow;
+mod update_modal;
 mod view_sync;
 mod waiting;
 mod waiting_wire;
@@ -139,6 +140,11 @@ pub struct App {
     /// Update worker results land on this channel.
     update_tx: mpsc::Sender<update_flow::UpdateEvent>,
     update_rx: mpsc::Receiver<update_flow::UpdateEvent>,
+    /// The open update card, if any.
+    update_modal: Option<update_modal::UpdateModal>,
+    /// The executable whose directory an upgrade installs into; `None`
+    /// resolves `current_exe` when the card opens.
+    running_exe: Option<std::path::PathBuf>,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,

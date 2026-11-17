@@ -24,6 +24,7 @@ pub(crate) mod notice_render;
 pub mod palette;
 pub mod panes;
 pub mod panes_draw;
+pub(crate) mod release_notes;
 pub mod render;
 pub mod scroll;
 pub(crate) mod selection_highlight;
@@ -38,6 +39,7 @@ pub mod text;
 pub(crate) mod text_editor;
 pub(crate) mod title_text;
 pub mod tokens;
+pub(crate) mod update_modal;
 pub mod workspace;
 
 use std::path::PathBuf;

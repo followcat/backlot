@@ -35,6 +35,8 @@ pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
 pub mod update_check;
+pub(crate) mod update_install;
+pub(crate) mod update_markdown;
 pub(crate) mod update_notes;
 pub mod update_state;
 pub(crate) mod waiting;

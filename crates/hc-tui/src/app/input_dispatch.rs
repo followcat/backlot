@@ -67,7 +67,7 @@ impl App {
                             navigator.filter = None;
                             navigator.selected = None;
                         }
-                    } else if self.settings.is_some() {
+                    } else if self.settings.is_some() || self.update_modal.is_some() {
                         // The Settings overlay has no text field — eat it.
                     } else if self.popup_paste(&text) {
                         // The popup terminal owns paste while open.
@@ -93,7 +93,7 @@ impl App {
                         navigator.filter = None;
                         navigator.selected = None;
                     }
-                } else if self.settings.is_some() {
+                } else if self.settings.is_some() || self.update_modal.is_some() {
                     // The Settings overlay has no text field — eat it.
                 } else if self.popup_text(text.clone().into_bytes()) {
                     // The popup terminal owns IME text while open.
