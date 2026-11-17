@@ -4,18 +4,18 @@ A runner is a coding agent CLI that can fill a role. An adapter holds what diffe
 a chosen model and thinking depth, how to resume it, and how to read its screen.
 
 Measured on 2026-11-09 with real launches in an isolated hc session, unless a cell says otherwise; cursor-agent was
-measured on 2026-11-11, cmd on 2026-11-13. Kimi 0.38.0 has not been measured.
+measured on 2026-11-11, cmd on 2026-11-13, cline on 2026-11-17. Kimi 0.38.0 has not been measured.
 
-| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 | cursor-agent 2026.11.05 | cmd 1.88.5 |
-|---|---|---|---|---|---|---|
-| Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` | `--model` | `-m`, session-scoped — the global `model`/`provider` config keys were untouched in the before/after snapshot |
-| Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured | Part of the model ID (`composer-2.5`, `gpt-5.3-codex-low`) | Not carried — `--effort` is accepted but writes the GLOBAL `reasoningEffort.<model>` config key (measured), so the adapter emits nothing and a cast effort is refused |
-| First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` | Positional; submits on open, fresh and resumed | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) |
-| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) | `-r <id>` or `-r <name>` — a `-n <name>` at launch makes a resumable name; `--session <prefix>` and `-c` also work; context kept (a code word was recalled) |
-| Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` | `create-chat` prints a uuid and `--resume <uuid>` starts in it; the stage instead finds the newest chat under `<config>/chats/<md5(cwd)>/<uuid>/` after launch — its `meta.json` holds the cwd | No — cmd mints the uuid. The stage finds the newest `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/` created at or after launch; line 1 `{"type":"session",...,"id","cwd"}` is authoritative |
-| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used | `permissions.allow` `Shell(...)` rules, written per session into the role's own `cli-config.json` (see below) | `permissions.allow`/`deny` `Shell(...)` rules, written per launch into the workdir's `.commandcode/settings.json` (see below); `deny` carries `mcp__<server>` per global server |
-| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` | `--trust` skips `Do you trust the files in this folder?` (it only creates `projects/<slug>/`); an empty cwd auto-trusts. If seen, the stage never answers — it raises instead |
-| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen | None — no `]7501;` bytes in a full-session typescript, `status: null` throughout | None — no `]7501;` bytes in a typescript capture; hc's screen source still classifies idle/working/blocked(permission) fine |
+| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 | cursor-agent 2026.11.05 | cmd 1.88.5 | cline 3.0.74 |
+|---|---|---|---|---|---|---|---|
+| Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` | `--model` | `-m`, session-scoped — the global `model`/`provider` config keys were untouched in the before/after snapshot | `-m` beside `-P cline-pass` — the provider is taken from a `cline-pass/<model>` id, and any other model is a plan refusal (`model not supported`), because no config channel carries a provider |
+| Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured | Part of the model ID (`composer-2.5`, `gpt-5.3-codex-low`) | Not carried — `--effort` is accepted but writes the GLOBAL `reasoningEffort.<model>` config key (measured), so the adapter emits nothing and a cast effort is refused | `--thinking none`, `low`, `medium`, `high` or `xhigh`; there is no `max` |
+| First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` | Positional; submits on open, fresh and resumed | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) |
+| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) | `-r <id>` or `-r <name>` — a `-n <name>` at launch makes a resumable name; `--session <prefix>` and `-c` also work; context kept (a code word was recalled) | `--id <id>`, context kept (a recall question was answered correctly); the positional prompt is ignored |
+| Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` | `create-chat` prints a uuid and `--resume <uuid>` starts in it; the stage instead finds the newest chat under `<config>/chats/<md5(cwd)>/<uuid>/` after launch — its `meta.json` holds the cwd | No — cmd mints the uuid. The stage finds the newest `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/` created at or after launch; line 1 `{"type":"session",...,"id","cwd"}` is authoritative | No — cline mints it. The stage finds the manifest `<id>/<id>.json` in the user's session store, created at or after launch, whose `cwd` is the role's and whose `pid` is the engine child of the terminal's `node` wrapper |
+| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used | `permissions.allow` `Shell(...)` rules, written per session into the role's own `cli-config.json` (see below) | `permissions.allow`/`deny` `Shell(...)` rules, written per launch into the workdir's `.commandcode/settings.json` (see below); `deny` carries `mcp__<server>` per global server | a stage-written work-area hook, `<cwd>/.cline/hooks/PreToolUse.sh`: the role's command rules, default-deny, the network tools and MCP names always cancelled (see below) |
+| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` | `--trust` skips `Do you trust the files in this folder?` (it only creates `projects/<slug>/`); an empty cwd auto-trusts. If seen, the stage never answers — it raises instead | None seen — a role's work area sits inside an existing repository |
+| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen | None — no `]7501;` bytes in a full-session typescript, `status: null` throughout | None — no `]7501;` bytes in a typescript capture; hc's screen source still classifies idle/working/blocked(permission) fine | None — `hc get` showed `agent: null`; the stage's screen markers carry the role (S14a) |
 
 Screen detection exists only on the followcat core and covers each agent partially (`docs/screen-status.md` in that core).
 On official hc, an agent that does not report status has none, so the stage's own screen sampling matters there. Running
@@ -37,6 +37,7 @@ sees it.
 | OpenCode | `Permission required` and `Allow once` | `esc interrupt` | Permission text from a capture; the working marker is not measured |
 | cursor-agent | the workspace-trust dialog — `Workspace Trust Required` and `Trust this workspace` together; or any approval picker below the last full-width `─` divider — a `→ ` option-cursor line, a `Run Everything (shift+tab)` footer, and `allowlist`/`approval` wording or a tool question (`… this file?`, `… this command?`, `Proceed with this edit?`). The question's own words are not the marker, so a picker kind not yet named still blocks | `ctrl+c to stop`, or a spinner line — one or two braille glyphs, a space, then `Composing` or `Running … tokens`. A transcript line starting `Running the` is not one | Shell picker measured on 2026.11.05; the generic picker shape — `Write to this file?` and the rest — from the S12e run and the fork's `cursor.toml` |
 | cmd | the folder-trust dialog — `Do you trust the files in this folder?` and `Yes, proceed` together; or a permission prompt — `needs to execute`, `needs to run` or `make this edit to` plus a line starting `❯ 1.` | `esc to interrupt` on the status line — the rotating `*ing…` verb and the `✻ Worked for`/`✻ Thought for`/`⎿ Tip:` post-turn lines are not a turn | Measured on 1.88.5 |
+| cline | `Cline needs permission` and `Approve tool call?` together — it must not appear under `--yolo`, which forces auto-approve on, so a screen showing it means the user switched the mode off | a braille spinner line from `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` and a word after it (`⠏ Thinking... (esc to cancel)`), or `(esc to cancel)` alone. The composer stays on screen while it works, so its presence is not a turn by itself; a `▶ Thinking:` transcript line is a finished thought | Measured on 3.0.74 — idle, working and approval captures (S14a) |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
 ## Signal matrix
@@ -53,6 +54,7 @@ so an upstream core without screen inference still works on markers alone.
 | Codex | yes | yes | yes | yes | Fork inference via `codex.toml` |
 | OpenCode | yes | yes | yes | yes | Fork inference via `opencode.toml` |
 | cmd | yes | yes | yes | yes | Fork inference via `command-code.toml` |
+| cline | no | no | no | no | None — no hook signal and no structured state; the screen markers carry it (S14a: `agent: null`) |
 | cursor-agent | yes | yes | yes | yes | Fork inference via `cursor.toml` — lands with the core-side Repo-A work (`feat/cursor-manifest` on followcat/herdr-core); before that, the screen markers carry cursor alone |
 
 How the structured fields are consumed:
@@ -87,6 +89,7 @@ answer. Lines that move while the prompt waits are dropped first.
 | OpenCode | none | No approval key is ever sent, so no block is mapped |
 | cursor-agent | From the last `─` rule above the picker's `→ ` option-cursor line to the end — the `$ <command>` or the diff preview, the question, the ` in <path>`/`Add <Verb>(<path>)` target and the options. A diff preview's own `─` rule can open the block; the `Approval N of M` header stays out of it | Shell picker measured on 2026.11.05; file pickers from the S12e run and the fork's `cursor.toml` |
 | cmd | From the last full-width `─` rule above the `❯ 1.` picker to the end — the tool title, the `needs to …` sentence, the command and the picker | Measured on 1.88.5 |
+| cline | From the last full-width `─` rule above `Cline needs permission` to the end — the tool name, the `$ <command>` preview and the `[y] Approve   [n] Deny` line | Measured on 3.0.74 (S14a). No key is ever sent for it, so the block is compared for the record only: a prompt under `--yolo` is the user's |
 | Anything else | none | — |
 
 ## Approval keys
@@ -103,6 +106,7 @@ A recorded `role.approval` sends one key while the saved prompt block is still t
 | OpenCode | none sent | none sent | Not measured — the attention stays open for the user |
 | cursor-agent | `y` | none sent | `y` takes the highlighted allow option — `Run (once)` on the shell picker, `Proceed` on a file picker — shell measured on 2026.11.05, the file picker's `(y)` from the S12e capture. A denied command is retried by the runner (it re-asked four times, then read the file itself), so no deny key is mapped and the attention stays open for the user |
 | cmd | `enter` | `esc` | Both measured on 1.88.5 — `enter` takes `❯ 1. Yes` (run-once); `esc` or `3` ends the turn and the agent does not retry. Option `2` ("don't ask again") is never sent — it writes a project allow rule |
+| cline | none sent | none sent | The block only appears when `--yolo`'s auto-approve was switched off by hand; `y` and `n` are both a mode the stage must not change, so the attention stays open for the user (S14a) |
 | Anything else | none sent | none sent | — |
 
 ### What a cursor file picker reaches for (S12f)
@@ -269,6 +273,68 @@ background self-update; read-only commands (`git status|log|diff`) never prompt;
 refusal, not a permission prompt; and non-TTY invocation dies cleanly
 (`Interactive mode requires a TTY`).
 
+## Per-session files (cline)
+
+Cline shares the user's login, settings and session store — no per-role config, data or auth tree, the
+same reality cmd has. The role boundary is the work area: a hook the stage writes before launch, plus a
+mask file for MCP. Both are rewritten at every start and resume.
+
+- **`<cwd>/.cline/hooks/PreToolUse.sh`** (mode 0755) — the permission layer (S14a section 5). Cline runs
+  it before every tool call with `.tool_call.name` and `.tool_call.input` as JSON on stdin; printing
+  `{"cancel":true,"errorMessage":"…"}` refuses the call and ends the agent's turn, `{"cancel":false}`
+  lets it run. The script is plain POSIX `sh` — no `jq`, because nothing else here assumes it — and
+  default-deny:
+  - allowed: `run_commands` whose every segment is one of the role's rules — `backlot`; an actor's
+    `git add`/`commit`/`status`/`diff`/`log`/`show`; the director's read-only set and `git merge`, never
+    `git branch`; each declared check verbatim. A command is split on `;`, `&&`, `||` and `|`, and every
+    part must match on its own; a `$`, a backtick or a redirection is refused, so nothing reaches past
+    the prefix that matched.
+  - allowed: `read_files` for any path but the secret ones (`.ssh`, `.aws`, `.netrc`, `.git-credentials`,
+    `id_rsa*`, `.env`, `.npmrc`, `credentials*`, the gh config, the stage's own files) and any `..`
+    path; `search_codebase`; `editor` only for a path strictly inside the role's work area, never
+    `.git/` or `.cline/`.
+  - always refused: `web_search`, `fetch_web_content`, `composio_*`, every `<server>__<tool>` MCP name,
+    and every tool the list above does not name (`ask_question`, `skills`, an unknown name).
+  A cancel ends the turn exactly as cmd's `esc` deny does: the agent does not retry, and it is told the
+  action is outside the role and should be asked for through `backlot` — the actor's next step is a
+  `backlot ask`/`tell`, which the rules let through.
+- **`roles/<role>/cline-signals.jsonl`** — one line per decision in the shape `signals.rs` reads:
+  `ts_ms`, `event: PreToolUse`, `decision: allow|cancel`, `tool_name` and one bounded target (the
+  command or path, cut to 200 characters). Never file contents — an `editor` call's `new_text` and
+  `old_text` are not recorded. The line carries no session id (the hook cannot know it), so the stage's
+  session-filtered read ignores it today: the record is for a person, ready to bind to an attention once
+  cline exposes its own id.
+- **`roles/<role>/cline-mcp.json`** — `{"mcpServers":{}}`, the role's whole MCP policy while the studio
+  has none for roles. `CLINE_MCP_SETTINGS_PATH` points cline at it, which removes every global server
+  from a `--yolo` session (measured). The stage's env reaches the agent's commands only because of
+  `--yolo`.
+- **`/.cline/` in the worktree's `info/exclude`** — the hook directory never shows up in the actor's
+  `git status`. The stage appends the line once, following a linked worktree's `gitdir:` pointer to the
+  real git directory.
+
+Why `--yolo`, and what it costs:
+
+- `cline -i` runs its session in a per-user hub daemon by default, and tool commands are children of the
+  hub: they get the **hub's environment**, so `BACKLOT_STUDIO`, `BACKLOT_ROLE`, `BACKLOT_TASK`,
+  `BACKLOT_STATE_DIR` and `PATH` never reach the actor. `--yolo` is the one switch that selects the local
+  backend, which is why every argv carries it. `--data-dir` would too, but it relocates the login
+  (`settings/providers.json`) and the TUI then opens on a sign-in screen, so it is never passed.
+- Without `--data-dir` the launch flags may rewrite the user's global providers file (per-provider
+  `settings.model` and `settings.reasoning`). That is the cursor `--model` class of side effect:
+  documented, not restored.
+- `Tab` (plan/act) and `Shift+Tab` (auto-approve) persist to the user's global settings file; the stage
+  never presses them.
+- `--hooks-dir` has no effect in any mode and is never passed; a workspace hook is found by its path.
+- The signals file's lines carry no session id, so the stage's session-filtered signal read does not use
+  them for the work state today: the screen markers carry it, as they do for cmd.
+
+Discovery and resume: the id is cline's own (`<epoch ms>_<5 lowercase chars>`). The stage looks for the
+manifest the launch wrote, at or after the role's start, whose `cwd` (or `workspace_root`) is the role's
+and whose `pid` is the engine process — the `.cline` child of the foreground `node` wrapper the terminal
+reports. Directories with no manifest, a manifest for another folder and another process's session are
+skipped. `--id <id>` resumes; the positional prompt is ignored on a resume, so the stage sends the
+prompt after the idle composer shows (the devin and cmd rule).
+
 ## Screen patterns
 
 Observed on real runs. These are the first entries for each adapter's pattern table and need captured fixtures.
@@ -281,11 +347,12 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 | Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | Wait, then a short retry. Do not change model |
 | cursor-agent | `Workspace Trust Required` with `Trust this workspace` | First launch in an untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cmd | `Do you trust the files in this folder?` with `❯ 1. Yes, proceed` | First launch in a non-empty untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
+| cline | `Cline needs permission` with `Approve tool call?` and `[y] Approve   [n] Deny` | Auto-approve was switched off by hand — `--yolo` forces it on, so the prompt should never appear | The stage presses nothing: `y` and `n` are both a mode it must not change. The attention stays open for the user |
 | Any | Permission dialog | Waiting on a person | Approval policy |
 
 Fixtures use neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
 
 ## First version
 
-Claude Code, Codex, Devin, OpenCode, cursor-agent and cmd. Kimi and others follow the same
+Claude Code, Codex, Devin, OpenCode, cursor-agent, cmd and cline. Kimi and others follow the same
 adapter shape when needed.
