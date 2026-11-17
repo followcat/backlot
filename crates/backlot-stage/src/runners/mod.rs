@@ -380,6 +380,8 @@ mod cline_hook_tests;
 #[cfg(test)]
 mod cline_prep_tests;
 #[cfg(test)]
+mod cline_session_tests;
+#[cfg(test)]
 mod cline_tests;
 #[cfg(test)]
 mod cmd_tests;
