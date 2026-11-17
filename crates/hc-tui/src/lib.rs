@@ -21,7 +21,9 @@ pub mod host;
 pub mod input;
 pub mod preferences;
 pub mod project;
+pub mod restart;
 
+pub(crate) mod install_source;
 pub mod raw_events;
 pub mod raw_frames;
 pub mod raw_input;
@@ -35,6 +37,11 @@ pub mod terminal_notify;
 #[cfg(test)]
 mod testcore;
 pub mod update_check;
+pub(crate) mod update_install;
+pub(crate) mod update_markdown;
+pub(crate) mod update_notes;
+pub(crate) mod update_run;
+pub mod update_state;
 pub(crate) mod waiting;
 mod word_select;
 

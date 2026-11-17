@@ -228,6 +228,10 @@ pub(crate) fn keybind_help_groups(
                 .collect(),
         ));
     }
+    groups.push((
+        "hc-tui",
+        vec![entry(binding_label(&keybinds.update), "update")],
+    ));
     groups
 }
 

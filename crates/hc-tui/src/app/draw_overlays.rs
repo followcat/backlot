@@ -42,6 +42,7 @@ pub(super) fn render_overlays_and_cursor(
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()
+        || app.update_modal.is_some()
         || mobile_navigate
     {
         None
@@ -61,7 +62,8 @@ pub(super) fn render_overlays_and_cursor(
             app.keyboard_locked,
             app.copy_mode.as_ref(),
             None,
-            false,
+            app.update_ready_version().is_some(),
+            app.restart_ready.is_some(),
             &app.live,
             &app.shell.palette,
         )
@@ -258,6 +260,25 @@ pub(super) fn render_overlays_and_cursor(
     } else {
         crate::chrome::settings_render::SettingsRender::default()
     };
+    // The update card dims the background like the other overlays.
+    if let Some(modal) = app.update_modal.as_ref() {
+        overlay_painted = true;
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            cell.set_style(cell.style().add_modifier(Modifier::DIM));
+        }
+        let view = crate::app::update_modal::view(
+            modal,
+            &app.update_state,
+            app.update_latest.as_deref(),
+            app.update_notes_fetching,
+            app.install.as_ref(),
+        );
+        let rendered = crate::chrome::update_modal::render(buf, &view, &app.shell.palette);
+        if let (Some(modal), Some(rendered)) = (app.update_modal.as_mut(), rendered) {
+            modal.render = rendered;
+        }
+    }
     overlay_painted |= app.dialog.is_some();
     app.render_dialog(buf);
     // The context menu is the topmost shell overlay; the reference

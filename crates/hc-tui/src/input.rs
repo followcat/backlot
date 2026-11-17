@@ -78,6 +78,7 @@ pub enum KeybindAction {
     Help,
     Settings,
     ReloadConfig,
+    Update,
     OpenNotificationTarget,
     Detach,
     OpenNavigator,
@@ -159,6 +160,7 @@ pub fn resolve_non_indexed_action(
         ),
         (&keybinds.detach, KeybindAction::Detach),
         (&keybinds.goto, KeybindAction::OpenNavigator),
+        (&keybinds.update, KeybindAction::Update),
     ] {
         if action_matches(bindings, key, dispatch) {
             return Some(action);

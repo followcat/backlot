@@ -126,12 +126,17 @@ impl App {
             self.new_tab();
             return;
         }
-        // The badge's update hint re-raises the toast; the version
+        if self.update_toast_hit.width > 0 && contains(self.update_toast_hit, point) {
+            self.notice = None;
+            self.open_update();
+            return;
+        }
+        // The badge's update hint opens the update card; the version
         // itself stays inert — the hit only covers the hint.
-        if self.update_latest.is_some() && contains(hits.update_badge, point) {
-            let (title, body) =
-                crate::update_check::toast(self.update_latest.as_deref().unwrap_or_default());
-            self.show_notice(&title, &body);
+        if (self.update_ready_version().is_some() || self.restart_ready.is_some())
+            && contains(hits.update_badge, point)
+        {
+            self.open_update();
             return;
         }
         // The `+ new workspace` sidebar row — same surface the mobile

@@ -71,7 +71,7 @@ async fn a_known_update_adds_an_accent_hint() {
     let hint_x = header.find('↑').expect("the update hint is missing") as u16;
     let ver_x = header.find(&version()).expect("the version is missing") as u16;
     let buf = backend.buffer();
-    assert_eq!(buf[(hint_x, 0)].fg, app.shell.palette.red);
+    assert_eq!(buf[(hint_x, 0)].fg, app.shell.palette.accent);
     assert_eq!(buf[(ver_x, 0)].fg, app.shell.palette.overlay0);
     // The click hit covers the hint, not the inert version text.
     let hit = app.hit_map.update_badge;
@@ -132,15 +132,186 @@ async fn a_tight_mobile_header_skips_the_badge() {
 #[tokio::test]
 async fn the_report_stores_the_latest_for_the_badge() {
     let mut app = app();
-    app.on_update_check(Some(crate::update_check::Notice {
-        title: "Update available".into(),
-        body: "hc-tui v9.9.9 is out — run: hc-tui --upgrade".into(),
-        latest: "9.9.9".into(),
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state: crate::update_state::UpdateCheckState::default(),
+        path: None,
     }));
     assert_eq!(app.update_latest.as_deref(), Some("9.9.9"));
     assert!(app.notice.is_some(), "the toast still fires");
+    assert_eq!(
+        app.update_state.seen_toast_version.as_deref(),
+        Some("9.9.9"),
+        "the toast marks the version seen once"
+    );
     // A quiet follow-up report keeps the badge — only a newer release
     // rewrites it.
     app.on_update_check(None);
     assert_eq!(app.update_latest.as_deref(), Some("9.9.9"));
+}
+
+#[tokio::test]
+async fn a_seen_version_does_not_toast_again() {
+    let mut app = app();
+    let state = crate::update_state::UpdateCheckState {
+        seen_toast_version: Some("9.9.9".into()),
+        ..crate::update_state::UpdateCheckState::default()
+    };
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state,
+        path: None,
+    }));
+    assert!(app.notice.is_none(), "already toasted: silent");
+    assert_eq!(app.update_ready_version(), Some("9.9.9"), "still a hint");
+}
+
+#[tokio::test]
+async fn a_skipped_version_hides_every_passive_surface() {
+    let mut app = app();
+    let state = crate::update_state::UpdateCheckState {
+        skipped_version: Some("9.9.9".into()),
+        ..crate::update_state::UpdateCheckState::default()
+    };
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state,
+        path: None,
+    }));
+    assert!(app.notice.is_none(), "skipped: no toast");
+    assert_eq!(app.update_ready_version(), None, "skipped: no badge");
+    assert_eq!(
+        app.update_latest.as_deref(),
+        Some("9.9.9"),
+        "the modal can still reach the skipped release"
+    );
+}
+
+#[tokio::test]
+async fn a_verified_install_waiting_for_restart_shows_the_green_hint() {
+    let mut app = app_with(&["t1"]);
+    app.update_latest = Some(next_patch());
+    app.restart_ready = app.update_latest.clone();
+    let backend = drawn(&mut app, 80, 24);
+    let header = header(&backend);
+    assert!(
+        !header.contains('↑'),
+        "the restart hint replaces the update hint: {header:?}"
+    );
+    let hint_x = header.find('↻').expect("the restart hint is missing") as u16;
+    assert_eq!(backend.buffer()[(hint_x, 0)].fg, app.shell.palette.green);
+}
+
+#[tokio::test]
+async fn navigate_mode_says_restart_ready_while_an_install_waits() {
+    let mut app = app_with(&["t1"]);
+    app.mode = Mode::Navigate;
+    app.restart_ready = Some("0.1.13".into());
+    let backend = drawn(&mut app, 80, 24);
+    assert!(
+        screen_lines(&backend)
+            .iter()
+            .any(|row| row.contains("restart ready"))
+    );
+}
+
+/// The first cell drawn with `symbol` on the frame: its position and colour.
+fn find_cell(
+    backend: &ratatui::backend::TestBackend,
+    symbol: &str,
+) -> Option<(u16, u16, ratatui::style::Color)> {
+    let buf = backend.buffer();
+    (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| buf[(x, y)].symbol() == symbol)
+        .map(|(x, y)| (x, y, buf[(x, y)].fg))
+}
+
+#[tokio::test]
+async fn launcher_shows_a_dot_while_an_update_waits() {
+    let mut app = app_with(&["t1"]);
+    app.update_latest = Some(next_patch());
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, color) = find_cell(&backend, "●").expect("the launcher dot is missing");
+    assert_eq!(color, app.shell.palette.accent);
+    assert_eq!(
+        app.hit_map.global_launcher.width, 8,
+        "the launcher widens for the dot"
+    );
+}
+
+#[tokio::test]
+async fn launcher_dot_is_green_while_a_restart_waits() {
+    let mut app = app_with(&["t1"]);
+    app.restart_ready = Some(next_patch());
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, color) = find_cell(&backend, "●").expect("the launcher dot is missing");
+    assert_eq!(color, app.shell.palette.green);
+}
+
+#[tokio::test]
+async fn launcher_has_no_dot_without_an_update() {
+    let mut app = app_with(&["t1"]);
+    let backend = drawn(&mut app, 80, 24);
+    assert!(find_cell(&backend, "●").is_none());
+    assert_eq!(app.hit_map.global_launcher.width, 6);
+}
+
+#[tokio::test]
+async fn collapsed_toggle_takes_the_update_colour() {
+    let mut app = app_with(&["t1"]);
+    app.shell_state.sidebar_collapsed = true;
+    app.update_latest = Some(next_patch());
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, color) = find_cell(&backend, "»").expect("the collapsed toggle is missing");
+    assert_eq!(color, app.shell.palette.accent);
+    app.update_latest = None;
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, plain) = find_cell(&backend, "»").expect("the collapsed toggle is missing");
+    assert_eq!(plain, app.shell.palette.overlay0);
+}
+
+#[tokio::test]
+async fn a_newer_release_re_arms_the_badge_and_the_toast_after_a_skip() {
+    let mut app = app();
+    let state = crate::update_state::UpdateCheckState {
+        skipped_version: Some("9.9.9".into()),
+        seen_toast_version: Some("9.9.9".into()),
+        ..crate::update_state::UpdateCheckState::default()
+    };
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.10".into()),
+        state,
+        path: None,
+    }));
+    assert_eq!(
+        app.update_ready_version(),
+        Some("9.9.10"),
+        "a newer release shows again"
+    );
+    assert!(app.notice.is_some(), "and toasts once");
+}
+
+#[tokio::test]
+async fn the_toast_fires_once_across_two_starts() {
+    let dir = std::env::temp_dir().join(format!("hctui-toast-starts-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("update-check.json");
+    let mut first = app();
+    first.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state: crate::update_state::UpdateCheckState::default(),
+        path: Some(path.clone()),
+    }));
+    assert!(first.notice.is_some(), "the first start toasts");
+    let state = crate::update_state::load(&path);
+    assert_eq!(state.seen_toast_version.as_deref(), Some("9.9.9"));
+    let mut second = app();
+    second.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state,
+        path: Some(path),
+    }));
+    assert!(second.notice.is_none(), "the second start stays quiet");
+    let _ = std::fs::remove_dir_all(&dir);
 }
