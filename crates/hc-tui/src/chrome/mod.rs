@@ -10,6 +10,7 @@ pub(crate) mod dialogs;
 pub mod endpoint_agents;
 pub mod endpoint_sidebar;
 pub mod endpoint_sidebar_expanded;
+pub mod endpoint_sidebar_row;
 pub mod endpoints;
 pub(crate) mod help;
 pub(crate) mod menu;
