@@ -192,6 +192,40 @@ fn the_version_line_is_cleaned() {
     assert_eq!(found.version.as_deref(), Some("1.2.3"));
 }
 
+/// A node CLI found under a fake nvm bin: its `#!/usr/bin/env node`
+/// script can only answer `--version` when the binary's own
+/// directory — where `node` sits — leads the child's PATH, exactly
+/// like the `[runner_env]` write gives a role. The inherited PATH
+/// lacks it, like a core started over ssh.
+#[test]
+fn a_node_cli_is_probed_with_its_own_bin_on_path() {
+    let root = dir("node-cli");
+    let home = root.join("home");
+    let bin = home.join(".nvm/versions/node/v24.19.0/bin");
+    // A fake `node`: run the script argument with /bin/sh — close
+    // enough for a version line.
+    exe(&bin, "node", "exec /bin/sh \"$@\"");
+    // The agent is a node script, like cmd and cline under nvm:
+    // `env` resolves `node` on the child's PATH or the shebang
+    // fails.
+    let cmd = bin.join("cmd");
+    std::fs::write(&cmd, "#!/usr/bin/env node\necho cmd 1.2.3\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&cmd, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let env = env(&[
+        ("PATH", "/nonexistent-dir"),
+        ("HOME", &home.to_string_lossy()),
+    ]);
+    let found = detect::find("cmd", &scope(&env)).unwrap();
+    assert_eq!(found.path, cmd);
+    assert_eq!(found.version.as_deref(), Some("cmd 1.2.3"));
+    assert_eq!(found.source, Source::Known);
+    assert!(found.needs_path());
+}
+
 /// Nothing on PATH, no `$SHELL`, no known dir: the runner is
 /// simply missing — `find` answers `None`.
 #[test]

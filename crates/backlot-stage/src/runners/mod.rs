@@ -13,6 +13,7 @@ pub mod cmd;
 mod codex;
 pub mod cursor;
 pub mod detect;
+mod detect_report;
 mod devin;
 mod fake;
 pub mod opencode;

@@ -18,7 +18,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use super::probe;
-use crate::cli::{Env, Fail};
+use crate::cli::Env;
+
+pub use super::detect_report::report;
 
 /// The runners `backlot runners` lists and the wizard's detection
 /// walks — `fake` ships in `tools/`, never detected.
@@ -42,8 +44,9 @@ pub struct RunOut {
 /// detector ever asks for.
 type EnvGet<'a> = Box<dyn Fn(&str) -> Option<String> + 'a>;
 /// Run `argv`, answer its output — `None` on timeout or a failed
-/// spawn.
-type Run<'a> = Box<dyn Fn(&[String], Duration) -> Option<RunOut> + 'a>;
+/// spawn. The `PATH` argument, when set, is the child's whole
+/// PATH; `None` leaves the child inheriting this process's.
+type Run<'a> = Box<dyn Fn(&[String], Option<&str>, Duration) -> Option<RunOut> + 'a>;
 
 /// The outside world the search touches, injected for tests:
 /// environment values (`PATH`, `SHELL`, `HOME`) and the timeout
@@ -132,7 +135,11 @@ pub fn find(runner: &str, scope: &Scope) -> Option<Found> {
 /// profile noise never lands inside it. No `$SHELL` — no step.
 fn login_path(scope: &Scope) -> Option<String> {
     let shell = (scope.env)("SHELL").filter(|s| !s.is_empty())?;
-    let out = (scope.run)(&[shell, "-lc".to_string(), PATH_SCRIPT.to_string()], PROBE)?;
+    let out = (scope.run)(
+        &[shell, "-lc".to_string(), PATH_SCRIPT.to_string()],
+        None,
+        PROBE,
+    )?;
     path_between(&out.stdout)
 }
 
@@ -228,13 +235,21 @@ fn version_key(name: Option<&OsStr>) -> (u64, u64, u64) {
 /// `<binary> --version` inside the probe timeout: the first
 /// nonempty line of its output — stdout, then stderr — cleaned of
 /// escapes. A non-zero exit, a timeout or silence all mean "not
-/// working".
+/// working". The child gets the PATH a role would — the binary's
+/// own directory first — because a node CLI's
+/// `#!/usr/bin/env node` shebang finds `node` only there.
 fn version(binary: &Path, scope: &Scope) -> Option<String> {
+    let dir = binary.parent().unwrap_or(Path::new(""));
+    let path = match (scope.env)("PATH").filter(|p| !p.is_empty()) {
+        Some(inherited) => format!("{}:{inherited}", dir.display()),
+        None => dir.to_string_lossy().into_owned(),
+    };
     let out = (scope.run)(
         &[
             binary.to_string_lossy().into_owned(),
             "--version".to_string(),
         ],
+        Some(&path),
         PROBE,
     )?;
     if out.code != 0 {
@@ -285,16 +300,19 @@ fn clean(line: &str) -> String {
 /// `argv` with stdin closed and both pipes drained by reader
 /// threads — a chatty child never wedges on a full pipe; the child
 /// is killed at `timeout` and `None` answered, as on a failed
-/// spawn.
-pub fn run_timed(argv: &[String], timeout: Duration) -> Option<RunOut> {
+/// spawn. `path`, when set, becomes the child's whole PATH.
+pub fn run_timed(argv: &[String], path: Option<&str>, timeout: Duration) -> Option<RunOut> {
     let (prog, args) = argv.split_first()?;
-    let mut child = std::process::Command::new(prog)
+    let mut command = std::process::Command::new(prog);
+    command
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .ok()?;
+        .stderr(std::process::Stdio::piped());
+    if let Some(path) = path {
+        command.env("PATH", path);
+    }
+    let mut child = command.spawn().ok()?;
     fn drain(mut r: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
         std::thread::spawn(move || {
             let mut b = Vec::new();
@@ -335,65 +353,4 @@ pub(crate) fn tilde(home: Option<&Path>, path: &Path) -> String {
         return PathBuf::from("~").join(rest).to_string_lossy().into_owned();
     }
     path.to_string_lossy().into_owned()
-}
-
-/// `backlot runners` (U5): every runner with where its binary was
-/// found — or that it was not — its `--version` line, and whether
-/// a launch needs the `[runner_env]` PATH write. Read-only: the
-/// first thing to run when a role says "not found".
-pub fn report(env: &Env) -> Result<String, Fail> {
-    let scope = scope(env);
-    let home = env.get("HOME").filter(|h| !h.is_empty()).map(PathBuf::from);
-    let mut rows = Vec::with_capacity(RUNNERS.len());
-    for runner in RUNNERS {
-        rows.push(match find(runner, &scope) {
-            Some(f) => {
-                let needs = if f.needs_path() { "yes" } else { "no" }.to_string();
-                [
-                    (*runner).to_string(),
-                    if f.version.is_some() {
-                        "found"
-                    } else {
-                        "not working"
-                    }
-                    .to_string(),
-                    f.version.unwrap_or_else(|| "-".to_string()),
-                    tilde(home.as_deref(), &f.path),
-                    needs,
-                ]
-            }
-            None => [
-                (*runner).to_string(),
-                "missing".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-            ],
-        });
-    }
-    let header = ["runner", "status", "version", "path", "needs PATH"];
-    let mut width = [0usize; 5];
-    for (i, h) in header.iter().enumerate() {
-        width[i] = h.len();
-    }
-    for row in &rows {
-        for (i, c) in row.iter().enumerate() {
-            width[i] = width[i].max(c.len());
-        }
-    }
-    let mut out = String::new();
-    let mut line = |cells: &[String; 5]| {
-        for (i, c) in cells.iter().enumerate() {
-            out.push_str(c);
-            if i + 1 < cells.len() {
-                out.push_str(&" ".repeat(width[i] - c.len() + 2));
-            }
-        }
-        out.push('\n');
-    };
-    line(&header.map(String::from));
-    for row in &rows {
-        line(row);
-    }
-    Ok(out.trim_end().to_string())
 }
