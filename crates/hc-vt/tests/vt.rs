@@ -312,6 +312,40 @@ fn clipboard_writes_complete_once_and_queries_disclose_nothing() {
     }
 }
 
+/// Standard base64, just enough to build OSC 52 payloads in tests.
+fn b64(data: &[u8]) -> String {
+    const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in data.chunks(3) {
+        let n = chunk.iter().fold(0u32, |n, b| (n << 8) | u32::from(*b)) << (8 * (3 - chunk.len()));
+        for i in 0..4 {
+            let idx = ((n >> (18 - 6 * i)) & 63) as usize;
+            out.push(if i < chunk.len() + 1 {
+                ALPHA[idx] as char
+            } else {
+                '='
+            });
+        }
+    }
+    out
+}
+
+/// A program that copies in a loop cannot grow the queue without limit:
+/// only the newest 16 writes are kept, dropped oldest first.
+#[test]
+fn clipboard_writes_keep_only_the_newest_sixteen() {
+    let mut vt = vt(10, 3);
+    for i in 1..=20u32 {
+        let text = format!("write-{i:02}");
+        vt.feed(format!("\x1b]52;c;{}\x07", b64(text.as_bytes())).as_bytes());
+    }
+    let writes = vt.take_clipboard_writes();
+    let want: Vec<Vec<u8>> = (5..=20u32)
+        .map(|i| format!("write-{i:02}").into_bytes())
+        .collect();
+    assert_eq!(writes, want);
+}
+
 /// "Scroll to the tail" by absolute row (`total - len`) degrades to
 /// `scroll_to_row(0)` while the scrollback is empty — and row 0 pins
 /// the buffer top, so output that lands after freezes the head on
