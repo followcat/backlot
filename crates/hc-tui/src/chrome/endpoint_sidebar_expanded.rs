@@ -45,35 +45,6 @@ pub(crate) fn render_expanded(
     } else {
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
-    let (workspace_area, detail_area) =
-        expanded_sidebar_sections(area, state.sidebar_section_split);
-    hits.sidebar_section_divider = sidebar_section_divider_rect(area, state.sidebar_section_split);
-    put_text(
-        buffer,
-        workspace_area.x,
-        workspace_area.y,
-        workspace_area.width,
-        " machines",
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-    // The version badge shares the header row, right-aligned short of
-    // the divider column and never touching the `machines` label.
-    let badge_row = Rect::new(
-        workspace_area.x,
-        workspace_area.y,
-        workspace_area.width.saturating_sub(2),
-        1,
-    );
-    hits.update_badge = put_version_badge(
-        buffer,
-        badge_row,
-        workspace_area.x.saturating_add(10),
-        state.update_latest,
-        palette,
-    );
-
     let empty_collapsed_groups = HashSet::new();
 
     let mut rows = Vec::new();
@@ -95,15 +66,6 @@ pub(crate) fn render_expanded(
             );
         }
     }
-    let body = Rect::new(
-        workspace_area.x,
-        workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
-        workspace_area.width,
-        workspace_area
-            .height
-            .saturating_sub(WORKSPACE_HEADER_ROWS + 1),
-    );
-    hits.workspace_body = body;
     let row_heights = rows
         .iter()
         .map(|row| match row {
@@ -147,6 +109,60 @@ pub(crate) fn render_expanded(
             _ => 0,
         })
         .collect::<Vec<_>>();
+    // U1: in studio mode the machines tree takes only the rows it
+    // needs, at most a third of the sidebar — the cast takes the rest
+    // and the section divider goes away, as the single-endpoint
+    // sidebar does.
+    let (workspace_area, detail_area) = if state.cast.is_some() {
+        let needed = row_heights
+            .iter()
+            .chain(gaps.iter())
+            .fold(0u16, |sum, h| sum.saturating_add(*h))
+            .saturating_add(WORKSPACE_HEADER_ROWS + 1);
+        crate::cast::sections(area, needed)
+    } else {
+        expanded_sidebar_sections(area, state.sidebar_section_split)
+    };
+    hits.sidebar_section_divider = if state.cast.is_some() {
+        Rect::default()
+    } else {
+        sidebar_section_divider_rect(area, state.sidebar_section_split)
+    };
+    put_text(
+        buffer,
+        workspace_area.x,
+        workspace_area.y,
+        workspace_area.width,
+        " machines",
+        Style::default()
+            .fg(palette.overlay0)
+            .add_modifier(Modifier::BOLD),
+    );
+    // The version badge shares the header row, right-aligned short of
+    // the divider column and never touching the `machines` label.
+    let badge_row = Rect::new(
+        workspace_area.x,
+        workspace_area.y,
+        workspace_area.width.saturating_sub(2),
+        1,
+    );
+    hits.update_badge = put_version_badge(
+        buffer,
+        badge_row,
+        workspace_area.x.saturating_add(10),
+        state.update_latest,
+        palette,
+    );
+
+    let body = Rect::new(
+        workspace_area.x,
+        workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
+        workspace_area.width,
+        workspace_area
+            .height
+            .saturating_sub(WORKSPACE_HEADER_ROWS + 1),
+    );
+    hits.workspace_body = body;
     let reveal_navigation = !body.is_empty() && std::mem::take(state.reveal_navigation_workspace);
     let reveal_focus = !body.is_empty() && std::mem::take(state.reveal_focused_workspace);
     if reveal_navigation || reveal_focus {
@@ -338,16 +354,21 @@ pub(crate) fn render_expanded(
             Style::default().fg(palette.overlay0),
         );
     }
-    super::endpoint_agents::render_expanded(
-        buffer,
-        detail_area,
-        active_snapshot.and_then(|snapshot| snapshot.agent_view_label.as_deref()),
-        state.endpoints,
-        state.active_endpoint_id,
-        config,
-        state.agent_scroll,
-        hits,
-    );
+    match &state.cast {
+        Some(cast) => {
+            crate::cast::render_cast(buffer, detail_area, cast, config, state.cast_scroll, hits)
+        }
+        None => super::endpoint_agents::render_expanded(
+            buffer,
+            detail_area,
+            active_snapshot.and_then(|snapshot| snapshot.agent_view_label.as_deref()),
+            state.endpoints,
+            state.active_endpoint_id,
+            config,
+            state.agent_scroll,
+            hits,
+        ),
+    }
     hits.sidebar_toggle = Rect::new(
         area.right().saturating_sub(2),
         area.bottom().saturating_sub(1),
