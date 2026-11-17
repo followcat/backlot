@@ -80,6 +80,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         focused_tab_count(app),
         app.sidebar_width,
     );
+    let update_latest = app.update_ready_version().map(str::to_owned);
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -99,7 +100,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_navigation_workspace: &mut app.shell_state.reveal_navigation_workspace,
         dragged_workspace_id: None,
         workspace_drop_indicator_row: None,
-        update_latest: app.update_latest.as_deref(),
+        update_latest: update_latest.as_deref(),
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

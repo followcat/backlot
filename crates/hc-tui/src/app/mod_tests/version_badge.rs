@@ -132,15 +132,57 @@ async fn a_tight_mobile_header_skips_the_badge() {
 #[tokio::test]
 async fn the_report_stores_the_latest_for_the_badge() {
     let mut app = app();
-    app.on_update_check(Some(crate::update_check::Notice {
-        title: "Update available".into(),
-        body: "hc-tui v9.9.9 is out — run: hc-tui --upgrade".into(),
-        latest: "9.9.9".into(),
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state: crate::update_state::UpdateCheckState::default(),
+        path: None,
     }));
     assert_eq!(app.update_latest.as_deref(), Some("9.9.9"));
     assert!(app.notice.is_some(), "the toast still fires");
+    assert_eq!(
+        app.update_state.seen_toast_version.as_deref(),
+        Some("9.9.9"),
+        "the toast marks the version seen once"
+    );
     // A quiet follow-up report keeps the badge — only a newer release
     // rewrites it.
     app.on_update_check(None);
     assert_eq!(app.update_latest.as_deref(), Some("9.9.9"));
+}
+
+#[tokio::test]
+async fn a_seen_version_does_not_toast_again() {
+    let mut app = app();
+    let state = crate::update_state::UpdateCheckState {
+        seen_toast_version: Some("9.9.9".into()),
+        ..crate::update_state::UpdateCheckState::default()
+    };
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state,
+        path: None,
+    }));
+    assert!(app.notice.is_none(), "already toasted: silent");
+    assert_eq!(app.update_ready_version(), Some("9.9.9"), "still a hint");
+}
+
+#[tokio::test]
+async fn a_skipped_version_hides_every_passive_surface() {
+    let mut app = app();
+    let state = crate::update_state::UpdateCheckState {
+        skipped_version: Some("9.9.9".into()),
+        ..crate::update_state::UpdateCheckState::default()
+    };
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state,
+        path: None,
+    }));
+    assert!(app.notice.is_none(), "skipped: no toast");
+    assert_eq!(app.update_ready_version(), None, "skipped: no badge");
+    assert_eq!(
+        app.update_latest.as_deref(),
+        Some("9.9.9"),
+        "the modal can still reach the skipped release"
+    );
 }

@@ -15,6 +15,7 @@ impl App {
         let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
         let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
         let (image_read_done_tx, image_read_done_rx) = mpsc::channel(8);
+        let (update_tx, update_rx) = mpsc::channel(16);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         // Saved per-endpoint chrome choices win over config; each
@@ -66,6 +67,13 @@ impl App {
             core_start: None,
             update_check: None,
             update_latest: None,
+            update_state: crate::update_state::UpdateCheckState::default(),
+            update_state_path: None,
+            update_toast_hit: ratatui::layout::Rect::default(),
+            update_notes_fetching: false,
+            notes_fetch: update_flow::default_notes_fetch(),
+            update_tx,
+            update_rx,
             background_failure: None,
             next_tab_status: None,
             last_window_title: None,

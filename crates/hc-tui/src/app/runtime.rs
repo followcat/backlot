@@ -195,6 +195,7 @@ impl App {
         let mut waiting_open = true;
         let mut pane_open = true;
         let mut image_read_done_open = true;
+        let mut update_open = true;
         let mut need_pane_sync = true;
         while !self.quitting {
             let wake = self.wake_deadline();
@@ -247,6 +248,17 @@ impl App {
                 report = Self::update_check_report(&mut self.update_check) => {
                     self.on_update_check(report);
                     kind = WakeKind::View;
+                },
+                ev = self.update_rx.recv(), if update_open => match ev {
+                    Some(first) => {
+                        self.on_update_event(first);
+                        while let Ok(ev) = self.update_rx.try_recv() {
+                            self.on_update_event(ev);
+                        }
+                        dirty = true;
+                        kind = WakeKind::View;
+                    }
+                    None => update_open = false,
                 },
                 seen = self.seen_rx.recv(), if seen_open => match seen {
                     Some(first) => {

@@ -6,9 +6,9 @@
 //! error surface, one real fetch per 24h at most.
 
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use hc_proto::endpoint::Env;
 use tokio::sync::oneshot;
@@ -27,27 +27,33 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 /// matching the `HERDR_DISABLE_SOUND` kill-switch convention.
 const ENV_OPT_OUT: &str = "HC_TUI_NO_UPDATE_CHECK";
 
-/// A notice for the app to show, plus the bare latest version so the
-/// sidebar badge can outlive the toast.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Notice {
-    pub title: String,
-    pub body: String,
-    pub latest: String,
-}
-
 /// The shared toast wording — the report path and the badge's
-/// re-raise click both use it.
-pub(crate) fn toast(version: &str) -> (String, String) {
-    (
-        "Update available".into(),
-        format!("hc-tui v{version} is out — run: hc-tui --upgrade"),
-    )
+/// re-raise click both use it. `prefix` is the live primary prefix
+/// label (`ctrl+b`); the mobile body drops the "click" verb.
+pub(crate) fn toast(version: &str, prefix: &str, mobile: bool) -> (String, String) {
+    let body = if mobile {
+        format!("hc-tui v{version} — {prefix} u or ↑v{version}")
+    } else {
+        format!("hc-tui v{version} — {prefix} u or click ↑v{version}")
+    };
+    ("Update available".into(), body)
 }
 
-/// The one-shot report. `Some(notice)` only when a release newer than
-/// `CARGO_PKG_VERSION` is known — freshly fetched or remembered.
-pub type Report = oneshot::Receiver<Option<Notice>>;
+/// The one-shot report: the bare latest version when it outranks the
+/// running binary, plus the whole cache state so the app owns
+/// skip/seen/notes persistence from one place.
+pub struct CheckReport {
+    /// Newer release's bare version (`0.1.13`), or `None`.
+    pub latest: Option<String>,
+    /// The cache as loaded (and possibly refreshed) — never `None` so
+    /// the app always has somewhere to persist seen/skip flags.
+    pub state: crate::update_state::UpdateCheckState,
+    /// Where the state persists — `None` when no XDG/HOME root exists.
+    pub path: Option<PathBuf>,
+}
+
+/// The one-shot report channel.
+pub type Report = oneshot::Receiver<CheckReport>;
 
 /// Arm the check; `None` on either opt-out — then no task, socket or
 /// wake is spent at all.
@@ -58,7 +64,7 @@ pub fn kick(env: &Env, enabled: bool) -> Option<Report> {
     let cache = cache_path(env);
     let (tx, rx) = oneshot::channel();
     tokio::spawn(async move {
-        let _ = tx.send(check(cache.as_deref(), fetch_latest_tag()).await);
+        let _ = tx.send(check(cache, fetch_latest_tag()).await);
     });
     Some(rx)
 }
@@ -66,27 +72,38 @@ pub fn kick(env: &Env, enabled: bool) -> Option<Report> {
 /// The check itself: a fresh cache answers without a fetch; otherwise
 /// fetch, remember the tag, and compare to the running version.
 async fn check(
-    cache: Option<&Path>,
+    cache: Option<PathBuf>,
     tag: impl std::future::Future<Output = Option<String>>,
-) -> Option<Notice> {
-    let tag = match cache.and_then(cached_tag) {
+) -> CheckReport {
+    let mut state = cache
+        .as_deref()
+        .map(crate::update_state::load)
+        .unwrap_or_default();
+    let tag = match fresh_cached_tag(&state) {
         Some(tag) => tag,
-        None => {
-            let tag = tag.await?;
-            if let Some(path) = cache {
-                write_cache(path, &tag);
+        None => match tag.await {
+            Some(tag) => {
+                state.tag = Some(tag.clone());
+                state.checked_ms = crate::update_state::now_ms();
+                if let Some(path) = &cache {
+                    crate::update_state::store(path, &state);
+                }
+                tag
             }
-            tag
-        }
+            None => {
+                return CheckReport {
+                    latest: None,
+                    state,
+                    path: cache,
+                };
+            }
+        },
     };
-    newer_release(&tag).map(|version| {
-        let (title, body) = toast(&version);
-        Notice {
-            title,
-            body,
-            latest: version,
-        }
-    })
+    CheckReport {
+        latest: newer_release(&tag),
+        state,
+        path: cache,
+    }
 }
 
 /// HEAD `releases/latest` through curl (the install script's resolver):
@@ -125,35 +142,13 @@ async fn fetch_latest_tag() -> Option<String> {
     (!tag.is_empty()).then(|| tag.to_owned())
 }
 
-/// The tag when it both parses as a version and was checked inside the
-/// TTL — a poisoned or stale cache misses and refetches.
-fn cached_tag(path: &Path) -> Option<String> {
-    let parsed: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
-    let checked_ms = parsed.get("checked_ms")?.as_u64()?;
-    let tag = parsed.get("tag")?.as_str()?.to_owned();
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()?
-        .as_millis() as u64;
-    let fresh = now_ms.saturating_sub(checked_ms) < CACHE_TTL.as_millis() as u64;
+/// The cached tag when it both parses as a version and was checked
+/// inside the TTL — a stale or unparseable entry refetches.
+fn fresh_cached_tag(state: &crate::update_state::UpdateCheckState) -> Option<String> {
+    let tag = state.tag.clone()?;
+    let fresh = crate::update_state::now_ms().saturating_sub(state.checked_ms)
+        < CACHE_TTL.as_millis() as u64;
     (fresh && semver(&tag).is_some()).then_some(tag)
-}
-
-/// Best effort — a cache miss costs nothing but the next fetch.
-fn write_cache(path: &Path, tag: &str) {
-    let Some(dir) = path.parent() else { return };
-    if std::fs::create_dir_all(dir).is_err() {
-        return;
-    }
-    let checked_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-    let _ = std::fs::write(
-        path,
-        serde_json::json!({ "tag": tag, "checked_ms": checked_ms }).to_string(),
-    );
 }
 
 /// `$XDG_STATE_HOME/hc-tui/update-check.json`, falling back to
@@ -189,7 +184,7 @@ fn newer_release(tag: &str) -> Option<String> {
 
 /// `vX.Y.Z` / `X.Y.Z` (suffixes like `-rc1`/`+build` dropped, missing
 /// minor/patch read as zero). `None` on anything else.
-fn semver(version: &str) -> Option<(u32, u32, u32)> {
+pub(crate) fn semver(version: &str) -> Option<(u32, u32, u32)> {
     let core = version
         .trim()
         .trim_start_matches('v')
@@ -208,6 +203,7 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use std::io;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// A scratch directory that removes itself.
     struct Scratch(PathBuf);
@@ -276,22 +272,19 @@ mod tests {
     }
 
     /// A fetched tag is remembered: the same check answers from cache
-    /// and the fetched "newer" tag still raises the notice.
+    /// and the fetched "newer" tag still reports latest.
     #[tokio::test]
     async fn a_fresh_cache_answer_skips_the_fetch() {
         let scratch = Scratch::new();
         let cache = scratch.0.join("update-check.json");
-        let notice = check(Some(&cache), tag("v999.0.0")).await;
-        assert!(notice.is_some(), "the future tag should notify");
-        let notice = notice.unwrap();
-        assert!(notice.body.contains("999.0.0"));
-        assert_eq!(notice.latest, "999.0.0");
+        let report = check(Some(cache.clone()), tag("v999.0.0")).await;
+        assert_eq!(report.latest.as_deref(), Some("999.0.0"));
         assert!(cache.exists(), "the fetch was cached");
 
-        // A cached "newer" tag still notifies — and never refetches
-        // (a `None` source would yield no notice if it were used).
-        let notice = check(Some(&cache), async { None }).await;
-        assert!(notice.is_some(), "the cached tag still notifies");
+        // A cached "newer" tag still reports — and never refetches
+        // (a `None` source would yield no latest if it were used).
+        let report = check(Some(cache.clone()), async { None }).await;
+        assert_eq!(report.latest.as_deref(), Some("999.0.0"));
     }
 
     /// A stale cache entry is ignored and refreshed.
@@ -310,11 +303,11 @@ mod tests {
             serde_json::json!({ "tag": "v0.0.1", "checked_ms": old_ms }).to_string(),
         )
         .unwrap();
-        assert!(cached_tag(&cache).is_none(), "past the TTL");
 
-        let notice = check(Some(&cache), tag("v999.0.0")).await;
-        assert!(notice.is_some());
-        assert_eq!(cached_tag(&cache).as_deref(), Some("v999.0.0"));
+        let report = check(Some(cache.clone()), tag("v999.0.0")).await;
+        assert_eq!(report.latest.as_deref(), Some("999.0.0"));
+        let state = crate::update_state::load(&cache);
+        assert_eq!(state.tag.as_deref(), Some("v999.0.0"));
     }
 
     /// A garbage cache entry is treated as absent.
@@ -323,9 +316,13 @@ mod tests {
         let scratch = Scratch::new();
         let cache = scratch.0.join("update-check.json");
         std::fs::write(&cache, "{not json").unwrap();
-        assert_eq!(cached_tag(&cache), None);
+        assert_eq!(crate::update_state::load(&cache).tag, None);
         std::fs::write(&cache, r#"{"tag":"banana","checked_ms":99999999999999}"#).unwrap();
-        assert_eq!(cached_tag(&cache), None, "unparseable tag refetches");
+        let state = crate::update_state::load(&cache);
+        assert!(
+            fresh_cached_tag(&state).is_none(),
+            "unparseable tag refetches"
+        );
     }
 
     /// Both opt-outs disarm before anything spawns; `version_check =
@@ -360,7 +357,8 @@ mod tests {
     async fn a_failed_fetch_is_silent() {
         let scratch = Scratch::new();
         let cache = scratch.0.join("update-check.json");
-        assert_eq!(check(Some(&cache), async { None }).await, None);
+        let report = check(Some(cache.clone()), async { None }).await;
+        assert_eq!(report.latest, None);
         assert!(!cache.exists(), "failures are not remembered");
     }
 }

@@ -128,10 +128,13 @@ impl App {
         }
         // The badge's update hint re-raises the toast; the version
         // itself stays inert — the hit only covers the hint.
-        if self.update_latest.is_some() && contains(hits.update_badge, point) {
+        if let Some(latest) = self.update_ready_version().map(str::to_owned)
+            && contains(hits.update_badge, point)
+        {
+            let mobile = self.area.0 <= self.shell.mobile_width_threshold;
             let (title, body) =
-                crate::update_check::toast(self.update_latest.as_deref().unwrap_or_default());
-            self.show_notice(&title, &body);
+                crate::update_check::toast(&latest, &self.live.primary_prefix_label(), mobile);
+            self.show_update_toast(&title, &body);
             return;
         }
         // The `+ new workspace` sidebar row — same surface the mobile

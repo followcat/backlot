@@ -59,6 +59,7 @@ mod shared;
 mod shell_state;
 mod synthesize;
 mod tab_status;
+mod update_flow;
 mod view_sync;
 mod waiting;
 mod waiting_wire;
@@ -125,6 +126,19 @@ pub struct App {
     /// The last known newer release's bare version — feeds the
     /// sidebar/mobile version badge after the toast expires.
     pub update_latest: Option<String>,
+    /// The `update-check.json` state — skip/seen/notes/show-on-startup.
+    pub(crate) update_state: crate::update_state::UpdateCheckState,
+    /// Where `update_state` persists; `None` without an XDG/HOME root.
+    update_state_path: Option<std::path::PathBuf>,
+    /// The update toast's card rect — a click opens the modal.
+    update_toast_hit: ratatui::layout::Rect,
+    /// A release-notes fetch is in flight.
+    update_notes_fetching: bool,
+    /// The release-list fetch — injected; offline under `cfg(test)`.
+    notes_fetch: update_flow::NotesFetch,
+    /// Update worker results land on this channel.
+    update_tx: mpsc::Sender<update_flow::UpdateEvent>,
+    update_rx: mpsc::Receiver<update_flow::UpdateEvent>,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,

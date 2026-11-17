@@ -9,6 +9,9 @@ pub(super) struct Notice {
     title: String,
     body: String,
     pub(super) deadline: Instant,
+    /// Accent dot + click-opens-update semantics (the update toast);
+    /// plain rejected-input notices are the red default.
+    pub(super) update: bool,
 }
 
 /// The reference's `CopyFeedback` — the `copied to clipboard` card.
@@ -54,8 +57,54 @@ impl App {
             title: title.into(),
             body: body.into(),
             deadline: Instant::now() + Duration::from_secs(3),
+            update: false,
         });
         self.sched.mark_dirty(Instant::now());
+    }
+
+    /// The newer release the passive UI (badge, dot, modebar, toast)
+    /// advertises — `None` when up to date or when the user skipped
+    /// exactly this version. The modal still reaches a skipped release
+    /// through `update_latest`.
+    pub(crate) fn update_ready_version(&self) -> Option<&str> {
+        let latest = self.update_latest.as_deref()?;
+        (self.update_state.skipped_version.as_deref() != Some(latest)).then_some(latest)
+    }
+
+    /// The one-time-per-version update toast: accent dot, five
+    /// seconds, click opens the modal. Raising it persists
+    /// `seen_toast_version` so the same release never toasts twice.
+    pub(super) fn maybe_toast_update(&mut self) {
+        let Some(latest) = self.update_ready_version().map(str::to_owned) else {
+            return;
+        };
+        if self.update_state.seen_toast_version.as_deref() == Some(latest.as_str()) {
+            return;
+        }
+        let mobile = self.area.0 <= self.shell.mobile_width_threshold;
+        let (title, body) =
+            crate::update_check::toast(&latest, &self.live.primary_prefix_label(), mobile);
+        self.show_update_toast(&title, &body);
+        self.update_state.seen_toast_version = Some(latest);
+        self.persist_update_state();
+    }
+
+    /// The update toast card: accent dot, five seconds, click-to-open.
+    pub(super) fn show_update_toast(&mut self, title: &str, body: &str) {
+        self.notice = Some(Notice {
+            title: title.into(),
+            body: body.into(),
+            deadline: Instant::now() + Duration::from_secs(5),
+            update: true,
+        });
+        self.sched.mark_dirty(Instant::now());
+    }
+
+    /// Best effort — a failed write retries on the next mutation.
+    pub(super) fn persist_update_state(&mut self) {
+        if let Some(path) = &self.update_state_path {
+            crate::update_state::store(path, &self.update_state);
+        }
     }
 
     /// `true` when the visible notice cleared — the card un-paints.
@@ -100,24 +149,28 @@ impl App {
     }
 
     /// `pending()` while no check was armed; resolves once with its
-    /// outcome — `Some(notice)` only when a newer release exists.
+    /// outcome.
     pub(super) async fn update_check_report(
         rx: &mut Option<crate::update_check::Report>,
-    ) -> Option<crate::update_check::Notice> {
+    ) -> Option<crate::update_check::CheckReport> {
         match rx {
-            Some(rx) => rx.await.ok().flatten(),
+            Some(rx) => rx.await.ok(),
             None => std::future::pending().await,
         }
     }
 
-    /// A newer release surfaces as a dismissible toast; a quiet report
-    /// (up to date, offline, opted out) just disarms the arm.
-    pub(super) fn on_update_check(&mut self, report: Option<crate::update_check::Notice>) {
+    /// The report lands: the cache state becomes authoritative, a
+    /// newer release arms the badge and the one-time toast. A quiet
+    /// report (up to date, offline, opted out) just disarms the arm.
+    pub(super) fn on_update_check(&mut self, report: Option<crate::update_check::CheckReport>) {
         self.update_check = None;
-        if let Some(notice) = report {
-            self.update_latest = Some(notice.latest);
-            self.show_notice(&notice.title, &notice.body);
-        }
+        let Some(report) = report else { return };
+        self.update_state = report.state;
+        self.update_state_path = report.path;
+        self.update_latest = report.latest;
+        self.maybe_toast_update();
+        // Prefetch the notes so the modal opens instantly from cache.
+        self.kick_notes_fetch(false);
     }
 }
 
@@ -126,6 +179,7 @@ impl App {
 pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
     app.take_control_hit = Rect::default();
     app.notification_hit = Rect::default();
+    app.update_toast_hit = Rect::default();
     let pane = app.pane.notice();
     let offline = match &app.view.link {
         hc_proto::watch::Link::Offline { error, .. } => Some(crate::sidebar::clean(error)),
@@ -133,13 +187,23 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
         _ => None,
     };
     let notice = if let Some(notice) = app.notice.as_ref() {
-        Some((notice.title.as_str(), notice.body.as_str(), false))
+        Some((
+            notice.title.as_str(),
+            notice.body.as_str(),
+            false,
+            notice.update,
+        ))
     } else if let Some(notice) = pane.as_ref() {
-        Some((notice.title, notice.body.as_str(), notice.take_control))
+        Some((
+            notice.title,
+            notice.body.as_str(),
+            notice.take_control,
+            false,
+        ))
     } else {
         offline
             .as_ref()
-            .map(|error| ("Connection lost", error.as_str(), false))
+            .map(|error| ("Connection lost", error.as_str(), false, false))
     };
     let mobile = area.width <= app.shell.mobile_width_threshold;
     let palette = &app.shell.palette;
@@ -153,14 +217,15 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
                 ratatui::style::Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
         }
     }
-    if let Some((title, body, take_control)) = notice {
+    if let Some((title, body, take_control, update)) = notice {
+        let dot = if update { palette.accent } else { palette.red };
         let rect = if mobile {
             crate::chrome::notice_render::render_mobile_notice_banner(
                 buffer,
                 area,
                 title,
                 Some(body),
-                palette.red,
+                dot,
                 false,
                 palette,
             )
@@ -172,12 +237,15 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
                 body,
                 crate::config::ToastHerdrPosition::TopRight,
                 1,
-                palette.red,
+                dot,
                 palette,
             )
         };
         if take_control {
             app.take_control_hit = rect;
+        }
+        if update {
+            app.update_toast_hit = rect;
         }
     } else if let Some(notification) = app.notifications.visible.as_ref() {
         app.notification_hit = if mobile {
