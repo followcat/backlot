@@ -46,6 +46,7 @@ pub(crate) mod popup;
 mod popup_selection;
 mod preferences;
 mod presentation;
+mod probe;
 mod reap;
 mod reload;
 mod routing;
@@ -67,6 +68,7 @@ mod word_selection;
 
 pub use input::UiEvent;
 pub use pane::{OpenAttach, PaneEv, Role, Spec};
+pub use probe::Probe;
 pub(crate) use shell_state::ShellState;
 
 use std::future::Future;
@@ -100,25 +102,6 @@ pub(crate) enum Mode {
     /// program sees none of them.
     Copy,
     Resize,
-}
-
-/// Instrumentation counters a test can hold across `run`.
-#[derive(Debug, Default)]
-pub struct Probe {
-    /// Redraws performed.
-    pub draws: std::sync::atomic::AtomicU64,
-    /// Attach attempts made.
-    pub attaches: std::sync::atomic::AtomicU64,
-    /// Times the select loop woke for any reason.
-    pub wakeups: std::sync::atomic::AtomicU64,
-    /// Times a deadline sleep was armed.
-    pub timers: std::sync::atomic::AtomicU64,
-    /// Times a changed `HostFacts` bundle actually re-seeded panes.
-    pub host_facts: std::sync::atomic::AtomicU64,
-    /// Projection rebuilds actually run for a publish or focus change.
-    pub projections: std::sync::atomic::AtomicU64,
-    /// VT cells copied into pane surfaces across all draws.
-    pub cells_painted: std::sync::atomic::AtomicU64,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
@@ -278,9 +261,29 @@ pub struct App {
     /// Kitty releases of presses the image bridge consumed: the release
     /// arm consults this before the popup's unconditional release leg.
     image_paste_suppress: std::collections::HashSet<hc_vt::Key>,
-    /// The clipboard-image read — a boxed field so tests never touch a
+    /// The clipboard-image read — a shared field so tests never touch a
     /// real clipboard and can close over stub-tool environments.
-    image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
+    image_paste_reader: image_paste::ImageReader,
+    /// The dropped-file image read — the same seam for the file-drop path.
+    image_drop_reader: image_paste::DropReader,
+    /// One image read in flight, holding the gesture that started it
+    /// and the terminal input that arrived since — see `image_paste`.
+    image_read: Option<image_paste::ImageRead>,
+    /// Matches a worker result to `image_read` — a late result after the
+    /// hold expired lands dead.
+    image_read_seq: u64,
+    /// The `spawn_blocking` join for `image_read` — aborted on drop.
+    image_read_task: Option<tokio::task::JoinHandle<()>>,
+    /// Worker results land on this channel; the select arm dispatches them.
+    image_read_done_tx: mpsc::Sender<image_paste::ImageReadDone>,
+    image_read_done_rx: mpsc::Receiver<image_paste::ImageReadDone>,
+    /// How long terminal-directed input waits behind one image read —
+    /// above the reader's own probe timeouts, so a never-returning
+    /// worker still resolves the gesture as a miss.
+    image_read_hold: std::time::Duration,
+    /// `true` while the held trigger is being replayed through `on_input`
+    /// after a miss — the replay must not start another read.
+    image_read_replay: bool,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
     /// The host reports every key as an escape code — the reference's

@@ -113,6 +113,7 @@ impl App {
             .chain(self.selection_highlight_clear_deadline)
             .chain(self.copy_feedback_deadline)
             .chain(self.waiting_due)
+            .chain(self.image_read.as_ref().map(|read| read.deadline))
             .min()
     }
 
@@ -160,6 +161,11 @@ impl App {
             && self.pane_wake().is_some_and(|due| now >= due)
         {
             dirty |= self.pane_retry(now);
+        }
+        // The image-read hold bound is owed on any wake that lands at
+        // or past it, not only the deadline arm itself.
+        if deadline_due {
+            dirty |= self.expire_image_read(now);
         }
         if kind.routes() {
             self.reconcile_key_routes();
