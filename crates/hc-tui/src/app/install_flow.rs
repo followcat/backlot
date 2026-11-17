@@ -260,4 +260,32 @@ impl App {
             self.restart_ready = self.update_latest.clone();
         }
     }
+
+    /// `↵ restart` on a verified install. The installed version is marked
+    /// seen first (its notes were read), then the run loop unwinds the way
+    /// a detach does (leases released, panes shut down) and `cli` execs
+    /// the installed binary with the original arguments.
+    pub(super) fn request_restart(&mut self) {
+        let done = self
+            .install
+            .as_ref()
+            .is_some_and(|install| install.step == Step::Done);
+        let Some(latest) = self.update_latest.clone().filter(|_| done) else {
+            return;
+        };
+        self.restart = self
+            .install
+            .as_ref()
+            .map(|install| install.plan.bin.clone());
+        self.update_state.show_on_startup_version = Some(latest);
+        self.persist_update_state();
+        self.restart_ready = None;
+        self.update_modal = None;
+        self.quitting = true;
+    }
+
+    /// The installed binary to exec once the run loop has unwound.
+    pub(crate) fn take_restart(&mut self) -> Option<std::path::PathBuf> {
+        self.restart.take()
+    }
 }

@@ -63,6 +63,7 @@ pub(super) fn render_overlays_and_cursor(
             app.copy_mode.as_ref(),
             None,
             app.update_ready_version().is_some(),
+            app.restart_ready.is_some(),
             &app.live,
             &app.shell.palette,
         )

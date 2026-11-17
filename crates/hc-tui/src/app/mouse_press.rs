@@ -133,7 +133,9 @@ impl App {
         }
         // The badge's update hint opens the update card; the version
         // itself stays inert — the hit only covers the hint.
-        if self.update_ready_version().is_some() && contains(hits.update_badge, point) {
+        if (self.update_ready_version().is_some() || self.restart_ready.is_some())
+            && contains(hits.update_badge, point)
+        {
             self.open_update();
             return;
         }

@@ -197,9 +197,20 @@ async fn the_what_s_new_card_never_starts_an_install() {
     app.update_state.releases = vec![notes_for(env!("CARGO_PKG_VERSION"))];
     app.open_update();
     assert_eq!(phase(&app), Some(Phase::WhatsNew));
-    key(&mut app, Key::Enter);
     key(&mut app, Key::Char('u'));
-    assert_eq!(phase(&app), Some(Phase::WhatsNew), "read-only");
+    key(&mut app, Key::Char('s'));
+    assert_eq!(
+        phase(&app),
+        Some(Phase::WhatsNew),
+        "read-only: u and s do nothing"
+    );
+    assert!(app.install.is_none(), "no installer run");
+    key(&mut app, Key::Enter);
+    assert!(
+        app.update_modal.is_none(),
+        "enter closes the read-only card"
+    );
+    assert!(app.install.is_none());
 }
 
 fn press(app: &mut App, key: Key, mods: Mods) {

@@ -141,9 +141,9 @@ pub(crate) struct ShellRenderState<'a> {
     pub reveal_navigation_workspace: &'a mut bool,
     pub dragged_workspace_id: Option<&'a str>,
     pub workspace_drop_indicator_row: Option<u16>,
-    /// A newer release's bare version once the background check
-    /// reported one — the badge's update hint.
-    pub update_latest: Option<&'a str>,
+    /// The badge's update hint: a newer release's ` ↑v…` or a
+    /// verified install's ` ↻v…` while it awaits its restart.
+    pub update_badge: UpdateBadge<'a>,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
@@ -172,7 +172,7 @@ pub(crate) fn render_shell(
             snapshot,
             config,
             &mut hits,
-            state.update_latest,
+            state.update_badge,
         );
     }
     if layout.sidebar.width > 0 {
@@ -284,20 +284,43 @@ pub(super) fn display_width(text: &str) -> u16 {
     UnicodeWidthStr::width(text).min(u16::MAX as usize) as u16
 }
 
+/// The version badge's update hint — ` ↑v…` in accent while a newer
+/// release is offered, ` ↻v…` in green once a verified install only
+/// waits on its restart. The restart hint wins while both are known.
+#[derive(Clone, Copy)]
+pub(crate) enum UpdateBadge<'a> {
+    None,
+    Update(&'a str),
+    Restart(&'a str),
+}
+
+impl<'a> UpdateBadge<'a> {
+    pub(crate) fn new(update: Option<&'a str>, restart: Option<&'a str>) -> Self {
+        match (restart, update) {
+            (Some(version), _) => Self::Restart(version),
+            (None, Some(version)) => Self::Update(version),
+            (None, None) => Self::None,
+        }
+    }
+}
+
 /// The badge's two parts: the running `vX.Y.Z`, and — once the
 /// update check reported a newer release — the ` ↑v…` hint in the
-/// notice toast's accent. The hint stays tight so a two-digit pair
-/// still fits the default-width header.
-fn version_badge_text(update_latest: Option<&str>) -> (String, Option<String>) {
-    (
-        format!("v{}", env!("CARGO_PKG_VERSION")),
-        update_latest.map(|latest| format!(" ↑v{latest}")),
-    )
+/// notice toast's accent (or ` ↻v…` in green for a pending restart).
+/// The hint stays tight so a two-digit pair still fits the
+/// default-width header.
+fn version_badge_text(update_badge: UpdateBadge<'_>) -> (String, Option<String>) {
+    let hint = match update_badge {
+        UpdateBadge::Update(latest) => Some(format!(" ↑v{latest}")),
+        UpdateBadge::Restart(version) => Some(format!(" ↻v{version}")),
+        UpdateBadge::None => None,
+    };
+    (format!("v{}", env!("CARGO_PKG_VERSION")), hint)
 }
 
 /// Width of the fully drawn badge — callers reserve a slot with it.
-pub(super) fn version_badge_width(update_latest: Option<&str>) -> u16 {
-    let (version, hint) = version_badge_text(update_latest);
+pub(super) fn version_badge_width(update_badge: UpdateBadge<'_>) -> u16 {
+    let (version, hint) = version_badge_text(update_badge);
     display_width(&version) + hint.as_deref().map_or(0, display_width)
 }
 
@@ -308,10 +331,10 @@ pub(super) fn put_version_badge(
     buffer: &mut Buffer,
     row: Rect,
     min_left: u16,
-    update_latest: Option<&str>,
+    update_badge: UpdateBadge<'_>,
     palette: &Palette,
 ) -> Rect {
-    let (version, hint) = version_badge_text(update_latest);
+    let (version, hint) = version_badge_text(update_badge);
     let ver_w = display_width(&version);
     let hint_w = hint.as_deref().map_or(0, display_width);
     let right = row.right();
@@ -333,13 +356,17 @@ pub(super) fn put_version_badge(
         return Rect::default();
     }
     let hint_x = ver_x.saturating_add(ver_w);
+    let hint_color = match update_badge {
+        UpdateBadge::Restart(_) => palette.green,
+        _ => palette.accent,
+    };
     put_text(
         buffer,
         hint_x,
         row.y,
         hint_w,
         hint.as_deref().unwrap_or_default(),
-        Style::default().fg(palette.accent),
+        Style::default().fg(hint_color),
     );
     Rect::new(hint_x, row.y, hint_w, 1)
 }

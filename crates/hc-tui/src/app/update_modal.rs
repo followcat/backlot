@@ -145,6 +145,12 @@ impl App {
             self.show_notice("Update", &format!("hc-tui v{RUNNING} is up to date"));
             return;
         };
+        self.open_card(phase);
+    }
+
+    /// Opens `phase` over the live state; only the offered-update card
+    /// starts a notes fetch.
+    fn open_card(&mut self, phase: Phase) {
         let exe = self.running_exe.clone();
         let dir = running_install_dir(exe.as_deref());
         let writable = dir.as_deref().is_some_and(dir_writable);
@@ -179,7 +185,7 @@ impl App {
     pub(super) fn maybe_open_whats_new(&mut self) {
         let shown = self.update_state.show_on_startup_version.as_deref() == Some(RUNNING);
         if !shown && running_notes(&self.update_state).is_some() && self.update_modal.is_none() {
-            self.open_update();
+            self.open_card(Phase::WhatsNew);
         }
     }
 
@@ -198,6 +204,10 @@ impl App {
             KeyCode::Esc => self.escape_update(phase),
             KeyCode::Char('q') if plain && phase != Phase::Updating => self.escape_update(phase),
             KeyCode::Char('s') if plain && phase == Phase::Opened => self.skip_update(),
+            KeyCode::Enter if plain && phase == Phase::WhatsNew => self.close_update(),
+            KeyCode::Enter | KeyCode::Char('r') if plain && phase == Phase::Done => {
+                self.request_restart();
+            }
             KeyCode::Enter | KeyCode::Char('u') if plain && phase == Phase::Opened && writable => {
                 self.start_install();
             }
@@ -255,7 +265,7 @@ impl App {
             }
             Button::Close => self.close_update(),
             Button::Skip => self.skip_update(),
-            Button::Restart => {}
+            Button::Restart => self.request_restart(),
         }
     }
 

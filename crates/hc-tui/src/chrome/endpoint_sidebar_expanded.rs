@@ -70,7 +70,7 @@ pub(crate) fn render_expanded(
         buffer,
         badge_row,
         workspace_area.x.saturating_add(10),
-        state.update_latest,
+        state.update_badge,
         palette,
     );
 

@@ -79,6 +79,7 @@ impl App {
             install_generation: 0,
             seams: install_flow::default_seams(),
             restart_ready: None,
+            restart: None,
             running_exe: None,
             background_failure: None,
             next_tab_status: None,

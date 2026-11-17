@@ -63,7 +63,7 @@ pub(crate) fn render_mobile_header(
     snapshot: &ClientShellSnapshot,
     config: &super::ClientShellConfig,
     hits: &mut ShellHitMap,
-    update_latest: Option<&str>,
+    update_badge: super::render::UpdateBadge<'_>,
 ) {
     if area.is_empty() {
         return;
@@ -81,8 +81,8 @@ pub(crate) fn render_mobile_header(
     let status_width = button.x.saturating_sub(area.x).saturating_sub(1);
     // The version badge claims a right slot only when the status keeps
     // a readable width — the hint drops first, then the whole badge.
-    let full = super::render::version_badge_width(update_latest);
-    let bare = super::render::version_badge_width(None);
+    let full = super::render::version_badge_width(update_badge);
+    let bare = super::render::version_badge_width(super::render::UpdateBadge::None);
     let badge_w = [full, bare]
         .into_iter()
         .find(|w| status_width >= w + 1 + MOBILE_STATUS_MIN)
@@ -98,7 +98,7 @@ pub(crate) fn render_mobile_header(
     if badge_w > 0 {
         let slot = Rect::new(status.right().saturating_add(1), area.y, badge_w, 1);
         hits.update_badge =
-            super::render::put_version_badge(buffer, slot, slot.x, update_latest, palette);
+            super::render::put_version_badge(buffer, slot, slot.x, update_badge, palette);
     }
 }
 

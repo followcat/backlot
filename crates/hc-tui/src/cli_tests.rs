@@ -246,3 +246,19 @@ fn caller_needs_the_verifying_socket_var() {
         None
     );
 }
+
+#[test]
+fn upgrade_installs_into_the_running_binary_directory_unless_configured() {
+    use crate::update_install::upgrade_install_dir;
+    let exe = std::path::Path::new("/home/user/bin/hc-tui");
+    let dir = std::path::PathBuf::from("/home/user/bin");
+    assert_eq!(upgrade_install_dir(None, Some(exe)), Some(dir.clone()));
+    assert_eq!(
+        upgrade_install_dir(Some(std::ffi::OsStr::new("")), Some(exe)),
+        Some(dir)
+    );
+    assert_eq!(
+        upgrade_install_dir(Some(std::ffi::OsStr::new("/opt/hc")), Some(exe)),
+        None
+    );
+}

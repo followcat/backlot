@@ -268,3 +268,82 @@ async fn events_from_a_cancelled_run_never_change_the_card() {
     );
     assert!(app.install.as_ref().unwrap().tail.is_empty());
 }
+
+#[tokio::test]
+async fn enter_on_a_verified_install_marks_the_version_seen_and_leaves_for_the_restart() {
+    let dir = scratch("restart");
+    let record = Arc::new(Mutex::new(Record {
+        probe: Some("hc-tui 0.1.13".into()),
+        ..Record::default()
+    }));
+    let mut app = offered(&dir, &record);
+    press(&mut app, Key::Enter);
+    let generation = app.install_generation;
+    app.on_update_event(UpdateEvent::Exited {
+        generation,
+        code: Some(0),
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    drain(&mut app);
+    assert_eq!(phase(&app), Some(Phase::Done));
+    press(&mut app, Key::Enter);
+    assert!(app.quitting, "the run loop unwinds the way a detach does");
+    assert!(app.update_modal.is_none());
+    assert_eq!(app.take_restart(), Some(dir.join("hc-tui")));
+    assert!(
+        app.take_restart().is_none(),
+        "the restart is handed back once"
+    );
+    assert_eq!(
+        app.update_state.show_on_startup_version.as_deref(),
+        Some("0.1.13"),
+        "marked seen before the exec"
+    );
+}
+
+#[tokio::test]
+async fn a_restarted_run_does_not_reopen_whats_new_but_an_upgrade_does() {
+    let dir = scratch("whats-new");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut app = app();
+    app.running_exe = Some(dir.join("hc-tui"));
+    app.update_state.releases = vec![crate::update_state::CachedRelease {
+        version: env!("CARGO_PKG_VERSION").into(),
+        date: "2026-01-01".into(),
+        body: "## Changes\n- **Lead-in** text (#39)".into(),
+    }];
+    app.update_state.show_on_startup_version = Some(env!("CARGO_PKG_VERSION").into());
+    app.maybe_open_whats_new();
+    assert!(
+        app.update_modal.is_none(),
+        "marked seen: no card on this start"
+    );
+    app.update_state.show_on_startup_version = Some("0.0.0".into());
+    app.maybe_open_whats_new();
+    assert_eq!(
+        phase(&app),
+        Some(Phase::WhatsNew),
+        "an upgrade shows its notes once"
+    );
+}
+
+#[tokio::test]
+async fn enter_closes_the_whats_new_card_and_marks_it_seen() {
+    let dir = scratch("whats-new-enter");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut app = app();
+    app.running_exe = Some(dir.join("hc-tui"));
+    app.update_state.releases = vec![crate::update_state::CachedRelease {
+        version: env!("CARGO_PKG_VERSION").into(),
+        date: "2026-01-01".into(),
+        body: "## Changes\n- **Lead-in** text (#39)".into(),
+    }];
+    app.maybe_open_whats_new();
+    assert_eq!(phase(&app), Some(Phase::WhatsNew));
+    press(&mut app, Key::Enter);
+    assert!(app.update_modal.is_none());
+    assert_eq!(
+        app.update_state.show_on_startup_version.as_deref(),
+        Some(env!("CARGO_PKG_VERSION"))
+    );
+}

@@ -21,6 +21,7 @@ pub mod host;
 pub mod input;
 pub mod preferences;
 pub mod project;
+pub mod restart;
 
 pub mod raw_events;
 pub mod raw_frames;

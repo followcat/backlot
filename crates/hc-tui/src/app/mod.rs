@@ -152,6 +152,9 @@ pub struct App {
     /// The version whose install finished and awaits a restart
     /// (`esc later`): the badge shows `↻v…` until the restart happens.
     restart_ready: Option<String>,
+    /// The installed binary `↵ restart` execs once the detach path
+    /// unwound (`releases`, `shutdown_panes`, terminal restore).
+    restart: Option<std::path::PathBuf>,
     /// The executable whose directory an upgrade installs into; `None`
     /// resolves `current_exe` when the card opens.
     running_exe: Option<std::path::PathBuf>,

@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
-use hc_tui::cli::{Action, help_text, parse, run_options, upgrade, version_text};
+use hc_tui::cli::{Action, Options, help_text, parse, run_options, upgrade, version_text};
+use hc_tui::restart::exec_installed;
 
 fn main() -> ExitCode {
     match parse(std::env::args().skip(1)) {
@@ -13,32 +14,42 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Action::Upgrade) => upgrade(),
-        Ok(Action::Run(options)) => {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build();
-            match runtime {
-                Ok(rt) => match rt.block_on(run_options(
-                    &options,
-                    &hc_proto::endpoint::env_snapshot(),
-                    &hc_proto::endpoint::Sys,
-                )) {
-                    Ok(()) => ExitCode::SUCCESS,
-                    Err(message) => {
-                        eprintln!("error: {message}");
-                        ExitCode::FAILURE
-                    }
-                },
-                Err(e) => {
-                    eprintln!("error: runtime: {e}");
-                    ExitCode::FAILURE
-                }
-            }
-        }
+        Ok(Action::Run(options)) => run_client(&options),
         Err(message) => {
             eprintln!("error: {message}");
             eprintln!("Try 'hc-tui --help' for more information.");
             ExitCode::from(2)
+        }
+    }
+}
+
+/// Runs the client. A restart execs the installed binary only after the
+/// runtime is gone and `run_options` has restored the terminal.
+fn run_client(options: &Options) -> ExitCode {
+    let outcome = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt.block_on(run_options(
+            options,
+            &hc_proto::endpoint::env_snapshot(),
+            &hc_proto::endpoint::Sys,
+        )),
+        Err(e) => {
+            eprintln!("error: runtime: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    match outcome {
+        Ok(None) => ExitCode::SUCCESS,
+        Ok(Some(bin)) => {
+            let error = exec_installed(&bin, std::env::args_os().skip(1));
+            eprintln!("error: restart: {}: {error}", bin.display());
+            ExitCode::FAILURE
+        }
+        Err(message) => {
+            eprintln!("error: {message}");
+            ExitCode::FAILURE
         }
     }
 }

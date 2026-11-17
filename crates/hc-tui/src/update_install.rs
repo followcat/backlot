@@ -28,6 +28,19 @@ pub(crate) fn running_install_dir(exe: Option<&Path>) -> Option<PathBuf> {
     install_dir_for(&exe)
 }
 
+/// Where `hc-tui --upgrade` installs: the running binary's directory,
+/// unless `HC_TUI_INSTALL_DIR` already names one (an empty value counts as
+/// unset). `None` leaves the installer's own default in charge.
+pub(crate) fn upgrade_install_dir(
+    configured: Option<&OsStr>,
+    exe: Option<&Path>,
+) -> Option<PathBuf> {
+    match configured.filter(|dir| !dir.is_empty()) {
+        Some(_) => None,
+        None => running_install_dir(exe),
+    }
+}
+
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 /// Whether `dir` accepts a new file: a `create_new` probe that is

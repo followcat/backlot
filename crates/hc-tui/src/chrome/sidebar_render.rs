@@ -64,7 +64,7 @@ pub(crate) fn render_sidebar(
         buffer,
         badge_row,
         workspace_area.x.saturating_add(8),
-        state.update_latest,
+        state.update_badge,
         palette,
     );
 

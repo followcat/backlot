@@ -4,6 +4,7 @@
 
 use std::ffi::OsString;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use hc_proto::endpoint::{self, Endpoint, Env, Platform};
@@ -82,13 +83,19 @@ pub const INSTALL_COMMAND: &str = "curl -fsSL https://followcat.github.io/hc-tui
 /// progress shows, and the exit code propagates.
 pub fn upgrade() -> std::process::ExitCode {
     use std::process::ExitCode;
-    match std::process::Command::new("sh")
+    let mut command = std::process::Command::new("sh");
+    command
         .args(["-c", INSTALL_COMMAND])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-    {
+        .stderr(std::process::Stdio::inherit());
+    if let Some(dir) = crate::update_install::upgrade_install_dir(
+        std::env::var_os("HC_TUI_INSTALL_DIR").as_deref(),
+        None,
+    ) {
+        command.env("HC_TUI_INSTALL_DIR", dir);
+    }
+    match command.status() {
         Ok(status) if status.success() => {
             println!("restart hc-tui to use the new version");
             ExitCode::SUCCESS
@@ -119,8 +126,9 @@ Options:
                          target (login kept 10 minutes)
   -h, --help             Print this help
   -V, --version          Print the version
-      --upgrade          Run the official installer to upgrade to the
-                         latest release, then restart hc-tui
+      --upgrade          Run the official installer into this binary's
+                         directory (HC_TUI_INSTALL_DIR overrides) to upgrade
+                         to the latest release, then restart hc-tui
 
 Default keys: Ctrl+B prefix — q detach · w workspace navigation ·
 b sidebar · ? keybinds · Ctrl+B Ctrl+B literal ^B.
@@ -178,7 +186,7 @@ fn shared_attach(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::clien
 /// Builds the app over the endpoint's real connections and runs it
 /// until detach. Errors are user-facing strings — a failure leaves the
 /// terminal restored by the caller's guard.
-pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
+pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<Option<PathBuf>, String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
     let loaded = crate::config::load(&config_path);
@@ -296,6 +304,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     let result = app
         .run(&mut terminal, &mut reader.ui, &mut reader.replies)
         .await;
+    let restart = app.take_restart();
     if let Some(diag) = diag {
         diag.finish();
     }
@@ -308,7 +317,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     if let Some(error) = reader.failure() {
         return Err(format!("input reader: {error}"));
     }
-    Ok(())
+    Ok(restart)
 }
 
 /// Resolves `--remote`/`--session` to an endpoint and runs the client.
@@ -316,7 +325,7 @@ pub async fn run_options(
     options: &Options,
     env: &Env,
     platform: &dyn Platform,
-) -> Result<(), String> {
+) -> Result<Option<PathBuf>, String> {
     let endpoint = endpoint::resolve(
         env,
         options.session.as_deref(),

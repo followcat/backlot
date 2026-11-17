@@ -186,3 +186,31 @@ async fn a_skipped_version_hides_every_passive_surface() {
         "the modal can still reach the skipped release"
     );
 }
+
+#[tokio::test]
+async fn a_verified_install_waiting_for_restart_shows_the_green_hint() {
+    let mut app = app_with(&["t1"]);
+    app.update_latest = Some(next_patch());
+    app.restart_ready = app.update_latest.clone();
+    let backend = drawn(&mut app, 80, 24);
+    let header = header(&backend);
+    assert!(
+        !header.contains('↑'),
+        "the restart hint replaces the update hint: {header:?}"
+    );
+    let hint_x = header.find('↻').expect("the restart hint is missing") as u16;
+    assert_eq!(backend.buffer()[(hint_x, 0)].fg, app.shell.palette.green);
+}
+
+#[tokio::test]
+async fn navigate_mode_says_restart_ready_while_an_install_waits() {
+    let mut app = app_with(&["t1"]);
+    app.mode = Mode::Navigate;
+    app.restart_ready = Some("0.1.13".into());
+    let backend = drawn(&mut app, 80, 24);
+    assert!(
+        screen_lines(&backend)
+            .iter()
+            .any(|row| row.contains("restart ready"))
+    );
+}
