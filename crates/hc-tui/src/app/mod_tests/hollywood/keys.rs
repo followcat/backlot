@@ -162,3 +162,29 @@ async fn the_panel_chord_still_toggles_while_the_layer_is_expanded() {
     assert_eq!(app.panel.mode, crate::panel::PanelMode::Expanded);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
 }
+
+#[tokio::test]
+async fn n_opens_the_new_studio_wizard_and_collapses_the_bar() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Char('n'));
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Collapsed,
+        "the popup is never under the bar"
+    );
+    assert!(app.popup_pending.is_some(), "the wizard is armed");
+}
+
+#[tokio::test]
+async fn enter_on_the_new_studio_frame_opens_the_wizard() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    app.hollywood.selected = Some(Target::NewStudio);
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert!(app.popup_pending.is_some(), "the wizard is armed");
+}

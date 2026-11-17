@@ -139,3 +139,25 @@ async fn an_outside_click_closes_the_show_me_view() {
     ));
     assert!(app.hollywood.view.is_none());
 }
+
+#[tokio::test]
+async fn a_click_on_the_new_studio_frame_opens_the_wizard() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    app.hollywood.mode = LayerMode::Expanded;
+    draw_to(&mut app, 120, 24);
+    let frame = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::NewStudio))
+        .map(|(rect, _)| *rect)
+        .expect("the new-studio frame");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        frame.x + 2,
+        frame.y + 2,
+    ));
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert!(app.popup_pending.is_some(), "the wizard is armed");
+}

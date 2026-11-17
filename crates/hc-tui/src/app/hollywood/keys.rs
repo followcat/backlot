@@ -94,6 +94,7 @@ impl App {
             KeyCode::Char('i') if plain && self.has_hollywood_cfg => {
                 self.hollywood.editing = true;
             }
+            KeyCode::Char('n') if plain => self.hollywood_new_studio(),
             KeyCode::Enter => self.hollywood_activate(),
             KeyCode::Char('a') if plain => self.hollywood_card_key(BtnKind::Apply),
             KeyCode::Char('c') if plain => self.hollywood_card_key(BtnKind::Cancel),

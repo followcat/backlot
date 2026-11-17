@@ -320,6 +320,12 @@ validation the user's own command would hit, and recording `card.done`, `card.fa
 Hollywood's ledger. A `studio-new` card re-runs the `studio new --dry-run` checks, writes `studio.created` and queues
 the brief to the new producer. The config gates the agent terminal, never the card pass.
 
+The bar in the TUI (U7, D15, D16) is studio mode's own surface, not the agent's: it draws with or without a
+`[hollywood]` table, since the studios, the new-studio frame and the `backlot hollywood setup` line need no agent. The
+agent's parts — the role state in the title, the headline, the cards and the `tell hollywood` line — appear only with
+the table, and the stage side is unchanged: no table, no `bl-hollywood`. Under `--plain` the bar does not exist at
+all, which is what keeps the parity harness's screen herdr's.
+
 ## Recovery
 
 An hc server restart ends every terminal, including the stage; the person starts it again with

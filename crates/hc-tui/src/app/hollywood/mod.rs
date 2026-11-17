@@ -353,10 +353,19 @@ impl App {
                 self.focus_studio(&id);
                 self.hollywood_leave();
             }
+            Some(Target::NewStudio) => self.hollywood_new_studio(),
             Some(Target::Card(id)) => self.hollywood_card_show(&id),
             Some(Target::Input) => self.hollywood.editing = true,
             _ => {}
         }
+    }
+
+    /// The new-studio frame, and `n` anywhere in the bar: the bar
+    /// collapses first so the wizard's popup is never under it, then
+    /// the wizard runs — the same one the opening card's `n` opens.
+    pub(super) fn hollywood_new_studio(&mut self) {
+        self.hollywood_leave();
+        self.opening_new_studio();
     }
 
     /// Focus the `bl-hollywood` terminal — same read `reap` and

@@ -654,3 +654,52 @@ fn the_card_view_draws_over_the_layer() {
     let view = hits.view.expect("the view's hit map");
     assert!(view.metrics.unwrap().max_offset_from_bottom > 0);
 }
+
+// ---------- the new-studio frame ----------
+
+#[test]
+fn the_new_studio_frame_is_always_last_and_dashed() {
+    let summary = summary();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let (buf, hits) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let new = frame_hit(&hits, &Target::NewStudio).expect("the new-studio frame");
+    let studios: Vec<Rect> = hits
+        .rows
+        .iter()
+        .filter(|(_, t)| matches!(t, Target::Studio(_)))
+        .map(|(rect, _)| *rect)
+        .collect();
+    assert_eq!(studios.len(), 3);
+    assert!(
+        studios.iter().all(|frame| frame.x < new.x),
+        "the entry is the last frame"
+    );
+    let top = row_of(&buf, area, new.y);
+    assert!(top.contains('┄'), "a dashed edge: {top}");
+    assert!(top.contains('╭') && top.contains('╮'), "{top}");
+    assert_eq!(buf[(new.x, new.y)].fg, palette.overlay0);
+    assert!(row_of(&buf, area, new.y + 2).contains("+  new studio"));
+    assert!(row_of(&buf, area, new.y + 3).contains("repository + cast"));
+    let chip = row_of(&buf, area, new.y + 5);
+    assert!(chip.contains(" n "), "{chip}");
+    // The key chip: ` n ` in accent on surface0.
+    let cells: Vec<u16> = (new.x..new.x + new.width)
+        .filter(|x| buf[(*x, new.y + 5)].bg == palette.surface0)
+        .collect();
+    assert_eq!(cells.len(), 3, "{chip}");
+    assert_eq!(
+        cells
+            .iter()
+            .map(|x| buf[(*x, new.y + 5)].symbol())
+            .collect::<String>(),
+        " n "
+    );
+}
