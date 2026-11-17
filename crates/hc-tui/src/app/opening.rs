@@ -67,6 +67,16 @@ impl App {
         }
         self.opening.settled = true;
         self.opening.cap = None;
+        // U7: a client that opens with studios meets the bar open;
+        // one that opens on the card keeps it collapsed, and the
+        // first studio to arrive later does not pull it open.
+        if !self.plain {
+            self.hollywood.mode = if self.studioless() {
+                crate::hollywood::LayerMode::Collapsed
+            } else {
+                crate::hollywood::LayerMode::Expanded
+            };
+        }
         self.sched.mark_dirty(now);
     }
 

@@ -102,9 +102,13 @@ fn app_with_doc() -> App {
     app
 }
 
-/// The document plus a configured layer — collapsed already.
+/// The document plus a configured layer, collapsed — the state a
+/// client that entered without studios meets, and the one a toggle
+/// leaves behind. A client with studios starts expanded (U7), so the
+/// strip tests collapse it here.
 fn app_with_hollywood() -> App {
     let mut app = app_with_doc();
+    app.hollywood.mode = LayerMode::Collapsed;
     app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app
@@ -266,6 +270,83 @@ async fn the_layer_never_resizes_a_pane_at_any_width() {
             );
         }
     }
+}
+
+// ---------- the entry state (U7) ----------
+
+/// A settled document with no studios.
+fn zero_studio_json() -> serde_json::Value {
+    serde_json::json!({ "schema": "backlot/1", "updated_ms": 1, "studios": [] })
+}
+
+/// A client whose first read landed with no studio: the card is up.
+fn app_with_empty_doc() -> App {
+    let mut app = app_with(&["t1"]);
+    app.set_plain(false);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: zero_studio_json(),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.focused = Some("t1".into());
+    app.reconcile_published_view();
+    app
+}
+
+#[tokio::test]
+async fn a_client_with_studios_starts_the_bar_expanded() {
+    let mut app = app_with_doc();
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Expanded,
+        "the bar opens on entry (U7)"
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
+    assert!(text.contains("acme-shop"), "{text}");
+    // Esc collapses it, as before.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    // And `x` still hides it from the expanded panel.
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Char('x'));
+    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
+}
+
+#[tokio::test]
+async fn a_client_without_studios_keeps_the_bar_off_the_card() {
+    let mut app = app_with_empty_doc();
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert!(app.opening_visible());
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(!text.contains("hollywood"), "{text}");
+    assert!(text.contains("New studio"), "{text}");
+}
+
+#[tokio::test]
+async fn the_first_studio_leaves_the_bar_collapsed() {
+    let mut app = app_with_empty_doc();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: summary_json(),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    assert!(!app.opening_visible());
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Collapsed,
+        "a studio that arrives later does not pull the bar open"
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("✦ hollywood"), "{text}");
 }
 
 // ---------- the toggle ----------

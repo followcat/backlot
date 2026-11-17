@@ -10,6 +10,10 @@ async fn a_configured_direct_key_replaces_alt_y() {
         Ok(Some(cfg(Some("ctrl+h")))),
         std::path::Path::new("config.toml"),
     );
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded, "the entry state");
+    // The strip is the state this test toggles from.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
     // Alt+Y is no longer the layer's — the strip stays a strip.
     alt_y(&mut app);
@@ -25,6 +29,8 @@ async fn a_configured_chord_toggles_through_the_prefix() {
         Ok(Some(cfg(Some("prefix+h")))),
         std::path::Path::new("config.toml"),
     );
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
@@ -48,6 +54,8 @@ async fn a_refused_key_falls_back_to_alt_y_with_a_notice() {
     assert!(app.notice.is_some(), "a refused key notices");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(text.contains("previous_studio"), "{text}");
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
