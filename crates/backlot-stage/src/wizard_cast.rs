@@ -13,12 +13,16 @@ use crate::wizard::{Io, ask, io_fail};
 /// Runners the wizard drafts from, best first, with the model the
 /// draft assigns — the same check `runners::installed` answers.
 /// `cursor`, `devin` and `cmd` carry no effort flag (the cast rule).
+/// `claude` gets the CLI's own `sonnet` alias so the draft tracks
+/// the current sonnet instead of going stale; `gpt-5.3-codex` is the
+/// codex id `docs/studio/` documents, and opencode takes the same
+/// sonnet through its `provider/model` config.
 const PREFERENCE: &[(&str, &str)] = &[
     ("devin", "swe-2-max"),
-    ("claude", "claude-sonnet-4-5"),
+    ("claude", "sonnet"),
     ("codex", "gpt-5.3-codex"),
     ("cursor", "auto"),
-    ("opencode", "anthropic/claude-sonnet-4-5"),
+    ("opencode", "anthropic/claude-sonnet-5-5"),
     ("cmd", "deepseek/deepseek-v4.1-flash"),
     ("cline", "cline-pass/deepseek-v4.1-flash-1017"),
     ("fake", "m"),
