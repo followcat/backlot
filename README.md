@@ -130,11 +130,12 @@ backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop
 backlot stage start
 ```
 
-Or let the client do it: open `backlot` with no studio and you land on the opening page — press `n` and a
-wizard asks for the repository, the studio name and the cast (it drafts one from the agent CLIs installed on
-the machine), then offers to start the stage.
+Or let the client do it: open `backlot` with no studio and you land on the opening page — a film-strip
+title card with `n` for a new studio, `s` to start the stage and `q` to detach. Press `n` and a
+wizard asks for the repository, the studio name and the cast (it drafts one from the agent CLIs
+installed on the machine), then offers to start the stage.
 
-![The opening page of backlot with no studio yet: n creates a studio, s starts the stage, q detaches, and backlot --plain runs it as a plain multiplexer](docs/images/opening.png)
+![The opening page of backlot with no studio yet: a film-strip title card and the keys n for a new studio, s to start the stage, q to detach](docs/images/opening.png)
 
 **3. Open the client and talk to the producer:**
 
