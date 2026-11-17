@@ -5,12 +5,14 @@
 //! real git repository under `files/` like the dry-run tests use.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
 use crate::cli_testkit::*;
-use crate::wizard::{Io, WizardArgs, create_draft, run_io};
+use crate::runners::detect::{Found, Source};
+use crate::wizard::{Io, WizardArgs, run_io};
+use crate::wizard_cast::create_draft;
 
 /// A git repository under `files/` — `draft::check` asks git
 /// itself, so the wizard's answer must be a real one.
@@ -26,18 +28,34 @@ fn repo(scratch: &Scratch, name: &str) -> String {
 
 /// Scripted seams: `lines` feed every prompt in order, `fake` is
 /// the only installed runner, `edit` swaps in `edited` when set,
-/// and the prompts are collected to assert on.
+/// nothing is detected, and the prompts are collected to assert on.
 fn io<'a>(lines: &'a mut &[u8], out: &'a mut Vec<u8>, edited: Option<&'a str>) -> Io<'a> {
     Io {
         input: lines,
         out,
         git_repo: Box::new(|_| true),
         installed: Box::new(|r| r == "fake"),
+        detect: Box::new(|_| None),
         edit: Box::new(move |file| match edited {
             Some(text) => fs::write(file, text).map_err(|e| e.to_string()),
             None => Err("no editor".into()),
         }),
+        pick_repo: None,
     }
+}
+
+/// An executable shell script `<dir>/<name>` running `body` — the
+/// fake agent binaries detection and the draft check share.
+fn exe(dir: &Path, name: &str, body: &str) -> PathBuf {
+    fs::create_dir_all(dir).unwrap();
+    let path = dir.join(name);
+    fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    path
 }
 
 fn args() -> WizardArgs {
@@ -204,7 +222,9 @@ fn no_runner_installed_refuses_the_draft() {
         out: &mut out,
         git_repo: Box::new(|_| true),
         installed: Box::new(|_| false),
+        detect: Box::new(|_| None),
         edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: None,
     };
     let res = run_io(Common::default(), args(), &env, &mut io);
     match res {
@@ -245,6 +265,76 @@ fn the_reserved_name_is_refused() {
     assert!(!scratch.dir.join("studios").exists());
 }
 
+/// U5: on a terminal the `pick_repo` seam answers the repository
+/// question — the line prompt never prints, and the picked path
+/// flows through the same checks as a typed answer.
+#[test]
+fn a_terminal_pick_replaces_the_line_prompt() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
+    let (scratch, env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    let picked = PathBuf::from(&repo);
+    let answers = b"\n\na\nn\n".as_slice();
+    let mut input = answers;
+    let mut out = Vec::new();
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "fake"),
+        detect: Box::new(|_| None),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: Some(Box::new(move |_| Ok(picked.clone()))),
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    drop(io);
+    assert!(res.unwrap().contains("studio.created"));
+    let out = String::from_utf8(out).unwrap();
+    assert!(!out.contains("repository"), "{out}");
+    assert!(out.contains("studio [acme-shop]"), "{out}");
+    assert!(scratch.dir.join("studios/acme-shop/events.jsonl").is_file());
+}
+
+/// U5: the picker's cancel refuses with "cancelled" — nothing is
+/// written, like a refused cast.
+#[test]
+fn a_cancelled_pick_writes_nothing() {
+    let (scratch, env) = scratch();
+    let answers = b"\n\n\n\n".as_slice();
+    let mut input = answers;
+    let mut out = Vec::new();
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "fake"),
+        detect: Box::new(|_| None),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: Some(Box::new(|_| Err(Fail::refused("cancelled")))),
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    match res {
+        Err(Fail::Refused(m)) => assert!(m.contains("cancelled"), "{m}"),
+        other => panic!("expected refusal, got {other:?}"),
+    }
+    assert!(!scratch.dir.join("studios").exists());
+}
+
+/// U5: a core that cannot be reached leaves the in-use group
+/// absent — the picker works the same, it just has nothing to
+/// offer on top.
+#[test]
+fn an_unreachable_core_leaves_no_in_use_group() {
+    let (_scratch, env) = scratch();
+    // A session name with no socket: the connect fails fast and
+    // the group is empty — it never touches a real session.
+    let common = Common {
+        session: Some("u5-scratch-none".into()),
+        ..Common::default()
+    };
+    assert!(crate::wizard::in_use(&env, &common).is_empty());
+}
+
 /// A draft-shaped cast on the `fake` runner — the same roles the
 /// wizard drafts, written out for `--cast` and edited-cast tests.
 const CAST_FAKE: &str = r#"
@@ -280,6 +370,191 @@ model = "m"
 effort = "medium"
 permission_profile = "standard"
 "#;
+
+/// U5: the draft shows where each runner came from — its version
+/// and directory, `~`-shortened under HOME — and marks a find that
+/// only the login shell or a well-known dir could reach.
+#[test]
+fn the_draft_shows_where_each_runner_came_from() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
+    let (scratch, mut env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    env.vars
+        .insert("HOME".into(), scratch.files.to_string_lossy().into_owned());
+    let claude_dir = scratch.files.join(".nvm/versions/node/v24.19.0/bin");
+    let claude = exe(&claude_dir, "claude", "echo 2.1.330");
+    let answers = format!("{repo}\n\n\nrefuse\n");
+    let mut input = answers.as_bytes();
+    let mut out = Vec::new();
+    let found = Found {
+        path: claude,
+        version: Some("2.1.330".into()),
+        source: Source::Login,
+    };
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "fake"),
+        detect: Box::new(move |r| (r == "claude").then(|| found.clone())),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: None,
+    };
+    let _ = run_io(Common::default(), args(), &env, &mut io);
+    drop(io);
+    let out = String::from_utf8(out).unwrap();
+    assert!(out.contains("claude"), "{out}");
+    assert!(out.contains("2.1.330"), "{out}");
+    assert!(out.contains("~/.nvm/versions/node/v24.19.0/bin"), "{out}");
+    assert!(out.contains("needs PATH"), "{out}");
+    assert!(out.contains("codex"), "{out}");
+    assert!(out.contains("not installed"), "{out}");
+}
+
+/// U5: accepting a cast whose runner only the login shell's PATH
+/// reaches writes exactly one `[runner_env.<runner>]` PATH into the
+/// state's `config.toml` — binary dir first — and the file is born
+/// `0600`.
+#[test]
+fn accepting_a_cast_writes_the_runner_path() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
+    let (scratch, mut env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    env.vars.insert("PATH".into(), "/nonexistent-dir".into());
+    let bin = scratch.files.join("agent-bin");
+    let claude = exe(&bin, "claude", "echo 2.1.330");
+    let answers = format!("{repo}\n\n\na\nn\n");
+    let mut input = answers.as_bytes();
+    let mut out = Vec::new();
+    let found = Found {
+        path: claude.clone(),
+        version: Some("2.1.330".into()),
+        source: Source::Login,
+    };
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "claude"),
+        detect: Box::new(move |r| (r == "claude").then(|| found.clone())),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: None,
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    drop(io);
+    let out_str = res.unwrap();
+    assert!(out_str.contains("studio.created"), "{out_str}");
+    let config = scratch.dir.join("config.toml");
+    let text = fs::read_to_string(&config).unwrap();
+    assert_eq!(text.matches("[runner_env.claude]").count(), 1, "{text}");
+    assert_eq!(text.matches("PATH =").count(), 1, "{text}");
+    assert!(
+        text.contains(&format!("PATH = \"{}:/nonexistent-dir\"", bin.display())),
+        "{text}"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&config).unwrap().permissions().mode() & 0o777,
+            0o600,
+            "config.toml must be owner-only"
+        );
+    }
+    let out = String::from_utf8(out).unwrap();
+    assert!(out.contains("[runner_env.claude]"), "{out}");
+    assert!(out.contains("PATH ="), "{out}");
+}
+
+/// U5: an existing `runner_env.<runner>` PATH is never rewritten —
+/// one that does not reach the binary warns instead, and the draft
+/// check then still refuses "not installed".
+#[test]
+fn an_existing_runner_path_is_never_touched() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
+    let (scratch, mut env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    env.vars.insert("PATH".into(), "/nonexistent-dir".into());
+    let bin = scratch.files.join("agent-bin");
+    let claude = exe(&bin, "claude", "echo 2.1.330");
+    let config = scratch.dir.join("config.toml");
+    fs::write(&config, "[runner_env.claude]\nPATH = \"/elsewhere\"\n").unwrap();
+    let answers = format!("{repo}\n\n\na\n");
+    let mut input = answers.as_bytes();
+    let mut out = Vec::new();
+    let found = Found {
+        path: claude.clone(),
+        version: Some("2.1.330".into()),
+        source: Source::Login,
+    };
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "claude"),
+        detect: Box::new(move |r| (r == "claude").then(|| found.clone())),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: None,
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    drop(io);
+    match res {
+        Err(Fail::Refused(m)) => assert!(m.contains("not installed"), "{m}"),
+        other => panic!("expected refusal, got {other:?}"),
+    }
+    let out = String::from_utf8(out).unwrap();
+    assert!(out.contains("already"), "{out}");
+    assert!(
+        !scratch.dir.join("studios").exists(),
+        "no studio should be written"
+    );
+    let text = fs::read_to_string(&config).unwrap();
+    assert_eq!(text, "[runner_env.claude]\nPATH = \"/elsewhere\"\n");
+}
+
+/// U5: an existing `runner_env.<runner>` PATH that already reaches
+/// the binary needs no warning and no write — the studio is made.
+#[test]
+fn a_configured_path_that_reaches_the_binary_is_left_alone() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
+    let (scratch, mut env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    env.vars.insert("PATH".into(), "/nonexistent-dir".into());
+    let bin = scratch.files.join("agent-bin");
+    let claude = exe(&bin, "claude", "echo 2.1.330");
+    let config = scratch.dir.join("config.toml");
+    fs::write(
+        &config,
+        format!("[runner_env.claude]\nPATH = \"{}\"\n", bin.display()),
+    )
+    .unwrap();
+    let answers = format!("{repo}\n\n\na\nn\n");
+    let mut input = answers.as_bytes();
+    let mut out = Vec::new();
+    let found = Found {
+        path: claude,
+        version: Some("2.1.330".into()),
+        source: Source::Login,
+    };
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "claude"),
+        detect: Box::new(move |r| (r == "claude").then(|| found.clone())),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: None,
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    drop(io);
+    let out_str = res.unwrap();
+    assert!(out_str.contains("studio.created"), "{out_str}");
+    let text = fs::read_to_string(&config).unwrap();
+    assert_eq!(text.matches("PATH =").count(), 1, "{text}");
+    let out = String::from_utf8(out).unwrap();
+    assert!(!out.contains("warning"), "{out}");
+    assert!(!out.contains("adding"), "{out}");
+}
 
 /// U2 round 1: a name someone else already took — planted or leaked —
 /// is never truncated: the draft moves to the next free number and

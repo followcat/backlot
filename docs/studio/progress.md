@@ -1,5 +1,44 @@
 # Studio progress
 
+## U5: a repository picker and agent detection for the wizard (2026-11-18)
+
+- Done: `wizard_picker/` holds a repository picker — state/filter/tree/render/term behind the
+  `Io.pick_repo` seam — so `studio new --interactive` on a terminal replaces the bare
+  `repository:` line with a full-screen picker: typing filters live (substring then subsequence,
+  repositories first, the root tracking the deepest existing directory), `Tab` completes the
+  longest common prefix and descends on a single match, arrows/PgUp/PgDn/Home/End move, `→`/`←`
+  expand/collapse/climb, `Enter` picks a `●` repository (branch + commit age, `git log -1` per
+  visible row, cached; `○` has no commits and cannot be picked), `Esc` refocuses then cancels,
+  `Ctrl+C` cancels at once. Hidden dirs stay hidden unless the filter starts with `.`;
+  `node_modules`/`target`/`.git` never list; >500 children truncate with a count line; unreadable
+  dirs show `(no access)`. While the input is untouched, up to eight repositories the core's
+  terminals have as cwd — deduplicated to their roots — lead the tree (`wizard::in_use` over
+  `terminal.list`; an unreachable core just has no group). Non-terminal stdin/stdout keeps the
+  line prompt.
+- Done: `runners/detect.rs` finds each runner's binary past the inherited `PATH` — login-shell
+  `PATH` via `$SHELL -lc` between marker lines, then known dirs (`~/.local/bin`, nvm `*/bin`
+  newest first, Volta/bun/cargo/npm-global/deno, mise/asdf shims, Homebrew, `/usr/local/bin`) —
+  probes `--version` at 3 s, sanitizes its first line, and reports `needs PATH` for a find the
+  inherited PATH cannot reach. `backlot runners` prints the table (runner, status, version,
+  path, needs PATH) with no core; the draft shows the same per runner. Accepting the cast writes
+  `[runner_env.<runner>] PATH = "<bin dir>:<inherited PATH>"` into the state root's
+  `config.toml` — lines shown first, file born `0600`, an existing PATH never rewritten (a
+  warning when it still cannot reach the binary) — and `draft::check` counts a configured PATH
+  as installed like a launch. The draft models moved: claude `sonnet` (the CLI alias, so the
+  draft tracks current), opencode `anthropic/claude-sonnet-5-5`; `gpt-5.3-codex` stays.
+- Measured: 55 wizard tests (terminal pick replaces the line prompt, non-terminal keeps it, in-use
+  group absent on an unreachable scratch core, PATH written once/never overwritten/warned, refused
+  writes nothing), picker state/filter/tree/fs/render suites incl. 100×30 and 60×20 text
+  snapshots and no-panic tiny sizes, 10 detect tests over fake dir trees and fake `$SHELL`, and a
+  draft test proving a configured PATH counts as installed.
+- Not verified: the picker's keys and look were exercised in a real popup only by the buffer
+  snapshots, not a live TTY; the login-shell probe is untested against a real nvm login; the
+  `runner_env` PATH write is proven against `draft::check` and the config parser, not a launched
+  role. One environmental flake seen: `clipboard::tests::missing_tool_is_unavailable_not_no_image`
+  fails on hosts with real `wl-paste`/`xclip`/`xsel` in `/usr/bin` (its stub PATH includes it) —
+  unrelated to this diff; the suite was green on the gating runs.
+
+
 ## S14b: the cline adapter (2026-11-17)
 
 - Done: `runners/cline.rs` plans and preps a Cline CLI 3.0.74 role — `cline -i --yolo -P cline-pass -m

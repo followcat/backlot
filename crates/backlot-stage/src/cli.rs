@@ -45,6 +45,7 @@ const COMMANDS: &[&str] = &[
     "hook",
     "hollywood",
     "card",
+    "runners",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
@@ -318,6 +319,8 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
         Cmd::Hollywood(..) | Cmd::Card(..) | Cmd::TellHollywood { .. } => {
             return crate::hwood::run(common, cmd, env);
         }
+        // `runners` is local detection only — no core, no ledger.
+        Cmd::Runners => return crate::runners::detect::report(env),
         _ => {}
     }
     let base = base(env, &common)?;

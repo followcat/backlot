@@ -8,27 +8,13 @@
 //! then the stage is offered. Nothing is written before the user
 //! accepts — a refused cast writes no studio at all.
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail, check_studio_name};
-use crate::commands;
+use crate::runners::detect::{self, Found};
 use crate::workareas;
-
-/// Runners the wizard drafts from, best first, with the model the
-/// draft assigns — the same check `runners::installed` answers.
-/// `cursor`, `devin` and `cmd` carry no effort flag (the cast rule).
-const PREFERENCE: &[(&str, &str)] = &[
-    ("devin", "swe-2-max"),
-    ("claude", "claude-sonnet-4-5"),
-    ("codex", "gpt-5.3-codex"),
-    ("cursor", "auto"),
-    ("opencode", "anthropic/claude-sonnet-4-5"),
-    ("cmd", "deepseek/deepseek-v4.1-flash"),
-    ("cline", "cline-pass/deepseek-v4.1-flash-1017"),
-    ("fake", "m"),
-];
 
 /// What the wizard still needs after the flags — `None` is asked
 /// for. The cast file, when given, skips the draft entirely.
@@ -42,6 +28,14 @@ pub(crate) struct WizardArgs {
 /// The `$VISUAL`/`$EDITOR` seam — the edited file stays where it is.
 type Edit<'a> = Box<dyn Fn(&Path) -> Result<(), String> + 'a>;
 
+/// The terminal picker's seam — the current directory in, the picked
+/// repository's absolute path out; `Err` the picker's refusal.
+type PickRepo<'a> = Box<dyn FnMut(&Path) -> Result<PathBuf, Fail> + 'a>;
+
+/// The runner detection seam (U5) — `detect::find`'s verdict for one
+/// runner name, `None` when nothing was found anywhere.
+type Detect<'a> = Box<dyn Fn(&str) -> Option<Found> + 'a>;
+
 /// Everything `run` does behind injected seams, so tests script the
 /// prompts and never spawn git, an editor or a runner probe.
 pub(crate) struct Io<'a> {
@@ -52,15 +46,70 @@ pub(crate) struct Io<'a> {
     /// `<dir>` is a git repository with at least one commit —
     /// `git -C <dir> rev-parse --verify HEAD` live.
     pub git_repo: Box<dyn Fn(&Path) -> bool + 'a>,
-    /// `runners::installed(runner, PATH)` — the runner probe.
+    /// `runners::installed(runner, PATH)` widened by detection —
+    /// a runner found anywhere counts, since the wizard writes the
+    /// PATH its launch needs (U5).
     pub installed: Box<dyn Fn(&str) -> bool + 'a>,
+    /// `detect::find` — the draft's runners block and the
+    /// `runner_env` PATH write's verdict per runner.
+    pub detect: Detect<'a>,
     /// `$VISUAL`/`$EDITOR <file>` — the edited file stays where it is.
     pub edit: Edit<'a>,
+    /// The terminal repository picker — `Some` only when the
+    /// wizard's stdin and stdout are both a terminal (U5). The
+    /// repository question goes through it instead of `ask`; it
+    /// answers the picked absolute path, `Err` the picker's own
+    /// refusal — "cancelled" for Esc/Ctrl+C.
+    pub pick_repo: Option<PickRepo<'a>>,
+}
+
+/// The "repositories in use" group for the picker (U5): each live
+/// terminal's cwd walked up to its repository root, deduplicated.
+/// The core unreachable, `terminal.list` failing — the group is
+/// simply absent, never an error.
+pub(crate) fn in_use(env: &Env, common: &Common) -> Vec<PathBuf> {
+    let Ok(rt) = crate::link::runtime() else {
+        return Vec::new();
+    };
+    let fetch = async {
+        let link = crate::link::connect(
+            env,
+            common.session.as_deref().map(std::ffi::OsStr::new),
+            common.remote.as_deref(),
+        )
+        .await
+        .ok()?;
+        link.client
+            .terminal_list(hc_proto::terminal::ListParams::default())
+            .await
+            .ok()
+    };
+    let Some(list) = rt.block_on(fetch) else {
+        return Vec::new();
+    };
+    crate::wizard_picker::in_use::collect(
+        list.terminals
+            .into_iter()
+            .map(|t| PathBuf::from(t.cwd))
+            .collect(),
+        &|p| p.join(".git").exists(),
+    )
 }
 
 /// The real seams: git for the default probe, `runners::installed`
 /// for the draft, `$VISUAL`/`$EDITOR` for the edit.
-fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env) -> Io<'a> {
+fn real_io<'a>(
+    input: &'a mut dyn BufRead,
+    out: &'a mut dyn Write,
+    env: &'a Env,
+    common: &Common,
+) -> Io<'a> {
+    let pick_env = Env {
+        vars: env.vars.clone(),
+    };
+    let pick_common = common.clone();
+    let detect_scope = detect::scope(env);
+    let installed_scope = detect::scope(env);
     Io {
         input,
         out,
@@ -78,7 +127,23 @@ fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env)
             .code
                 == 0
         }),
-        installed: Box::new(move |runner| crate::runners::installed(runner, env.get("PATH"))),
+        installed: Box::new(move |runner| {
+            crate::runners::installed(runner, env.get("PATH"))
+                || detect::find(runner, &installed_scope).is_some()
+        }),
+        detect: Box::new(move |runner| detect::find(runner, &detect_scope)),
+        pick_repo: (std::io::stdin().is_terminal() && std::io::stdout().is_terminal()).then(
+            move || -> PickRepo {
+                Box::new(move |start| {
+                    let in_use = in_use(&pick_env, &pick_common);
+                    match crate::wizard_picker::pick(start, in_use) {
+                        Ok(Some(path)) => Ok(path),
+                        Ok(None) => Err(Fail::refused("cancelled")),
+                        Err(e) => Err(Fail::refused(format!("picker: {e}"))),
+                    }
+                })
+            },
+        ),
         edit: Box::new(|file| {
             let editor = std::env::var("VISUAL")
                 .ok()
@@ -105,7 +170,7 @@ fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env)
 pub(crate) fn run(common: Common, args: WizardArgs, env: &Env) -> Result<String, Fail> {
     let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
-    let mut io = real_io(&mut input, &mut out, env);
+    let mut io = real_io(&mut input, &mut out, env, &common);
     run_io(common, args, env, &mut io)
 }
 
@@ -131,8 +196,15 @@ pub(crate) fn run_io(
         Some(repo) => repo,
         None => {
             let cwd = std::env::current_dir().map_err(|e| Fail::refused(e.to_string()))?;
-            let default = (io.git_repo)(&cwd).then(|| cwd.to_string_lossy().into_owned());
-            repo_answer(ask(io, "repository", default.as_deref())?)?
+            match io.pick_repo.as_mut() {
+                // On a terminal the picker answers the question —
+                // the line prompt stays for scripts and pipes.
+                Some(pick) => repo_answer(pick(&cwd)?.to_string_lossy().into_owned())?,
+                None => {
+                    let default = (io.git_repo)(&cwd).then(|| cwd.to_string_lossy().into_owned());
+                    repo_answer(ask(io, "repository", default.as_deref())?)?
+                }
+            }
         }
     };
     let id = match common.studio.clone() {
@@ -158,12 +230,18 @@ pub(crate) fn run_io(
     };
     let (cast_file, drafted) = match args.cast_file {
         Some(file) => (file, false),
-        None => (cast_draft(io)?, true),
+        None => (crate::wizard_cast::cast_draft(io, env)?, true),
     };
     // Every check `studio new` runs — same messages — before the
     // write is even offered. Nothing exists before this point but
     // the answers and the draft's temporary file.
     let base = crate::cli::base(env, &common)?;
+    // U5: the accepted draft's runners that only detection could
+    // reach get their `[runner_env]` PATH before the draft check —
+    // the check counts it as installed like a launch would.
+    if drafted {
+        crate::wizard_paths::runner_paths(io, &base, &cast_file, env)?;
+    }
     let written = (|| -> Result<String, Fail> {
         crate::draft::check(&base, &id, &repo, &cast_file, env)?;
         crate::cli::exec_event(
@@ -200,7 +278,7 @@ pub(crate) fn run_io(
 /// `name [default]: ` on `out`, the trimmed answer back — the
 /// default on an empty line, re-asked while empty with no default;
 /// EOF refuses.
-fn ask(io: &mut Io, what: &str, default: Option<&str>) -> Result<String, Fail> {
+pub(crate) fn ask(io: &mut Io, what: &str, default: Option<&str>) -> Result<String, Fail> {
     loop {
         match default {
             Some(d) => write!(io.out, "{what} [{d}]: ").map_err(io_fail)?,
@@ -246,120 +324,6 @@ fn default_id(repo: &str) -> Option<String> {
     crate::cli::valid_studio_name(id).then(|| id.to_string())
 }
 
-/// The drafted cast: the first installed runner seats every fixed
-/// role and both candidates, with its draft model — `cursor`,
-/// `devin` and `cmd` take no effort (the cast rule).
-fn draft_text(io: &Io) -> Result<String, Fail> {
-    let Some((runner, model)) = PREFERENCE.iter().find(|(r, _)| (io.installed)(r)) else {
-        return Err(Fail::refused(
-            "no supported runner is installed — the wizard cannot draft a cast",
-        ));
-    };
-    let effort = |runner: &str| {
-        if matches!(runner, "cursor" | "devin" | "cmd") {
-            String::new()
-        } else {
-            "effort = \"medium\"\n".to_string()
-        }
-    };
-    let role = |runner: &str, model: &str| {
-        format!(
-            "runner = \"{runner}\"\nmodel = \"{model}\"\n{}\
-             permission_profile = \"standard\"",
-            effort(runner)
-        )
-    };
-    Ok(format!(
-        "# Drafted by `backlot studio new --interactive` — edit or accept as is.\n\
-         \n\
-         [producer]\n{}\n\n\
-         [director]\n{}\n\n\
-         [writer]\n{}\n\n\
-         [[candidates]]\nname = \"actor-a\"\n{}\n\n\
-         [[candidates]]\nname = \"actor-b\"\n{}\n",
-        role(runner, model),
-        role(runner, model),
-        role(runner, model),
-        role(runner, model),
-        role(runner, model),
-    ))
-}
-
-/// The draft's file: `backlot-cast-<pid>-<n>.toml` at the first
-/// free number, `create_new` so a planted or leaked file is never
-/// truncated and a planted symlink never followed — a cast draft is
-/// owner-only, mode `0600`.
-pub(crate) fn create_draft(dir: &Path, text: &str) -> Result<PathBuf, Fail> {
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    for n in 0..16u32 {
-        let path = dir.join(format!("backlot-cast-{}-{n}.toml", std::process::id()));
-        match opts.open(&path) {
-            Ok(mut file) => {
-                file.write_all(text.as_bytes())
-                    .map_err(|e| Fail::refused(format!("draft: {e}")))?;
-                return Ok(path);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(Fail::refused(format!("draft: {e}"))),
-        }
-    }
-    Err(Fail::refused(
-        "draft: no free backlot-cast-* name left in the temp directory",
-    ))
-}
-
-/// The cast step: draft, show, `accept`/`edit`/`refuse` — the file
-/// the checks and the write read is a temporary one; `refuse`
-/// writes nothing anywhere.
-fn cast_draft(io: &mut Io) -> Result<PathBuf, Fail> {
-    let mut text = draft_text(io)?;
-    // The file is born only when the draft is accepted or the
-    // editor needs it — a refused cast writes nothing anywhere.
-    let mut path: Option<PathBuf> = None;
-    loop {
-        writeln!(io.out, "\n{text}").map_err(io_fail)?;
-        match ask(io, "cast [accept/edit/refuse]", Some("a"))?.as_str() {
-            a if a.eq_ignore_ascii_case("a") || a.eq_ignore_ascii_case("accept") => {
-                return match path {
-                    // The editor's file already holds `text`.
-                    Some(path) => Ok(path),
-                    None => create_draft(&std::env::temp_dir(), &text),
-                };
-            }
-            r if r.eq_ignore_ascii_case("r") || r.eq_ignore_ascii_case("refuse") => {
-                return Err(Fail::refused("cast refused — nothing written"));
-            }
-            _ => {
-                if path.is_none() {
-                    path = Some(create_draft(&std::env::temp_dir(), &text)?);
-                }
-                let file = path.as_ref().expect("created above");
-                match (io.edit)(file) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        writeln!(io.out, "{e}").map_err(io_fail)?;
-                        continue;
-                    }
-                }
-                text = std::fs::read_to_string(file)
-                    .map_err(|e| Fail::refused(format!("draft: {e}")))?;
-                // An edit that does not parse is shown and asked
-                // again — the cast checks are `studio new`'s own.
-                if let Err(e) = commands::read_cast(file) {
-                    writeln!(io.out, "{}", e.message()).map_err(io_fail)?;
-                    continue;
-                }
-            }
-        }
-    }
-}
-
-fn io_fail(e: std::io::Error) -> Fail {
+pub(crate) fn io_fail(e: std::io::Error) -> Fail {
     Fail::refused(format!("interactive: {e}"))
 }

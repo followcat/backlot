@@ -45,12 +45,15 @@ name = "backlot-stage"
 version = "0.2.1"
 dependencies = [
  "backlot-model",
+ "crossterm",
  "hc-proto",
  "libc",
+ "ratatui",
  "serde",
  "serde_json",
  "tokio",
  "toml 1.2.0+spec-1.1.0",
+ "unicode-width",
 ]
 
 [[package]]

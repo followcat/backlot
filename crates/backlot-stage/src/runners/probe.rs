@@ -3,7 +3,7 @@
 //! launch file this shell can run (`installed`) — `fake`'s script in
 //! `tools/`, every other runner's program on PATH.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::tools_dir;
 
@@ -18,7 +18,7 @@ pub fn supported(runner: &str) -> bool {
 
 /// The program the runner's argv leads with — `None` for `fake`,
 /// whose script ships in `tools/` instead of on PATH.
-fn launch_program(runner: &str) -> Option<&'static str> {
+pub(crate) fn launch_program(runner: &str) -> Option<&'static str> {
     match runner {
         "claude" => Some("claude"),
         "codex" => Some("codex"),
@@ -34,7 +34,7 @@ fn launch_program(runner: &str) -> Option<&'static str> {
 
 /// An executable regular file — the executable bit on unix, a plain
 /// file elsewhere.
-fn executable(f: &Path) -> bool {
+pub(crate) fn executable(f: &Path) -> bool {
     if !f.is_file() {
         return false;
     }
@@ -51,14 +51,19 @@ fn executable(f: &Path) -> bool {
     }
 }
 
+/// `name`'s first executable file on `path` (the PATH value) — the
+/// directory order kept, like the shell's own search.
+pub(crate) fn find_on_path(name: &str, path: Option<&str>) -> Option<PathBuf> {
+    path?
+        .split(':')
+        .filter(|dir| !dir.is_empty())
+        .map(|dir| Path::new(dir).join(name))
+        .find(|f| executable(f))
+}
+
 /// `name` resolves to an executable file on `path` (the PATH value).
 fn on_path(name: &str, path: Option<&str>) -> bool {
-    let Some(path) = path else {
-        return false;
-    };
-    path.split(':')
-        .filter(|dir| !dir.is_empty())
-        .any(|dir| executable(&Path::new(dir).join(name)))
+    find_on_path(name, path).is_some()
 }
 
 /// The runner's launch file exists: `fake`'s tools script, every

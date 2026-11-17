@@ -139,6 +139,8 @@ pub enum Cmd {
     StageWatch {
         target: Option<String>,
     },
+    /// `backlot runners` — the detector's table (U5), read-only.
+    Runners,
     /// `backlot hollywood propose|report` — Hollywood's own ledger.
     Hollywood(HollywoodCmd),
     /// `backlot card list|apply|cancel` — the card gate (D17a).
@@ -182,6 +184,7 @@ pub(crate) const U_CORRECT: &str =
 pub(crate) const U_STATUS: &str = "usage: backlot status [--studio <name>] [--all] [--json]";
 pub(crate) const U_RECORDS: &str = "usage: backlot records [--studio <name>] [--all] [--json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>]";
+pub(crate) const U_RUNNERS: &str = "usage: backlot runners";
 
 pub(crate) fn usage(msg: impl Into<String>, u: &'static str) -> Fail {
     Fail::usage(format!("{}\n{}\n{}", msg.into(), u, COMMON))
@@ -389,6 +392,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 _ => Err(usage(format!("unknown stage subcommand '{sub}'"), U_STAGE)),
             }
         }
+        "runners" => args_studio::common_only(&mut common, &mut it, U_RUNNERS, Cmd::Runners),
         other => Err(usage(format!("unknown command '{other}'"), U_STATUS)),
     }
 }

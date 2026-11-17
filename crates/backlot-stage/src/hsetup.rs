@@ -118,7 +118,7 @@ pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<
     }
     if !crate::runners::supported(&cfg.runner) {
         return Err(Fail::refused(format!(
-            "runner '{}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd)",
+            "runner '{}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline)",
             cfg.runner
         )));
     }

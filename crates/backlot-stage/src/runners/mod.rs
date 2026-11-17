@@ -12,6 +12,8 @@ mod cline_hook_awk;
 pub mod cmd;
 mod codex;
 pub mod cursor;
+pub mod detect;
+mod detect_report;
 mod devin;
 mod fake;
 pub mod opencode;
@@ -19,6 +21,7 @@ mod probe;
 pub(crate) mod splice;
 pub(crate) mod work;
 
+pub(crate) use probe::find_on_path;
 pub use probe::{installed, supported};
 pub(crate) use work::work_state;
 
@@ -392,5 +395,7 @@ mod cmd_tests;
 mod cursor_tests;
 #[cfg(test)]
 mod decision_tests;
+#[cfg(test)]
+mod detect_tests;
 #[cfg(test)]
 mod work_tests;
