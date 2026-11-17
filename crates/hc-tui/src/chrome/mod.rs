@@ -21,6 +21,7 @@ pub mod navigate;
 pub(crate) mod navigator;
 pub(crate) mod navigator_render;
 pub(crate) mod notice_render;
+pub(crate) mod overlay;
 pub mod palette;
 pub mod panes;
 pub mod panes_draw;

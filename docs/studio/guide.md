@@ -147,6 +147,13 @@ then reads the ledger and starts the producer and the director as `bl-acme-shop-
 for its task (`bl-acme-shop-t1`). Role terminals are ordinary `hc` terminals: each studio is its
 own space in the client with its people as tabs, and `hc ls` lists them all.
 
+On a remote core (`--remote <target>`) the stage terminal runs on **that host**, so `backlot` must
+be installed there. `stage start` uses the host's own `backlot` from its `PATH`, with `--session`
+alone — this machine's executable path, `--remote` and `BACKLOT_STATE_DIR` mean nothing there. If
+the host has no `backlot`, the start fails and names the target and the fix: install it there with
+`curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | BACKLOT_SKIP_CORE=1 sh`,
+or run `backlot` on that host.
+
 The stage has no heartbeat of its own — `backlot stage watch` is the external watchdog:
 
 ```sh

@@ -28,13 +28,16 @@ fn app_with_config(config: &hc_tui::config::Config) -> (App, Arc<Probe>) {
         std::path::PathBuf::new(),
     );
     let probe = Arc::new(Probe::default());
-    let app = App::new(
+    let mut app = App::new(
         watcher,
         Arc::new(|_| Box::pin(std::future::pending())),
         config.live_keybinds(),
         shell,
         probe.clone(),
     );
+    // The opening page is not what these loop tests measure: dismiss
+    // it (and its one-time animation) as Esc would.
+    app.dismiss_opening();
     (app, probe)
 }
 
@@ -329,6 +332,9 @@ async fn off_tab_observer_output_and_closed_replies_do_not_trigger_redraws() {
         shell,
         probe.clone(),
     );
+    // Idle draws here must be the shell's, not the opening page's
+    // one-time animation.
+    app.dismiss_opening();
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let (ui_tx, mut ui) = mpsc::channel(8);
     let (reply_tx, mut replies) = mpsc::channel(1);

@@ -140,6 +140,8 @@ pub(crate) fn render_notification_card(
             buffer,
         );
     }
+    // The release-notes card must be opaque in backlot's own look.
+    super::overlay::fill_default_bg(buffer, rect, palette);
     rect
 }
 
@@ -205,4 +207,38 @@ pub(crate) fn render_mobile_notification_banner(
         offset_for_warning,
         palette,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The release-notes card (`Update available` …) is an overlay over
+    /// the panes: in backlot's own look every cell inside its frame is
+    /// opaque, so the terminal behind never shows through.
+    #[test]
+    fn the_release_notes_card_is_opaque_in_the_backlot_theme() {
+        let area = Rect::new(0, 0, 60, 20);
+        let mut buffer = Buffer::empty(area);
+        let rect = render_notification_card(
+            &mut buffer,
+            area,
+            "Update available",
+            "backlot v9.9.9 is out — run: backlot --upgrade",
+            ToastHerdrPosition::TopRight,
+            1,
+            Color::Red,
+            &Palette::backlot(),
+        );
+        assert!(!rect.is_empty());
+        for y in rect.y..rect.bottom() {
+            for x in rect.x..rect.right() {
+                assert_ne!(
+                    buffer[(x, y)].bg,
+                    Color::Reset,
+                    "see-through release card cell at {x},{y}"
+                );
+            }
+        }
+    }
 }

@@ -615,6 +615,9 @@ impl App {
                 .render(header, buf);
             Clear.render(surface, buf);
             super::draw::draw_terminal(&mut peek.pane, surface, buf, now, true);
+            // A default-background cell must not open a window onto the
+            // terminal behind the popup in backlot's own look.
+            crate::chrome::overlay::fill_default_bg(buf, surface, palette);
             // The peek surface is composed into the rebuilt ratatui
             // frame: its extended underline bits drop too.
             for cell in &mut buf.content {
@@ -674,6 +677,10 @@ impl App {
         // exactly the surface area and keep the panel fill outside it.
         Clear.render(surface, buf);
         let wish = super::draw::draw_terminal(&mut popup.pane, surface, buf, now, false);
+        // The popup's terminal cells keep their real backgrounds; the
+        // default-background ones are filled in backlot's own look, so
+        // the wizard is never see-through.
+        crate::chrome::overlay::fill_default_bg(buf, surface, palette);
         // The popup's VT cells went through the same ratatui rebuild in
         // the reference — extended underline bits collapse to single.
         for cell in &mut buf.content {

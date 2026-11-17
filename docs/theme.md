@@ -3,6 +3,12 @@
 backlot has a look of its own, so you can tell it from hc-tui and Herdr at a glance: the built-in `backlot` theme,
 marquee gold on midnight blue with cream text. It is the default.
 
+The backlot theme is opaque: its sidebar is a step darker than the panes with a one-column rule where it meets
+them, and its overlays — popups, the wizard, notice and release cards, the Hollywood layer — fill their
+default-background cells with the panel colour. A translucent terminal therefore never shows the window behind
+the UI. With `[theme] source = "herdr"` (or any built-in Herdr theme) the reference look is unchanged, translucency
+included.
+
 The theme is read from backlot's own config, `~/.config/backlot/config.toml` (`$XDG_CONFIG_HOME/backlot/config.toml`
 when that is set), not from your Herdr config. With no `[theme]` table there, or no file, you get `backlot`.
 

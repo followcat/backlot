@@ -1,10 +1,15 @@
-//! The opening page (U2): what backlot shows in the pane area while
+//! The opening page (U2/U4): what backlot shows in the pane area while
 //! no studio exists — no `backlot` document, or a good one with zero
-//! studios — and while `new_workspace` has called it up. A welcome
-//! screen: what backlot is in one line, the actions with their keys,
-//! and a dim pointer to `backlot --plain`. Palette colours only,
-//! centred, readable at 40 columns. The keys it owns live in
-//! `app/opening.rs`; the state is memory only — nothing is stored.
+//! studios — and while `new_workspace` has called it up. A film-strip
+//! title card: sprocket rows, a double frame lit like a screen, the
+//! block title, a tagline and the actions with their keys. Palette
+//! colours only, centred, readable down to 40 columns. The keys it
+//! owns live in `app/opening.rs`; the state is memory only.
+//!
+//! The card and its fallbacks live in `opening/card.rs`; the plain
+//! layout the ladder ends on is here.
+
+use std::time::Duration;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -14,6 +19,14 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 
+mod card;
+
+/// One animation frame of the one-time opening run.
+pub(crate) const FRAME: Duration = Duration::from_millis(80);
+/// Frames in the run (15 × 80 ms ≈ 1.2 s); the last frame is the
+/// static page.
+pub(crate) const OPENING_FRAMES: u8 = 15;
+
 /// The client-local page state: Esc dismisses for the session,
 /// `new_workspace` brings it back. Nothing is stored.
 #[derive(Debug, Default)]
@@ -22,6 +35,18 @@ pub(crate) struct Opening {
     pub dismissed: bool,
     /// `new_workspace` asked for the page even over a live studio.
     pub forced: bool,
+    /// The one-time animation: `done` after it played (or was left),
+    /// so it never replays on a resize, Esc or any later redraw.
+    pub anim: Anim,
+}
+
+/// How far the one-time opening animation has come.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct Anim {
+    /// The frame being drawn, 0-based.
+    pub frame: u8,
+    /// The run finished — or the page was left before it did.
+    pub done: bool,
 }
 
 /// What the page needs from the app, so tests can draw it without
@@ -35,13 +60,13 @@ pub(crate) struct OpeningOpts {
 }
 
 /// One action row's key and label.
-struct Action {
-    key: &'static str,
-    label: &'static str,
+pub(super) struct Action {
+    pub(super) key: &'static str,
+    pub(super) label: &'static str,
 }
 
 /// The rows for `opts`, in page order.
-fn actions(opts: &OpeningOpts) -> Vec<Action> {
+pub(super) fn actions(opts: &OpeningOpts) -> Vec<Action> {
     let mut rows = vec![Action {
         key: "n",
         label: "New studio",
@@ -65,36 +90,41 @@ fn actions(opts: &OpeningOpts) -> Vec<Action> {
     rows
 }
 
-/// The one-line description — fits 40 columns.
-const TAGLINE: &str = "a film studio for coding agents";
-/// The dim last line — names the plain multiplexer. Secondary text:
-/// `surface_dim` is a separator colour a step off the panel
-/// background, so it drew this line nearly invisible.
-const PLAIN_HINT: &str = "backlot --plain — a plain multiplexer";
+/// The one-line description.
+pub(super) const TAGLINE: &str = "a film studio for coding agents";
+/// The dim last line — names the plain multiplexer.
+pub(super) const PLAIN_HINT: &str = "backlot --plain — a plain multiplexer";
 
-/// Paint the page over `area` (the pane surface). Content keeps to a
-/// ~40-column block, centred horizontally and vertically; narrower
-/// frames clip lines on the right, never panic.
+/// Paint the page over `area` (the pane surface). `frame` is the
+/// one-time animation's frame, or `None` for the static page.
 pub(crate) fn render_opening(
     buffer: &mut Buffer,
     area: Rect,
     palette: &Palette,
     opts: OpeningOpts,
+    frame: Option<u8>,
 ) {
     if area.is_empty() {
         return;
     }
     buffer.set_style(area, Style::default().bg(palette.panel_bg));
+    if card::render(buffer, area, palette, &opts, frame) {
+        return;
+    }
+    render_plain(buffer, area, palette, &opts);
+}
 
-    let rows = actions(&opts);
+/// Today's plain layout — the ladder's last fallback, and what a
+/// one-cell area gets: tagline, actions, dim hint. Narrow frames clip
+/// lines on the right, never panic.
+fn render_plain(buffer: &mut Buffer, area: Rect, palette: &Palette, opts: &OpeningOpts) {
+    let rows = actions(opts);
     let key_col = rows.iter().map(|a| a.key.len()).max().unwrap_or(1) as u16;
     let label_max = rows
         .iter()
         .map(|a| display_width(a.label) as u16)
         .max()
         .unwrap_or(0);
-    // Block width: the longest row the page can show, capped at 40
-    // columns of content so a wide frame keeps it a page, not a span.
     let block = (display_width(PLAIN_HINT) as u16)
         .max(key_col + 2 + label_max)
         .min(40)
@@ -111,7 +141,6 @@ pub(crate) fn render_opening(
         &truncate_end(TAGLINE, block as usize),
         Style::default().fg(palette.subtext0),
     );
-    let rows = actions(&opts);
     for (i, action) in rows.iter().enumerate() {
         let row = y + 2 + i as u16;
         if row >= area.bottom() {

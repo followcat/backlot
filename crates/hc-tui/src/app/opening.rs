@@ -67,6 +67,58 @@ impl App {
         self.opening.forced = !self.studioless();
     }
 
+    // ---------- the one-time animation ----------
+
+    /// The frame to paint this draw. The run starts on the page's
+    /// first draw and never restarts: after it played — or the page
+    /// was left — this answers `None`, the static page.
+    pub(crate) fn opening_frame(&mut self) -> Option<u8> {
+        (!self.opening.anim.done).then_some(self.opening.anim.frame)
+    }
+
+    /// Arm the next frame while the run is live; an idle page arms
+    /// nothing, so the client parks on real events.
+    pub(crate) fn arm_opening_anim(&mut self, now: std::time::Instant) {
+        if self.opening.anim.done {
+            self.opening_anim_deadline = None;
+        } else {
+            self.opening_anim_deadline
+                .get_or_insert(now + crate::opening::FRAME);
+        }
+    }
+
+    /// The frame deadline fired: advance, or finish on the last frame.
+    /// The draw after it re-arms only while frames remain.
+    pub(crate) fn tick_opening(&mut self, now: std::time::Instant) {
+        if !self.opening_anim_deadline.is_some_and(|due| due <= now) {
+            return;
+        }
+        self.opening_anim_deadline = None;
+        let anim = &mut self.opening.anim;
+        if anim.frame + 1 >= crate::opening::OPENING_FRAMES - 1 {
+            anim.frame = crate::opening::OPENING_FRAMES - 1;
+            anim.done = true;
+        } else {
+            anim.frame += 1;
+        }
+        self.sched.mark_dirty(now);
+    }
+
+    /// Esc, and embedders that draw their own opening frame: hide the
+    /// page for this client session and finish its one-time run.
+    pub fn dismiss_opening(&mut self) {
+        self.opening.dismissed = true;
+        self.opening.forced = false;
+        self.opening_finish_anim();
+    }
+
+    /// Leaving the page before the run ends finishes it: no resize,
+    /// Esc-and-back or later redraw ever replays it.
+    pub(crate) fn opening_finish_anim(&mut self) {
+        self.opening.anim.done = true;
+        self.opening_anim_deadline = None;
+    }
+
     /// A key while the page is up. It owns every key like the focused
     /// panel does — the studio keys, the panel chord and Hollywood's
     /// toggle already took theirs in routing; only the page's own
@@ -74,8 +126,9 @@ impl App {
     pub(crate) fn opening_key(&mut self, key: &TerminalKey) {
         match key.input.key {
             Key::Escape => {
-                self.opening.dismissed = true;
-                self.opening.forced = false;
+                // Leaving finishes the one-time run: returning to the
+                // page later shows it static.
+                self.dismiss_opening();
             }
             Key::Char('n') if key.input.mods == hc_vt::Mods::NONE => self.opening_new_studio(),
             Key::Char('h') if key.input.mods == hc_vt::Mods::NONE => {

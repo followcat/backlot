@@ -109,6 +109,11 @@ does not depend on either.
 The panel reads the stage's document through the local watcher's `local_documents` — remote
 machines never carry it, so a studio running on a remote core shows nothing in the panel.
 
+A remote studio needs `backlot` installed on the core's host: `stage start` runs that host's own
+binary from its `PATH`, with `--session` alone, because the stage terminal lives there. A missing
+binary is reported with the target and the one-line install; it leaves no `backlot-stage`
+terminal behind. This path is unit-tested only — no test has driven a real remote host.
+
 ## After an hc restart
 
 The person starts the stage again with `backlot stage start` — the core never re-runs the
