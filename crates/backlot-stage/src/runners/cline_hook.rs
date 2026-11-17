@@ -145,6 +145,9 @@ if [ "$name" = run_commands ]; then
     list=$(printf '%s' "$body" | awk 'BEGIN { RS = "\"" } NR % 2 == 0 { print }')
     bad=
     old=$IFS
+    # No globbing: a `*` in a command must reach the rule test as a
+    # character, not expand against the worktree.
+    set -f
     IFS='
 '
     for one in $list; do
@@ -160,6 +163,7 @@ if [ "$name" = run_commands ]; then
             rule_allowed "$seg" || bad=$seg
         done
     done
+    set +f
     IFS=$old
     [ -z "$bad" ] || deny "$name" command "$bad"
     first=$(printf '%s' "$list" | head -n 1)
@@ -172,12 +176,14 @@ if [ "$name" = read_files ]; then
     [ -n "$paths" ] || deny "$name" tool ""
     bad=
     old=$IFS
+    set -f
     IFS='
 '
     for path in $paths; do
         case "$path" in ''|*..*) bad=$path; continue ;; esac
         secret_path "$path" && bad=$path
     done
+    set +f
     IFS=$old
     [ -z "$bad" ] || deny "$name" path "$bad"
     first=$(printf '%s' "$paths" | head -n 1)

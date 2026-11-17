@@ -244,6 +244,22 @@ fn the_signals_hold_no_file_contents() {
     assert!(line["ts_ms"].as_u64().is_some(), "{line}");
 }
 
+/// A `*` in a command reaches the rule test as a character: globbing
+/// is off, so a pattern never expands against the worktree into other
+/// words the rules were never asked about.
+#[test]
+fn a_glob_stays_a_character() {
+    let dir = tmp("glob");
+    // `backlot` is allowed with any arguments, `git status` too.
+    for cmd in ["backlot tell producer --file *", "git status *.txt"] {
+        let (cancel, _, signals) = run(&dir, &commands(&[cmd]));
+        assert!(!cancel, "{cmd}: {signals}");
+    }
+    // And a glob cannot smuggle a second command in.
+    let (cancel, _, _) = run(&dir, &commands(&["backlot * && rm -rf /home/user"]));
+    assert!(cancel);
+}
+
 /// The recorded target is bounded: a long command is cut to
 /// `TARGET_CAP` characters and the line stays valid JSON.
 #[test]
