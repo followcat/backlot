@@ -270,3 +270,48 @@ async fn collapsed_toggle_takes_the_update_colour() {
     let (_, _, plain) = find_cell(&backend, "»").expect("the collapsed toggle is missing");
     assert_eq!(plain, app.shell.palette.overlay0);
 }
+
+#[tokio::test]
+async fn a_newer_release_re_arms_the_badge_and_the_toast_after_a_skip() {
+    let mut app = app();
+    let state = crate::update_state::UpdateCheckState {
+        skipped_version: Some("9.9.9".into()),
+        seen_toast_version: Some("9.9.9".into()),
+        ..crate::update_state::UpdateCheckState::default()
+    };
+    app.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.10".into()),
+        state,
+        path: None,
+    }));
+    assert_eq!(
+        app.update_ready_version(),
+        Some("9.9.10"),
+        "a newer release shows again"
+    );
+    assert!(app.notice.is_some(), "and toasts once");
+}
+
+#[tokio::test]
+async fn the_toast_fires_once_across_two_starts() {
+    let dir = std::env::temp_dir().join(format!("hctui-toast-starts-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("update-check.json");
+    let mut first = app();
+    first.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state: crate::update_state::UpdateCheckState::default(),
+        path: Some(path.clone()),
+    }));
+    assert!(first.notice.is_some(), "the first start toasts");
+    let state = crate::update_state::load(&path);
+    assert_eq!(state.seen_toast_version.as_deref(), Some("9.9.9"));
+    let mut second = app();
+    second.on_update_check(Some(crate::update_check::CheckReport {
+        latest: Some("9.9.9".into()),
+        state,
+        path: Some(path),
+    }));
+    assert!(second.notice.is_none(), "the second start stays quiet");
+    let _ = std::fs::remove_dir_all(&dir);
+}
