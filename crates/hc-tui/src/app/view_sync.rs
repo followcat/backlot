@@ -72,6 +72,9 @@ impl App {
     /// Everything `on_view` does after the view lands — split out so
     /// tests can publish a synthetic `self.view` through the same path.
     pub(super) fn reconcile_published_view(&mut self) {
+        // U7: the entry decision reads the publish — settle it first so
+        // the card and the layer are judged against this view.
+        self.settle_opening(Instant::now());
         self.fence_chrome_core();
         self.follow_shared_focus();
         // The dead pane's context survives the reprojection for the

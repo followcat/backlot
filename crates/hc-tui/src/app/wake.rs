@@ -117,6 +117,7 @@ impl App {
             .chain(self.selection_highlight_clear_deadline)
             .chain(self.panel_anim_deadline)
             .chain(self.opening_anim_deadline)
+            .chain(self.opening.cap)
             .chain(self.copy_feedback_deadline)
             .min()
     }
@@ -176,6 +177,7 @@ impl App {
             dirty |= self.expire_notice(now);
             dirty |= self.tick_notifications(now);
             self.tick_panel(now);
+            self.settle_opening(now);
             self.tick_opening(now);
             dirty |= self.tick_selection(now) | self.tick_copy_feedback(now);
             if self.next_tab_status.is_some_and(|due| now >= due) {

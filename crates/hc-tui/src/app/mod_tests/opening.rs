@@ -51,14 +51,124 @@ fn one_studio() -> serde_json::Value {
     })
 }
 
-/// A focused plain terminal, no `backlot` document — the start
-/// state of a first run.
+/// Write the `backlot` document slot with `value`, `fetching` as the
+/// watcher would while the read is still on the wire.
+fn put_document(app: &mut App, value: serde_json::Value, fetching: bool) {
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            fetching,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+}
+
+/// A focused terminal on a core whose first read landed with an
+/// unwritten document — the start state of a first run, and the card.
 fn no_doc_app() -> App {
+    let mut app = app_with(&["t1"]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    put_document(&mut app, serde_json::Value::Null, false);
+    app
+}
+
+/// A core that has not answered the first read at all: no document
+/// slot, so nothing is known yet.
+fn blank_app() -> App {
     let mut app = app_with(&["t1"]);
     app.set_plain(false);
     app.focused = Some("t1".into());
     app.reconcile_published_view();
     app
+}
+
+/// The same, with the read still on the wire carrying `value`.
+fn reading_app(value: serde_json::Value) -> App {
+    let mut app = app_with(&["t1", "t2"]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    put_document(&mut app, value, true);
+    app
+}
+
+// ---------- the entry wait (U7) ----------
+
+#[tokio::test]
+async fn nothing_draws_while_the_first_read_is_on_the_wire() {
+    // The read carries an unwritten document: it is the gate alone
+    // that keeps the card back.
+    let mut app = reading_app(serde_json::Value::Null);
+    assert!(!app.opening.ready(), "the read has not landed");
+    assert!(!app.opening_visible());
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(!text.contains("New studio"), "{text}");
+    // The one-time run never started, so it never flashes.
+    assert!(app.opening_anim_deadline.is_none(), "the run armed");
+    assert!(!app.opening.anim.done, "the run was left before it played");
+    // The read lands with no studios: the card shows and the run
+    // starts from its first frame.
+    put_document(&mut app, serde_json::Value::Null, false);
+    assert!(app.opening_visible());
+    assert_eq!(app.opening_frame(), Some(0));
+}
+
+#[tokio::test]
+async fn the_layer_waits_for_the_read_too() {
+    let mut app = reading_app(one_studio());
+    app.set_hollywood(
+        Ok(Some(backlot_stage::config::HollywoodCfg {
+            runner: "fake".into(),
+            model: "m".into(),
+            effort: None,
+            key: None,
+            default_cast: None,
+        })),
+        std::path::Path::new("/tmp/x"),
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(!text.contains("hollywood"), "{text}");
+    // The read lands: the layer is judged now.
+    put_document(&mut app, one_studio(), false);
+    assert!(app.opening.ready());
+}
+
+#[tokio::test]
+async fn the_two_second_cap_shows_the_card() {
+    use std::time::Duration;
+    let mut app = blank_app();
+    let t0 = std::time::Instant::now();
+    app.settle_opening(t0);
+    assert!(!app.opening_visible(), "the cap has not passed");
+    app.settle_opening(t0 + Duration::from_millis(1_999));
+    assert!(!app.opening_visible());
+    app.settle_opening(t0 + crate::opening::SETTLE_CAP);
+    assert!(app.opening_visible(), "judge with what is there");
+    assert!(app.opening.cap.is_none(), "the wait left no timer");
+}
+
+#[tokio::test]
+async fn a_settled_read_with_no_studios_shows_the_card() {
+    let mut app = reading_app(serde_json::Value::Null);
+    assert!(!app.opening_visible());
+    put_document(&mut app, serde_json::Value::Null, false);
+    assert!(app.opening_visible());
+    let text = screen_lines(&draw_to(&mut app, 80, 24)).join("\n");
+    assert!(text.contains("New studio"), "{text}");
+}
+
+#[tokio::test]
+async fn a_settled_read_with_a_studio_never_shows_the_card() {
+    let mut app = reading_app(one_studio());
+    let text = screen_lines(&draw_to(&mut app, 80, 24)).join("\n");
+    assert!(!text.contains("New studio"), "{text}");
+    put_document(&mut app, one_studio(), false);
+    assert!(!app.opening_visible());
+    let text = screen_lines(&draw_to(&mut app, 80, 24)).join("\n");
+    assert!(!text.contains("New studio"), "{text}");
 }
 
 // ---------- the latch ----------

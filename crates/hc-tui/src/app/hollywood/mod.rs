@@ -121,6 +121,11 @@ impl App {
     /// matched like a studio key, or the chord tail while the prefix
     /// is armed. `None` without `[hollywood]` — the key is not ours.
     pub(crate) fn hollywood_key_press(&self, key: &super::input::TerminalKey) -> bool {
+        // U7: no layer until the first read settled — the key is not
+        // ours while it is on the wire.
+        if !self.opening.ready() {
+            return false;
+        }
         let matched = crate::input::terminal_key_of(key);
         match self.hollywood_key {
             Some(HollywoodKey::Direct(combo)) => {

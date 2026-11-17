@@ -27,6 +27,12 @@ pub(crate) const FRAME: Duration = Duration::from_millis(80);
 /// static page.
 pub(crate) const OPENING_FRAMES: u8 = 15;
 
+/// How long the entry decision waits for the first `backlot` read
+/// (U7). A client with studios must never flash the welcome card
+/// while the first read is on the wire; after this cap the client
+/// judges with what it has.
+pub(crate) const SETTLE_CAP: Duration = Duration::from_secs(2);
+
 /// The client-local page state: Esc dismisses for the session,
 /// `new_workspace` brings it back. Nothing is stored.
 #[derive(Debug, Default)]
@@ -35,9 +41,21 @@ pub(crate) struct Opening {
     pub dismissed: bool,
     /// `new_workspace` asked for the page even over a live studio.
     pub forced: bool,
+    /// The first `backlot` read has landed — or [`SETTLE_CAP`] passed.
+    pub settled: bool,
+    /// The cap's deadline, armed at the first decision pass and
+    /// cleared once settled, so nothing waits on a timer after entry.
+    pub cap: Option<std::time::Instant>,
     /// The one-time animation: `done` after it played (or was left),
     /// so it never replays on a resize, Esc or any later redraw.
     pub anim: Anim,
+}
+
+impl Opening {
+    /// The entry decision is made: the card or the layer may show.
+    pub fn ready(&self) -> bool {
+        self.settled
+    }
 }
 
 /// How far the one-time opening animation has come.

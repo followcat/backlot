@@ -37,12 +37,48 @@ fn wizard_line(exe: &str, endpoint_args: &[String]) -> String {
 const WIZARD_POPUP: crate::popup_size::PopupSize = crate::popup_size::PopupSize::Percent(80);
 
 impl App {
+    /// The first `backlot` read has landed: a value, an unwritten
+    /// document or an error — anything but a fetch still in flight.
+    pub(crate) fn document_settled(&self) -> bool {
+        self.view
+            .documents
+            .get(&crate::panel::document_key())
+            .is_some_and(|doc| !doc.fetching)
+    }
+
+    /// The entry gate (U7): which screen to show is unknowable until
+    /// the first `backlot` read lands, so the client decides once —
+    /// and draws neither the card nor the layer before then, so a
+    /// client with studios never flashes the welcome card. The wait
+    /// is capped at [`crate::opening::SETTLE_CAP`] from the first
+    /// decision pass (the first connect, in practice); after it the
+    /// client judges with what it has. Clearing `cap` leaves no timer
+    /// behind.
+    pub(crate) fn settle_opening(&mut self, now: std::time::Instant) {
+        if self.opening.settled {
+            return;
+        }
+        let cap = *self
+            .opening
+            .cap
+            .get_or_insert(now + crate::opening::SETTLE_CAP);
+        if !self.document_settled() && now < cap {
+            return;
+        }
+        self.opening.settled = true;
+        self.opening.cap = None;
+        self.sched.mark_dirty(now);
+    }
+
     /// The page paints over the pane area while there is no studio —
     /// no `backlot` document yet, or a good one with zero studios —
     /// and while `new_workspace` has forced it up over a live studio.
     /// `--plain` never shows it; Esc dismisses for the session.
     pub(crate) fn opening_visible(&self) -> bool {
-        !self.plain && !self.opening.dismissed && (self.opening.forced || self.studioless())
+        !self.plain
+            && self.opening.settled
+            && !self.opening.dismissed
+            && (self.opening.forced || self.studioless())
     }
 
     /// No studio exists: the document is missing, unreadable or

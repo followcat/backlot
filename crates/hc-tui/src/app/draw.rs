@@ -309,9 +309,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             frame,
         );
         app.arm_opening_anim(_now);
-    } else {
+    } else if app.opening.ready() {
         // No page, no run: leaving before the last frame finishes it,
-        // so Esc-and-back and resizes show the static page.
+        // so Esc-and-back and resizes show the static page. While the
+        // entry decision still waits the run is untouched — the card
+        // plays its animation when it is finally judged.
         app.opening_finish_anim();
     }
     let (mode_bar, overlay_painted) = draw_overlays::render_overlays_and_cursor(

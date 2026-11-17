@@ -96,8 +96,9 @@ fn app_with_doc() -> App {
         .into(),
     );
     app.focused = Some("t1".into());
-    app.sync_target();
-    app.refresh_projection();
+    // The publish the loop would deliver: projection, pane targets and
+    // U7's entry decision all run from it.
+    app.reconcile_published_view();
     app
 }
 
