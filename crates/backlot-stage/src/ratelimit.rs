@@ -104,11 +104,20 @@ fn fresh_tail(screen: &str) -> &str {
     &screen[screen.len() - tail.min(screen.len())..]
 }
 
+/// cline's own rate-limit wording is **unmeasured** (S14a section 7:
+/// ClinePass has 5 h, weekly and monthly limits, none hit). This
+/// placeholder is empty on purpose and matches nothing: no word is
+/// guessed, so no user-visible text claims a limit nobody saw. When a
+/// real limit screen is captured, add its words here — `limit_text`
+/// already reads this list beside the shared vocabulary.
+pub(crate) const CLINE_LIMIT_WORDS: &[&str] = &[];
+
 /// Whether the screen carries a limit line — checked whole, so a
 /// `usage limit` inside prose still counts.
 fn limit_text(screen: &str) -> bool {
     let lower = screen.to_lowercase();
     LIMIT_WORDS.iter().any(|w| lower.contains(w))
+        || CLINE_LIMIT_WORDS.iter().any(|w| lower.contains(w))
 }
 
 /// The wait a reset line asks for. The LAST limit line owns the

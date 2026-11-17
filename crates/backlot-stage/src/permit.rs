@@ -74,6 +74,12 @@ pub fn approval_keys(runner: &str, decision: ApprovalDecision) -> Option<&'stati
             ApprovalDecision::Allow => Some("enter"),
             ApprovalDecision::Deny => Some("esc"),
         },
+        // cline presses nothing: its approval block only appears when
+        // `--yolo`'s auto-approve was switched off by hand, and both
+        // keys (`y`, `n`) would be the stage guessing at a mode it
+        // must not change (S14a section 4) — the attention stays for
+        // the user.
+        "cline" => None,
         _ => None,
     }
 }
@@ -133,6 +139,17 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
             let ask = lines
                 .iter()
                 .rposition(|l| l.trim_start().starts_with("❯ 1."))?;
+            lines[..ask]
+                .iter()
+                .rposition(|l| work::is_full_width_rule(l))?
+        }
+        // From the last full-width `─` rule above the approval block to
+        // the end — the tool name, the command preview and the
+        // `[y] Approve   [n] Deny` line (S14a section 4).
+        "cline" => {
+            let ask = lines
+                .iter()
+                .rposition(|l| l.contains("Cline needs permission"))?;
             lines[..ask]
                 .iter()
                 .rposition(|l| work::is_full_width_rule(l))?
@@ -214,6 +231,9 @@ pub fn needs_user(role: &str, runner: &str, screen: &str, command: Option<&str>)
     !is_actor(role)
         || (runner == "cursor" && work::cursor_trust_dialog(screen))
         || (runner == "cmd" && work::cmd_trust_dialog(screen))
+        // cline's approval block means `--yolo`'s auto-approve was
+        // switched off by hand: the prompt is the user's (S14a).
+        || (runner == "cline" && work::cline_approval(screen))
         || touches_env(
             &command.map(String::from).unwrap_or_else(|| {
                 prompt_block(runner, screen).unwrap_or_else(|| screen.to_string())

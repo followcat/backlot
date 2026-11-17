@@ -348,3 +348,98 @@ fn anything_unmatched_is_waiting() {
     );
     assert_eq!(work_state("fake", ""), Work::Waiting);
 }
+
+/// cline's idle screen (S14a's capture, neutralised): the composer
+/// `❯ Ask anything...` between two full-width `─` rules, the footer
+/// under it, a finished thought above — no spinner, so waiting.
+const CLINE_IDLE: &str = "\
+ \x20❯ Think briefly about how to list this directory, then run the shell command: ls -la\n\
+ \x20\n\
+ \x20▶ Thinking: The directory is empty. Report.\n\
+ \x20\n\
+ ────────────────────────────────────\n\
+ ❯ Ask anything...\n\
+ ────────────────────────────────────\n\
+ \x20ClinePass: DeepSeek V4.1 Flash 1017 (medium) ██████ (7,267)    ○ Plan ● Act (Tab)\n\
+ \x20acme-shop\n\
+ \x20▶▶ Auto-approve all enabled (Shift+Tab)\n";
+
+/// cline's working screen: the same composer with the braille spinner
+/// line above it — `⠏ Thinking... (esc to cancel)`.
+const CLINE_WORKING: &str = "\
+ \x20❯ Think briefly about how to list this directory, then run the shell command: ls -la\n\
+ \x20\n\
+ ⠏ Thinking... (esc to cancel)\n\
+ \x20\n\
+ ────────────────────────────────────\n\
+ ❯ Ask anything...\n\
+ ────────────────────────────────────\n\
+ \x20ClinePass: DeepSeek V4.1 Flash 1017 (medium) ██████ (0)    ○ Plan ● Act (Tab)\n";
+
+/// cline's approval block (S14a's capture, neutralised): it shows only
+/// with auto-approve off — under `--yolo` it must never appear.
+const CLINE_APPROVAL: &str = "\
+ \x20❯ Run the shell command: ls\n\
+ \x20\n\
+ \x20▶ Thinking: Just run ls.\n\
+ ────────────────────────────────────\n\
+ \x20Cline needs permission\n\
+ \x20\n\
+ \x20Approve tool call?\n\
+ \x20\n\
+ \x20run_commands\n\
+ \x20\n\
+ \x20  $ ls\n\
+ \x20\n\
+ \x20 [y] Approve   [n] Deny\n";
+
+/// The idle capture is waiting: the composer is on screen with no
+/// spinner line. The fresh-launch composer (`❯ What can I do for
+/// you?`) reads the same.
+#[test]
+fn cline_idle_is_waiting() {
+    assert_eq!(work_state("cline", CLINE_IDLE), Work::Waiting);
+    let fresh = CLINE_IDLE.replace("Ask anything...", "What can I do for you?");
+    assert_eq!(work_state("cline", &fresh), Work::Waiting);
+    // A finished thought above the composer is not a turn.
+    assert_eq!(
+        work_state(
+            "cline",
+            " ▶ Thinking: The directory is empty. Report.\n ❯ Ask anything...\n"
+        ),
+        Work::Waiting
+    );
+}
+
+/// The working capture is a turn even though the composer stays on
+/// screen; the braille line carries it.
+#[test]
+fn cline_working() {
+    assert_eq!(work_state("cline", CLINE_WORKING), Work::Working);
+    assert_eq!(
+        work_state("cline", " ⠋ Thinking... (esc to cancel)\n"),
+        Work::Working
+    );
+    // The marker alone, with no glyph on the line, still counts.
+    assert_eq!(
+        work_state("cline", " Thinking... (esc to cancel)\n"),
+        Work::Working
+    );
+    // A spinner glyph with nothing after it is not the turn.
+    assert_eq!(work_state("cline", " ⠏\n"), Work::Waiting);
+}
+
+/// The approval capture is blocked — and blocked beats the spinner a
+/// stale turn left above it.
+#[test]
+fn cline_blocked() {
+    assert_eq!(work_state("cline", CLINE_APPROVAL), Work::Blocked);
+    let stale = format!(" ⠏ Thinking... (esc to cancel)\n{CLINE_APPROVAL}");
+    assert_eq!(work_state("cline", &stale), Work::Blocked);
+    // The banner without the question is not the prompt.
+    assert_eq!(
+        work_state("cline", " Cline needs permission\n"),
+        Work::Waiting
+    );
+    assert_eq!(work_state("cline", " Approve tool call?\n"), Work::Waiting);
+}
