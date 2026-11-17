@@ -164,40 +164,83 @@ fn recorder() -> (
 
 // ---------- parity (D6) ----------
 
+// ---------- the no-agent bar (U7) ----------
+
 #[tokio::test]
-async fn without_the_table_alt_y_reaches_the_pane_and_no_cell_changes() {
+async fn without_the_table_the_bar_still_exists_without_an_agent() {
     let mut app = app_with_doc();
     app.area = (120, 24);
     // `Ok(None)` — the absent read the cli path hands the layer.
     app.set_hollywood(Ok(None), std::path::Path::new("config.toml"));
+    assert!(
+        app.hollywood.visible(),
+        "studio mode always has the bar (U7)"
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
+    // The toggle is the default one without a table.
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("no agent"), "{text}");
+    assert!(text.contains("backlot hollywood setup"), "{text}");
+    assert!(!text.contains("tell hollywood"), "no input line: {text}");
+    assert!(
+        !text.contains("acme-shop needs a look"),
+        "no headline without an agent: {text}"
+    );
+}
+
+#[tokio::test]
+async fn plain_has_no_layer_and_alt_y_reaches_the_pane() {
+    let mut app = app_with_doc();
+    app.area = (120, 24);
+    app.set_plain(true);
+    app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
     assert_eq!(app.hollywood.mode, LayerMode::Hidden);
-    assert!(!app.hollywood.visible());
-    // Alt+Y is not the layer's: it reaches the focused program.
     let before = app.pane.input_backlog().0;
     alt_y(&mut app);
     assert!(app.pane.input_backlog().0 > before, "alt+y was consumed");
     assert_eq!(app.hollywood.mode, LayerMode::Hidden);
-    // The frame is the frame herdr draws: no strip on the top row.
-    let backend = draw_to(&mut app, 120, 24);
-    let text = screen_lines(&backend).join("\n");
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(!text.contains("hollywood"), "{text}");
-    let backend2 = draw_to(&mut app, 120, 24);
-    assert_eq!(backend.buffer(), backend2.buffer());
 }
 
 #[tokio::test]
-async fn a_malformed_table_stays_hidden_and_notices() {
+async fn turning_plain_on_drops_the_layer_and_freeing_it_brings_it_back() {
+    let mut app = app_with_doc();
+    app.area = (120, 24);
+    app.set_hollywood(Ok(None), std::path::Path::new("config.toml"));
+    assert!(app.hollywood.visible());
+    app.set_plain(true);
+    assert_eq!(app.hollywood.mode, LayerMode::Hidden, "--plain hides it");
+    let before = app.pane.input_backlog().0;
+    alt_y(&mut app);
+    assert!(app.pane.input_backlog().0 > before, "alt+y was consumed");
+    app.set_plain(false);
+    assert!(app.hollywood.visible(), "studio mode brings the bar back");
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+}
+
+#[tokio::test]
+async fn a_malformed_table_notices_and_leaves_the_no_agent_bar() {
     let mut app = app_with_doc();
     app.area = (120, 24);
     app.set_hollywood(
         Err("config.toml: malformed at line 2 column 1".into()),
         std::path::Path::new("config.toml"),
     );
-    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
     assert!(app.notice.is_some(), "the bad read notices once");
-    let before = app.pane.input_backlog().0;
+    assert!(!app.has_hollywood_cfg, "no agent is configured");
+    // The bar survives a bad read in its no-agent form, on the
+    // default toggle.
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
     alt_y(&mut app);
-    assert!(app.pane.input_backlog().0 > before);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("no agent"), "{text}");
 }
 
 // ---------- geometry ----------

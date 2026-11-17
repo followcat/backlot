@@ -112,8 +112,10 @@ pub(super) fn render_overlays_and_cursor(
     // panes, the cast sidebar and the studio panel — but under the
     // popup/notice/overlay stack. It reserves nothing: the pane
     // layout is identical whether it is hidden, a strip or expanded.
-    // U7: it waits for the same first read the card does.
-    app.hollywood_hits = if app.hollywood.visible() && app.opening.ready() {
+    // U7: it waits for the same first read the card does, and never
+    // covers the card: with no studio the card is the surface.
+    app.hollywood_hits = if app.hollywood.visible() && app.opening.ready() && !app.opening_visible()
+    {
         overlay_painted = true;
         let summary = app.hollywood_summary();
         crate::hollywood::render(
@@ -122,7 +124,10 @@ pub(super) fn render_overlays_and_cursor(
             summary.as_ref(),
             crate::panel::stage_running(&app.view),
             &app.hollywood,
-            app.area.0 <= app.shell.mobile_width_threshold,
+            crate::hollywood::LayerOpts {
+                agent: app.has_hollywood_cfg,
+                mobile: app.area.0 <= app.shell.mobile_width_threshold,
+            },
             &app.shell.palette,
         )
     } else {

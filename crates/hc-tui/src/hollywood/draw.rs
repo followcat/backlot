@@ -11,11 +11,12 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::view::{self, CardView};
-use super::{Hollywood, LayerMode, Row, Target, rows, strip_text};
+use super::{Hollywood, LayerMode, LayerOpts, Row, Target, rows, strip_text};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::truncate_end;
+use crate::hollywood::rows::{SETUP_COMMAND, SETUP_LEAD};
 
 /// The collapsed strip's width cap: a third of the frame.
 const STRIP_FRAC: u16 = 3;
@@ -77,7 +78,8 @@ impl HollywoodRender {
 
 /// Render the layer into the frame. `summary` is this client's last
 /// good `backlot` document — `None` keeps the strip and rows on their
-/// down/empty reads. `mobile` is the narrow-width full-screen cut.
+/// down/empty reads. `opts` carries the agent gate and the narrow
+/// cut.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
@@ -85,21 +87,15 @@ pub(crate) fn render(
     summary: Option<&Summary>,
     stage_running: bool,
     hollywood: &Hollywood,
-    mobile: bool,
+    opts: LayerOpts,
     palette: &Palette,
 ) -> HollywoodRender {
     match hollywood.mode {
         LayerMode::Hidden => HollywoodRender::default(),
-        LayerMode::Collapsed => render_strip(buf, frame, summary, palette),
-        LayerMode::Expanded => render_expanded(
-            buf,
-            frame,
-            summary,
-            stage_running,
-            hollywood,
-            mobile,
-            palette,
-        ),
+        LayerMode::Collapsed => render_strip(buf, frame, summary, opts.agent, palette),
+        LayerMode::Expanded => {
+            render_expanded(buf, frame, summary, stage_running, hollywood, opts, palette)
+        }
     }
 }
 
@@ -110,12 +106,13 @@ fn render_strip(
     buf: &mut Buffer,
     frame: Rect,
     summary: Option<&Summary>,
+    agent: bool,
     palette: &Palette,
 ) -> HollywoodRender {
     if frame.width == 0 || frame.height == 0 {
         return HollywoodRender::default();
     }
-    let text = strip_text(summary);
+    let text = strip_text(summary, agent);
     let cap = (frame.width / STRIP_FRAC).max(1);
     let text = truncate_end(&text, cap as usize);
     let width = (text.chars().count() as u16).min(cap).max(1);
@@ -158,14 +155,15 @@ fn render_expanded(
     summary: Option<&Summary>,
     stage_running: bool,
     hollywood: &Hollywood,
-    mobile: bool,
+    opts: LayerOpts,
     palette: &Palette,
 ) -> HollywoodRender {
-    let all = rows(summary, stage_running);
-    // Fixed: title (1) + input (1). Floating adds the edge row (1).
+    let mobile = opts.mobile;
+    let all = rows(summary, stage_running, opts.agent);
+    // Fixed rows: the title, the input line only with an agent, and
+    // the bottom edge while floating.
     let edge = u16::from(!mobile);
-    let body_len = all.len().saturating_sub(2) as u16;
-    let want = 2 + body_len + edge;
+    let want = all.len() as u16 + edge;
     let height = if mobile {
         frame.height
     } else {
@@ -215,7 +213,12 @@ fn render_expanded(
     let mut title_style = Style::default()
         .fg(palette.accent)
         .add_modifier(Modifier::BOLD);
-    if let Some(hollywood_summary) = summary.and_then(|s| s.hollywood.as_ref()) {
+    if !opts.agent {
+        // U7: no agent configured — the bar says so and keeps the
+        // rest to the studios.
+        title_text.push_str(" · no agent");
+        title_style = title_style.fg(palette.overlay0);
+    } else if let Some(hollywood_summary) = summary.and_then(|s| s.hollywood.as_ref()) {
         let state = &hollywood_summary.state;
         title_text.push_str(&format!(" {state}"));
         let runner = [
@@ -244,36 +247,33 @@ fn render_expanded(
         title_style,
     );
 
-    // The input line is the last interior row — always in place,
-    // editing or not.
-    let input = Rect::new(
-        interior.x,
-        interior.y + interior.height - 1,
-        interior.width,
-        1,
-    );
-    hits.input = input;
-    hits.rows.push((input, Target::Input));
-    draw_input(buf, input, hollywood, dim, palette, &mut hits);
+    // The input line is the last interior row when an agent exists —
+    // always in place, editing or not. Without one the last row is
+    // the setup line, which scrolls with the body.
+    let mut body_height = interior.height.saturating_sub(1);
+    if opts.agent {
+        let input = Rect::new(
+            interior.x,
+            interior.y + interior.height - 1,
+            interior.width,
+            1,
+        );
+        hits.input = input;
+        hits.rows.push((input, Target::Input));
+        draw_input(buf, input, hollywood, dim, palette, &mut hits);
+    } else {
+        body_height = interior.height;
+    }
 
-    // The scrollable body between them.
-    let body = Rect::new(
-        interior.x,
-        interior.y + 1,
-        interior.width,
-        interior.height.saturating_sub(2),
-    );
+    // The scrollable body between the title and the fixed last row.
+    let body = Rect::new(interior.x, interior.y + 1, interior.width, body_height);
     if body.height == 0 {
         finish(buf, frame, hollywood, palette, &mut hits);
         return hits;
     }
     hits.body = body;
-    let heights: Vec<u16> = all
-        .iter()
-        .skip(1)
-        .take(body_len as usize)
-        .map(|_| 1)
-        .collect();
+    let body_rows = all.len() - 1 - usize::from(opts.agent);
+    let heights: Vec<u16> = vec![1; body_rows];
     let metrics = list_scroll_metrics(&heights, &[], body.height, hollywood.scroll);
     hits.metrics = Some(metrics);
     hits.viewport_rows = metrics.viewport_rows;
@@ -313,6 +313,7 @@ fn render_expanded(
                 );
             }
             Row::Card(card) => draw_card(buf, rect, card, palette, &mut hits),
+            Row::Setup => draw_setup(buf, rect, palette),
         }
         hits.rows.push((rect, target));
     }
@@ -394,6 +395,36 @@ fn draw_studio(buf: &mut Buffer, rect: Rect, studio: &StudioSummary, palette: &P
         &truncate_end(&text, rect.width as usize),
         Style::default().fg(state_color(&studio.state, palette)),
     );
+}
+
+/// `✦ an agent can watch every studio and tell you what needs you:
+/// backlot hollywood setup --runner <runner> --model <model>` — the
+/// lead in `overlay0`, the command in `subtext0` (U7).
+fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
+    if rect.width == 0 {
+        return;
+    }
+    let lead = format!(" {SETUP_LEAD}");
+    let lead_w = (lead.chars().count() as u16).min(rect.width);
+    put_text(
+        buf,
+        rect.x,
+        rect.y,
+        lead_w,
+        &truncate_end(&lead, lead_w as usize),
+        Style::default().fg(palette.overlay0),
+    );
+    let rest = rect.width.saturating_sub(lead_w + 1);
+    if rest > 0 {
+        put_text(
+            buf,
+            rect.x + lead_w + 1,
+            rect.y,
+            rest,
+            &truncate_end(SETUP_COMMAND, rest as usize),
+            Style::default().fg(palette.subtext0),
+        );
+    }
 }
 
 /// `c<n> · <studio> · <action> — <why>` plus the right-aligned

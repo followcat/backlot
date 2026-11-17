@@ -26,6 +26,8 @@ pub(crate) enum Target {
     Card(String),
     /// The input line — `i`/Enter opens it for editing.
     Input,
+    /// The no-agent bar's setup line — shown, not actionable.
+    Setup,
 }
 
 /// One display row, borrowing its data from the summary.
@@ -46,6 +48,9 @@ pub(crate) enum Row<'a> {
     Card(&'a backlot_model::summary::CardSummary),
     /// `› <input>` — the `tell hollywood` line.
     Input,
+    /// `✦ an agent can watch every studio …: backlot hollywood setup …`
+    /// — the bar without an agent (U7).
+    Setup,
 }
 
 impl Row<'_> {
@@ -59,6 +64,7 @@ impl Row<'_> {
             Row::Headline(_) => Target::Headline,
             Row::Card(card) => Target::Card(card.id.clone()),
             Row::Input => Target::Input,
+            Row::Setup => Target::Setup,
         }
     }
 }
@@ -66,8 +72,14 @@ impl Row<'_> {
 /// The expanded panel's rows: the fixed title, then the scrolled
 /// body — a stage-down line, the studios, the newest headline, the
 /// open cards — then the fixed input line. The studio rows read the
-/// document even while Hollywood's own agent is down.
-pub(crate) fn rows<'a>(summary: Option<&'a Summary>, stage_running: bool) -> Vec<Row<'a>> {
+/// document even while Hollywood's own agent is down. Without an
+/// agent (U7) the headline, the cards and the input line are gone,
+/// and one setup line takes their place.
+pub(crate) fn rows<'a>(
+    summary: Option<&'a Summary>,
+    stage_running: bool,
+    agent: bool,
+) -> Vec<Row<'a>> {
     let mut out = vec![Row::Title];
     if !stage_running {
         out.push(Row::StageDown);
@@ -79,31 +91,47 @@ pub(crate) fn rows<'a>(summary: Option<&'a Summary>, stage_running: bool) -> Vec
             } else {
                 out.extend(summary.studios.iter().map(Row::Studio));
             }
-            if let Some(hollywood) = summary.hollywood.as_ref()
+            if agent
+                && let Some(hollywood) = summary.hollywood.as_ref()
                 && let Some(headline) = hollywood.headline.as_deref()
             {
                 out.push(Row::Headline(headline));
             }
-            if let Some(hollywood) = summary.hollywood.as_ref() {
+            if agent && let Some(hollywood) = summary.hollywood.as_ref() {
                 out.extend(hollywood.cards.iter().map(Row::Card));
             }
         }
         None => out.push(Row::Empty),
     }
-    out.push(Row::Input);
+    out.push(if agent { Row::Input } else { Row::Setup });
     out
 }
+
+/// The setup line a bar without an agent shows: what an agent would
+/// do for you, and the command that writes its table.
+pub(crate) const SETUP_LEAD: &str =
+    "✦ an agent can watch every studio and tell you what needs you:";
+/// The command the setup line names — `backlot hollywood setup`.
+pub(crate) const SETUP_COMMAND: &str = "backlot hollywood setup --runner <runner> --model <model>";
 
 /// The collapsed strip's one-line content (D16): Hollywood's mark
 /// and role state, the count of studios by state, the count of open
 /// cards, then the newest headline. `draw` cuts it to a third of the
-/// frame's width.
-pub(crate) fn strip_text(summary: Option<&Summary>) -> String {
+/// frame's width. Without an agent the strip just counts the studios.
+pub(crate) fn strip_text(summary: Option<&Summary>, agent: bool) -> String {
     let mut text = "✦ hollywood".to_string();
     let (studios, hollywood) = match summary {
         Some(summary) => (summary.studios.as_slice(), summary.hollywood.as_ref()),
         None => (&[][..], None),
     };
+    if !agent {
+        text.push_str(&format!(
+            " · {} studio{}",
+            studios.len(),
+            if studios.len() == 1 { "" } else { "s" }
+        ));
+        return text;
+    }
     if let Some(hollywood) = hollywood {
         text.push_str(&format!(" {}", hollywood.state));
     } else {

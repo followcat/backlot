@@ -22,7 +22,7 @@ pub(crate) enum HollywoodKey {
 
 impl HollywoodKey {
     /// The fallback: `alt+y` parses unconditionally.
-    fn default() -> HollywoodKey {
+    pub(crate) fn fallback() -> HollywoodKey {
         HollywoodKey::Direct(crate::config::parse_key_combo("alt+y").expect("alt+y parses"))
     }
 }
@@ -56,7 +56,7 @@ pub(crate) fn resolve_key(
     path: &Path,
 ) -> (HollywoodKey, Option<String>) {
     let Some(raw) = raw.filter(|k| !k.trim().is_empty()) else {
-        return (HollywoodKey::default(), None);
+        return (HollywoodKey::fallback(), None);
     };
     let notice = |why: &str| Some(format!("{path:?} ignored: invalid hollywood.key ({why})"));
     let (chord, tail) = match raw.trim().strip_prefix("prefix+") {
@@ -64,23 +64,23 @@ pub(crate) fn resolve_key(
         None => (false, raw.trim()),
     };
     let Some(combo) = crate::config::parse_key_combo(tail) else {
-        return (HollywoodKey::default(), notice("unparseable"));
+        return (HollywoodKey::fallback(), notice("unparseable"));
     };
     if !chord && crate::config::is_unmodified_printable(combo) {
         return (
-            HollywoodKey::default(),
+            HollywoodKey::fallback(),
             notice("a bare printable key types"),
         );
     }
     if let Some(name) = collides_with_keys(combo, keys) {
         return (
-            HollywoodKey::default(),
+            HollywoodKey::fallback(),
             notice(&format!("collides with keys.{name}")),
         );
     }
     if chord && panel_tail == Some(combo) {
         return (
-            HollywoodKey::default(),
+            HollywoodKey::fallback(),
             notice("collides with the panel chord"),
         );
     }

@@ -73,6 +73,9 @@ fn app_with_panel_doc() -> App {
     app.sync_target();
     // Latch studio mode the way a publish does: active + current.
     app.refresh_projection();
+    // U7: these tests measure the cast and the panel; the Hollywood
+    // bar's own strip would share the top row, so it is hidden.
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
     app
 }
 

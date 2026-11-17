@@ -47,6 +47,8 @@ impl App {
         if !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
         }
+        // U7: `--plain` drops the Hollywood bar; studio mode has it.
+        self.sync_hollywood_plain();
     }
 
     /// A direct studio key: `alt+up/down` move between studios in

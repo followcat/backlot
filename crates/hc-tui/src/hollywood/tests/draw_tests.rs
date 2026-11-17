@@ -8,7 +8,7 @@ use ratatui::layout::Rect;
 
 use super::*;
 use crate::chrome::palette::Palette;
-use crate::hollywood::{CardView, Hollywood, LayerMode, Target, render};
+use crate::hollywood::{CardView, Hollywood, LayerMode, LayerOpts, Target, render};
 
 fn palettes() -> [Palette; 2] {
     [
@@ -44,16 +44,51 @@ fn draw(
     mobile: bool,
     palette: &Palette,
 ) -> (Buffer, crate::hollywood::HollywoodRender) {
-    let mut buf = Buffer::empty(area);
-    let hits = render(
-        &mut buf,
+    draw_with(
         area,
         summary,
         stage_running,
         layer,
-        mobile,
+        LayerOpts {
+            agent: true,
+            mobile,
+        },
         palette,
-    );
+    )
+}
+
+/// The same draw on a client with no `[hollywood]` table: the bar's
+/// no-agent form (U7).
+fn draw_without_agent(
+    area: Rect,
+    summary: Option<&Summary>,
+    stage_running: bool,
+    layer: &Hollywood,
+    palette: &Palette,
+) -> (Buffer, crate::hollywood::HollywoodRender) {
+    draw_with(
+        area,
+        summary,
+        stage_running,
+        layer,
+        LayerOpts {
+            agent: false,
+            mobile: false,
+        },
+        palette,
+    )
+}
+
+fn draw_with(
+    area: Rect,
+    summary: Option<&Summary>,
+    stage_running: bool,
+    layer: &Hollywood,
+    opts: LayerOpts,
+    palette: &Palette,
+) -> (Buffer, crate::hollywood::HollywoodRender) {
+    let mut buf = Buffer::empty(area);
+    let hits = render(&mut buf, area, summary, stage_running, layer, opts, palette);
     (buf, hits)
 }
 
@@ -333,7 +368,10 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
             Some(&summary),
             true,
             &layer(mode),
-            false,
+            LayerOpts {
+                agent: true,
+                mobile: false,
+            },
             &palettes()[0],
         );
         // Under the layer's own rect nothing bleeds through.
@@ -385,4 +423,47 @@ fn the_floating_layer_is_opaque() {
             }
         }
     }
+}
+
+// ---------- the no-agent bar (U7) ----------
+
+/// Without a `[hollywood]` table the bar still lists the studios and
+/// the setup hint, in its no-agent form: no headline, no cards and no
+/// input line.
+#[test]
+fn without_an_agent_the_bar_lists_studios_and_the_setup_hint() {
+    let summary = summary();
+    let area = Rect::new(0, 0, 120, 24);
+    let (buf, hits) = draw_without_agent(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        &palettes()[0],
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
+    assert!(text.contains("no agent"), "{text}");
+    assert!(text.contains("acme-shop"), "{text}");
+    assert!(text.contains("backlot hollywood setup"), "{text}");
+    assert!(!text.contains("tell hollywood"), "{text}");
+    assert!(!text.contains("acme-shop needs a look"), "{text}");
+    assert!(hits.input.is_empty(), "no input line without an agent");
+}
+
+/// The strip without an agent names the studios and nothing else.
+#[test]
+fn the_strip_without_an_agent_names_the_studios() {
+    let summary = summary();
+    let area = Rect::new(0, 0, 120, 24);
+    let (buf, _) = draw_without_agent(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Collapsed),
+        &palettes()[0],
+    );
+    let row = lines(&buf, area)[0].clone();
+    assert!(row.contains("hollywood"), "{row}");
+    assert!(row.contains("2 studios"), "{row}");
 }

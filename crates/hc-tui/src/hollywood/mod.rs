@@ -37,6 +37,18 @@ pub(crate) enum LayerMode {
     Expanded,
 }
 
+/// What the renderer needs from the app: whether a `[hollywood]` table
+/// configures the agent, and the narrow-width cut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct LayerOpts {
+    /// An agent is configured: the headline, the cards, the `tell
+    /// hollywood` line and the animated role state belong to it.
+    /// Without one the bar still exists, in its no-agent form (U7).
+    pub agent: bool,
+    /// The narrow-width full-screen cut.
+    pub mobile: bool,
+}
+
 /// The whole client-local layer state (D21): which of the three
 /// states it is in, the selection, the scroll offset and the input
 /// line's text. Everything on screen is read from the document.

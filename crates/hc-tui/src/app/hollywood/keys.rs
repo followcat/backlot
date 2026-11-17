@@ -83,7 +83,7 @@ impl App {
                 self.hollywood.editing = false;
                 self.hollywood.view = None;
             }
-            KeyCode::Char('i') if plain => {
+            KeyCode::Char('i') if plain && self.has_hollywood_cfg => {
                 self.hollywood.editing = true;
             }
             KeyCode::Enter => self.hollywood_activate(),

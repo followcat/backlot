@@ -21,10 +21,11 @@ impl App {
     // ---------- config ----------
 
     /// cli injects the `[hollywood]` read: `Ok(Some)` configures the
-    /// layer and starts it collapsed; `Ok(None)` keeps it hidden with
-    /// no binding at all — Alt+Y then reaches the program exactly as
-    /// before (D15a); `Err` is a malformed file or section, noticed
-    /// once with the position only.
+    /// agent and starts the layer; `Ok(None)` still leaves the bar in
+    /// studio mode — in its no-agent form (U7) — with the default
+    /// toggle; under `--plain` there is no layer at all, so Alt+Y
+    /// reaches the program exactly as before (D6, D15a); `Err` is a
+    /// malformed file or section, noticed once with the position only.
     pub(crate) fn set_hollywood(
         &mut self,
         read: Result<Option<backlot_stage::config::HollywoodCfg>, String>,
@@ -50,7 +51,7 @@ impl App {
                 if let Some(key_notice) = key_notice {
                     self.show_notice("Hollywood config", &key_notice);
                 }
-                if self.hollywood.mode == LayerMode::Hidden {
+                if self.hollywood.mode == LayerMode::Hidden && !self.plain {
                     self.hollywood.mode = LayerMode::Collapsed;
                 }
             }
@@ -59,8 +60,29 @@ impl App {
                 self.hollywood.mode = LayerMode::Hidden;
             }
         }
+        // U7: studio mode always has the bar; `--plain` never does.
+        self.sync_hollywood_plain();
         if let Some(notice) = notice {
             self.show_notice("Hollywood config", &notice);
+        }
+    }
+
+    /// The `--plain` latch on the layer (D6, D15a): plain has no
+    /// layer, no consumed key and no timer, so the frame stays
+    /// herdr's. Studio mode always has the bar — configured or not —
+    /// and its toggle is the default `alt+y` unless `[hollywood] key`
+    /// replaced it.
+    pub(crate) fn sync_hollywood_plain(&mut self) {
+        if self.plain {
+            self.hollywood_key = None;
+            self.hollywood.mode = LayerMode::Hidden;
+            self.hollywood.editing = false;
+            self.hollywood.view = None;
+        } else if self.hollywood_key.is_none() {
+            self.hollywood_key = Some(HollywoodKey::fallback());
+            if self.hollywood.mode == LayerMode::Hidden {
+                self.hollywood.mode = LayerMode::Collapsed;
+            }
         }
     }
 
@@ -80,10 +102,14 @@ impl App {
     /// stable identities, never positions.
     fn hollywood_targets(&self) -> Vec<Target> {
         let summary = self.hollywood_summary();
-        hollywood::rows(summary.as_ref(), crate::panel::stage_running(&self.view))
-            .iter()
-            .map(|r| r.target())
-            .collect()
+        hollywood::rows(
+            summary.as_ref(),
+            crate::panel::stage_running(&self.view),
+            self.has_hollywood_cfg,
+        )
+        .iter()
+        .map(|r| r.target())
+        .collect()
     }
 
     /// The selected row's index in `targets` — a vanished target
