@@ -68,7 +68,7 @@ mod word_selection;
 
 pub use input::UiEvent;
 pub use pane::{OpenAttach, PaneEv, Role, Spec};
-pub use probe::{HostOutput, Probe};
+pub use probe::{HostOutput, PANE_ROLE_NAMES, Probe, WAKE_NAMES};
 pub(crate) use shell_state::ShellState;
 
 use std::future::Future;

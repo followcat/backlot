@@ -12,8 +12,14 @@ use super::App;
 
 /// Wake kinds, one counter slot each, in `WakeKind` order.
 pub const WAKE_KINDS: usize = 8;
+/// Snapshot names of the wake kinds, indexed like the counters.
+pub const WAKE_NAMES: [&str; WAKE_KINDS] = [
+    "none", "input", "replies", "view", "seen", "waiting", "pane", "deadline",
+];
 /// Pane roles, one `Probe::panes` slot each.
 pub const PANE_ROLES: usize = 4;
+/// Snapshot names of the pane roles, indexed like `Probe::panes`.
+pub const PANE_ROLE_NAMES: [&str; PANE_ROLES] = ["active", "observer", "size_lease", "popup"];
 
 /// Loop-side counters: wakeups and dirty requests per wake kind, draws,
 /// elided draws, painted cells, host terminal output, stdin reads and the

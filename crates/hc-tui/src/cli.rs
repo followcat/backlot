@@ -137,8 +137,12 @@ Everything else types into the focused terminal.",
 /// the watcher's refreshes, layout actions and background seen writes
 /// all multiplex onto it (one transport, one `hello`): lazy like
 /// `AttachConn`, single-flight, rebuilt once when the wire dies.
-fn shared_rpc(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::watch::OpenRpc {
-    hc_proto::client::shared_rpc(endpoint.clone(), ssh.clone())
+fn shared_rpc(
+    endpoint: &Endpoint,
+    ssh: &Option<OsString>,
+    stats: Arc<hc_proto::stats::ConnStats>,
+) -> hc_proto::watch::OpenRpc {
+    hc_proto::client::shared_rpc_counted(endpoint.clone(), ssh.clone(), stats)
 }
 
 /// The hc terminal this client runs inside, verified against the
@@ -201,10 +205,15 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
     // One framed RPC wire: the watcher's refreshes and the operations
     // + seen workers' calls all ride clones of this single opener.
     let ssh: Option<OsString> = None;
-    let rpc = shared_rpc(endpoint, &ssh);
-    let watcher = Watcher::connect_with_rpc(endpoint, ssh.as_deref(), rpc.clone(), params);
+    let rpc_stats = Arc::new(hc_proto::stats::ConnStats::default());
+    let sub_stats = Arc::new(hc_proto::stats::ConnStats::default());
+    let rpc = shared_rpc(endpoint, &ssh, Arc::clone(&rpc_stats));
+    let sub =
+        hc_proto::watch::subscription_opener(endpoint, ssh.as_deref(), Arc::clone(&sub_stats));
+    let watcher = Watcher::with_openers(rpc.clone(), sub, params);
     let caller = self_caller(env, endpoint);
     let attach_conn = shared_attach(endpoint, &ssh);
+    let attach_for_diag = attach_conn.clone();
     let open: OpenAttach = Arc::new(move |params| {
         let conn = attach_conn.clone();
         let caller = caller.clone();
@@ -220,7 +229,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         })
     });
     let mouse_capture = shell.mouse_capture;
-    let probe = Arc::new(Probe::default());
+    let probe = Arc::new(Probe {
+        publish_panes: crate::diag::requested(env),
+        ..Probe::default()
+    });
     let mut app = App::new(watcher, open, live, shell, Arc::clone(&probe));
 
     app.set_operations(rpc);
@@ -271,9 +283,22 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<(), String> {
         env,
         loaded.config.update.version_check,
     ));
+    let diag = crate::diag::Diag::start(
+        env,
+        crate::diag::Sources::new(
+            Arc::clone(&probe),
+            endpoint,
+            sub_stats,
+            rpc_stats,
+            attach_for_diag,
+        ),
+    );
     let result = app
         .run(&mut terminal, &mut reader.ui, &mut reader.replies)
         .await;
+    if let Some(diag) = diag {
+        diag.finish();
+    }
     reader.stop();
     let _ = guard.writer().flush();
     result.map_err(|e| e.to_string())?;

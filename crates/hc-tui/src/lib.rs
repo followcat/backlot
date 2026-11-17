@@ -16,6 +16,7 @@ pub(crate) mod copy_buffer;
 pub mod copy_mode;
 pub(crate) mod copy_window;
 pub mod core_start;
+pub mod diag;
 pub mod host;
 pub mod input;
 pub mod preferences;

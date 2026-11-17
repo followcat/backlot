@@ -23,9 +23,9 @@ mod wire;
 pub use attach::ConnectParts;
 pub use attach::{Attach, AttachConn, AttachError, AttachGauges, CloseReason, Ended, Output};
 pub use error::{CallError, Error};
-pub use shared_rpc::shared_rpc;
 #[doc(hidden)]
 pub use shared_rpc::shared_rpc_with;
+pub use shared_rpc::{shared_rpc, shared_rpc_counted};
 
 use crate::OpenRpcDocument;
 use crate::codec::{Reader, Writer};
