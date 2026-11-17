@@ -81,17 +81,17 @@ fn home() -> PathBuf {
 /// The mock's tree under `/home/user`.
 fn demo_fs() -> FakeFs {
     let home = home();
-    let aic = home.join("AIcontrol");
-    let phone = aic.join("phone");
+    let code = home.join("code");
+    let clients = code.join("clients");
     let mut fs = FakeFs::new();
-    fs.dir(&home, &["AIcontrol", "Documents"]);
+    fs.dir(&home, &["code", "Documents"]);
     fs.dir(
-        &aic,
+        &code,
         &[
             "acme-shop",
             "backlot",
-            "backlot-work",
-            "phone",
+            "scratch",
+            "clients",
             "empty-repo",
             "noaccess",
             ".hidden",
@@ -99,21 +99,24 @@ fn demo_fs() -> FakeFs {
             "target",
         ],
     );
-    fs.dir(&phone, &["wherdr", "wherdr-v3"]);
-    fs.dir(&aic.join("backlot-work"), &["u1-api"]);
-    fs.dir(&aic.join("acme-shop"), &["src"]);
-    fs.dir(&aic.join("backlot"), &["crates", "docs"]);
-    fs.dir(&aic.join("empty-repo"), &["src"]);
-    fs.dir(&aic.join("noaccess"), &["secret"]);
-    fs.dir(&aic.join(".hidden"), &[]);
-    fs.dir(&aic.join("node_modules"), &["dep"]);
-    fs.dir(&aic.join("target"), &["debug"]);
+    fs.dir(&clients, &["web-app", "web-app-v2"]);
+    fs.dir(&code.join("scratch"), &["service-a"]);
+    fs.dir(&code.join("acme-shop"), &["src"]);
+    fs.dir(&code.join("backlot"), &["crates", "docs"]);
+    fs.dir(&code.join("empty-repo"), &["src"]);
+    fs.dir(&code.join("noaccess"), &["secret"]);
+    fs.dir(&code.join(".hidden"), &[]);
+    fs.dir(&code.join("node_modules"), &["dep"]);
+    fs.dir(&code.join("target"), &["debug"]);
+    fs.dir(&clients.join("web-app"), &[]);
+    fs.dir(&clients.join("web-app-v2"), &[]);
     fs.dir(&home.join("Documents"), &[]);
-    fs.repo(&aic.join("acme-shop"), "main", 7200);
-    fs.repo(&aic.join("backlot"), "main", 300);
-    fs.repo(&phone.join("wherdr"), "mobile", 86400);
-    fs.empty_repo(&aic.join("empty-repo"));
-    fs.no_access(&aic.join("noaccess"));
+    fs.repo(&code.join("acme-shop"), "main", 7200);
+    fs.repo(&code.join("backlot"), "main", 300);
+    fs.repo(&clients.join("web-app"), "develop", 86400);
+    fs.empty_repo(&code.join("empty-repo"));
+    fs.empty_repo(&clients.join("web-app-v2"));
+    fs.no_access(&code.join("noaccess"));
     fs
 }
 
@@ -143,10 +146,7 @@ fn row_paths(p: &Picker) -> Vec<String> {
 #[test]
 fn the_start_is_home_and_the_in_use_group_leads() {
     let fs = demo_fs();
-    let in_use = vec![
-        home().join("AIcontrol/backlot"),
-        home().join("AIcontrol/acme-shop"),
-    ];
+    let in_use = vec![home().join("code/backlot"), home().join("code/acme-shop")];
     let p = picker(&fs, &home(), in_use);
     assert_eq!(p.input(), "~");
     assert_eq!(p.root(), &home());
@@ -156,9 +156,9 @@ fn the_start_is_home_and_the_in_use_group_leads() {
     assert_eq!(
         paths,
         vec![
-            "/home/user/AIcontrol/backlot",
-            "/home/user/AIcontrol/acme-shop",
-            "/home/user/AIcontrol",
+            "/home/user/code/backlot",
+            "/home/user/code/acme-shop",
+            "/home/user/code",
             "/home/user/Documents",
         ]
     );
@@ -172,9 +172,9 @@ fn the_start_is_home_and_the_in_use_group_leads() {
 #[test]
 fn a_repository_start_picks_the_typed_path() {
     let fs = demo_fs();
-    let start = home().join("AIcontrol/backlot");
+    let start = home().join("code/backlot");
     let mut p = picker(&fs, &start, vec![]);
-    assert_eq!(p.input(), "~/AIcontrol/backlot");
+    assert_eq!(p.input(), "~/code/backlot");
     assert_eq!(p.root(), &start);
     match p.key(Key::Enter) {
         Some(Outcome::Picked(path)) => assert_eq!(path, start),
@@ -188,31 +188,33 @@ fn a_repository_start_picks_the_typed_path() {
 fn typing_filters_live() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/");
-    assert_eq!(p.input(), "~/AIcontrol/");
-    assert_eq!(p.root(), home().join("AIcontrol"));
-    assert_eq!(p.root_display(), "~/AIcontrol");
+    typ(&mut p, "/code/");
+    assert_eq!(p.input(), "~/code/");
+    assert_eq!(p.root(), home().join("code"));
+    assert_eq!(p.root_display(), "~/code");
     let paths = row_paths(&p);
     // Repositories first — `empty-repo` counts, it has a `.git` —
     // then by name; hidden and skipped are out.
     assert_eq!(
         paths,
         vec![
-            "/home/user/AIcontrol/acme-shop",
-            "/home/user/AIcontrol/backlot",
-            "/home/user/AIcontrol/empty-repo",
-            "/home/user/AIcontrol/backlot-work",
-            "/home/user/AIcontrol/noaccess",
-            "/home/user/AIcontrol/phone",
+            "/home/user/code/acme-shop",
+            "/home/user/code/backlot",
+            "/home/user/code/empty-repo",
+            "/home/user/code/clients",
+            "/home/user/code/noaccess",
+            "/home/user/code/scratch",
         ]
     );
-    typ(&mut p, "bac");
+    typ(&mut p, "ac");
     let paths = row_paths(&p);
     assert_eq!(
         paths,
         vec![
-            "/home/user/AIcontrol/backlot",
-            "/home/user/AIcontrol/backlot-work"
+            "/home/user/code/acme-shop",
+            "/home/user/code/backlot",
+            "/home/user/code/noaccess",
+            "/home/user/code/scratch"
         ]
     );
 }
@@ -222,23 +224,30 @@ fn typing_filters_live() {
 fn tab_completes_and_descends() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/A");
-    // Only AIcontrol matches "~/A" — Tab descends into it.
+    typ(&mut p, "/od");
+    // Only `code` matches "~/od" — Tab descends into it.
     p.key(Key::Tab);
-    assert_eq!(p.input(), "~/AIcontrol/");
-    assert_eq!(p.root(), home().join("AIcontrol"));
-    // "~/AIcontrol/ba" → backlot and backlot-work share "backlot".
+    assert_eq!(p.input(), "~/code/");
+    assert_eq!(p.root(), home().join("code"));
+    // "~/code/ba" → a single match descends into it too.
     typ(&mut p, "ba");
     p.key(Key::Tab);
-    assert_eq!(p.input(), "~/AIcontrol/backlot");
-    // "~/AIcontrol/backlot" exists now — the tree is inside it.
-    assert_eq!(p.root(), home().join("AIcontrol/backlot"));
+    assert_eq!(p.input(), "~/code/backlot/");
+    assert_eq!(p.root(), home().join("code/backlot"));
+    // An ambiguous completion stops at the longest common prefix:
+    // `we` inside clients → web-app and web-app-v2 share `web-app`,
+    // which exists — the tree roots there.
+    let mut p = picker(&fs, &home(), vec![]);
+    typ(&mut p, "/code/clients/we");
+    p.key(Key::Tab);
+    assert_eq!(p.input(), "~/code/clients/web-app");
+    assert_eq!(p.root(), home().join("code/clients/web-app"));
     // A filter that leaves one match descends on Tab.
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/acm");
+    typ(&mut p, "/code/acm");
     p.key(Key::Tab);
-    assert_eq!(p.input(), "~/AIcontrol/acme-shop/");
-    assert_eq!(p.root(), home().join("AIcontrol/acme-shop"));
+    assert_eq!(p.input(), "~/code/acme-shop/");
+    assert_eq!(p.root(), home().join("code/acme-shop"));
 }
 
 /// Backspace edits like any text field — cursor and filter follow.
@@ -246,21 +255,15 @@ fn tab_completes_and_descends() {
 fn backspace_edits() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/bax");
-    assert_eq!(p.input(), "~/AIcontrol/bax");
+    typ(&mut p, "/code/bax");
+    assert_eq!(p.input(), "~/code/bax");
     p.key(Key::Backspace);
-    assert_eq!(p.input(), "~/AIcontrol/ba");
+    assert_eq!(p.input(), "~/code/ba");
     assert_eq!(p.cursor(), p.input().len());
     let paths = row_paths(&p);
-    assert_eq!(
-        paths,
-        vec![
-            "/home/user/AIcontrol/backlot",
-            "/home/user/AIcontrol/backlot-work"
-        ]
-    );
+    assert_eq!(paths, vec!["/home/user/code/backlot"]);
     // Backspace through the filter boundary re-roots the tree.
-    for _ in 0.."AIcontrol/ba".len() {
+    for _ in 0.."code/ba".len() {
         p.key(Key::Backspace);
     }
     assert_eq!(p.input(), "~/");
@@ -271,7 +274,7 @@ fn backspace_edits() {
 #[test]
 fn the_in_use_group_hides_once_typing_starts() {
     let fs = demo_fs();
-    let in_use = vec![home().join("AIcontrol/backlot")];
+    let in_use = vec![home().join("code/backlot")];
     let mut p = picker(&fs, &home(), in_use);
     assert!(matches!(p.rows()[0], Row::Used { .. }));
     typ(&mut p, "x");
@@ -283,12 +286,12 @@ fn the_in_use_group_hides_once_typing_starts() {
 #[test]
 fn a_used_repository_picks_like_any_row() {
     let fs = demo_fs();
-    let in_use = vec![home().join("AIcontrol/backlot")];
+    let in_use = vec![home().join("code/backlot")];
     let mut p = picker(&fs, &home(), in_use);
     // The first selectable row is the used repo — Enter picks it.
     match p.key(Key::Enter) {
         Some(Outcome::Picked(path)) => {
-            assert_eq!(path, home().join("AIcontrol/backlot"))
+            assert_eq!(path, home().join("code/backlot"))
         }
         other => panic!("expected Picked, got {other:?}"),
     }
@@ -300,17 +303,17 @@ fn a_used_repository_picks_like_any_row() {
 fn the_tree_moves_expands_and_collapses() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/");
+    typ(&mut p, "/code/");
     // Select backlot's row: repos lead, so sel is acme-shop.
     p.key(Key::Down);
     assert_eq!(p.focus(), Focus::Tree);
-    assert_eq!(row_paths(&p)[p.sel()], "/home/user/AIcontrol/backlot");
-    // phone is the last row — expand it in place.
-    let phone = row_paths(&p)
+    assert_eq!(row_paths(&p)[p.sel()], "/home/user/code/backlot");
+    // clients — expand it in place.
+    let clients = row_paths(&p)
         .iter()
-        .position(|s| s == "/home/user/AIcontrol/phone")
+        .position(|s| s == "/home/user/code/clients")
         .unwrap();
-    while p.sel() < phone {
+    while p.sel() < clients {
         p.key(Key::Down);
     }
     p.key(Key::Right);
@@ -318,16 +321,16 @@ fn the_tree_moves_expands_and_collapses() {
     assert_eq!(
         paths
             .iter()
-            .filter(|s| s.starts_with("/home/user/AIcontrol/phone"))
+            .filter(|s| s.starts_with("/home/user/code/clients"))
             .count(),
-        3 // phone itself + wherdr + wherdr-v3
+        3 // clients itself + web-app + web-app-v2
     );
     // Left collapses it back.
-    let phone_idx = paths
+    let clients_idx = paths
         .iter()
-        .position(|s| s == "/home/user/AIcontrol/phone")
+        .position(|s| s == "/home/user/code/clients")
         .unwrap();
-    while p.sel() > phone_idx {
+    while p.sel() > clients_idx {
         p.key(Key::Up);
     }
     p.key(Key::Left);
@@ -335,12 +338,12 @@ fn the_tree_moves_expands_and_collapses() {
     assert_eq!(
         paths
             .iter()
-            .filter(|s| s.starts_with("/home/user/AIcontrol/phone/"))
+            .filter(|s| s.starts_with("/home/user/code/clients/"))
             .count(),
         0
     );
-    // Left again on the collapsed row moves to the parent — phone's
-    // parent is root-level, so nothing above: stays.
+    // Left again on the collapsed row moves to the parent —
+    // clients's parent is root-level, so nothing above: stays.
     p.key(Key::Left);
 }
 
@@ -349,20 +352,20 @@ fn the_tree_moves_expands_and_collapses() {
 fn right_enters_a_leaf_directory() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/");
-    // backlot-work has one child u1-api — Right expands, Right again
-    // on the leaf u1-api enters it.
-    let bw = row_paths(&p)
+    typ(&mut p, "/code/");
+    // scratch has one child service-a — Right expands, Right again
+    // on the leaf service-a enters it.
+    let sc = row_paths(&p)
         .iter()
-        .position(|s| s == "/home/user/AIcontrol/backlot-work")
+        .position(|s| s == "/home/user/code/scratch")
         .unwrap();
-    while p.sel() < bw {
+    while p.sel() < sc {
         p.key(Key::Down);
     }
-    p.key(Key::Right); // expands → u1-api appears
-    p.key(Key::Down); // select u1-api
+    p.key(Key::Right); // expands → service-a appears
+    p.key(Key::Down); // select service-a
     p.key(Key::Right); // leaf → descend
-    assert_eq!(p.input(), "~/AIcontrol/backlot-work/u1-api/");
+    assert_eq!(p.input(), "~/code/scratch/service-a/");
     assert_eq!(p.focus(), Focus::Input);
 }
 
@@ -372,28 +375,28 @@ fn right_enters_a_leaf_directory() {
 fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/ba");
+    typ(&mut p, "/code/ba");
     // backlot selected first — Enter picks it.
     match p.key(Key::Enter) {
         Some(Outcome::Picked(path)) => {
-            assert_eq!(path, home().join("AIcontrol/backlot"))
+            assert_eq!(path, home().join("code/backlot"))
         }
         other => panic!("expected Picked, got {other:?}"),
     }
     // A plain directory: Enter expands it and explains.
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/");
-    let bw = row_paths(&p)
+    typ(&mut p, "/code/");
+    let sc = row_paths(&p)
         .iter()
-        .position(|s| s == "/home/user/AIcontrol/backlot-work")
+        .position(|s| s == "/home/user/code/scratch")
         .unwrap();
-    while p.sel() < bw {
+    while p.sel() < sc {
         p.key(Key::Down);
     }
     p.key(Key::Enter);
     assert_eq!(p.status(), Some("not a git repository with a commit"));
     let paths = row_paths(&p);
-    assert!(paths.contains(&"/home/user/AIcontrol/backlot-work/u1-api".to_string()));
+    assert!(paths.contains(&"/home/user/code/scratch/service-a".to_string()));
 }
 
 /// A repository without commits cannot be picked; an unreadable
@@ -402,10 +405,10 @@ fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
 fn an_empty_repository_and_no_access_directory_report() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/");
+    typ(&mut p, "/code/");
     let er = row_paths(&p)
         .iter()
-        .position(|s| s == "/home/user/AIcontrol/empty-repo")
+        .position(|s| s == "/home/user/code/empty-repo")
         .unwrap();
     while p.sel() < er {
         p.key(Key::Down);
@@ -415,7 +418,7 @@ fn an_empty_repository_and_no_access_directory_report() {
     // noaccess: Enter expands nothing, the row marker says no access.
     let na = row_paths(&p)
         .iter()
-        .position(|s| s == "/home/user/AIcontrol/noaccess")
+        .position(|s| s == "/home/user/code/noaccess")
         .unwrap();
     while p.sel() < na {
         p.key(Key::Down);
@@ -431,7 +434,7 @@ fn an_empty_repository_and_no_access_directory_report() {
 fn an_unreadable_root_lists_nothing() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/noaccess/");
+    typ(&mut p, "/code/noaccess/");
     assert!(!p.root_listed());
     assert!(row_paths(&p).iter().all(|s| !s.contains("secret")));
 }
@@ -462,7 +465,7 @@ fn esc_twice_cancels_and_ctrl_c_at_once() {
 fn pagination_and_ends() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/AIcontrol/");
+    typ(&mut p, "/code/");
     p.set_page(3);
     p.key(Key::End);
     let last = p.sel();
@@ -480,9 +483,7 @@ fn pagination_and_ends() {
 #[test]
 fn the_in_use_group_caps_at_eight() {
     let fs = demo_fs();
-    let in_use: Vec<PathBuf> = (0..10)
-        .map(|i| home().join(format!("AIcontrol/r{i}")))
-        .collect();
+    let in_use: Vec<PathBuf> = (0..10).map(|i| home().join(format!("code/r{i}"))).collect();
     let p = picker(&fs, &home(), in_use);
     assert_eq!(
         p.rows()

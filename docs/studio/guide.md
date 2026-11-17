@@ -128,13 +128,13 @@ The repository question is a full-screen picker when stdin and stdout are termin
 
 ```
  New studio · repository
- path › ~/AIcontrol/▏                          Tab completes
+ path › ~/code/▏                               Tab completes
 
-   ~/AIcontrol
+   ~/code
  ▶ ├   acme-shop                  ● main · 2 h ago
    ├   backlot                    ● main · 5 min ago
-   ├   backlot-work
-   └ ▸ phone
+   ├   clients
+   └ ▸ scratch
 
  ● git repository with a commit — Enter picks it
  ↑↓ move   → open   ← close/up   Tab complete   Enter pick

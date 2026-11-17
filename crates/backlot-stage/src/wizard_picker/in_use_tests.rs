@@ -50,12 +50,12 @@ fn a_nested_repository_wins_over_its_parent() {
 fn cwds_deduplicate_to_roots_in_first_seen_order() {
     let mut roots = BTreeSet::new();
     roots.insert(PathBuf::from("/home/user/acme-shop"));
-    roots.insert(PathBuf::from("/home/user/wherdr"));
+    roots.insert(PathBuf::from("/home/user/code/web-app"));
     let is_repo = repos(&roots);
     let cwds = vec![
         PathBuf::from("/home/user/acme-shop/src"),
         PathBuf::from("/home/user/acme-shop/tests"), // same root
-        PathBuf::from("/home/user/wherdr"),
+        PathBuf::from("/home/user/code/web-app"),
         PathBuf::from("/opt/nowhere"), // no repository
         PathBuf::from(""),             // no cwd at all
     ];
@@ -63,7 +63,7 @@ fn cwds_deduplicate_to_roots_in_first_seen_order() {
         collect(cwds, &*is_repo),
         vec![
             PathBuf::from("/home/user/acme-shop"),
-            PathBuf::from("/home/user/wherdr"),
+            PathBuf::from("/home/user/code/web-app"),
         ]
     );
 }
