@@ -110,39 +110,108 @@ fn probe_state(terminal: &Terminal) -> Probe {
     }
 }
 
-/// Wait a short window for a remote stage to prove itself live. A
-/// finished terminal is removed either way, so a failed start leaves
-/// no `backlot-stage` behind to block the next one.
-async fn await_remote_start(
-    client: &hc_proto::client::Client,
-    address: &str,
-    target: &str,
-) -> Result<(), Fail> {
-    let params = || TerminalParams {
-        terminal: address.to_string(),
-        caller: None,
-    };
-    for _ in 0..20 {
-        let term = client
-            .terminal_get(params())
+/// One poll interval of the remote start's settle window.
+const POLL: Duration = Duration::from_millis(100);
+/// A remote stage must stay live this long before it counts as
+/// started: the core runs the line as `sh -c`, so the wrapper shell is
+/// live while it is still checking `command -v backlot`, and a very
+/// early stage failure must not read as a start.
+const SETTLE: Duration = Duration::from_millis(600);
+/// The overall bound while a terminal is neither live nor finished.
+const BOUND: Duration = Duration::from_millis(2000);
+
+/// The polling seam: a remote stage terminal and the clock. Tests
+/// script the probes and advance time without a core or a sleep.
+trait StageHost {
+    async fn probe(&self) -> Result<Probe, Fail>;
+    async fn remove(&self);
+    fn elapsed(&self) -> Duration;
+    async fn tick(&self);
+}
+
+/// The real core's stage terminal, measured from the `terminal.run`
+/// result.
+struct RemoteStage<'a> {
+    client: &'a hc_proto::client::Client,
+    address: &'a str,
+    started: std::time::Instant,
+}
+
+impl RemoteStage<'_> {
+    fn params(&self) -> TerminalParams {
+        TerminalParams {
+            terminal: self.address.to_string(),
+            caller: None,
+        }
+    }
+}
+
+impl StageHost for RemoteStage<'_> {
+    async fn probe(&self) -> Result<Probe, Fail> {
+        let term = self
+            .client
+            .terminal_get(self.params())
             .await
             .map_err(|e| Fail::refused(format!("terminal.get failed: {e}")))?;
-        match probe_state(&term) {
-            Probe::Live => return Ok(()),
-            Probe::Missing => {
-                let _ = client.terminal_rm(params()).await;
+        Ok(probe_state(&term))
+    }
+    async fn remove(&self) {
+        let _ = self.client.terminal_rm(self.params()).await;
+    }
+    fn elapsed(&self) -> Duration {
+        self.started.elapsed()
+    }
+    async fn tick(&self) {
+        tokio::time::sleep(POLL).await;
+    }
+}
+
+/// What one remote-start observation means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    /// Keep polling.
+    Wait,
+    /// The stage stayed live through the settle window.
+    Started,
+    /// The host has no `backlot`; the terminal is removed.
+    Missing,
+    /// The stage exited with this code; the terminal is removed.
+    Exited(i32),
+}
+
+fn start_verdict(probe: Probe, elapsed: Duration) -> Verdict {
+    match probe {
+        Probe::Missing => Verdict::Missing,
+        Probe::Exited(code) => Verdict::Exited(code),
+        Probe::Live if elapsed >= SETTLE => Verdict::Started,
+        Probe::Live | Probe::Starting if elapsed >= BOUND => Verdict::Started,
+        _ => Verdict::Wait,
+    }
+}
+
+/// Wait for a remote stage to prove itself live. A `live` sighting
+/// only counts after the settle window — the core runs the line as
+/// `sh -c`, so the wrapper shell is live while it checks for
+/// `backlot`. A finished terminal is removed either way, so a failed
+/// start leaves no `backlot-stage` behind to block the next one.
+async fn await_remote_start<S: StageHost>(stage: &S, target: &str) -> Result<(), Fail> {
+    loop {
+        let verdict = start_verdict(stage.probe().await?, stage.elapsed());
+        match verdict {
+            Verdict::Started => return Ok(()),
+            Verdict::Missing => {
+                stage.remove().await;
                 return Err(Fail::refused(not_installed(target)));
             }
-            Probe::Exited(code) => {
-                let _ = client.terminal_rm(params()).await;
+            Verdict::Exited(code) => {
+                stage.remove().await;
                 return Err(Fail::refused(format!(
                     "{STAGE_NAME} exited with code {code}"
                 )));
             }
-            Probe::Starting => tokio::time::sleep(Duration::from_millis(100)).await,
+            Verdict::Wait => stage.tick().await,
         }
     }
-    Ok(())
 }
 
 async fn start_async(common: &Common, env: &Env) -> Result<String, Fail> {
@@ -174,7 +243,12 @@ async fn start_async(common: &Common, env: &Env) -> Result<String, Fail> {
         .await
         .map_err(|e| Fail::refused(format!("terminal.run failed: {e}")))?;
     if let Endpoint::Remote(remote) = &link.endpoint {
-        await_remote_start(&link.client, &run.terminal.address, &remote.target).await?;
+        let stage = RemoteStage {
+            client: &link.client,
+            address: &run.terminal.address,
+            started: std::time::Instant::now(),
+        };
+        await_remote_start(&stage, &remote.target).await?;
     }
     Ok(format!("{STAGE_NAME} started ({})", run.terminal.address))
 }
