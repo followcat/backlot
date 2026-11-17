@@ -238,6 +238,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         | Cmd::StageStart
         | Cmd::StageRun
         | Cmd::StageWatch { .. }
+        | Cmd::Runners
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }

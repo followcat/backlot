@@ -12,6 +12,7 @@ mod cline_hook_awk;
 pub mod cmd;
 mod codex;
 pub mod cursor;
+pub mod detect;
 mod devin;
 mod fake;
 pub mod opencode;
@@ -392,5 +393,7 @@ mod cmd_tests;
 mod cursor_tests;
 #[cfg(test)]
 mod decision_tests;
+#[cfg(test)]
+mod detect_tests;
 #[cfg(test)]
 mod work_tests;
