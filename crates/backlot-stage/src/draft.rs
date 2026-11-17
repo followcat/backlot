@@ -59,7 +59,7 @@ pub fn check(base: &Path, name: &str, repo: &str, cast_path: &Path, env: &Env) -
     for runner in named {
         if !crate::runners::supported(runner) {
             return Err(Fail::refused(format!(
-                "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd)"
+                "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline)"
             )));
         }
         let path = crate::config::runner_env_in(&config_text, runner)
