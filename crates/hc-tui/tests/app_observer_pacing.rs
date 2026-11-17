@@ -46,13 +46,17 @@ fn app() -> Rig {
         std::path::PathBuf::new(),
     );
     let probe = Arc::new(Probe::default());
-    let app = App::new(
+    let mut app = App::new(
         watcher,
         loopcore::attach_opens(attach_tx),
         config.live_keybinds(),
         shell,
         probe.clone(),
     );
+    // The opening page is not what this loop test measures: dismiss it
+    // (and its one-time animation) as Esc would, so idle draws are the
+    // shell's own.
+    app.dismiss_opening();
     (app, probe, subs, attaches)
 }
 

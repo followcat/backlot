@@ -125,13 +125,16 @@ fn app() -> Channels {
         std::path::PathBuf::new(),
     );
     let probe = Arc::new(Probe::default());
-    let app = App::new(
+    let mut app = App::new(
         watcher,
         loopcore::attach_opens(attach_tx),
         config.live_keybinds(),
         shell,
         probe.clone(),
     );
+    // These tests price pane paints: the opening page would cover the
+    // panes and its one-time animation would add draws, so dismiss it.
+    app.dismiss_opening();
     (app, probe, subs, rpcs, attaches)
 }
 

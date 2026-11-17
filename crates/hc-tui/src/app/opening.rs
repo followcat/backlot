@@ -104,6 +104,14 @@ impl App {
         self.sched.mark_dirty(now);
     }
 
+    /// Esc, and embedders that draw their own opening frame: hide the
+    /// page for this client session and finish its one-time run.
+    pub fn dismiss_opening(&mut self) {
+        self.opening.dismissed = true;
+        self.opening.forced = false;
+        self.opening_finish_anim();
+    }
+
     /// Leaving the page before the run ends finishes it: no resize,
     /// Esc-and-back or later redraw ever replays it.
     pub(crate) fn opening_finish_anim(&mut self) {
@@ -118,11 +126,9 @@ impl App {
     pub(crate) fn opening_key(&mut self, key: &TerminalKey) {
         match key.input.key {
             Key::Escape => {
-                self.opening.dismissed = true;
-                self.opening.forced = false;
                 // Leaving finishes the one-time run: returning to the
                 // page later shows it static.
-                self.opening_finish_anim();
+                self.dismiss_opening();
             }
             Key::Char('n') if key.input.mods == hc_vt::Mods::NONE => self.opening_new_studio(),
             Key::Char('h') if key.input.mods == hc_vt::Mods::NONE => {
