@@ -84,14 +84,15 @@ pub(super) fn render_overlays_and_cursor(
         } else {
             area
         };
-        let summary = app.panel_summary();
+        let machines = app.panel_summaries();
         let hits = crate::panel::render(
             buf,
             rect,
-            summary.as_ref(),
-            crate::panel::stage_running(&app.view),
+            &machines,
+            |machine| crate::panel::stage_running(&app.view, machine),
             &app.panel,
-            app.studio.current.as_deref(),
+            app.studio.current.as_ref(),
+            Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,
             &app.shell.palette,
         );
@@ -117,12 +118,31 @@ pub(super) fn render_overlays_and_cursor(
     app.hollywood_hits = if app.hollywood.visible() && app.opening.ready() && !app.opening_visible()
     {
         overlay_painted = true;
-        let summary = app.hollywood_summary();
+        let machines = app.panel_summaries();
+        // The collapsed strip anchors the frame's top-right — the same
+        // corner a beside/full-screen panel's title row owns. Hand it
+        // only the columns left of the panel; a full-screen panel
+        // leaves it none. The expanded band keeps the whole frame —
+        // floating over the panel is its job.
+        let hollywood_area = if app.hollywood.expanded() {
+            area
+        } else {
+            let panel_cols = if app.panel_fullscreen() {
+                area.width
+            } else {
+                app.panel_width()
+            };
+            Rect {
+                width: area.width.saturating_sub(panel_cols),
+                ..area
+            }
+        };
         crate::hollywood::render(
             buf,
-            area,
-            summary.as_ref(),
-            crate::panel::stage_running(&app.view),
+            hollywood_area,
+            &machines,
+            Some(crate::project::LOCAL_LABEL),
+            crate::panel::stage_running(&app.view, None),
             &app.hollywood,
             crate::hollywood::LayerOpts {
                 agent: app.has_hollywood_cfg,

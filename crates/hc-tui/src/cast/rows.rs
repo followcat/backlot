@@ -54,7 +54,7 @@ pub(crate) fn cast_rows<'a>(view: &'a CastView<'a>) -> Vec<CastRow<'a>> {
     let mut rows = Vec::new();
     for role in view
         .studio
-        .map(|studio| studio::cast_order(studio))
+        .map(|studio| studio::cast_order(studio.studio))
         .unwrap_or_default()
     {
         rows.push(CastRow::Person {

@@ -37,9 +37,16 @@ fn next_shell_n_walks_past_the_highest() {
         // A role carries no shell label.
         term("t4", &[(STUDIO_LABEL, "acme-shop")]),
     ]);
-    assert_eq!(next_shell_n(&view, "acme-shop"), 4);
-    assert_eq!(next_shell_n(&view, "other"), 10);
-    assert_eq!(next_shell_n(&view, "none"), 1);
+    assert_eq!(next_shell_n(&view, None, "acme-shop"), 4);
+    assert_eq!(next_shell_n(&view, None, "other"), 10);
+    assert_eq!(next_shell_n(&view, None, "none"), 1);
+    // A remote machine's shells count only on that machine.
+    let view = view_with(vec![term(
+        "host-b/t1",
+        &[(STUDIO_LABEL, "acme-shop"), (SHELL_LABEL, "7")],
+    )]);
+    assert_eq!(next_shell_n(&view, Some("host-b"), "acme-shop"), 8);
+    assert_eq!(next_shell_n(&view, None, "acme-shop"), 1);
 }
 
 #[test]
@@ -49,8 +56,25 @@ fn studio_shells_sorts_by_number() {
         term("t1", &[(STUDIO_LABEL, "acme-shop"), (SHELL_LABEL, "1")]),
     ]);
     assert_eq!(
-        studio_shells(&view, "acme-shop"),
+        studio_shells(&view, None, "acme-shop"),
         vec![(1, "t1".to_string()), (2, "t9".to_string())]
+    );
+    // A remote studio's shells answer with qualified addresses.
+    let view = view_with(vec![
+        term(
+            "host-b/t9",
+            &[(STUDIO_LABEL, "acme-shop"), (SHELL_LABEL, "2")],
+        ),
+        term(
+            "host-b/t1",
+            &[(STUDIO_LABEL, "acme-shop"), (SHELL_LABEL, "1")],
+        ),
+        // This core's shells never count on host-b.
+        term("t4", &[(STUDIO_LABEL, "acme-shop"), (SHELL_LABEL, "9")]),
+    ]);
+    assert_eq!(
+        studio_shells(&view, Some("host-b"), "acme-shop"),
+        vec![(1, "host-b/t1".to_string()), (2, "host-b/t9".to_string())]
     );
 }
 

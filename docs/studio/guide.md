@@ -386,6 +386,30 @@ prints the same); on any other card it focuses the studio.
 The bar only ever shows what the `backlot` document says and only ever acts through `backlot`
 commands — `backlot card apply c3` from the bar is the same command you would type.
 
+## Studios on several machines
+
+`hc machine add` attaches another machine's core to this client — the sidebar already lists its
+terminals. Each machine serves its own `backlot` document, and the client reads them all: the
+panel, the cast and the Hollywood frames show every machine's studios together, this core's
+first, and the same studio id on two machines is two studios.
+
+While studios come from one machine nothing looks different. Once they span machines, a studio's
+header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-b` is never
+confused with the local `acme-shop`. A machine that does not serve the document — no `backlot`
+installed, a foreign schema, a core that does not answer — simply contributes nothing: its slot
+stays blank, never an error.
+
+Acting on a studio runs on the machine that owns it. A local studio's keys spawn `backlot` here
+exactly as before; a remote studio's keys send `terminal.run` to that machine's core, where the
+client locates `backlot` once (`command -v`, then the login shell, then `~/.local/bin`) and
+reuses the path. Enter on a remote studio's frame or on one of its people focuses that terminal
+on its machine, like a sidebar row does. A machine without `backlot` installed says so in a
+notice instead of running anything.
+
+Hollywood itself — the headline, the cards and the `tell hollywood` line — stays this core's;
+only the frame list spans machines. And `n` still creates a studio on this core: choosing the
+machine at creation, and installing or upgrading `backlot` on a machine, come later.
+
 ## Permission prompts
 
 A role whose screen sits on a permission prompt for two seconds raises a `permission prompt`

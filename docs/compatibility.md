@@ -14,6 +14,8 @@ blank or uses a fallback. It doesn't cause an error or a retry loop.
 | Agent status read from the screen | present | absent | Agents show a status only if they report OSC 7501. |
 | `automatic_input`, `resize_notifications`: attach results | may be absent | present | Accepted. Unknown result fields are ignored. |
 | Unknown fields and event kinds | n/a | possible | Ignored. Optional fields stay `None`, and unknown kinds are skipped. |
+| `backlot` document on an added machine | served per machine | served per machine | A machine that does not serve it contributes no studios — blank, not an error. |
+| `terminal.run` `on:` | routed to the named machine | routed | Studio actions land on the studio's own machine; a core refusing the field fails that action's notice. |
 
 ## Done and unseen without `record_activity`
 

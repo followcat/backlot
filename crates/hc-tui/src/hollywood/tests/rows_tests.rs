@@ -9,7 +9,8 @@ use backlot_model::summary::Summary;
 #[test]
 fn the_frames_are_the_studios_then_the_new_studio_entry() {
     let summary = summary();
-    let all = frames(Some(&summary));
+    let list = machines(Some(&summary));
+    let all = frames(&list);
     assert_eq!(all.len(), 4);
     assert_eq!(
         all.iter().map(|f| f.target()).collect::<Vec<_>>(),
@@ -26,7 +27,7 @@ fn the_frames_are_the_studios_then_the_new_studio_entry() {
 
 #[test]
 fn a_missing_document_still_offers_the_entry() {
-    let all = frames(None);
+    let all = frames(&[]);
     assert_eq!(all.len(), 1);
     assert!(matches!(all[0], Frame::New));
 }
@@ -61,7 +62,7 @@ fn without_an_agent_the_band_is_the_setup_line() {
     let all = band_rows(Some(&summary), true, false);
     assert_eq!(all.len(), 1);
     assert!(matches!(all[0], Row::Setup));
-    let text = strip_text(Some(&summary), false);
+    let text = strip_text(&machines(Some(&summary)), false);
     assert!(text.contains("3 studios"), "{text}");
     assert!(!text.contains("card"), "{text}");
     // The square stays, dim: it is the bar's mark, not the agent's.
@@ -78,29 +79,30 @@ fn a_document_without_a_hollywood_object_has_a_setup_free_band() {
     let all = band_rows(Some(&summary), true, false);
     assert_eq!(all.len(), 1);
     assert!(matches!(all[0], Row::Setup));
-    assert_eq!(frames(Some(&summary)).len(), 4);
+    assert_eq!(frames(&machines(Some(&summary))).len(), 4);
 }
 
 #[test]
 fn the_strip_names_the_agent_the_studios_and_what_waits() {
     let summary = summary();
-    let content = strip(Some(&summary), true);
+    let list = machines(Some(&summary));
+    let content = strip(&list, true);
     assert_eq!(content.state, Some("live"));
     assert_eq!(content.studios, 3);
     assert_eq!(content.waiting, 2);
-    let text = strip_text(Some(&summary), true);
+    let text = strip_text(&list, true);
     assert!(text.contains("✦ hollywood"), "{text}");
     assert!(text.contains("3 studios"), "{text}");
     assert!(text.contains("!2"), "{text}");
     // Without an agent the state is gone and the count stays.
-    let content = strip(Some(&summary), false);
+    let content = strip(&list, false);
     assert_eq!(content.state, None);
-    assert!(strip_text(Some(&summary), false).contains("3 studios"));
+    assert!(strip_text(&list, false).contains("3 studios"));
     // A missing document reads as no studios.
-    let content = strip(None, true);
+    let content = strip(&[], true);
     assert_eq!(content.studios, 0);
     assert_eq!(content.state, Some("down"));
-    assert!(strip_text(None, true).contains("0 studios"));
+    assert!(strip_text(&[], true).contains("0 studios"));
 }
 
 #[test]

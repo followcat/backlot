@@ -230,14 +230,18 @@ pub(crate) fn project(view: &View, selected: Option<&str>) -> Projection {
 /// gets a machine key (`None` = local), that endpoint's filtered
 /// terminals and its effective selection, and returns its raw snapshot +
 /// tab layouts. `ProjectCache` reuses untouched endpoints through here.
+/// The local endpoint's fixed label — "Local" in the sidebar, and the
+/// same word in `id · machine` studio labels (source: client/shell/
+/// endpoints.rs local_endpoint).
+pub(crate) const LOCAL_LABEL: &str = "Local";
+
 pub(crate) fn project_with(
     view: &View,
     selected: Option<&str>,
     own: &crate::structure::Document,
     mut build: impl FnMut(Option<&str>, &[&Terminal], Option<&str>) -> EndpointSnapshot,
 ) -> Projection {
-    // Source client/shell/endpoints.rs local_endpoint has a fixed label.
-    let local_name = "Local".to_string();
+    let local_name = LOCAL_LABEL.to_string();
 
     let stream_offline =
         !matches!(view.link, Link::Online | Link::Static { .. }) || view.inventory.is_offline();

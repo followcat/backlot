@@ -9,11 +9,11 @@ mod mouse;
 
 use std::time::{Duration, Instant};
 
-use backlot_model::summary::Summary;
 use hc_proto::endpoint::Endpoint;
 
 use super::App;
 use crate::chrome::scroll;
+use crate::panel::data::MachineSummary;
 use crate::panel::{self, PanelConfig, PanelMode, Target};
 
 /// The working-mark spin interval (~8 fps); the deadline is a one-shot
@@ -91,9 +91,16 @@ impl App {
         self.panel.open() && (self.panel.focused || self.panel_fullscreen())
     }
 
-    /// The current `backlot` summary for this view.
-    pub(crate) fn panel_summary(&self) -> Option<Summary> {
-        panel::summary(&self.view)
+    /// Every machine's `backlot` summary for this view — this core's
+    /// first, then each added machine's, in `machine.list` order.
+    pub(crate) fn panel_summaries(&self) -> Vec<MachineSummary> {
+        panel::data::summaries(&self.view)
+    }
+
+    /// Whether `machine`'s (`None` is this core) inventory shows a
+    /// live stage terminal.
+    fn machine_stage_running(&self, machine: Option<&str>) -> bool {
+        panel::stage_running(&self.view, machine)
     }
 
     /// The row targets as they would draw now — selection works on
@@ -101,12 +108,12 @@ impl App {
     /// needs the drawn body's height; pre-first-draw it is zero, and
     /// `rows` reads that as "no constraint" so every block opens.
     fn panel_targets(&self) -> Vec<Target> {
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         panel::rows(
-            summary.as_ref(),
-            panel::stage_running(&self.view),
+            &machines,
+            |m| self.machine_stage_running(m),
             &self.panel,
-            self.studio.current.as_deref(),
+            self.studio.current.as_ref(),
             self.panel_hits.body.height,
         )
         .iter()
@@ -115,12 +122,25 @@ impl App {
     }
 
     /// The selected row's index in `targets` — a vanished target
-    /// reverts to the title (index 0).
+    /// reverts to the title (index 0). A `Studio`/`StageDown` target
+    /// names several rows, so `selected_row` pins the occurrence the
+    /// selection actually sits on; when rows shifted since (a publish
+    /// above it), the nearest surviving occurrence keeps the place.
     fn panel_selected_index(&self, targets: &[Target]) -> usize {
-        self.panel
-            .selected
-            .as_ref()
-            .and_then(|t| targets.iter().position(|r| r == t))
+        let Some(target) = self.panel.selected.as_ref() else {
+            return 0;
+        };
+        if let Some(at) = self.panel.selected_row
+            && targets.get(at) == Some(target)
+        {
+            return at;
+        }
+        targets
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| *t == target)
+            .map(|(i, _)| i)
+            .min_by_key(|i| i.abs_diff(self.panel.selected_row.unwrap_or(0)))
             .unwrap_or(0)
     }
 
@@ -131,6 +151,7 @@ impl App {
             self.panel.mode = PanelMode::Expanded;
             self.panel.focused = true;
             self.panel.selected = None;
+            self.panel.selected_row = None;
             self.panel.reopen_confirm = None;
             self.panel.scroll = 0;
             return;
@@ -150,6 +171,7 @@ impl App {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
         self.panel.selected = None;
+        self.panel.selected_row = None;
         self.panel.reopen_confirm = None;
         self.panel_anim_deadline = None;
     }
@@ -177,12 +199,12 @@ impl App {
     /// target — a move always lands on a different target, so the
     /// selection visibly steps. Moving clears an armed reopen.
     fn panel_move(&mut self, delta: isize) {
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         let rows = panel::rows(
-            summary.as_ref(),
-            panel::stage_running(&self.view),
+            &machines,
+            |m| self.machine_stage_running(m),
             &self.panel,
-            self.studio.current.as_deref(),
+            self.studio.current.as_ref(),
             self.panel_hits.body.height,
         );
         if rows.len() <= 1 {
@@ -202,6 +224,7 @@ impl App {
             }
         }
         self.panel.selected = Some(targets[index].clone());
+        self.panel.selected_row = Some(index);
         self.panel.reopen_confirm = None;
         // Keep the selection inside the scrolled body (title is fixed).
         let body_height = self.panel_hits.body.height.max(1);
@@ -235,6 +258,7 @@ impl App {
             .clamp(self.panel.scroll + 1, self.panel.scroll + viewport_rows)
             .min(targets.len().saturating_sub(1).max(1));
         self.panel.selected = targets.get(selected).cloned();
+        self.panel.selected_row = self.panel.selected.as_ref().map(|_| selected);
     }
 
     /// Space — collapse or expand the block the selected row belongs
@@ -250,27 +274,35 @@ impl App {
         };
         // A block is open when `expanded_set` says so — toggling
         // writes the opposite manual override.
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         let rows = panel::rows(
-            summary.as_ref(),
-            panel::stage_running(&self.view),
+            &machines,
+            |m| self.machine_stage_running(m),
             &self.panel,
-            self.studio.current.as_deref(),
+            self.studio.current.as_ref(),
             self.panel_hits.body.height,
         );
         let open = rows
             .iter()
-            .any(|r| matches!(r, panel::Row::BlockTop(s) if s.id == studio));
+            .any(|r| matches!(r, panel::Row::BlockTop(s) if s.key() == studio));
         if open {
             self.panel.expanded_blocks.remove(&studio);
             self.panel.collapsed_blocks.insert(studio.clone());
             // The block's identity changes with its shape — ride the
             // `╶` line so the next Space toggles it back open.
-            self.panel.selected = Some(Target::Block(studio));
+            self.panel.selected = Some(Target::Block(studio.clone()));
+            self.panel.selected_row = self
+                .panel_targets()
+                .iter()
+                .position(|t| matches!(t, Target::Block(s) if *s == studio));
         } else {
             self.panel.collapsed_blocks.remove(&studio);
             self.panel.expanded_blocks.insert(studio.clone());
-            self.panel.selected = Some(Target::Studio(studio));
+            self.panel.selected = Some(Target::Studio(studio.clone()));
+            self.panel.selected_row = self
+                .panel_targets()
+                .iter()
+                .position(|t| *t == Target::Studio(studio.clone()));
         }
     }
 
@@ -319,5 +351,10 @@ impl App {
     /// Tests inject a recorder; production spawns `current_exe()`.
     pub(crate) fn set_panel_runner(&mut self, runner: panel::PanelRunner) {
         self.panel_runner = runner;
+    }
+
+    /// cli installs the shared-RPC runner once the client is up.
+    pub(crate) fn set_remote_runner(&mut self, runner: panel::RemoteRunner) {
+        self.remote_runner = Some(runner);
     }
 }

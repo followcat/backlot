@@ -203,13 +203,13 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
         config_path,
     );
     shell.own_theme = own_theme;
-    let params = WatchParams {
+    let mut params = WatchParams {
         traversal: Some(crate::project::agent_traversal),
-        // The `backlot` summary document is this core's only — remote
-        // machines never carry the stage's document.
-        local_documents: vec!["backlot".into()],
         ..WatchParams::default()
     };
+    // `backlot` rides `documents`: every attached machine serves its
+    // own stage's summary under `DocKey { machine, name }`.
+    params.documents.push("backlot".into());
     // One framed RPC wire: the watcher's refreshes and the operations
     // + seen workers' calls all ride clones of this single opener.
     let ssh: Option<OsString> = None;
@@ -235,7 +235,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
     let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
     app.set_plain(plain);
 
-    app.set_operations(rpc);
+    app.set_operations(rpc.clone());
+    // A studio on an added machine runs its `backlot` there — one
+    // `terminal.run on:` through this same shared RPC connection.
+    app.set_remote_runner(crate::panel::RemoteRunner::new(rpc));
     // `endpoint_accepts_local_images` client arms: a `--remote`
     // endpoint, or this client itself running inside an SSH session.
     app.set_image_paste_context(

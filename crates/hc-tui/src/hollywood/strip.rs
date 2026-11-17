@@ -4,7 +4,6 @@
 //! agent's square in its role state, the studio count and the waiting
 //! chip. A click on it expands the bar.
 
-use backlot_model::summary::Summary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -15,6 +14,7 @@ use super::rows;
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::truncate_end;
+use crate::panel::data::MachineSummary;
 
 /// The strip's width cap: a third of the frame.
 const STRIP_FRAC: u16 = 3;
@@ -23,7 +23,7 @@ const STRIP_FRAC: u16 = 3;
 pub(crate) fn render(
     buf: &mut Buffer,
     frame: Rect,
-    summary: Option<&Summary>,
+    machines: &[MachineSummary],
     agent: bool,
     palette: &Palette,
 ) -> HollywoodRender {
@@ -32,7 +32,7 @@ pub(crate) fn render(
     }
     let cap = (frame.width / STRIP_FRAC).max(1);
     let base = Style::default().bg(palette.surface_dim);
-    let content = rows::strip(summary, agent);
+    let content = rows::strip(machines, agent);
     // Pieces in draw order — the same text `rows::strip_text` builds:
     // the mark, the agent's square, the count and the waiting chip.
     let mut pieces: Vec<(String, Style)> = vec![

@@ -81,6 +81,74 @@ fn app_with_panel_doc() -> App {
     app
 }
 
+/// `host-b`'s `backlot` document: `beta-tools` with a live
+/// producer/director and `actor-a` carrying `t1` at high priority.
+/// Bare terminals — `parse` qualifies them to `host-b/<t>`.
+fn remote_summary_json() -> serde_json::Value {
+    serde_json::json!({
+        "schema": "backlot/1",
+        "updated_ms": 2,
+        "studios": [{
+            "id": "beta-tools", "title": "Beta tools", "state": "live",
+            "requirement_version": 1, "mode": "standard",
+            "open_reviews": 0, "waiting": 0,
+            "next": "deliver t1",
+            "roles": [
+                { "role": "producer", "name": "producer", "terminal": "t1",
+                  "state": "live" },
+                { "role": "director", "name": "director", "terminal": "t2",
+                  "state": "live" },
+                { "role": "actor-a", "name": "actor-a", "terminal": "t10",
+                  "runner": "agent-a", "model": "m", "state": "live",
+                  "task": "t1", "priority": "high", "doing": "writes code" }
+            ]
+        }]
+    })
+}
+
+/// A two-machine app: the local `acme-shop` plus `host-b`'s
+/// `beta-tools`, both stages live — the shape the real check drove.
+fn app_with_two_machines() -> App {
+    let mut app = app_with_panel_doc();
+    app.view.machines = Some(vec![hc_proto::machine::MachineView {
+        name: "host-b".into(),
+        target: "host-b".into(),
+        id: "id-host-b".into(),
+        host: "host-b".into(),
+        hostname: None,
+        version: "0".into(),
+        state: "connected".into(),
+        session: None,
+        since_ms: None,
+        temporary: false,
+        via: false,
+        why: None,
+    }]);
+    app.view.documents_mut().insert(
+        DocKey {
+            machine: Some("host-b".into()),
+            name: "backlot".into(),
+        },
+        Document {
+            value: remote_summary_json(),
+            ..Document::default()
+        }
+        .into(),
+    );
+    let mut stage = crate::sidebar::fixture::term("host-b/t9");
+    stage.name = Some("backlot-stage".into());
+    stage.state = "live".into();
+    let mut terms: Vec<_> = app.view.inventory.terminals().values().cloned().collect();
+    terms.push(stage);
+    for address in ["host-b/t1", "host-b/t2", "host-b/t10"] {
+        terms.push(crate::sidebar::fixture::term(address));
+    }
+    app.view.inventory_mut().replace(3, terms);
+    app.reconcile_published_view();
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
+    app
+}
+
 fn key(app: &mut App, k: hc_vt::Key) {
     app.on_input(
         UiEvent::Key(term_key(k, hc_vt::Mods::NONE, hc_vt::Action::Press)),

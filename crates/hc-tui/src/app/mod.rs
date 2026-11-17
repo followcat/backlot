@@ -240,6 +240,10 @@ pub struct App {
     /// Injectable `backlot …` runner — tests record argv, production
     /// spawns `current_exe()` off the event loop.
     panel_runner: crate::panel::PanelRunner,
+    /// Runs `backlot …` on an added machine through `terminal.run
+    /// on:` — `None` until cli installs the shared-RPC runner, so a
+    /// test's remote action reports the machine as unreachable.
+    remote_runner: Option<crate::panel::RemoteRunner>,
     panel_action_tx: mpsc::Sender<(String, Result<(), String>)>,
     panel_rx: mpsc::Receiver<(String, Result<(), String>)>,
     /// Endpoint flags (`--session`/`--remote`) for spawned actions.

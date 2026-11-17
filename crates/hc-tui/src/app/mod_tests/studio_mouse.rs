@@ -34,7 +34,7 @@ async fn a_cast_row_click_focuses_the_person() {
         alice.y,
     ));
     assert_eq!(app.focused.as_deref(), Some("t4"));
-    assert_eq!(app.studio.current.as_deref(), Some("acme-shop"));
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
 }
 
 #[tokio::test]
@@ -76,7 +76,7 @@ async fn a_block_top_border_click_makes_that_studio_current() {
         .map(|(rect, _)| *rect)
         .expect("night-owl's frame hit");
     app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), top.x, top.y));
-    assert_eq!(app.studio.current.as_deref(), Some("night-owl"));
+    assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(app.focused.as_deref(), Some("t7"));
 }
 

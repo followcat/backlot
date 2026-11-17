@@ -369,7 +369,9 @@ fn active_endpoint_label<'a>(state: &'a ShellRenderState<'_>) -> &'a str {
         .endpoints
         .iter()
         .find(|endpoint| &endpoint.endpoint_id == state.active_endpoint_id)
-        .map_or("Local", |endpoint| endpoint.label.as_str())
+        .map_or(crate::project::LOCAL_LABEL, |endpoint| {
+            endpoint.label.as_str()
+        })
 }
 
 fn render_endpoint_row(

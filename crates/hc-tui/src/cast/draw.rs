@@ -69,12 +69,17 @@ pub(crate) fn render_cast(
                 .width
                 .saturating_sub(13) // " cast · " plus the `1/12` tail
                 .max(4);
+            let label = view
+                .label
+                .as_ref()
+                .map(|label| label.fit(id_width as usize))
+                .unwrap_or_else(|| studio.studio.id.clone());
             put_text(
                 buffer,
                 header.x,
                 header.y,
                 header.width,
-                &format!(" cast · {}", truncate_end(&studio.id, id_width as usize)),
+                &format!(" cast · {label}"),
                 Style::default()
                     .fg(palette.overlay0)
                     .add_modifier(Modifier::BOLD),

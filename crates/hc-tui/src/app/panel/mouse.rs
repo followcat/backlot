@@ -61,10 +61,20 @@ impl App {
                     .panel_hits
                     .rows
                     .iter()
-                    .find(|(rect, _)| contains(*rect, point))
-                    .map(|(_, target)| target.clone());
-                if let Some(target) = hit {
+                    .enumerate()
+                    .find(|(_, (rect, _))| contains(*rect, point))
+                    .map(|(pos, (_, target))| (pos, target.clone()));
+                if let Some((pos, target)) = hit {
+                    // Hits draw from `1 + scroll-start` in order — the
+                    // absolute row index pins which occurrence of a
+                    // repeated `Studio` target was clicked.
+                    let start = self
+                        .panel_hits
+                        .metrics
+                        .map(|m| m.max_offset_from_bottom - m.offset_from_bottom)
+                        .unwrap_or(0);
                     self.panel.selected = Some(target);
+                    self.panel.selected_row = Some(1 + start + pos);
                     self.panel_activate();
                 }
             }

@@ -31,6 +31,8 @@ pub mod error_kind {
     pub const UNAVAILABLE: &str = "unavailable";
     /// A versioned write found the value changed under it.
     pub const CONFLICT: &str = "conflict";
+    /// The program could not be started (a missing `argv[0]`).
+    pub const SPAWN_FAILED: &str = "spawn_failed";
 }
 
 /// Serializes as `"2.0"` and accepts only `"2.0"`.
