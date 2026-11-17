@@ -67,6 +67,11 @@ pub struct StudioSummary {
     /// directory (U2). Documents an older stage wrote have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo: Option<String>,
+    /// Every task the ledger knows is terminal and `studio.finished`
+    /// was never written — the work is done, the finish is still the
+    /// user's. Documents an older stage wrote read as `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ready_to_finish: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
 }
@@ -122,6 +127,11 @@ pub struct RoleSummary {
     pub since_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention: Option<String>,
+    /// The open `attention` is a `permission prompt` only the user may
+    /// answer — a flagged screen, or a prompt on a non-actor role
+    /// (D9). Documents an older stage wrote read as `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub attention_user: bool,
 }
 
 /// The whole document body.
@@ -240,6 +250,17 @@ fn role_attention(state: &StudioState, role: &str) -> Option<String> {
     })
 }
 
+/// The role's open attention is the user's to answer — the same rule
+/// the `needs the user` marker follows, as a flag clients can count
+/// without re-reading the text (the lot pill's urgent count).
+fn role_attention_user(state: &StudioState, role: &str) -> bool {
+    state.open_attention().any(|a| {
+        a.role == role
+            && a.reason == crate::event::PERMISSION_PROMPT
+            && (a.needs_user || crate::state::actor_task(&a.role).is_none())
+    })
+}
+
 /// One role's summary. `live` maps a terminal address to what the
 /// program there reports doing; `work` the watch pass's per-role
 /// screen classification and `failed` a role's StopFailure error,
@@ -316,6 +337,7 @@ fn role_summary(
         resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
         since_ms: r.since_ms,
         attention: role_attention(state, role),
+        attention_user: role_attention_user(state, role),
     })
 }
 
@@ -358,6 +380,7 @@ pub fn summary(
                     error: Some(error),
                     next: None,
                     repo: None,
+                    ready_to_finish: false,
                     roles: Vec::new(),
                 });
             }
@@ -413,6 +436,7 @@ pub fn summary(
                 resumable: false,
                 since_ms: 0,
                 attention: None,
+                attention_user: false,
             });
         }
         let entry = StudioSummary {
@@ -432,6 +456,9 @@ pub fn summary(
                 .first()
                 .map(|s| cap(&format!("{} — {}", s.label, s.owner))),
             repo: Some(cap(&cfg.repo)),
+            ready_to_finish: !state.tasks.is_empty()
+                && state.tasks.values().all(|t| t.status.is_terminal())
+                && state.finished.is_none(),
             roles,
         };
         if done {
