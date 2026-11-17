@@ -219,12 +219,18 @@ impl<'a> Picker<'a> {
     pub fn root_display(&self) -> String {
         filter::shorten(&self.root, &self.home)
     }
+    /// `path` spelled with `~` for the home prefix — the "in use"
+    /// rows' display.
+    pub fn display(&self, path: &Path) -> String {
+        filter::shorten(path, &self.home)
+    }
     /// `false` — the root's own listing failed; the tree says
     /// `(no access)`.
     pub fn root_listed(&self) -> bool {
         self.root_listed
     }
     /// Leading `Used` rows — the group is empty once typing starts.
+    #[cfg(test)]
     pub fn in_use_rows(&self) -> usize {
         self.rows
             .iter()
@@ -254,7 +260,14 @@ impl<'a> Picker<'a> {
     pub fn is_expanded(&self, path: &Path) -> bool {
         self.expanded.contains(path)
     }
-    /// The input set outright — tests and the start rule use it.
+    /// `path` has children the tree would show — Right expands it
+    /// rather than entering, its marker is `▸` rather than a leaf.
+    pub fn has_children(&mut self, path: &Path) -> bool {
+        self.kids(path)
+            .is_some_and(|kids| !filter::rank(kids, "", &*self.seams.is_repo).is_empty())
+    }
+    /// The input set outright — tests use it.
+    #[cfg(test)]
     pub fn set_input(&mut self, text: &str) {
         self.text = text.to_string();
         self.cursor = self.text.len();

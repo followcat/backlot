@@ -55,7 +55,6 @@ pub mod store;
 mod watch;
 mod watchdog;
 mod wizard;
-#[cfg(test)]
 mod wizard_picker;
 mod workareas;
 

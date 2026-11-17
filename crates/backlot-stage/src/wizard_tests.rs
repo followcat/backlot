@@ -37,6 +37,7 @@ fn io<'a>(lines: &'a mut &[u8], out: &'a mut Vec<u8>, edited: Option<&'a str>) -
             Some(text) => fs::write(file, text).map_err(|e| e.to_string()),
             None => Err("no editor".into()),
         }),
+        pick_repo: None,
     }
 }
 
@@ -205,6 +206,7 @@ fn no_runner_installed_refuses_the_draft() {
         git_repo: Box::new(|_| true),
         installed: Box::new(|_| false),
         edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: None,
     };
     let res = run_io(Common::default(), args(), &env, &mut io);
     match res {
@@ -240,6 +242,59 @@ fn the_reserved_name_is_refused() {
     let (res, _out) = run(common, args(), &env, answers.as_bytes(), None);
     match res {
         Err(Fail::Refused(m)) => assert!(m.contains("reserved"), "{m}"),
+        other => panic!("expected refusal, got {other:?}"),
+    }
+    assert!(!scratch.dir.join("studios").exists());
+}
+
+/// U5: on a terminal the `pick_repo` seam answers the repository
+/// question — the line prompt never prints, and the picked path
+/// flows through the same checks as a typed answer.
+#[test]
+fn a_terminal_pick_replaces_the_line_prompt() {
+    let _lock = DRAFT_LOCK.lock().unwrap();
+    let (scratch, env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    let picked = PathBuf::from(&repo);
+    let answers = b"\n\na\nn\n".as_slice();
+    let mut input = answers;
+    let mut out = Vec::new();
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "fake"),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: Some(Box::new(move |_| Ok(picked.clone()))),
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    drop(io);
+    assert!(res.unwrap().contains("studio.created"));
+    let out = String::from_utf8(out).unwrap();
+    assert!(!out.contains("repository"), "{out}");
+    assert!(out.contains("studio [acme-shop]"), "{out}");
+    assert!(scratch.dir.join("studios/acme-shop/events.jsonl").is_file());
+}
+
+/// U5: the picker's cancel refuses with "cancelled" — nothing is
+/// written, like a refused cast.
+#[test]
+fn a_cancelled_pick_writes_nothing() {
+    let (scratch, env) = scratch();
+    let answers = b"\n\n\n\n".as_slice();
+    let mut input = answers;
+    let mut out = Vec::new();
+    let mut io = Io {
+        input: &mut input,
+        out: &mut out,
+        git_repo: Box::new(|_| true),
+        installed: Box::new(|r| r == "fake"),
+        edit: Box::new(|_| Err("no editor".into())),
+        pick_repo: Some(Box::new(|_| Err(Fail::refused("cancelled")))),
+    };
+    let res = run_io(Common::default(), args(), &env, &mut io);
+    match res {
+        Err(Fail::Refused(m)) => assert!(m.contains("cancelled"), "{m}"),
         other => panic!("expected refusal, got {other:?}"),
     }
     assert!(!scratch.dir.join("studios").exists());

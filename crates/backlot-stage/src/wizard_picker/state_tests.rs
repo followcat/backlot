@@ -254,7 +254,10 @@ fn backspace_edits() {
     let paths = row_paths(&p);
     assert_eq!(
         paths,
-        vec!["/home/user/AIcontrol/backlot", "/home/user/AIcontrol/backlot-work"]
+        vec![
+            "/home/user/AIcontrol/backlot",
+            "/home/user/AIcontrol/backlot-work"
+        ]
     );
     // Backspace through the filter boundary re-roots the tree.
     for _ in 0.."AIcontrol/ba".len() {

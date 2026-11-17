@@ -8,7 +8,7 @@
 //! then the stage is offered. Nothing is written before the user
 //! accepts — a refused cast writes no studio at all.
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use crate::args::Common;
@@ -42,6 +42,10 @@ pub(crate) struct WizardArgs {
 /// The `$VISUAL`/`$EDITOR` seam — the edited file stays where it is.
 type Edit<'a> = Box<dyn Fn(&Path) -> Result<(), String> + 'a>;
 
+/// The terminal picker's seam — the current directory in, the picked
+/// repository's absolute path out; `Err` the picker's refusal.
+type PickRepo<'a> = Box<dyn FnMut(&Path) -> Result<PathBuf, Fail> + 'a>;
+
 /// Everything `run` does behind injected seams, so tests script the
 /// prompts and never spawn git, an editor or a runner probe.
 pub(crate) struct Io<'a> {
@@ -56,6 +60,12 @@ pub(crate) struct Io<'a> {
     pub installed: Box<dyn Fn(&str) -> bool + 'a>,
     /// `$VISUAL`/`$EDITOR <file>` — the edited file stays where it is.
     pub edit: Edit<'a>,
+    /// The terminal repository picker — `Some` only when the
+    /// wizard's stdin and stdout are both a terminal (U5). The
+    /// repository question goes through it instead of `ask`; it
+    /// answers the picked absolute path, `Err` the picker's own
+    /// refusal — "cancelled" for Esc/Ctrl+C.
+    pub pick_repo: Option<PickRepo<'a>>,
 }
 
 /// The real seams: git for the default probe, `runners::installed`
@@ -79,6 +89,17 @@ fn real_io<'a>(input: &'a mut dyn BufRead, out: &'a mut dyn Write, env: &'a Env)
                 == 0
         }),
         installed: Box::new(move |runner| crate::runners::installed(runner, env.get("PATH"))),
+        pick_repo: (std::io::stdin().is_terminal() && std::io::stdout().is_terminal()).then(
+            || -> PickRepo {
+                Box::new(
+                    |start| match crate::wizard_picker::pick(start, Vec::new()) {
+                        Ok(Some(path)) => Ok(path),
+                        Ok(None) => Err(Fail::refused("cancelled")),
+                        Err(e) => Err(Fail::refused(format!("picker: {e}"))),
+                    },
+                )
+            },
+        ),
         edit: Box::new(|file| {
             let editor = std::env::var("VISUAL")
                 .ok()
@@ -131,8 +152,15 @@ pub(crate) fn run_io(
         Some(repo) => repo,
         None => {
             let cwd = std::env::current_dir().map_err(|e| Fail::refused(e.to_string()))?;
-            let default = (io.git_repo)(&cwd).then(|| cwd.to_string_lossy().into_owned());
-            repo_answer(ask(io, "repository", default.as_deref())?)?
+            match io.pick_repo.as_mut() {
+                // On a terminal the picker answers the question —
+                // the line prompt stays for scripts and pipes.
+                Some(pick) => repo_answer(pick(&cwd)?.to_string_lossy().into_owned())?,
+                None => {
+                    let default = (io.git_repo)(&cwd).then(|| cwd.to_string_lossy().into_owned());
+                    repo_answer(ask(io, "repository", default.as_deref())?)?
+                }
+            }
         }
     };
     let id = match common.studio.clone() {
