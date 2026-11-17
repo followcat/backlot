@@ -83,18 +83,25 @@ async fn a_click_on_the_input_line_edits_it() {
 }
 
 #[tokio::test]
-async fn the_wheel_scrolls_the_body() {
+async fn the_wheel_scrolls_the_frames_sideways() {
     let mut app = app_with_hollywood();
-    // A short panel forces an overflowing body.
-    app.area = (120, 12);
+    // Two frames per row and one row of frames: three frames do not
+    // fit, so the window moves.
+    app.area = (70, 18);
     app.hollywood.mode = LayerMode::Expanded;
-    draw_to(&mut app, 120, 12);
-    assert!(app.hollywood_hits.metrics.unwrap().max_offset_from_bottom > 0);
-    let area = app.hollywood_hits.area;
-    app.on_mouse(mouse(MouseEventKind::ScrollDown, area.x + 2, area.y + 2));
-    assert_eq!(app.hollywood.scroll, 1);
-    app.on_mouse(mouse(MouseEventKind::ScrollUp, area.x + 2, area.y + 2));
-    assert_eq!(app.hollywood.scroll, 0);
+    draw_to(&mut app, 70, 18);
+    // Over the frames the wheel scrolls the frame window.
+    let frame = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Studio(_)))
+        .map(|(rect, _)| *rect)
+        .expect("a frame");
+    app.on_mouse(mouse(MouseEventKind::ScrollDown, frame.x + 1, frame.y + 1));
+    assert!(app.hollywood.frame_scroll > 0, "the frames scrolled");
+    app.on_mouse(mouse(MouseEventKind::ScrollUp, frame.x + 1, frame.y + 1));
+    assert_eq!(app.hollywood.frame_scroll, 0);
 }
 
 #[tokio::test]

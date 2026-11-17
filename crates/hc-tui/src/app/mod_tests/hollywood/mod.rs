@@ -375,10 +375,8 @@ async fn the_strip_draws_at_the_top_right_and_expands_on_click() {
     let backend = draw_to(&mut app, 120, 24);
     let top = &screen_lines(&backend)[0];
     assert!(top.contains("✦ hollywood"), "{top}");
-    assert!(
-        top.contains("2 live 1 fin") || top.contains("1 live 1 fin"),
-        "{top}"
-    );
+    assert!(top.contains("2 studios"), "{top}");
+    assert!(top.contains("!1"), "the waiting chip: {top}");
     let strip = app.hollywood_hits.area;
     assert_eq!(strip.height, 1);
     assert_eq!(strip.x + strip.width, 120);

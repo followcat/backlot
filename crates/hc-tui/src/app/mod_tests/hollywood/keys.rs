@@ -62,23 +62,45 @@ async fn a_refused_key_falls_back_to_alt_y_with_a_notice() {
 }
 
 #[tokio::test]
-async fn expanded_keys_move_act_and_do_not_leak() {
+async fn expanded_keys_walk_the_frames_and_the_band() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // j selects the first body row — a studio — k back to the title.
-    key(&mut app, hc_vt::Key::Char('j'));
+    // Opening selects the first frame.
     assert_eq!(
         app.hollywood.selected,
         Some(Target::Studio("acme-shop".into()))
     );
-    key(&mut app, hc_vt::Key::Char('k'));
-    assert_eq!(app.hollywood.selected, Some(Target::Title));
-    key(&mut app, hc_vt::Key::ArrowDown);
+    // → / l walk the frames, the new-studio frame included.
+    key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(
         app.hollywood.selected,
-        Some(Target::Studio("acme-shop".into()))
+        Some(Target::Studio("beta-tools".into()))
+    );
+    key(&mut app, hc_vt::Key::Char('l'));
+    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
+    // The last frame is the end of the line.
+    key(&mut app, hc_vt::Key::Char('l'));
+    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
+    // ← / h come back.
+    key(&mut app, hc_vt::Key::Char('h'));
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("beta-tools".into()))
+    );
+    // ↓ leaves the frames for the band's first row; ↑ comes back.
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key(&mut app, hc_vt::Key::Char('k'));
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::NewStudio),
+        "up from the band returns to the frames"
     );
     // Nothing reached the focused program.
     assert_eq!(app.pane.input_backlog().0, 0, "expanded keys leaked");

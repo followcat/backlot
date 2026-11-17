@@ -89,15 +89,40 @@ impl App {
                     }
                 }
                 MouseEventKind::ScrollUp => {
-                    self.hollywood_scroll_to(self.hollywood.scroll.saturating_sub(1));
+                    if self.hollywood_over_frames(point) {
+                        self.hollywood_frame_scroll(-1);
+                    } else {
+                        self.hollywood_scroll_to(self.hollywood.scroll.saturating_sub(1));
+                    }
                 }
                 MouseEventKind::ScrollDown => {
-                    self.hollywood_scroll_to(self.hollywood.scroll.saturating_add(1));
+                    if self.hollywood_over_frames(point) {
+                        self.hollywood_frame_scroll(1);
+                    } else {
+                        self.hollywood_scroll_to(self.hollywood.scroll.saturating_add(1));
+                    }
                 }
                 _ => {}
             },
             LayerMode::Hidden => {}
         }
+    }
+
+    /// The point sits on the frames' block — the wheel scrolls it
+    /// sideways there and the cards vertically.
+    fn hollywood_over_frames(&self, point: (u16, u16)) -> bool {
+        let rect = self.hollywood_frames_hit();
+        !rect.is_empty() && contains(rect, point)
+    }
+
+    /// The wheel's sideways step over the frames: one frame, clamped
+    /// into the window.
+    fn hollywood_frame_scroll(&mut self, delta: isize) {
+        let (visible, _) = self.hollywood_frame_window();
+        let frames = self.hollywood_frames().len();
+        let max = frames.saturating_sub(visible);
+        let next = self.hollywood.frame_scroll as isize + delta;
+        self.hollywood.frame_scroll = next.clamp(0, max as isize) as usize;
     }
 
     /// The scrollbar grab continues — drag math mirrors the panel's.

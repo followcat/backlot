@@ -1,107 +1,132 @@
-//! The layer's row model and the strip's one-line content.
+//! The bar's model: the frames, the band rows, the strip's content
+//! and the cast marks — all pure reads of the document.
 use super::*;
-use crate::hollywood::rows::Row;
-use crate::hollywood::{Target, rows, strip_text};
+use crate::hollywood::rows::{
+    CastMark, Frame, Row, Target, band_rows, frames, on_set, strip, strip_text,
+};
+use backlot_model::summary::Summary;
 
 #[test]
-fn expanded_rows_are_title_body_then_input() {
+fn the_frames_are_the_studios_then_the_new_studio_entry() {
     let summary = summary();
-    let all = rows(Some(&summary), true, true);
-    assert!(matches!(all[0], Row::Title));
-    assert!(matches!(all.last(), Some(Row::Input)));
-    let body: Vec<Target> = all[1..all.len() - 1].iter().map(|r| r.target()).collect();
-    // Studios first, then the headline, then the open cards.
+    let all = frames(Some(&summary));
+    assert_eq!(all.len(), 4);
     assert_eq!(
-        body,
+        all.iter().map(|f| f.target()).collect::<Vec<_>>(),
         vec![
             Target::Studio("acme-shop".into()),
             Target::Studio("beta-tools".into()),
+            Target::Studio("gamma-site".into()),
+            Target::NewStudio,
+        ]
+    );
+    // The last frame is always the entry.
+    assert!(matches!(all.last(), Some(Frame::New)));
+}
+
+#[test]
+fn a_missing_document_still_offers_the_entry() {
+    let all = frames(None);
+    assert_eq!(all.len(), 1);
+    assert!(matches!(all[0], Frame::New));
+}
+
+#[test]
+fn the_band_is_the_headline_the_cards_and_the_input() {
+    let summary = summary();
+    let all = band_rows(Some(&summary), true, true);
+    let targets: Vec<Target> = all.iter().map(|r| r.target()).collect();
+    assert_eq!(
+        targets,
+        vec![
             Target::Headline,
             Target::Card("c3".into()),
             Target::Card("c4".into()),
+            Target::Input,
         ]
     );
 }
 
 #[test]
-fn a_dead_stage_adds_its_line_and_keeps_the_studios() {
+fn a_dead_stage_leads_the_band() {
     let summary = summary();
-    let all = rows(Some(&summary), false, true);
-    assert!(matches!(all[1], Row::StageDown));
-    assert!(
-        all.iter()
-            .any(|r| matches!(r, Row::Studio(s) if s.id == "acme-shop"))
-    );
+    let all = band_rows(Some(&summary), false, true);
+    assert!(matches!(all[0], Row::StageDown));
+    assert_eq!(all[0].target(), Target::StageDown);
 }
 
 #[test]
-fn no_document_and_no_hollywood_section_degrade() {
-    // No document at all.
-    let all = rows(None, true, true);
-    assert!(matches!(all[1], Row::Empty));
-    assert!(matches!(all.last(), Some(Row::Input)));
-    // A document with no `hollywood` object: studios still show,
-    // no headline or cards appear.
+fn without_an_agent_the_band_is_the_setup_line() {
+    let summary = summary();
+    let all = band_rows(Some(&summary), true, false);
+    assert_eq!(all.len(), 1);
+    assert!(matches!(all[0], Row::Setup));
+    let text = strip_text(Some(&summary), false);
+    assert!(text.contains("3 studios"), "{text}");
+    assert!(!text.contains("card"), "{text}");
+    // The square stays, dim: it is the bar's mark, not the agent's.
+    assert!(text.contains('■'), "{text}");
+}
+
+#[test]
+fn a_document_without_a_hollywood_object_has_a_setup_free_band() {
+    // No agent: the studios still show as frames; the band is the
+    // setup line and nothing else.
     let mut value = summary_json();
     value.as_object_mut().unwrap().remove("hollywood");
     let summary: Summary = serde_json::from_value(value).unwrap();
-    let all = rows(Some(&summary), true, true);
-    assert!(all.iter().any(|r| matches!(r, Row::Studio(_))));
-    assert!(!all.iter().any(|r| matches!(r, Row::Headline(_))));
-    assert!(!all.iter().any(|r| matches!(r, Row::Card(_))));
+    let all = band_rows(Some(&summary), true, false);
+    assert_eq!(all.len(), 1);
+    assert!(matches!(all[0], Row::Setup));
+    assert_eq!(frames(Some(&summary)).len(), 4);
 }
 
 #[test]
-fn the_strip_names_state_counts_cards_and_headline() {
+fn the_strip_names_the_agent_the_studios_and_what_waits() {
     let summary = summary();
+    let content = strip(Some(&summary), true);
+    assert_eq!(content.state, Some("live"));
+    assert_eq!(content.studios, 3);
+    assert_eq!(content.waiting, 2);
     let text = strip_text(Some(&summary), true);
     assert!(text.contains("✦ hollywood"), "{text}");
-    assert!(text.contains("live"), "{text}");
-    assert!(text.contains("1 live"), "{text}");
-    assert!(text.contains("1 fin"), "{text}");
-    assert!(text.contains("2 cards"), "{text}");
-    assert!(text.contains("acme-shop needs a look"), "{text}");
+    assert!(text.contains("3 studios"), "{text}");
+    assert!(text.contains("!2"), "{text}");
+    // Without an agent the state is gone and the count stays.
+    let content = strip(Some(&summary), false);
+    assert_eq!(content.state, None);
+    assert!(strip_text(Some(&summary), false).contains("3 studios"));
+    // A missing document reads as no studios.
+    let content = strip(None, true);
+    assert_eq!(content.studios, 0);
+    assert_eq!(content.state, Some("down"));
+    assert!(strip_text(None, true).contains("0 studios"));
 }
 
 #[test]
-fn the_strip_says_down_closed_and_lost() {
-    // No hollywood object → the role is down.
-    let mut value = summary_json();
-    value.as_object_mut().unwrap().remove("hollywood");
-    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
-    assert!(strip_text(Some(&summary), true).contains("down"));
-    for state in ["closed", "lost"] {
-        value["hollywood"]["state"] = serde_json::json!(state);
-        let summary: Summary = serde_json::from_value(value.clone()).unwrap();
-        assert!(strip_text(Some(&summary), true).contains(state), "{state}");
-    }
-}
-
-#[test]
-fn the_strip_counts_cards_only_while_open() {
-    let mut value = summary_json();
-    value["hollywood"]["cards"] = serde_json::json!([]);
-    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
-    assert!(!strip_text(Some(&summary), true).contains("card"));
-    value["hollywood"]["cards"] = serde_json::json!([{
-        "id": "c1", "studio": "acme-shop", "action": "pause t1", "why": "w"
-    }]);
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    assert!(strip_text(Some(&summary), true).contains("1 card"));
-}
-
-#[test]
-fn without_an_agent_the_last_row_is_the_setup_line() {
+fn the_role_on_set_is_the_first_working_one_else_the_producer() {
     let summary = summary();
-    let all = rows(Some(&summary), true, false);
-    assert!(matches!(all.last(), Some(Row::Setup)));
-    assert!(
-        !all.iter()
-            .any(|r| matches!(r, Row::Headline(_) | Row::Card(_))),
-        "the agent's rows need the agent"
+    let acme = &summary.studios[0];
+    let who = on_set(acme).expect("a role on set");
+    assert_eq!(who.name, "producer");
+    // A studio with only idle roles still names the producer.
+    let beta = &summary.studios[1];
+    assert_eq!(on_set(beta).map(|r| r.name.as_str()), Some("producer"));
+    // No roles at all: nothing on set.
+    assert!(on_set(&summary.studios[2]).is_none());
+}
+
+#[test]
+fn cast_marks_follow_the_role_state() {
+    let summary = summary();
+    let marks: Vec<CastMark> = summary.studios[0].roles.iter().map(CastMark::of).collect();
+    assert_eq!(
+        marks,
+        vec![
+            CastMark::Working,   // producer, working
+            CastMark::Attention, // alice, an attention
+            CastMark::Failed,    // bob, lost
+            CastMark::Idle,      // carol, waiting
+        ]
     );
-    assert!(all.iter().any(|r| matches!(r, Row::Studio(_))));
-    let text = strip_text(Some(&summary), false);
-    assert!(text.contains("2 studios"), "{text}");
-    assert!(!text.contains("card"), "{text}");
 }
