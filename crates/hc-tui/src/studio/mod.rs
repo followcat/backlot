@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 
 use backlot_model::summary::{RoleSummary, StudioSummary};
 
+pub(crate) mod glyphs;
+
 use crate::panel::data::MachineSummary;
 
 /// A studio's stable identity across machines: the machine's name

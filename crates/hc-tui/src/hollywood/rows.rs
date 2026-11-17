@@ -187,31 +187,3 @@ pub(crate) fn on_set(studio: &StudioSummary) -> Option<&RoleSummary> {
         .find(|role| role.state == "live" && role.work == Some(Work::Working))
         .or_else(|| studio.roles.iter().find(|role| role.role == "producer"))
 }
-
-/// One cast diamond's colour class: the role's state, as the frame's
-/// `◆` shows it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CastMark {
-    /// Working — green.
-    Working,
-    /// Something waits on a person — peach.
-    Attention,
-    /// Failed or lost — red.
-    Failed,
-    /// Anything else — dim.
-    Idle,
-}
-
-impl CastMark {
-    pub fn of(role: &RoleSummary) -> CastMark {
-        if role.attention.is_some() {
-            CastMark::Attention
-        } else if role.failed.is_some() || role.state == "lost" {
-            CastMark::Failed
-        } else if role.state == "live" && role.work == Some(Work::Working) {
-            CastMark::Working
-        } else {
-            CastMark::Idle
-        }
-    }
-}

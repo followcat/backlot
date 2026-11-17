@@ -520,21 +520,21 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     assert!(who.contains("producer"), "{who}");
     let what = row_of(&buf, area, frame.y + 3);
     assert!(what.contains("review delivery 1"), "{what}");
-    // The cast line: one diamond each, coloured by role state.
+    // The cast line: one mark each, coloured by role state.
     let cast = row_of(&buf, area, frame.y + 5);
-    assert!(cast.contains("◆ ◆ ◆ ◆"), "{cast}");
+    assert!(cast.contains("◐ ! ! ○"), "{cast}");
     assert!(cast.contains("4 cast · r2"), "{cast}");
-    let diamonds: Vec<Color> = (frame.x..frame.x + frame.width)
-        .filter(|x| buf[(*x, frame.y + 5)].symbol() == "◆")
+    let marks: Vec<Color> = (frame.x..frame.x + frame.width)
+        .filter(|x| matches!(buf[(*x, frame.y + 5)].symbol(), "◐" | "!" | "○"))
         .map(|x| buf[(x, frame.y + 5)].fg)
         .collect();
     assert_eq!(
-        diamonds,
+        marks,
         vec![
-            palette.green,    // producer: working
+            palette.yellow,   // producer: working
             palette.peach,    // alice: attention
             palette.red,      // bob: lost
-            palette.overlay0  // carol: idle
+            palette.overlay1  // carol: idle
         ]
     );
 }

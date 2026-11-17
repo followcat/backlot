@@ -1,9 +1,8 @@
 //! The bar's model: the frames, the band rows, the strip's content
 //! and the cast marks — all pure reads of the document.
 use super::*;
-use crate::hollywood::rows::{
-    CastMark, Frame, Row, Target, band_rows, frames, on_set, strip, strip_text,
-};
+use crate::hollywood::rows::{Frame, Row, Target, band_rows, frames, on_set, strip, strip_text};
+use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
 
 #[test]
@@ -121,14 +120,14 @@ fn the_role_on_set_is_the_first_working_one_else_the_producer() {
 #[test]
 fn cast_marks_follow_the_role_state() {
     let summary = summary();
-    let marks: Vec<CastMark> = summary.studios[0].roles.iter().map(CastMark::of).collect();
+    let marks: Vec<Person> = summary.studios[0].roles.iter().map(Person::of).collect();
     assert_eq!(
         marks,
         vec![
-            CastMark::Working,   // producer, working
-            CastMark::Attention, // alice, an attention
-            CastMark::Failed,    // bob, lost
-            CastMark::Idle,      // carol, waiting
+            Person::Working, // producer, working
+            Person::Stalled, // alice, an attention
+            Person::Lost,    // bob, lost
+            Person::Idle,    // carol, waiting
         ]
     );
 }
