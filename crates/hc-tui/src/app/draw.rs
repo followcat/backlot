@@ -305,6 +305,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             layout.pane_surface,
             &app.shell.palette,
             app.opening_opts(),
+            None,
         );
     }
     let (mode_bar, overlay_painted) = draw_overlays::render_overlays_and_cursor(
