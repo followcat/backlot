@@ -21,7 +21,6 @@ use super::{Hollywood, LayerMode, LayerOpts, band, frames, strip};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics};
-use crate::chrome::text::truncate_end;
 
 /// The expanded band's height cap while floating: half the frame.
 const EXPANDED_FRAC: u16 = 2;
@@ -279,6 +278,12 @@ fn draw_sprocket(buf: &mut Buffer, area: Rect, y: u16, glyph: char, palette: &Pa
     }
 }
 
+/// The display width of `text`, in cells — a floor for the title row's
+/// room sums.
+fn width_of(text: &str) -> u16 {
+    crate::chrome::text::display_width(text) as u16
+}
+
 /// The title row: the mark, the agent's square and role, and the
 /// right-aligned studio count with what waits on you.
 fn draw_title(
@@ -315,23 +320,14 @@ fn draw_title(
     } else {
         String::new()
     };
-    let right_w = count.chars().count() as u16 + wait.chars().count() as u16;
-    let right_x = (area.x + area.width).saturating_sub(MARGIN + right_w);
-    let room = right_x.saturating_sub(x + 2);
-
     let state = summary
         .and_then(|s| s.hollywood.as_ref())
         .map(|h| h.state.as_str());
-    if agent {
+    // The agent's words: the full line when it fits, the state alone
+    // when it does not. If even that is squeezed, the counts step
+    // aside — the state is what the row must say.
+    let (agent_line, short_line) = if agent {
         let state = state.unwrap_or("down");
-        put_text(
-            buf,
-            x,
-            y,
-            1,
-            "■",
-            base.fg(strip::state_color(state, palette)),
-        );
         let details = summary
             .and_then(|s| s.hollywood.as_ref())
             .map(|h| {
@@ -342,24 +338,56 @@ fn draw_title(
                     .join(" / ")
             })
             .unwrap_or_default();
-        let text = if details.is_empty() {
-            state.to_string()
+        if details.is_empty() {
+            (state.to_string(), String::new())
         } else {
-            format!("{state} · {details}")
-        };
+            (format!("{state} · {details}"), state.to_string())
+        }
+    } else {
+        ("no agent".to_string(), String::new())
+    };
+    let mut right_w = count.chars().count() as u16 + wait.chars().count() as u16;
+    let mut right_x = (area.x + area.width).saturating_sub(MARGIN + right_w);
+    let mut room = right_x.saturating_sub(x + 2);
+    // The longest line that fits; if none does, the counts step aside
+    // for it — the state is what the row must say.
+    let pick = |room: u16| {
+        if width_of(&agent_line) <= room {
+            agent_line.clone()
+        } else if !short_line.is_empty() && width_of(&short_line) <= room {
+            short_line.clone()
+        } else {
+            String::new()
+        }
+    };
+    let mut text = pick(room);
+    if text.is_empty() && right_w > 0 {
+        right_w = 0;
+        right_x = area.x + area.width;
+        room = right_x.saturating_sub(x + 2);
+        text = pick(room);
+    }
+    if agent {
+        let colour = strip::state_color(state.unwrap_or("down"), palette);
+        put_text(buf, x, y, 1, "■", base.fg(colour));
+    } else {
+        put_text(buf, x, y, 1, "■", base.fg(palette.overlay0));
+    }
+    if !text.is_empty() {
         put_text(
             buf,
             x + 2,
             y,
             room,
-            &truncate_end(&text, room as usize),
-            base.fg(palette.overlay1),
+            &text,
+            base.fg(if agent {
+                palette.overlay1
+            } else {
+                palette.overlay0
+            }),
         );
-    } else {
-        put_text(buf, x, y, 1, "■", base.fg(palette.overlay0));
-        put_text(buf, x + 2, y, room, "no agent", base.fg(palette.overlay0));
     }
-    if right_x > x {
+    if right_w > 0 && right_x > x {
         put_text(
             buf,
             right_x,
