@@ -31,9 +31,9 @@ mod table;
 
 pub use error::{AttachError, Ended};
 pub use output::{CloseReason, Output};
-pub use registry::AttachConn;
 #[doc(hidden)]
 pub use registry::ConnectParts;
+pub use registry::{AttachConn, AttachGauges};
 
 use super::error::CallError;
 use super::{call, lock};

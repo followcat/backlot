@@ -251,6 +251,17 @@ impl Connection {
         )
     }
 
+    /// The same connection with its transport reads and writes counted
+    /// into `stats`.
+    pub fn counted(self, stats: &Arc<crate::stats::ConnStats>) -> Connection {
+        use crate::stats::Counted;
+        Connection {
+            read: Box::pin(Counted::new(self.read, Arc::clone(stats))),
+            write: Box::pin(Counted::new(self.write, Arc::clone(stats))),
+            backend: self.backend,
+        }
+    }
+
     /// Ends the connection: the write side closes first (remote `hc connect`
     /// exits on stdin EOF), then the ssh child exits or is killed and its
     /// stderr tail is collected.

@@ -72,6 +72,7 @@ pub fn spawn_reader(
     mouse_capture: bool,
     queries_pending: bool,
     cell_size_pending: bool,
+    probe: Arc<crate::app::Probe>,
 ) -> io::Result<Reader> {
     let input = File::from(io::stdin().as_fd().try_clone_to_owned()?);
     spawn_from(
@@ -80,6 +81,7 @@ pub fn spawn_reader(
         mouse_capture,
         queries_pending,
         cell_size_pending,
+        probe,
     )
 }
 
@@ -89,6 +91,7 @@ fn spawn_from(
     mouse_capture: bool,
     queries_pending: bool,
     cell_size_pending: bool,
+    probe: Arc<crate::app::Probe>,
 ) -> io::Result<Reader> {
     if capacity == 0 {
         return Err(io::Error::new(
@@ -124,6 +127,7 @@ fn spawn_from(
         mouse_capture,
         queries_pending,
         cell_size_pending,
+        probe,
     };
     reader.input = Some(
         std::thread::Builder::new()

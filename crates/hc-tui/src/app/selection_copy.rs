@@ -36,11 +36,14 @@ impl App {
                 .flat_map(|pane| pane.take_clipboard_writes()),
         );
         let mut seen = std::collections::HashSet::new();
+        let mut kept: Vec<Vec<u8>> = writes
+            .into_iter()
+            .rev()
+            .filter(|content| seen.insert(content.clone()))
+            .collect();
+        kept.reverse();
         let mut shown = false;
-        for content in writes {
-            if !seen.insert(content.clone()) {
-                continue;
-            }
+        for content in kept {
             let sequence = crate::selection::osc52_sequence(&content);
             let _ = (self.host_control)(sequence.as_bytes());
             shown |= self.show_copy_feedback(Instant::now());

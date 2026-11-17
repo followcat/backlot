@@ -120,6 +120,9 @@ impl App {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         } else {
             self.sched.unarm();
+            self.probe
+                .elided_draws
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
     }
@@ -204,6 +207,7 @@ impl App {
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 self.sched.armed_timer();
             }
+            let marks = self.sched.marks();
             // A wakeup alone is never a draw reason — each arm reports
             // whether it changed state the frame can show. `on_view`,
             // `on_operation` and `show_notice` mark the scheduler
@@ -294,6 +298,7 @@ impl App {
                     kind = WakeKind::Deadline;
                 }
             }
+            self.probe.wake_kinds[kind as usize].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             // A liveness-only wake maintains nothing; a deadline that
             // already passed is taken by the next select's arm.
             if matches!(kind, WakeKind::None) {
@@ -302,6 +307,13 @@ impl App {
             self.housekeeping(kind, wake, dirty);
             self.maybe_draw(term, Instant::now())?;
             self.post_draw_sync(kind, &mut need_pane_sync);
+            self.probe.dirty_marks[kind as usize].fetch_add(
+                self.sched.marks() - marks,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            if self.probe.publish_panes {
+                self.publish_panes();
+            }
             if self.pane.attaches > 0 {
                 self.probe
                     .attaches

@@ -195,7 +195,7 @@ async fn shared_rpc_opens_one_connection_for_every_consumer() {
     let _ = std::fs::remove_file(&socket);
     let listener = tokio::net::UnixListener::bind(&socket).unwrap();
     let endpoint = local(socket.to_str().unwrap());
-    let rpc = shared_rpc(&endpoint, &None);
+    let rpc = shared_rpc(&endpoint, &None, Arc::default());
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut hello = Vec::new();

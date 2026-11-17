@@ -25,7 +25,7 @@ impl Attach {
         ssh_program: Option<&OsStr>,
         params: &AttachParams,
     ) -> Result<Attach, AttachError> {
-        let conn = Conn::connect(endpoint, ssh_program).await?;
+        let conn = Conn::connect(endpoint, ssh_program, &Default::default()).await?;
         match conn.attach(params).await {
             Err(err) => Err(conn.diagnose(err).await),
             ok => ok,
