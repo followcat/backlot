@@ -363,3 +363,26 @@ fn the_card_view_draws_over_the_layer() {
     let view = hits.view.expect("the view's hit map");
     assert!(view.metrics.unwrap().max_offset_from_bottom > 0);
 }
+
+/// The floating layer is an overlay: its cells carry the panel
+/// background, so nothing behind it shows through.
+#[test]
+fn the_floating_layer_is_opaque() {
+    let summary = summary();
+    let area = Rect::new(0, 0, 120, 24);
+    for palette in palettes() {
+        let (buf, hits) = draw(
+            area,
+            Some(&summary),
+            true,
+            &layer(LayerMode::Expanded),
+            false,
+            &palette,
+        );
+        for y in hits.area.y..hits.area.bottom() {
+            for x in hits.area.x..hits.area.right() {
+                assert_eq!(buf[(x, y)].bg, palette.panel_bg, "layer cell at {x},{y}");
+            }
+        }
+    }
+}

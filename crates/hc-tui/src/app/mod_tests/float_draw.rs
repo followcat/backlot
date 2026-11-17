@@ -288,6 +288,44 @@ async fn a_narrow_frame_drops_the_key_hint_but_keeps_the_border() {
     assert!(top.contains("╮"), "the border lost its corner: {top:?}");
 }
 
+/// The wizard and float popups must not be windows onto the terminal
+/// behind them. In backlot's own look every cell inside the frame is
+/// opaque; the terminal's default background never survives.
+#[tokio::test]
+async fn a_float_is_opaque_in_the_backlot_theme() {
+    use crate::chrome::palette::Palette;
+    let mut app = app_with_shown_float();
+    app.shell.palette = Palette::backlot();
+    let backend = draw_float(&mut app, 140, 30);
+    let (x0, y0) = find_cell(&backend, "╭").expect("the float's top-left");
+    let (x1, y1) = find_cell(&backend, "╯").expect("the float's bottom-right");
+    let buf = backend.buffer();
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            assert_ne!(
+                buf[(x, y)].bg,
+                ratatui::style::Color::Reset,
+                "default-background cell inside the float at {x},{y}"
+            );
+        }
+    }
+}
+
+/// The reference themes keep their translucency exactly: a popup's
+/// default-background cells still let the terminal behind show.
+#[tokio::test]
+async fn a_float_keeps_the_reference_translucency() {
+    let mut app = app_with_shown_float();
+    let backend = draw_float(&mut app, 140, 30);
+    let (x0, y0) = find_cell(&backend, "╭").expect("the float's top-left");
+    let (x1, y1) = find_cell(&backend, "╯").expect("the float's bottom-right");
+    let buf = backend.buffer();
+    let clear = (y0..=y1)
+        .flat_map(|y| (x0..=x1).map(move |x| (x, y)))
+        .any(|(x, y)| buf[(x, y)].bg == ratatui::style::Color::Reset);
+    assert!(clear, "a herdr theme's popup must stay translucent");
+}
+
 #[tokio::test]
 async fn ephemeral_popups_keep_the_plain_frame() {
     let mut app = app_with_tabs(&[("t1", "ws-alpha", "tab-one"), ("t2", "ws-alpha", "tab-two")]);

@@ -112,5 +112,8 @@ pub(crate) fn render_copy_feedback_buffer(
         ),
     ]);
     Paragraph::new(text).render(inner, buffer);
+    // The copy card is an overlay too: no see-through cells in the
+    // opaque look.
+    super::overlay::fill_default_bg(buffer, feedback_area, palette);
     feedback_area
 }
