@@ -11,27 +11,42 @@ layer, and the floating layer in the TUI) and marks what lands with real agents 
 
 ## The layer and its key
 
-The layer has three states, and it is always a float: it is drawn *over* the screen — after the
+The bar has three states, and it is always a float: it is drawn *over* the screen — after the
 panes, the cast sidebar and the studio panel — and never takes a row or a column from the pane
 layout, so toggling it resizes nothing.
 
-- **Hidden** draws nothing and consumes no key. Without a `[hollywood]` section in your config
-  this is the default, and the screen is exactly the herdr screen.
-- **Collapsed** is a one-row strip floating at the right end of the top row, sized to its content
-  and capped at a third of the width: Hollywood's mark and role state, the studio counts by state,
-  the number of open cards, and its newest headline cut to fit.
-- **Expanded** is a panel dropping down from the top, at most half the height, scrollable: one
-  row per studio (state, attention count, what it is doing), Hollywood's newest headline, the
-  open cards with `apply` / `cancel` / `show` targets, and an input line. At narrow widths it is
-  a full-screen view, like the studio panel.
+- **Hidden** draws nothing and consumes no key. In studio mode the bar exists whether or not a
+  `[hollywood]` table does (U7); without one it is the no-agent bar, and `backlot --plain` has
+  no bar at all, so its screen is exactly the herdr screen.
+- **Collapsed** is a one-row strip floating at the right end of the top row, at most a third of
+  the width, on `surface_dim`: the mark, the agent's square in its role state (dim without an
+  agent), the studio count and a peach chip with what waits on you. A click expands it.
+- **Expanded** is the **film-strip band** dropped from the top over the whole width, at most
+  half the height: `▄▄`/`▀▀` sprocket rows, the `✦  H O L L Y W O O D` title with the agent's
+  square, role state and runner / model / effort plus the right-hand studio count and
+  `k waiting on you` in peach, then one seven-row frame per studio — id in the top edge
+  (accent on `selection_bg` when selected), `■ <state>` and a ` !n ` chip, the role on set,
+  what it is doing (a broken ledger's error in red), and one `◆` per cast member coloured by
+  its state (green working, peach with an attention, red failed or lost, dim idle) with
+  `<n> cast · r<version>` right-aligned. The last frame is always the dashed **new-studio**
+  frame. Frames that do not fit scroll sideways behind a `‹` or `›` at the band edge; a narrow
+  screen puts two per row, one under 40 columns. With an agent the band then shows the newest
+  headline, one row per open card with its `apply` / `cancel` / `show` chips, and the
+  `tell hollywood` line; without one, a single line naming `backlot hollywood setup`. The
+  height ladder drops the blank rows, then the hints, then the headline — the frames go last.
+
+The bar starts **expanded** on a client whose first settled `backlot` read has at least one
+studio. A client that opens on the opening card keeps it collapsed, and the first studio to
+arrive later leaves it collapsed. Neither the card nor the bar draws before that first read
+settles (two seconds at most), so a client with studios never flashes the welcome card.
 
 The key is **`alt+y`**, a direct key with no prefix. It switches collapsed and expanded and shows
-the layer when hidden; `x` in the expanded panel hides it; `Esc` collapses it.
+the layer when hidden; `x` in the expanded bar hides it; `Esc` collapses it.
 `[hollywood] key` changes it (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
-bound only while `[hollywood]` exists — with no section, Alt+Y reaches the focused program as
-always. A key value that does not parse, is a bare printable key, or collides with one of the
-four studio keys or the panel chord falls back to `alt+y` with a notice that names the file and
-never echoes the value. Known costs, said plainly:
+bound in studio mode with or without a `[hollywood]` table; under `--plain` it is not bound, so
+Alt+Y reaches the focused program as always. A key value that does not parse, is a bare printable
+key, or collides with one of the four studio keys or the panel chord falls back to `alt+y` with a
+notice that names the file and never echoes the value. Known costs, said plainly:
 
 1. While bound, **Alt+Y no longer reaches the program in the pane**. Readline and Emacs use `M-y`
    for yank-pop; if you use it, rebind (`key = "prefix+h"`) or unset the layer.
@@ -42,14 +57,17 @@ never echoes the value. Known costs, said plainly:
 
 The studio panel keeps `prefix+y`.
 
-Inside the expanded panel: arrows / `j` `k` move the selection, `PageUp` / `PageDown` page,
-`Enter` acts on the row (a studio row focuses that studio's producer; the title row focuses
-`bl-hollywood`; a card row is its Show me; the input line opens for editing), `a` applies and
-`c` cancels the selected card, `s` is Show me, `i` opens the input line, `x` hides the layer,
-`Esc` collapses it. The panel owns those keys while it is expanded — an armed prefix disarms
-into it. Mouse does the same: a click on the strip expands it, clicks on rows select and act,
-the card buttons and the input line do what the keys do, the scrollbar and the wheel scroll,
-and a click outside the expanded panel goes to what is under it and leaves the panel open.
+Inside the expanded bar: `←` `→` (or `h` `l`) move between the frames, the new-studio frame
+included; `↓` `↑` (or `j` `k`) leave the frames for the cards and the input line and come back;
+`PageUp` / `PageDown` scroll the cards; `Enter` acts on the selection (a studio frame focuses
+that studio's producer; the new-studio frame or `n` opens the wizard, with the bar collapsed
+first; the title row focuses `bl-hollywood`; a card row is its Show me; the input line opens for
+editing), `a` applies and `c` cancels the selected card, `s` is Show me, `i` opens the input
+line, `x` hides the bar, `Esc` collapses it. The bar owns those keys while it is expanded — an
+armed prefix disarms into it. Mouse does the same: a click on the strip expands it, a click on a
+frame selects and opens it, the card chips and the input line do what the keys do, the wheel
+scrolls the frames sideways under the pointer and the cards below them, and a click outside the
+expanded bar goes to what is under it and leaves the bar open.
 
 Show me on a `studio-new` card opens the draft's cast and brief in a read-only popup
 (`backlot card show` output); on any other card it focuses the studio the card names. The view
@@ -59,10 +77,12 @@ The input line (`i` or a click) is one line sent with `backlot tell hollywood "<
 user — never written into Hollywood's terminal. Empty sends nothing; `Esc` leaves the line;
 Enter sends and leaves it.
 
-Everything the layer draws comes from the `backlot` summary document plus the stage-running
-flag — the studio rows show even while Hollywood's own agent is down (a `closed` or `lost`
-role state is said in the strip and the title row, and a stopped stage gets its own line).
-Everything it changes goes through `backlot` commands spawned as the user — `card apply`,
+Everything the bar draws comes from the `backlot` summary document plus the stage-running
+flag — the studio frames show even while Hollywood's own agent is down (a `closed` or `lost`
+role state colours the title's square, a broken studio's ledger error shows in its frame, and a
+stopped stage gets its own band line). Without a table the frames still draw and the band shows
+the setup line instead of the agent's rows. Everything it changes goes through `backlot`
+commands spawned as the user — `card apply`,
 `card cancel`, `card show`, `tell hollywood` — off the event loop, failures surfacing as
 notices. The only client-local state is the mode, the selection, the scroll offset and the
 input line's text.

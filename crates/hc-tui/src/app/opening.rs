@@ -37,12 +37,56 @@ fn wizard_line(exe: &str, endpoint_args: &[String]) -> String {
 const WIZARD_POPUP: crate::popup_size::PopupSize = crate::popup_size::PopupSize::Percent(80);
 
 impl App {
+    /// The first `backlot` read has landed: a value, an unwritten
+    /// document or an error — anything but a fetch still in flight.
+    pub(crate) fn document_settled(&self) -> bool {
+        self.view
+            .documents
+            .get(&crate::panel::document_key())
+            .is_some_and(|doc| !doc.fetching)
+    }
+
+    /// The entry gate (U7): which screen to show is unknowable until
+    /// the first `backlot` read lands, so the client decides once —
+    /// and draws neither the card nor the layer before then, so a
+    /// client with studios never flashes the welcome card. The wait
+    /// is capped at [`crate::opening::SETTLE_CAP`] from the first
+    /// decision pass (the first connect, in practice); after it the
+    /// client judges with what it has. Clearing `cap` leaves no timer
+    /// behind.
+    pub(crate) fn settle_opening(&mut self, now: std::time::Instant) {
+        if self.opening.settled {
+            return;
+        }
+        let cap = *self
+            .opening
+            .cap
+            .get_or_insert(now + crate::opening::SETTLE_CAP);
+        if !self.document_settled() && now < cap {
+            return;
+        }
+        self.opening.settled = true;
+        self.opening.cap = None;
+        // U7: a client that opens with studios meets the bar open;
+        // one that opens on the card keeps it collapsed, and the
+        // first studio to arrive later does not pull it open.
+        if !self.plain {
+            self.hollywood.mode = if self.studioless() {
+                crate::hollywood::LayerMode::Collapsed
+            } else {
+                crate::hollywood::LayerMode::Expanded
+            };
+        }
+        self.sched.mark_dirty(now);
+    }
+
     /// The page paints over the pane area while there is no studio —
-    /// no `backlot` document yet, or a good one with zero studios —
-    /// and while `new_workspace` has forced it up over a live studio.
-    /// `--plain` never shows it; Esc dismisses for the session.
+    /// no `backlot` document yet, or a good one with zero studios.
+    /// `--plain` never shows it; Esc dismisses for the session, and
+    /// `new_workspace` brings it back. It never covers a studio: with
+    /// one, `new_workspace` opens the new-studio wizard instead.
     pub(crate) fn opening_visible(&self) -> bool {
-        !self.plain && !self.opening.dismissed && (self.opening.forced || self.studioless())
+        !self.plain && self.opening.settled && !self.opening.dismissed && self.studioless()
     }
 
     /// No studio exists: the document is missing, unreadable or
@@ -60,11 +104,10 @@ impl App {
         }
     }
 
-    /// `new_workspace` outside `--plain`: the page comes back — the
-    /// new-studio flow over an existing studio too.
+    /// `new_workspace` outside `--plain`: the page comes back. With a
+    /// studio the action never lands here — it opens the wizard.
     pub(crate) fn opening_show(&mut self) {
         self.opening.dismissed = false;
-        self.opening.forced = !self.studioless();
     }
 
     // ---------- the one-time animation ----------
@@ -108,7 +151,6 @@ impl App {
     /// page for this client session and finish its one-time run.
     pub fn dismiss_opening(&mut self) {
         self.opening.dismissed = true;
-        self.opening.forced = false;
         self.opening_finish_anim();
     }
 
@@ -149,10 +191,11 @@ impl App {
     }
 
     /// `n`: `backlot studio new --interactive` in a one-shot floating
-    /// terminal — the `type = "popup"` keybind path. When the wizard
-    /// created a studio the publish lifts the mode latch and the page
-    /// goes away on its own.
-    fn opening_new_studio(&mut self) {
+    /// terminal — the `type = "popup"` keybind path, shared by the
+    /// card's `n`, the layer's new-studio frame and `new_workspace`
+    /// over an existing studio. When the wizard created a studio the
+    /// publish lifts the mode latch and the page goes away on its own.
+    pub(super) fn opening_new_studio(&mut self) {
         if self
             .popup_pending
             .as_ref()

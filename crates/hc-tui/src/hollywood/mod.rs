@@ -11,15 +11,20 @@
 //! before the layer existed (D15, D6).
 
 mod actions;
+mod band;
 mod draw;
+mod frames;
 mod keys;
+mod new_frame;
+mod plan;
 mod rows;
+mod strip;
 mod view;
 
 pub(crate) use actions::{HollywoodAction, HollywoodRunner, spawn_runner};
 pub(crate) use draw::{BtnKind, CardBtn, HollywoodRender, render};
 pub(crate) use keys::{HollywoodKey, resolve_key};
-pub(crate) use rows::{Row, Target, rows, strip_text};
+pub(crate) use rows::{Target, band_rows, frames};
 pub(crate) use view::CardView;
 
 use crate::chrome::text_editor::TextEditor;
@@ -37,15 +42,32 @@ pub(crate) enum LayerMode {
     Expanded,
 }
 
+/// What the renderer needs from the app: whether a `[hollywood]` table
+/// configures the agent, and the narrow-width cut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct LayerOpts {
+    /// An agent is configured: the headline, the cards, the `tell
+    /// hollywood` line and the animated role state belong to it.
+    /// Without one the bar still exists, in its no-agent form (U7).
+    pub agent: bool,
+    /// The narrow-width full-screen cut.
+    pub mobile: bool,
+}
+
 /// The whole client-local layer state (D21): which of the three
-/// states it is in, the selection, the scroll offset and the input
-/// line's text. Everything on screen is read from the document.
+/// states it is in, the selection, the frame window, the card scroll
+/// and the input line's text. Everything on screen is read from the
+/// document.
 pub(crate) struct Hollywood {
     pub mode: LayerMode,
-    /// The selected row's stable identity — rows rebuild each frame,
-    /// so selection survives document updates by target, not index.
+    /// The selected frame or row's stable identity — frames and rows
+    /// rebuild each frame, so selection survives document updates by
+    /// target, not index.
     pub selected: Option<Target>,
-    /// First body row rendered under the title.
+    /// The first frame drawn: the strip scrolls sideways when more
+    /// frames exist than fit.
+    pub frame_scroll: usize,
+    /// First card row drawn.
     pub scroll: usize,
     /// The input line's editor — `editing` is the latch that sends it
     /// keys (`i` or a click opens it, `Esc` leaves it).
@@ -61,6 +83,7 @@ impl Hollywood {
         Hollywood {
             mode: LayerMode::Hidden,
             selected: None,
+            frame_scroll: 0,
             scroll: 0,
             input: TextEditor::new("", false),
             editing: false,

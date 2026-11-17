@@ -17,7 +17,7 @@ pub(crate) use actions::{PanelAction, PanelRunner, spawn_runner};
 pub(crate) use config::{
     PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,
 };
-pub(crate) use data::{stage_running, summary};
+pub(crate) use data::{key as document_key, stage_running, summary};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use rows::{Mark, Row, Target, mark_color, mark_counts, mark_symbol, rows};
 

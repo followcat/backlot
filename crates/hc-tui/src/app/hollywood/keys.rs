@@ -53,20 +53,28 @@ impl App {
         let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
         let plain = modifiers.is_empty();
         if matches!(code, KeyCode::Down | KeyCode::Char('j')) && plain {
-            self.hollywood_move(1);
+            self.hollywood_row_move(1);
             return;
         }
         if matches!(code, KeyCode::Up | KeyCode::Char('k')) && plain {
-            self.hollywood_move(-1);
+            self.hollywood_row_move(-1);
+            return;
+        }
+        if matches!(code, KeyCode::Right | KeyCode::Char('l')) && plain {
+            self.hollywood_frame_move(1);
+            return;
+        }
+        if matches!(code, KeyCode::Left | KeyCode::Char('h')) && plain {
+            self.hollywood_frame_move(-1);
             return;
         }
         let page = self.hollywood_hits.viewport_rows.max(1) as isize;
         if code == KeyCode::PageDown && plain {
-            self.hollywood_move(page);
+            self.hollywood_scroll_to(self.hollywood.scroll.saturating_add(page as usize));
             return;
         }
         if code == KeyCode::PageUp && plain {
-            self.hollywood_move(-page);
+            self.hollywood_scroll_to(self.hollywood.scroll.saturating_sub(page as usize));
             return;
         }
         if key.input.action != hc_vt::Action::Press {
@@ -83,9 +91,10 @@ impl App {
                 self.hollywood.editing = false;
                 self.hollywood.view = None;
             }
-            KeyCode::Char('i') if plain => {
+            KeyCode::Char('i') if plain && self.has_hollywood_cfg => {
                 self.hollywood.editing = true;
             }
+            KeyCode::Char('n') if plain => self.hollywood_new_studio(),
             KeyCode::Enter => self.hollywood_activate(),
             KeyCode::Char('a') if plain => self.hollywood_card_key(BtnKind::Apply),
             KeyCode::Char('c') if plain => self.hollywood_card_key(BtnKind::Cancel),

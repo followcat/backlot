@@ -21,10 +21,11 @@ impl App {
     // ---------- config ----------
 
     /// cli injects the `[hollywood]` read: `Ok(Some)` configures the
-    /// layer and starts it collapsed; `Ok(None)` keeps it hidden with
-    /// no binding at all — Alt+Y then reaches the program exactly as
-    /// before (D15a); `Err` is a malformed file or section, noticed
-    /// once with the position only.
+    /// agent and starts the layer; `Ok(None)` still leaves the bar in
+    /// studio mode — in its no-agent form (U7) — with the default
+    /// toggle; under `--plain` there is no layer at all, so Alt+Y
+    /// reaches the program exactly as before (D6, D15a); `Err` is a
+    /// malformed file or section, noticed once with the position only.
     pub(crate) fn set_hollywood(
         &mut self,
         read: Result<Option<backlot_stage::config::HollywoodCfg>, String>,
@@ -50,7 +51,7 @@ impl App {
                 if let Some(key_notice) = key_notice {
                     self.show_notice("Hollywood config", &key_notice);
                 }
-                if self.hollywood.mode == LayerMode::Hidden {
+                if self.hollywood.mode == LayerMode::Hidden && !self.plain {
                     self.hollywood.mode = LayerMode::Collapsed;
                 }
             }
@@ -59,8 +60,29 @@ impl App {
                 self.hollywood.mode = LayerMode::Hidden;
             }
         }
+        // U7: studio mode always has the bar; `--plain` never does.
+        self.sync_hollywood_plain();
         if let Some(notice) = notice {
             self.show_notice("Hollywood config", &notice);
+        }
+    }
+
+    /// The `--plain` latch on the layer (D6, D15a): plain has no
+    /// layer, no consumed key and no timer, so the frame stays
+    /// herdr's. Studio mode always has the bar — configured or not —
+    /// and its toggle is the default `alt+y` unless `[hollywood] key`
+    /// replaced it.
+    pub(crate) fn sync_hollywood_plain(&mut self) {
+        if self.plain {
+            self.hollywood_key = None;
+            self.hollywood.mode = LayerMode::Hidden;
+            self.hollywood.editing = false;
+            self.hollywood.view = None;
+        } else if self.hollywood_key.is_none() {
+            self.hollywood_key = Some(HollywoodKey::fallback());
+            if self.hollywood.mode == LayerMode::Hidden {
+                self.hollywood.mode = LayerMode::Collapsed;
+            }
         }
     }
 
@@ -76,18 +98,41 @@ impl App {
         crate::panel::summary(&self.view)
     }
 
-    /// The row targets as they would draw now — selection works on
-    /// stable identities, never positions.
-    fn hollywood_targets(&self) -> Vec<Target> {
+    /// The frames' targets in document order — the studios, then the
+    /// new-studio entry.
+    fn hollywood_frames(&self) -> Vec<Target> {
         let summary = self.hollywood_summary();
-        hollywood::rows(summary.as_ref(), crate::panel::stage_running(&self.view))
+        hollywood::frames(summary.as_ref())
             .iter()
-            .map(|r| r.target())
+            .map(|f| f.target())
             .collect()
     }
 
-    /// The selected row's index in `targets` — a vanished target
-    /// reverts to the title (index 0).
+    /// The band's targets in draw order.
+    fn hollywood_band(&self) -> Vec<Target> {
+        let summary = self.hollywood_summary();
+        hollywood::band_rows(
+            summary.as_ref(),
+            crate::panel::stage_running(&self.view),
+            self.has_hollywood_cfg,
+        )
+        .iter()
+        .map(|r| r.target())
+        .collect()
+    }
+
+    /// Every actionable target: the title row, the frames, then the
+    /// band's rows — selection works on stable identities, never
+    /// positions.
+    fn hollywood_targets(&self) -> Vec<Target> {
+        let mut targets = vec![Target::Title];
+        targets.extend(self.hollywood_frames());
+        targets.extend(self.hollywood_band());
+        targets
+    }
+
+    /// The selected target's index in `targets` — a vanished target
+    /// reverts to the first frame.
     fn hollywood_selected_index(&self, targets: &[Target]) -> usize {
         self.hollywood
             .selected
@@ -96,11 +141,28 @@ impl App {
             .unwrap_or(0)
     }
 
+    /// How many frames the last draw showed, and how many per row.
+    fn hollywood_frame_window(&self) -> (usize, usize) {
+        let rects: Vec<ratatui::layout::Rect> = self
+            .hollywood_hits
+            .rows
+            .iter()
+            .filter(|(_, target)| matches!(target, Target::Studio(_) | Target::NewStudio))
+            .map(|(rect, _)| *rect)
+            .collect();
+        let Some(first) = rects.first() else {
+            return (0, 1);
+        };
+        let per_row = rects.iter().filter(|rect| rect.y == first.y).count().max(1);
+        (rects.len(), per_row)
+    }
+
     // ---------- the toggle ----------
 
     /// The configured toggle (`alt+y` direct or its `[hollywood] key`
     /// override): hidden shows the strip, the strip expands, expanded
-    /// collapses back to the strip.
+    /// collapses back to the strip. Opening selects the first frame,
+    /// so Enter works before the first arrow press.
     pub(crate) fn hollywood_toggle(&mut self) {
         self.hollywood.mode = match self.hollywood.mode {
             LayerMode::Hidden => LayerMode::Collapsed,
@@ -108,7 +170,8 @@ impl App {
             LayerMode::Expanded => LayerMode::Collapsed,
         };
         if self.hollywood.mode == LayerMode::Expanded {
-            self.hollywood.selected = None;
+            self.hollywood.selected = self.hollywood_frames().first().cloned();
+            self.hollywood.frame_scroll = 0;
             self.hollywood.scroll = 0;
         } else {
             // Leaving the panel retires its ephemeral sub-state.
@@ -121,6 +184,11 @@ impl App {
     /// matched like a studio key, or the chord tail while the prefix
     /// is armed. `None` without `[hollywood]` — the key is not ours.
     pub(crate) fn hollywood_key_press(&self, key: &super::input::TerminalKey) -> bool {
+        // U7: no layer until the first read settled — the key is not
+        // ours while it is on the wire.
+        if !self.opening.ready() {
+            return false;
+        }
         let matched = crate::input::terminal_key_of(key);
         match self.hollywood_key {
             Some(HollywoodKey::Direct(combo)) => {
@@ -133,50 +201,134 @@ impl App {
         }
     }
 
-    // ---------- rows / selection ----------
+    // ---------- frames and rows ----------
 
-    /// j/k/arrows and paging: move the selection by `delta` rows and
-    /// keep it visible, like `panel_move`.
-    fn hollywood_move(&mut self, delta: isize) {
-        let targets = self.hollywood_targets();
-        if targets.len() <= 1 {
+    /// ← / → (`h` / `l`): move the frame cursor, the new-studio frame
+    /// included, and keep it in the drawn window.
+    pub(crate) fn hollywood_frame_move(&mut self, delta: isize) {
+        let frames = self.hollywood_frames();
+        if frames.is_empty() {
             return;
         }
-        let mut index = self.hollywood_selected_index(&targets);
-        for _ in 0..delta.unsigned_abs() {
-            let next = if delta > 0 {
-                (index + 1..targets.len()).find(|&i| targets[i] != targets[index])
-            } else {
-                (0..index).rev().find(|&i| targets[i] != targets[index])
-            };
-            match next {
-                Some(next) => index = next,
-                None => break,
-            }
-        }
-        self.hollywood.selected = Some(targets[index].clone());
-        // Keep the selection inside the scrolled body (title and the
-        // input line are fixed rows 0 and last).
-        let body_height = self.hollywood_hits.body.height.max(1);
-        let body_rows = targets.len().saturating_sub(2);
-        let heights: Vec<u16> = vec![1; body_rows];
-        self.hollywood.scroll = crate::chrome::scroll::list_scroll_start_to_reveal(
-            &heights,
-            &[],
-            body_height,
-            self.hollywood.scroll,
-            index.saturating_sub(1).min(body_rows.saturating_sub(1)),
-        );
+        let current = self
+            .hollywood
+            .selected
+            .as_ref()
+            .and_then(|t| frames.iter().position(|f| f == t))
+            .unwrap_or(0);
+        let next = (current as isize + delta).clamp(0, frames.len() as isize - 1) as usize;
+        self.hollywood.selected = Some(frames[next].clone());
+        self.hollywood_keep_frame_visible();
     }
 
-    /// Wheel/drag scroll: clamp the offset into the drawn metrics.
-    fn hollywood_scroll_to(&mut self, start: usize) {
+    /// ↑ / ↓ (`k` / `j`): from the frames into the band's rows, then
+    /// along them — and back to the frames from the band's first row.
+    /// On a narrow screen the frames move a row at a time.
+    pub(crate) fn hollywood_row_move(&mut self, delta: isize) {
+        let frames = self.hollywood_frames();
+        let band = self.hollywood_band();
+        if let Some(index) = self
+            .hollywood
+            .selected
+            .as_ref()
+            .and_then(|t| band.iter().position(|r| r == t))
+        {
+            if index == 0 && delta < 0 {
+                // Back up into the frames.
+                if let Some(last) = frames.last() {
+                    self.hollywood.selected = Some(last.clone());
+                    self.hollywood_keep_frame_visible();
+                }
+                return;
+            }
+            let next = (index as isize + delta).clamp(0, band.len() as isize - 1) as usize;
+            self.hollywood.selected = Some(band[next].clone());
+            self.hollywood_reveal_card(&band, next);
+            return;
+        }
+        let current = self
+            .hollywood
+            .selected
+            .as_ref()
+            .and_then(|t| frames.iter().position(|f| f == t))
+            .unwrap_or(0);
+        let mobile = self.area.0 <= self.shell.mobile_width_threshold;
+        let step = if mobile {
+            self.hollywood_frame_window().1.max(1) as isize
+        } else {
+            frames.len().max(1) as isize
+        };
+        let next = current as isize + delta.signum() * step;
+        if next < 0 {
+            return;
+        }
+        if (next as usize) < frames.len() {
+            self.hollywood.selected = Some(frames[next as usize].clone());
+            self.hollywood_keep_frame_visible();
+        } else if let Some(first) = band.first() {
+            self.hollywood.selected = Some(first.clone());
+            self.hollywood_reveal_card(&band, 0);
+        }
+    }
+
+    /// Scroll the frame window so the selected frame shows, whole rows
+    /// at a time so a narrow screen never starts mid-row.
+    fn hollywood_keep_frame_visible(&mut self) {
+        let Some(index) = self
+            .hollywood
+            .selected
+            .as_ref()
+            .and_then(|t| self.hollywood_frames().iter().position(|f| f == t))
+        else {
+            return;
+        };
+        let (visible, per_row) = self.hollywood_frame_window();
+        if visible == 0 {
+            return;
+        }
+        let rows = (visible / per_row).max(1);
+        let mut start = self.hollywood.frame_scroll;
+        let row = index / per_row;
+        let start_row = start / per_row;
+        if row < start_row {
+            start = row * per_row;
+        } else if row >= start_row + rows {
+            start = (row + 1 - rows) * per_row;
+        }
+        self.hollywood.frame_scroll = start;
+    }
+
+    /// Keep the selected card inside the drawn card rows.
+    fn hollywood_reveal_card(&mut self, band: &[Target], index: usize) {
+        if !matches!(band.get(index), Some(Target::Card(_))) {
+            return;
+        }
+        let card = band[..index]
+            .iter()
+            .filter(|t| matches!(t, Target::Card(_)))
+            .count();
+        let visible = self.hollywood_hits.viewport_rows.max(1);
+        if card < self.hollywood.scroll {
+            self.hollywood.scroll = card;
+        } else if card >= self.hollywood.scroll + visible {
+            self.hollywood.scroll = card + 1 - visible;
+        }
+    }
+
+    /// Wheel/drag scroll of the cards: clamp the offset into the drawn
+    /// metrics.
+    pub(crate) fn hollywood_scroll_to(&mut self, start: usize) {
         let max = self
             .hollywood_hits
             .metrics
             .map(|m| m.max_offset_from_bottom)
             .unwrap_or(0);
         self.hollywood.scroll = start.min(max);
+    }
+
+    /// The frames' rect as last drawn — the wheel's sideways target.
+    pub(crate) fn hollywood_frames_hit(&self) -> ratatui::layout::Rect {
+        self.hollywood_hits.body
     }
 
     /// Leave the layer after a row focused a terminal: the panel
@@ -201,10 +353,19 @@ impl App {
                 self.focus_studio(&id);
                 self.hollywood_leave();
             }
+            Some(Target::NewStudio) => self.hollywood_new_studio(),
             Some(Target::Card(id)) => self.hollywood_card_show(&id),
             Some(Target::Input) => self.hollywood.editing = true,
             _ => {}
         }
+    }
+
+    /// The new-studio frame, and `n` anywhere in the bar: the bar
+    /// collapses first so the wizard's popup is never under it, then
+    /// the wizard runs — the same one the opening card's `n` opens.
+    pub(super) fn hollywood_new_studio(&mut self) {
+        self.hollywood_leave();
+        self.opening_new_studio();
     }
 
     /// Focus the `bl-hollywood` terminal — same read `reap` and

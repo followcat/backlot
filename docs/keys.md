@@ -55,8 +55,9 @@ blocks. While it is focused it owns these keys:
 
 ## The opening page
 
-With no studio (no `backlot` document, or a good one with zero studios) an opening page covers
-the pane area and owns these keys:
+With no studio (no `backlot` document yet, or a good one with zero studios) an opening page
+covers the pane area and owns these keys. The client waits for its first `backlot` read before
+drawing the page — at most two seconds — so a client that already has studios never flashes it:
 
 | Keys | Action |
 |---|---|
@@ -66,8 +67,32 @@ the pane area and owns these keys:
 | `q` | Detach |
 | `Esc` | Hide the page for this session; `new_workspace` brings it back |
 
-`new_workspace` opens the page instead of an empty workspace — in studio mode every new terminal
-belongs to a studio, so the empty-workspace flow does not apply.
+`new_workspace` shows the page instead of an empty workspace — in studio mode every new terminal
+belongs to a studio, so the empty-workspace flow does not apply. With at least one studio it
+never covers the studios: it runs the new-studio wizard directly instead.
+
+## The Hollywood bar
+
+`Alt+Y` — a direct key, no prefix — cycles the bar between hidden, its one-row strip at the top
+right and the film-strip band dropped from the top. In studio mode the bar exists even with no
+`[hollywood]` table, in its no-agent form; `backlot --plain` has no bar at all, and `Alt+Y` there
+reaches the program. `[hollywood] key` rebinds the toggle. While the band is expanded it owns
+these keys:
+
+| Keys | Action |
+|---|---|
+| `←`/`→`, `h`/`l` | Move between the studio frames, the new-studio frame included |
+| `↓`/`↑`, `j`/`k` | Move to the cards and the `tell hollywood` line, and back to the frames |
+| `Enter` | Open the selected frame: a studio → its producer, the new-studio frame → the wizard, the title → `bl-hollywood` |
+| `n` | New studio — the wizard, with the bar collapsed first |
+| `a` / `c` / `s` | Apply, cancel or Show me on the selected card |
+| `i` | Edit the `tell hollywood` line, with an agent |
+| `PageUp`/`PageDown` | Scroll the cards |
+| `x` | Hide the bar |
+| `Esc` | Collapse it to the strip |
+
+A click on a frame opens it, the card chips run their action, the input line opens for editing,
+and the wheel scrolls the frames sideways or the cards under the pointer.
 
 ## Studio keys
 

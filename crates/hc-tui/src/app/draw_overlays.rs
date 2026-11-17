@@ -112,7 +112,10 @@ pub(super) fn render_overlays_and_cursor(
     // panes, the cast sidebar and the studio panel — but under the
     // popup/notice/overlay stack. It reserves nothing: the pane
     // layout is identical whether it is hidden, a strip or expanded.
-    app.hollywood_hits = if app.hollywood.visible() {
+    // U7: it waits for the same first read the card does, and never
+    // covers the card: with no studio the card is the surface.
+    app.hollywood_hits = if app.hollywood.visible() && app.opening.ready() && !app.opening_visible()
+    {
         overlay_painted = true;
         let summary = app.hollywood_summary();
         crate::hollywood::render(
@@ -121,22 +124,17 @@ pub(super) fn render_overlays_and_cursor(
             summary.as_ref(),
             crate::panel::stage_running(&app.view),
             &app.hollywood,
-            app.area.0 <= app.shell.mobile_width_threshold,
+            crate::hollywood::LayerOpts {
+                agent: app.has_hollywood_cfg,
+                mobile: app.area.0 <= app.shell.mobile_width_threshold,
+            },
             &app.shell.palette,
         )
     } else {
         crate::hollywood::HollywoodRender::default()
     };
-    // The input line's cursor wins while the line edits — the layer's
-    // own cursor, like the help overlay's.
-    if let Some(cursor) = app.hollywood_hits.cursor.as_ref() {
-        app.want_cursor = CursorWish {
-            pos: cursor.visible.then_some((cursor.x, cursor.y)),
-            anchor: Some((cursor.x, cursor.y)),
-            shape: CursorShape::Default,
-            blinking: true,
-        };
-    }
+    // The input line's cursor is placed below, once the pane's own wish
+    // is known: it must be able to replace it, not be overwritten by it.
     // The mobile switcher IS the Navigate surface under the threshold —
     // `composition.rs` renders it over the whole frame, rebuilding the
     // wire frame as ratatui cells (dropping extended underline bits).
@@ -269,6 +267,32 @@ pub(super) fn render_overlays_and_cursor(
         app.want_cursor.pos = None;
         app.want_cursor.anchor = None;
         app.want_cursor.shape = CursorShape::Default;
+    }
+    // The Hollywood bar is opaque, and that includes the host cursor: it
+    // floats over the panes, so a pane cursor that lands inside the band
+    // would sit in a frame or on the input line (U7 fix 1). While the
+    // bar is expanded, such a cursor is hidden, and the `tell hollywood`
+    // input's own cursor takes its place while the line edits. A strip
+    // or a hidden bar covers no cells and changes nothing; a popup owns
+    // the cursor while one is open.
+    if app.hollywood.expanded() && app.popup.is_none() {
+        if app
+            .want_cursor
+            .pos
+            .is_some_and(|point| app.hollywood_hits.contains(point))
+        {
+            app.want_cursor.pos = None;
+            app.want_cursor.anchor = None;
+            app.want_cursor.shape = CursorShape::Default;
+        }
+        if let Some(cursor) = app.hollywood_hits.cursor.as_ref() {
+            app.want_cursor = CursorWish {
+                pos: cursor.visible.then_some((cursor.x, cursor.y)),
+                anchor: Some((cursor.x, cursor.y)),
+                shape: CursorShape::Default,
+                blinking: true,
+            };
+        }
     }
     if app.want_cursor.pos.is_some_and(|(x, y)| {
         config_covered

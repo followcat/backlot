@@ -10,7 +10,7 @@ use crate::client::Client;
 use crate::events::ServerNotification;
 use crate::inventory::Effect;
 use crate::subscribe::SubscribeError;
-use crate::watch::{DocKey, Link, SubAttempt};
+use crate::watch::{DocKey, Document, Link, SubAttempt};
 use std::sync::Arc;
 use tokio::task::JoinError;
 
@@ -107,13 +107,7 @@ impl Actor {
         self.rpc_epoch += 1;
         self.fetches.abort_all();
         self.doc_inflight.clear();
-        if self.docs.values().any(|doc| doc.fetching) {
-            for doc in Arc::make_mut(&mut self.docs).values_mut() {
-                if doc.fetching {
-                    Arc::make_mut(doc).fetching = false;
-                }
-            }
-        }
+        self.clear_aborted_fetches();
         if let Some(handle) = self.machine_fetch.take() {
             handle.abort();
             self.machines_pending = true;
@@ -129,6 +123,20 @@ impl Actor {
         self.notes.insert("rpc".into(), "connection lost".into());
         self.rpc_backoff.schedule();
         self.publish();
+    }
+
+    /// The aborted fetches will never report. A slot that carries an
+    /// answer stops claiming the wire; one that never got an answer
+    /// keeps the flag, because the next reconnect still owes it a read
+    /// and a consumer must not mistake it for an empty answer.
+    pub(super) fn clear_aborted_fetches(&mut self) {
+        if self.docs.values().any(|doc| doc.fetching) {
+            for doc in Arc::make_mut(&mut self.docs).values_mut() {
+                if doc.fetching && answered(doc) {
+                    Arc::make_mut(doc).fetching = false;
+                }
+            }
+        }
     }
 
     /// A subscription open attempt landed: a live epoch, the static
@@ -233,4 +241,12 @@ impl Actor {
         }
         self.publish();
     }
+}
+
+/// Whether a slot ever carried an answer — a value or an error. An
+/// answer may itself be an unwritten document (`null`, version 0), so no
+/// check of the value alone separates the two; this is what the abort
+/// path uses to decide whether a slot still owes a read.
+fn answered(doc: &Document) -> bool {
+    doc.error.is_some() || doc.version > 0 || !doc.value.is_null()
 }

@@ -212,6 +212,11 @@ impl Actor {
     /// exists, not only once a slot frees and the next fetch spawns.
     /// `doc_gens` outlives slot deletion, so a machine alias removed and
     /// re-added can never match an old fetch's generation again.
+    ///
+    /// A slot created here is *queued*, not answered: it is born with
+    /// `fetching: true`, so no publish between the request and the
+    /// dispatch can show it as an empty answer. Only `fetch_done` clears
+    /// the flag, and only with a result.
     pub(super) fn request_doc(&mut self, key: DocKey) {
         if !self.docs_enabled {
             return;
@@ -219,7 +224,11 @@ impl Actor {
         // The map clone happens only when the key is really new — a
         // repeat request shares the published map untouched.
         if !self.docs.contains_key(&key) {
-            Arc::make_mut(&mut self.docs).insert(key.clone(), Arc::new(Document::default()));
+            let queued = Document {
+                fetching: true,
+                ..Document::default()
+            };
+            Arc::make_mut(&mut self.docs).insert(key.clone(), Arc::new(queued));
         }
         *self.doc_gens.entry(key.clone()).or_default() += 1;
         self.doc_pending.insert(key);

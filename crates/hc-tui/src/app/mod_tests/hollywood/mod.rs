@@ -4,6 +4,8 @@
 //! `actions`, mouse in `mouse`. Neutral fixtures only (`acme-shop`,
 //! `beta-tools`, `alice`, `host-a`).
 mod actions;
+mod cursor;
+mod entry;
 mod keys;
 mod mouse;
 
@@ -96,14 +98,19 @@ fn app_with_doc() -> App {
         .into(),
     );
     app.focused = Some("t1".into());
-    app.sync_target();
-    app.refresh_projection();
+    // The publish the loop would deliver: projection, pane targets and
+    // U7's entry decision all run from it.
+    app.reconcile_published_view();
     app
 }
 
-/// The document plus a configured layer — collapsed already.
+/// The document plus a configured layer, collapsed — the state a
+/// client that entered without studios meets, and the one a toggle
+/// leaves behind. A client with studios starts expanded (U7), so the
+/// strip tests collapse it here.
 fn app_with_hollywood() -> App {
     let mut app = app_with_doc();
+    app.hollywood.mode = LayerMode::Collapsed;
     app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app
@@ -163,40 +170,83 @@ fn recorder() -> (
 
 // ---------- parity (D6) ----------
 
+// ---------- the no-agent bar (U7) ----------
+
 #[tokio::test]
-async fn without_the_table_alt_y_reaches_the_pane_and_no_cell_changes() {
+async fn without_the_table_the_bar_still_exists_without_an_agent() {
     let mut app = app_with_doc();
     app.area = (120, 24);
     // `Ok(None)` — the absent read the cli path hands the layer.
     app.set_hollywood(Ok(None), std::path::Path::new("config.toml"));
+    assert!(
+        app.hollywood.visible(),
+        "studio mode always has the bar (U7)"
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
+    // The toggle is the default one without a table.
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("no agent"), "{text}");
+    assert!(text.contains("backlot hollywood setup"), "{text}");
+    assert!(!text.contains("tell hollywood"), "no input line: {text}");
+    assert!(
+        !text.contains("acme-shop needs a look"),
+        "no headline without an agent: {text}"
+    );
+}
+
+#[tokio::test]
+async fn plain_has_no_layer_and_alt_y_reaches_the_pane() {
+    let mut app = app_with_doc();
+    app.area = (120, 24);
+    app.set_plain(true);
+    app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
     assert_eq!(app.hollywood.mode, LayerMode::Hidden);
-    assert!(!app.hollywood.visible());
-    // Alt+Y is not the layer's: it reaches the focused program.
     let before = app.pane.input_backlog().0;
     alt_y(&mut app);
     assert!(app.pane.input_backlog().0 > before, "alt+y was consumed");
     assert_eq!(app.hollywood.mode, LayerMode::Hidden);
-    // The frame is the frame herdr draws: no strip on the top row.
-    let backend = draw_to(&mut app, 120, 24);
-    let text = screen_lines(&backend).join("\n");
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(!text.contains("hollywood"), "{text}");
-    let backend2 = draw_to(&mut app, 120, 24);
-    assert_eq!(backend.buffer(), backend2.buffer());
 }
 
 #[tokio::test]
-async fn a_malformed_table_stays_hidden_and_notices() {
+async fn turning_plain_on_drops_the_layer_and_freeing_it_brings_it_back() {
+    let mut app = app_with_doc();
+    app.area = (120, 24);
+    app.set_hollywood(Ok(None), std::path::Path::new("config.toml"));
+    assert!(app.hollywood.visible());
+    app.set_plain(true);
+    assert_eq!(app.hollywood.mode, LayerMode::Hidden, "--plain hides it");
+    let before = app.pane.input_backlog().0;
+    alt_y(&mut app);
+    assert!(app.pane.input_backlog().0 > before, "alt+y was consumed");
+    app.set_plain(false);
+    assert!(app.hollywood.visible(), "studio mode brings the bar back");
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+}
+
+#[tokio::test]
+async fn a_malformed_table_notices_and_leaves_the_no_agent_bar() {
     let mut app = app_with_doc();
     app.area = (120, 24);
     app.set_hollywood(
         Err("config.toml: malformed at line 2 column 1".into()),
         std::path::Path::new("config.toml"),
     );
-    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
     assert!(app.notice.is_some(), "the bad read notices once");
-    let before = app.pane.input_backlog().0;
+    assert!(!app.has_hollywood_cfg, "no agent is configured");
+    // The bar survives a bad read in its no-agent form, on the
+    // default toggle.
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
     alt_y(&mut app);
-    assert!(app.pane.input_backlog().0 > before);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("no agent"), "{text}");
 }
 
 // ---------- geometry ----------
@@ -222,6 +272,83 @@ async fn the_layer_never_resizes_a_pane_at_any_width() {
             );
         }
     }
+}
+
+// ---------- the entry state (U7) ----------
+
+/// A settled document with no studios.
+fn zero_studio_json() -> serde_json::Value {
+    serde_json::json!({ "schema": "backlot/1", "updated_ms": 1, "studios": [] })
+}
+
+/// A client whose first read landed with no studio: the card is up.
+fn app_with_empty_doc() -> App {
+    let mut app = app_with(&["t1"]);
+    app.set_plain(false);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: zero_studio_json(),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.focused = Some("t1".into());
+    app.reconcile_published_view();
+    app
+}
+
+#[tokio::test]
+async fn a_client_with_studios_starts_the_bar_expanded() {
+    let mut app = app_with_doc();
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Expanded,
+        "the bar opens on entry (U7)"
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("hollywood"), "{text}");
+    assert!(text.contains("acme-shop"), "{text}");
+    // Esc collapses it, as before.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    // And `x` still hides it from the expanded panel.
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Char('x'));
+    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
+}
+
+#[tokio::test]
+async fn a_client_without_studios_keeps_the_bar_off_the_card() {
+    let mut app = app_with_empty_doc();
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert!(app.opening_visible());
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(!text.contains("hollywood"), "{text}");
+    assert!(text.contains("New studio"), "{text}");
+}
+
+#[tokio::test]
+async fn the_first_studio_leaves_the_bar_collapsed() {
+    let mut app = app_with_empty_doc();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: summary_json(),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    assert!(!app.opening_visible());
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Collapsed,
+        "a studio that arrives later does not pull the bar open"
+    );
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("✦ hollywood"), "{text}");
 }
 
 // ---------- the toggle ----------
@@ -250,10 +377,8 @@ async fn the_strip_draws_at_the_top_right_and_expands_on_click() {
     let backend = draw_to(&mut app, 120, 24);
     let top = &screen_lines(&backend)[0];
     assert!(top.contains("✦ hollywood"), "{top}");
-    assert!(
-        top.contains("2 live 1 fin") || top.contains("1 live 1 fin"),
-        "{top}"
-    );
+    assert!(top.contains("2 studios"), "{top}");
+    assert!(top.contains("!1"), "the waiting chip: {top}");
     let strip = app.hollywood_hits.area;
     assert_eq!(strip.height, 1);
     assert_eq!(strip.x + strip.width, 120);

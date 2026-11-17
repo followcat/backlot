@@ -38,6 +38,26 @@ pub(crate) fn list_dirs(path: &Path) -> Option<Vec<PathBuf>> {
     Some(dirs)
 }
 
+/// `root`'s current branch — one `symbolic-ref`; `None` without one
+/// (detached, or not a repository at all). The in-use group uses it to
+/// spot backlot's own `backlot/<studio>/…` branches (U7 fix 2).
+pub(crate) fn branch(path: &Path) -> Option<String> {
+    let out = workareas::real_git(
+        &[
+            "-C",
+            &path.to_string_lossy(),
+            "symbolic-ref",
+            "--quiet",
+            "--short",
+            "HEAD",
+        ],
+        ".",
+    );
+    (out.code == 0)
+        .then(|| out.stdout.trim().to_string())
+        .filter(|branch| !branch.is_empty())
+}
+
 /// `git log -1` as a [`Repo`]: `.git` itself is the gate — children
 /// inside a repository's work tree are not repositories — then one
 /// `log` for the commit age and one `symbolic-ref` for the branch
@@ -58,14 +78,7 @@ pub(crate) fn probe(path: &Path) -> Repo {
         .parse::<u64>()
         .map(|then| now().saturating_sub(then))
         .unwrap_or(0);
-    let out = workareas::real_git(
-        &["-C", &dir, "symbolic-ref", "--quiet", "--short", "HEAD"],
-        ".",
-    );
-    let branch = match out.stdout.trim() {
-        b if out.code == 0 && !b.is_empty() => b.to_string(),
-        _ => "detached".to_string(),
-    };
+    let branch = branch(path).unwrap_or_else(|| "detached".to_string());
     Repo::Commit { branch, age_s }
 }
 

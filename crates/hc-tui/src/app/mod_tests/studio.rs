@@ -94,6 +94,9 @@ pub(super) fn two_studio_app() -> App {
     );
     app.focused = Some("t1".into());
     app.reconcile_published_view();
+    // U7: the bar would share the top row with the cast header these
+    // tests read; hide it here, its own tests own it.
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
     app
 }
 

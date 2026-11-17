@@ -147,6 +147,12 @@ fn app() -> App {
             ..hc_proto::watch::WatchParams::default()
         },
     );
+    app_over(watcher)
+}
+
+/// An app over `watcher` — the shape `app()` builds, for tests that
+/// drive a real actor against a fake core.
+fn app_over(watcher: Watcher) -> App {
     let open: OpenAttach = Arc::new(|_| unreachable!("no attach in this test"));
     let config = crate::config::Config::default();
     let live = config.live_keybinds();

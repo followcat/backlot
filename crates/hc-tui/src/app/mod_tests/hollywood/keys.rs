@@ -10,6 +10,10 @@ async fn a_configured_direct_key_replaces_alt_y() {
         Ok(Some(cfg(Some("ctrl+h")))),
         std::path::Path::new("config.toml"),
     );
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded, "the entry state");
+    // The strip is the state this test toggles from.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
     // Alt+Y is no longer the layer's — the strip stays a strip.
     alt_y(&mut app);
@@ -25,6 +29,8 @@ async fn a_configured_chord_toggles_through_the_prefix() {
         Ok(Some(cfg(Some("prefix+h")))),
         std::path::Path::new("config.toml"),
     );
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
@@ -48,29 +54,53 @@ async fn a_refused_key_falls_back_to_alt_y_with_a_notice() {
     assert!(app.notice.is_some(), "a refused key notices");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(text.contains("previous_studio"), "{text}");
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
 }
 
 #[tokio::test]
-async fn expanded_keys_move_act_and_do_not_leak() {
+async fn expanded_keys_walk_the_frames_and_the_band() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // j selects the first body row — a studio — k back to the title.
-    key(&mut app, hc_vt::Key::Char('j'));
+    // Opening selects the first frame.
     assert_eq!(
         app.hollywood.selected,
         Some(Target::Studio("acme-shop".into()))
     );
-    key(&mut app, hc_vt::Key::Char('k'));
-    assert_eq!(app.hollywood.selected, Some(Target::Title));
-    key(&mut app, hc_vt::Key::ArrowDown);
+    // → / l walk the frames, the new-studio frame included.
+    key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(
         app.hollywood.selected,
-        Some(Target::Studio("acme-shop".into()))
+        Some(Target::Studio("beta-tools".into()))
+    );
+    key(&mut app, hc_vt::Key::Char('l'));
+    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
+    // The last frame is the end of the line.
+    key(&mut app, hc_vt::Key::Char('l'));
+    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
+    // ← / h come back.
+    key(&mut app, hc_vt::Key::Char('h'));
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("beta-tools".into()))
+    );
+    // ↓ leaves the frames for the band's first row; ↑ comes back.
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    key(&mut app, hc_vt::Key::Char('k'));
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::NewStudio),
+        "up from the band returns to the frames"
     );
     // Nothing reached the focused program.
     assert_eq!(app.pane.input_backlog().0, 0, "expanded keys leaked");
@@ -131,4 +161,30 @@ async fn the_panel_chord_still_toggles_while_the_layer_is_expanded() {
     key(&mut app, hc_vt::Key::Char('y'));
     assert_eq!(app.panel.mode, crate::panel::PanelMode::Expanded);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+}
+
+#[tokio::test]
+async fn n_opens_the_new_studio_wizard_and_collapses_the_bar() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Char('n'));
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Collapsed,
+        "the popup is never under the bar"
+    );
+    assert!(app.popup_pending.is_some(), "the wizard is armed");
+}
+
+#[tokio::test]
+async fn enter_on_the_new_studio_frame_opens_the_wizard() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    app.hollywood.selected = Some(Target::NewStudio);
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert!(app.popup_pending.is_some(), "the wizard is armed");
 }

@@ -394,6 +394,8 @@ impl Drop for Actor {
 }
 
 #[cfg(test)]
+mod doc_slot_tests;
+#[cfg(test)]
 mod epoch_tests;
 #[cfg(test)]
 mod receipt_tests;
