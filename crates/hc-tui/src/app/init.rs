@@ -79,6 +79,7 @@ impl App {
             plain: false,
             studio: crate::studio::Studio::default(),
             opening: crate::opening::Opening::default(),
+            opening_anim_deadline: None,
             hollywood: crate::hollywood::Hollywood::new(),
             hollywood_key: None,
             has_hollywood_cfg: false,

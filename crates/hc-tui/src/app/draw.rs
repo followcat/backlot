@@ -300,13 +300,19 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // U2: the opening page covers the pane surface while it is up —
     // the terminals beneath stay attached, overlays still paint on top.
     if app.opening_visible() {
+        let frame = app.opening_frame();
         crate::opening::render_opening(
             buf,
             layout.pane_surface,
             &app.shell.palette,
             app.opening_opts(),
-            None,
+            frame,
         );
+        app.arm_opening_anim(_now);
+    } else {
+        // No page, no run: leaving before the last frame finishes it,
+        // so Esc-and-back and resizes show the static page.
+        app.opening_finish_anim();
     }
     let (mode_bar, overlay_painted) = draw_overlays::render_overlays_and_cursor(
         app,

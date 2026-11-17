@@ -255,6 +255,9 @@ pub struct App {
     /// re-shown by `new_workspace`; drawn while studio mode is off
     /// and `--plain` was not given.
     opening: crate::opening::Opening,
+    /// One-shot opening-animation deadline — armed only while the
+    /// one-time run is live, so an idle page wakes nothing.
+    opening_anim_deadline: Option<Instant>,
     /// The Hollywood layer's client-local state (H4) — `Hidden` by
     /// default and whenever `[hollywood]` is absent, so a stock frame
     /// is cell-identical to before the layer existed.

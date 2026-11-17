@@ -9,6 +9,8 @@
 //! The card and its fallbacks live in `opening/card.rs`; the plain
 //! layout the ladder ends on is here.
 
+use std::time::Duration;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -19,6 +21,8 @@ use crate::chrome::text::{display_width, truncate_end};
 
 mod card;
 
+/// One animation frame of the one-time opening run.
+pub(crate) const FRAME: Duration = Duration::from_millis(80);
 /// Frames in the run (15 × 80 ms ≈ 1.2 s); the last frame is the
 /// static page.
 pub(crate) const OPENING_FRAMES: u8 = 15;
@@ -31,6 +35,18 @@ pub(crate) struct Opening {
     pub dismissed: bool,
     /// `new_workspace` asked for the page even over a live studio.
     pub forced: bool,
+    /// The one-time animation: `done` after it played (or was left),
+    /// so it never replays on a resize, Esc or any later redraw.
+    pub anim: Anim,
+}
+
+/// How far the one-time opening animation has come.
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct Anim {
+    /// The frame being drawn, 0-based.
+    pub frame: u8,
+    /// The run finished — or the page was left before it did.
+    pub done: bool,
 }
 
 /// What the page needs from the app, so tests can draw it without

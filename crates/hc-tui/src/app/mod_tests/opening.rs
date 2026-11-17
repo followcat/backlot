@@ -352,3 +352,40 @@ async fn the_h_row_needs_the_hollywood_config() {
     let text = screen_lines(&backend).join("\n");
     assert!(!text.contains("Tell Hollywood"), "{text}");
 }
+
+// ---------- the one-time animation ----------
+
+#[tokio::test]
+async fn the_opening_plays_once_and_then_arms_nothing() {
+    use std::time::Duration;
+    let mut app = no_doc_app();
+    let t0 = std::time::Instant::now();
+    // The first draw starts the run at frame 0 and arms the next one.
+    assert_eq!(app.opening_frame(), Some(0));
+    app.arm_opening_anim(t0);
+    assert_eq!(app.opening_anim_deadline, Some(t0 + crate::opening::FRAME));
+    let mut now = t0;
+    for _ in 1..crate::opening::OPENING_FRAMES {
+        now += Duration::from_millis(80);
+        app.tick_opening(now);
+        let _ = app.opening_frame();
+        app.arm_opening_anim(now);
+    }
+    assert!(app.opening.anim.done, "the run finished");
+    assert!(app.opening_anim_deadline.is_none(), "idle arms nothing");
+    assert_eq!(app.opening_frame(), None, "it never replays");
+}
+
+#[tokio::test]
+async fn esc_before_the_last_frame_leaves_the_page_static() {
+    let mut app = no_doc_app();
+    let t0 = std::time::Instant::now();
+    assert_eq!(app.opening_frame(), Some(0));
+    app.arm_opening_anim(t0);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.opening.anim.done, "leaving finishes the run");
+    assert!(app.opening_anim_deadline.is_none());
+    app.on_action(crate::input::KeybindAction::NewWorkspace, 80);
+    assert!(app.opening_visible());
+    assert_eq!(app.opening_frame(), None, "no replay after Esc");
+}
