@@ -5,15 +5,17 @@
 //! `backlot` is not always on a remote core's PATH (a core started
 //! over ssh has no `~/.local/bin`), so the runner locates it once per
 //! machine with a short locate script and caches the absolute path.
-//! A 127 or a "not found" reply drops the cache entry, locates once
-//! more and retries once; nothing found reports `backlot is not
-//! installed on <machine>` — U6c will offer to install it there.
+//! A `spawn_failed` RPC error or a 126/127 exit drops the cache
+//! entry, locates once more and retries once; nothing found reports
+//! `backlot is not installed on <machine>` — U6c will offer to
+//! install it there.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use hc_proto::client::Client;
+use hc_proto::client::{CallError, Client};
+use hc_proto::jsonrpc::error_kind;
 use hc_proto::terminal::{RunParams, RunResult, TerminalParams};
 use hc_proto::watch::OpenRpc;
 
@@ -116,10 +118,14 @@ enum Outcome {
 }
 
 /// A `terminal.run` call's shape: either the core answered (and the
-/// terminal address is known) or the RPC itself failed.
+/// terminal address is known) or the RPC itself failed — kept as the
+/// structured `CallError` so a `spawn_failed` answer is known by
+/// kind, not by message text.
 enum RunOutcome {
     Ran(Box<RunResult>),
-    Rpc(String),
+    Rpc(CallError),
+    /// The client-side guard elapsed before any reply arrived.
+    Guard,
 }
 
 /// Run `argv` on `machine` with `wait`; the core reports within
@@ -141,16 +147,25 @@ async fn run_waited(
     });
     match tokio::time::timeout(CALL_GUARD, call).await {
         Ok(Ok(result)) => RunOutcome::Ran(Box::new(result)),
-        Ok(Err(e)) => RunOutcome::Rpc(format!("{e}")),
-        Err(_) => RunOutcome::Rpc("terminal.run timed out".into()),
+        Ok(Err(e)) => RunOutcome::Rpc(e),
+        Err(_) => RunOutcome::Guard,
     }
 }
 
-/// Read the run's verdict. `wait` reports the exit inline; the output
-/// — read before any removal — supplies the failure line.
+/// Read the run's verdict. `NotFound` is only the binary being
+/// missing — a `spawn_failed` RPC answer, or the shell's 126/127 —
+/// never a plain backlot error that merely says "not found": those
+/// keep their first output line as the failure text and never retry.
 fn outcome(out: &RunOutcome) -> Outcome {
     match out {
-        RunOutcome::Rpc(e) => Outcome::Rpc(e.clone()),
+        RunOutcome::Guard => Outcome::Rpc("terminal.run timed out".into()),
+        RunOutcome::Rpc(e) => {
+            if e.is_kind(error_kind::SPAWN_FAILED) {
+                Outcome::NotFound
+            } else {
+                Outcome::Rpc(format!("{e}"))
+            }
+        }
         RunOutcome::Ran(result) => {
             let ended = result.wait.as_ref().is_some_and(|w| w.ended);
             let code = result
@@ -163,15 +178,8 @@ fn outcome(out: &RunOutcome) -> Outcome {
             }
             match code {
                 Some(0) => Outcome::Ok,
-                Some(127) => Outcome::NotFound,
-                _ => {
-                    let line = first_line(result.output.as_deref().unwrap_or(""));
-                    if line.contains("not found") || line.contains("No such file") {
-                        Outcome::NotFound
-                    } else {
-                        Outcome::Failed(line)
-                    }
-                }
+                Some(126) | Some(127) => Outcome::NotFound,
+                _ => Outcome::Failed(first_line(result.output.as_deref().unwrap_or(""))),
             }
         }
     }
@@ -259,7 +267,7 @@ async fn locate(
             .map(str::trim)
             .find(|l| l.starts_with('/'))
             .map(str::to_owned),
-        RunOutcome::Rpc(_) => None,
+        RunOutcome::Rpc(_) | RunOutcome::Guard => None,
     };
     rm(client, &out).await;
     if let Some(path) = &path {

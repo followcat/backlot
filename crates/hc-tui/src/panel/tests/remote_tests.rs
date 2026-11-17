@@ -46,9 +46,21 @@ fn locate_result(output: &str) -> Value {
     run_result("host-b/r1", 0, output)
 }
 
+/// The core's real answer when `argv[0]` cannot be spawned — the
+/// RPC error a missing backlot produces, as captured from a live
+/// core: `spawn_failed`, no terminal created.
+fn spawn_failed(path: &str) -> Value {
+    json!({"$error": {
+        "code": -32000,
+        "message": format!("cannot start \"{path}\": No such file or directory (os error 2)"),
+        "data": {"kind": "spawn_failed", "hint": "check the program name and cwd"},
+    }})
+}
+
 /// Serve `terminal.run`/`rm`/`kill`: a run whose argv[0] is `sh` is
 /// the locate script and gets `locate`, any other run gets the next
-/// of `actions` (the last one repeating).
+/// of `actions` (the last one repeating). An action carrying
+/// `$error` replies the RPC error envelope instead of a result.
 fn serve(
     calls: Arc<Mutex<Calls>>,
     locate: &'static str,
@@ -77,6 +89,10 @@ fn serve(
                         } else {
                             let reply = actions[n.min(actions.len() - 1)].clone();
                             n += 1;
+                            if let Some(error) = reply.get("$error") {
+                                core.reply_error(&req["id"], error.clone()).await;
+                                continue;
+                            }
                             reply
                         }
                     }
@@ -193,6 +209,71 @@ async fn a_127_relocates_once_and_retries() {
     assert_eq!(calls.runs.len(), 4, "{:?}", calls.runs);
     assert_eq!(calls.runs[2]["argv"][0], "sh", "the retry re-locates");
     assert_eq!(calls.runs[3]["argv"][0], "/home/user/.local/bin/backlot");
+    fake.abort();
+}
+
+#[tokio::test]
+async fn a_spawn_failed_relocates_once_and_retries() {
+    // The core's real answer for a missing argv[0] — a `spawn_failed`
+    // RPC error, no terminal — is the one case that re-locates.
+    let (runner, calls, fake) = rig(
+        "/home/user/.local/bin/backlot\n",
+        vec![
+            spawn_failed("/home/user/.local/bin/backlot"),
+            run_result("host-b/r4", 0, ""),
+        ],
+    );
+    runner
+        .run("host-b".into(), vec!["reopen".into()])
+        .await
+        .expect("the retry succeeds");
+    let calls = calls.lock().unwrap();
+    // locate, action(spawn_failed), locate again, action(ok).
+    assert_eq!(calls.runs.len(), 4, "{:?}", calls.runs);
+    assert_eq!(calls.runs[2]["argv"][0], "sh", "the retry re-locates");
+    assert_eq!(calls.runs[3]["argv"][0], "/home/user/.local/bin/backlot");
+    fake.abort();
+}
+
+#[tokio::test]
+async fn a_126_relocates_once_and_retries() {
+    let (runner, calls, fake) = rig(
+        "/home/user/.local/bin/backlot\n",
+        vec![
+            run_result("host-b/r2", 126, "backlot: cannot execute"),
+            run_result("host-b/r4", 0, ""),
+        ],
+    );
+    runner
+        .run("host-b".into(), vec!["reopen".into()])
+        .await
+        .expect("the retry succeeds");
+    let calls = calls.lock().unwrap();
+    assert_eq!(calls.runs.len(), 4, "{:?}", calls.runs);
+    assert_eq!(calls.runs[2]["argv"][0], "sh", "the retry re-locates");
+    fake.abort();
+}
+
+#[tokio::test]
+async fn a_backlot_not_found_error_is_not_retried() {
+    // `task t9 not found` is backlot's own error — not a missing
+    // binary: one action run, the first line as the failure.
+    let (runner, calls, fake) = rig(
+        "/home/user/.local/bin/backlot\n",
+        vec![run_result("host-b/r2", 1, "task t9 not found\n")],
+    );
+    let err = runner
+        .run("host-b".into(), vec!["priority".into()])
+        .await
+        .expect_err("the backlot error surfaces");
+    assert_eq!(err, "task t9 not found");
+    let calls = calls.lock().unwrap();
+    assert_eq!(
+        calls.runs.len(),
+        2,
+        "locate and the action — no relocate, no retry: {:?}",
+        calls.runs
+    );
     fake.abort();
 }
 

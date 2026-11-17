@@ -137,6 +137,14 @@ impl FakeCore {
         self.send(&Frame::data(0, payload).encode()).await;
     }
 
+    /// Replies an RPC `error` envelope to request `id` — `{"code",
+    /// "message", "data": {"kind", …}}` in the real core's shape.
+    pub async fn reply_error(&mut self, id: &Value, error: Value) {
+        let payload =
+            serde_json::to_vec(&json!({"jsonrpc": "2.0", "id": id, "error": error})).unwrap();
+        self.send(&Frame::data(0, payload).encode()).await;
+    }
+
     /// A stream frame sent raw.
     pub async fn send_stream(&mut self, channel: u32, kind: Kind, payload: &[u8]) {
         self.send(&Frame::new(channel, kind, payload.to_vec()).encode())
