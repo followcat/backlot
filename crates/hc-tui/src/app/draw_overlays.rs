@@ -84,14 +84,16 @@ pub(super) fn render_overlays_and_cursor(
         } else {
             area
         };
-        let summary = app.panel_summary();
+        let machines = app.panel_summaries();
+        let local = app.view.core.as_ref().map(|core| core.name.clone());
         let hits = crate::panel::render(
             buf,
             rect,
-            summary.as_ref(),
-            crate::panel::stage_running(&app.view),
+            &machines,
+            |machine| crate::panel::stage_running(&app.view, machine),
             &app.panel,
-            app.studio.current.as_deref(),
+            app.studio.current.as_ref(),
+            local.as_deref(),
             &app.panel_config.keys,
             &app.shell.palette,
         );
@@ -117,12 +119,14 @@ pub(super) fn render_overlays_and_cursor(
     app.hollywood_hits = if app.hollywood.visible() && app.opening.ready() && !app.opening_visible()
     {
         overlay_painted = true;
-        let summary = app.hollywood_summary();
+        let machines = app.panel_summaries();
+        let local = app.view.core.as_ref().map(|core| core.name.clone());
         crate::hollywood::render(
             buf,
             area,
-            summary.as_ref(),
-            crate::panel::stage_running(&app.view),
+            &machines,
+            local.as_deref(),
+            crate::panel::stage_running(&app.view, None),
             &app.hollywood,
             crate::hollywood::LayerOpts {
                 agent: app.has_hollywood_cfg,

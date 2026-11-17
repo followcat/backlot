@@ -21,26 +21,20 @@ impl App {
     /// `shell <n>` tab). Outside studio mode nothing changes — the
     /// caller keeps herdr's own `creation`.
     pub(super) fn studio_shell(&self, vertical: Option<bool>) -> Result<Creation, String> {
-        let summary = self.panel_summary().ok_or("No studio document")?;
-        let index = self.studio.current_index(&summary).ok_or("No studio")?;
-        let studio = &summary.studios[index];
-        let n = next_shell_n(&self.view, &studio.id);
+        let machines = self.panel_summaries();
+        let index = self.studio.current_index(&machines).ok_or("No studio")?;
+        let studios = crate::panel::data::studios(&machines);
+        let current = studios[index];
+        let studio = current.studio;
+        let n = next_shell_n(&self.view, current.machine, &studio.id);
         let focused = self
             .focused
             .as_deref()
             .and_then(|id| self.view.inventory.get(id));
 
-        // The studio's machine: the focused terminal's first, else
-        // any live role's — a remote studio keeps its shells remote.
-        let machine = focused
-            .and_then(|t| t.address.split_once('/').map(|(m, _)| m.to_owned()))
-            .or_else(|| {
-                studio
-                    .roles
-                    .iter()
-                    .filter_map(|r| r.terminal.as_deref())
-                    .find_map(|a| a.split_once('/').map(|(m, _)| m.to_owned()))
-            });
+        // The studio's own machine — a remote studio keeps its
+        // shells remote, never pulled local by a local focus.
+        let machine = current.machine.map(str::to_owned);
 
         // The workarea of the person focused — an actor's worktree,
         // the director's integration worktree — else the studio's
@@ -191,15 +185,14 @@ impl App {
     }
 
     /// The current studio's shell terminals for the role keys —
-    /// after the people, in shell-number order.
+    /// after the people, in shell-number order, on its own machine.
     pub(crate) fn focused_studio_shells(&self) -> Vec<String> {
-        let Some(summary) = self.panel_summary() else {
+        let machines = self.panel_summaries();
+        let Some(index) = self.studio.current_index(&machines) else {
             return Vec::new();
         };
-        let Some(index) = self.studio.current_index(&summary) else {
-            return Vec::new();
-        };
-        studio_shells(&self.view, &summary.studios[index].id)
+        let current = crate::panel::data::studios(&machines)[index];
+        studio_shells(&self.view, current.machine, &current.studio.id)
             .into_iter()
             .map(|(_, address)| address)
             .filter(|address| {

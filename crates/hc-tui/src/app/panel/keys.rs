@@ -6,6 +6,7 @@ use backlot_model::event::Priority;
 use backlot_model::summary::RoleSummary;
 
 use crate::app::input::TerminalKey;
+use crate::panel::data::StudioRef;
 use crate::panel::{PanelAction, Target};
 
 use super::App;
@@ -102,7 +103,7 @@ impl App {
     /// person focuses their terminal, and a closed person runs the
     /// two-step reopen.
     pub(super) fn panel_activate(&mut self) {
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
         // Activating any row drops an armed reopen — only a second
@@ -122,28 +123,31 @@ impl App {
                 self.panel.expanded_blocks.insert(id.clone());
                 self.panel.selected = Some(Target::Studio(id));
             }
-            Some(Target::Person(studio, role_name)) => {
-                let role = summary.as_ref().and_then(|s| {
-                    s.studios
+            Some(Target::Person(key, role_name)) => {
+                let studio = crate::panel::data::studio(&machines, &key);
+                let role = studio.and_then(|s| {
+                    s.studio
+                        .roles
                         .iter()
-                        .find(|st| st.id == studio)
-                        .and_then(|st| st.roles.iter().find(|r| r.role == role_name))
+                        .find(|r| r.role == role_name)
+                        .map(|r| (s, r))
                 });
                 let armed = confirm
                     .as_ref()
-                    .is_some_and(|(s, r)| s == &studio && r == &role_name);
-                if let Some(role) = role.cloned() {
-                    self.panel_person_enter(&studio, &role, armed);
+                    .is_some_and(|(s, r)| s == &key && r == &role_name);
+                if let Some((studio, role)) = role.map(|(s, r)| (s, r.clone())) {
+                    self.panel_person_enter(studio, &role, armed);
                 }
             }
             _ => {}
         }
     }
 
-    /// Enter on a person: a live one focuses its terminal; a closed
-    /// one arms the row hint first and reopens on the second armed
-    /// press — or explains why it cannot.
-    fn panel_person_enter(&mut self, studio: &str, role: &RoleSummary, armed: bool) {
+    /// Enter on a person: a live one focuses its terminal — a remote
+    /// one lands through the same machine-qualified address the
+    /// sidebar uses; a closed one arms the row hint first and reopens
+    /// on the second armed press — or explains why it cannot.
+    fn panel_person_enter(&mut self, studio: StudioRef<'_>, role: &RoleSummary, armed: bool) {
         if role.state == "closed" {
             if !role.resumable {
                 self.show_notice(
@@ -160,9 +164,10 @@ impl App {
                 self.run_panel_action(PanelAction {
                     label: format!("reopen {}", role.name),
                     argv,
+                    machine: studio.machine.map(str::to_owned),
                 });
             } else {
-                self.panel.reopen_confirm = Some((studio.to_owned(), role.role.clone()));
+                self.panel.reopen_confirm = Some((studio.key(), role.role.clone()));
             }
             return;
         }
@@ -177,22 +182,18 @@ impl App {
     /// `+`/`-` on a selected actor: raise/lower its task priority.
     /// Clamped at the ends — no action is spawned there.
     fn panel_priority(&mut self, delta: i32) {
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        let Some(Target::Person(studio_id, role_name)) = targets.get(index).cloned() else {
+        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
             return;
         };
-        let Some((studio, role)) = summary.as_ref().and_then(|s| {
-            s.studios
+        let Some((studio, role)) = crate::panel::data::studio(&machines, &key).and_then(|s| {
+            s.studio
+                .roles
                 .iter()
-                .find(|st| st.id == studio_id)
-                .and_then(|st| {
-                    st.roles
-                        .iter()
-                        .find(|r| r.role == role_name)
-                        .map(|r| (st, r))
-                })
+                .find(|r| r.role == role_name)
+                .map(|r| (s, r))
         }) else {
             return;
         };
@@ -208,7 +209,7 @@ impl App {
         };
         let Some(next) = next else { return };
         let argv = self.panel_argv(
-            &studio.id,
+            studio,
             &[
                 "priority".into(),
                 "--task".into(),
@@ -220,21 +221,27 @@ impl App {
         self.run_panel_action(PanelAction {
             label: format!("priority {} {}", role.name, next),
             argv,
+            machine: studio.machine.map(str::to_owned),
         });
     }
 
     /// The argv tail for a panel command — the command word first
     /// (`backlot` dispatches studio commands on argv[1]), then its
-    /// flags, then the common `--studio`/`--as` and endpoint flags.
-    fn panel_argv(&self, studio: &str, command: &[String]) -> Vec<String> {
+    /// flags, then the common `--studio`/`--as` and, for a local
+    /// studio, the endpoint flags. A remote studio's tail carries no
+    /// endpoint flags: the terminal it runs in on that machine
+    /// reaches that machine's core through its own `HC_*` variables.
+    fn panel_argv(&self, studio: StudioRef<'_>, command: &[String]) -> Vec<String> {
         let mut argv = command.to_vec();
         argv.extend([
             "--studio".into(),
-            studio.to_owned(),
+            studio.studio.id.clone(),
             "--as".into(),
             "user".into(),
         ]);
-        argv.extend(self.panel_endpoint_args.iter().cloned());
+        if studio.machine.is_none() {
+            argv.extend(self.panel_endpoint_args.iter().cloned());
+        }
         argv
     }
 
@@ -242,7 +249,16 @@ impl App {
     /// runner; the result comes back on `panel_rx`. The opening
     /// page's `s` runs `stage start` through the same path.
     pub(crate) fn run_panel_action(&mut self, action: PanelAction) {
-        let future = (self.panel_runner)(action.argv);
+        let future = match &action.machine {
+            None => (self.panel_runner)(action.argv.clone()),
+            Some(machine) => {
+                self.show_notice(
+                    "Studio action failed",
+                    &format!("{}: cannot reach {machine}", action.label),
+                );
+                return;
+            }
+        };
         let tx = self.panel_action_tx.clone();
         let label = action.label;
         tokio::spawn(async move {

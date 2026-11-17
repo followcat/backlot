@@ -294,7 +294,11 @@ async fn backlot_documents_fetch_on_every_machine() {
     })
     .await;
     assert!(view.documents[&key(None, "backlot")].error.is_none());
-    assert!(view.documents[&key(Some("host-b"), "backlot")].error.is_none());
+    assert!(
+        view.documents[&key(Some("host-b"), "backlot")]
+            .error
+            .is_none()
+    );
     watcher.stop();
     fake.abort();
 }

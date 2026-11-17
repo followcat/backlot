@@ -7,12 +7,12 @@
 //! summary, writes cells, returns `PanelRender` (hits + whether a
 //! working mark reached the screen).
 
-use backlot_model::summary::Summary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::config::StudioKeys;
+use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
     draw_inner, draw_person, draw_person_line, draw_stacked, draw_strip, draw_top, frame_style,
 };
@@ -22,6 +22,7 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::truncate_end;
+use crate::studio::StudioKey;
 
 /// What the mouse needs plus the animation fact: a working mark
 /// reached the frame (the loop arms the ~120 ms tick only then).
@@ -47,15 +48,18 @@ pub(crate) struct PanelRender {
 
 /// Render the panel into `area`. `body` rows under the title scroll;
 /// the rightmost column carries the scrollbar on overflow; the last
-/// row is the dim shortcuts line (dropped under 8 rows).
+/// row is the dim shortcuts line (dropped under 8 rows). `local` is
+/// this core's display name — it labels local studios and local
+/// stage lines when studios span machines.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
     area: Rect,
-    summary: Option<&Summary>,
-    stage_running: bool,
+    machines: &[MachineSummary],
+    stage_running: impl Fn(Option<&str>) -> bool,
     panel: &Panel,
-    current: Option<&str>,
+    current: Option<&StudioKey>,
+    local: Option<&str>,
     keys: &StudioKeys,
     palette: &Palette,
 ) -> PanelRender {
@@ -85,7 +89,7 @@ pub(crate) fn render(
     } else {
         palette.text
     };
-    let studios = summary.map(|s| s.studios.len()).unwrap_or(0);
+    let studios = studio_count(machines);
     put_text(
         buf,
         title.x,
@@ -126,7 +130,11 @@ pub(crate) fn render(
         return hits;
     }
     hits.body = body;
-    let all = rows(summary, stage_running, panel, current, body.height);
+    let all = rows(machines, &stage_running, panel, current, body.height);
+    let multi = spans_machines(machines);
+    let label = |studio: super::data::StudioRef<'_>| {
+        studio_label(&studio.studio.id, studio.machine, local, multi)
+    };
     // `all[0]` is the fixed Title — the scrolled list is the body under
     // it, so `panel.scroll` and the metrics index body rows only.
     let heights: Vec<u16> = all.iter().skip(1).map(|r| r.height()).collect();
@@ -163,16 +171,24 @@ pub(crate) fn render(
         }
         match row {
             Row::Title => {}
-            Row::StageDown => {
-                put_text(buf, rect.x, rect.y, rect.width, "stage not running", dim);
+            Row::StageDown { machine } => {
+                // `host-b · stage not running` once several machines
+                // answered; bare on the only machine.
+                let text = match if multi { machine.or(local) } else { None } {
+                    Some(name) => format!("{name} · stage not running"),
+                    None => "stage not running".to_string(),
+                };
+                put_text(buf, rect.x, rect.y, rect.width, &text, dim);
             }
             Row::Empty => {
                 put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
             }
-            Row::BlockTop(studio) => draw_top(buf, rect, studio, current, palette),
+            Row::BlockTop(studio) => {
+                draw_top(buf, rect, *studio, &label(*studio), current, palette)
+            }
             Row::BlockError(studio) => {
-                draw_inner(buf, rect, frame_style(studio, current, palette));
-                if let Some(error) = &studio.error {
+                draw_inner(buf, rect, frame_style(*studio, current, palette));
+                if let Some(error) = &studio.studio.error {
                     put_text(
                         buf,
                         rect.x + 2,
@@ -184,8 +200,8 @@ pub(crate) fn render(
                 }
             }
             Row::BlockNext(studio) => {
-                draw_inner(buf, rect, frame_style(studio, current, palette));
-                if let Some(next) = &studio.next {
+                draw_inner(buf, rect, frame_style(*studio, current, palette));
+                if let Some(next) = &studio.studio.next {
                     put_text(
                         buf,
                         rect.x + 2,
@@ -197,7 +213,7 @@ pub(crate) fn render(
                 }
             }
             Row::Divider(studio) => {
-                let edge = frame_style(studio, current, palette);
+                let edge = frame_style(*studio, current, palette);
                 put_text(buf, rect.x, rect.y, 1, "├", edge);
                 put_text(
                     buf,
@@ -210,7 +226,7 @@ pub(crate) fn render(
                 put_text(buf, rect.x + rect.width - 1, rect.y, 1, "┤", edge);
             }
             Row::BlockBottom(studio) => {
-                let edge = frame_style(studio, current, palette);
+                let edge = frame_style(*studio, current, palette);
                 put_text(buf, rect.x, rect.y, 1, "╰", edge);
                 put_text(
                     buf,
@@ -224,16 +240,24 @@ pub(crate) fn render(
             }
             Row::Person { studio, role } => {
                 hits.working_drawn |= matches!(Mark::of(role), Mark::Working);
-                draw_person(buf, rect, studio, role, current, panel.spin, palette);
+                draw_person(buf, rect, *studio, role, current, panel.spin, palette);
             }
             Row::PersonLine { studio, role, kind } => {
-                draw_person_line(buf, rect, studio, role, kind, current, palette);
+                draw_person_line(buf, rect, *studio, role, kind, current, palette);
             }
             Row::Stacked(studio) => {
-                draw_stacked(buf, rect, studio, panel.spin, palette, &mut hits);
+                draw_stacked(
+                    buf,
+                    rect,
+                    *studio,
+                    &label(*studio),
+                    panel.spin,
+                    palette,
+                    &mut hits,
+                );
             }
             Row::Strip(studio) => {
-                draw_strip(buf, rect, studio, palette);
+                draw_strip(buf, rect, *studio, &label(*studio), palette);
             }
             Row::SetupHint => {
                 put_text(

@@ -62,7 +62,16 @@ fn draw_with(
     palette: &Palette,
 ) -> (Buffer, crate::hollywood::HollywoodRender) {
     let mut buf = Buffer::empty(area);
-    let hits = render(&mut buf, area, summary, stage_running, layer, opts, palette);
+    let hits = render(
+        &mut buf,
+        area,
+        &machines(summary),
+        None,
+        stage_running,
+        layer,
+        opts,
+        palette,
+    );
     (buf, hits)
 }
 
@@ -592,7 +601,8 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         let hits = render(
             &mut buf,
             area,
-            Some(&summary),
+            &machines(Some(&summary)),
+            None,
             true,
             &layer(mode),
             LayerOpts {
@@ -702,4 +712,72 @@ fn the_new_studio_frame_is_always_last_and_dashed() {
             .collect::<String>(),
         " n "
     );
+}
+
+// ---------- studios on several machines (U6a) ----------
+
+#[test]
+fn a_remote_studios_frame_titles_its_machine() {
+    // Both machines serve `acme-shop`: the frame titles read
+    // `acme-shop · here` and `acme-shop · host-b`, local first.
+    let summary = summary();
+    let mut list = machines(Some(&summary));
+    list.push(remote(&summary));
+    let area = Rect::new(0, 0, 160, 45);
+    let mut buf = Buffer::empty(area);
+    let hits = render(
+        &mut buf,
+        area,
+        &list,
+        Some("here"),
+        true,
+        &layer(LayerMode::Expanded),
+        LayerOpts {
+            agent: true,
+            mobile: false,
+        },
+        &palettes()[0],
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("acme-shop · here"), "{text}");
+    assert!(text.contains("acme-shop · host-b"), "{text}");
+    // The remote studio is its own frame — a hit keyed by machine.
+    let key = crate::studio::StudioKey {
+        machine: Some("host-b".into()),
+        id: "acme-shop".into(),
+    };
+    assert!(frame_hit(&hits, &Target::Studio(key)).is_some(), "{text}");
+}
+
+#[test]
+fn the_narrow_frame_cuts_the_machine_before_the_id() {
+    // Two-per-row frames at 56 columns are ~25 cells: a label too
+    // long for them falls back to the bare id — the machine name is
+    // what the cut takes.
+    let summary = summary();
+    let mut list = machines(Some(&summary));
+    let mut theirs = summary.clone();
+    theirs.studios[0].id = "acme-shop-remote-ops".into();
+    list.push(remote(&theirs));
+    let area = Rect::new(0, 0, 56, 45);
+    let mut buf = Buffer::empty(area);
+    render(
+        &mut buf,
+        area,
+        &list,
+        Some("here"),
+        true,
+        &layer(LayerMode::Expanded),
+        LayerOpts {
+            agent: true,
+            mobile: true,
+        },
+        &palettes()[0],
+    );
+    let text = lines(&buf, area).join("\n");
+    // The short label still fits; the long one's id survives the cut
+    // (truncated itself only past the machine's share of the cells).
+    assert!(text.contains("beta-tools · host-b"), "{text}");
+    assert!(text.contains("acme-shop-remote"), "{text}");
+    assert!(!text.contains("acme-shop-remote-ops · host-b"), "{text}");
 }

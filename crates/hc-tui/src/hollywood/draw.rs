@@ -9,7 +9,6 @@
 //! file owns the strip, the title row, the height ladder and the
 //! hit map.
 
-use backlot_model::summary::Summary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -21,6 +20,7 @@ use super::{Hollywood, LayerMode, LayerOpts, band, frames, strip};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics};
+use crate::panel::data::{MachineSummary, spans_machines, studio_count};
 
 /// The expanded band's height cap while floating: half the frame.
 const EXPANDED_FRAC: u16 = 2;
@@ -90,14 +90,17 @@ impl HollywoodRender {
     }
 }
 
-/// Render the bar into the frame. `summary` is this client's last good
-/// `backlot` document — `None` keeps the frames and the band on their
-/// empty reads.
+/// Render the bar into the frame. `machines` is every machine's last
+/// good `backlot` document — the frames and the counts span them all
+/// while the headline, the cards and the input line stay this core's.
+/// `local` is this core's display name, used in studio labels once
+/// studios span machines.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
     frame: Rect,
-    summary: Option<&Summary>,
+    machines: &[MachineSummary],
+    local: Option<&str>,
     stage_running: bool,
     hollywood: &Hollywood,
     opts: LayerOpts,
@@ -105,19 +108,28 @@ pub(crate) fn render(
 ) -> HollywoodRender {
     match hollywood.mode {
         LayerMode::Hidden => HollywoodRender::default(),
-        LayerMode::Collapsed => strip::render(buf, frame, summary, opts.agent, palette),
-        LayerMode::Expanded => {
-            render_band(buf, frame, summary, stage_running, hollywood, opts, palette)
-        }
+        LayerMode::Collapsed => strip::render(buf, frame, machines, opts.agent, palette),
+        LayerMode::Expanded => render_band(
+            buf,
+            frame,
+            machines,
+            local,
+            stage_running,
+            hollywood,
+            opts,
+            palette,
+        ),
     }
 }
 
 /// The expanded band: the plan, the frames, the band rows, the hints
 /// and the two sprocket rows, all over `surface_dim`.
+#[allow(clippy::too_many_arguments)]
 fn render_band(
     buf: &mut Buffer,
     frame: Rect,
-    summary: Option<&Summary>,
+    machines: &[MachineSummary],
+    local: Option<&str>,
     stage_running: bool,
     hollywood: &Hollywood,
     opts: LayerOpts,
@@ -126,7 +138,9 @@ fn render_band(
     if frame.width == 0 || frame.height == 0 {
         return HollywoodRender::default();
     }
-    let all_frames = rows::frames(summary);
+    let multi = spans_machines(machines);
+    let summary = rows::local_summary(machines);
+    let all_frames = rows::frames(machines);
     let band_rows = rows::band_rows(summary, stage_running, opts.agent);
     let cap = if opts.mobile {
         frame.height
@@ -201,7 +215,7 @@ fn render_band(
         y += 1;
     }
     if plan.title {
-        draw_title(buf, area, y, summary, opts.agent, palette, &mut hits);
+        draw_title(buf, area, y, machines, opts.agent, palette, &mut hits);
         y += 1;
     }
     if plan.blank_1 {
@@ -217,6 +231,8 @@ fn render_band(
                 selected: hollywood.selected.as_ref(),
                 scroll: hollywood.frame_scroll,
                 mobile: opts.mobile,
+                local,
+                multi,
             },
             palette,
         );
@@ -285,12 +301,13 @@ fn width_of(text: &str) -> u16 {
 }
 
 /// The title row: the mark, the agent's square and role, and the
-/// right-aligned studio count with what waits on you.
+/// right-aligned studio count with what waits on you. The count
+/// spans machines; the agent's words stay this core's.
 fn draw_title(
     buf: &mut Buffer,
     area: Rect,
     y: u16,
-    summary: Option<&Summary>,
+    machines: &[MachineSummary],
     agent: bool,
     palette: &Palette,
     hits: &mut HollywoodRender,
@@ -310,16 +327,19 @@ fn draw_title(
     );
     let x = area.x + MARGIN + mark_w + 3;
 
-    let studios = summary.map(|s| s.studios.len()).unwrap_or(0);
-    let waiting: u32 = summary
-        .map(|s| s.studios.iter().map(|studio| studio.waiting).sum())
-        .unwrap_or(0);
+    let studios = studio_count(machines);
+    let waiting: u32 = machines
+        .iter()
+        .flat_map(|m| m.summary.studios.iter())
+        .map(|studio| studio.waiting)
+        .sum();
     let count = format!("{studios} studio{}", if studios == 1 { "" } else { "s" });
     let wait = if waiting > 0 {
         format!("  ·  {waiting} waiting on you")
     } else {
         String::new()
     };
+    let summary = rows::local_summary(machines);
     let state = summary
         .and_then(|s| s.hollywood.as_ref())
         .map(|h| h.state.as_str());

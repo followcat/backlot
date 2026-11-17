@@ -4,6 +4,7 @@
 use super::*;
 use crate::panel::rows::{Mark, Target, mark_counts, rows};
 use crate::panel::{Panel, PanelMode};
+use crate::studio::StudioKey;
 
 fn panel(mode: PanelMode) -> Panel {
     Panel {
@@ -19,10 +20,17 @@ fn targets(
     current: Option<&str>,
     body_height: u16,
 ) -> Vec<Target> {
-    rows(summary, stage, panel, current, body_height)
-        .iter()
-        .map(|r| r.target())
-        .collect()
+    let current = current.map(StudioKey::local);
+    rows(
+        &machines(summary),
+        |_| stage,
+        panel,
+        current.as_ref(),
+        body_height,
+    )
+    .iter()
+    .map(|r| r.target())
+    .collect()
 }
 
 fn people(targets: &[Target]) -> Vec<String> {

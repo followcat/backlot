@@ -9,11 +9,11 @@ mod mouse;
 
 use std::time::{Duration, Instant};
 
-use backlot_model::summary::Summary;
 use hc_proto::endpoint::Endpoint;
 
 use super::App;
 use crate::chrome::scroll;
+use crate::panel::data::MachineSummary;
 use crate::panel::{self, PanelConfig, PanelMode, Target};
 
 /// The working-mark spin interval (~8 fps); the deadline is a one-shot
@@ -91,9 +91,16 @@ impl App {
         self.panel.open() && (self.panel.focused || self.panel_fullscreen())
     }
 
-    /// The current `backlot` summary for this view.
-    pub(crate) fn panel_summary(&self) -> Option<Summary> {
-        panel::summary(&self.view)
+    /// Every machine's `backlot` summary for this view — this core's
+    /// first, then each added machine's, in `machine.list` order.
+    pub(crate) fn panel_summaries(&self) -> Vec<MachineSummary> {
+        panel::data::summaries(&self.view)
+    }
+
+    /// Whether `machine`'s (`None` is this core) inventory shows a
+    /// live stage terminal.
+    fn machine_stage_running(&self, machine: Option<&str>) -> bool {
+        panel::stage_running(&self.view, machine)
     }
 
     /// The row targets as they would draw now — selection works on
@@ -101,12 +108,12 @@ impl App {
     /// needs the drawn body's height; pre-first-draw it is zero, and
     /// `rows` reads that as "no constraint" so every block opens.
     fn panel_targets(&self) -> Vec<Target> {
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         panel::rows(
-            summary.as_ref(),
-            panel::stage_running(&self.view),
+            &machines,
+            |m| self.machine_stage_running(m),
             &self.panel,
-            self.studio.current.as_deref(),
+            self.studio.current.as_ref(),
             self.panel_hits.body.height,
         )
         .iter()
@@ -177,12 +184,12 @@ impl App {
     /// target — a move always lands on a different target, so the
     /// selection visibly steps. Moving clears an armed reopen.
     fn panel_move(&mut self, delta: isize) {
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         let rows = panel::rows(
-            summary.as_ref(),
-            panel::stage_running(&self.view),
+            &machines,
+            |m| self.machine_stage_running(m),
             &self.panel,
-            self.studio.current.as_deref(),
+            self.studio.current.as_ref(),
             self.panel_hits.body.height,
         );
         if rows.len() <= 1 {
@@ -250,17 +257,17 @@ impl App {
         };
         // A block is open when `expanded_set` says so — toggling
         // writes the opposite manual override.
-        let summary = self.panel_summary();
+        let machines = self.panel_summaries();
         let rows = panel::rows(
-            summary.as_ref(),
-            panel::stage_running(&self.view),
+            &machines,
+            |m| self.machine_stage_running(m),
             &self.panel,
-            self.studio.current.as_deref(),
+            self.studio.current.as_ref(),
             self.panel_hits.body.height,
         );
         let open = rows
             .iter()
-            .any(|r| matches!(r, panel::Row::BlockTop(s) if s.id == studio));
+            .any(|r| matches!(r, panel::Row::BlockTop(s) if s.key() == studio));
         if open {
             self.panel.expanded_blocks.remove(&studio);
             self.panel.collapsed_blocks.insert(studio.clone());

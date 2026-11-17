@@ -1,12 +1,17 @@
-//! The bar's model: one frame per studio plus the trailing new-studio
-//! frame, the band rows under them, and the collapsed strip's
-//! content. Pure functions of the `backlot` document — nothing is
-//! scraped from Hollywood's terminal.
+//! The bar's model: one frame per studio — every machine's — plus
+//! the trailing new-studio frame, the band rows under them, and the
+//! collapsed strip's content. Pure functions of the `backlot`
+//! documents — nothing is scraped from Hollywood's terminal.
 //!
 //! Frame and row identities are document ids, never positions: the
 //! frames rebuild on every publish and the selection has to survive.
+//! A studio identity is `(machine, id)` — the same id on two
+//! machines is two studios.
 
 use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
+
+use crate::panel::data::{MachineSummary, StudioRef, studio_count};
+use crate::studio::StudioKey;
 
 /// A selected/clicked thing's stable identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,7 +21,7 @@ pub(crate) enum Target {
     /// The "stage not running" line — shown, not actionable.
     StageDown,
     /// A studio's frame — Enter focuses that studio's producer.
-    Studio(String),
+    Studio(StudioKey),
     /// The trailing `+ new studio` frame — Enter opens the wizard.
     NewStudio,
     /// Hollywood's newest headline — shown, not actionable.
@@ -33,8 +38,9 @@ pub(crate) enum Target {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Frame<'a> {
     /// A studio: `╭─ <id> ─…╮` with its state, the role on set, what
-    /// it is doing and its cast.
-    Studio(&'a StudioSummary),
+    /// it is doing and its cast — `machine` names it in the title
+    /// once studios span machines.
+    Studio(StudioRef<'a>),
     /// `+  new studio` — the wizard's frame, always last.
     New,
 }
@@ -43,19 +49,20 @@ impl Frame<'_> {
     /// The frame's stable identity for selection, clicks and Enter.
     pub fn target(&self) -> Target {
         match self {
-            Frame::Studio(studio) => Target::Studio(studio.id.clone()),
+            Frame::Studio(studio) => Target::Studio(studio.key()),
             Frame::New => Target::NewStudio,
         }
     }
 }
 
-/// Every frame: the studios in document order, then the new-studio
-/// entry. A missing document still offers the entry.
-pub(crate) fn frames(summary: Option<&Summary>) -> Vec<Frame<'_>> {
-    let mut out: Vec<Frame<'_>> = match summary {
-        Some(summary) => summary.studios.iter().map(Frame::Studio).collect(),
-        None => Vec::new(),
-    };
+/// Every frame: the studios in aggregate order — this core's first,
+/// then each added machine's — then the new-studio entry. A missing
+/// document still offers the entry.
+pub(crate) fn frames(machines: &[MachineSummary]) -> Vec<Frame<'_>> {
+    let mut out: Vec<Frame<'_>> = crate::panel::data::studios(machines)
+        .into_iter()
+        .map(Frame::Studio)
+        .collect();
     out.push(Frame::New);
     out
 }
@@ -120,8 +127,8 @@ pub(crate) const SETUP_LEAD: &str =
 pub(crate) const SETUP_COMMAND: &str = "backlot hollywood setup --runner <runner> --model <model>";
 
 /// The collapsed strip's content: the agent's role state (`None`
-/// without an agent, drawn dim), how many studios there are, and how
-/// many things wait on you.
+/// without an agent, drawn dim), how many studios there are across
+/// every machine, and how many things wait on you.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Strip<'a> {
     pub state: Option<&'a str>,
@@ -130,16 +137,27 @@ pub(crate) struct Strip<'a> {
     pub waiting: u32,
 }
 
-/// Read the strip's content out of the document.
-pub(crate) fn strip(summary: Option<&Summary>, agent: bool) -> Strip<'_> {
-    let (studios, hollywood) = match summary {
-        Some(summary) => (summary.studios.as_slice(), summary.hollywood.as_ref()),
-        None => (&[][..], None),
-    };
+/// This core's parsed document inside the aggregate — the headline,
+/// the cards and the agent's state stay this core's.
+pub(crate) fn local_summary(machines: &[MachineSummary]) -> Option<&Summary> {
+    machines
+        .iter()
+        .find(|m| m.machine.is_none())
+        .map(|m| &m.summary)
+}
+
+/// Read the strip's content out of the documents: the studio count
+/// and waiting sum span machines; the agent's state is this core's.
+pub(crate) fn strip(machines: &[MachineSummary], agent: bool) -> Strip<'_> {
+    let hollywood = local_summary(machines).and_then(|s| s.hollywood.as_ref());
     Strip {
         state: agent.then(|| hollywood.map(|h| h.state.as_str()).unwrap_or("down")),
-        studios: studios.len(),
-        waiting: studios.iter().map(|s| s.waiting).sum(),
+        studios: studio_count(machines),
+        waiting: machines
+            .iter()
+            .flat_map(|m| m.summary.studios.iter())
+            .map(|s| s.waiting)
+            .sum(),
     }
 }
 
@@ -147,8 +165,8 @@ pub(crate) fn strip(summary: Option<&Summary>, agent: bool) -> Strip<'_> {
 /// renderer writes, piece for piece. The tests read it; the renderer
 /// builds the coloured pieces itself.
 #[cfg(test)]
-pub(crate) fn strip_text(summary: Option<&Summary>, agent: bool) -> String {
-    let strip = strip(summary, agent);
+pub(crate) fn strip_text(machines: &[MachineSummary], agent: bool) -> String {
+    let strip = strip(machines, agent);
     let mut text = format!(
         "✦ hollywood  ■ {} studio{}",
         strip.studios,

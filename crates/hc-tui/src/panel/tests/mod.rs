@@ -52,3 +52,24 @@ pub(super) fn summary_json() -> serde_json::Value {
 pub(super) fn summary() -> Summary {
     serde_json::from_value(summary_json()).unwrap()
 }
+
+/// A summary wrapped as this core's machine row — the shape the
+/// aggregate APIs take; `None` is no document anywhere.
+pub(super) fn machines(summary: Option<&Summary>) -> Vec<crate::panel::data::MachineSummary> {
+    summary
+        .map(|summary| crate::panel::data::MachineSummary {
+            machine: None,
+            summary: summary.clone(),
+        })
+        .into_iter()
+        .collect()
+}
+
+/// `host-b`'s row — the shape `summaries` returns for an added
+/// machine.
+pub(super) fn remote(summary: &Summary) -> crate::panel::data::MachineSummary {
+    crate::panel::data::MachineSummary {
+        machine: Some("host-b".into()),
+        summary: summary.clone(),
+    }
+}

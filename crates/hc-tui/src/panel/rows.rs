@@ -1,13 +1,15 @@
-//! The panel's row model (U1): a pure `(Summary, Panel, current,
+//! The panel's row model (U1): a pure `(machines, Panel, current,
 //! body height)` → one-line rows map. Every row is a single line — a
 //! block border, a person, a `├──┤` divider or a stacked block's
 //! `╶ id …` line — so the scroll math stays in one-line steps.
 
-use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
+use backlot_model::summary::{RoleSummary, StudioSummary, Work};
 
+use super::data::{MachineSummary, StudioRef};
 use super::{Panel, PanelMode};
 use crate::chrome::palette::Palette;
 use crate::chrome::status::{AgentStatus, status_color};
+use crate::studio::StudioKey;
 use ratatui::style::Color;
 
 /// Role groups in display order. `producer`/`director`/`writer` are
@@ -24,25 +26,25 @@ pub(crate) fn group_of(role: &RoleSummary) -> &'static str {
 }
 
 /// A selected/clicked row's stable identity. Rows rebuild per frame,
-/// so anything the user can act on is named by document ids, never by
-/// position.
+/// so anything the user can act on is named by machine plus document
+/// ids, never by position.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Target {
     Title,
-    /// The "stage not running" line — shown, not actionable.
+    /// A "stage not running" line — shown, not actionable.
     StageDown,
     /// The empty-state line — shown, not actionable.
     Empty,
     /// Any chrome row of an expanded block — top border, divider,
     /// error/next line or bottom. Enter/click makes the studio
     /// current.
-    Studio(String),
+    Studio(StudioKey),
     /// A stacked block's `╶ id …` line — Enter/click expands it.
-    Block(String),
+    Block(StudioKey),
     /// A collapsed-strip row — Enter/click expands the panel.
-    Strip(String),
+    Strip(StudioKey),
     /// `(studio, role)` — a person row or one of its extra lines.
-    Person(String, String),
+    Person(StudioKey, String),
     /// H4: the expanded panel's "no hollywood" hint — shown, not
     /// actionable.
     SetupHint,
@@ -59,38 +61,44 @@ pub(crate) enum PersonLine {
     Confirm,
 }
 
-/// One display row, borrowing its data from the summary.
+/// One display row, borrowing its data from the summaries.
 #[derive(Debug)]
 pub(crate) enum Row<'a> {
     Title,
-    StageDown,
-    /// No `backlot` document or an unparseable one — "no studios".
+    /// `stage not running` — one per machine whose document answered
+    /// but whose stage is down; `machine` names it when several
+    /// machines answered.
+    StageDown {
+        machine: Option<&'a str>,
+    },
+    /// No `backlot` document anywhere or an unparseable one —
+    /// "no studios".
     Empty,
     /// `╭ <id> ── !<n> ╮` — the studio id in the top border.
-    BlockTop(&'a StudioSummary),
+    BlockTop(StudioRef<'a>),
     /// `│ ! <error> │`
-    BlockError(&'a StudioSummary),
+    BlockError(StudioRef<'a>),
     /// `│ → <next> │`
-    BlockNext(&'a StudioSummary),
+    BlockNext(StudioRef<'a>),
     /// `├──┤` between role groups.
-    Divider(&'a StudioSummary),
+    Divider(StudioRef<'a>),
     /// `╰──╯`
-    BlockBottom(&'a StudioSummary),
+    BlockBottom(StudioRef<'a>),
     /// `│ <mark> <name> <task> <flag>   <state> │`
     Person {
-        studio: &'a StudioSummary,
+        studio: StudioRef<'a>,
         role: &'a RoleSummary,
     },
     /// A person's attention/failed/confirm extra line.
     PersonLine {
-        studio: &'a StudioSummary,
+        studio: StudioRef<'a>,
         role: &'a RoleSummary,
         kind: PersonLine,
     },
     /// A stacked block's single line: `╶ <id> ⠿2 ○3 ×1 !<n>`.
-    Stacked(&'a StudioSummary),
+    Stacked(StudioRef<'a>),
     /// The collapsed strip's one line per studio.
-    Strip(&'a StudioSummary),
+    Strip(StudioRef<'a>),
     /// H4: `no hollywood — backlot hollywood setup …` — the expanded
     /// panel's last row while `[hollywood]` is absent (R22).
     SetupHint,
@@ -101,18 +109,18 @@ impl Row<'_> {
     pub fn target(&self) -> Target {
         match self {
             Row::Title => Target::Title,
-            Row::StageDown => Target::StageDown,
+            Row::StageDown { .. } => Target::StageDown,
             Row::Empty => Target::Empty,
             Row::BlockTop(studio)
             | Row::BlockError(studio)
             | Row::BlockNext(studio)
             | Row::Divider(studio)
-            | Row::BlockBottom(studio) => Target::Studio(studio.id.clone()),
+            | Row::BlockBottom(studio) => Target::Studio(studio.key()),
             Row::Person { studio, role } | Row::PersonLine { studio, role, .. } => {
-                Target::Person(studio.id.clone(), role.role.clone())
+                Target::Person(studio.key(), role.role.clone())
             }
-            Row::Stacked(studio) => Target::Block(studio.id.clone()),
-            Row::Strip(studio) => Target::Strip(studio.id.clone()),
+            Row::Stacked(studio) => Target::Block(studio.key()),
+            Row::Strip(studio) => Target::Strip(studio.key()),
             Row::SetupHint => Target::SetupHint,
         }
     }
@@ -222,24 +230,25 @@ pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Mark, usize)> {
 
 /// A person's line count: itself plus an attention-or-failed line and
 /// the armed reopen hint.
-fn person_height(studio: &StudioSummary, role: &RoleSummary, panel: &Panel) -> usize {
+fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
     1 + usize::from(role.attention.is_some() || role.failed.is_some())
         + usize::from(
             panel
                 .reopen_confirm
                 .as_ref()
-                .is_some_and(|(s, r)| s == &studio.id && r == &role.role),
+                .is_some_and(|(s, r)| s == &studio.key() && r == &role.role),
         )
 }
 
 /// An expanded block's height: top + bottom borders, the `error` and
 /// `next` lines when present, each non-empty group's people, and a
 /// divider between groups.
-fn block_height(studio: &StudioSummary, panel: &Panel) -> usize {
-    let mut height = 2 + usize::from(studio.error.is_some()) + usize::from(studio.next.is_some());
+fn block_height(studio: StudioRef<'_>, panel: &Panel) -> usize {
+    let mut height =
+        2 + usize::from(studio.studio.error.is_some()) + usize::from(studio.studio.next.is_some());
     let mut groups = 0usize;
     for group in GROUPS {
-        let people = studio.roles.iter().filter(|r| group_of(r) == group);
+        let people = studio.studio.roles.iter().filter(|r| group_of(r) == group);
         let mut counted = false;
         for role in people {
             counted = true;
@@ -253,50 +262,50 @@ fn block_height(studio: &StudioSummary, panel: &Panel) -> usize {
 /// Which studios draw an expanded block: all of them while every
 /// expanded block fits the body; past that, the current studio and any
 /// block `Space` opened by hand — `collapsed_blocks` wins either way.
-fn expanded_set<'a>(
-    summary: &'a Summary,
+fn expanded_set(
+    studios: &[StudioRef<'_>],
     panel: &Panel,
-    current: Option<&str>,
+    current: Option<&StudioKey>,
     body_height: u16,
-) -> std::collections::BTreeSet<&'a str> {
+) -> std::collections::BTreeSet<StudioKey> {
     // `body_height == 0` means the body was never drawn — no
     // constraint measured, so every block opens.
     let fits = body_height == 0
-        || summary
-            .studios
+        || studios
             .iter()
-            .map(|studio| block_height(studio, panel))
+            .map(|studio| block_height(*studio, panel))
             .sum::<usize>()
             <= body_height as usize;
-    summary
-        .studios
+    studios
         .iter()
         .filter_map(|studio| {
-            let open = if panel.expanded_blocks.contains(&studio.id) {
+            let key = studio.key();
+            let open = if panel.expanded_blocks.contains(&key) {
                 true
-            } else if panel.collapsed_blocks.contains(&studio.id) {
+            } else if panel.collapsed_blocks.contains(&key) {
                 false
             } else {
-                fits || current == Some(studio.id.as_str())
+                fits || current == Some(&key)
             };
-            open.then_some(studio.id.as_str())
+            open.then_some(key)
         })
         .collect()
 }
 
 /// One studio's expanded block: `╭ id ╮`, `error`/`next` lines, the
 /// groups divided by `├──┤` rules — empty groups skipped — `╰──╯`.
-fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: &'a StudioSummary, panel: &Panel) {
+fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: StudioRef<'a>, panel: &Panel) {
     out.push(Row::BlockTop(studio));
-    if studio.error.is_some() {
+    if studio.studio.error.is_some() {
         out.push(Row::BlockError(studio));
     }
-    if studio.next.is_some() {
+    if studio.studio.next.is_some() {
         out.push(Row::BlockNext(studio));
     }
     let mut first_group = true;
     for group in GROUPS {
         let people: Vec<&RoleSummary> = studio
+            .studio
             .roles
             .iter()
             .filter(|r| group_of(r) == group)
@@ -312,7 +321,7 @@ fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: &'a StudioSummary, panel: &Pan
             let confirm = panel
                 .reopen_confirm
                 .as_ref()
-                .is_some_and(|(s, r)| s == &studio.id && r == &role.role);
+                .is_some_and(|(s, r)| s == &studio.key() && r == &role.role);
             out.push(Row::Person { studio, role });
             if role.attention.is_some() {
                 out.push(Row::PersonLine {
@@ -339,32 +348,42 @@ fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: &'a StudioSummary, panel: &Pan
     out.push(Row::BlockBottom(studio));
 }
 
-/// The whole row list for the current mode. `None` summary — a
-/// missing, malformed or foreign-schema document — is the
-/// "no studios" state, never an error row.
+/// The whole row list for the current mode. An empty `machines` — no
+/// machine's document parsed — is the "no studios" state, never an
+/// error row. `stage_running` answers per machine (`None` is this
+/// core); a machine that answered its document but runs no stage gets
+/// its own line.
 pub(crate) fn rows<'a>(
-    summary: Option<&'a Summary>,
-    stage_running: bool,
+    machines: &'a [MachineSummary],
+    stage_running: impl Fn(Option<&str>) -> bool,
     panel: &Panel,
-    current: Option<&str>,
+    current: Option<&StudioKey>,
     body_height: u16,
 ) -> Vec<Row<'a>> {
     let mut out = vec![Row::Title];
-    if !stage_running {
-        out.push(Row::StageDown);
-    }
-    let Some(summary) = summary else {
+    if machines.is_empty() {
+        if !stage_running(None) {
+            out.push(Row::StageDown { machine: None });
+        }
         out.push(Row::Empty);
         return out;
-    };
+    }
+    for machine in machines {
+        if !stage_running(machine.machine.as_deref()) {
+            out.push(Row::StageDown {
+                machine: machine.machine.as_deref(),
+            });
+        }
+    }
+    let studios = super::data::studios(machines);
     match panel.mode {
         PanelMode::Closed | PanelMode::Collapsed => {
-            out.extend(summary.studios.iter().map(Row::Strip));
+            out.extend(studios.iter().map(|s| Row::Strip(*s)));
         }
         PanelMode::Expanded => {
-            let open = expanded_set(summary, panel, current, body_height);
-            for studio in &summary.studios {
-                if open.contains(studio.id.as_str()) {
+            let open = expanded_set(&studios, panel, current, body_height);
+            for studio in studios {
+                if open.contains(&studio.key()) {
                     block_rows(&mut out, studio, panel);
                 } else {
                     out.push(Row::Stacked(studio));

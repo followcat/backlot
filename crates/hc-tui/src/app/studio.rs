@@ -7,10 +7,10 @@ use backlot_model::summary::RoleSummary;
 
 use super::App;
 use crate::panel::StudioNav;
-use crate::studio;
+use crate::studio::{self, StudioKey};
 
 impl App {
-    /// Sync the studio latch against the last good summary and the
+    /// Sync the studio latch against the last good summaries and the
     /// focus — called from `refresh_projection`, so publishes and
     /// focus moves both land here. A mode flip re-derives the sidebar
     /// width unless the user dragged it this session.
@@ -22,8 +22,8 @@ impl App {
         // the parity harness measures that client.
         let was = self.studio.active;
         self.studio.active = !self.plain;
-        let summary = self.panel_summary();
-        self.studio.sync(summary.as_ref(), self.focused.as_deref());
+        let machines = self.panel_summaries();
+        self.studio.sync(&machines, self.focused.as_deref());
         if self.studio.active != was && !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
         }
@@ -52,13 +52,13 @@ impl App {
     }
 
     /// A direct studio key: `alt+up/down` move between studios in
-    /// document order, `alt+left/right` between the current studio's
-    /// live people in cast order — all wrapping.
+    /// the aggregate's order — this core's first, then machine-list
+    /// order — `alt+left/right` between the current studio's live
+    /// people in cast order — all wrapping.
     pub(crate) fn studio_nav(&mut self, nav: StudioNav) {
-        let Some(summary) = self.panel_summary() else {
-            return;
-        };
-        if summary.studios.is_empty() {
+        let machines = self.panel_summaries();
+        let studios = crate::panel::data::studios(&machines);
+        if studios.is_empty() {
             return;
         }
         match nav {
@@ -68,11 +68,9 @@ impl App {
                 } else {
                     -1
                 };
-                let len = summary.studios.len() as isize;
-                let current = self.studio.current_index(&summary).unwrap_or(0) as isize;
-                let next = summary.studios[(current + dir).rem_euclid(len) as usize]
-                    .id
-                    .clone();
+                let len = studios.len() as isize;
+                let current = self.studio.current_index(&machines).unwrap_or(0) as isize;
+                let next = studios[(current + dir).rem_euclid(len) as usize].key();
                 self.focus_studio(&next);
             }
             StudioNav::PreviousRole | StudioNav::NextRole => {
@@ -81,13 +79,15 @@ impl App {
                 } else {
                     -1
                 };
-                let Some(index) = self.studio.current_index(&summary) else {
+                let Some(index) = self.studio.current_index(&machines) else {
                     return;
                 };
-                let studio = &summary.studios[index];
+                let studio = studios[index];
                 // The cycle: the live people in cast order, then the
-                // studio's shells in shell-number order.
-                let cycle: Vec<String> = studio::cast_order(studio)
+                // studio's shells in shell-number order — a remote
+                // studio's terminals arrive machine-qualified, so the
+                // focus addresses match the inventory's.
+                let cycle: Vec<String> = studio::cast_order(studio.studio)
                     .into_iter()
                     .filter_map(|role| studio::live_terminal(role).map(str::to_owned))
                     .chain(self.focused_studio_shells())
@@ -99,8 +99,8 @@ impl App {
                     .as_deref()
                     .is_some_and(|terminal| cycle.iter().any(|t| t == terminal));
                 if !inside {
-                    let id = studio.id.clone();
-                    self.focus_studio(&id);
+                    let key = studio.key();
+                    self.focus_studio(&key);
                     return;
                 }
                 if cycle.is_empty() {
@@ -116,41 +116,42 @@ impl App {
         }
     }
 
-    /// Make `id` the current studio and focus its remembered person,
+    /// Make `key` the current studio and focus its remembered person,
     /// else its producer, else its first person with a live terminal
     /// — in cast order. A studio with no live terminal still becomes
     /// current (cast and frame follow) and a notice says so.
-    pub(crate) fn focus_studio(&mut self, id: &str) {
-        let Some(summary) = self.panel_summary() else {
+    pub(crate) fn focus_studio(&mut self, key: &StudioKey) {
+        let machines = self.panel_summaries();
+        let Some(studio) = crate::panel::data::studio(&machines, key) else {
             return;
         };
-        let Some(studio) = summary.studios.iter().find(|s| s.id == id) else {
-            return;
-        };
-        self.studio.current = Some(id.to_string());
+        self.studio.current = Some(key.clone());
         let live = |role: &RoleSummary| studio::live_terminal(role).is_some();
         let remembered = self
             .studio
             .remembered
-            .get(id)
-            .and_then(|role| studio.roles.iter().find(|r| &r.role == role))
+            .get(key)
+            .and_then(|role| studio.studio.roles.iter().find(|r| &r.role == role))
             .filter(|role| live(role));
         let target = remembered
             .or_else(|| {
                 studio
+                    .studio
                     .roles
                     .iter()
                     .find(|role| role.role == "producer" && live(role))
             })
             .or_else(|| {
-                studio::cast_order(studio)
+                studio::cast_order(studio.studio)
                     .into_iter()
                     .find(|role| live(role))
             })
             .and_then(|role| role.terminal.clone());
         match target {
+            // The role's terminal is machine-qualified on an added
+            // machine — the same address shape a sidebar focus takes.
             Some(terminal) => self.focus_pane(terminal),
-            None => self.show_notice("Studio", &format!("{id} has no live terminal")),
+            None => self.show_notice("Studio", &format!("{} has no live terminal", key.id)),
         }
     }
 }

@@ -4,6 +4,7 @@
 use super::*;
 use crate::app::input::UiEvent;
 use crate::panel::PanelMode;
+use crate::studio::StudioKey;
 use hc_proto::watch::{DocKey, Document};
 
 pub(super) fn doc_key() -> DocKey {
@@ -113,7 +114,7 @@ pub(super) fn alt(app: &mut App, k: hc_vt::Key) {
 async fn a_document_with_studios_latches_studio_mode_and_the_cast() {
     let mut app = two_studio_app();
     assert!(app.studio.active);
-    assert_eq!(app.studio.current.as_deref(), Some("acme-shop"));
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("cast · acme-shop"), "{text}");
@@ -182,19 +183,19 @@ async fn next_and_previous_studio_cycle_and_land_on_the_remembered() {
     let mut app = two_studio_app();
     // Producer-focused → acme remembers producer.
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current.as_deref(), Some("night-owl"));
+    assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(app.focused.as_deref(), Some("t7"), "the producer lands");
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current.as_deref(), Some("ghost"));
+    assert_eq!(app.studio.current, Some("ghost".into()));
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current.as_deref(), Some("acme-shop"), "wraps");
+    assert_eq!(app.studio.current, Some("acme-shop".into()), "wraps");
     assert_eq!(app.focused.as_deref(), Some("t1"));
     // Focus alice, leave, come back → alice lands, not the producer.
     app.focused = Some("t4".into());
     app.refresh_projection();
     alt(&mut app, hc_vt::Key::ArrowDown);
     alt(&mut app, hc_vt::Key::ArrowUp);
-    assert_eq!(app.studio.current.as_deref(), Some("acme-shop"));
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert_eq!(
         app.focused.as_deref(),
         Some("t4"),
@@ -221,7 +222,10 @@ async fn a_role_key_from_outside_the_studio_focuses_the_remembered() {
     app.focused = Some("t4".into());
     app.refresh_projection();
     assert_eq!(
-        app.studio.remembered.get("acme-shop").map(String::as_str),
+        app.studio
+            .remembered
+            .get(&StudioKey::local("acme-shop"))
+            .map(String::as_str),
         Some("actor-alice")
     );
     // Focus a terminal no person owns → still acme's current, but
@@ -237,7 +241,7 @@ async fn a_studio_with_no_live_terminal_still_becomes_current() {
     let mut app = two_studio_app();
     alt(&mut app, hc_vt::Key::ArrowDown);
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current.as_deref(), Some("ghost"));
+    assert_eq!(app.studio.current, Some("ghost".into()));
     assert_eq!(
         app.focused.as_deref(),
         Some("t7"),
@@ -264,7 +268,7 @@ async fn a_studio_key_wins_over_the_herdr_binding_on_the_same_key() {
     // previous_role: alice lands, not another tab.
     alt(&mut app, hc_vt::Key::ArrowLeft);
     assert_eq!(app.focused.as_deref(), Some("t4"));
-    assert_eq!(app.studio.current.as_deref(), Some("acme-shop"));
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
 }
 
 #[tokio::test]
@@ -313,7 +317,7 @@ async fn the_studio_keys_fire_while_the_panel_owns_the_keys() {
     app.panel.mode = PanelMode::Expanded;
     app.panel.focused = true;
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current.as_deref(), Some("night-owl"));
+    assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(app.focused.as_deref(), Some("t7"));
 }
 
@@ -338,7 +342,7 @@ async fn the_studio_keys_fire_while_a_persistent_float_is_focused() {
     app.on_popup_spawned("t50".into(), 50);
     assert!(app.popup.is_some(), "the float shows");
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current.as_deref(), Some("night-owl"));
+    assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(app.focused.as_deref(), Some("t7"), "the nav ran");
 }
 
@@ -355,8 +359,8 @@ async fn an_unbound_studio_key_does_nothing() {
     app.set_panel_config(config, notice);
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
-        app.studio.current.as_deref(),
-        Some("acme-shop"),
+        app.studio.current,
+        Some("acme-shop".into()),
         "unbound: nothing ran"
     );
 }

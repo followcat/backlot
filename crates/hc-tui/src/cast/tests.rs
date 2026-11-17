@@ -8,6 +8,7 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::ShellHitMap;
 use crate::chrome::status::AgentStatus;
 use crate::chrome::tokens::{ResolvedToken, ResolvedTokenKind};
+use backlot_model::summary::Summary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -74,7 +75,14 @@ fn cast_view<'a>(
     focused: Option<&'a str>,
 ) -> CastView<'a> {
     CastView {
-        studio: Some(&summary.studios[0]),
+        studio: Some(StudioRef {
+            machine: None,
+            studio: &summary.studios[0],
+        }),
+        label: Some(crate::panel::data::StudioLabel {
+            full: "acme-shop".into(),
+            id: "acme-shop".into(),
+        }),
         index: 0,
         total: 1,
         focused_terminal: focused,

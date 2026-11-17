@@ -14,13 +14,19 @@ use crate::app::BoxFut;
 pub(crate) type PanelRunner = Arc<dyn Fn(Vec<String>) -> BoxFut<Result<(), String>> + Send + Sync>;
 
 /// A panel action the user asked for — the message a result notice
-/// names.
+/// names and the machine the command runs on.
 #[derive(Debug, Clone)]
 pub(crate) struct PanelAction {
     /// For the notice: `priority high`, `reopen alice`.
     pub label: String,
-    /// The argv tail handed to the runner.
+    /// The argv tail handed to the runner — endpoint flags included
+    /// for a local studio, absent for a remote one: a terminal on
+    /// that machine reaches that machine's core on its own.
     pub argv: Vec<String>,
+    /// The studio's machine: `None` spawns locally through the
+    /// injected runner; `Some(name)` runs `backlot` on that machine
+    /// through `terminal.run on:`.
+    pub machine: Option<String>,
 }
 
 /// The real runner: spawn `exe <argv>` detached from the UI thread

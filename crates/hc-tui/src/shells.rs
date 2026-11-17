@@ -18,12 +18,22 @@ pub(crate) fn shell_name(studio: &str, n: u32) -> String {
     format!("bl-{studio}-sh{n}")
 }
 
-/// The next `backlot.shell` number for `studio` — one past the
-/// highest in the inventory.
-pub(crate) fn next_shell_n(view: &hc_proto::watch::View, studio: &str) -> u32 {
+/// A terminal's owning machine — the `host-b/` prefix, `None` here.
+fn machine_of(address: &str) -> Option<&str> {
+    address.split_once('/').map(|(machine, _)| machine)
+}
+
+/// The next `backlot.shell` number for `studio` on `machine` (`None`
+/// is this core) — one past the highest in that machine's inventory.
+pub(crate) fn next_shell_n(
+    view: &hc_proto::watch::View,
+    machine: Option<&str>,
+    studio: &str,
+) -> u32 {
     view.inventory
         .terminals()
         .values()
+        .filter(|t| machine_of(&t.address) == machine)
         .filter(|t| t.labels.get(STUDIO_LABEL).is_some_and(|s| s == studio))
         .filter_map(|t| t.labels.get(SHELL_LABEL))
         .filter_map(|s| s.parse::<u32>().ok())
@@ -32,13 +42,19 @@ pub(crate) fn next_shell_n(view: &hc_proto::watch::View, studio: &str) -> u32 {
         + 1
 }
 
-/// Every `address` of `studio`'s shells, sorted by shell number —
-/// the cast's `shells` group and the role keys read it.
-pub(crate) fn studio_shells(view: &hc_proto::watch::View, studio: &str) -> Vec<(u32, String)> {
+/// Every `address` of `studio`'s shells on `machine` (`None` is this
+/// core), sorted by shell number — the cast's `shells` group and the
+/// role keys read it.
+pub(crate) fn studio_shells(
+    view: &hc_proto::watch::View,
+    machine: Option<&str>,
+    studio: &str,
+) -> Vec<(u32, String)> {
     let mut shells: Vec<(u32, String)> = view
         .inventory
         .terminals()
         .values()
+        .filter(|t| machine_of(&t.address) == machine)
         .filter(|t| t.labels.get(STUDIO_LABEL).is_some_and(|s| s == studio))
         .filter_map(|t| {
             Some((

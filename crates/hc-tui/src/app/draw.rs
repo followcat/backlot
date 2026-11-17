@@ -71,14 +71,15 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     let collapsed = app.shell_state.sidebar_collapsed;
     let layout = app.chrome_layout(area.width, area.height);
     // U1: studio mode replaces the agents section with the current
-    // studio's cast — borrowed views only.
-    let summary = app.panel_summary();
+    // studio's cast — borrowed views only, every machine's summaries.
+    let machines = app.panel_summaries();
     let cast = app.studio.active.then(|| {
         crate::cast::CastView::build(
-            summary.as_ref(),
+            &machines,
             &app.projection.snapshot,
             &app.view,
-            app.studio.current.as_deref(),
+            app.studio.current.as_ref(),
+            app.view.core.as_ref().map(|core| core.name.as_str()),
             &app.shell,
             app.studio.others_expanded,
             app.focused.as_deref(),

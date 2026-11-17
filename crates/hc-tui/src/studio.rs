@@ -1,11 +1,58 @@
 //! Studio mode's client-local state (U1): the mode latch, the current
 //! studio and the person last focused in each. Everything here is
 //! memory only — nothing is stored, and a publish recomputes the
-//! latch from the last good `backlot` document.
+//! latch from the last good `backlot` documents.
 
 use std::collections::BTreeMap;
 
-use backlot_model::summary::{RoleSummary, StudioSummary, Summary};
+use backlot_model::summary::{RoleSummary, StudioSummary};
+
+use crate::panel::data::MachineSummary;
+
+/// A studio's stable identity across machines: the machine's name
+/// (`None` is this core) plus the document's studio id. The same id
+/// on two machines is two studios — everything user-facing keys by
+/// this pair.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct StudioKey {
+    /// The machine's name, or `None` for this core.
+    pub machine: Option<String>,
+    /// The studio id the document carries.
+    pub id: String,
+}
+
+impl StudioKey {
+    /// `id` on this core.
+    pub(crate) fn local(id: &str) -> StudioKey {
+        StudioKey {
+            machine: None,
+            id: id.into(),
+        }
+    }
+}
+
+/// A bare id reads as this core's key — the common local-studio
+/// spelling in tests and call sites.
+impl From<&str> for StudioKey {
+    fn from(id: &str) -> StudioKey {
+        StudioKey::local(id)
+    }
+}
+
+/// `key == "id"`: this core's `id` — a remote studio never equals a
+/// bare id.
+impl PartialEq<str> for StudioKey {
+    fn eq(&self, id: &str) -> bool {
+        self.machine.is_none() && self.id == id
+    }
+}
+
+/// The `&str` spelling of the same comparison.
+impl PartialEq<&str> for StudioKey {
+    fn eq(&self, id: &&str) -> bool {
+        self == *id
+    }
+}
 
 /// The client-local studio state: whether studio mode is on, which
 /// studio is current, the person each studio last focused and the
@@ -17,14 +64,14 @@ pub(crate) struct Studio {
     /// foreign-schema document never changes it and the cast (with
     /// its `others` row) shows even with zero studios.
     pub active: bool,
-    /// The current studio's id — the studio whose person owns the
-    /// focused terminal, or the last such studio while the focus is
-    /// elsewhere. At the start it is the first studio in document
-    /// order.
-    pub current: Option<String>,
-    /// `studio id → role`: the person last focused in each studio, so
-    /// returning lands on the same person.
-    pub remembered: BTreeMap<String, String>,
+    /// The current studio — the studio whose person owns the focused
+    /// terminal, or the last such studio while the focus is
+    /// elsewhere. At the start it is the first studio in the
+    /// aggregate's order.
+    pub current: Option<StudioKey>,
+    /// `(machine, studio) → role`: the person last focused in each
+    /// studio, so returning lands on the same person.
+    pub remembered: BTreeMap<StudioKey, String>,
     /// The cast's `others` row, expanded in place.
     pub others_expanded: bool,
     /// The cast section's scroll offset — its own, so the agents
@@ -33,54 +80,56 @@ pub(crate) struct Studio {
 }
 
 impl Studio {
-    /// Sync against the last good summary and the focused terminal.
-    /// `None` — a missing or unreadable document — keeps every latch.
-    /// The `active` latch itself is `sync_studio`'s (`!plain`), not
-    /// the document's.
-    pub(crate) fn sync(&mut self, summary: Option<&Summary>, focused: Option<&str>) {
-        let Some(summary) = summary else { return };
-        // A focused terminal owned by a studio person moves the
-        // current pointer and remembers the person there.
-        if let Some((studio, role)) = studio_of_terminal(summary, focused.unwrap_or_default()) {
-            self.current = Some(studio.id.clone());
-            self.remembered.insert(studio.id.clone(), role.role.clone());
+    /// Sync against the last good summaries and the focused terminal.
+    /// No machine's document at all keeps every latch. The `active`
+    /// latch itself is `sync_studio`'s (`!plain`), not the
+    /// documents'.
+    pub(crate) fn sync(&mut self, machines: &[MachineSummary], focused: Option<&str>) {
+        if machines.is_empty() {
+            return;
         }
-        // A current studio that left the document falls back to
-        // document order, like the start does.
+        let studios = crate::panel::data::studios(machines);
+        // A focused terminal owned by a studio person moves the
+        // current pointer and remembers the person there. An
+        // unfocused frame (`None`) must not match the unseated
+        // roles — `None == None` would otherwise pin the current
+        // studio to the first with a terminal-less person.
+        if let Some((studio, role)) = focused.and_then(|terminal| {
+            studios.iter().find_map(|s| {
+                s.studio
+                    .roles
+                    .iter()
+                    .find(|role| role.terminal.as_deref() == Some(terminal))
+                    .map(|role| (*s, role))
+            })
+        }) {
+            let key = studio.key();
+            self.current = Some(key.clone());
+            self.remembered.insert(key, role.role.clone());
+        }
+        // A current studio that left every machine's document falls
+        // back to the aggregate's order, like the start does.
         if self
             .current
             .as_ref()
-            .is_none_or(|id| !summary.studios.iter().any(|s| &s.id == id))
+            .is_none_or(|key| !studios.iter().any(|s| &s.key() == key))
         {
-            self.current = summary.studios.first().map(|s| s.id.clone());
+            self.current = studios.first().map(|s| s.key());
         }
     }
 
-    /// The current studio's index in document order — `None` only
-    /// when the document lists no studios.
-    pub(crate) fn current_index(&self, summary: &Summary) -> Option<usize> {
-        if summary.studios.is_empty() {
+    /// The current studio's index in the aggregate's order — `None`
+    /// only when no machine's document lists a studio.
+    pub(crate) fn current_index(&self, machines: &[MachineSummary]) -> Option<usize> {
+        let studios = crate::panel::data::studios(machines);
+        if studios.is_empty() {
             return None;
         }
         self.current
             .as_ref()
-            .and_then(|id| summary.studios.iter().position(|s| &s.id == id))
+            .and_then(|key| studios.iter().position(|s| &s.key() == key))
             .or(Some(0))
     }
-}
-
-/// The `(studio, role)` owning a terminal, if any person does.
-pub(crate) fn studio_of_terminal<'a>(
-    summary: &'a Summary,
-    terminal: &str,
-) -> Option<(&'a StudioSummary, &'a RoleSummary)> {
-    summary.studios.iter().find_map(|studio| {
-        studio
-            .roles
-            .iter()
-            .find(|role| role.terminal.as_deref() == Some(terminal))
-            .map(|role| (studio, role))
-    })
 }
 
 /// A person's terminal while live — `None` for lost, closed and

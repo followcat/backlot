@@ -89,18 +89,20 @@ impl App {
         !self.plain && self.opening.settled && !self.opening.dismissed && self.studioless()
     }
 
-    /// No studio exists: the document is missing, unreadable or
-    /// foreign — the start state — or a good one lists none.
+    /// No studio exists on any machine: this core's document is
+    /// missing, unreadable or foreign — the start state — and no
+    /// added machine's document lists one. A studio that arrives from
+    /// another machine closes the card like a local one does.
     pub(crate) fn studioless(&self) -> bool {
-        self.panel_summary().is_none_or(|s| s.studios.is_empty())
+        crate::panel::data::studio_count(&self.panel_summaries()) == 0
     }
 
-    /// What the page draws: `[hollywood]` gates `h`, a live
+    /// What the page draws: `[hollywood]` gates `h`, a live local
     /// `backlot-stage` terminal gates `s` — the panel's own reads.
     pub(crate) fn opening_opts(&self) -> crate::opening::OpeningOpts {
         crate::opening::OpeningOpts {
             hollywood: self.has_hollywood_cfg,
-            stage_running: crate::panel::stage_running(&self.view),
+            stage_running: crate::panel::stage_running(&self.view, None),
         }
     }
 
@@ -312,10 +314,10 @@ impl App {
         Ok(params)
     }
 
-    /// `s`: `backlot stage start` through the panel's injected
-    /// runner — off the event loop like every panel action.
+    /// `s`: `backlot stage start` on this core — U6a starts stages
+    /// only locally; a stage on a chosen machine is U6b's.
     fn opening_start_stage(&mut self) {
-        if crate::panel::stage_running(&self.view) {
+        if crate::panel::stage_running(&self.view, None) {
             return;
         }
         let mut argv = vec!["stage".to_string(), "start".to_string()];
@@ -323,6 +325,7 @@ impl App {
         self.run_panel_action(crate::panel::PanelAction {
             label: "stage start".into(),
             argv,
+            machine: None,
         });
     }
 }

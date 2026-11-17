@@ -44,13 +44,15 @@ fn draw(
     current: Option<&str>,
 ) -> (Buffer, crate::panel::PanelRender) {
     let mut buf = Buffer::empty(area);
+    let current = current.map(crate::studio::StudioKey::local);
     let hits = render(
         &mut buf,
         area,
-        summary,
-        true,
+        &machines(summary),
+        |_| true,
         panel,
-        current,
+        current.as_ref(),
+        None,
         &keys(),
         &palette(),
     );
@@ -322,9 +324,10 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
     render(
         &mut buf,
         area,
-        Some(&summary),
-        true,
+        &machines(Some(&summary)),
+        |_| true,
         &panel,
+        None,
         None,
         &keys(),
         &palette(),
@@ -349,9 +352,10 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
     render(
         &mut buf,
         area,
-        Some(&summary),
-        false,
+        &machines(Some(&summary)),
+        |_| false,
         &panel,
+        None,
         None,
         &keys(),
         &palette(),
@@ -376,4 +380,62 @@ fn a_selected_row_is_highlighted() {
         .expect("alice row hit");
     let cell = &buf[(alice.x, alice.y)];
     assert_eq!(cell.bg, palette().active_row_bg);
+}
+
+#[test]
+fn studios_spanning_machines_name_their_machine() {
+    // Two machines each serve `acme-shop`: with this core named
+    // `here`, the headers read `acme-shop · here` and
+    // `acme-shop · host-b` — local first.
+    let summary = summary();
+    let mut list = machines(Some(&summary));
+    list.push(remote(&summary));
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 40);
+    let mut buf = Buffer::empty(area);
+    render(
+        &mut buf,
+        area,
+        &list,
+        |_| true,
+        &panel,
+        None,
+        Some("here"),
+        &keys(),
+        &palette(),
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("acme-shop · here"), "{text}");
+    assert!(text.contains("acme-shop · host-b"), "{text}");
+    // The title's count spans machines too.
+    assert!(text.contains("studios 2"), "{text}");
+}
+
+#[test]
+fn one_machine_keeps_the_bare_id_headers() {
+    // Two machines' documents, but only this core lists studios:
+    // nothing on screen changes from before machines existed.
+    let summary = summary();
+    let mut list = machines(Some(&summary));
+    let mut empty = summary.clone();
+    empty.studios.clear();
+    list.push(remote(&empty));
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 20);
+    let mut buf = Buffer::empty(area);
+    render(
+        &mut buf,
+        area,
+        &list,
+        |_| true,
+        &panel,
+        None,
+        Some("here"),
+        &keys(),
+        &palette(),
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("acme-shop"), "{text}");
+    assert!(!text.contains("·"), "{text}");
+    assert!(text.contains("studios 1"), "{text}");
 }

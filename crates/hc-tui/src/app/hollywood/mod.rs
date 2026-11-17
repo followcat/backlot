@@ -93,27 +93,29 @@ impl App {
 
     // ---------- data ----------
 
-    /// The current `backlot` summary — the same read the panel makes.
+    /// This core's `backlot` summary — the headline, the cards and
+    /// the agent state stay this core's; only the frames and the
+    /// counts span machines.
     pub(crate) fn hollywood_summary(&self) -> Option<Summary> {
-        crate::panel::summary(&self.view)
+        crate::panel::data::local_summary(&self.view)
     }
 
-    /// The frames' targets in document order — the studios, then the
-    /// new-studio entry.
+    /// The frames' targets in aggregate order — every machine's
+    /// studios, then the new-studio entry.
     fn hollywood_frames(&self) -> Vec<Target> {
-        let summary = self.hollywood_summary();
-        hollywood::frames(summary.as_ref())
+        let machines = self.panel_summaries();
+        hollywood::frames(&machines)
             .iter()
             .map(|f| f.target())
             .collect()
     }
 
-    /// The band's targets in draw order.
+    /// The band's targets in draw order — this core's rows.
     fn hollywood_band(&self) -> Vec<Target> {
         let summary = self.hollywood_summary();
         hollywood::band_rows(
             summary.as_ref(),
-            crate::panel::stage_running(&self.view),
+            crate::panel::stage_running(&self.view, None),
             self.has_hollywood_cfg,
         )
         .iter()
@@ -446,7 +448,9 @@ impl App {
                 view: true,
             });
         } else {
-            self.focus_studio(&card.studio);
+            // A card names one of this core's studios — the
+            // headline and the cards never leave this core.
+            self.focus_studio(&crate::studio::StudioKey::local(&card.studio));
             self.hollywood_leave();
         }
     }

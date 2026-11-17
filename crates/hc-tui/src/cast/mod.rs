@@ -2,7 +2,7 @@
 //! becomes the current studio's people — two rows each, the focused
 //! person marked, closed people last — and an `others` row that
 //! expands into herdr's own agent rows. Everything the renderer needs
-//! is a borrow of the summary plus the terminal inventory's titles.
+//! is a borrow of the summaries plus the terminal inventory's titles.
 
 mod draw;
 pub(crate) mod rows;
@@ -13,25 +13,29 @@ mod tests;
 
 use std::collections::BTreeMap;
 
-use backlot_model::summary::{StudioSummary, Summary};
 use ratatui::layout::Rect;
 
 use crate::chrome::ClientShellConfig;
 use crate::chrome::agents::{AgentRow, agent_rows};
 use crate::chrome::snapshot::ClientShellSnapshot;
 use crate::chrome::title_text::stripped_terminal_title;
+use crate::panel::data::{MachineSummary, StudioLabel, StudioRef, spans_machines, studio_label};
+use crate::studio::StudioKey;
 
 pub(crate) use draw::render_cast;
 
 /// What the cast draws with, built per frame: the current studio, its
 /// position, the focused terminal and the stripped terminal titles.
 pub(crate) struct CastView<'a> {
-    /// The current studio — `None` while the document lists none:
-    /// the cast still draws, people-less, so the `others` group is
-    /// where stray terminals land (U2's no-studio state).
-    pub(crate) studio: Option<&'a StudioSummary>,
-    /// Its position in document order (0-based) and the studio count —
-    /// the header's `<n>/<total>`.
+    /// The current studio — `None` while no machine's document lists
+    /// one: the cast still draws, people-less, so the `others` group
+    /// is where stray terminals land (U2's no-studio state).
+    pub(crate) studio: Option<StudioRef<'a>>,
+    /// The header's `id · machine` label pair — the machine part only
+    /// exists while studios span machines.
+    pub(crate) label: Option<StudioLabel>,
+    /// Its position in the aggregate's order (0-based) and the studio
+    /// count — the header's `<n>/<total>`.
     pub(crate) index: usize,
     pub(crate) total: usize,
     /// The focused terminal — its owner gets the active rows.
@@ -39,7 +43,7 @@ pub(crate) struct CastView<'a> {
     /// `terminal → stripped title` for a person's second row.
     pub(crate) titles: BTreeMap<String, Option<String>>,
     /// The studio's shells (U2) — the `shells` group after the
-    /// people, in shell-number order.
+    /// people, in shell-number order, on the studio's machine.
     pub(crate) shells: Vec<ShellRow>,
     /// Herdr's agents that are no studio person, studio shell or
     /// backlot-owned terminal — the `others` row's count and,
@@ -53,42 +57,42 @@ pub(crate) struct CastView<'a> {
 
 impl<'a> CastView<'a> {
     /// Build the frame's cast: the studio `current` points at (or the
-    /// first in document order when it does not resolve), the people
-    /// in cast order, its shells and every herdr agent that no
-    /// studio's person seats — `others`. With no studio at all —
-    /// no document, or zero studios — the cast still draws so the
-    /// `others` row exists; only `others` has rows then.
+    /// first in the aggregate's order when it does not resolve), the
+    /// people in cast order, its shells on its own machine and every
+    /// herdr agent that no studio's person seats — `others`. With no
+    /// studio anywhere the cast still draws so the `others` row
+    /// exists; only `others` has rows then.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn build(
-        summary: Option<&'a Summary>,
+        machines: &'a [MachineSummary],
         snapshot: &'a ClientShellSnapshot,
         view: &'a hc_proto::watch::View,
-        current: Option<&str>,
+        current: Option<&'a StudioKey>,
+        local: Option<&'a str>,
         config: &'a ClientShellConfig,
         others_expanded: bool,
         focused: Option<&'a str>,
         spin: usize,
     ) -> CastView<'a> {
-        let index =
-            summary.and_then(|s| current.and_then(|id| s.studios.iter().position(|s| s.id == id)));
-        let (index, studio) = match (index, summary) {
-            (Some(index), Some(summary)) => (index, Some(&summary.studios[index])),
-            (None, Some(summary)) if !summary.studios.is_empty() => (0, Some(&summary.studios[0])),
+        let studios = crate::panel::data::studios(machines);
+        let index = current.and_then(|key| studios.iter().position(|s| &s.key() == key));
+        let (index, studio) = match index {
+            Some(index) => (index, Some(studios[index])),
+            None if !studios.is_empty() => (0, Some(studios[0])),
             _ => (0, None),
         };
+        let multi = spans_machines(machines);
+        let label = studio.map(|s| studio_label(&s.studio.id, s.machine, local, multi));
         // Every person of every studio is out of `others`, and so is
         // anything backlot owns: a `backlot.role` (a person, the
         // stage, Hollywood), a `backlot.shell` or a `backlot.studio`
-        // label keeps a terminal out of the row.
-        let mut seated: std::collections::BTreeSet<&str> = summary
-            .map(|s| {
-                s.studios
-                    .iter()
-                    .flat_map(|s| s.roles.iter())
-                    .filter_map(|role| role.terminal.as_deref())
-                    .collect()
-            })
-            .unwrap_or_default();
+        // label keeps a terminal out of the row. Remote people's
+        // terminals arrive machine-qualified already.
+        let mut seated: std::collections::BTreeSet<&str> = studios
+            .iter()
+            .flat_map(|s| s.studio.roles.iter())
+            .filter_map(|role| role.terminal.as_deref())
+            .collect();
         seated.extend(
             view.inventory
                 .terminals()
@@ -107,6 +111,7 @@ impl<'a> CastView<'a> {
         let titles = studio
             .map(|studio| {
                 studio
+                    .studio
                     .roles
                     .iter()
                     .filter_map(|role| role.terminal.clone())
@@ -122,7 +127,7 @@ impl<'a> CastView<'a> {
             .unwrap_or_default();
         let shells = studio
             .map(|studio| {
-                crate::shells::studio_shells(view, &studio.id)
+                crate::shells::studio_shells(view, studio.machine, &studio.studio.id)
                     .into_iter()
                     .filter_map(|(n, address)| Some((n, view.inventory.get(&address)?)))
                     .map(|(n, term)| ShellRow {
@@ -149,8 +154,9 @@ impl<'a> CastView<'a> {
             .unwrap_or_default();
         CastView {
             studio,
+            label,
             index,
-            total: summary.map(|s| s.studios.len()).unwrap_or_default(),
+            total: studios.len(),
             focused_terminal: focused,
             titles,
             shells,

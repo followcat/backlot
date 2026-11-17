@@ -3,6 +3,7 @@
 //! injected `priority` runner with its failure notice.
 use super::*;
 use crate::panel::Target;
+use crate::studio::StudioKey;
 
 #[tokio::test]
 async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
@@ -43,9 +44,17 @@ async fn space_collapses_and_expands_the_selected_block() {
     draw_to(&mut app, 120, 24);
     app.panel.selected = Some(Target::Studio("acme-shop".into()));
     key(&mut app, hc_vt::Key::Char(' '));
-    assert!(app.panel.collapsed_blocks.contains("acme-shop"));
+    assert!(
+        app.panel
+            .collapsed_blocks
+            .contains(&StudioKey::local("acme-shop"))
+    );
     key(&mut app, hc_vt::Key::Char(' '));
-    assert!(app.panel.expanded_blocks.contains("acme-shop"));
+    assert!(
+        app.panel
+            .expanded_blocks
+            .contains(&StudioKey::local("acme-shop"))
+    );
 }
 
 #[tokio::test]

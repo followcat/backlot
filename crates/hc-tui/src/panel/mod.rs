@@ -8,7 +8,7 @@
 
 mod actions;
 mod config;
-mod data;
+pub(crate) mod data;
 mod draw;
 mod draw_blocks;
 mod rows;
@@ -17,7 +17,7 @@ pub(crate) use actions::{PanelAction, PanelRunner, spawn_runner};
 pub(crate) use config::{
     PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,
 };
-pub(crate) use data::{key as document_key, stage_running, summary};
+pub(crate) use data::{key as document_key, stage_running};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use rows::{Mark, Row, Target, mark_color, mark_counts, mark_symbol, rows};
 
@@ -42,17 +42,17 @@ pub(crate) struct Panel {
     pub focused: bool,
     /// Studios `Space` collapsed by hand — overrides both the
     /// everything-fits expansion and the current studio.
-    pub collapsed_blocks: std::collections::BTreeSet<String>,
+    pub collapsed_blocks: std::collections::BTreeSet<crate::studio::StudioKey>,
     /// Studios `Space` expanded by hand while stacking — overrides
     /// the not-everything-fits collapse, not a manual collapse.
-    pub expanded_blocks: std::collections::BTreeSet<String>,
+    pub expanded_blocks: std::collections::BTreeSet<crate::studio::StudioKey>,
     /// First row index rendered under the title.
     pub scroll: usize,
     /// The selected row's stable identity — rows rebuild each frame,
     /// so selection survives document updates by target, not index.
     pub selected: Option<Target>,
     /// A closed person whose reopen is one more Enter away.
-    pub reopen_confirm: Option<(String, String)>,
+    pub reopen_confirm: Option<(crate::studio::StudioKey, String)>,
     /// Spinner frame counter for working marks (~120 ms ticks).
     pub spin: usize,
     /// H4: the expanded panel's last row names `backlot hollywood

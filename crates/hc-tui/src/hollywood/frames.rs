@@ -18,6 +18,7 @@ use super::rows::{CastMark, Frame, on_set};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::truncate_end;
+use crate::panel::data::{StudioLabel, StudioRef, studio_label};
 
 /// A frame's height, borders included.
 pub(crate) const FRAME_H: u16 = 7;
@@ -36,6 +37,10 @@ pub(crate) struct FramesView<'a> {
     /// Index of the first frame drawn.
     pub scroll: usize,
     pub mobile: bool,
+    /// This core's name — the local studios' machine label.
+    pub local: Option<&'a str>,
+    /// Studios span machines: the titles carry `· <machine>`.
+    pub multi: bool,
 }
 
 /// What the frames drew.
@@ -110,7 +115,11 @@ pub(crate) fn render(
             let frame = &frames[index];
             let selected = view.selected == Some(&frame.target());
             match frame {
-                Frame::Studio(studio) => draw_studio(buf, rect, studio, selected, palette),
+                Frame::Studio(studio) => {
+                    let label =
+                        studio_label(&studio.studio.id, studio.machine, view.local, view.multi);
+                    draw_studio(buf, rect, *studio, &label, selected, palette)
+                }
                 Frame::New => draw_new(buf, rect, selected, palette),
             }
             out.hits.push((rect, frame.target()));
@@ -133,12 +142,14 @@ pub(crate) fn render(
     out
 }
 
-/// A studio's frame: `╭─ <id> ─…╮`, its state and waiting chip, the
-/// role on set, what it is doing, and the cast line.
+/// A studio's frame: `╭─ <id[ · machine]> ─…╮`, its state and
+/// waiting chip, the role on set, what it is doing, and the cast
+/// line. The label's machine part is what narrows first.
 fn draw_studio(
     buf: &mut Buffer,
     rect: Rect,
-    studio: &StudioSummary,
+    studio: StudioRef<'_>,
+    label: &StudioLabel,
     selected: bool,
     palette: &Palette,
 ) {
@@ -162,11 +173,12 @@ fn draw_studio(
             buf[(x, y)].set_style(on(border, bg));
         }
     }
-    // `╭─ <id> ─…╮` — the id in the top edge, bold, accent when the
-    // frame is selected.
+    // `╭─ <label> ─…╮` — the label in the top edge, bold, accent when
+    // the frame is selected; a machine name that does not fit is cut
+    // before the studio id is.
     let edge = on(border, palette.surface_dim);
     put_text(buf, rect.x, rect.y, 2, "╭─", edge);
-    let id = truncate_end(&studio.id, rect.width.saturating_sub(6) as usize);
+    let id = label.fit(rect.width.saturating_sub(6) as usize);
     let title = format!(" {id} ");
     let title_style = on(
         if selected {
@@ -223,7 +235,7 @@ fn draw_studio(
     put_text(buf, rect.x + rect.width - 1, bottom, 1, "╯", edge);
 
     let inner = rect.width.saturating_sub(4);
-    let state = studio_state_color(studio, palette);
+    let state = studio_state_color(studio.studio, palette);
     // Row 1: `■ <state>` and the waiting chip.
     let y = rect.y + 1;
     put_text(buf, rect.x + 2, y, 1, "■", on(state, bg));
@@ -234,12 +246,12 @@ fn draw_studio(
         inner.saturating_sub(1),
         &format!(
             " {}",
-            truncate_end(&studio.state, inner.saturating_sub(2) as usize)
+            truncate_end(&studio.studio.state, inner.saturating_sub(2) as usize)
         ),
         on(state, bg).add_modifier(Modifier::BOLD),
     );
-    if studio.waiting > 0 {
-        let chip = format!(" !{} ", studio.waiting);
+    if studio.studio.waiting > 0 {
+        let chip = format!(" !{} ", studio.studio.waiting);
         let w = chip.chars().count() as u16;
         if inner > w + 2 {
             let x = rect.x + rect.width - 2 - w;
@@ -254,7 +266,9 @@ fn draw_studio(
         }
     }
     // Row 2: the role on set now.
-    let who = on_set(studio).map(|r| r.name.as_str()).unwrap_or("—");
+    let who = on_set(studio.studio)
+        .map(|r| r.name.as_str())
+        .unwrap_or("—");
     put_text(
         buf,
         rect.x + 2,
@@ -264,12 +278,12 @@ fn draw_studio(
         on(palette.overlay1, bg),
     );
     // Row 3: what it is doing — or the ledger's error, in red.
-    let (what, colour) = match studio.error.as_deref() {
+    let (what, colour) = match studio.studio.error.as_deref() {
         Some(error) => (error, palette.red),
         None => (
-            on_set(studio)
+            on_set(studio.studio)
                 .and_then(|r| r.doing.as_deref())
-                .or(studio.next.as_deref())
+                .or(studio.studio.next.as_deref())
                 .unwrap_or("nothing on set"),
             palette.subtext0,
         ),
@@ -284,12 +298,12 @@ fn draw_studio(
     );
     // Row 5: the cast, one diamond each, and its count and revision
     // right-aligned.
-    let label = format!(
+    let cast_label = format!(
         "{} cast · r{}",
-        studio.roles.len(),
-        studio.requirement_version
+        studio.studio.roles.len(),
+        studio.studio.requirement_version
     );
-    let label_w = label.chars().count() as u16;
+    let label_w = cast_label.chars().count() as u16;
     let label_x = (rect.x + rect.width - 2).saturating_sub(label_w);
     if label_x > rect.x + 2 {
         put_text(
@@ -297,12 +311,12 @@ fn draw_studio(
             label_x,
             rect.y + 5,
             label_w,
-            &label,
+            &cast_label,
             on(palette.overlay0, bg),
         );
     }
     let mut x = rect.x + 2;
-    for role in &studio.roles {
+    for role in &studio.studio.roles {
         if x + 1 >= label_x {
             break;
         }

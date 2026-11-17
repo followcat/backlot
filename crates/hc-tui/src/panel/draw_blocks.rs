@@ -2,27 +2,28 @@
 //! frame pieces, one-line people and their extra lines, the stacked
 //! single-line block and the collapsed strip's studio line.
 use backlot_model::event::Priority;
-use backlot_model::summary::{RoleSummary, StudioSummary};
+use backlot_model::summary::RoleSummary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
+use super::data::{StudioLabel, StudioRef};
 use super::draw::PanelRender;
 use super::rows::PersonLine;
 use super::{Mark, mark_color, mark_counts, mark_symbol};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
-use crate::studio;
+use crate::studio::{self, StudioKey};
 
 /// The frame's colour: the current studio's block draws in the
 /// accent, every other in a muted surface colour.
 pub(super) fn frame_style(
-    studio: &StudioSummary,
-    current: Option<&str>,
+    studio: StudioRef<'_>,
+    current: Option<&StudioKey>,
     palette: &Palette,
 ) -> Style {
-    Style::default().fg(if current == Some(studio.id.as_str()) {
+    Style::default().fg(if current == Some(&studio.key()) {
         palette.accent
     } else {
         palette.surface_dim
@@ -37,35 +38,36 @@ pub(super) fn draw_inner(buf: &mut Buffer, rect: Rect, edge: Style) {
     }
 }
 
-/// `╭ <id> ── !<n> ╮`: the studio id sits in the top border, the
+/// `╭ <label> ── !<n> ╮`: the studio label sits in the top border, the
 /// attention count at its right end in the blocked colour — `!` only
 /// above zero.
 pub(super) fn draw_top(
     buf: &mut Buffer,
     rect: Rect,
-    studio: &StudioSummary,
-    current: Option<&str>,
+    studio: StudioRef<'_>,
+    label: &StudioLabel,
+    current: Option<&StudioKey>,
     palette: &Palette,
 ) {
     let frame = frame_style(studio, current, palette);
     let right = rect.x + rect.width;
     put_text(buf, rect.x, rect.y, rect.width.min(2), "╭ ", frame);
     put_text(buf, right.saturating_sub(1), rect.y, 1, "╮", frame);
-    let attention = studio::attention_count(studio);
+    let attention = studio::attention_count(studio.studio);
     let tail = if attention > 0 {
         format!(" !{attention} ")
     } else {
         String::new()
     };
     let tail_width = display_width(&tail) as u16;
-    // `╭ <id> ── !<n> ╮`: the id keeps ≥1 dash and one space before the
-    // tail or the corner.
+    // `╭ <label> ── !<n> ╮`: the label keeps ≥1 dash and one space
+    // before the tail or the corner.
     let id_end = right.saturating_sub(1 + tail_width + 1);
     let id_width = id_end.saturating_sub(rect.x + 2);
-    let id_text = truncate_end(&studio.id, id_width as usize);
+    let id_text = label.fit(id_width as usize);
     let drawn_id_width = display_width(&id_text) as u16;
     if id_width > 0 {
-        let id_style = if current == Some(studio.id.as_str()) {
+        let id_style = if current == Some(&studio.key()) {
             frame.add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(palette.subtext0)
@@ -101,9 +103,9 @@ pub(super) fn draw_top(
 pub(super) fn draw_person(
     buf: &mut Buffer,
     rect: Rect,
-    studio: &StudioSummary,
+    studio: StudioRef<'_>,
     role: &RoleSummary,
-    current: Option<&str>,
+    current: Option<&StudioKey>,
     spin: usize,
     palette: &Palette,
 ) {
@@ -163,10 +165,10 @@ pub(super) fn draw_person(
 pub(super) fn draw_person_line(
     buf: &mut Buffer,
     rect: Rect,
-    studio: &StudioSummary,
+    studio: StudioRef<'_>,
     role: &RoleSummary,
     kind: &PersonLine,
-    current: Option<&str>,
+    current: Option<&StudioKey>,
     palette: &Palette,
 ) {
     draw_inner(buf, rect, frame_style(studio, current, palette));
@@ -201,7 +203,7 @@ pub(super) fn draw_person_line(
 }
 
 /// Right-aligned `(<text>, <colour>)` parts — `count` marks the
-/// id's right end; returns where the tail started.
+/// label's right end; returns where the tail started.
 fn put_parts_right(buf: &mut Buffer, rect: Rect, parts: &[(String, Color)]) -> u16 {
     let glyphs: u16 = parts
         .iter()
@@ -217,13 +219,15 @@ fn put_parts_right(buf: &mut Buffer, rect: Rect, parts: &[(String, Color)]) -> u
     rect.x + rect.width.saturating_sub(glyphs + spaces)
 }
 
-/// A stacked block's single line: `╶ <id> ⠿2 ○3 ×1 !<n>` — each mark
-/// count in its mark's colour, the attention count in the blocked
-/// colour.
+/// A stacked block's single line: `╶ <label> ⠿2 ○3 ×1 !<n>` — each
+/// mark count in its mark's colour, the attention count in the
+/// blocked colour.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_stacked(
     buf: &mut Buffer,
     rect: Rect,
-    studio: &StudioSummary,
+    studio: StudioRef<'_>,
+    label: &StudioLabel,
     spin: usize,
     palette: &Palette,
     hits: &mut PanelRender,
@@ -237,14 +241,14 @@ pub(super) fn draw_stacked(
         Style::default().fg(palette.overlay0),
     );
     let mut parts = Vec::new();
-    for (mark, n) in mark_counts(studio) {
+    for (mark, n) in mark_counts(studio.studio) {
         hits.working_drawn |= mark == Mark::Working;
         parts.push((
             format!("{}{}", mark_symbol(mark, spin), n),
             mark_color(mark, palette),
         ));
     }
-    let attention = studio::attention_count(studio);
+    let attention = studio::attention_count(studio.studio);
     if attention > 0 {
         parts.push((format!("!{attention}"), palette.red));
     }
@@ -258,17 +262,23 @@ pub(super) fn draw_stacked(
             rect.x + 2,
             rect.y,
             id_width,
-            &truncate_end(&studio.id, id_width as usize),
+            &label.fit(id_width as usize),
             Style::default().fg(palette.subtext0),
         );
     }
 }
 
-/// The collapsed strip's one line per studio: the id cut to fit, the
-/// working count and `!<n>` right-aligned.
-pub(super) fn draw_strip(buf: &mut Buffer, rect: Rect, studio: &StudioSummary, palette: &Palette) {
-    let attention = studio::attention_count(studio);
-    let working = studio::working_count(studio);
+/// The collapsed strip's one line per studio: the label cut to fit,
+/// the working count and `!<n>` right-aligned.
+pub(super) fn draw_strip(
+    buf: &mut Buffer,
+    rect: Rect,
+    studio: StudioRef<'_>,
+    label: &StudioLabel,
+    palette: &Palette,
+) {
+    let attention = studio::attention_count(studio.studio);
+    let working = studio::working_count(studio.studio);
     let mut parts = Vec::new();
     if working > 0 {
         parts.push((working.to_string(), palette.yellow));
@@ -285,7 +295,7 @@ pub(super) fn draw_strip(buf: &mut Buffer, rect: Rect, studio: &StudioSummary, p
             rect.x + 1,
             rect.y,
             id_width,
-            &truncate_end(&studio.id, id_width as usize),
+            &label.fit(id_width as usize),
             Style::default().fg(palette.text),
         );
     }
