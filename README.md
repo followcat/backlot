@@ -50,11 +50,10 @@ what. backlot takes that job:
   change a task's priority.
 - **Several studios on one core**, each with its own repository, cast, ledger and limits.
 - **Limits and budgets**: a cap of live roles per agent CLI, a running-time budget per task.
-- **Hollywood, the overseer** (on `main`, not in a release yet): one agent above all studios. The stage tells it
-  what happens in each studio; it reports, and it proposes *cards* (pause, resume, abandon, priority, close,
-  reopen, new studio). A card does nothing until you apply it, and the stage checks again that nothing moved
-  before it carries one out. Today you work with it from the command line; its floating layer in the client is
-  the next step.
+- **Hollywood, the overseer**: one agent above all studios. The stage tells it what happens in each studio; it
+  reports, and it proposes *cards* (pause, resume, abandon, priority, close, reopen, new studio). A card does
+  nothing until you apply it, and the stage checks again that nothing moved before it carries one out. In the
+  client, its bar is a film strip with a frame per studio and a frame to add one.
 - **The terminal client**: sidebar of spaces and agents with live status, tabs, split panes, zoom, keyboard
   copy mode, mouse selection that copies on release, remote use over SSH with image paste, and a theme of its
   own.
@@ -184,6 +183,12 @@ backlot is also the terminal you work in. The default prefix is `Ctrl+B`:
 | `Ctrl+B q` | Detach. Everything keeps running |
 | `Ctrl+G` | Lock the keyboard, so every key goes to the program |
 
+Once a studio exists, the client opens on the **Hollywood bar**: a frame per studio, with its state, who is on set
+and its cast, and a frame for a new studio. `←`/`→` move between frames, `Enter` opens one, `n` starts a new
+studio, and `Esc` folds the bar into one row; `Alt+Y` brings it back.
+
+![The Hollywood bar: a film strip with a frame per studio showing its state, who is on set and its cast, and a dashed frame for a new studio](docs/images/hollywood.png)
+
 Key bindings, the sidebar and the other settings are read from your Herdr config when you have one. Run it
 against a local core or a remote one over plain SSH:
 
@@ -213,8 +218,7 @@ Early, and honest about it:
   producer on the test runner; the second run had two actors at once and ended with the studio finished.
   Codex and OpenCode were launched and measured, not run through a whole studio.
   [docs/studio/limits.md](docs/studio/limits.md) has the details.
-- **Hollywood has only run on the test runner.** Its floating layer in the client and its first run on a real
-  agent are the next two steps.
+- **Hollywood has only run on the test runner.** Its first run on a real agent is the next step.
 - **It runs on official `hc`**, which CI builds from source and drives the real UI against. Day-to-day use is
   still mostly on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`. On official
   `hc` an agent shows a status only if it reports one itself, and the sidebar's Git and hostname details are
