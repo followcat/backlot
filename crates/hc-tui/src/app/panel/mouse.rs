@@ -73,9 +73,11 @@ impl App {
                         .metrics
                         .map(|m| m.max_offset_from_bottom - m.offset_from_bottom)
                         .unwrap_or(0);
-                    self.panel.selected = Some(target);
-                    self.panel.selected_row = Some(1 + start + pos);
-                    self.panel_activate();
+                    if target != crate::panel::Target::None {
+                        self.panel.selected = Some(target);
+                        self.panel.selected_row = Some(1 + start + pos);
+                        self.panel_activate();
+                    }
                 }
             }
             MouseEventKind::ScrollUp => {

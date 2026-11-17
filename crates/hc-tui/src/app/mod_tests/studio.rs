@@ -124,7 +124,7 @@ async fn a_document_with_studios_latches_studio_mode_and_the_cast() {
     app.panel.mode = PanelMode::Expanded;
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("studios 3"), "{text}");
+    assert!(text.contains("lot · 3"), "{text}");
     assert!(text.contains("╭"), "{text}");
     assert!(text.contains("night-owl"), "{text}");
 }

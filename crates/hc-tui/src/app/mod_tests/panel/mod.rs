@@ -370,7 +370,7 @@ async fn a_closed_panel_is_identical_in_geometry_keys_and_cells() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(!right.contains("acme-shop"), "{right}");
-    assert!(!right.contains("studios"), "{right}");
+    assert!(!right.contains("lot"), "{right}");
     // And a second draw is byte-identical: no panel state leaks a frame.
     let backend2 = draw_to(&mut app, 120, 24);
     assert_eq!(backend.buffer(), backend2.buffer());
@@ -383,7 +383,7 @@ async fn an_open_panel_draws_its_column_and_fullscreen_covers() {
     open_panel(&mut app);
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("studios 1"), "{text}");
+    assert!(text.contains("lot · 1"), "{text}");
     assert!(text.contains("acme-shop"));
     // At 80 the same panel covers the frame instead.
     app.area = (80, 24);

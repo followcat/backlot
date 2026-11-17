@@ -110,7 +110,6 @@ impl App {
         // Enter on the same closed person still finds it armed.
         let confirm = self.panel.reopen_confirm.take();
         match targets.get(index).cloned() {
-            Some(Target::Title) => self.panel_flip_mode(),
             Some(Target::Studio(id) | Target::Strip(id)) => {
                 self.focus_studio(&id);
                 self.panel_leave();

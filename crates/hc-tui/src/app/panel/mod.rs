@@ -146,6 +146,8 @@ impl App {
 
     /// The toggle chord (`prefix+<panel.key>`): closed opens expanded
     /// and focused; open-but-unfocused focuses; focused closes.
+    /// Opening or focusing selects the first actionable row — a row
+    /// cursor is always visible while the panel owns the keys (A2.2).
     pub(crate) fn panel_toggle(&mut self) {
         if !self.panel.open() {
             self.panel.mode = PanelMode::Expanded;
@@ -154,6 +156,7 @@ impl App {
             self.panel.selected_row = None;
             self.panel.reopen_confirm = None;
             self.panel.scroll = 0;
+            self.panel_select_first();
             return;
         }
         // Full-screen owns the keys: the chord closes on the first
@@ -164,6 +167,19 @@ impl App {
             return;
         }
         self.panel.focused = true;
+        if self.panel.selected.is_none() {
+            self.panel_select_first();
+        }
+    }
+
+    /// The first actionable row's target — `j`/`k` never park on a
+    /// `None` row, so the cursor starts on something real.
+    fn panel_select_first(&mut self) {
+        let targets = self.panel_targets();
+        if let Some(index) = targets.iter().position(|t| *t != Target::None) {
+            self.panel.selected = Some(targets[index].clone());
+            self.panel.selected_row = Some(index);
+        }
     }
 
     /// Close the panel and drop every piece of interaction state.
@@ -213,15 +229,25 @@ impl App {
         let targets: Vec<Target> = rows.iter().map(|r| r.target()).collect();
         let mut index = self.panel_selected_index(&targets);
         for _ in 0..delta.unsigned_abs() {
+            // Skip `None` rows — titles, dividers, block bottoms and
+            // spacers are never a cursor stop (A2.2).
             let next = if delta > 0 {
-                (index + 1..targets.len()).find(|&i| targets[i] != targets[index])
+                (index + 1..targets.len())
+                    .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
             } else {
-                (0..index).rev().find(|&i| targets[i] != targets[index])
+                (0..index)
+                    .rev()
+                    .find(|&i| targets[i] != targets[index] && targets[i] != Target::None)
             };
             match next {
                 Some(next) => index = next,
                 None => break,
             }
+        }
+        // A person's extra lines share its target — the cursor lands
+        // on the person's own row, the target's first contiguous row.
+        while index > 0 && targets[index - 1] == targets[index] {
+            index -= 1;
         }
         self.panel.selected = Some(targets[index].clone());
         self.panel.selected_row = Some(index);
@@ -252,12 +278,23 @@ impl App {
             .map(|m| m.max_offset_from_bottom)
             .unwrap_or_else(|| targets.len().saturating_sub(viewport_rows));
         self.panel.scroll = start.min(max);
-        let selected = self
-            .panel_selected_index(&targets)
-            .max(1)
-            .clamp(self.panel.scroll + 1, self.panel.scroll + viewport_rows)
-            .min(targets.len().saturating_sub(1).max(1));
-        self.panel.selected = targets.get(selected).cloned();
+        let lo = (self.panel.scroll + 1).min(targets.len());
+        let hi = (self.panel.scroll + viewport_rows)
+            .min(targets.len().saturating_sub(1))
+            .max(lo);
+        let mut selected = self.panel_selected_index(&targets).clamp(lo, hi);
+        // The clamp can land on a `None` row — walk to the nearest
+        // actionable one inside the viewport instead.
+        if targets.get(selected) == Some(&Target::None) {
+            selected = (selected..=hi)
+                .find(|&i| targets[i] != Target::None)
+                .or_else(|| (lo..selected).rev().find(|&i| targets[i] != Target::None))
+                .unwrap_or(selected);
+        }
+        self.panel.selected = targets
+            .get(selected)
+            .filter(|t| **t != Target::None)
+            .cloned();
         self.panel.selected_row = self.panel.selected.as_ref().map(|_| selected);
     }
 

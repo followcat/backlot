@@ -25,6 +25,20 @@ impl HollywoodKey {
     pub(crate) fn fallback() -> HollywoodKey {
         HollywoodKey::Direct(crate::config::parse_key_combo("alt+y").expect("alt+y parses"))
     }
+
+    /// The binding's label for hints and the help overlay — `alt+y`
+    /// for a direct key, `^B i` for a chord tail.
+    pub(crate) fn label(&self) -> String {
+        use crate::panel::{code_label, mods_label};
+        match self {
+            HollywoodKey::Direct((code, mods)) => {
+                format!("{}{}", mods_label(*mods), code_label(*code))
+            }
+            HollywoodKey::Chord((code, mods)) => {
+                format!("^B {}{}", mods_label(*mods), code_label(*code))
+            }
+        }
+    }
 }
 
 /// Whether `combo` is one of the four `[keys]` studio bindings —

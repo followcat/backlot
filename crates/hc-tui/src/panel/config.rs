@@ -138,7 +138,7 @@ impl StudioKeys {
 }
 
 /// A modifier set's label for the shortcuts row (`alt`, `ctrl`, …).
-fn mods_label(mods: crossterm::event::KeyModifiers) -> &'static str {
+pub(crate) fn mods_label(mods: crossterm::event::KeyModifiers) -> &'static str {
     use crossterm::event::KeyModifiers as M;
     match mods {
         m if m == M::ALT => "alt",
@@ -153,7 +153,7 @@ fn mods_label(mods: crossterm::event::KeyModifiers) -> &'static str {
 }
 
 /// A key code's label for the pair fallback (`↑`, `pageup`, `x`, …).
-fn code_label(code: crossterm::event::KeyCode) -> String {
+pub(crate) fn code_label(code: crossterm::event::KeyCode) -> String {
     use crossterm::event::KeyCode;
     match code {
         KeyCode::Up => "↑".to_string(),

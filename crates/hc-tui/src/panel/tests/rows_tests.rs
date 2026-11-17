@@ -2,9 +2,10 @@
 //! stacking when the blocks stop fitting, manual overrides and the
 //! collapsed strip.
 use super::*;
-use crate::panel::rows::{Mark, Target, mark_counts, rows};
+use crate::panel::rows::{Target, mark_counts, rows};
 use crate::panel::{Panel, PanelMode};
 use crate::studio::StudioKey;
+use crate::studio::glyphs::Person;
 
 fn panel(mode: PanelMode) -> Panel {
     Panel {
@@ -53,15 +54,20 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
         Some("acme-shop"),
         100,
     );
-    assert_eq!(t.first(), Some(&Target::Title));
-    // Studio targets: top border + 3 dividers (4 non-empty groups) +
-    // bottom border = 5.
+    assert_eq!(t.first(), Some(&Target::None));
+    // The top border is the only `Studio` row here — the 3 dividers
+    // and the bottom border are `Target::None` rows now (A2.2).
     assert_eq!(
         t.iter()
             .filter(|x| **x == Target::Studio("acme-shop".into()))
             .count(),
-        5,
+        1,
         "{t:?}"
+    );
+    assert_eq!(
+        t.iter().filter(|x| **x == Target::None).count(),
+        1 + 3 + 1,
+        "title + dividers + bottom: {t:?}"
     );
     assert_eq!(
         people(&t),
@@ -116,7 +122,7 @@ fn stacking_kicks_in_when_blocks_do_not_fit_and_keeps_current_open() {
     let t = targets(Some(&summary), true, &panel(PanelMode::Expanded), None, 5);
     assert_eq!(
         t,
-        vec![Target::Title, Target::Block("acme-shop".into())],
+        vec![Target::None, Target::Block("acme-shop".into())],
         "{t:?}"
     );
 }
@@ -128,7 +134,7 @@ fn space_overrides_the_automatic_block_state() {
     let mut p = panel(PanelMode::Expanded);
     p.collapsed_blocks.insert("acme-shop".into());
     let t = targets(Some(&summary), true, &p, Some("acme-shop"), 100);
-    assert_eq!(t, vec![Target::Title, Target::Block("acme-shop".into())]);
+    assert_eq!(t, vec![Target::None, Target::Block("acme-shop".into())]);
     // Manual expand wins over the stacking collapse.
     let mut p = panel(PanelMode::Expanded);
     p.expanded_blocks.insert("acme-shop".into());
@@ -144,7 +150,7 @@ fn collapsed_strip_lists_one_row_per_studio() {
     let summary = summary();
     assert_eq!(
         targets(Some(&summary), true, &panel(PanelMode::Collapsed), None, 0),
-        vec![Target::Title, Target::Strip("acme-shop".into())]
+        vec![Target::None, Target::Strip("acme-shop".into())]
     );
 }
 
@@ -155,11 +161,11 @@ fn mark_counts_follow_the_mark_order() {
     assert_eq!(
         counts,
         vec![
-            (Mark::Working, 3),
-            (Mark::Waiting, 2),
-            (Mark::Blocked, 1),
-            (Mark::Lost, 1),
-            (Mark::Closed, 1),
+            (Person::DirPrompt, 1),
+            (Person::Lost, 1),
+            (Person::Working, 3),
+            (Person::Idle, 2),
+            (Person::Resumable, 1),
         ]
     );
 }
@@ -168,7 +174,7 @@ fn mark_counts_follow_the_mark_order() {
 fn missing_document_is_title_plus_no_studios() {
     assert_eq!(
         targets(None, true, &panel(PanelMode::Expanded), None, 0),
-        vec![Target::Title, Target::Empty]
+        vec![Target::None, Target::None]
     );
 }
 
@@ -190,6 +196,6 @@ fn a_dead_stage_adds_one_line_and_keeps_the_rows() {
             Some("acme-shop"),
             100,
         ),
-        [vec![Target::Title, Target::StageDown], alive[1..].to_vec()].concat()
+        [vec![Target::None, Target::None], alive[1..].to_vec()].concat()
     );
 }

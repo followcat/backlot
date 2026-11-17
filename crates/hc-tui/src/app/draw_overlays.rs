@@ -94,6 +94,8 @@ pub(super) fn render_overlays_and_cursor(
             app.studio.current.as_ref(),
             Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,
+            app.hollywood_key
+                .map(|key| format!("{} sheet", key.label())),
             &app.shell.palette,
         );
         if hits.working_drawn {
