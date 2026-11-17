@@ -201,3 +201,83 @@ async fn the_what_s_new_card_never_starts_an_install() {
     key(&mut app, Key::Char('u'));
     assert_eq!(phase(&app), Some(Phase::WhatsNew), "read-only");
 }
+
+fn press(app: &mut App, key: Key, mods: Mods) {
+    app.on_input(input::UiEvent::Key(term_key(key, mods, Action::Press)), 120);
+}
+
+/// The default prefix (`ctrl+b`) then one key.
+fn prefix_then(app: &mut App, key: Key) {
+    press(app, Key::Char('b'), Mods::CTRL);
+    press(app, key, Mods::NONE);
+}
+
+fn click(app: &mut App, point: (u16, u16)) {
+    app.on_input(
+        input::UiEvent::Mouse(input::MouseInput {
+            kind: crate::app::input::MouseEventKind::Down(crate::app::input::MouseButton::Left),
+            col: point.0,
+            row: point.1,
+            mods: Mods::NONE,
+            sgr_position: None,
+        }),
+        120,
+    );
+}
+
+fn centre(rect: ratatui::layout::Rect) -> (u16, u16) {
+    (rect.x + rect.width / 2, rect.y)
+}
+
+#[tokio::test]
+async fn prefix_u_opens_the_card_for_an_offered_update() {
+    let mut app = offered();
+    prefix_then(&mut app, Key::Char('u'));
+    assert_eq!(phase(&app), Some(Phase::Opened));
+}
+
+#[tokio::test]
+async fn a_user_binding_on_prefix_u_wins_over_the_built_in_update() {
+    let config: crate::config::Config = toml::from_str("[keys]\nnew_tab = 'prefix+u'\n").unwrap();
+    let mut app = offered();
+    app.live = config.live_keybinds();
+    prefix_then(&mut app, Key::Char('u'));
+    assert!(app.update_modal.is_none(), "the user's chord, not the card");
+}
+
+#[tokio::test]
+async fn a_rebound_update_leaves_prefix_u_free() {
+    let config: crate::config::Config = toml::from_str("[keys]\nupdate = 'prefix+x'\n").unwrap();
+    let mut app = offered();
+    app.live = config.live_keybinds();
+    prefix_then(&mut app, Key::Char('u'));
+    assert!(app.update_modal.is_none());
+    prefix_then(&mut app, Key::Char('x'));
+    assert_eq!(phase(&app), Some(Phase::Opened));
+}
+
+#[tokio::test]
+async fn clicking_the_startup_toast_opens_the_card() {
+    let mut app = offered();
+    app.maybe_toast_update();
+    let screen = draw_to(&mut app, 80, 24);
+    assert!(
+        screen_lines(&screen)
+            .join("\n")
+            .contains("Update available")
+    );
+    let rect = app.update_toast_hit;
+    assert!(rect.width > 0, "the toast card has a hit rectangle");
+    click(&mut app, centre(rect));
+    assert_eq!(phase(&app), Some(Phase::Opened));
+}
+
+#[tokio::test]
+async fn clicking_the_version_badge_hint_opens_the_card() {
+    let mut app = offered();
+    draw_to(&mut app, 80, 24);
+    let badge = app.hit_map.update_badge;
+    assert!(!badge.is_empty(), "an offered update shows the hint");
+    click(&mut app, centre(badge));
+    assert_eq!(phase(&app), Some(Phase::Opened));
+}

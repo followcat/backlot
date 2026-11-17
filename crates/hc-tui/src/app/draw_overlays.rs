@@ -62,7 +62,7 @@ pub(super) fn render_overlays_and_cursor(
             app.keyboard_locked,
             app.copy_mode.as_ref(),
             None,
-            false,
+            app.update_ready_version().is_some(),
             &app.live,
             &app.shell.palette,
         )

@@ -339,7 +339,7 @@ pub(super) fn put_version_badge(
         row.y,
         hint_w,
         hint.as_deref().unwrap_or_default(),
-        Style::default().fg(palette.red),
+        Style::default().fg(palette.accent),
     );
     Rect::new(hint_x, row.y, hint_w, 1)
 }

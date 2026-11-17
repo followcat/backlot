@@ -71,7 +71,7 @@ async fn a_known_update_adds_an_accent_hint() {
     let hint_x = header.find('↑').expect("the update hint is missing") as u16;
     let ver_x = header.find(&version()).expect("the version is missing") as u16;
     let buf = backend.buffer();
-    assert_eq!(buf[(hint_x, 0)].fg, app.shell.palette.red);
+    assert_eq!(buf[(hint_x, 0)].fg, app.shell.palette.accent);
     assert_eq!(buf[(ver_x, 0)].fg, app.shell.palette.overlay0);
     // The click hit covers the hint, not the inert version text.
     let hit = app.hit_map.update_badge;

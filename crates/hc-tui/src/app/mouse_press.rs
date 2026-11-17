@@ -126,6 +126,11 @@ impl App {
             self.new_tab();
             return;
         }
+        if self.update_toast_hit.width > 0 && contains(self.update_toast_hit, point) {
+            self.notice = None;
+            self.open_update();
+            return;
+        }
         // The badge's update hint opens the update card; the version
         // itself stays inert — the hit only covers the hint.
         if self.update_ready_version().is_some() && contains(hits.update_badge, point) {
