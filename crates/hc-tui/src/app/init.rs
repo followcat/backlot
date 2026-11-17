@@ -73,6 +73,7 @@ impl App {
             panel_runner: std::sync::Arc::new(|_| {
                 Box::pin(async { Err("panel actions unavailable".into()) })
             }),
+            remote_runner: None,
             panel_action_tx,
             panel_rx,
             panel_endpoint_args: Vec::new(),

@@ -327,4 +327,9 @@ impl App {
     pub(crate) fn set_panel_runner(&mut self, runner: panel::PanelRunner) {
         self.panel_runner = runner;
     }
+
+    /// cli installs the shared-RPC runner once the client is up.
+    pub(crate) fn set_remote_runner(&mut self, runner: panel::RemoteRunner) {
+        self.remote_runner = Some(runner);
+    }
 }

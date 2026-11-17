@@ -11,6 +11,7 @@ mod config;
 pub(crate) mod data;
 mod draw;
 mod draw_blocks;
+pub(crate) mod remote;
 mod rows;
 
 pub(crate) use actions::{PanelAction, PanelRunner, spawn_runner};
@@ -19,6 +20,7 @@ pub(crate) use config::{
 };
 pub(crate) use data::{key as document_key, stage_running};
 pub(crate) use draw::{PanelRender, render};
+pub(crate) use remote::RemoteRunner;
 pub(crate) use rows::{Mark, Row, Target, mark_color, mark_counts, mark_symbol, rows};
 
 /// How the panel sits on screen. The default is `Closed`: no state,

@@ -251,13 +251,16 @@ impl App {
     pub(crate) fn run_panel_action(&mut self, action: PanelAction) {
         let future = match &action.machine {
             None => (self.panel_runner)(action.argv.clone()),
-            Some(machine) => {
-                self.show_notice(
-                    "Studio action failed",
-                    &format!("{}: cannot reach {machine}", action.label),
-                );
-                return;
-            }
+            Some(machine) => match &self.remote_runner {
+                Some(runner) => runner.run(machine.clone(), action.argv.clone()),
+                None => {
+                    self.show_notice(
+                        "Studio action failed",
+                        &format!("{}: cannot reach {machine}", action.label),
+                    );
+                    return;
+                }
+            },
         };
         let tx = self.panel_action_tx.clone();
         let label = action.label;
