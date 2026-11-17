@@ -302,6 +302,13 @@ mask file for MCP. Both are rewritten at every start and resume.
     strictly inside the role's work area, never `.git/` or `.cline/`;
   - `search_codebase`'s input shape is unmeasured, so every string in it that looks like a path —
     absolute, `~`-relative or holding a `/` — goes through the same `..` and secret checks as a read.
+  - quoting is understood, not stripped: a rule is plain unquoted words, so `git commit -m
+    "fix(runners): tidy"` is one allowed segment while `"curl" x`, an unterminated quote, a `$(…)` or a
+    backtick inside double quotes refuse. Every word of an allowed segment is checked for a secret
+    too — `git diff --no-index /proc/self/environ /dev/null` prints the environment and a commit's
+    `-F` would echo it — with an `--opt=value`'s value checked as well.
+  - the rules limit which programs start, not what code runs: an allowed `cargo test` runs the
+    project's build scripts and tests, which the role itself may have written.
   - always refused: `web_search`, `fetch_web_content`, `composio_*`, every `<server>__<tool>` MCP name,
     and every tool the list above does not name (`ask_question`, `skills`, an unknown name).
   A cancel ends the turn exactly as cmd's `esc` deny does: the agent does not retry, and it is told the

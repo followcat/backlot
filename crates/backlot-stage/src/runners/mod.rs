@@ -8,6 +8,7 @@
 pub mod claude;
 pub mod cline;
 mod cline_hook;
+mod cline_hook_awk;
 pub mod cmd;
 mod codex;
 pub mod cursor;

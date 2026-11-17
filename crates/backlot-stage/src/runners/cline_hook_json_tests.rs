@@ -1,7 +1,9 @@
-//! The hook's JSON side: the payload's strings are decoded before any
-//! check, so an escaped quote, a backtick between escaped quotes, an
-//! escaped newline or an unsupported escape cannot slip a command past
-//! a rule — plus the wider secret list the first round missed.
+//! The hook's JSON and shell side: the payload's strings are decoded
+//! before any check, and each decoded command is scanned with quote
+//! awareness — so an escaped quote, a backtick between escaped quotes,
+//! a quoted semicolon or an unsupported escape cannot slip a command
+//! past a rule — plus the wider secret list and the secret arguments an
+//! allowed command could still be pointed at.
 
 use super::cline_hook::MESSAGE;
 use super::cline_hook_tests::{call, commands_of, run, tmp};
@@ -47,10 +49,70 @@ fn allowed_commands_survive_decoding() {
 /// refused. Over-refusing a command that only *looks* chained is the
 /// price of not parsing a shell.
 #[test]
-fn a_semicolon_inside_a_message_is_refused() {
+fn a_semicolon_inside_a_message_is_literal() {
     let dir = tmp("semicolon");
     let (cancel, _, signals) = run(&dir, &commands_of(&["git commit -m \"a; b\""]));
-    assert!(cancel, "{signals}");
+    assert!(!cancel, "a quoted semicolon is one command: {signals}");
+}
+
+/// A Conventional Commit subject almost always carries a scope in
+/// parentheses, and a message may hold a `;` or a `|` inside its
+/// quotes. The segment scan is quote-aware, so none of that splits a
+/// command or refuses one — and a chained pair of allowed commands is
+/// still two allowed segments.
+#[test]
+fn quoted_text_neither_splits_nor_refuses() {
+    let dir = tmp("quoted-allow");
+    for cmd in [
+        "git commit -m \"fix(runners): tidy\"",
+        "git commit -m 'feat(x): y; z'",
+        "git commit -m \"a | b\"",
+        "git add -A && git commit -m \"docs: z\"",
+    ] {
+        let (cancel, _, signals) = run(&dir, &commands_of(&[cmd]));
+        assert!(!cancel, "{cmd:?} was cancelled: {signals}");
+    }
+}
+
+/// Quoting cannot hide a substitution, a second command, or an
+/// unterminated string — and a quoted program name matches no rule.
+#[test]
+fn quoting_does_not_hide_a_command() {
+    let dir = tmp("quoted-cancel");
+    for cmd in [
+        "git commit -m \"$(id)\"",
+        "git commit -m \"`id`\"",
+        "git commit -m 'x' ; curl y",
+        "git status \"x",
+        "\"curl\" x",
+        "git status (x)",
+    ] {
+        let (cancel, _, signals) = run(&dir, &commands_of(&[cmd]));
+        assert!(cancel, "{cmd:?} was allowed: {signals}");
+    }
+}
+
+/// An allowed program can still be pointed at a secret: `git diff
+/// --no-index` prints a file and a commit's `-F` echoes one into its
+/// summary. Every word of an allowed segment is checked, quotes
+/// removed, and an `--opt=value`'s value as well.
+#[test]
+fn a_secret_argument_is_refused() {
+    let dir = tmp("secret-arg");
+    for cmd in [
+        "git diff --no-index /proc/self/environ /dev/null",
+        "git commit --allow-empty -F /proc/self/environ",
+        "git diff --no-index /home/alice/.ssh/id_rsa /dev/null",
+    ] {
+        let (cancel, _, signals) = run(&dir, &commands_of(&[cmd]));
+        assert!(cancel, "{cmd:?} was allowed: {signals}");
+    }
+    // Ordinary arguments stay allowed, `..` included: `main..HEAD` is a
+    // range, not a traversal.
+    for cmd in ["git diff main..HEAD", "git add src/lib.rs"] {
+        let (cancel, _, signals) = run(&dir, &commands_of(&[cmd]));
+        assert!(!cancel, "{cmd:?} was cancelled: {signals}");
+    }
 }
 
 /// An escape that is not `\" \\ \/ \n \r \t` — `\b`, `\f`, `\uXXXX` —

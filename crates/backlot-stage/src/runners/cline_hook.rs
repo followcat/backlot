@@ -15,6 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use super::claude::sh_quote;
+use super::cline_hook_awk;
 
 /// The longest command or path one signals line carries.
 pub const TARGET_CAP: usize = 200;
@@ -49,6 +50,8 @@ pub fn script(spec: &Spec<'_>) -> String {
         .replace("@@WORKTREE@@", &sh_quote(spec.worktree))
         .replace("@@SIGNALS@@", &sh_quote(&spec.signals.to_string_lossy()))
         .replace("@@ALLOWED@@", &sh_quote(&allowed))
+        .replace("@@TOKENS@@", cline_hook_awk::PAYLOAD)
+        .replace("@@SEGMENTS@@", cline_hook_awk::SEGMENTS)
         .replace("@@MESSAGE@@", &sh_quote(MESSAGE))
         .replace("@@CAP@@", &TARGET_CAP.to_string())
 }
@@ -125,6 +128,35 @@ secret_path() {
     return 1
 }
 
+# A command's arguments may name a secret too: `git diff --no-index
+# /proc/self/environ /dev/null` prints the environment, and a commit's
+# `-F` would echo it. Every word is checked with its quotes removed, and
+# the value of an `--opt=value` as well. The `..` ban is not applied
+# here: `main..HEAD` is an ordinary git range.
+secret_arg() {
+    secret_path "$1" && return 0
+    case "$1" in
+        -*=*) secret_path "${1#*=}" && return 0 ;;
+    esac
+    case "${1##*/}" in
+        .env|.netrc|_netrc|.git-credentials|.npmrc|.pypirc) return 0 ;;
+        id_rsa|id_ed25519|id_ecdsa|.credentials.json) return 0 ;;
+    esac
+    return 1
+}
+
+# Whether any word of an allowed segment names a secret.
+args_leak() {
+    words=$(printf '%s' "$1" | tr -d '"' | tr -d "'")
+    old_ifs=$IFS
+    IFS=' '
+    for word in $words; do
+        secret_arg "$word" && { IFS=$old_ifs; return 0; }
+    done
+    IFS=$old_ifs
+    return 1
+}
+
 input=$(cat 2>/dev/null)
 
 # The payload's strings, decoded: one `path<TAB>value` line each, where
@@ -134,89 +166,7 @@ input=$(cat 2>/dev/null)
 # command separator, `\t` to a space; `\b`, `\f` and `\uXXXX` — which
 # only control characters need — refuse the whole call.
 tokens=$(printf '%s' "$input" | awk '
-{
-    buf = buf $0 " "
-}
-END {
-    n = length(buf)
-    sp = 1
-    type[1] = "root"
-    path[1] = ""
-    idx[1] = 0
-    key[1] = ""
-    i = 1
-    bad = 0
-    while (i <= n) {
-        c = substr(buf, i, 1)
-        if (c == " " || c == "\t" || c == "\r") { i++; continue }
-        if (c == ",") { i++; continue }
-        if (c == "{") { p = kid(); sp++; type[sp] = "obj"; path[sp] = p; key[sp] = ""; i++; continue }
-        if (c == "[") { p = kid(); sp++; type[sp] = "arr"; path[sp] = p; idx[sp] = 0; i++; continue }
-        if (c == "}") { if (sp > 1) { sp--; if (type[sp] == "arr") idx[sp]++ } i++; continue }
-        if (c == "]") { if (sp > 1) { sp--; if (type[sp] == "arr") idx[sp]++ } i++; continue }
-        if (c == "\"") {
-            i++
-            s = ""
-            closed = 0
-            while (i <= n) {
-                d = substr(buf, i, 1)
-                if (d == "\\") { s = s d substr(buf, i + 1, 1); i += 2; continue }
-                if (d == "\"") { closed = 1; i++; break }
-                s = s d
-                i++
-            }
-            if (!closed) { bad = 1; break }
-            j = i
-            while (j <= n) {
-                d = substr(buf, j, 1)
-                if (d != " " && d != "\t") break
-                j++
-            }
-            v = unescape(s)
-            if (bad) break
-            if (substr(buf, j, 1) == ":" && type[sp] == "obj") { key[sp] = v; i = j + 1; continue }
-            printf "%s\t%s\n", kid(), v
-            if (type[sp] == "arr") idx[sp]++
-            continue
-        }
-        while (i <= n) {
-            d = substr(buf, i, 1)
-            if (d == "," || d == "}" || d == "]" || d == " " || d == "\t") break
-            i++
-        }
-        if (type[sp] == "arr") idx[sp]++
-        continue
-    }
-    if (bad) print "@@REFUSE@@"
-}
-function kid() {
-    if (type[sp] == "obj") {
-        if (path[sp] == "") return key[sp]
-        return path[sp] "." key[sp]
-    }
-    if (type[sp] == "arr") return path[sp] "[" idx[sp] "]"
-    return ""
-}
-function unescape(s,   out, ln, k, c, e) {
-    out = ""
-    ln = length(s)
-    k = 1
-    while (k <= ln) {
-        c = substr(s, k, 1)
-        if (c != "\\") { out = out c; k++; continue }
-        k++
-        if (k > ln) { bad = 1; return out }
-        e = substr(s, k, 1)
-        if (e == "\"") out = out "\""
-        else if (e == "\\") out = out "\\"
-        else if (e == "/") out = out "/"
-        else if (e == "n" || e == "r") out = out ";"
-        else if (e == "t") out = out " "
-        else { bad = 1; return out }
-        k++
-    }
-    return out
-}
+@@TOKENS@@
 ')
 
 # Every decoded value whose path matches the pattern, one per line.
@@ -275,16 +225,17 @@ if [ "$name" = run_commands ]; then
     IFS='
 '
     for one in $list; do
-        segs=$(printf '%s' "$one" | tr ';&|' '\n\n\n')
+        segs=$(printf '%s' "$one" | awk '
+@@SEGMENTS@@
+')
+        case "$segs" in
+            *@@REFUSE@@*) bad=$one; continue ;;
+        esac
         for seg in $segs; do
             seg=$(printf '%s' "$seg" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             [ -n "$seg" ] || continue
-            # A substitution, a redirection, a subshell or a group could
-            # reach past the prefix that matched; all are refused.
-            case "$seg" in
-                *'$'*|*'`'*|*'>'*|*'<'*|*'('*|*')'*|*'{'*|*'}'*) bad=$seg; continue ;;
-            esac
-            rule_allowed "$seg" || bad=$seg
+            rule_allowed "$seg" || { bad=$seg; continue; }
+            args_leak "$seg" && bad=$seg
         done
     done
     set +f

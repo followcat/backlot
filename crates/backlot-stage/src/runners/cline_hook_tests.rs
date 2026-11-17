@@ -24,6 +24,7 @@ fn rules() -> Vec<String> {
         "git status",
         "git diff",
         "git commit",
+        "git add",
         "cargo test",
     ]
     .iter()
