@@ -3,10 +3,17 @@
 //! untouched structure/snapshot work while the changed endpoint rebuilds.
 
 use super::*;
-use crate::sidebar::fixture::{machine, term, view};
+use crate::sidebar::fixture::{agent, machine, term, view};
 
 fn labeled(address: &str, space: &str, tab: &str) -> Terminal {
     let mut terminal = term(address);
+    terminal.labels.insert("herdr.space".into(), space.into());
+    terminal.labels.insert("herdr.tab".into(), tab.into());
+    terminal
+}
+
+fn labeled_agent(address: &str, space: &str, tab: &str, word: &str) -> Terminal {
+    let mut terminal = agent(address, word);
     terminal.labels.insert("herdr.space".into(), space.into());
     terminal.labels.insert("herdr.tab".into(), tab.into());
     terminal
@@ -124,13 +131,13 @@ fn a_changed_remote_rebuilds_only_its_endpoint() {
     let rebuilt = cache.project(&renamed, Some("t1"));
 
     // Local and host-a keep their exact structure + snapshot allocations;
-    // host-b's terminal slice changed so it rebuilds both.
+    // host-b's title is not structural: same spaces, rebuilt snapshot.
     assert!(Arc::ptr_eq(&local_spaces, &entry(&cache, None).spaces));
     assert!(Arc::ptr_eq(
         &a_spaces,
         &entry(&cache, Some("host-a")).spaces
     ));
-    assert!(!Arc::ptr_eq(
+    assert!(Arc::ptr_eq(
         &b_spaces,
         &entry(&cache, Some("host-b")).spaces
     ));
@@ -187,6 +194,113 @@ fn a_remote_focus_flip_leaves_local_untouched() {
     assert_eq!(entry(&cache, None).snapshot_builds, local_builds);
     assert!(Arc::ptr_eq(&local_spaces, &entry(&cache, None).spaces));
     assert_same_projection(&rebuilt, &crate::project::project(&view, Some("host-b/t1")));
+}
+
+/// `host-b`'s agent terminal carries `word` with `title` mutated by
+/// `edit`; `replace` republishes it under a fresh inventory `seq`.
+fn edited_host_b(view: &View, seq: u64, word: &str, edit: impl FnOnce(&mut Terminal)) -> View {
+    let mut next = view.clone();
+    next.inventory_mut().replace(
+        seq,
+        vec![
+            labeled("t1", "work", "one"),
+            labeled("host-a/t1", "work", "one"),
+            {
+                let mut terminal = labeled_agent("host-b/t1", "work", "one", word);
+                edit(&mut terminal);
+                terminal
+            },
+        ],
+    );
+    next
+}
+
+#[test]
+fn a_title_change_keeps_the_spaces_and_updates_the_snapshot() {
+    let mut cache = ProjectCache::default();
+    let view = edited_host_b(&multi(), 1, "working", |_| {});
+    cache.project(&view, Some("t1"));
+    let spaces = Arc::clone(&entry(&cache, Some("host-b")).spaces);
+    let builds = entry(&cache, Some("host-b")).snapshot_builds;
+
+    let titled = edited_host_b(&view, 2, "working", |t| t.title = "renamed".into());
+    let rebuilt = cache.project(&titled, Some("t1"));
+
+    // The structure groups on labels, not titles: same `Space`s, fresh
+    // per-terminal snapshot carrying the new title.
+    assert!(Arc::ptr_eq(&spaces, &entry(&cache, Some("host-b")).spaces));
+    assert!(entry(&cache, Some("host-b")).snapshot_builds > builds);
+    assert_same_projection(&rebuilt, &crate::project::project(&titled, Some("t1")));
+    let agent = entry(&cache, Some("host-b"))
+        .snapshot
+        .agents
+        .iter()
+        .find(|a| a.pane_id == "host-b/t1")
+        .expect("host-b agent");
+    assert_eq!(agent.terminal_title.as_deref(), Some("renamed"));
+}
+
+#[test]
+fn a_status_change_keeps_the_spaces_and_updates_the_snapshot() {
+    let mut cache = ProjectCache::default();
+    let view = edited_host_b(&multi(), 1, "working", |_| {});
+    cache.project(&view, Some("t1"));
+    let spaces = Arc::clone(&entry(&cache, Some("host-b")).spaces);
+    let builds = entry(&cache, Some("host-b")).snapshot_builds;
+
+    let blocked = edited_host_b(&view, 2, "blocked", |_| {});
+    let rebuilt = cache.project(&blocked, Some("t1"));
+
+    assert!(Arc::ptr_eq(&spaces, &entry(&cache, Some("host-b")).spaces));
+    assert!(entry(&cache, Some("host-b")).snapshot_builds > builds);
+    assert_same_projection(&rebuilt, &crate::project::project(&blocked, Some("t1")));
+    let agent = entry(&cache, Some("host-b"))
+        .snapshot
+        .agents
+        .iter()
+        .find(|a| a.pane_id == "host-b/t1")
+        .expect("host-b agent");
+    assert_eq!(
+        agent.agent_status,
+        crate::chrome::status::AgentStatus::Blocked
+    );
+}
+
+#[test]
+fn a_structural_change_rebuilds_the_spaces() {
+    let mut cache = ProjectCache::default();
+    let view = multi();
+    cache.project(&view, Some("t1"));
+
+    // A `herdr.tab` move regroups host-b's terminal under another tab.
+    let mut retabbed = view.clone();
+    retabbed.inventory_mut().replace(
+        2,
+        vec![
+            labeled("t1", "work", "one"),
+            labeled("host-a/t1", "work", "one"),
+            labeled("host-b/t1", "work", "two"),
+        ],
+    );
+    let spaces = Arc::clone(&entry(&cache, Some("host-b")).spaces);
+    cache.project(&retabbed, Some("t1"));
+    assert!(!Arc::ptr_eq(&spaces, &entry(&cache, Some("host-b")).spaces));
+
+    // A second terminal on host-b adds a pane: structure must re-read.
+    let mut grown = view.clone();
+    grown.inventory_mut().replace(
+        3,
+        vec![
+            labeled("t1", "work", "one"),
+            labeled("host-a/t1", "work", "one"),
+            labeled("host-b/t1", "work", "two"),
+            labeled("host-b/t2", "work", "two"),
+        ],
+    );
+    let spaces = Arc::clone(&entry(&cache, Some("host-b")).spaces);
+    let rebuilt = cache.project(&grown, Some("t1"));
+    assert!(!Arc::ptr_eq(&spaces, &entry(&cache, Some("host-b")).spaces));
+    assert_same_projection(&rebuilt, &crate::project::project(&grown, Some("t1")));
 }
 
 #[test]

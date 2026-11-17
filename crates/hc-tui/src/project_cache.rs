@@ -2,6 +2,7 @@
 //! only that endpoint's snapshot; a publish whose projection inputs are
 //! unchanged rebuilds nothing. `App` consults `is_unchanged` before every
 //! reconcile and calls `project` only when the answer is no.
+use super::repository::repository_equal;
 use super::snapshot_builder::structured_snapshot_from_spaces;
 use super::{EndpointSnapshot, Projection, local_status, machine_of, project_with};
 use crate::chrome::snapshot::ClientEndpointStatus;
@@ -103,6 +104,28 @@ fn app_docs_match(a: &Option<Arc<WatchDocument>>, b: &Option<Arc<WatchDocument>>
 
 fn terms_equal(stored: &[Terminal], current: &[&Terminal]) -> bool {
     stored.len() == current.len() && stored.iter().zip(current).all(|(a, b)| a == *b)
+}
+
+/// Exactly the fields `structure::read` consumes: identity, ordering
+/// and the labels/cwd/repository facts that group terminals into spaces
+/// and tabs. Title, status, turn and every other display-only field are
+/// excluded — changing them reuses the `Space`s and rebuilds only the
+/// per-terminal snapshot that carries them.
+fn terms_structurally_equal(stored: &[Terminal], current: &[&Terminal]) -> bool {
+    stored.len() == current.len()
+        && stored
+            .iter()
+            .zip(current)
+            .all(|(a, b)| structurally_equal(a, b))
+}
+
+fn structurally_equal(a: &Terminal, b: &Terminal) -> bool {
+    a.address == b.address
+        && a.created_ms == b.created_ms
+        && a.cwd == b.cwd
+        && a.labels.get("herdr.space") == b.labels.get("herdr.space")
+        && a.labels.get("herdr.tab") == b.labels.get("herdr.tab")
+        && repository_equal(a.repository.as_ref(), b.repository.as_ref())
 }
 
 /// The projection-relevant slice of a documents map: `hc-tui` on this
@@ -275,11 +298,15 @@ fn endpoint(
         Some(_) => selected,
     };
     if let Some(entry) = endpoints.get(&key) {
-        let terms_match =
+        let same_terms =
             Arc::ptr_eq(&entry.inventory, &view.inventory) || terms_equal(&entry.terms, terms);
-        if terms_match && app_docs_match(&entry.app, &app) && entry.closed == own.closed {
+        // Display-only edits keep the structure: the same `Space`s drive
+        // a fresh snapshot built from the current terminals.
+        let same_spaces = same_terms || terms_structurally_equal(&entry.terms, terms);
+        if same_spaces && app_docs_match(&entry.app, &app) && entry.closed == own.closed {
             let mut builds = entry.snapshot_builds;
-            let (mut snapshot, layouts) = if Arc::ptr_eq(&entry.own, own)
+            let (mut snapshot, layouts) = if same_terms
+                && Arc::ptr_eq(&entry.own, own)
                 && entry.generation == view.generation
                 && entry.selected.as_deref() == selected
             {
@@ -299,6 +326,7 @@ fn endpoint(
             snapshot.revision = view.version;
             let entry = endpoints.get_mut(&key).expect("entry checked above");
             entry.inventory = Arc::clone(&view.inventory);
+            entry.terms = terms.iter().map(|t| (*t).clone()).collect();
             entry.app = app;
             entry.own = Arc::clone(own);
             entry.generation = view.generation;

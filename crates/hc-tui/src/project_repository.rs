@@ -2,7 +2,7 @@
 // herdr-core docs/repository-facts.md (Apache-2.0).
 //! Project origin facts without probing paths or Git on the viewer machine.
 
-use hc_proto::terminal::{RepositoryFacts, Terminal};
+use hc_proto::terminal::{Checkout, RepositoryFacts, Terminal};
 
 use crate::chrome::snapshot::ClientShellCheckout;
 use crate::sidebar::clean;
@@ -69,6 +69,34 @@ pub(super) fn checkout(facts: &RepositoryFacts) -> Option<ClientShellCheckout> {
         is_linked_worktree: checkout.is_linked_worktree,
         is_bare: checkout.is_bare,
     })
+}
+
+/// Identity facts that `structure::read` groups by; branch, counts and
+/// state are display-only and never reach the cached structure.
+pub(crate) fn repository_equal(a: Option<&RepositoryFacts>, b: Option<&RepositoryFacts>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.core_id == b.core_id
+                && a.cwd == b.cwd
+                && a.auto_label == b.auto_label
+                && checkout_equal(a.checkout.as_ref(), b.checkout.as_ref())
+        }
+        _ => false,
+    }
+}
+
+fn checkout_equal(a: Option<&Checkout>, b: Option<&Checkout>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => {
+            a.repository_key == b.repository_key
+                && a.checkout_key == b.checkout_key
+                && a.checkout_name == b.checkout_name
+                && a.repo_root == b.repo_root
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]
