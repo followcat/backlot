@@ -20,7 +20,8 @@ terminal or on a machine with no desktop, and want the Herdr TUI on top of `hc`.
   running while you work in the tab, parked when you switch away, killed when its tab closes.
 - A release check on startup tells you when a newer hc-tui is out — one cached request a day, disabled with
   `update.version_check = false` or `HC_TUI_NO_UPDATE_CHECK=1`. `hc-tui --upgrade` installs it, and `prefix+u` opens
-  the release notes and an in-client upgrade with a restart.
+  the release notes and an in-client upgrade with a restart. A binary managed by mise, Homebrew, Nix or cargo — or a
+  dev build — is refused instead, with the package manager's own command.
 
 Agents can also show `◌ waiting`: their own turn is quiet, but work they started is still running — a background
 `-c` shell under the agent's process tree, or, for Claude Code, a `shell` status in its own session file. The check

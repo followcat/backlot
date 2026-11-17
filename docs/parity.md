@@ -758,7 +758,10 @@ Everything else on the compared surfaces still diffs normally.
   every newer stable release (cached in `update-check.json`), the official installer run locally with
   `HC_TUI_SKIP_CORE=1` into the running binary's directory, a `--version` check before `done`, and an in-place `exec`
   restart. The modal frame, typography, markdown styling, the shell badges and the `NAVIGATE` status are ported from the
-  reference. Not ported yet: the reference's global command menu. The `● menu` launcher shows its dot while an update
+  reference, and so is the managed-install refusal: a mise, Homebrew, Nix, cargo or dev-build binary gets no `↵ update`,
+  and `hc-tui --upgrade` refuses with the channel's own command (`mise upgrade --bump github:followcat/hc-tui`, `brew
+  upgrade hc-tui`) unless `HC_TUI_INSTALL_DIR` is set explicitly. Not ported yet: the reference's global command menu.
+  The `● menu` launcher shows its dot while an update
   waits, but its click still does nothing, as before this change; the card is reached through `prefix+u` and the badge.
 - **Waiting status overlay.** Deliberate: the reference has no Waiting
   state. hc-tui adds `AgentStatus::Waiting` between Working and Idle in
