@@ -58,7 +58,13 @@ hc-tui --upgrade
 
 `--upgrade` runs the install script again for the latest release, with its progress on your terminal, and asks you to
 restart hc-tui. Set `HC_TUI_VERSION=v<version>` first to move to a specific release, newer or older. Clients that are
-already running keep the old version until you restart them.
+already running keep the old version until you restart them. `--upgrade` installs into the directory of the running
+binary (`HC_TUI_INSTALL_DIR` overrides it), so the command upgrades the binary you run.
+
+Inside the client, `prefix+u` (or a click on the `↑v…` badge) opens the update card with the release notes of every
+newer release. `↵ update` runs the same installer locally, even when the client is attached to a remote host, checks
+that `hc-tui --version` reports the new version, and then `↵ restart` re-executes the installed binary in place. The
+card offers `↵ update` only when the install directory is writable; otherwise it shows the command to run by hand.
 
 ### Update check
 

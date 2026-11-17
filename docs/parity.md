@@ -753,6 +753,13 @@ Everything else on the compared surfaces still diffs normally.
   failed write is a notice. `collapsed_endpoints` is not persisted —
   the reference does not persist it either. The file lives in hc-tui's
   state root, never herdr's.
+- **In-client update card and restart.** Deliberate hc-tui addition: the reference tells the user to detach and
+  run `herdr update`. hc-tui adds the card from `prefix+u`, the header badge and the startup toast: the release notes of
+  every newer stable release (cached in `update-check.json`), the official installer run locally with
+  `HC_TUI_SKIP_CORE=1` into the running binary's directory, a `--version` check before `done`, and an in-place `exec`
+  restart. The modal frame, typography, markdown styling, the shell badges and the `NAVIGATE` status are ported from the
+  reference. Not ported yet: the reference's global command menu. The `● menu` launcher shows its dot while an update
+  waits, but its click still does nothing, as before this change; the card is reached through `prefix+u` and the badge.
 - **Waiting status overlay.** Deliberate: the reference has no Waiting
   state. hc-tui adds `AgentStatus::Waiting` between Working and Idle in
   display priority — `◌`/`waiting`/peach in every status surface — but
