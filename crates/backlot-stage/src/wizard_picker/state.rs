@@ -90,7 +90,8 @@ pub struct Picker<'a> {
 
 impl<'a> Picker<'a> {
     /// `start` is the process's working directory: a repository with
-    /// a commit fills the input, anything else starts at `~`.
+    /// a commit fills the input, anything else starts at `~/` — the
+    /// trailing slash keeps typing inside `~`, not next to it.
     /// `in_use` is the "repositories in use" group (capped at 8).
     pub fn new(seams: Seams<'a>, home: PathBuf, start: &Path, in_use: Vec<PathBuf>) -> Picker<'a> {
         let mut p = Picker {
@@ -115,7 +116,7 @@ impl<'a> Picker<'a> {
         };
         p.text = match p.repo(start) {
             Repo::Commit { .. } => filter::shorten(start, &p.home),
-            _ => "~".to_string(),
+            _ => "~/".to_string(),
         };
         p.cursor = p.text.len();
         p.reparse();
@@ -504,6 +505,12 @@ impl<'a> Picker<'a> {
             format!("/{rest}")
         };
         self.text = format!("{prefix}{sep}{pre}{tail}");
+        // A completed directory ends with `/` — the input then sits
+        // inside it and typing continues below.
+        if !self.text.ends_with('/') && (self.seams.is_dir)(&filter::expand(&self.text, &self.home))
+        {
+            self.text.push('/');
+        }
         self.cursor = self.text.len();
         self.edited();
     }

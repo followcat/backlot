@@ -132,7 +132,7 @@ fn the_100x30_screen() {
     assert_eq!(
         out,
         " New studio · repository
- path › ~▏                                                                             Tab completes
+ path › ~/▏                                                                            Tab completes
 
    ~
      ● ~/code/backlot                                                     ● main · 5 min ago
@@ -170,7 +170,7 @@ fn the_100x30_screen() {
 fn the_60x20_screen() {
     let (fs, _code) = demo_fs();
     let mut p = Picker::new(fs.seams(), home(), &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     let out = screen(&mut p, 60, 20);
     assert_eq!(
         out,
@@ -204,7 +204,7 @@ fn the_60x20_screen() {
 fn a_40_wide_screen_drops_the_meta() {
     let (fs, _code) = demo_fs();
     let mut p = Picker::new(fs.seams(), home(), &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     let out = screen(&mut p, 40, 12);
     assert!(!out.contains("main"), "meta dropped: {out}");
     assert!(out.contains("▶ ├   acme-shop"), "{out}");

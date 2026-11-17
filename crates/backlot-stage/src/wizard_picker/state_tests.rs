@@ -141,14 +141,14 @@ fn row_paths(p: &Picker) -> Vec<String> {
         .collect()
 }
 
-/// The picker starts at `~` when the current directory is no
+/// The picker starts at `~/` when the current directory is no
 /// repository — root home, the in-use group ahead of the tree.
 #[test]
 fn the_start_is_home_and_the_in_use_group_leads() {
     let fs = demo_fs();
     let in_use = vec![home().join("code/backlot"), home().join("code/acme-shop")];
     let p = picker(&fs, &home(), in_use);
-    assert_eq!(p.input(), "~");
+    assert_eq!(p.input(), "~/");
     assert_eq!(p.root(), &home());
     assert_eq!(p.in_use_rows(), 2);
     assert_eq!(p.focus(), Focus::Input);
@@ -165,6 +165,24 @@ fn the_start_is_home_and_the_in_use_group_leads() {
     // Row kinds: two used rows, then the tree.
     assert!(matches!(p.rows()[0], Row::Used { .. }));
     assert!(matches!(p.rows()[2], Row::Dir { .. }));
+}
+
+/// The input starts inside `~`, so typing continues there:
+/// `code/cl` filters `~/code`'s children by `cl`.
+#[test]
+fn typing_continues_inside_the_start_directory() {
+    let fs = demo_fs();
+    let mut p = picker(&fs, &home(), vec![]);
+    assert_eq!(p.input(), "~/");
+    typ(&mut p, "code/cl");
+    assert_eq!(p.input(), "~/code/cl");
+    assert_eq!(p.root(), home().join("code"));
+    // `cl` hits `clients` as a substring and `backlot` only as a
+    // subsequence — `clients` leads.
+    assert_eq!(
+        row_paths(&p),
+        vec!["/home/user/code/clients", "/home/user/code/backlot"]
+    );
 }
 
 /// Starting inside a repository puts its path in the input; the
@@ -188,7 +206,7 @@ fn a_repository_start_picks_the_typed_path() {
 fn typing_filters_live() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     assert_eq!(p.input(), "~/code/");
     assert_eq!(p.root(), home().join("code"));
     assert_eq!(p.root_display(), "~/code");
@@ -224,7 +242,7 @@ fn typing_filters_live() {
 fn tab_completes_and_descends() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/od");
+    typ(&mut p, "od");
     // Only `code` matches "~/od" — Tab descends into it.
     p.key(Key::Tab);
     assert_eq!(p.input(), "~/code/");
@@ -236,15 +254,15 @@ fn tab_completes_and_descends() {
     assert_eq!(p.root(), home().join("code/backlot"));
     // An ambiguous completion stops at the longest common prefix:
     // `we` inside clients → web-app and web-app-v2 share `web-app`,
-    // which exists — the tree roots there.
+    // which exists — the tree roots there and the input ends `/`.
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/clients/we");
+    typ(&mut p, "code/clients/we");
     p.key(Key::Tab);
-    assert_eq!(p.input(), "~/code/clients/web-app");
+    assert_eq!(p.input(), "~/code/clients/web-app/");
     assert_eq!(p.root(), home().join("code/clients/web-app"));
     // A filter that leaves one match descends on Tab.
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/acm");
+    typ(&mut p, "code/acm");
     p.key(Key::Tab);
     assert_eq!(p.input(), "~/code/acme-shop/");
     assert_eq!(p.root(), home().join("code/acme-shop"));
@@ -255,7 +273,7 @@ fn tab_completes_and_descends() {
 fn backspace_edits() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/bax");
+    typ(&mut p, "code/bax");
     assert_eq!(p.input(), "~/code/bax");
     p.key(Key::Backspace);
     assert_eq!(p.input(), "~/code/ba");
@@ -303,7 +321,7 @@ fn a_used_repository_picks_like_any_row() {
 fn the_tree_moves_expands_and_collapses() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     // Select backlot's row: repos lead, so sel is acme-shop.
     p.key(Key::Down);
     assert_eq!(p.focus(), Focus::Tree);
@@ -352,7 +370,7 @@ fn the_tree_moves_expands_and_collapses() {
 fn right_enters_a_leaf_directory() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     // scratch has one child service-a — Right expands, Right again
     // on the leaf service-a enters it.
     let sc = row_paths(&p)
@@ -375,7 +393,7 @@ fn right_enters_a_leaf_directory() {
 fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/ba");
+    typ(&mut p, "code/ba");
     // backlot selected first — Enter picks it.
     match p.key(Key::Enter) {
         Some(Outcome::Picked(path)) => {
@@ -385,7 +403,7 @@ fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
     }
     // A plain directory: Enter expands it and explains.
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     let sc = row_paths(&p)
         .iter()
         .position(|s| s == "/home/user/code/scratch")
@@ -405,7 +423,7 @@ fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
 fn an_empty_repository_and_no_access_directory_report() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     let er = row_paths(&p)
         .iter()
         .position(|s| s == "/home/user/code/empty-repo")
@@ -434,7 +452,7 @@ fn an_empty_repository_and_no_access_directory_report() {
 fn an_unreadable_root_lists_nothing() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/noaccess/");
+    typ(&mut p, "code/noaccess/");
     assert!(!p.root_listed());
     assert!(row_paths(&p).iter().all(|s| !s.contains("secret")));
 }
@@ -465,7 +483,7 @@ fn esc_twice_cancels_and_ctrl_c_at_once() {
 fn pagination_and_ends() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
-    typ(&mut p, "/code/");
+    typ(&mut p, "code/");
     p.set_page(3);
     p.key(Key::End);
     let last = p.sel();

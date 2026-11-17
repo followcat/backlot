@@ -20,11 +20,13 @@ pub enum Match {
 
 /// `~` becomes `home`; a relative text resolves under `home` (an
 /// empty one is `home` itself) and an absolute one passes through.
+/// `~//x` stays inside `home`, like a shell's `~//x` = `~/x` — an
+/// extra `/` typed at the `~/` start never escapes.
 pub fn expand(text: &str, home: &Path) -> PathBuf {
     if text == "~" {
         home.to_path_buf()
     } else if let Some(rest) = text.strip_prefix("~/") {
-        home.join(rest)
+        home.join(rest.trim_start_matches('/'))
     } else if Path::new(text).is_absolute() {
         PathBuf::from(text)
     } else {
