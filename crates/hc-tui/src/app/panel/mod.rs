@@ -122,12 +122,25 @@ impl App {
     }
 
     /// The selected row's index in `targets` — a vanished target
-    /// reverts to the title (index 0).
+    /// reverts to the title (index 0). A `Studio`/`StageDown` target
+    /// names several rows, so `selected_row` pins the occurrence the
+    /// selection actually sits on; when rows shifted since (a publish
+    /// above it), the nearest surviving occurrence keeps the place.
     fn panel_selected_index(&self, targets: &[Target]) -> usize {
-        self.panel
-            .selected
-            .as_ref()
-            .and_then(|t| targets.iter().position(|r| r == t))
+        let Some(target) = self.panel.selected.as_ref() else {
+            return 0;
+        };
+        if let Some(at) = self.panel.selected_row
+            && targets.get(at) == Some(target)
+        {
+            return at;
+        }
+        targets
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| *t == target)
+            .map(|(i, _)| i)
+            .min_by_key(|i| i.abs_diff(self.panel.selected_row.unwrap_or(0)))
             .unwrap_or(0)
     }
 
@@ -138,6 +151,7 @@ impl App {
             self.panel.mode = PanelMode::Expanded;
             self.panel.focused = true;
             self.panel.selected = None;
+            self.panel.selected_row = None;
             self.panel.reopen_confirm = None;
             self.panel.scroll = 0;
             return;
@@ -157,6 +171,7 @@ impl App {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
         self.panel.selected = None;
+        self.panel.selected_row = None;
         self.panel.reopen_confirm = None;
         self.panel_anim_deadline = None;
     }
@@ -209,6 +224,7 @@ impl App {
             }
         }
         self.panel.selected = Some(targets[index].clone());
+        self.panel.selected_row = Some(index);
         self.panel.reopen_confirm = None;
         // Keep the selection inside the scrolled body (title is fixed).
         let body_height = self.panel_hits.body.height.max(1);
@@ -242,6 +258,7 @@ impl App {
             .clamp(self.panel.scroll + 1, self.panel.scroll + viewport_rows)
             .min(targets.len().saturating_sub(1).max(1));
         self.panel.selected = targets.get(selected).cloned();
+        self.panel.selected_row = self.panel.selected.as_ref().map(|_| selected);
     }
 
     /// Space — collapse or expand the block the selected row belongs
@@ -273,11 +290,19 @@ impl App {
             self.panel.collapsed_blocks.insert(studio.clone());
             // The block's identity changes with its shape — ride the
             // `╶` line so the next Space toggles it back open.
-            self.panel.selected = Some(Target::Block(studio));
+            self.panel.selected = Some(Target::Block(studio.clone()));
+            self.panel.selected_row = self
+                .panel_targets()
+                .iter()
+                .position(|t| matches!(t, Target::Block(s) if *s == studio));
         } else {
             self.panel.collapsed_blocks.remove(&studio);
             self.panel.expanded_blocks.insert(studio.clone());
-            self.panel.selected = Some(Target::Studio(studio));
+            self.panel.selected = Some(Target::Studio(studio.clone()));
+            self.panel.selected_row = self
+                .panel_targets()
+                .iter()
+                .position(|t| *t == Target::Studio(studio.clone()));
         }
     }
 

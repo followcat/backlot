@@ -53,6 +53,12 @@ pub(crate) struct Panel {
     /// The selected row's stable identity — rows rebuild each frame,
     /// so selection survives document updates by target, not index.
     pub selected: Option<Target>,
+    /// The row `selected` last resolved to — a block's several
+    /// `Studio` rows share one target, so the index pins which
+    /// occurrence the selection actually sits on. A stale pin
+    /// (rows shifted by a publish) degrades to the nearest
+    /// surviving occurrence, never to position 0.
+    pub selected_row: Option<usize>,
     /// A closed person whose reopen is one more Enter away.
     pub reopen_confirm: Option<(crate::studio::StudioKey, String)>,
     /// Spinner frame counter for working marks (~120 ms ticks).
@@ -76,6 +82,7 @@ impl Panel {
             expanded_blocks: Default::default(),
             scroll: 0,
             selected: None,
+            selected_row: None,
             reopen_confirm: None,
             spin: 0,
             // The flag stays off until `set_hollywood` reads the

@@ -121,7 +121,11 @@ impl App {
                 // block's new identity.
                 self.panel.collapsed_blocks.remove(&id);
                 self.panel.expanded_blocks.insert(id.clone());
-                self.panel.selected = Some(Target::Studio(id));
+                self.panel.selected = Some(Target::Studio(id.clone()));
+                self.panel.selected_row = self
+                    .panel_targets()
+                    .iter()
+                    .position(|t| *t == Target::Studio(id.clone()));
             }
             Some(Target::Person(key, role_name)) => {
                 let studio = crate::panel::data::studio(&machines, &key);
