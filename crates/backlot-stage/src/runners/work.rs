@@ -88,8 +88,22 @@ fn blocked(runner: &str, screen: &str) -> bool {
                     && has_line_starting(screen, "❯ 1."))
         }
         "fake" => fake_state(screen) == Some(Work::Blocked),
+        // cline's approval block (S14a section 4) — it should never
+        // appear under `--yolo`, which forces auto-approve on; when
+        // it does, the user switched it off and the prompt is
+        // theirs. Nothing is pressed either way (`permit`).
+        "cline" => cline_approval(screen),
         _ => false,
     }
+}
+
+/// cline's `Cline needs permission` / `Approve tool call?` block.
+/// Under `--yolo` it must not appear: auto-approve is forced on, so a
+/// screen still showing it means the user switched the mode off — the
+/// prompt is theirs and the stage never answers it.
+pub(crate) fn cline_approval(text: &str) -> bool {
+    has_line_containing(text, "Cline needs permission")
+        && has_line_containing(text, "Approve tool call?")
 }
 
 /// The runner's screen reads as mid-turn.
@@ -105,9 +119,30 @@ fn working(runner: &str, screen: &str) -> bool {
         // interrupt • 5s • ↓ 219` — the verb rotates, the marker
         // is stable (S12a).
         "cmd" => screen.contains("esc to interrupt"),
+        // cline's turn: a braille spinner line — `⠏ Thinking...
+        // (esc to cancel)` — above the composer, which stays on
+        // screen while it works (S14a section 7). The idle composer
+        // alone is not a turn; `(esc to cancel)` is the stable half
+        // of the line.
+        "cline" => screen.contains("(esc to cancel)") || screen.lines().any(cline_spinner_line),
         "fake" => fake_state(screen) == Some(Work::Working),
         _ => false,
     }
+}
+
+/// cline's running turn: a braille glyph from `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, a
+/// space, then the turn's word — `⠏ Thinking... (esc to cancel)`. The
+/// glyph is required: a transcript line starting `Thinking:` is a
+/// finished thought, not a turn.
+fn cline_spinner_line(l: &str) -> bool {
+    const GLYPHS: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let mut parts = l.trim().splitn(2, ' ');
+    let (Some(glyph), Some(rest)) = (parts.next(), parts.next()) else {
+        return false;
+    };
+    glyph.chars().count() == 1
+        && GLYPHS.contains(&glyph.chars().next().unwrap_or_default())
+        && !rest.trim().is_empty()
 }
 
 /// cursor-agent 2026.11.05's running turn: one or two braille

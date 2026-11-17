@@ -130,6 +130,9 @@ pub struct LiveTerminal {
     /// The terminal record-set revision — advances on each status
     /// update; a live program's clock for the structured stall.
     pub activity_revision: Option<u64>,
+    /// The program's pid while it runs — cline's manifest names the
+    /// engine process, whose parent is this one (S14b).
+    pub pid: Option<u32>,
 }
 
 /// This studio's live terminals by name: only the ones labelled

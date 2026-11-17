@@ -83,6 +83,7 @@ async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
                 status: t.status,
                 waiting_for_person: t.waiting_for_person,
                 activity_revision: t.activity.map(|a| a.revision),
+                pid: t.pid,
             });
         }
     }

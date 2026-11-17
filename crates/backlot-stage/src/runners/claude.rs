@@ -130,7 +130,7 @@ const HOOK_EVENTS: &[&str] = &[
 
 /// POSIX single-quoting for the settings file's command line: `'` is
 /// written `'\''`. A studio directory can hold spaces or quotes.
-fn sh_quote(s: &str) -> String {
+pub(crate) fn sh_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 

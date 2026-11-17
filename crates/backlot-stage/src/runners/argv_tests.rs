@@ -701,7 +701,9 @@ fn cmd_argv_and_env() {
 #[test]
 fn an_unknown_profile_refuses_every_runner() {
     let env = BTreeMap::new();
-    for runner in ["claude", "codex", "devin", "opencode", "cursor", "cmd"] {
+    for runner in [
+        "claude", "codex", "devin", "opencode", "cursor", "cmd", "cline",
+    ] {
         let e = plan(&actor(runner, "nowhere"), &ctx(&env, None, None)).unwrap_err();
         assert_eq!(e.reason, PROFILE_NOT_SUPPORTED, "{runner}");
         assert!(e.detail.contains("nowhere"), "{e:?}");

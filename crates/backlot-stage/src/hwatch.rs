@@ -48,6 +48,7 @@ impl Stage {
         let look = crate::discover::Look {
             home: &home,
             role_dir: &hdir.join("roles").join(HOLLYWOOD),
+            pid: term.pid,
         };
         let cwd = hdir.to_string_lossy().into_owned();
         let found = crate::discover::find_session(

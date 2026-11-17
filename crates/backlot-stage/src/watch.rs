@@ -383,6 +383,7 @@ impl Stage {
                 let look = discover::Look {
                     home: &home,
                     role_dir: &dir.join("roles").join(key),
+                    pid: term.pid,
                 };
                 discover::find_session(
                     &actor.runner,

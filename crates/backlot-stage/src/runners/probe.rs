@@ -12,7 +12,7 @@ use super::tools_dir;
 pub fn supported(runner: &str) -> bool {
     matches!(
         runner,
-        "fake" | "claude" | "codex" | "devin" | "opencode" | "cursor" | "cmd"
+        "fake" | "claude" | "codex" | "devin" | "opencode" | "cursor" | "cmd" | "cline"
     )
 }
 
@@ -26,6 +26,7 @@ fn launch_program(runner: &str) -> Option<&'static str> {
         "opencode" => Some("opencode"),
         "cursor" => Some("cursor-agent"),
         "cmd" => Some("cmd"),
+        "cline" => Some("cline"),
         "fake" => None,
         _ => None,
     }

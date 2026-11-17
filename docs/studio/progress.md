@@ -1,5 +1,33 @@
 # Studio progress
 
+## S14b: the cline adapter (2026-11-17)
+
+- Done: `runners/cline.rs` plans and preps a Cline CLI 3.0.74 role — `cline -i --yolo -P cline-pass -m
+  <model> [--thinking <effort>] [prompt]`, `--yolo` on every argv because hub mode would run the
+  actor's commands in the hub daemon's environment, where `BACKLOT_*` and `PATH` never reach them.
+  `--id <id>` resumes with no positional prompt. A model outside `cline-pass/` is a `model not
+  supported` refusal (no config channel carries a provider), and an effort outside `none`, `low`,
+  `medium`, `high` and `xhigh` is an `effort not supported` one. `runners/cline_hook.rs` generates
+  the permission layer: a POSIX `sh`
+  `<cwd>/.cline/hooks/PreToolUse.sh` (mode 0755, no `jq` — nothing here assumes it), default-deny
+  against the role's command rules, the network tools, MCP names, secret reads and writes outside
+  the work area, with one bounded line per decision in the role's signals file. The prep also writes
+  `roles/<role>/cline-mcp.json` (`{"mcpServers":{}}`, named by `CLINE_MCP_SETTINGS_PATH`) and keeps
+  `/.cline/` in the worktree's `info/exclude`. Session discovery reads the manifest under the user's
+  session store (cwd, start time, and the pid that is the engine child of the terminal's `node`),
+  and the work states, prompt block and approval policy follow S14a's captures.
+- Measured: 34 adapter tests — the exact argv shapes with `--yolo` in each, the never-flags list, the
+  provider and effort refusals, the generated hook run on nine sample tool calls (an allowed git
+  command, a `curl`, `web_search`, an MCP name, a write outside the worktree, a secret read, a chain,
+  a nameless call, a long target), the prep's files and modes, the exclude line (plain and
+  `gitdir` worktrees), the manifest lookup with wrong cwd, older start, no manifest and a pid
+  mismatch, plus the neutralized screen fixtures for idle, working and the approval block.
+- Not verified: no real `cline` launch — every test is fake or fixture. Unproven until the real run:
+  whether the hook is re-read mid-session, whether the hook's `cancel` verdict behaves exactly as
+  the measured print (it ends the turn), the rate-limit wording (the placeholder list is empty on
+  purpose), and whether the manifest's `pid` is the engine process on every node version.
+
+
 ## U2: studio first — every terminal belongs to a studio, fake runner only (2026-11-16)
 
 - Done: `backlot` is a studio tool and nothing else. `backlot --plain` keeps the plain

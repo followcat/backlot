@@ -935,3 +935,67 @@ fn deny_notice_owed_once() {
     });
     assert!(notices::owed(&state, dir).iter().all(|n| n.source_seq != 4));
 }
+
+/// A neutral cline approval screen (the S14a capture): the full-width
+/// `─` rule opens the block, the `[y] Approve` line ends it.
+fn cline_screen(command: &str) -> String {
+    format!(
+        " ❯ Run the shell command: {command}\n\
+         \x20\n\
+         ─────────────────────────────────────────\n\
+         \x20Cline needs permission\n\
+         \x20\n\
+         \x20Approve tool call?\n\
+         \x20\n\
+         \x20run_commands\n\
+         \x20\n\
+         \x20  $ {command}\n\
+         \x20\n\
+         \x20 [y] Approve   [n] Deny\n"
+    )
+}
+
+/// The cline block runs from the last full-width `─` rule above
+/// `Cline needs permission` to the end — a different command is a
+/// different block, and without the rule or the banner there is
+/// nothing comparable.
+#[test]
+fn prompt_block_on_cline() {
+    let a = cline_screen("ls");
+    let b = cline_screen("rm scratch.txt");
+    let block = prompt_block("cline", &a).expect("cline block");
+    assert!(block.contains("$ ls"), "{block}");
+    assert!(block.contains("Cline needs permission"), "{block}");
+    assert!(!block.contains("Run the shell command: ls"), "{block}");
+    assert_ne!(
+        block,
+        prompt_block("cline", &b).unwrap(),
+        "a different command must be a different block"
+    );
+    assert_eq!(prompt_block("cline", "plain output\n"), None);
+    assert_eq!(
+        prompt_block("cline", "Cline needs permission\nApprove tool call?\n"),
+        None,
+        "no full-width rule — nothing comparable"
+    );
+}
+
+/// cline gets no key, ever: its block only appears when `--yolo`'s
+/// auto-approve was switched off by hand, and the prompt is the
+/// user's — an actor's included.
+#[test]
+fn cline_takes_no_key() {
+    for decision in [ApprovalDecision::Allow, ApprovalDecision::Deny] {
+        assert_eq!(approval_keys("cline", decision), None);
+    }
+    let screen = cline_screen("ls");
+    assert!(needs_user("actor-t1-c1", "cline", &screen, None));
+    assert!(needs_user("director", "cline", &screen, None));
+    // The banner alone is no prompt.
+    assert!(!needs_user(
+        "actor-t1-c1",
+        "cline",
+        " Cline needs permission\n",
+        None
+    ));
+}
