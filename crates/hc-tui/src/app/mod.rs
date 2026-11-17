@@ -46,6 +46,7 @@ pub(crate) mod popup;
 mod popup_selection;
 mod preferences;
 mod presentation;
+mod probe;
 mod reap;
 mod reload;
 mod routing;
@@ -67,6 +68,7 @@ mod word_selection;
 
 pub use input::UiEvent;
 pub use pane::{OpenAttach, PaneEv, Role, Spec};
+pub use probe::Probe;
 pub(crate) use shell_state::ShellState;
 
 use std::future::Future;
@@ -100,25 +102,6 @@ pub(crate) enum Mode {
     /// program sees none of them.
     Copy,
     Resize,
-}
-
-/// Instrumentation counters a test can hold across `run`.
-#[derive(Debug, Default)]
-pub struct Probe {
-    /// Redraws performed.
-    pub draws: std::sync::atomic::AtomicU64,
-    /// Attach attempts made.
-    pub attaches: std::sync::atomic::AtomicU64,
-    /// Times the select loop woke for any reason.
-    pub wakeups: std::sync::atomic::AtomicU64,
-    /// Times a deadline sleep was armed.
-    pub timers: std::sync::atomic::AtomicU64,
-    /// Times a changed `HostFacts` bundle actually re-seeded panes.
-    pub host_facts: std::sync::atomic::AtomicU64,
-    /// Projection rebuilds actually run for a publish or focus change.
-    pub projections: std::sync::atomic::AtomicU64,
-    /// VT cells copied into pane surfaces across all draws.
-    pub cells_painted: std::sync::atomic::AtomicU64,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
