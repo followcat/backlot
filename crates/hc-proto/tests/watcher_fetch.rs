@@ -239,6 +239,66 @@ async fn a_machine_doc_error_is_isolated_to_its_source() {
     fake.abort();
 }
 
+/// U6a: `backlot` sits in `documents`, so every machine serves its own
+/// copy under `DocKey { machine, name }`. A machine whose `doc.get`
+/// fails keeps the failure inside its slot — the local document and
+/// every other machine are unaffected and nothing surfaces.
+#[tokio::test]
+async fn backlot_documents_fetch_on_every_machine() {
+    let (watcher, accepted) = watcher(vec!["backlot".into()]);
+    let machines = Arc::new(Mutex::new(vec![machine("host-b"), machine("host-c")]));
+    let fake = {
+        let machines = Arc::clone(&machines);
+        spawn_fake(accepted, move |core, framed| {
+            let machines = Arc::clone(&machines);
+            Box::pin(async move {
+                if framed {
+                    common::watcher::serve_rpc(core, METHODS, move |req| {
+                        match req["method"].as_str().unwrap() {
+                            "machine.list" => {
+                                let m = machines.lock().unwrap().clone();
+                                Some(Ok(json!({"machines": m})))
+                            }
+                            // host-c's core answers without the
+                            // document — the slot keeps the error.
+                            "doc.get" if req["params"]["on"] == "host-c" => {
+                                Some(Err(("doc.get".into(), "no such document".into())))
+                            }
+                            "doc.get" => Some(Ok(json!({
+                                "value": {"schema": "backlot/1", "studios": []},
+                                "version": 1
+                            }))),
+                            _ => Some(Ok(Value::Null)),
+                        }
+                    })
+                    .await;
+                } else {
+                    let mut core = core;
+                    serve_subscribe(&mut core, METHODS, json!({"seq": 1, "terminals": []})).await;
+                    let _park = core.read_message().await;
+                }
+            })
+        })
+    };
+    let view = await_view(&watcher, |v| {
+        v.link == Link::Online
+            && v.documents
+                .get(&key(None, "backlot"))
+                .is_some_and(|d| !d.fetching && !d.value.is_null())
+            && v.documents
+                .get(&key(Some("host-b"), "backlot"))
+                .is_some_and(|d| !d.fetching && !d.value.is_null())
+            && v.documents
+                .get(&key(Some("host-c"), "backlot"))
+                .is_some_and(|d| !d.fetching && d.error.is_some())
+    })
+    .await;
+    assert!(view.documents[&key(None, "backlot")].error.is_none());
+    assert!(view.documents[&key(Some("host-b"), "backlot")].error.is_none());
+    watcher.stop();
+    fake.abort();
+}
+
 /// `local_documents` are fetched on this core only: never on added
 /// machines, and a machine `doc` event for one never refetches.
 #[tokio::test]
