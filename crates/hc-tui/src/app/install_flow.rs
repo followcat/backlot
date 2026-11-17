@@ -110,7 +110,10 @@ impl App {
             Err(error) => (
                 Step::Failed,
                 None,
-                Some(format!("installer could not start: {error}")),
+                Some(format!(
+                    "installer could not start: {}",
+                    crate::sidebar::text::clean_ansi(&error)
+                )),
             ),
         };
         self.install = Some(Install {
@@ -169,7 +172,7 @@ impl App {
                 if install.tail.len() == TAIL_LINES {
                     install.tail.remove(0);
                 }
-                install.tail.push(line);
+                install.tail.push(crate::sidebar::text::clean_ansi(&line));
                 None
             }
             UpdateEvent::Exited {
@@ -218,7 +221,7 @@ impl App {
         };
         if let Some((step, reason, verified)) = outcome {
             install.step = step;
-            install.reason = reason;
+            install.reason = reason.map(|r| crate::sidebar::text::clean_ansi(&r));
             install.verified = verified;
             install.finished = Some(Instant::now());
             let phase = if step == Step::Done {

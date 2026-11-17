@@ -9,7 +9,7 @@
 //! renderers.
 
 pub mod status;
-mod text;
+pub(crate) mod text;
 
 pub(crate) use status::{Life, classify, effective};
 pub(crate) use text::clean;

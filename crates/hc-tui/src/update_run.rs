@@ -35,11 +35,12 @@ pub(crate) struct Plan {
 /// no core, and an explicit directory.
 pub(crate) fn plan(dir: &Path, latest: &str) -> Plan {
     let version = format!("v{latest}");
+    let quoted_version = shell_quote(&version);
     let dir_text = dir.display().to_string();
     let quoted = shell_quote(&dir_text);
     Plan {
         pipeline: format!(
-            "curl -fsSL {INSTALL_URL} | HC_TUI_VERSION={version} HC_TUI_SKIP_CORE=1 HC_TUI_INSTALL_DIR={quoted} sh"
+            "curl -fsSL {INSTALL_URL} | HC_TUI_VERSION={quoted_version} HC_TUI_SKIP_CORE=1 HC_TUI_INSTALL_DIR={quoted} sh"
         ),
         env: vec![
             ("HC_TUI_VERSION", version.clone()),
@@ -48,7 +49,7 @@ pub(crate) fn plan(dir: &Path, latest: &str) -> Plan {
         ],
         echo: vec![
             format!("$ curl -fsSL {INSTALL_URL} \\"),
-            format!("  | HC_TUI_VERSION={version} HC_TUI_SKIP_CORE=1 \\"),
+            format!("  | HC_TUI_VERSION={quoted_version} HC_TUI_SKIP_CORE=1 \\"),
             format!("    HC_TUI_INSTALL_DIR={quoted} sh"),
         ],
         bin: dir.join("hc-tui"),

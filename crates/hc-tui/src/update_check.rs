@@ -170,32 +170,37 @@ fn cache_path(env: &Env) -> Option<PathBuf> {
 /// The newest release's bare version when it outranks the running
 /// `CARGO_PKG_VERSION`; `None` on equal/older/unparseable tags.
 fn newer_release(tag: &str) -> Option<String> {
-    let latest = semver(tag)?;
+    let (major, minor, patch) = semver(tag)?;
     let current = semver(env!("CARGO_PKG_VERSION"))?;
-    (latest > current).then(|| {
-        tag.trim()
-            .trim_start_matches('v')
-            .split(['-', '+'])
-            .next()
-            .unwrap_or_default()
-            .to_owned()
-    })
+    ((major, minor, patch) > current).then(|| format!("{major}.{minor}.{patch}"))
 }
 
-/// `vX.Y.Z` / `X.Y.Z` (suffixes like `-rc1`/`+build` dropped, missing
-/// minor/patch read as zero). `None` on anything else.
+/// `vX.Y.Z` / `X.Y.Z` — digits and dots only in the numeric core
+/// (missing minor/patch read as zero), then an optional `-…`/`+…`
+/// semver suffix of `0-9 A-Z a-z . + -`. Anything else — a fourth
+/// field, an empty field, or another character — is `None`, so a
+/// hostile tag can never parse its way into the installer's env.
 pub(crate) fn semver(version: &str) -> Option<(u32, u32, u32)> {
-    let core = version
-        .trim()
-        .trim_start_matches('v')
-        .split(['-', '+'])
-        .next()?;
-    let mut parts = core.split('.');
-    Some((
-        parts.next()?.parse().ok()?,
-        parts.next().unwrap_or("0").parse().ok()?,
-        parts.next().unwrap_or("0").parse().ok()?,
-    ))
+    let trimmed = version.trim();
+    let rest = trimmed.strip_prefix('v').unwrap_or(trimmed);
+    let split = rest.find(['-', '+']).unwrap_or(rest.len());
+    let (core, suffix) = rest.split_at(split);
+    if !suffix.is_empty()
+        && (suffix.len() == 1
+            || !suffix[1..]
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".+-".contains(&b)))
+    {
+        return None;
+    }
+    let mut numbers = [0u32; 3];
+    for (count, field) in core.split('.').enumerate() {
+        if count == 3 || field.is_empty() || !field.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        numbers[count] = field.parse().ok()?;
+    }
+    Some((numbers[0], numbers[1], numbers[2]))
 }
 
 #[cfg(test)]
@@ -360,5 +365,58 @@ mod tests {
         let report = check(Some(cache.clone()), async { None }).await;
         assert_eq!(report.latest, None);
         assert!(!cache.exists(), "failures are not remembered");
+    }
+    /// Review round 1: a tag's numeric core is digits and dots only —
+    /// a fourth field, an empty field or any other character rejects
+    /// the tag, so a hostile ref can never reach the installer's env.
+    #[test]
+    fn semver_rejects_a_hostile_numeric_core() {
+        assert_eq!(semver("v9.9.9.;id;"), None);
+        assert_eq!(semver("v1.2.3.4"), None, "a fourth field");
+        assert_eq!(semver("v1..2"), None, "an empty field");
+        assert_eq!(semver("v1.2.3$(x)"), None);
+        assert_eq!(semver("v1.2.3-;id;"), None, "the suffix stays semver-safe");
+        assert_eq!(semver("v1.2.3-"), None, "an empty suffix");
+        assert_eq!(
+            semver(" v1.2.3"),
+            Some((1, 2, 3)),
+            "a padded tag normalizes"
+        );
+        assert_eq!(semver("v1.2.3-rc.1+build.2"), Some((1, 2, 3)));
+    }
+
+    /// The version the client keeps is rebuilt from the parsed numbers,
+    /// never sliced out of the tag text.
+    #[test]
+    fn newer_release_rebuilds_the_version_from_numbers() {
+        assert_eq!(newer_release("v999"), Some("999.0.0".to_owned()));
+        assert_eq!(newer_release("v999.0.0-rc1"), Some("999.0.0".to_owned()));
+        assert_eq!(newer_release("v9.9.9.;id;"), None);
+        assert_eq!(newer_release("v999.0.0$(x)"), None);
+    }
+
+    /// A cached tag with shell metacharacters is not a version — the
+    /// check refetches, and a hostile fetched tag is dropped too. It
+    /// can never reach `update_run::plan`.
+    #[tokio::test]
+    async fn a_hostile_tag_never_reaches_the_kept_version() {
+        let scratch = Scratch::new();
+        let cache = scratch.0.join("update-check.json");
+        std::fs::write(
+            &cache,
+            serde_json::json!({
+                "tag": "v9.9.9.;id;",
+                "checked_ms": crate::update_state::now_ms()
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let report = check(Some(cache), async { None }).await;
+        assert_eq!(report.latest, None, "the hostile cached tag refetches");
+
+        let scratch = Scratch::new();
+        let cache = scratch.0.join("update-check.json");
+        let report = check(Some(cache), tag("v9.9.9$(x)")).await;
+        assert_eq!(report.latest, None, "a hostile fetched tag is dropped");
     }
 }

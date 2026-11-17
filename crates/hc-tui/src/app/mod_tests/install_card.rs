@@ -347,3 +347,61 @@ async fn enter_closes_the_whats_new_card_and_marks_it_seen() {
         Some(env!("CARGO_PKG_VERSION"))
     );
 }
+
+/// Installer output loses its escape sequences and controls on entry
+/// (review round 1): an SGR-coloured line stores only its text, and a
+/// `\r` progress line stays one text row instead of overwriting.
+#[tokio::test]
+async fn installer_output_loses_its_sequences_and_controls() {
+    let dir = scratch("cleanout");
+    let record = Arc::new(Mutex::new(Record::default()));
+    let mut app = offered(&dir, &record);
+    press(&mut app, Key::Enter);
+    let generation = app.install_generation;
+    app.on_update_event(UpdateEvent::Output {
+        generation,
+        line: "\u{1b}[1;32mok\u{1b}[0m".into(),
+    });
+    app.on_update_event(UpdateEvent::Output {
+        generation,
+        line: "\u{1b}]52;c;AAAA\u{7}hidden osc".into(),
+    });
+    app.on_update_event(UpdateEvent::Output {
+        generation,
+        line: "progress 10%\rprogress 20%".into(),
+    });
+    let install = app.install.as_ref().unwrap();
+    assert_eq!(install.tail[0], "ok");
+    assert_eq!(install.tail[1], "hidden osc");
+    assert_eq!(install.tail[2], "progress 10% progress 20%");
+    assert!(
+        install
+            .tail
+            .iter()
+            .all(|line| !line.chars().any(char::is_control))
+    );
+}
+
+/// The `--version` probe's text reaches the failure reason cleaned:
+/// a hostile binary cannot print controls into the modal.
+#[tokio::test]
+async fn a_probe_answer_reaches_the_reason_clean() {
+    let dir = scratch("cleanprobe");
+    let record = Arc::new(Mutex::new(Record {
+        probe: Some("hc-tui 0.1.12\u{1b}[2J".into()),
+        ..Record::default()
+    }));
+    let mut app = offered(&dir, &record);
+    press(&mut app, Key::Enter);
+    let generation = app.install_generation;
+    app.on_update_event(UpdateEvent::Exited {
+        generation,
+        code: Some(0),
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    drain(&mut app);
+    let install = app.install.as_ref().unwrap();
+    let reason = install.reason.as_deref().unwrap();
+    assert!(!reason.chars().any(char::is_control), "{reason:?}");
+    assert!(reason.contains("0.1.12"), "{reason:?}");
+}

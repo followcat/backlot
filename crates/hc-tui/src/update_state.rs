@@ -50,11 +50,22 @@ pub struct UpdateCheckState {
 }
 
 /// Best effort read — a missing or poisoned file is an empty cache.
+/// Release fields render in the card, so a cache written before they
+/// were cleaned (or hand-edited) is cleaned on the way in.
 pub fn load(path: &Path) -> UpdateCheckState {
     let Ok(text) = std::fs::read_to_string(path) else {
         return UpdateCheckState::default();
     };
-    serde_json::from_str(&text).unwrap_or_default()
+    serde_json::from_str(&text)
+        .map(|mut state: UpdateCheckState| {
+            for release in &mut state.releases {
+                release.version = crate::sidebar::text::clean_ansi(&release.version);
+                release.date = crate::sidebar::text::clean_ansi(&release.date);
+                release.body = crate::sidebar::text::clean_lines(&release.body);
+            }
+            state
+        })
+        .unwrap_or_default()
 }
 
 /// Atomic write: temp file + rename, as `preferences::store` does — a
@@ -148,6 +159,30 @@ mod tests {
         next.skipped_version = None;
         store(&path, &next);
         assert_eq!(load(&path), next);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    /// A release written before bodies were cleaned — or a hand-edited
+    /// cache — loads without its controls or sequences.
+    #[test]
+    fn a_poisoned_cached_release_loads_clean() {
+        let dir =
+            std::env::temp_dir().join(format!("hctui-updatestate-{}-clean", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("update-check.json");
+        std::fs::write(
+            &path,
+            r#"{"releases":[{"version":"9.9.9\u001b[2J","date":"2026-01\u000701","body":"a\u001b]52;c;AAAA\u0007b\nc\u009bd"}]}"#,
+        )
+        .unwrap();
+        let state = load(&path);
+        let release = &state.releases[0];
+        for text in [&release.version, &release.date] {
+            assert!(!text.chars().any(char::is_control), "{text:?}");
+        }
+        assert!(!release.body.chars().any(|c| c.is_control() && c != '\n'));
+        assert_eq!(release.version, "9.9.9");
+        assert_eq!(release.date, "2026-0101");
+        assert_eq!(release.body, "ab\ncd");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -134,3 +134,24 @@ async fn the_version_probe_reads_the_binary_and_a_failure_is_none() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A hostile version string still lands in the pipeline as one quoted
+/// shell word, exactly like a directory with a quote (review round 1).
+#[test]
+fn a_hostile_version_still_quotes_to_one_shell_word() {
+    let plan = plan(Path::new("/home/user/bin"), "9.9.9.;id;");
+    assert!(
+        plan.pipeline.contains("HC_TUI_VERSION='v9.9.9.;id;'"),
+        "{}",
+        plan.pipeline
+    );
+    assert_eq!(
+        plan.env,
+        [
+            ("HC_TUI_VERSION", "v9.9.9.;id;".to_owned()),
+            ("HC_TUI_SKIP_CORE", "1".to_owned()),
+            ("HC_TUI_INSTALL_DIR", "/home/user/bin".to_owned()),
+        ],
+        "the env list keeps the raw value — only the pipeline quotes"
+    );
+}

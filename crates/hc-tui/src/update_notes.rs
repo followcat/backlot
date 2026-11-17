@@ -47,20 +47,17 @@ pub(crate) fn parse_releases(json: &str, current: &str) -> Option<Releases> {
     let mut releases: Vec<CachedRelease> = api
         .into_iter()
         .filter(|release| !release.draft && !release.prerelease)
-        .filter(|release| {
-            crate::update_check::semver(&release.tag_name).is_some_and(|v| v > current)
-        })
-        .map(|release| CachedRelease {
-            version: release
-                .tag_name
-                .trim()
-                .trim_start_matches('v')
-                .split(['-', '+'])
-                .next()
-                .unwrap_or_default()
-                .to_owned(),
-            date: release.published_at.chars().take(10).collect(),
-            body: release.body,
+        .filter_map(|release| {
+            let (major, minor, patch) =
+                crate::update_check::semver(&release.tag_name).filter(|v| *v > current)?;
+            Some(CachedRelease {
+                version: format!("{major}.{minor}.{patch}"),
+                date: crate::sidebar::text::clean_ansi(&release.published_at)
+                    .chars()
+                    .take(10)
+                    .collect(),
+                body: crate::sidebar::text::clean_lines(&release.body),
+            })
         })
         .collect();
     releases.sort_by(|a, b| {
@@ -178,5 +175,47 @@ mod tests {
         assert_eq!(parse_releases("{not json", "0.1.11"), None);
         assert_eq!(parse_releases("{}", "0.1.11"), None);
         assert_eq!(parse_releases("[]", "0.1.11"), Some(vec![]));
+    }
+    /// Review round 1: a hostile `tag_name` is dropped whole and the
+    /// kept version is rebuilt from the parsed numbers — never sliced
+    /// out of the tag text.
+    #[test]
+    fn hostile_tag_names_are_dropped_and_versions_rebuilt() {
+        let json = r####"[
+            {"tag_name": "v999.0.5.;id;", "draft": false, "prerelease": false,
+             "published_at": "2026-11-16T00:00:00Z", "body": "x"},
+            {"tag_name": "v999.0.6$(x)", "draft": false, "prerelease": false,
+             "published_at": "2026-11-16T00:00:00Z", "body": "x"},
+            {"tag_name": "v999.0.7-rc1", "draft": false, "prerelease": false,
+             "published_at": "2026-11-16T00:00:00Z", "body": "x"}
+        ]"####;
+        let releases = parse_releases(json, "0.1.11").unwrap();
+        let versions: Vec<&str> = releases.iter().map(|r| r.version.as_str()).collect();
+        assert_eq!(versions, ["999.0.7"]);
+    }
+
+    /// A release body or date carrying terminal controls or escape
+    /// sequences loses them at parse — the cache never holds them and
+    /// the renderer never sees them.
+    #[test]
+    fn release_bodies_and_dates_lose_controls_and_sequences() {
+        let json = r####"[
+            {"tag_name": "v999.0.5", "draft": false, "prerelease": false,
+             "published_at": "\u001b]8;;http://x\u00072026-11-16T00:00:00Z",
+             "body": "### Added\n- osc \u001b]52;c;AAAA\u0007 gone\n- csi \u001b[2J gone\n- c1 \u009b gone"}
+        ]"####;
+        let releases = parse_releases(json, "0.1.11").unwrap();
+        let release = &releases[0];
+        assert_eq!(release.date, "2026-11-16");
+        let body = &release.body;
+        assert!(
+            !body.chars().any(|c| c.is_control() && c != '\n'),
+            "{body:?}"
+        );
+        assert!(!body.contains("52"), "{body:?}");
+        assert!(!body.contains("[2J"), "{body:?}");
+        assert!(body.contains("### Added"), "{body:?}");
+        assert!(body.contains("osc  gone"), "{body:?}");
+        assert!(body.contains("c1  gone"), "{body:?}");
     }
 }

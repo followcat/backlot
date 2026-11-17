@@ -188,3 +188,41 @@ fn read_only_callout_names_the_directory() {
     );
     assert_eq!(text_of(&lines[3]), " release notes unavailable offline");
 }
+
+/// A hostile release body — OSC, CSI and C1 — is cleaned at parse so
+/// the styled stream carries no control character into the buffer.
+#[test]
+fn a_hostile_body_renders_without_control_characters() {
+    let json = r####"[
+        {"tag_name": "v9.9.9", "draft": false, "prerelease": false,
+         "published_at": "2026-01-01T00:00:00Z",
+         "body": "- osc \u001b]52;c;AAAA\u0007 end\n- csi \u001b[2J end\n- c1 \u009b end"}
+    ]"####;
+    let releases = crate::update_notes::parse_releases(json, "0.1.11").unwrap();
+    let lines = stream_lines(
+        &Stream {
+            releases: &releases,
+            installed: "0.1.11",
+            latest: "9.9.9",
+            notes: NotesState::Loaded,
+            callout: None,
+        },
+        60,
+        &palette(),
+    );
+    for line in &lines {
+        for span in &line.spans {
+            assert!(
+                !span.content.chars().any(char::is_control),
+                "{:?}",
+                span.content
+            );
+        }
+    }
+    let text: String = lines
+        .iter()
+        .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
+        .collect();
+    assert!(!text.contains("52"), "{text}");
+    assert!(!text.contains("[2J"), "{text}");
+}
