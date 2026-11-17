@@ -165,6 +165,14 @@ yourself is never rewritten (a warning instead when it still cannot reach the bi
 `backlot runners` prints the same table whenever a role says "not found" — runner, status,
 version, path, needs PATH — read-only, with no core needed.
 
+The page only ever appears when there is no studio. `backlot` waits for its first `backlot`
+read before drawing it (two seconds at most), so a client with studios never flashes the page
+on its way in; with studios it opens the Hollywood bar instead (see below). Once the page has
+gone it never comes back over a studio: the `new_workspace` action — the sidebar's `new` row,
+the workspace keybind and the mobile switcher's target — runs the new-studio wizard directly
+when a studio exists, and shows the page only when none does. `Esc` hides the page for the
+session.
+
 `hc server start` brings a core up first, because the studio commands need one and do not start
 it themselves. If `backlot` (the TUI) is already open, a core is already running and you can skip
 that line.
@@ -322,10 +330,43 @@ switch studios and roles.
 ## Hollywood above the studios
 
 Hollywood is the overseer: one agent above all studios on a core — see
-[hollywood.md](hollywood.md) for its model and rules. In the TUI it is a floating layer over
-everything: a collapsed strip at the top right (`✦ hollywood live · 2 live · 1 card · …`), an
-expanded panel dropped from the top on `Alt+Y`, and hidden. It floats — nothing resizes when it
-moves — and with no `[hollywood]` section in the config it draws nothing and takes no key.
+[hollywood.md](hollywood.md) for its model and rules. In the TUI it is a bar floating over
+everything: a collapsed strip at the top right, the film-strip band dropped from the top on
+`Alt+Y`, and hidden. It floats — nothing resizes when it moves.
+
+**The bar exists with or without an agent.** In studio mode it always draws: without a
+`[hollywood]` section it shows the studios, the new-studio frame and one line naming
+`backlot hollywood setup`, and the agent's parts — the title's role state, the headline, the
+cards and the `tell hollywood` line — need the section. Under `backlot --plain` there is no bar
+at all, and `Alt+Y` reaches the focused program.
+
+**It starts expanded** on a client that opens with at least one studio, so the studios are the
+first thing you see. A client that opens on the opening page keeps it collapsed, and the first
+studio to arrive later leaves it collapsed. `Esc` collapses it, `x` hides it, and focusing a
+studio from it collapses it again.
+
+The expanded strip, top to bottom:
+
+- the sprocket rows and the `H O L L Y W O O D` title, with the agent's square, its role state
+  and runner / model / effort, and the right-hand count of studios with what waits on you;
+- one frame per studio: the id in the top edge, `■ <state>` and a `!n` chip when something
+  waits, the role on set, what it is doing (a broken ledger in red), and one `◆` per cast
+  member — green working, peach with an attention, red failed or lost, dim idle — with
+  `<n> cast · r<version>` on the right;
+- the dashed **new-studio frame** last: `+  new studio`, repository and cast, and the `n` key;
+- below them, with an agent: the newest headline, one row per open card with `apply`,
+  `cancel` and `show`, and the `tell hollywood` line. Without one: the setup line.
+
+Keys in the expanded bar: `←`/`→` (or `h`/`l`) move between the frames, the new-studio frame
+included; `↓`/`↑` (or `j`/`k`) leave the frames for the cards and the input line and come back;
+`Enter` opens the selected frame (a studio → its producer, the new-studio frame → the wizard,
+the title → `bl-hollywood`); `n` opens the new-studio wizard from anywhere in the bar, which
+collapses first so the popup is never under it. `a` applies and `c` cancels the selected card,
+`s` is Show me, `i` edits the `tell hollywood` line, `x` hides, `Esc` collapses. The frames
+scroll sideways when there are more than fit (a `‹` or `›` at the band edge says so) and the
+wheel does the same under the pointer; the card chips, the input line and the frame clicks take
+the mouse. On a narrow screen the frames sit two per row — one under 40 columns — and the band
+scrolls vertically.
 
 Set the section up by hand or let the command write it:
 
@@ -336,18 +377,14 @@ backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
 `setup` refuses a runner that is not supported or not installed before it touches the file, and
 keeps every other line as it was. A running stage starts `bl-hollywood` on its next tick; a
 running client picks the table up at its next start. Until a section exists, the expanded studio
-panel's last row names this command.
+panel's last row names this command too.
 
-`Alt+Y` cycles hidden → strip → panel → strip (rebind with `[hollywood] key = "prefix+h"`). In
-the expanded panel: `j`/`k` or the arrows move, `Enter` acts (studio row → its producer, title →
-`bl-hollywood`, card → Show me), `a` applies and `c` cancels the selected card, `s` is Show me,
-`i` edits the `tell hollywood` line, `x` hides, `Esc` collapses. The card buttons
-`apply`/`cancel`/`show`, the strip and the scrollbar take the mouse. Show me on a `studio-new`
-card opens the draft's cast and brief read-only (`backlot card show <id>` prints the same);
-on any other card it focuses the studio.
+`Alt+Y` cycles hidden → strip → band → strip (rebind with `[hollywood] key = "prefix+h"`). Show
+me on a `studio-new` card opens the draft's cast and brief read-only (`backlot card show <id>`
+prints the same); on any other card it focuses the studio.
 
-The layer only ever shows what the `backlot` document says and only ever acts through `backlot`
-commands — `backlot card apply c3` from the panel is the same command you would type.
+The bar only ever shows what the `backlot` document says and only ever acts through `backlot`
+commands — `backlot card apply c3` from the bar is the same command you would type.
 
 ## Permission prompts
 
@@ -563,6 +600,7 @@ A missing file means defaults; a malformed one means defaults plus a notice carr
 line and column. The panel's open/closed state is per client and in memory only — nothing is
 saved.
 
-With no `[hollywood]` the layer is absent: hidden, no `Alt+Y`, no timer — the screen is the
-herdr screen. A `key` value that cannot be bound falls back to `alt+y` with a notice naming the
-file, never echoing the value.
+With no `[hollywood]` the bar is still there in its no-agent form (studios, the new-studio
+frame and the setup line), on `Alt+Y`, with no timer; `backlot --plain` has no bar at all and
+the screen is the herdr screen. A `key` value that cannot be bound falls back to `alt+y` with a
+notice naming the file, never echoing the value.
