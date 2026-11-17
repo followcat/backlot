@@ -14,6 +14,7 @@ use super::palette::Palette;
 use super::release_notes::{Stream, stream_lines};
 use super::render::{display_width, put_text};
 use super::scroll::{ScrollMetrics, render_scrollbar_buffer};
+use super::update_status::{Status, Step, done_lines, failed_lines, updating_lines};
 
 /// The herdr release-notes modal size; the card clamps inside it.
 pub(crate) const MODAL_SIZE: (u16, u16) = (80, 24);
@@ -23,6 +24,12 @@ pub(crate) const MODAL_SIZE: (u16, u16) = (80, 24);
 pub(crate) enum Phase {
     /// The release notes with the install callout; scrolls.
     Opened,
+    /// The installer is running.
+    Updating,
+    /// Installed and verified; restart is offered.
+    Done,
+    /// The installer or the version check failed.
+    Failed,
     /// The read-only notes of the running version after an upgrade.
     WhatsNew,
 }
@@ -33,6 +40,16 @@ pub(crate) enum Button {
     Update,
     Skip,
     Close,
+    Cancel,
+    Restart,
+    Later,
+    Retry,
+}
+
+/// The body the phase shows.
+pub(crate) enum Body<'a> {
+    Notes(Stream<'a>),
+    Status(Status<'a>),
 }
 
 /// Everything one frame of the card is drawn from.
@@ -45,7 +62,7 @@ pub(crate) struct ModalView<'a> {
     pub latest: &'a str,
     /// Whether `↵ update` is offered (the install dir accepts writes).
     pub writable: bool,
-    pub body: Stream<'a>,
+    pub body: Body<'a>,
     /// Rows scrolled from the top of the notes body.
     pub scroll: u16,
 }
@@ -136,18 +153,27 @@ fn draw_header(
         base.fg(p.text).add_modifier(Modifier::BOLD),
     );
     let (subtitle_text, right) = match view.phase {
-        Phase::Opened => (
-            "update ready",
-            Some(format!("installed v{}", view.installed)),
+        Phase::Opened => ("update ready".to_owned(), Some(installed(view))),
+        Phase::Updating => (
+            "updates this client · programs keep running".to_owned(),
+            Some(installed(view)),
         ),
-        Phase::WhatsNew => ("what's new in this release", None),
+        Phase::Done => (
+            format!("update installed · restart to use v{}", view.latest),
+            Some(format!("v{} running", view.installed)),
+        ),
+        Phase::Failed => (
+            format!("update failed · v{} is unchanged", view.installed),
+            Some(installed(view)),
+        ),
+        Phase::WhatsNew => ("what's new in this release".to_owned(), None),
     };
     put_text(
         buf,
         subtitle.x,
         subtitle.y,
         subtitle.width,
-        subtitle_text,
+        &subtitle_text,
         base.fg(p.overlay1),
     );
     if let Some(right) = right {
@@ -173,6 +199,10 @@ fn draw_header(
     }
 }
 
+fn installed(view: &ModalView<'_>) -> String {
+    format!("installed v{}", view.installed)
+}
+
 fn draw_body(
     buf: &mut Buffer,
     view: &ModalView<'_>,
@@ -183,42 +213,54 @@ fn draw_body(
     let content = stack.content;
     let rows = usize::from(content.height);
     out.rows = content.height;
-    let stream = &view.body;
-    let mut lines = stream_lines(stream, content.width, p);
-    let overflow = lines.len() > rows;
-    if overflow {
-        lines = stream_lines(stream, content.width.saturating_sub(1), p);
-    }
-    let max_scroll = lines.len().saturating_sub(rows);
-    let scroll = usize::from(view.scroll).min(max_scroll);
-    let text_area = if overflow {
-        Rect::new(content.x, content.y, content.width - 1, content.height)
-    } else {
-        content
-    };
-    let visible: Vec<_> = lines.into_iter().skip(scroll).take(rows).collect();
-    Paragraph::new(visible).render(text_area, buf);
-    out.max_scroll = u16::try_from(max_scroll).unwrap_or(u16::MAX);
-    if overflow {
-        let track = Rect::new(
-            content.right().saturating_sub(1),
-            content.y,
-            1,
-            content.height,
-        );
-        render_scrollbar_buffer(
-            buf,
-            ScrollMetrics {
-                offset_from_bottom: max_scroll - scroll,
-                max_offset_from_bottom: max_scroll,
-                viewport_rows: rows,
-            },
-            track,
-            p.overlay0,
-            p.overlay1,
-            "▐",
-        );
-        out.track = Some(track);
+    match &view.body {
+        Body::Status(status) => {
+            let width = usize::from(content.width);
+            let lines = match status.step {
+                Step::Done => done_lines(status, width, p),
+                Step::Failed => failed_lines(status, width, p),
+                Step::Running | Step::Verifying => updating_lines(status, width, p),
+            };
+            Paragraph::new(lines.into_iter().take(rows).collect::<Vec<_>>()).render(content, buf);
+        }
+        Body::Notes(stream) => {
+            let mut lines = stream_lines(stream, content.width, p);
+            let overflow = lines.len() > rows;
+            if overflow {
+                lines = stream_lines(stream, content.width.saturating_sub(1), p);
+            }
+            let max_scroll = lines.len().saturating_sub(rows);
+            let scroll = usize::from(view.scroll).min(max_scroll);
+            let text_area = if overflow {
+                Rect::new(content.x, content.y, content.width - 1, content.height)
+            } else {
+                content
+            };
+            let visible: Vec<_> = lines.into_iter().skip(scroll).take(rows).collect();
+            Paragraph::new(visible).render(text_area, buf);
+            out.max_scroll = u16::try_from(max_scroll).unwrap_or(u16::MAX);
+            if overflow {
+                let track = Rect::new(
+                    content.right().saturating_sub(1),
+                    content.y,
+                    1,
+                    content.height,
+                );
+                render_scrollbar_buffer(
+                    buf,
+                    ScrollMetrics {
+                        offset_from_bottom: max_scroll - scroll,
+                        max_offset_from_bottom: max_scroll,
+                        viewport_rows: rows,
+                    },
+                    track,
+                    p.overlay0,
+                    p.overlay1,
+                    "▐",
+                );
+                out.track = Some(track);
+            }
+        }
     }
 }
 
@@ -254,6 +296,15 @@ fn draw_actions(
         ],
         Phase::Opened => vec![
             (Button::Skip, " s skip ", false),
+            (Button::Close, " esc close ", false),
+        ],
+        Phase::Updating => vec![(Button::Cancel, " esc cancel ", false)],
+        Phase::Done => vec![
+            (Button::Restart, " ↵ restart ", true),
+            (Button::Later, " esc later ", false),
+        ],
+        Phase::Failed => vec![
+            (Button::Retry, " ↵ retry ", true),
             (Button::Close, " esc close ", false),
         ],
         Phase::WhatsNew => Vec::new(),

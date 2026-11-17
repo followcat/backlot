@@ -114,6 +114,7 @@ impl App {
             .chain(self.copy_feedback_deadline)
             .chain(self.waiting_due)
             .chain(self.image_read.as_ref().map(|read| read.deadline))
+            .chain(self.install_tick_deadline())
             .min()
     }
 

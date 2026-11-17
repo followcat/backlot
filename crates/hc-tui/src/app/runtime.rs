@@ -307,6 +307,7 @@ impl App {
                     let now = Instant::now();
                     dirty |= self.pane_retry(now);
                     dirty |= self.expire_image_read(now);
+                    dirty |= self.install_tick(now);
                     kind = WakeKind::Deadline;
                 }
             }

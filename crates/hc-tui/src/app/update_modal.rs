@@ -1,16 +1,20 @@
 //! The update card's state and input: which card opens for the current
-//! state, scrolling, skip and close. What the card shows is drawn by
-//! `chrome::update_modal`; the installer lands in `update_run`.
+//! state, scrolling, the install actions, skip, and close. What the card
+//! shows is drawn by `chrome::update_modal`; the installer lifecycle is
+//! in `install_flow`.
 
+use std::path::PathBuf;
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::App;
 use super::input::{MouseButton, MouseEventKind, MouseInput, TerminalKey};
+use super::install_flow::Install;
 use super::mouse::contains;
 use crate::chrome::release_notes::{Callout, NotesState, Stream};
-use crate::chrome::update_modal::{Button, ModalRender, ModalView, Phase};
+use crate::chrome::update_modal::{Body, Button, ModalRender, ModalView, Phase};
+use crate::chrome::update_status::Status;
 use crate::update_install::{
     default_install_dir, dir_writable, manual_command, running_install_dir,
 };
@@ -26,6 +30,8 @@ pub(crate) struct UpdateModal {
     pub phase: Phase,
     pub scroll: u16,
     pub writable: bool,
+    /// The directory of the running binary — the installer's target.
+    pub dir: Option<PathBuf>,
     /// The install directory as the callout names it.
     pub install_text: String,
     /// The manual command for a read-only directory (or the plain
@@ -43,15 +49,38 @@ pub(crate) fn running_notes(state: &UpdateCheckState) -> Option<usize> {
         .position(|release| release.version == RUNNING)
 }
 
-/// The card's view over the live state; `fetching` marks a notes fetch
-/// still in flight.
+/// The card's view over the live state. `fetching` marks a notes fetch
+/// still in flight; `install` is the run the status phases show.
 pub(crate) fn view<'a>(
     modal: &'a UpdateModal,
     state: &'a UpdateCheckState,
     latest: Option<&'a str>,
     fetching: bool,
+    install: Option<&'a Install>,
 ) -> ModalView<'a> {
     let scroll = modal.scroll;
+    if let Some(install) =
+        install.filter(|_| matches!(modal.phase, Phase::Updating | Phase::Done | Phase::Failed))
+    {
+        return ModalView {
+            phase: modal.phase,
+            installed: RUNNING,
+            latest: latest.unwrap_or(RUNNING),
+            writable: modal.writable,
+            body: Body::Status(Status {
+                step: install.step,
+                elapsed_secs: install.elapsed_secs(),
+                spinner: install.spinner(),
+                echo: &install.plan.echo,
+                tail: &install.tail,
+                verified: install.verified.as_deref(),
+                reason: install.reason.as_deref(),
+                installed: RUNNING,
+                manual: &modal.chip,
+            }),
+            scroll,
+        };
+    }
     if modal.phase == Phase::WhatsNew {
         let releases =
             running_notes(state).map_or(&state.releases[..0], |i| &state.releases[i..=i]);
@@ -60,13 +89,13 @@ pub(crate) fn view<'a>(
             installed: RUNNING,
             latest: RUNNING,
             writable: modal.writable,
-            body: Stream {
+            body: Body::Notes(Stream {
                 releases,
                 installed: RUNNING,
                 latest: RUNNING,
                 notes: NotesState::Loaded,
                 callout: None,
-            },
+            }),
             scroll,
         };
     }
@@ -81,11 +110,11 @@ pub(crate) fn view<'a>(
             NotesState::Offline
         };
     ModalView {
-        phase: modal.phase,
+        phase: Phase::Opened,
         installed: RUNNING,
         latest,
         writable: modal.writable,
-        body: Stream {
+        body: Body::Notes(Stream {
             releases: &state.releases,
             installed: RUNNING,
             latest,
@@ -95,17 +124,20 @@ pub(crate) fn view<'a>(
                 install_dir: &modal.install_text,
                 chip: &modal.chip,
             }),
-        },
+        }),
         scroll,
     }
 }
 
 impl App {
-    /// The card for the current state: the notes while an update is
-    /// offered (a skipped one stays reachable), the read-only notes of
-    /// this version once upgraded, otherwise a quiet up-to-date notice.
+    /// The card for the current state: the finished install when one
+    /// awaits its restart, the notes while an update is offered (a
+    /// skipped one stays reachable), the read-only notes of this version
+    /// once upgraded, otherwise a quiet up-to-date notice.
     pub(crate) fn open_update(&mut self) {
-        let phase = if self.update_latest.is_some() {
+        let phase = if self.restart_ready.is_some() && self.install.is_some() {
+            Phase::Done
+        } else if self.update_latest.is_some() {
             Phase::Opened
         } else if running_notes(&self.update_state).is_some() {
             Phase::WhatsNew
@@ -131,6 +163,7 @@ impl App {
             phase,
             scroll: 0,
             writable,
+            dir,
             install_text,
             chip,
             render: ModalRender::default(),
@@ -162,17 +195,24 @@ impl App {
         let ctrl = mods == KeyModifiers::CONTROL;
         let scrollable = matches!(phase, Phase::Opened | Phase::WhatsNew);
         match code {
-            KeyCode::Esc => self.close_update(),
-            KeyCode::Char('q') if plain => self.close_update(),
+            KeyCode::Esc => self.escape_update(phase),
+            KeyCode::Char('q') if plain && phase != Phase::Updating => self.escape_update(phase),
             KeyCode::Char('s') if plain && phase == Phase::Opened => self.skip_update(),
-            KeyCode::Enter | KeyCode::Char('u') if plain && phase == Phase::Opened && writable => {}
+            KeyCode::Enter | KeyCode::Char('u') if plain && phase == Phase::Opened && writable => {
+                self.start_install();
+            }
+            KeyCode::Enter | KeyCode::Char('r') if plain && phase == Phase::Failed => {
+                self.start_install();
+            }
             KeyCode::Down | KeyCode::Char('j') if plain && scrollable => self.scroll_update(1),
             KeyCode::Up | KeyCode::Char('k') if plain && scrollable => self.scroll_update(-1),
             KeyCode::PageDown | KeyCode::Char(' ') if plain && scrollable => {
                 self.scroll_update(rows);
             }
             KeyCode::Char('d') if ctrl && scrollable => self.scroll_update(rows),
-            KeyCode::PageUp | KeyCode::Char('u') if ctrl && scrollable => self.scroll_update(-rows),
+            KeyCode::PageUp | KeyCode::Char('u') if ctrl && scrollable => {
+                self.scroll_update(-rows);
+            }
             KeyCode::Home | KeyCode::Char('g') if plain && scrollable => self.scroll_update_to(0),
             KeyCode::End | KeyCode::Char('G') if scrollable => self.scroll_update_to(i32::MAX),
             _ => {}
@@ -207,9 +247,28 @@ impl App {
 
     fn press_update_button(&mut self, button: Button) {
         match button {
+            Button::Update | Button::Retry => self.start_install(),
+            Button::Cancel => self.cancel_install(),
+            Button::Later => {
+                self.keep_restart_ready();
+                self.close_update();
+            }
             Button::Close => self.close_update(),
             Button::Skip => self.skip_update(),
-            Button::Update => {}
+            Button::Restart => {}
+        }
+    }
+
+    /// Esc (or q, outside a run): cancels a run, keeps a finished install
+    /// for its restart, or closes the card.
+    fn escape_update(&mut self, phase: Phase) {
+        match phase {
+            Phase::Updating => self.cancel_install(),
+            Phase::Done => {
+                self.keep_restart_ready();
+                self.close_update();
+            }
+            _ => self.close_update(),
         }
     }
 
@@ -226,8 +285,7 @@ impl App {
         }
     }
 
-    /// Esc / later / close. Closing the read-only card marks this
-    /// version's what's-new as shown.
+    /// Closing the read-only card marks this version's what's-new shown.
     fn close_update(&mut self) {
         let Some(modal) = self.update_modal.take() else {
             return;

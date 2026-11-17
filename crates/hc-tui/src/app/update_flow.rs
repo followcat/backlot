@@ -20,6 +20,15 @@ pub(crate) enum UpdateEvent {
     Notes {
         releases: Option<Vec<CachedRelease>>,
     },
+    /// One installer output line from the run `generation`.
+    Output { generation: u64, line: String },
+    /// The installer finished; `code` is `None` when a signal stopped it.
+    Exited { generation: u64, code: Option<i32> },
+    /// The `--version` check finished: `hc-tui <v>` or nothing.
+    Verified {
+        generation: u64,
+        version: Option<String>,
+    },
 }
 
 /// The client's real fetch; the test build answers offline so no unit
@@ -70,7 +79,13 @@ impl App {
     /// the tag of their newest entry, and a newer newest entry moves
     /// the latest known version. A failure keeps the previous cache.
     pub(super) fn on_update_event(&mut self, event: UpdateEvent) {
-        let UpdateEvent::Notes { releases } = event;
+        match event {
+            UpdateEvent::Notes { releases } => self.on_notes(releases),
+            other => self.on_install_event(other),
+        }
+    }
+
+    fn on_notes(&mut self, releases: Option<Vec<CachedRelease>>) {
         self.update_notes_fetching = false;
         let Some(releases) = releases else {
             self.sched.mark_dirty(Instant::now());

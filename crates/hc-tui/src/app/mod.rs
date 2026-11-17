@@ -27,6 +27,7 @@ mod image_paste;
 mod init;
 pub(crate) mod input;
 mod input_dispatch;
+mod install_flow;
 mod key_leases;
 mod key_routing;
 mod layout_actions;
@@ -59,7 +60,7 @@ mod shared;
 mod shell_state;
 mod synthesize;
 mod tab_status;
-mod update_flow;
+pub(crate) mod update_flow;
 mod update_modal;
 mod view_sync;
 mod waiting;
@@ -142,6 +143,15 @@ pub struct App {
     update_rx: mpsc::Receiver<update_flow::UpdateEvent>,
     /// The open update card, if any.
     update_modal: Option<update_modal::UpdateModal>,
+    /// The installer run in flight or finished, if any.
+    install: Option<install_flow::Install>,
+    /// Source of installer run ids; a stale run's events are ignored.
+    install_generation: u64,
+    /// The installer's side effects — injected by tests.
+    seams: install_flow::Seams,
+    /// The version whose install finished and awaits a restart
+    /// (`esc later`): the badge shows `↻v…` until the restart happens.
+    restart_ready: Option<String>,
     /// The executable whose directory an upgrade installs into; `None`
     /// resolves `current_exe` when the card opens.
     running_exe: Option<std::path::PathBuf>,

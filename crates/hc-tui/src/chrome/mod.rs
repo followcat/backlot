@@ -40,6 +40,7 @@ pub(crate) mod text_editor;
 pub(crate) mod title_text;
 pub mod tokens;
 pub(crate) mod update_modal;
+pub(crate) mod update_status;
 pub mod workspace;
 
 use std::path::PathBuf;

@@ -10,6 +10,7 @@ mod floats_lifecycle;
 mod image_paste;
 mod image_paste_off_loop;
 mod image_paste_upload;
+mod install_card;
 mod layout;
 mod layout_regressions;
 mod m3a;

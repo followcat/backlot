@@ -5,10 +5,11 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
-use super::{ModalRender, ModalView, Phase, render};
+use super::{Body, ModalRender, ModalView, Phase, render};
 use crate::chrome::dialogs::popup;
 use crate::chrome::palette::Palette;
 use crate::chrome::release_notes::{Callout, NotesState, Stream};
+use crate::chrome::update_status::{Status, Step};
 use crate::update_state::CachedRelease;
 
 const OPENED_80: [&str; 22] = [
@@ -83,7 +84,7 @@ fn opened(releases: &[CachedRelease]) -> ModalView<'_> {
         installed: "0.1.11",
         latest: "0.1.13",
         writable: true,
-        body: Stream {
+        body: Body::Notes(Stream {
             releases,
             installed: "0.1.11",
             latest: "0.1.13",
@@ -93,7 +94,7 @@ fn opened(releases: &[CachedRelease]) -> ModalView<'_> {
                 install_dir: "/home/user/.local/bin",
                 chip: "hc-tui --upgrade",
             }),
-        },
+        }),
         scroll: 0,
     }
 }
@@ -201,13 +202,13 @@ fn the_what_s_new_card_has_only_the_header_close_button() {
         installed: "0.1.13",
         latest: "0.1.13",
         writable: true,
-        body: Stream {
+        body: Body::Notes(Stream {
             releases: &releases[..1],
             installed: "0.1.13",
             latest: "0.1.13",
             notes: NotesState::Loaded,
             callout: None,
-        },
+        }),
         scroll: 0,
     };
     let (buf, rendered) = draw(80, 24, &view);
@@ -219,4 +220,178 @@ fn the_what_s_new_card_has_only_the_header_close_button() {
         "{header:?}"
     );
     assert!(card(&buf)[2].contains("what's new in this release"));
+}
+
+const UPDATING_80: [&str; 22] = [
+    "┌──────────────────────────────────────────────────────────────────────────┐",
+    "│ v0.1.13                                                installed v0.1.11 │",
+    "│ updates this client · programs keep running                              │",
+    "│                                                                          │",
+    "│ ◐ running official installer…                                       0:04 │",
+    "│ · check new binary (hc-tui --version)                                    │",
+    "│                                                                          │",
+    "│ OUTPUT                                                                   │",
+    "│ ▏ $ curl -fsSL https://followcat.github.io/hc-tui/install.sh \\           │",
+    "│ ▏   | HC_TUI_VERSION=v0.1.13 HC_TUI_SKIP_CORE=1 \\                        │",
+    "│ ▏     HC_TUI_INSTALL_DIR=/home/user/.local/bin sh                        │",
+    "│ ▏                                                                        │",
+    "│ ▏ waiting for installer output…                                          │",
+    "│                                                                          │",
+    "│ cancelling leaves v0.1.11 in place                                       │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                esc cancel                                │",
+    "└──────────────────────────────────────────────────────────────────────────┘",
+];
+
+const DONE_80: [&str; 22] = [
+    "┌──────────────────────────────────────────────────────────────────────────┐",
+    "│ v0.1.13                                                  v0.1.11 running │",
+    "│ update installed · restart to use v0.1.13                                │",
+    "│                                                                          │",
+    "│ ✓ official installer finished                                       0:06 │",
+    "│ ✓ verified new binary: hc-tui 0.1.13                                     │",
+    "│                                                                          │",
+    "│ OUTPUT                                                                   │",
+    "│ ▏ installed hc-tui 0.1.13 (x86_64-unknown-linux-musl)                    │",
+    "│ ▏   to /home/user/.local/bin/hc-tui                                      │",
+    "│                                                                          │",
+    "│ Restarting re-execs hc-tui in place and reconnects to this session.      │",
+    "│ Your hc core, spaces, and running programs keep running.                 │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                          ↵ restart    esc later                          │",
+    "└──────────────────────────────────────────────────────────────────────────┘",
+];
+
+const FAILED_80: [&str; 22] = [
+    "┌──────────────────────────────────────────────────────────────────────────┐",
+    "│ v0.1.13                                                installed v0.1.11 │",
+    "│ update failed · v0.1.11 is unchanged                                     │",
+    "│                                                                          │",
+    "│ × installer exited with status 1                                    0:03 │",
+    "│                                                                          │",
+    "│ OUTPUT                                                                   │",
+    "│ ▏ curl: (6) Could not resolve host: github.com                           │",
+    "│ ▏ install.sh: download failed — does release v0.1.13 contain             │",
+    "│ ▏   hc-tui-0.1.13-x86_64-unknown-linux-musl.tar.gz?                      │",
+    "│                                                                          │",
+    "│ Upgrade manually from a shell:                                           │",
+    "│   hc-tui --upgrade                                                       │",
+    "│                                                                          │",
+    "│ or: curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh        │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                                                                          │",
+    "│                           ↵ retry    esc close                           │",
+    "└──────────────────────────────────────────────────────────────────────────┘",
+];
+
+/// The installer status bodies, fed the same facts the mockups show.
+fn status_view(phase: Phase, status: Status<'_>) -> ModalView<'_> {
+    ModalView {
+        phase,
+        installed: "0.1.11",
+        latest: "0.1.13",
+        writable: true,
+        body: Body::Status(status),
+        scroll: 0,
+    }
+}
+
+fn echo() -> Vec<String> {
+    crate::update_run::plan(std::path::Path::new("/home/user/.local/bin"), "0.1.13").echo
+}
+
+#[test]
+fn updating_at_80x24_matches_the_mockup_card() {
+    let echo = echo();
+    let status = Status {
+        step: Step::Running,
+        elapsed_secs: 4,
+        spinner: 0,
+        echo: &echo,
+        tail: &[],
+        verified: None,
+        reason: None,
+        installed: "0.1.11",
+        manual: "hc-tui --upgrade",
+    };
+    let (buf, _) = draw(80, 24, &status_view(Phase::Updating, status));
+    assert_eq!(card(&buf), UPDATING_80);
+}
+
+#[test]
+fn done_at_80x24_matches_the_mockup_card() {
+    let tail = [
+        "installed hc-tui 0.1.13 (x86_64-unknown-linux-musl)".to_owned(),
+        "  to /home/user/.local/bin/hc-tui".to_owned(),
+    ];
+    let status = Status {
+        step: Step::Done,
+        elapsed_secs: 6,
+        spinner: 0,
+        echo: &[],
+        tail: &tail,
+        verified: Some("hc-tui 0.1.13"),
+        reason: None,
+        installed: "0.1.11",
+        manual: "hc-tui --upgrade",
+    };
+    let (buf, _) = draw(80, 24, &status_view(Phase::Done, status));
+    assert_eq!(card(&buf), DONE_80);
+}
+
+#[test]
+fn failed_at_80x24_matches_the_mockup_card() {
+    let tail = [
+        "curl: (6) Could not resolve host: github.com".to_owned(),
+        "install.sh: download failed — does release v0.1.13 contain hc-tui-0.1.13-x86_64-unknown-linux-musl.tar.gz?".to_owned(),
+    ];
+    let status = Status {
+        step: Step::Failed,
+        elapsed_secs: 3,
+        spinner: 0,
+        echo: &[],
+        tail: &tail,
+        verified: None,
+        reason: Some("installer exited with status 1"),
+        installed: "0.1.11",
+        manual: "hc-tui --upgrade",
+    };
+    let (buf, _) = draw(80, 24, &status_view(Phase::Failed, status));
+    assert_eq!(card(&buf), FAILED_80);
+}
+
+#[test]
+fn the_status_cards_keep_their_header_and_buttons_at_60x24() {
+    let echo = echo();
+    let status = Status {
+        step: Step::Running,
+        elapsed_secs: 4,
+        spinner: 0,
+        echo: &echo,
+        tail: &[],
+        verified: None,
+        reason: None,
+        installed: "0.1.11",
+        manual: "hc-tui --upgrade",
+    };
+    let (buf, rendered) = draw(60, 24, &status_view(Phase::Updating, status));
+    let rows = card(&buf);
+    assert!(rows[1].contains("installed v0.1.11"), "{:?}", rows[1]);
+    assert!(rows[2].contains("updates this client"), "{:?}", rows[2]);
+    assert!(rows[20].contains("esc cancel"), "{:?}", rows[20]);
+    let kinds: Vec<_> = rendered.buttons.iter().map(|(_, kind)| *kind).collect();
+    assert_eq!(kinds, [super::Button::Cancel]);
 }

@@ -88,10 +88,15 @@ fn fenced_blocks_are_gutter_rows_filled_to_the_width() {
     );
     assert_eq!(
         text_of(&lines[1]),
-        format!("▏ hc-tui --upgrade{}", " ".repeat(6))
+        format!(" ▏ hc-tui --upgrade{}", " ".repeat(5))
     );
-    assert_eq!(lines[1].spans[0].style.bg, Some(p.surface1));
-    assert_eq!(lines[1].spans[0].style.fg, Some(p.accent));
+    let gutter = lines[1]
+        .spans
+        .iter()
+        .find(|span| span.content.as_ref() == "▏")
+        .expect("the gutter is its own run");
+    assert_eq!(gutter.style.bg, Some(p.surface1));
+    assert_eq!(gutter.style.fg, Some(p.accent));
 }
 
 #[test]

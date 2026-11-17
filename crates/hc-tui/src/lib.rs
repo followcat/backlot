@@ -38,6 +38,7 @@ pub mod update_check;
 pub(crate) mod update_install;
 pub(crate) mod update_markdown;
 pub(crate) mod update_notes;
+pub(crate) mod update_run;
 pub mod update_state;
 pub(crate) mod waiting;
 mod word_select;

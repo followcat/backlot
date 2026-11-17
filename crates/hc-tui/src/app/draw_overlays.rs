@@ -271,6 +271,7 @@ pub(super) fn render_overlays_and_cursor(
             &app.update_state,
             app.update_latest.as_deref(),
             app.update_notes_fetching,
+            app.install.as_ref(),
         );
         let rendered = crate::chrome::update_modal::render(buf, &view, &app.shell.palette);
         if let (Some(modal), Some(rendered)) = (app.update_modal.as_mut(), rendered) {

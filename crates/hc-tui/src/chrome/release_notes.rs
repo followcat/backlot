@@ -181,11 +181,12 @@ fn block_lines(block: &Block, p: &Palette, width: usize, out: &mut Vec<Line<'sta
 pub(crate) fn code_rows(code: &str, style: Style, width: usize, p: &Palette) -> Vec<Line<'static>> {
     let box_bg = Style::default().bg(p.surface1);
     let gutter = Style::default().fg(p.accent).bg(p.surface1);
-    let width = width.max(4);
-    wrap_rows(&styled(code, style), width - 2, 2)
+    let width = width.max(6);
+    wrap_rows(&styled(code, style), width - 3, 2)
         .into_iter()
         .map(|row| {
-            let mut cells = styled("▏", gutter);
+            let mut cells = styled(" ", Style::default());
+            cells.extend(styled("▏", gutter));
             cells.extend(styled(" ", box_bg));
             cells.extend(row);
             while cells.len() < width {
