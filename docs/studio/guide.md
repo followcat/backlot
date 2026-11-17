@@ -117,11 +117,53 @@ backlot
 
 With no studio, `backlot` opens on the **opening page**: one line of what it is, then its
 actions. Press `n` — a popup runs `backlot studio new --interactive`, which asks for the
-repository (the directory you launched `backlot` from, when it is a git repository with a
-commit), the studio id (the repository's directory name), the title and the cast. The cast is
-drafted from the agent CLIs installed on the machine, shown to you, and you accept it, edit it
-in `$EDITOR` or refuse it — nothing is written before you accept. The wizard then offers to
-start the stage. When a studio exists, the page is gone and the studio is current.
+repository, the studio id (the repository's directory name), the title and the cast. The cast is
+drafted from the agent CLIs the wizard can find on the machine — not only the `PATH` it
+inherited — shown to you, and you accept it, edit it in `$EDITOR` or refuse it — nothing is
+written before you accept. The wizard then offers to start the stage. When a studio exists, the
+page is gone and the studio is current.
+
+The repository question is a full-screen picker when stdin and stdout are terminals (the plain
+`repository:` line otherwise, so scripted input still works):
+
+```
+ New studio · repository
+ path › ~/AIcontrol/▏                          Tab completes
+
+   ~/AIcontrol
+ ▶ ├   acme-shop                  ● main · 2 h ago
+   ├   backlot                    ● main · 5 min ago
+   ├   backlot-work
+   └ ▸ phone
+
+ ● git repository with a commit — Enter picks it
+ ↑↓ move   → open   ← close/up   Tab complete   Enter pick
+```
+
+- While the input is untouched, a "repositories in use" group leads the tree: up to eight
+  repositories the core's live terminals have as their working directory — usually the one you
+  wanted anyway. It is simply absent when the core cannot be reached.
+- Typing filters live: the tree's root follows the deepest existing directory of what you typed
+  and the rest of the last component filters its children, repositories first. `Tab` completes
+  the longest common prefix and descends when one match is left.
+- `↑`/`↓` (and `PgUp`/`PgDn`, `Home`/`End`) move, `→` expands a directory or enters it, `←`
+  collapses or climbs to the parent, `Enter` on a `●` row picks it. `Esc` returns to the input; a
+  second `Esc` cancels. `Ctrl+C` cancels at once — nothing is written.
+- `●` is a repository with a commit — its branch and last-commit age sit at the right; `○` has no
+  commits and cannot be picked. Hidden directories stay hidden unless the filter starts with `.`;
+  `node_modules`, `target` and `.git` are always skipped.
+
+The draft's runner block comes from a detector that looks past the inherited `PATH`: the login
+shell's `PATH`, then well-known install dirs (`~/.local/bin`, every `~/.nvm/versions/node/*/bin`
+newest first, Volta, bun, cargo, npm-global, deno, mise and asdf shims, Homebrew and
+`/usr/local/bin`). Each runner is listed with its version and where it was found; a binary only
+the fallback reached is marked `needs PATH`, and accepting the cast writes
+`[runner_env.<runner>] PATH = "<binary dir>:<inherited PATH>"` in the state root's `config.toml`
+— the lines are shown before they are written, a missing file is born `0600`, and a PATH you set
+yourself is never rewritten (a warning instead when it still cannot reach the binary).
+
+`backlot runners` prints the same table whenever a role says "not found" — runner, status,
+version, path, needs PATH — read-only, with no core needed.
 
 `hc server start` brings a core up first, because the studio commands need one and do not start
 it themselves. If `backlot` (the TUI) is already open, a core is already running and you can skip
@@ -492,7 +534,10 @@ state directory is private, so do not share or publish it.
 
 `config.toml` holds per-runner environment — profiles, proxy settings — as `[runner_env.<runner>]`
 tables. Values reach the role terminal's environment only; they are never written to the ledger,
-the summary or logs. A malformed file raises `config malformed`.
+the summary or logs. A malformed file raises `config malformed`. The new-studio wizard writes a
+runner's `PATH` here when the cast's binary lives outside the inherited `PATH` (shown before it is
+written, an existing `PATH` never touched); `studio new`'s installed check counts it the way a
+launch would.
 
 `backlot records` reads every studio's ledger and summarizes each actor identity's deliveries —
 the factual record, with no score.

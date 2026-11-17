@@ -131,9 +131,10 @@ backlot stage start
 ```
 
 Or let the client do it: open `backlot` with no studio and you land on the opening page — a film-strip
-title card with `n` for a new studio, `s` to start the stage and `q` to detach. Press `n` and a
-wizard asks for the repository, the studio name and the cast (it drafts one from the agent CLIs
-installed on the machine), then offers to start the stage.
+title card with `n` for a new studio, `s` to start the stage and `q` to detach. Press `n` and a wizard opens a
+repository picker (type to filter, `Tab` completes, `Enter` picks a `●` repository), asks for the studio name
+and the cast — drafted from the agent CLIs it finds on the machine; `backlot runners` prints the same table —
+then offers to start the stage.
 
 ![The opening page of backlot with no studio yet: a film-strip title card and the keys n for a new studio, s to start the stage, q to detach](docs/images/opening.png)
 
