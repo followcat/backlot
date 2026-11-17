@@ -45,7 +45,8 @@ fn codex_finds_its_rollout() {
             &taken,
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         )
@@ -76,7 +77,8 @@ fn codex_prefers_the_oldest_match() {
             &taken,
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         )
@@ -95,7 +97,8 @@ fn codex_prefers_the_oldest_match() {
             &taken,
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         )
@@ -125,7 +128,8 @@ fn codex_skips_day_directories_before_the_role() {
             &BTreeSet::new(),
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         ),
@@ -159,7 +163,8 @@ fn codex_rejects_the_wrong_files() {
             &taken,
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         )
@@ -178,7 +183,8 @@ fn codex_rejects_the_wrong_files() {
             &taken,
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         ),
@@ -195,7 +201,8 @@ fn codex_rejects_the_wrong_files() {
             &BTreeSet::new(),
             &Look {
                 home: &home,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         ),
@@ -212,7 +219,8 @@ fn codex_rejects_the_wrong_files() {
             &BTreeSet::new(),
             &Look {
                 home: &empty,
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         ),
@@ -252,7 +260,8 @@ fn devin_finds_its_entry() {
             &taken,
             &Look {
                 home: Path::new("/h"),
-                role_dir
+                role_dir,
+                pid: None,
             },
             &exec
         )
@@ -283,7 +292,8 @@ fn devin_failures_find_nothing() {
             &BTreeSet::new(),
             &Look {
                 home: Path::new("/h"),
-                role_dir
+                role_dir,
+                pid: None,
             },
             &failing
         ),
@@ -299,7 +309,8 @@ fn devin_failures_find_nothing() {
             &BTreeSet::new(),
             &Look {
                 home: Path::new("/h"),
-                role_dir
+                role_dir,
+                pid: None,
             },
             &garbage
         ),
@@ -343,6 +354,7 @@ fn cursor_finds_its_chat() {
             &Look {
                 home: &home,
                 role_dir: &role_dir,
+                pid: None,
             },
             &no_exec,
         )
@@ -403,6 +415,7 @@ fn cmd_finds_its_transcript() {
             &Look {
                 home: &home,
                 role_dir: &role_dir,
+                pid: None,
             },
             &no_exec,
         )
@@ -426,12 +439,75 @@ fn cmd_finds_its_transcript() {
             &BTreeSet::new(),
             &Look {
                 home: &home,
-                role_dir: &role_dir
+                role_dir: &role_dir,
+                pid: None,
             },
             &no_exec
         )
         .as_deref(),
         Some("sess-9")
+    );
+}
+
+/// A fake `~/.cline/data/sessions/<id>/<id>.json` manifest.
+fn cline_manifest(home: &Path, id: &str, cwd: &str, pid: u32) {
+    let dir = home.join(".cline/data/sessions").join(id);
+    fs::create_dir_all(&dir).unwrap();
+    let v = serde_json::json!({
+        "version": 1, "session_id": id, "source": "cli", "pid": pid,
+        "cwd": cwd, "workspace_root": cwd, "interactive": true,
+    });
+    fs::write(dir.join(format!("{id}.json")), v.to_string()).unwrap();
+}
+
+/// A cline role's manifest lives under the user's HOME (its login
+/// and store are shared, no per-role tree): the session whose cwd is
+/// the role's is the one, and a resumed role's `--id` reads off argv
+/// first. The pid filter needs a real process tree, so the fixture
+/// names no owner pid — the fixture-level `session_at` tests cover
+/// the pid.
+#[test]
+fn cline_finds_its_manifest() {
+    let home = tmp("cline-home");
+    let role_dir = tmp("cline-rd");
+    let mine = "1794894104593_rurer";
+    let other = "1794894104594_other";
+    cline_manifest(&home, mine, CWD, 4242);
+    cline_manifest(&home, other, "/home/user/other-repo", 4243);
+    let look = Look {
+        home: &home,
+        role_dir: &role_dir,
+        pid: None,
+    };
+    assert_eq!(
+        find_session("cline", &[], CWD, 1, &BTreeSet::new(), &look, &no_exec).as_deref(),
+        Some(mine)
+    );
+    // A claimed id is skipped; the other folder's manifest is never
+    // the role's, so nothing is left.
+    assert_eq!(
+        find_session(
+            "cline",
+            &[],
+            CWD,
+            1,
+            &BTreeSet::from([mine.to_string()]),
+            &look,
+            &no_exec
+        ),
+        None
+    );
+    // A resumed role's id sits in its own argv.
+    let argv = vec![
+        "cline".to_string(),
+        "-i".to_string(),
+        "--yolo".to_string(),
+        "--id".to_string(),
+        mine.to_string(),
+    ];
+    assert_eq!(
+        find_session("cline", &argv, CWD, 1, &BTreeSet::new(), &look, &no_exec).as_deref(),
+        Some(mine)
     );
 }
 
@@ -455,7 +531,8 @@ fn chosen_ids_come_off_argv() {
             &taken,
             &Look {
                 home: Path::new("/h"),
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         )
@@ -472,7 +549,8 @@ fn chosen_ids_come_off_argv() {
             &taken,
             &Look {
                 home: Path::new("/h"),
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         ),
@@ -487,7 +565,8 @@ fn chosen_ids_come_off_argv() {
             &BTreeSet::new(),
             &Look {
                 home: Path::new("/h"),
-                role_dir
+                role_dir,
+                pid: None,
             },
             &no_exec
         ),

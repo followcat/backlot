@@ -3,6 +3,10 @@
 //! lands here — the docs test fails before the docs can drift.
 
 #[cfg(test)]
+pub use crate::runners::cline::CLINE_PREP_FAILED;
+#[cfg(test)]
+pub use crate::runners::cline::{EFFORT_NOT_SUPPORTED, MODEL_NOT_SUPPORTED};
+#[cfg(test)]
 pub use crate::runners::cmd::CMD_PREP_FAILED;
 #[cfg(test)]
 pub(crate) use crate::runners::cursor::XDG_CONFIG_HOME_SET;
@@ -45,6 +49,9 @@ pub const ALL: &[&str] = &[
     CURSOR_DIR_OPEN,
     XDG_CONFIG_HOME_SET,
     CMD_PREP_FAILED,
+    CLINE_PREP_FAILED,
+    MODEL_NOT_SUPPORTED,
+    EFFORT_NOT_SUPPORTED,
     OWED,
     OVER_BUDGET,
     crate::ratelimit::RATE_LIMITED,

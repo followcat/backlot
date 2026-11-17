@@ -26,6 +26,7 @@ const PREFERENCE: &[(&str, &str)] = &[
     ("cursor", "auto"),
     ("opencode", "anthropic/claude-sonnet-4-5"),
     ("cmd", "deepseek/deepseek-v4.1-flash"),
+    ("cline", "cline-pass/deepseek-v4.1-flash-1017"),
     ("fake", "m"),
 ];
 

@@ -110,11 +110,14 @@ pub fn runner_version(exec: &Exec, program: &str) -> Option<String> {
 }
 
 /// The places `find_session` may read: the user's home (codex's
-/// `~/.codex/sessions` tree) and `roles/<role>/` in the studio
-/// state directory (cursor's per-role chats).
+/// `~/.codex/sessions` tree, cmd's projects, cline's session store)
+/// and `roles/<role>/` in the studio state directory (cursor's
+/// per-role chats). `pid` is the live terminal's own process, for a
+/// runner whose store names the session's engine pid (cline).
 pub struct Look<'a> {
     pub home: &'a Path,
     pub role_dir: &'a Path,
+    pub pid: Option<u32>,
 }
 
 /// The session id a live role's runner assigned, if it can be found:
@@ -156,6 +159,21 @@ pub fn find_session(
                     cwd,
                     started_ms,
                     taken,
+                )
+            }),
+        // cline's id is the manifest's under the user's shared
+        // `~/.cline/data/sessions` (no per-role tree); a resume's id
+        // sits in the terminal's own argv.
+        "cline" => runners::session_in_argv(runner, argv)
+            .filter(|id| !taken.contains(id))
+            .or_else(|| {
+                runners::cline::session_at(
+                    &runners::cline::sessions_root(home),
+                    cwd,
+                    started_ms,
+                    taken,
+                    look.pid,
+                    &runners::cline::parent_pid,
                 )
             }),
         _ => None,
