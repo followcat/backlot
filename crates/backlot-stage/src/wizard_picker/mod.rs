@@ -12,7 +12,7 @@
 //! - `fs`/`term` — the live seams and the crossterm loop.
 
 mod filter;
-mod fs;
+pub(crate) mod fs;
 pub(crate) mod in_use;
 mod render;
 mod state;

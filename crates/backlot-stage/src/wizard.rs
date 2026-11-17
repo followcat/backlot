@@ -79,12 +79,21 @@ pub(crate) fn in_use(env: &Env, common: &Common) -> Vec<PathBuf> {
         )
         .await
         .ok()?;
-        link.client
+        let list = link
+            .client
             .terminal_list(hc_proto::terminal::ListParams::default())
             .await
-            .ok()
+            .ok()?;
+        // The state base exactly as the stage resolves it: the
+        // environment when set, else this core's directory, made real
+        // so a terminal's cwd compares against the same path.
+        let base = match env.get("BACKLOT_STATE_DIR") {
+            Some(dir) => PathBuf::from(dir),
+            None => crate::store::base_dir(&env.vars, &link.core_id),
+        };
+        Some((list, crate::daemon::resolved_base(base)))
     };
-    let Some(list) = rt.block_on(fetch) else {
+    let Some((list, state_dir)) = rt.block_on(fetch) else {
         return Vec::new();
     };
     crate::wizard_picker::in_use::collect(
@@ -92,7 +101,9 @@ pub(crate) fn in_use(env: &Env, common: &Common) -> Vec<PathBuf> {
             .into_iter()
             .map(|t| PathBuf::from(t.cwd))
             .collect(),
+        &state_dir,
         &|p| p.join(".git").exists(),
+        &crate::wizard_picker::fs::branch,
     )
 }
 
