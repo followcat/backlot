@@ -106,8 +106,11 @@ does not depend on either.
 `stage run`'s polling fallback is unit-tested only — the scratch core always offers
 `events.subscribe`.
 
-The panel reads the stage's document through the local watcher's `local_documents` — remote
-machines never carry it, so a studio running on a remote core shows nothing in the panel.
+The client reads every machine's `backlot` document through the watcher's `documents`, so a
+studio whose stage runs on a machine added with `hc machine add` shows in the panel and in
+Hollywood's frames, and its actions run on that machine through `terminal.run on:`. That path has
+run against a second core on the same host (`hc machine add --via`, fake runner, real key
+presses in kitty), not against a real remote host.
 
 A remote studio needs `backlot` installed on the core's host: `stage start` runs that host's own
 binary from its `PATH`, with `--session` alone, because the stage terminal lives there. A missing
