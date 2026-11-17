@@ -114,6 +114,28 @@ async fn a_resize_moves_the_panel_between_beside_and_fullscreen() {
 }
 
 #[tokio::test]
+async fn the_collapsed_hollywood_strip_clears_the_panel_title() {
+    let mut app = app_with_live_pane();
+    app.area = (160, 40);
+    app.hollywood.mode = crate::hollywood::LayerMode::Collapsed;
+    open_panel(&mut app);
+    let drawn = draw_to(&mut app, 160, 40);
+    // The strip's rect ends where the panel's column begins — it may
+    // not share a cell with the panel's title row.
+    let strip = app.hollywood_hits.area;
+    let title = app.panel_hits.title;
+    assert!(
+        strip.is_empty() || strip.x + strip.width <= title.x,
+        "strip {strip:?} overlaps the panel title {title:?}"
+    );
+    // And the panel's title row reads its own text, not the strip's.
+    let top = columns_text(&drawn, title.x, title.x + title.width);
+    let first = top.lines().next().unwrap_or_default().to_string();
+    assert!(first.contains("studios"), "{first}");
+    assert!(!first.contains("hollywood"), "{first}");
+}
+
+#[tokio::test]
 async fn the_collapsed_strip_draws_without_touching_the_panes() {
     let mut app = app_with_live_pane();
     app.area = (120, 24);

@@ -121,9 +121,27 @@ pub(super) fn render_overlays_and_cursor(
         overlay_painted = true;
         let machines = app.panel_summaries();
         let local = app.view.core.as_ref().map(|core| core.name.clone());
+        // The collapsed strip anchors the frame's top-right — the same
+        // corner a beside/full-screen panel's title row owns. Hand it
+        // only the columns left of the panel; a full-screen panel
+        // leaves it none. The expanded band keeps the whole frame —
+        // floating over the panel is its job.
+        let hollywood_area = if app.hollywood.expanded() {
+            area
+        } else {
+            let panel_cols = if app.panel_fullscreen() {
+                area.width
+            } else {
+                app.panel_width()
+            };
+            Rect {
+                width: area.width.saturating_sub(panel_cols),
+                ..area
+            }
+        };
         crate::hollywood::render(
             buf,
-            area,
+            hollywood_area,
             &machines,
             local.as_deref(),
             crate::panel::stage_running(&app.view, None),
