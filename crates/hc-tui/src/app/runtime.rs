@@ -191,6 +191,7 @@ impl App {
         let mut seen_open = true;
         let mut waiting_open = true;
         let mut pane_open = true;
+        let mut image_read_done_open = true;
         let mut need_pane_sync = true;
         while !self.quitting {
             let wake = self.wake_deadline();
@@ -270,13 +271,26 @@ impl App {
                     }
                     None => pane_open = false,
                 },
+                done = self.image_read_done_rx.recv(), if image_read_done_open => match done {
+                    Some(first) => {
+                        self.on_image_read_done(first);
+                        while let Ok(done) = self.image_read_done_rx.try_recv() {
+                            self.on_image_read_done(done);
+                        }
+                        dirty = true;
+                        kind = WakeKind::Input;
+                    }
+                    None => image_read_done_open = false,
+                },
                 _ = async {
                     match wake {
                         Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
                         None => std::future::pending::<()>().await,
                     }
                 }, if wake.is_some() => {
-                    dirty |= self.pane_retry(Instant::now());
+                    let now = Instant::now();
+                    dirty |= self.pane_retry(now);
+                    dirty |= self.expire_image_read(now);
                     kind = WakeKind::Deadline;
                 }
             }

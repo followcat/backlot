@@ -157,5 +157,8 @@ impl Drop for App {
         if let Some(task) = self.reap_task.take() {
             task.abort();
         }
+        if let Some(task) = self.image_read_task.take() {
+            task.abort();
+        }
     }
 }

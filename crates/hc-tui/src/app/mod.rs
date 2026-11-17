@@ -261,9 +261,29 @@ pub struct App {
     /// Kitty releases of presses the image bridge consumed: the release
     /// arm consults this before the popup's unconditional release leg.
     image_paste_suppress: std::collections::HashSet<hc_vt::Key>,
-    /// The clipboard-image read — a boxed field so tests never touch a
+    /// The clipboard-image read — a shared field so tests never touch a
     /// real clipboard and can close over stub-tool environments.
-    image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
+    image_paste_reader: image_paste::ImageReader,
+    /// The dropped-file image read — the same seam for the file-drop path.
+    image_drop_reader: image_paste::DropReader,
+    /// One image read in flight, holding the gesture that started it
+    /// and the terminal input that arrived since — see `image_paste`.
+    image_read: Option<image_paste::ImageRead>,
+    /// Matches a worker result to `image_read` — a late result after the
+    /// hold expired lands dead.
+    image_read_seq: u64,
+    /// The `spawn_blocking` join for `image_read` — aborted on drop.
+    image_read_task: Option<tokio::task::JoinHandle<()>>,
+    /// Worker results land on this channel; the select arm dispatches them.
+    image_read_done_tx: mpsc::Sender<image_paste::ImageReadDone>,
+    image_read_done_rx: mpsc::Receiver<image_paste::ImageReadDone>,
+    /// How long terminal-directed input waits behind one image read —
+    /// above the reader's own probe timeouts, so a never-returning
+    /// worker still resolves the gesture as a miss.
+    image_read_hold: std::time::Duration,
+    /// `true` while the held trigger is being replayed through `on_input`
+    /// after a miss — the replay must not start another read.
+    image_read_replay: bool,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
     /// The host reports every key as an escape code — the reference's

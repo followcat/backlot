@@ -14,6 +14,7 @@ impl App {
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
         let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
         let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
+        let (image_read_done_tx, image_read_done_rx) = mpsc::channel(8);
         let view = View::default();
         let projection = crate::project::project(&view, None);
         // Saved per-endpoint chrome choices win over config; each
@@ -146,7 +147,15 @@ impl App {
             image_paste_suppress: Default::default(),
             popup_key_suppress: Default::default(),
             floats: Default::default(),
-            image_paste_reader: Box::new(crate::clipboard::read_clipboard_image),
+            image_paste_reader: Arc::new(crate::clipboard::read_clipboard_image),
+            image_drop_reader: Arc::new(crate::clipdrop::read_image_file),
+            image_read: None,
+            image_read_seq: 0,
+            image_read_task: None,
+            image_read_done_tx,
+            image_read_done_rx,
+            image_read_hold: std::time::Duration::from_secs(3),
+            image_read_replay: false,
             hit_map: ShellHitMap::default(),
             host_reports_all_keys: false,
             host_reports_key_releases: false,
