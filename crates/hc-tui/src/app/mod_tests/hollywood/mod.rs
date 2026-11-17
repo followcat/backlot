@@ -4,6 +4,7 @@
 //! `actions`, mouse in `mouse`. Neutral fixtures only (`acme-shop`,
 //! `beta-tools`, `alice`, `host-a`).
 mod actions;
+mod cursor;
 mod entry;
 mod keys;
 mod mouse;
