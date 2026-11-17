@@ -80,32 +80,59 @@ pub const INSTALL_COMMAND: &str = "curl -fsSL https://followcat.github.io/hc-tui
 
 /// `hc-tui --upgrade`: a user-invoked network action, not a background
 /// call — the official installer runs with stdio inherited so its
-/// progress shows, and the exit code propagates.
+/// progress shows, and the exit code propagates. A package-managed
+/// install or dev build is refused before anything runs (issue #44);
+/// an explicit `HC_TUI_INSTALL_DIR` is the user's own choice.
 pub fn upgrade() -> std::process::ExitCode {
-    use std::process::ExitCode;
+    let configured = std::env::var_os("HC_TUI_INSTALL_DIR");
+    let source = crate::install_source::current(|key| std::env::var_os(key));
+    let dir = crate::update_install::upgrade_install_dir(configured.as_deref(), None);
+    let code = upgrade_with(&source, configured.as_deref(), dir, &run_installer);
+    if code == 0 {
+        println!("restart hc-tui to use the new version");
+    }
+    std::process::ExitCode::from(code)
+}
+
+/// The `--upgrade` decision, with the installer injected so tests never
+/// spawn it. An explicit non-empty `HC_TUI_INSTALL_DIR` runs as asked; a
+/// managed or dev-build binary refuses with its own command; a direct
+/// install upgrades `direct_dir`, the running binary's directory.
+pub fn upgrade_with(
+    source: &crate::install_source::InstallSource,
+    configured_dir: Option<&std::ffi::OsStr>,
+    direct_dir: Option<PathBuf>,
+    run: &dyn Fn(Option<PathBuf>) -> u8,
+) -> u8 {
+    if configured_dir.is_some_and(|dir| !dir.is_empty()) {
+        return run(None);
+    }
+    if let Some(refusal) = source.refusal() {
+        eprintln!("{refusal}");
+        return 1;
+    }
+    run(direct_dir)
+}
+
+/// Run the official installer with stdio inherited, optionally into
+/// `dir` (`HC_TUI_INSTALL_DIR`); its exit code propagates.
+fn run_installer(dir: Option<PathBuf>) -> u8 {
     let mut command = std::process::Command::new("sh");
     command
         .args(["-c", INSTALL_COMMAND])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit());
-    if let Some(dir) = crate::update_install::upgrade_install_dir(
-        std::env::var_os("HC_TUI_INSTALL_DIR").as_deref(),
-        None,
-    ) {
+    if let Some(dir) = dir {
         command.env("HC_TUI_INSTALL_DIR", dir);
     }
     match command.status() {
-        Ok(status) if status.success() => {
-            println!("restart hc-tui to use the new version");
-            ExitCode::SUCCESS
-        }
-        Ok(status) => status.code().map_or(ExitCode::FAILURE, |code| {
-            ExitCode::from(u8::try_from(code).unwrap_or(1))
-        }),
+        Ok(status) => status
+            .code()
+            .map_or(1, |code| u8::try_from(code).unwrap_or(1)),
         Err(e) => {
             eprintln!("error: upgrade: {e}");
-            ExitCode::FAILURE
+            1
         }
     }
 }
@@ -128,7 +155,8 @@ Options:
   -V, --version          Print the version
       --upgrade          Run the official installer into this binary's
                          directory (HC_TUI_INSTALL_DIR overrides) to upgrade
-                         to the latest release, then restart hc-tui
+                         to the latest release, then restart hc-tui; a
+                         package-managed or dev build is refused instead
 
 Default keys: Ctrl+B prefix — q detach · w workspace navigation ·
 b sidebar · ? keybinds · Ctrl+B Ctrl+B literal ^B.
@@ -279,6 +307,11 @@ pub async fn run(endpoint: &Endpoint, env: &Env) -> Result<Option<PathBuf>, Stri
         out.write_all(bytes).and_then(|()| out.flush())?;
         input_control.written(bytes);
         Ok(())
+    }));
+    // The install channel gates in-place upgrades: a package-managed
+    // or dev-build binary never gets `↵ update` (issue #44).
+    app.set_install_source(crate::install_source::current(|key| {
+        env.get(std::ffi::OsStr::new(key)).map(OsString::from)
     }));
     // Terminal setup has succeeded — a run with no terminal already
     // failed above and starts nothing. Kick the one-shot local core

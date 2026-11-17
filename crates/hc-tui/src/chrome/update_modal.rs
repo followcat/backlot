@@ -333,3 +333,7 @@ fn draw_actions(
 #[cfg(test)]
 #[path = "update_modal_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "update_modal_source_tests.rs"]
+mod source_tests;

@@ -7,16 +7,21 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// The running binary's canonical path: symlinks resolve, and a binary
+/// replaced while running (`" (deleted)"`) falls back to its named path.
+pub(crate) fn canonical_exe(exe: &Path) -> PathBuf {
+    std::fs::canonicalize(exe).unwrap_or_else(|_| {
+        let text = exe.to_string_lossy();
+        PathBuf::from(text.strip_suffix(" (deleted)").unwrap_or(&text))
+    })
+}
+
 /// The directory the running `hc-tui` lives in — the one the installer
 /// must write, so the binary that is running is the one replaced.
 /// Symlinks resolve; on Linux a binary replaced while running shows a
 /// `" (deleted)"` suffix, which the fallback strips.
 pub(crate) fn install_dir_for(exe: &Path) -> Option<PathBuf> {
-    let canonical = std::fs::canonicalize(exe).unwrap_or_else(|_| {
-        let text = exe.to_string_lossy();
-        PathBuf::from(text.strip_suffix(" (deleted)").unwrap_or(&text))
-    });
-    canonical.parent().map(Path::to_path_buf)
+    canonical_exe(exe).parent().map(Path::to_path_buf)
 }
 
 /// The directory of the running binary, or `None` when it is unknown.

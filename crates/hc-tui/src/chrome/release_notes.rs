@@ -25,9 +25,13 @@ pub(crate) enum NotesState {
 pub(crate) struct Callout<'a> {
     pub writable: bool,
     pub install_dir: &'a str,
-    /// The manual command shown as the chip (`hc-tui --upgrade`, or
-    /// the `HC_TUI_INSTALL_DIR=… hc-tui --upgrade` form).
+    /// The manual command shown as the chip (`hc-tui --upgrade`, the
+    /// `HC_TUI_INSTALL_DIR=… hc-tui --upgrade` form, or the channel's
+    /// own command on a managed install).
     pub chip: &'a str,
+    /// The managed-install line that replaces the writable/read-only
+    /// copy while a package manager owns the binary.
+    pub managed: Option<&'a str>,
 }
 
 /// Everything the notes body is built from.
@@ -102,8 +106,29 @@ pub(crate) fn stream_lines(stream: &Stream<'_>, width: u16, p: &Palette) -> Vec<
     out
 }
 
+/// A package manager or dev build owns the binary: its channel line,
+/// then the command to run when it has one.
+fn managed_callout(phrase: &str, chip: &str, p: &Palette) -> Vec<Line<'static>> {
+    let copy = Style::default().fg(p.text).add_modifier(Modifier::BOLD);
+    let mut out = vec![line(&[
+        (" ".into(), text(p)),
+        ("●".into(), warn_bold(p)),
+        (format!(" {phrase}"), copy),
+    ])];
+    if !chip.is_empty() {
+        out.push(line(&[
+            (" run: ".into(), text(p)),
+            (chip.into(), chip_style(p)),
+        ]));
+    }
+    out
+}
+
 /// The two-line install callout plus its trailing blank row.
 fn callout_lines(callout: &Callout<'_>, p: &Palette) -> Vec<Line<'static>> {
+    if let Some(phrase) = callout.managed {
+        return managed_callout(phrase, callout.chip, p);
+    }
     let copy = Style::default().fg(p.text).add_modifier(Modifier::BOLD);
     let chip = chip_style(p);
     if callout.writable {

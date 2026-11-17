@@ -63,7 +63,7 @@ const OPENED_60: [&str; 22] = [
 ];
 
 /// The mockup's release notes: 0.1.13 with its two sections, then 0.1.12.
-fn releases() -> Vec<CachedRelease> {
+pub(super) fn releases() -> Vec<CachedRelease> {
     vec![
         CachedRelease {
             version: "0.1.13".into(),
@@ -93,6 +93,7 @@ fn opened(releases: &[CachedRelease]) -> ModalView<'_> {
                 writable: true,
                 install_dir: "/home/user/.local/bin",
                 chip: "hc-tui --upgrade",
+                managed: None,
             }),
         }),
         scroll: 0,
@@ -105,7 +106,7 @@ fn outer_of(buf: &Buffer) -> Rect {
 }
 
 /// The card's rows as the terminal shows them.
-fn card(buf: &Buffer) -> Vec<String> {
+pub(super) fn card(buf: &Buffer) -> Vec<String> {
     let outer = outer_of(buf);
     (outer.y..outer.bottom())
         .map(|y| {
@@ -116,7 +117,7 @@ fn card(buf: &Buffer) -> Vec<String> {
         .collect()
 }
 
-fn draw(width: u16, height: u16, view: &ModalView<'_>) -> (Buffer, ModalRender) {
+pub(super) fn draw(width: u16, height: u16, view: &ModalView<'_>) -> (Buffer, ModalRender) {
     let mut buf = Buffer::empty(Rect::new(0, 0, width, height));
     let rendered = render(&mut buf, view, &Palette::catppuccin()).expect("the card fits");
     (buf, rendered)

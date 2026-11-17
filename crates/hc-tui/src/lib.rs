@@ -23,6 +23,7 @@ pub mod preferences;
 pub mod project;
 pub mod restart;
 
+pub(crate) mod install_source;
 pub mod raw_events;
 pub mod raw_frames;
 pub mod raw_input;

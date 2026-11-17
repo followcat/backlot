@@ -34,9 +34,13 @@ pub(crate) struct UpdateModal {
     pub dir: Option<PathBuf>,
     /// The install directory as the callout names it.
     pub install_text: String,
-    /// The manual command for a read-only directory (or the plain
-    /// `hc-tui --upgrade` when writable).
+    /// The manual command for a read-only directory (the plain
+    /// `hc-tui --upgrade` when writable, the channel's own command
+    /// when managed).
     pub chip: String,
+    /// The managed-install callout line (`managed by mise: update it
+    /// there`); `Some` means this binary is not upgraded in place.
+    pub managed: Option<String>,
     /// The last frame's hit map and scroll bounds.
     pub render: ModalRender,
 }
@@ -123,6 +127,7 @@ pub(crate) fn view<'a>(
                 writable: modal.writable,
                 install_dir: &modal.install_text,
                 chip: &modal.chip,
+                managed: modal.managed.as_deref(),
             }),
         }),
         scroll,
@@ -130,6 +135,12 @@ pub(crate) fn view<'a>(
 }
 
 impl App {
+    /// Set how the running binary was installed: package-managed
+    /// installs and dev builds get no in-place upgrade (issue #44).
+    pub(crate) fn set_install_source(&mut self, source: crate::install_source::InstallSource) {
+        self.install_source = source;
+    }
+
     /// The card for the current state: the finished install when one
     /// awaits its restart, the notes while an update is offered (a
     /// skipped one stays reachable), the read-only notes of this version
@@ -153,10 +164,12 @@ impl App {
     fn open_card(&mut self, phase: Phase) {
         let exe = self.running_exe.clone();
         let dir = running_install_dir(exe.as_deref());
-        let writable = dir.as_deref().is_some_and(dir_writable);
+        let managed = self.install_source.card_phrase();
+        let writable = managed.is_none() && dir.as_deref().is_some_and(dir_writable);
         let home = std::env::var_os("HOME");
-        let chip = match dir.as_deref() {
-            Some(dir) if !writable => {
+        let chip = match (&managed, dir.as_deref()) {
+            (Some(_), _) => self.install_source.card_chip().unwrap_or_default(),
+            (None, Some(dir)) if !writable => {
                 manual_command(dir, default_install_dir(home.as_deref()).as_deref())
             }
             _ => "hc-tui --upgrade".to_owned(),
@@ -172,6 +185,7 @@ impl App {
             dir,
             install_text,
             chip,
+            managed,
             render: ModalRender::default(),
         });
         if phase == Phase::Opened {

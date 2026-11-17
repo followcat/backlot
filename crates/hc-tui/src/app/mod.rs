@@ -158,6 +158,9 @@ pub struct App {
     /// The executable whose directory an upgrade installs into; `None`
     /// resolves `current_exe` when the card opens.
     running_exe: Option<std::path::PathBuf>,
+    /// How the running binary was installed: package-managed installs
+    /// and dev builds refuse in-place upgrades (issue #44).
+    install_source: crate::install_source::InstallSource,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,

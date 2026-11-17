@@ -81,6 +81,7 @@ impl App {
             restart_ready: None,
             restart: None,
             running_exe: None,
+            install_source: crate::install_source::InstallSource::Direct,
             background_failure: None,
             next_tab_status: None,
             last_window_title: None,
