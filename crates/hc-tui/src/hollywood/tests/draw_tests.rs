@@ -719,7 +719,7 @@ fn the_new_studio_frame_is_always_last_and_dashed() {
 #[test]
 fn a_remote_studios_frame_titles_its_machine() {
     // Both machines serve `acme-shop`: the frame titles read
-    // `acme-shop · here` and `acme-shop · host-b`, local first.
+    // `acme-shop · Local` and `acme-shop · host-b`, local first.
     let summary = summary();
     let mut list = machines(Some(&summary));
     list.push(remote(&summary));
@@ -729,7 +729,7 @@ fn a_remote_studios_frame_titles_its_machine() {
         &mut buf,
         area,
         &list,
-        Some("here"),
+        Some(crate::project::LOCAL_LABEL),
         true,
         &layer(LayerMode::Expanded),
         LayerOpts {
@@ -739,7 +739,7 @@ fn a_remote_studios_frame_titles_its_machine() {
         &palettes()[0],
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("acme-shop · here"), "{text}");
+    assert!(text.contains("acme-shop · Local"), "{text}");
     assert!(text.contains("acme-shop · host-b"), "{text}");
     // The remote studio is its own frame — a hit keyed by machine.
     let key = crate::studio::StudioKey {
@@ -765,7 +765,7 @@ fn the_narrow_frame_cuts_the_machine_before_the_id() {
         &mut buf,
         area,
         &list,
-        Some("here"),
+        Some(crate::project::LOCAL_LABEL),
         true,
         &layer(LayerMode::Expanded),
         LayerOpts {

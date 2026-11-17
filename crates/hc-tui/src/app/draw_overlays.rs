@@ -85,7 +85,6 @@ pub(super) fn render_overlays_and_cursor(
             area
         };
         let machines = app.panel_summaries();
-        let local = app.view.core.as_ref().map(|core| core.name.clone());
         let hits = crate::panel::render(
             buf,
             rect,
@@ -93,7 +92,7 @@ pub(super) fn render_overlays_and_cursor(
             |machine| crate::panel::stage_running(&app.view, machine),
             &app.panel,
             app.studio.current.as_ref(),
-            local.as_deref(),
+            Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,
             &app.shell.palette,
         );
@@ -120,7 +119,6 @@ pub(super) fn render_overlays_and_cursor(
     {
         overlay_painted = true;
         let machines = app.panel_summaries();
-        let local = app.view.core.as_ref().map(|core| core.name.clone());
         // The collapsed strip anchors the frame's top-right — the same
         // corner a beside/full-screen panel's title row owns. Hand it
         // only the columns left of the panel; a full-screen panel
@@ -143,7 +141,7 @@ pub(super) fn render_overlays_and_cursor(
             buf,
             hollywood_area,
             &machines,
-            local.as_deref(),
+            Some(crate::project::LOCAL_LABEL),
             crate::panel::stage_running(&app.view, None),
             &app.hollywood,
             crate::hollywood::LayerOpts {

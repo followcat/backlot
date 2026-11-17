@@ -79,7 +79,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.projection.snapshot,
             &app.view,
             app.studio.current.as_ref(),
-            app.view.core.as_ref().map(|core| core.name.as_str()),
+            Some(crate::project::LOCAL_LABEL),
             &app.shell,
             app.studio.others_expanded,
             app.focused.as_deref(),

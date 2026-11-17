@@ -384,9 +384,8 @@ fn a_selected_row_is_highlighted() {
 
 #[test]
 fn studios_spanning_machines_name_their_machine() {
-    // Two machines each serve `acme-shop`: with this core named
-    // `here`, the headers read `acme-shop · here` and
-    // `acme-shop · host-b` — local first.
+    // Two machines each serve `acme-shop`: this core reads
+    // `acme-shop · Local` and `acme-shop · host-b` — local first.
     let summary = summary();
     let mut list = machines(Some(&summary));
     list.push(remote(&summary));
@@ -400,12 +399,12 @@ fn studios_spanning_machines_name_their_machine() {
         |_| true,
         &panel,
         None,
-        Some("here"),
+        Some(crate::project::LOCAL_LABEL),
         &keys(),
         &palette(),
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("acme-shop · here"), "{text}");
+    assert!(text.contains("acme-shop · Local"), "{text}");
     assert!(text.contains("acme-shop · host-b"), "{text}");
     // The title's count spans machines too.
     assert!(text.contains("studios 2"), "{text}");
@@ -430,7 +429,7 @@ fn one_machine_keeps_the_bare_id_headers() {
         |_| true,
         &panel,
         None,
-        Some("here"),
+        Some(crate::project::LOCAL_LABEL),
         &keys(),
         &palette(),
     );
