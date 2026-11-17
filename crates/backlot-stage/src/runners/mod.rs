@@ -376,6 +376,8 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod argv_tests;
 #[cfg(test)]
+mod cline_hook_json_tests;
+#[cfg(test)]
 mod cline_hook_tests;
 #[cfg(test)]
 mod cline_prep_tests;

@@ -11,7 +11,7 @@ use super::cline_hook::{MESSAGE, Spec, TARGET_CAP, script};
 
 const WORKTREE: &str = "/home/user/acme-shop/work";
 
-fn tmp(tag: &str) -> PathBuf {
+pub(super) fn tmp(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("bl-cline-hook-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
@@ -19,14 +19,30 @@ fn tmp(tag: &str) -> PathBuf {
 }
 
 fn rules() -> Vec<String> {
-    ["backlot", "git status", "git diff", "cargo test"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
+    [
+        "backlot",
+        "git status",
+        "git diff",
+        "git commit",
+        "cargo test",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// One tool call, encoded by a real JSON encoder — the hook must read
+/// what the agent will actually see on the wire, escapes included.
+pub(super) fn call(name: &str, input: serde_json::Value) -> String {
+    serde_json::json!({"tool_call": {"name": name, "input": input}}).to_string()
+}
+
+pub(super) fn commands_of(cmds: &[&str]) -> String {
+    call("run_commands", serde_json::json!({"commands": cmds}))
 }
 
 /// Run the generated hook on one payload: `(cancel, message, signals)`.
-fn run(dir: &Path, input: &str) -> (bool, String, String) {
+pub(super) fn run(dir: &Path, input: &str) -> (bool, String, String) {
     let signals = dir.join("cline-signals.jsonl");
     let hook = dir.join("PreToolUse.sh");
     fs::write(

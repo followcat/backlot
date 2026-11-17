@@ -284,15 +284,24 @@ mask file for MCP. Both are rewritten at every start and resume.
   `{"cancel":true,"errorMessage":"…"}` refuses the call and ends the agent's turn, `{"cancel":false}`
   lets it run. The script is plain POSIX `sh` — no `jq`, because nothing else here assumes it — and
   default-deny:
+  - the payload's strings are decoded before any check: JSON escapes are unescaped, `\n` and `\r`
+    become a command separator, and `\b`, `\f` and `\uXXXX` refuse the whole call — so an escaped
+    quote, a backtick between escaped quotes or an escaped newline cannot slip a second command past
+    a prefix match;
   - allowed: `run_commands` whose every segment is one of the role's rules — `backlot`; an actor's
     `git add`/`commit`/`status`/`diff`/`log`/`show`; the director's read-only set and `git merge`, never
-    `git branch`; each declared check verbatim. A command is split on `;`, `&&`, `||` and `|`, and every
-    part must match on its own; a `$`, a backtick or a redirection is refused, so nothing reaches past
-    the prefix that matched.
-  - allowed: `read_files` for any path but the secret ones (`.ssh`, `.aws`, `.netrc`, `.git-credentials`,
-    `id_rsa*`, `.env`, `.npmrc`, `credentials*`, the gh config, the stage's own files) and any `..`
-    path; `search_codebase`; `editor` only for a path strictly inside the role's work area, never
-    `.git/` or `.cline/`.
+    `git branch`; each declared check verbatim. A command is split on `;`, `&&`, `||`, `|` and a
+    decoded newline, and every part must match on its own; `$`, a backtick, a redirection, or `(` `)`
+    `{` `}` in a segment refuses it, so nothing reaches past the prefix that matched;
+  - allowed: `read_files` for any path but the secret ones (`.ssh`, `.aws`, `.gnupg`, `.netrc`,
+    `.git-credentials`, `id_rsa*`, `.credentials*`, `.env*`, `.npmrc`, `.pypirc`, the gh and backlot
+    configs, the stage's own files, any `/proc/<pid>/environ`, the agent CLIs' own stores — `.claude/`,
+    `.codex/auth.json`, `.cursor/`, `.config/cursor/`, `.config/devin/`, `.commandcode/` — plus
+    `.docker/config.json`, `.kube/config`, `.config/secrets/` and the shell start-up files `.zshrc`,
+    `.bashrc`, `.profile`, `.zshenv`, `.bash_profile`) and any `..` path; `editor` only for a path
+    strictly inside the role's work area, never `.git/` or `.cline/`;
+  - `search_codebase`'s input shape is unmeasured, so every string in it that looks like a path —
+    absolute, `~`-relative or holding a `/` — goes through the same `..` and secret checks as a read.
   - always refused: `web_search`, `fetch_web_content`, `composio_*`, every `<server>__<tool>` MCP name,
     and every tool the list above does not name (`ask_question`, `skills`, an unknown name).
   A cancel ends the turn exactly as cmd's `esc` deny does: the agent does not retry, and it is told the
