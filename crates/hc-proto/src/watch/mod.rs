@@ -27,9 +27,11 @@
 //!   `terminal.list`. Nothing state-changing is ever replayed.
 
 mod actor;
+mod open;
 mod receipts;
 mod refresh;
 
+pub use open::subscription_opener;
 pub use receipts::ActivityReceipts;
 
 use crate::client::{CallError, Client};
@@ -276,21 +278,7 @@ impl Watcher {
         rpc: OpenRpc,
         params: WatchParams,
     ) -> Watcher {
-        let ssh = ssh_program.map(|s| s.to_os_string());
-        let sub_endpoint = endpoint.clone();
-        let sub: OpenSub = Arc::new(move |subscribe: SubscribeParams| {
-            let endpoint = sub_endpoint.clone();
-            let ssh = ssh.clone();
-            Box::pin(async move {
-                match Subscription::connect(&endpoint, ssh.as_deref(), &subscribe).await {
-                    Ok(subscription) => SubAttempt::Subscribed(Box::new(subscription)),
-                    Err(SubscribeError::Call(CallError::Unsupported { reason, .. })) => {
-                        SubAttempt::Unsupported(reason)
-                    }
-                    Err(e) => SubAttempt::Failed(e),
-                }
-            })
-        });
+        let sub = subscription_opener(endpoint, ssh_program, Arc::default());
         Watcher::with_openers(rpc, sub, params)
     }
 

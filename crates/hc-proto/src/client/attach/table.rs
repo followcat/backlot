@@ -320,6 +320,17 @@ impl Channels {
         self.map.len()
     }
 
+    /// Installed, held and dead slots, counted apart for diagnostics.
+    pub(super) fn census(&self) -> (usize, usize, usize) {
+        self.map
+            .values()
+            .fold((0, 0, 0), |(live, held, dead), slot| match slot {
+                Slot::Live { .. } => (live + 1, held, dead),
+                Slot::Held { .. } => (live, held + 1, dead),
+                Slot::Dead => (live, held, dead + 1),
+            })
+    }
+
     /// Ends every channel with the connection's own end reason — each
     /// attach sees the same failure shape it would on a dedicated wire.
     pub(super) fn fail_all(&mut self, reason: Option<String>) {

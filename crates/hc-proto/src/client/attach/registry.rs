@@ -35,6 +35,22 @@ pub struct AttachConn {
 struct Inner {
     connect: Connect,
     slot: Mutex<Stage>,
+    /// Counts every connection this registry opens.
+    stats: Arc<crate::stats::ConnStats>,
+}
+
+/// What a shared attach connection holds right now: attach calls waiting
+/// for their reply, and the channel table's slots by state.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct AttachGauges {
+    /// `terminal.attach` requests sent and not yet answered.
+    pub calls_in_flight: usize,
+    /// Installed attaches whose frames are routed to them.
+    pub channels_live: usize,
+    /// Channels whose reply arrived and whose attach is still installing.
+    pub channels_held: usize,
+    /// Channels closed by this client, waiting for the core's CLOSE.
+    pub channels_dead: usize,
 }
 
 /// Where the shared connection's transport comes from.
@@ -80,6 +96,16 @@ impl AttachConn {
     /// `ssh_program` overrides the `ssh` name for tests; production
     /// passes `None`.
     pub fn new(endpoint: Endpoint, ssh_program: Option<OsString>) -> AttachConn {
+        AttachConn::with_stats(endpoint, ssh_program, Arc::default())
+    }
+
+    /// Like [`new`](Self::new), with every connection's transport counted
+    /// into `stats`.
+    pub fn with_stats(
+        endpoint: Endpoint,
+        ssh_program: Option<OsString>,
+        stats: Arc<crate::stats::ConnStats>,
+    ) -> AttachConn {
         AttachConn {
             inner: Arc::new(Inner {
                 connect: Connect::Endpoint {
@@ -87,7 +113,21 @@ impl AttachConn {
                     ssh_program,
                 },
                 slot: Mutex::new(Stage::Empty),
+                stats,
             }),
+        }
+    }
+
+    /// The transport counters this connection reports into.
+    pub fn stats(&self) -> Arc<crate::stats::ConnStats> {
+        Arc::clone(&self.inner.stats)
+    }
+
+    /// What the live connection holds right now, for diagnostics.
+    pub fn gauges(&self) -> AttachGauges {
+        match &*lock(&self.inner.slot) {
+            Stage::Live(conn) => conn.gauges(),
+            _ => AttachGauges::default(),
         }
     }
 
@@ -103,6 +143,7 @@ impl AttachConn {
             inner: Arc::new(Inner {
                 connect: Connect::Injected(Arc::new(move || Box::pin(connect()))),
                 slot: Mutex::new(Stage::Empty),
+                stats: Arc::default(),
             }),
         }
     }
@@ -176,7 +217,7 @@ impl AttachConn {
             Connect::Endpoint {
                 endpoint,
                 ssh_program,
-            } => Conn::connect(endpoint, ssh_program.as_deref()).await,
+            } => Conn::connect(endpoint, ssh_program.as_deref(), &self.inner.stats).await,
             Connect::Injected(connector) => {
                 let parts = connector().await?;
                 Conn::negotiate(

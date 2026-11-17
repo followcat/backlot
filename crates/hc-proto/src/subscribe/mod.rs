@@ -80,12 +80,24 @@ impl Subscription {
         ssh_program: Option<&OsStr>,
         params: &SubscribeParams,
     ) -> Result<Subscription, SubscribeError> {
+        Subscription::connect_counted(endpoint, ssh_program, params, &Default::default()).await
+    }
+
+    /// [`connect`](Self::connect) with its transport counted into `stats`.
+    pub async fn connect_counted(
+        endpoint: &Endpoint,
+        ssh_program: Option<&OsStr>,
+        params: &SubscribeParams,
+        stats: &std::sync::Arc<crate::stats::ConnStats>,
+    ) -> Result<Subscription, SubscribeError> {
         let conn = tokio::time::timeout(CONNECT_TIMEOUT, transport::connect(endpoint, ssh_program))
             .await
             .map_err(|_| SubscribeError::Open(crate::client::Error::Timeout("connect")))?
             .map_err(crate::client::Error::Transport)?;
-        let (reader, writer, guard) = conn.split();
-        Subscription::negotiated(reader, writer, Some(guard), params).await
+        let (reader, writer, guard) = conn.counted(stats).split();
+        let subscription = Subscription::negotiated(reader, writer, Some(guard), params).await?;
+        stats.connected();
+        Ok(subscription)
     }
 
     /// Subscribes over an injected byte stream — tests use in-memory wires.

@@ -12,6 +12,7 @@ use super::diag::open_failed;
 use super::error::AttachError;
 use super::mux::{self, Cells};
 use super::pump::{CTRL_QUEUE, DataQueue};
+use super::registry::AttachGauges;
 use super::stream::Stream;
 use super::table::{Channels, Install};
 use super::{Attach, Shared};
@@ -89,6 +90,7 @@ impl Conn {
     pub(super) async fn connect(
         endpoint: &Endpoint,
         ssh_program: Option<&OsStr>,
+        stats: &Arc<crate::stats::ConnStats>,
     ) -> Result<Arc<Conn>, AttachError> {
         let conn = tokio::time::timeout(
             super::super::CONNECT_TIMEOUT,
@@ -97,8 +99,21 @@ impl Conn {
         .await
         .map_err(|_| AttachError::Open(Error::Timeout("connect")))?
         .map_err(Error::Transport)?;
-        let (reader, writer, guard) = conn.split();
-        Conn::negotiate(reader, writer, Some(guard)).await
+        let (reader, writer, guard) = conn.counted(stats).split();
+        let conn = Conn::negotiate(reader, writer, Some(guard)).await?;
+        stats.connected();
+        Ok(conn)
+    }
+
+    /// What this connection holds right now, for diagnostics.
+    pub(super) fn gauges(&self) -> AttachGauges {
+        let (live, held, dead) = lock(&self.channels).census();
+        AttachGauges {
+            calls_in_flight: self.attach_calls.len(),
+            channels_live: live,
+            channels_held: held,
+            channels_dead: dead,
+        }
     }
 
     /// Negotiates `hello` over an injected byte stream — tests use
