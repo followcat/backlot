@@ -71,14 +71,12 @@ impl App {
     }
 
     /// The page paints over the pane area while there is no studio —
-    /// no `backlot` document yet, or a good one with zero studios —
-    /// and while `new_workspace` has forced it up over a live studio.
-    /// `--plain` never shows it; Esc dismisses for the session.
+    /// no `backlot` document yet, or a good one with zero studios.
+    /// `--plain` never shows it; Esc dismisses for the session, and
+    /// `new_workspace` brings it back. It never covers a studio: with
+    /// one, `new_workspace` opens the new-studio wizard instead.
     pub(crate) fn opening_visible(&self) -> bool {
-        !self.plain
-            && self.opening.settled
-            && !self.opening.dismissed
-            && (self.opening.forced || self.studioless())
+        !self.plain && self.opening.settled && !self.opening.dismissed && self.studioless()
     }
 
     /// No studio exists: the document is missing, unreadable or
@@ -96,11 +94,10 @@ impl App {
         }
     }
 
-    /// `new_workspace` outside `--plain`: the page comes back — the
-    /// new-studio flow over an existing studio too.
+    /// `new_workspace` outside `--plain`: the page comes back. With a
+    /// studio the action never lands here — it opens the wizard.
     pub(crate) fn opening_show(&mut self) {
         self.opening.dismissed = false;
-        self.opening.forced = !self.studioless();
     }
 
     // ---------- the one-time animation ----------
@@ -144,7 +141,6 @@ impl App {
     /// page for this client session and finish its one-time run.
     pub fn dismiss_opening(&mut self) {
         self.opening.dismissed = true;
-        self.opening.forced = false;
         self.opening_finish_anim();
     }
 
@@ -185,10 +181,11 @@ impl App {
     }
 
     /// `n`: `backlot studio new --interactive` in a one-shot floating
-    /// terminal — the `type = "popup"` keybind path. When the wizard
-    /// created a studio the publish lifts the mode latch and the page
-    /// goes away on its own.
-    fn opening_new_studio(&mut self) {
+    /// terminal — the `type = "popup"` keybind path, shared by the
+    /// card's `n`, the layer's new-studio frame and `new_workspace`
+    /// over an existing studio. When the wizard created a studio the
+    /// publish lifts the mode latch and the page goes away on its own.
+    pub(super) fn opening_new_studio(&mut self) {
         if self
             .popup_pending
             .as_ref()

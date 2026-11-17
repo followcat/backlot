@@ -39,8 +39,6 @@ pub(crate) const SETTLE_CAP: Duration = Duration::from_secs(2);
 pub(crate) struct Opening {
     /// Esc dismissed the page until `new_workspace` asks for it.
     pub dismissed: bool,
-    /// `new_workspace` asked for the page even over a live studio.
-    pub forced: bool,
     /// The first `backlot` read has landed — or [`SETTLE_CAP`] passed.
     pub settled: bool,
     /// The cap's deadline, armed at the first decision pass and

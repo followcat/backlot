@@ -102,11 +102,17 @@ impl App {
     /// `new_workspace` binding: prompt with the derived label when
     /// `prompt_new_workspace_name` is set, else create directly — matching
     /// the reference's `open_new_workspace_overlay`/direct create.
-    /// Outside `--plain` there are no empty workspaces (U2): the key
-    /// brings the opening page's new-studio flow up instead.
+    /// Outside `--plain` there are no empty workspaces (U2): with no
+    /// studio the key brings the opening page's new-studio flow up;
+    /// with one it opens the new-studio wizard directly, as the page's
+    /// `n` does, and never shows the welcome card over a live studio.
     pub(super) fn new_workspace(&mut self) {
         if !self.plain {
-            self.opening_show();
+            if self.studioless() {
+                self.opening_show();
+            } else {
+                self.opening_new_studio();
+            }
             return;
         }
         let (creation, suggested) = match self.workspace_creation() {

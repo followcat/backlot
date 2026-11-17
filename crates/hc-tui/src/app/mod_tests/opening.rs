@@ -243,26 +243,44 @@ async fn new_workspace_brings_the_page_back() {
 }
 
 #[tokio::test]
-async fn new_workspace_over_a_studio_forces_the_page() {
+async fn new_workspace_over_a_studio_opens_the_wizard() {
     let mut app = no_doc_app();
     publish_summary(&mut app, one_studio());
     assert!(!app.opening_visible());
     app.on_action(crate::input::KeybindAction::NewWorkspace, 80);
-    assert!(app.opening_visible(), "the new-studio flow covers the cast");
+    assert!(
+        !app.opening_visible(),
+        "the card must never come up over a studio"
+    );
+    let pending = app.popup_pending.as_ref().expect("the wizard popup");
+    assert!(!pending.persistent);
+    assert_eq!(
+        pending.width,
+        Some(crate::popup_size::PopupSize::Percent(80)),
+        "the wizard's large popup"
+    );
+}
+
+#[tokio::test]
+async fn new_workspace_without_a_studio_shows_the_card() {
+    let mut app = no_doc_app();
     key(&mut app, hc_vt::Key::Escape);
     assert!(!app.opening_visible());
+    app.on_action(crate::input::KeybindAction::NewWorkspace, 80);
+    assert!(app.opening_visible());
+    assert!(app.popup_pending.is_none(), "the card owns the new flow");
 }
 
 #[tokio::test]
 async fn plain_new_workspace_stays_herdrs() {
     let mut app = no_doc_app();
     app.set_plain(true);
-    // `--plain`: the action is herdr's — no page, and the action
-    // reaches the layout document path (a real workspace create
-    // fails here only for lack of an operations wire).
+    // `--plain`: the action is herdr's — no page, no wizard, and the
+    // action reaches the layout document path (a real workspace
+    // create fails here only for lack of an operations wire).
     app.on_action(crate::input::KeybindAction::NewWorkspace, 80);
     assert!(!app.opening_visible());
-    assert!(!app.opening.forced);
+    assert!(app.popup_pending.is_none(), "no wizard outside studio mode");
 }
 
 // ---------- the keys ----------
