@@ -205,6 +205,7 @@ pub(crate) fn render_shell(
                     .selected_workspace_id
                     .map(|target| target.workspace_id.as_str()),
                 &mut hits,
+                state.update_badge,
             );
         } else {
             super::sidebar_render::render_sidebar(
@@ -300,6 +301,26 @@ impl<'a> UpdateBadge<'a> {
             (Some(version), _) => Self::Restart(version),
             (None, Some(version)) => Self::Update(version),
             (None, None) => Self::None,
+        }
+    }
+}
+
+impl UpdateBadge<'_> {
+    /// The accent of the update dot and the collapsed toggle: accent while
+    /// an update waits, green once an install waits for its restart.
+    pub(crate) fn accent_style(self, palette: &Palette) -> Option<Style> {
+        match self {
+            UpdateBadge::None => None,
+            UpdateBadge::Update(_) => Some(
+                Style::default()
+                    .fg(palette.accent)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            UpdateBadge::Restart(_) => Some(
+                Style::default()
+                    .fg(palette.green)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            ),
         }
     }
 }

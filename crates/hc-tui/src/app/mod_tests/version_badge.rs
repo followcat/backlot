@@ -214,3 +214,59 @@ async fn navigate_mode_says_restart_ready_while_an_install_waits() {
             .any(|row| row.contains("restart ready"))
     );
 }
+
+/// The first cell drawn with `symbol` on the frame: its position and colour.
+fn find_cell(
+    backend: &ratatui::backend::TestBackend,
+    symbol: &str,
+) -> Option<(u16, u16, ratatui::style::Color)> {
+    let buf = backend.buffer();
+    (0..buf.area.height)
+        .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+        .find(|&(x, y)| buf[(x, y)].symbol() == symbol)
+        .map(|(x, y)| (x, y, buf[(x, y)].fg))
+}
+
+#[tokio::test]
+async fn launcher_shows_a_dot_while_an_update_waits() {
+    let mut app = app_with(&["t1"]);
+    app.update_latest = Some(next_patch());
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, color) = find_cell(&backend, "●").expect("the launcher dot is missing");
+    assert_eq!(color, app.shell.palette.accent);
+    assert_eq!(
+        app.hit_map.global_launcher.width, 8,
+        "the launcher widens for the dot"
+    );
+}
+
+#[tokio::test]
+async fn launcher_dot_is_green_while_a_restart_waits() {
+    let mut app = app_with(&["t1"]);
+    app.restart_ready = Some(next_patch());
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, color) = find_cell(&backend, "●").expect("the launcher dot is missing");
+    assert_eq!(color, app.shell.palette.green);
+}
+
+#[tokio::test]
+async fn launcher_has_no_dot_without_an_update() {
+    let mut app = app_with(&["t1"]);
+    let backend = drawn(&mut app, 80, 24);
+    assert!(find_cell(&backend, "●").is_none());
+    assert_eq!(app.hit_map.global_launcher.width, 6);
+}
+
+#[tokio::test]
+async fn collapsed_toggle_takes_the_update_colour() {
+    let mut app = app_with(&["t1"]);
+    app.shell_state.sidebar_collapsed = true;
+    app.update_latest = Some(next_patch());
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, color) = find_cell(&backend, "»").expect("the collapsed toggle is missing");
+    assert_eq!(color, app.shell.palette.accent);
+    app.update_latest = None;
+    let backend = drawn(&mut app, 80, 24);
+    let (_, _, plain) = find_cell(&backend, "»").expect("the collapsed toggle is missing");
+    assert_eq!(plain, app.shell.palette.overlay0);
+}

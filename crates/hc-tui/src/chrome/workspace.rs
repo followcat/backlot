@@ -59,6 +59,7 @@ pub(crate) fn render_collapsed_sidebar(
     config: &super::ClientShellConfig,
     selected_workspace_id: Option<&str>,
     hits: &mut ShellHitMap,
+    update: super::render::UpdateBadge<'_>,
 ) {
     let palette = &config.palette;
     let selection_background = workspace_selection_background(palette);
@@ -193,6 +194,8 @@ pub(crate) fn render_collapsed_sidebar(
         hits.sidebar_toggle.y,
         hits.sidebar_toggle.width,
         "»",
-        Style::default().fg(palette.overlay0),
+        update
+            .accent_style(palette)
+            .unwrap_or(Style::default().fg(palette.overlay0)),
     );
 }

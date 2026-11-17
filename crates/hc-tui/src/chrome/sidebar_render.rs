@@ -233,7 +233,9 @@ pub(crate) fn render_sidebar(
             " new",
             Style::default().fg(palette.overlay0),
         );
-        let launcher_width = 6.min(workspace_area.width);
+        let dot = state.update_badge.accent_style(palette);
+        let launcher_width = if dot.is_some() { 8 } else { 6 };
+        let launcher_width = launcher_width.min(workspace_area.width);
         hits.global_launcher = Rect::new(
             workspace_area.right().saturating_sub(launcher_width),
             footer_y,
@@ -247,6 +249,16 @@ pub(crate) fn render_sidebar(
             "menu",
             Style::default().fg(palette.overlay0),
         );
+        if let Some(style) = dot.filter(|_| workspace_area.width >= 6) {
+            put_text(
+                buffer,
+                workspace_area.right().saturating_sub(6),
+                footer_y,
+                2,
+                "● ",
+                style,
+            );
+        }
     }
 
     super::agents::render_agent_panel(

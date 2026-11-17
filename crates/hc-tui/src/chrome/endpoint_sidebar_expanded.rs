@@ -323,7 +323,9 @@ pub(crate) fn render_expanded(
             &label,
             Style::default().fg(palette.overlay0),
         );
-        let width = 6.min(workspace_area.width);
+        let dot = state.update_badge.accent_style(palette);
+        let width = if dot.is_some() { 8 } else { 6 };
+        let width = width.min(workspace_area.width);
         hits.global_launcher = Rect::new(
             workspace_area.right().saturating_sub(width),
             footer_y,
@@ -337,6 +339,16 @@ pub(crate) fn render_expanded(
             "menu",
             Style::default().fg(palette.overlay0),
         );
+        if let Some(style) = dot.filter(|_| workspace_area.width >= 6) {
+            put_text(
+                buffer,
+                workspace_area.right().saturating_sub(6),
+                footer_y,
+                2,
+                "● ",
+                style,
+            );
+        }
     }
     super::endpoint_agents::render_expanded(
         buffer,
