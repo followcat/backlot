@@ -14,7 +14,7 @@ use ratatui::style::{Color, Modifier, Style};
 
 use super::Target;
 use super::new_frame::draw_new;
-use super::rows::{CastMark, Frame, on_set};
+use super::rows::{Frame, on_set};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::truncate_end;
@@ -320,13 +320,14 @@ fn draw_studio(
         if x + 1 >= label_x {
             break;
         }
+        let mark = crate::studio::glyphs::Person::of(role);
         put_text(
             buf,
             x,
             rect.y + 5,
             1,
-            "◆",
-            on(cast_color(CastMark::of(role), palette), bg),
+            mark.still(),
+            on(mark.color(palette), bg),
         );
         x += 2;
     }
@@ -342,15 +343,5 @@ pub(crate) fn studio_state_color(studio: &StudioSummary, palette: &Palette) -> C
         "live" => palette.green,
         "finished" => palette.teal,
         _ => palette.overlay0,
-    }
-}
-
-/// A cast diamond's colour.
-fn cast_color(mark: CastMark, palette: &Palette) -> Color {
-    match mark {
-        CastMark::Working => palette.green,
-        CastMark::Attention => palette.peach,
-        CastMark::Failed => palette.red,
-        CastMark::Idle => palette.overlay0,
     }
 }

@@ -1,19 +1,20 @@
-//! The layer's mouse hits: strip click expands, expanded-panel rows
-//! act like Enter, card buttons run their action, the input line
-//! opens for editing, the wheel scrolls and a press outside leaves
-//! the panel open for whatever is under it.
+//! The layer's mouse hits: the lot pill opens the bar, expanded-
+//! panel rows act like Enter, card buttons run their action, the
+//! input line opens for editing, the wheel scrolls and a press
+//! outside leaves the panel open for whatever is under it.
 use super::*;
 
 #[tokio::test]
-async fn a_click_on_the_strip_expands_the_layer() {
+async fn a_click_on_the_lot_pill_expands_the_layer() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     draw_to(&mut app, 120, 24);
-    let strip = app.hollywood_hits.area;
+    let pill = app.hit_map.lot_pill;
+    assert!(!pill.is_empty(), "the pill has a hit");
     app.on_mouse(mouse(
         MouseEventKind::Down(MouseButton::Left),
-        strip.x,
-        strip.y,
+        pill.x,
+        pill.y,
     ));
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
 }

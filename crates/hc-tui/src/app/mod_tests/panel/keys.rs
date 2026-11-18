@@ -99,12 +99,17 @@ async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     open_panel(&mut app);
-    // j selects the next row (title → studio), k back.
-    key(&mut app, hc_vt::Key::Char('j'));
+    // Opening selects the first actionable row — the block top, not
+    // the title (A2.2).
     assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
+    // j lands on the first person, k steps back to the block — never
+    // on the title or a divider.
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "producer".into()))
+    );
     key(&mut app, hc_vt::Key::Char('k'));
-    assert_eq!(app.panel.selected, Some(Target::Title));
-    key(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
     key(&mut app, hc_vt::Key::ArrowUp);
     // PageDown leaps a viewport — the hit map comes from a real draw.
@@ -170,7 +175,10 @@ async fn a_full_screen_panel_owns_the_keyboard() {
     app.panel.focused = false;
     assert!(app.panel_focused());
     key(&mut app, hc_vt::Key::Char('j'));
-    assert_eq!(app.panel.selected, Some(Target::Studio("acme-shop".into())));
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Person("acme-shop".into(), "producer".into()))
+    );
     assert_eq!(app.pane.input_backlog().0, 0, "keys leaked to the pane");
 }
 
@@ -244,7 +252,7 @@ async fn a_bad_panel_key_still_toggles_with_y() {
     let path = dir.join("config.toml");
     std::fs::write(&path, "[panel]\nkey = \"nope+\"\n").unwrap();
     let (config, notice) = crate::panel::load(&path);
-    app.set_panel_config(config, notice);
+    app.set_panel_config(config, notice, &path);
     assert!(app.notice.is_some(), "the bad key notices once");
     // The notice names the file, never the bogus value — the screen
     // shows no "nope".

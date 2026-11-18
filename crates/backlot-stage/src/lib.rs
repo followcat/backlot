@@ -150,3 +150,4 @@ mod wizard_tests;
 mod workareas_tests;
 
 pub use cli::{Env, Fail, maybe_run};
+pub use runners::detect;

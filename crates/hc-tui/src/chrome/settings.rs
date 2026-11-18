@@ -13,6 +13,8 @@ pub(crate) enum SettingsSection {
     Sound,
     Toast,
     Integrations,
+    /// Backlot's own tab (S0) — studio mode only.
+    Studio,
 }
 
 impl SettingsSection {
@@ -24,6 +26,16 @@ impl SettingsSection {
         Self::Integrations,
     ];
 
+    /// The tabs this client shows: herdr's five always, `studio`
+    /// appended in studio mode (D6 — plain stays cell-identical).
+    pub(crate) fn visible(studio: bool) -> Vec<Self> {
+        let mut sections = Self::ALL.to_vec();
+        if studio {
+            sections.push(Self::Studio);
+        }
+        sections
+    }
+
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Theme => "theme",
@@ -31,9 +43,35 @@ impl SettingsSection {
             Self::Sound => "sound",
             Self::Toast => "toasts",
             Self::Integrations => "integrations",
+            Self::Studio => "studio",
         }
     }
 }
+
+/// The studio tab's live values — a snapshot the overlay refreshes
+/// after each write.
+#[derive(Debug, Clone)]
+pub(crate) struct StudioView {
+    /// The call sheet's start policy.
+    pub start: crate::panel::CallSheetStart,
+    /// The direct call-sheet key (`alt+y`) bound.
+    pub alt_y: bool,
+    /// `[dock] width` — the expanded dock's columns.
+    pub dock_width: u16,
+    /// `runner · model`, or `None` while `[hollywood]` is unset.
+    pub overseer: Option<String>,
+    /// `not configured · backlot hollywood setup …` — shown while the
+    /// overseer is unset; the row is read-only, Enter does nothing.
+    pub setup: Option<String>,
+}
+
+/// The studio tab's row ids — its four rows are not one choice list,
+/// so the renderer and the key router share these constants.
+pub(crate) const STUDIO_START: usize = 0;
+pub(crate) const STUDIO_ALT_Y: usize = 1;
+pub(crate) const STUDIO_DOCK_WIDTH: usize = 2;
+pub(crate) const STUDIO_OVERSEER: usize = 3;
+pub(crate) const STUDIO_ROWS: usize = 4;
 
 /// The reference `api::schema::IntegrationState`. hc's core publishes no
 /// integration rows; the enum survives so the render port stays verbatim.
@@ -58,6 +96,11 @@ pub(crate) struct IntegrationInfo {
 pub(crate) struct SettingsOverlay {
     pub section: SettingsSection,
     pub selected: usize,
+    /// The tabs the overlay shows — `ALL` plus `studio` in studio
+    /// mode, kept here so plain mode's list is cell-identical.
+    pub sections: Vec<SettingsSection>,
+    /// The studio tab's values — `None` outside studio mode.
+    pub studio: Option<StudioView>,
     pub original_theme_name: String,
     /// The theme list shown: the reference's, or backlot's own.
     pub theme_names: &'static [&'static str],

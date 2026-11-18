@@ -773,3 +773,188 @@ fn strings_are_capped() {
     let bytes = serde_json::to_vec(&s).unwrap().len();
     assert!(bytes < 64 * 1024, "{bytes}");
 }
+
+/// The pill's urgent count reads `attention_user` — the flag mirrors
+/// the `needs the user` marker on `attention` (S9b): a flagged screen,
+/// or any prompt on a non-actor role.
+#[test]
+fn attention_user_marks_the_users_prompts() {
+    let mut base = base_events();
+    base.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    let flag = |role: &str, needs_user: bool| {
+        (
+            "stage",
+            EventKind::AttentionRaised {
+                role: role.into(),
+                reason: crate::event::PERMISSION_PROMPT.into(),
+                detail: String::new(),
+                needs_user,
+            },
+        )
+    };
+    let state = state_with(
+        &base,
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            ("stage", started("writer", "t8", "w")),
+            flag("actor-t1-c1", true),
+            flag("writer", false),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let role = |name: &str| s.studios[0].roles.iter().find(|r| r.role == name).unwrap();
+    assert!(role("actor-t1-c1").attention_user, "flagged prompt");
+    assert!(role("writer").attention_user, "a non-actor's prompt");
+    assert_eq!(
+        s.studios[0]
+            .roles
+            .iter()
+            .filter(|r| r.attention_user)
+            .count(),
+        2
+    );
+
+    // An unflagged prompt on an actor is the director's to answer.
+    let state = state_with(
+        &base,
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            flag("actor-t1-c1", false),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let a = s.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "actor-t1-c1")
+        .unwrap();
+    assert!(!a.attention_user);
+}
+
+/// `ready_to_finish` holds while every task is terminal and
+/// `studio.finished` was never written; a finished studio and one
+/// with live tasks read `false`.
+#[test]
+fn ready_to_finish_waits_on_the_user() {
+    let abandon = (
+        "user",
+        task_state("t1", crate::event::TaskStateChange::Abandoned, "dropped"),
+    );
+    let state = state_with(&base_events(), vec![abandon.clone()]);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert!(s.studios[0].ready_to_finish);
+
+    // A live task is not ready.
+    let state = state_with(&base_events(), vec![]);
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert!(!s.studios[0].ready_to_finish);
+
+    // A finished studio is past ready.
+    let state = state_with(
+        &base_events(),
+        vec![
+            abandon,
+            (
+                "user",
+                EventKind::StudioFinished {
+                    reason: "done".into(),
+                },
+            ),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert!(!s.studios[0].ready_to_finish);
+}
+
+/// A document an older stage wrote — no `attention_user`, no
+/// `ready_to_finish` — parses with defaults; a document a newer stage
+/// wrote parses in an older reader because nothing is denied.
+#[test]
+fn summary_fields_parse_old_and_new() {
+    let old = r#"{
+        "schema": "backlot/1",
+        "updated_ms": 7,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "acme shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "roles": [{
+                "role": "director",
+                "name": "director",
+                "state": "live",
+                "doing": "watching",
+                "since_ms": 3
+            }]
+        }]
+    }"#;
+    let s: Summary = serde_json::from_str(old).unwrap();
+    assert!(!s.studios[0].ready_to_finish);
+    assert!(!s.studios[0].roles[0].attention_user);
+
+    // A newer writer's keys read as values here; an older reader
+    // would simply ignore them.
+    let new = r#"{
+        "schema": "backlot/1",
+        "updated_ms": 7,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "acme shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "ready_to_finish": true,
+            "roles": [{
+                "role": "director",
+                "name": "director",
+                "state": "live",
+                "doing": "watching",
+                "since_ms": 3,
+                "attention_user": true
+            }]
+        }]
+    }"#;
+    let s: Summary = serde_json::from_str(new).unwrap();
+    assert!(s.studios[0].ready_to_finish);
+    assert!(s.studios[0].roles[0].attention_user);
+}

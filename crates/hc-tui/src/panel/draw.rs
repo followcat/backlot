@@ -17,12 +17,13 @@ use super::draw_blocks::{
     draw_inner, draw_person, draw_person_line, draw_stacked, draw_strip, draw_top, frame_style,
 };
 use super::rows::{Row, Target};
-use super::{Mark, Panel, rows};
+use super::{Panel, PanelMode, rows};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
-use crate::chrome::text::truncate_end;
+use crate::chrome::text::{display_width, fit_hints, truncate_end};
 use crate::studio::StudioKey;
+use crate::studio::glyphs::{self, Person};
 
 /// What the mouse needs plus the animation fact: a working mark
 /// reached the frame (the loop arms the ~120 ms tick only then).
@@ -61,6 +62,7 @@ pub(crate) fn render(
     current: Option<&StudioKey>,
     local: Option<&str>,
     keys: &StudioKeys,
+    sheet: Option<String>,
     palette: &Palette,
 ) -> PanelRender {
     // Reset every cell first: `set_style` alone leaves the symbols the
@@ -82,7 +84,8 @@ pub(crate) fn render(
         return hits;
     }
 
-    // `studios <n>` — accent while the panel owns the keys.
+    // `lot · <n>` — accent while the panel owns the keys; the call
+    // sheet's key sits at the row's right end when it fits.
     let title = Rect::new(area.x, area.y, area.width, 1);
     let title_fg = if panel.focused {
         palette.accent
@@ -90,21 +93,47 @@ pub(crate) fn render(
         palette.text
     };
     let studios = studio_count(machines);
+    let title_text = match panel.mode {
+        PanelMode::Collapsed => format!(" lot {studios}"),
+        _ => format!(" lot · {studios}"),
+    };
     put_text(
         buf,
         title.x,
         title.y,
         title.width,
-        &format!(" studios {studios}"),
+        &title_text,
         Style::default().fg(title_fg).add_modifier(Modifier::BOLD),
     );
+    if let Some(sheet) = sheet {
+        let sheet_width = display_width(&sheet) as u16;
+        if sheet_width
+            < title
+                .width
+                .saturating_sub(display_width(&title_text) as u16 + 1)
+        {
+            put_text(
+                buf,
+                title.x + title.width - sheet_width,
+                title.y,
+                sheet_width,
+                &sheet,
+                Style::default().fg(palette.overlay0),
+            );
+        }
+    }
     hits.title = title;
 
     // The last row is the dim shortcuts line — dropped under 8 rows.
     let shortcuts = area.height >= 8;
     if shortcuts {
+        const FOCUSED_TIERS: [&str; 3] = [
+            "↑↓ move  ⏎ open  +/- priority  esc",
+            "↑↓ move  ⏎ open  esc",
+            "esc",
+        ];
         let keys_line = if panel.focused {
-            "↑↓ move  ⏎ open  +/- priority  esc".to_string()
+            fit_hints(&FOCUSED_TIERS, area.width as usize).to_string()
         } else {
             keys.shortcut_label()
         };
@@ -147,6 +176,14 @@ pub(crate) fn render(
 
     let dim = Style::default().fg(palette.overlay0);
     let selected = panel.selected.as_ref();
+    let selected_studio = selected.and_then(|t| t.studio().cloned());
+    let frame_of = |studio: &StudioKey| {
+        frame_style(
+            selected_studio.as_ref() == Some(studio),
+            panel.focused,
+            palette,
+        )
+    };
     let mut y = body.y;
     for row in all.iter().skip(1 + start) {
         let height = row.height();
@@ -156,8 +193,13 @@ pub(crate) fn render(
         let rect = Rect::new(body.x, y, content_width, height);
         let target = row.target();
         // The selection paints the row it names — a block's `Studio`
-        // target shows on its top border only.
-        if selected == Some(&target)
+        // target shows on its top border only — with `selection_bg`,
+        // a bold `text` foreground and the accent `▌` at the row's
+        // left edge (inside the block border on a person's row). An
+        // unfocused panel keeps the remembered row but draws none of
+        // it: no highlight, no `▌`.
+        let paints = panel.focused
+            && selected == Some(&target)
             && matches!(
                 row,
                 Row::BlockTop(_)
@@ -165,9 +207,20 @@ pub(crate) fn render(
                     | Row::PersonLine { .. }
                     | Row::Stacked(_)
                     | Row::Strip(_)
-            )
-        {
-            buf.set_style(rect, Style::default().bg(palette.active_row_bg));
+            );
+        if paints {
+            // A person row's `│` borders keep the border colour on the
+            // panel background: the highlight lives inside them.
+            let inner = if matches!(row, Row::Person { .. } | Row::PersonLine { .. }) {
+                Rect {
+                    x: rect.x + 1,
+                    width: rect.width.saturating_sub(2),
+                    ..rect
+                }
+            } else {
+                rect
+            };
+            buf.set_style(inner, glyphs::selection(palette));
         }
         match row {
             Row::Title => {}
@@ -184,10 +237,19 @@ pub(crate) fn render(
                 put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
             }
             Row::BlockTop(studio) => {
-                draw_top(buf, rect, *studio, &label(*studio), current, palette)
+                let frame = frame_of(&studio.key());
+                draw_top(
+                    buf,
+                    rect,
+                    *studio,
+                    &label(*studio),
+                    current == Some(&studio.key()),
+                    frame,
+                    palette,
+                );
             }
             Row::BlockError(studio) => {
-                draw_inner(buf, rect, frame_style(*studio, current, palette));
+                draw_inner(buf, rect, frame_of(&studio.key()));
                 if let Some(error) = &studio.studio.error {
                     put_text(
                         buf,
@@ -200,7 +262,7 @@ pub(crate) fn render(
                 }
             }
             Row::BlockNext(studio) => {
-                draw_inner(buf, rect, frame_style(*studio, current, palette));
+                draw_inner(buf, rect, frame_of(&studio.key()));
                 if let Some(next) = &studio.studio.next {
                     put_text(
                         buf,
@@ -213,7 +275,7 @@ pub(crate) fn render(
                 }
             }
             Row::Divider(studio) => {
-                let edge = frame_style(*studio, current, palette);
+                let edge = frame_of(&studio.key());
                 put_text(buf, rect.x, rect.y, 1, "├", edge);
                 put_text(
                     buf,
@@ -226,7 +288,7 @@ pub(crate) fn render(
                 put_text(buf, rect.x + rect.width - 1, rect.y, 1, "┤", edge);
             }
             Row::BlockBottom(studio) => {
-                let edge = frame_style(*studio, current, palette);
+                let edge = frame_of(&studio.key());
                 put_text(buf, rect.x, rect.y, 1, "╰", edge);
                 put_text(
                     buf,
@@ -239,11 +301,18 @@ pub(crate) fn render(
                 put_text(buf, rect.x + rect.width - 1, rect.y, 1, "╯", edge);
             }
             Row::Person { studio, role } => {
-                hits.working_drawn |= matches!(Mark::of(role), Mark::Working);
-                draw_person(buf, rect, *studio, role, current, panel.spin, palette);
+                hits.working_drawn |= matches!(Person::of(role), Person::Working);
+                draw_person(
+                    buf,
+                    rect,
+                    role,
+                    frame_of(&studio.key()),
+                    panel.spin,
+                    palette,
+                );
             }
             Row::PersonLine { studio, role, kind } => {
-                draw_person_line(buf, rect, *studio, role, kind, current, palette);
+                draw_person_line(buf, rect, role, kind, frame_of(&studio.key()), palette);
             }
             Row::Stacked(studio) => {
                 draw_stacked(
@@ -269,6 +338,24 @@ pub(crate) fn render(
                     dim,
                 );
             }
+        }
+        if paints {
+            // `▌` over the row's left edge — inside the block border
+            // on a person's row — after the content, so nothing
+            // redraws over it.
+            let bar_x = if matches!(row, Row::Person { .. } | Row::PersonLine { .. }) {
+                rect.x + 1
+            } else {
+                rect.x
+            };
+            put_text(
+                buf,
+                bar_x,
+                rect.y,
+                1,
+                glyphs::SELECTION_BAR,
+                Style::default().bg(palette.selection_bg).fg(palette.accent),
+            );
         }
         hits.rows.push((rect, target));
         y += height;

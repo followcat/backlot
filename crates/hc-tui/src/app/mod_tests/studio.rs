@@ -124,7 +124,7 @@ async fn a_document_with_studios_latches_studio_mode_and_the_cast() {
     app.panel.mode = PanelMode::Expanded;
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("studios 3"), "{text}");
+    assert!(text.contains("lot · 3"), "{text}");
     assert!(text.contains("╭"), "{text}");
     assert!(text.contains("night-owl"), "{text}");
 }
@@ -217,7 +217,7 @@ async fn next_and_previous_role_skip_the_closed_and_wrap() {
 }
 
 #[tokio::test]
-async fn a_role_key_from_outside_the_studio_focuses_the_remembered() {
+async fn a_role_key_from_outside_the_studio_falls_through() {
     let mut app = two_studio_app();
     app.focused = Some("t4".into());
     app.refresh_projection();
@@ -228,9 +228,16 @@ async fn a_role_key_from_outside_the_studio_focuses_the_remembered() {
             .map(String::as_str),
         Some("actor-alice")
     );
-    // Focus a terminal no person owns → still acme's current, but
-    // `inside` is false → the first press lands on alice again.
+    // Focus a terminal no person owns → not a studio workspace, so
+    // the role key falls through to herdr's binding (unbound here:
+    // nothing happens), and acme's remembered role stays put.
     app.focused = Some("t99".into());
+    app.refresh_projection();
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.focused.as_deref(), Some("t99"), "herdr got the key");
+    // Back inside the studio the same key cycles the cast — and the
+    // remembered alice is where a studio hop lands.
+    app.focused = Some("t1".into());
     app.refresh_projection();
     alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t4"));
@@ -356,7 +363,7 @@ async fn an_unbound_studio_key_does_nothing() {
     std::fs::write(&path, "[keys]\nnext_studio = \"\"\n").unwrap();
     let (config, notice) = crate::panel::load(&path);
     assert!(notice.is_none());
-    app.set_panel_config(config, notice);
+    app.set_panel_config(config, notice, &path);
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.studio.current,

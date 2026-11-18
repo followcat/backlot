@@ -32,6 +32,7 @@ mod key_leases;
 mod key_routing;
 mod layout_actions;
 pub(crate) mod layout_mouse;
+mod lot;
 mod mouse;
 mod multipane;
 mod navigation;
@@ -231,6 +232,9 @@ pub struct App {
     panel: crate::panel::Panel,
     /// The `[panel]` config and the resolved toggle chord tail.
     panel_config: crate::panel::PanelConfig,
+    /// Backlot's own `config.toml` — the studio settings tab writes
+    /// it; empty until cli hands it over.
+    panel_config_path: std::path::PathBuf,
     panel_key_combo: Option<crate::config::KeyCombo>,
     /// Last frame's panel hit rectangles (`PanelRender`).
     panel_hits: crate::panel::PanelRender,
@@ -268,10 +272,16 @@ pub struct App {
     hollywood: crate::hollywood::Hollywood,
     /// The resolved toggle binding — `None` without `[hollywood]`, so
     /// Alt+Y reaches the focused program exactly as before.
-    hollywood_key: Option<crate::hollywood::HollywoodKey>,
+    hollywood_key: Option<crate::hollywood::CallSheetKeys>,
     /// Whether a `[hollywood]` table exists — the expanded studio
     /// panel shows the setup hint only without one.
     has_hollywood_cfg: bool,
+    /// `runner · model` for the settings tab's read-only overseer
+    /// row; `None` while `[hollywood]` is unset.
+    hollywood_overseer: Option<String>,
+    /// The first detected runner — fills `<r>` in the overseer row's
+    /// setup hint; `None` leaves the placeholder.
+    setup_runner_hint: Option<String>,
     /// Last frame's layer hit rectangles (`HollywoodRender`).
     hollywood_hits: crate::hollywood::HollywoodRender,
     /// Injectable `backlot …` runner for card actions and the input

@@ -176,11 +176,11 @@ fn the_title_falls_back_to_doing_then_the_state_word() {
     let summary = summary();
     let mut view = cast_view(&summary, vec![], false, None);
     // bob has no title entry → his `doing` when present, else his
-    // state word; the fixture gives him neither, so `blocked`.
+    // state word; the fixture gives him neither, so `dir`.
     view.titles.remove("t5");
     let (buf, ..) = draw(&view, 26, 20);
     let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("blocked"), "{text}");
+    assert!(text.contains("dir"), "{text}");
     // With a `doing` it wins over the state word.
     let mut value = summary_json();
     value["studios"][0]["roles"][2]["doing"] = serde_json::json!("mends tests");

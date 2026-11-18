@@ -15,19 +15,13 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::{ShellHitMap, put_right_text, put_text};
 use crate::chrome::scroll::{list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::{display_width, truncate_end};
-use crate::panel::{Mark, mark_color, mark_symbol};
+use crate::studio::glyphs::Person;
 
-/// A person's second row's state word — the title/doing fallback.
+/// A person's second row's state word — the shared vocabulary's own
+/// word (`working`, `idle`, `slot`, `USER`, `dir`, `stalled`,
+/// `failed`, `lost`, `closed`).
 fn state_word(role: &RoleSummary) -> &'static str {
-    match role.state.as_str() {
-        "closed" => "closed",
-        "lost" => "lost",
-        _ => match Mark::of(role) {
-            Mark::Working => "working",
-            Mark::Blocked => "blocked",
-            _ => "idle",
-        },
-    }
+    Person::of(role).word()
 }
 
 /// The short model form: drop a `<provider>/` prefix and a leading
@@ -199,14 +193,14 @@ fn draw_person(
         );
     }
     let closed = role.state == "closed";
-    let mark = Mark::of(role);
+    let mark = Person::of(role);
     put_text(
         buffer,
         rect.x + 1,
         rect.y,
         1,
-        mark_symbol(mark, view.spin),
-        Style::default().fg(mark_color(mark, palette)),
+        mark.glyph(view.spin),
+        mark.style(palette),
     );
     let text_fg = |main| {
         if closed { palette.overlay0 } else { main }
@@ -339,10 +333,7 @@ fn draw_shell(
         );
     }
     let (symbol, style) = match shell.mark {
-        Some(mark) => (
-            mark_symbol(mark, view.spin),
-            Style::default().fg(mark_color(mark, palette)),
-        ),
+        Some(mark) => (mark.glyph(view.spin), mark.style(palette)),
         None => ("$", Style::default().fg(palette.surface_dim)),
     };
     put_text(buffer, rect.x + 1, rect.y, 1, symbol, style);

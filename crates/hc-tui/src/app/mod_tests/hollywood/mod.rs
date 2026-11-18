@@ -183,7 +183,7 @@ async fn without_the_table_the_bar_still_exists_without_an_agent() {
         "studio mode always has the bar (U7)"
     );
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
-    assert!(text.contains("hollywood"), "{text}");
+    assert!(text.contains('✦'), "the lot pill: {text}");
     // The toggle is the default one without a table.
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
@@ -240,9 +240,9 @@ async fn a_malformed_table_notices_and_leaves_the_no_agent_bar() {
     assert!(app.notice.is_some(), "the bad read notices once");
     assert!(!app.has_hollywood_cfg, "no agent is configured");
     // The bar survives a bad read in its no-agent form, on the
-    // default toggle.
+    // default toggle — collapsed, its face the lot pill.
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
-    assert!(text.contains("hollywood"), "{text}");
+    assert!(text.contains('✦'), "the lot pill: {text}");
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
@@ -264,6 +264,7 @@ async fn the_layer_never_resizes_a_pane_at_any_width() {
                 app.shell_state.sidebar_collapsed,
                 crate::app::pane_geometry::focused_tab_count(&app),
                 app.sidebar_width,
+                app.studio.lot.pill || app.studio.lot.header.is_some(),
             );
             assert_eq!(
                 app.chrome_layout(cols, 24),
@@ -299,17 +300,19 @@ fn app_with_empty_doc() -> App {
 }
 
 #[tokio::test]
-async fn a_client_with_studios_starts_the_bar_expanded() {
+async fn a_client_with_studios_starts_the_bar_collapsed() {
     let mut app = app_with_doc();
     assert_eq!(
         app.hollywood.mode,
-        LayerMode::Expanded,
-        "the bar opens on entry (U7)"
+        LayerMode::Collapsed,
+        "the bar starts collapsed — the pill is its face (S0)"
     );
+    // `alt+y` opens it, as before; Esc collapses it back.
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(text.contains("hollywood"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
-    // Esc collapses it, as before.
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     // And `x` still hides it from the expanded panel.
@@ -348,7 +351,8 @@ async fn the_first_studio_leaves_the_bar_collapsed() {
         "a studio that arrives later does not pull the bar open"
     );
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
-    assert!(text.contains("✦ hollywood"), "{text}");
+    assert!(text.contains('✦'), "the lot pill: {text}");
+    assert!(text.contains('2'), "two studios in the pill: {text}");
 }
 
 // ---------- the toggle ----------
@@ -371,17 +375,23 @@ async fn alt_y_cycles_strip_then_panel_then_strip() {
 }
 
 #[tokio::test]
-async fn the_strip_draws_at_the_top_right_and_expands_on_click() {
+async fn the_lot_pill_sits_at_the_bar_s_right_end_and_opens_on_click() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     let backend = draw_to(&mut app, 120, 24);
     let top = &screen_lines(&backend)[0];
-    assert!(top.contains("✦ hollywood"), "{top}");
-    assert!(top.contains("2 studios"), "{top}");
-    assert!(top.contains("!1"), "the waiting chip: {top}");
-    let strip = app.hollywood_hits.area;
-    assert_eq!(strip.height, 1);
-    assert_eq!(strip.x + strip.width, 120);
+    assert!(top.contains('✦'), "the lot pill: {top}");
+    assert!(top.contains("2 cards"), "the card count: {top}");
+    let pill = app.hit_map.lot_pill;
+    assert_eq!(pill.height, 1);
+    assert_eq!(pill.x + pill.width, 120, "the right end of the row");
+    // A click on it opens the bar, like `alt+y`.
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        pill.x,
+        pill.y,
+    ));
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
 }
 
 #[tokio::test]

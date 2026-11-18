@@ -231,6 +231,158 @@ pub(crate) fn keybind_help_groups(
     groups
 }
 
+/// Backlot's own sections (S0): the dock and call-sheet toggles, the
+/// four studio keys with the herdr action each one shadows on this
+/// config, and the two-line glyph legend. Studio mode only — plain
+/// mode never builds them, so its help stays cell-identical to
+/// herdr's.
+pub(crate) fn backlot_help_groups(
+    keybinds: &Keybinds,
+    prefixes: &[crate::config::KeyCombo],
+    panel: &crate::panel::PanelConfig,
+    sheet: crate::hollywood::CallSheetKeys,
+    panel_tail: Option<crate::config::KeyCombo>,
+) -> Vec<KeybindHelpGroup> {
+    let chord = |tail: Option<crate::config::KeyCombo>| {
+        tail.map(|combo| {
+            format!(
+                "{} {}",
+                crate::config::format_prefix_combos(prefixes),
+                crate::config::format_key_combo(combo)
+            )
+        })
+        .unwrap_or_else(|| "unset".to_owned())
+    };
+    let shadow = |combo: Option<crate::config::KeyCombo>| -> String {
+        combo
+            .and_then(|(code, modifiers)| {
+                crate::input::resolve_direct_binding(
+                    keybinds,
+                    &crate::config::TerminalKey::new(code, modifiers),
+                )
+            })
+            .map(|hit| match hit {
+                crate::input::KeybindMatch::Action(action) => {
+                    format!("  (shadows herdr: {})", action_name(action))
+                }
+                crate::input::KeybindMatch::Command(_) => "  (shadows a custom command)".to_owned(),
+            })
+            .unwrap_or_default()
+    };
+    let studio_key = |combo: Option<crate::config::KeyCombo>| {
+        combo
+            .map(crate::config::format_key_combo)
+            .unwrap_or_else(|| "unset".to_owned())
+    };
+    let groups = vec![
+        (
+            "backlot",
+            vec![
+                entry(chord(panel_tail), "studio dock"),
+                (
+                    sheet.label(&crate::config::format_prefix_combos(prefixes)),
+                    Cow::Borrowed("call sheet") as Cow<'static, str>,
+                ),
+            ],
+        ),
+        (
+            "studio",
+            vec![
+                (
+                    studio_key(panel.keys.previous_studio),
+                    Cow::Owned(format!(
+                        "previous studio{}",
+                        shadow(panel.keys.previous_studio)
+                    )),
+                ),
+                (
+                    studio_key(panel.keys.next_studio),
+                    Cow::Owned(format!("next studio{}", shadow(panel.keys.next_studio))),
+                ),
+                (
+                    studio_key(panel.keys.previous_role),
+                    Cow::Owned(format!("previous role{}", shadow(panel.keys.previous_role))),
+                ),
+                (
+                    studio_key(panel.keys.next_role),
+                    Cow::Owned(format!("next role{}", shadow(panel.keys.next_role))),
+                ),
+            ],
+        ),
+        (
+            "glyph legend",
+            vec![
+                entry(
+                    "people",
+                    "◐ work  ○ idle  ◌ slot  × USER/dir  ! fail  ✓ closed",
+                ),
+                entry("tasks", "· wait  ◐ run   ◈ rev   ✓ pass  = pause  ↑/↓ prio"),
+            ],
+        ),
+    ];
+    groups
+}
+
+/// The config key a resolved herdr action carries — the shadow note's
+/// name for it.
+fn action_name(action: crate::input::KeybindAction) -> &'static str {
+    use crate::input::KeybindAction as A;
+    match action {
+        A::NewWorkspace => "new_workspace",
+        A::NewWorktree => "new_worktree",
+        A::OpenWorktree => "open_worktree",
+        A::RemoveWorktree => "remove_worktree",
+        A::RenameWorkspace => "rename_workspace",
+        A::CloseWorkspace => "close_workspace",
+        A::SwitchWorkspace(_) => "switch_workspace",
+        A::SwitchTab(_) => "switch_tab",
+        A::FocusAgent(_) => "focus_agent",
+        A::WorkspacePicker => "workspace_picker",
+        A::PreviousWorkspace => "previous_workspace",
+        A::NextWorkspace => "next_workspace",
+        A::PreviousAgent => "previous_agent",
+        A::NextAgent => "next_agent",
+        A::NewTab => "new_tab",
+        A::RenameTab => "rename_tab",
+        A::PreviousTab => "previous_tab",
+        A::NextTab => "next_tab",
+        A::MoveTabPrevious => "move_tab_previous",
+        A::MoveTabNext => "move_tab_next",
+        A::CloseTab => "close_tab",
+        A::RenamePane => "rename_pane",
+        A::FocusPaneLeft => "focus_pane_left",
+        A::FocusPaneDown => "focus_pane_down",
+        A::FocusPaneUp => "focus_pane_up",
+        A::FocusPaneRight => "focus_pane_right",
+        A::SwapPaneLeft => "swap_pane_left",
+        A::SwapPaneDown => "swap_pane_down",
+        A::SwapPaneUp => "swap_pane_up",
+        A::SwapPaneRight => "swap_pane_right",
+        A::SplitVertical => "split_vertical",
+        A::SplitHorizontal => "split_horizontal",
+        A::ClosePane => "close_pane",
+        A::EditScrollback => "edit_scrollback",
+        A::ClearPane => "clear_pane",
+        A::CopyMode => "copy_mode",
+        A::Zoom => "zoom",
+        A::EnterResizeMode => "resize_mode",
+        A::ResizePaneLeft => "resize_pane_left",
+        A::ResizePaneDown => "resize_pane_down",
+        A::ResizePaneUp => "resize_pane_up",
+        A::ResizePaneRight => "resize_pane_right",
+        A::ToggleSidebar => "toggle_sidebar",
+        A::CyclePaneNext => "cycle_pane_next",
+        A::CyclePanePrevious => "cycle_pane_previous",
+        A::LastPane => "last_pane",
+        A::Help => "help",
+        A::Settings => "settings",
+        A::ReloadConfig => "reload_config",
+        A::OpenNotificationTarget => "open_notification_target",
+        A::Detach => "detach",
+        A::OpenNavigator => "goto",
+    }
+}
+
 pub(crate) fn filter_keybind_help_groups(
     groups: Vec<KeybindHelpGroup>,
     query: &str,

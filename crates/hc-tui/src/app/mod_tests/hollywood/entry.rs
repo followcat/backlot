@@ -91,8 +91,8 @@ async fn a_queued_document_does_not_decide_the_entry() {
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(!text.contains("New studio"), "{text}");
 
-    // The read lands with two studios: the bar opens, the card never
-    // showed.
+    // The read lands with two studios: the bar stays collapsed —
+    // the pill is its face — and the card never showed.
     tokio::time::timeout(crate::testcore::DEADLINE, asked.notified())
         .await
         .expect("the backlot read was never dispatched");
@@ -107,8 +107,8 @@ async fn a_queued_document_does_not_decide_the_entry() {
     assert!(app.opening.ready(), "the answer decides it");
     assert_eq!(
         app.hollywood.mode,
-        LayerMode::Expanded,
-        "a client with studios opens the bar"
+        LayerMode::Collapsed,
+        "a client with studios starts on the pill (S0)"
     );
     assert!(!app.opening_visible());
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
@@ -234,7 +234,7 @@ async fn remote_studios_close_the_card_without_opening_the_bar() {
         LayerMode::Collapsed,
         "arriving studios do not pull the bar open"
     );
-    // The collapsed strip counts the remote machine's studios.
+    // The lot pill counts the remote machine's studios.
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
-    assert!(text.contains("2 studios"), "{text}");
+    assert!(text.contains("✦2"), "the pill's studio count: {text}");
 }

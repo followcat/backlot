@@ -31,6 +31,8 @@ impl App {
         self.settings = Some(SettingsOverlay {
             section: SettingsSection::Theme,
             selected: theme_index(self.shell.own_theme.names(), &self.shell.theme_name),
+            sections: SettingsSection::visible(self.studio.active),
+            studio: self.studio_view(),
             original_theme_name: self.shell.theme_name.clone(),
             theme_names: self.shell.own_theme.names(),
             original_palette: self.shell.palette.clone(),
@@ -38,6 +40,24 @@ impl App {
             loading_integrations: false,
             installing_integrations: false,
         });
+    }
+
+    /// The studio tab's current values — `None` outside studio mode.
+    fn studio_view(&self) -> Option<crate::chrome::settings::StudioView> {
+        self.studio
+            .active
+            .then(|| crate::chrome::settings::StudioView {
+                start: self.panel_config.call_sheet_start,
+                alt_y: self.hollywood_key.is_some_and(|keys| keys.direct.is_some()),
+                dock_width: self.panel_config.width,
+                overseer: self.hollywood_overseer.clone(),
+                setup: (self.hollywood_overseer.is_none()).then(|| {
+                    format!(
+                        "not configured · backlot hollywood setup --runner {} --model <m>",
+                        self.setup_runner_hint.as_deref().unwrap_or("<r>")
+                    )
+                }),
+            })
     }
 
     fn selected_index_for_settings_section(&self, section: SettingsSection) -> usize {
@@ -48,7 +68,7 @@ impl App {
             SettingsSection::Indicators => indicator_index(self.shell.status_indicators),
             SettingsSection::Sound => usize::from(!self.shell.sound.enabled),
             SettingsSection::Toast => toast_index(self.shell.toast_delivery),
-            SettingsSection::Integrations => 0,
+            SettingsSection::Integrations | SettingsSection::Studio => 0,
         }
     }
 
@@ -67,13 +87,14 @@ impl App {
         let Some(settings) = self.settings.as_ref() else {
             return;
         };
-        let current = SettingsSection::ALL
+        let current = settings
+            .sections
             .iter()
             .position(|section| *section == settings.section)
             .unwrap_or(0);
-        let next =
-            (current as isize + delta).rem_euclid(SettingsSection::ALL.len() as isize) as usize;
-        self.select_settings_section(SettingsSection::ALL[next]);
+        let next = (current as isize + delta).rem_euclid(settings.sections.len() as isize) as usize;
+        let next = settings.sections[next];
+        self.select_settings_section(next);
     }
 
     fn settings_choice_count(&self) -> usize {
@@ -83,6 +104,7 @@ impl App {
                 SettingsSection::Indicators | SettingsSection::Sound => 2,
                 SettingsSection::Toast => 4,
                 SettingsSection::Integrations => settings.integrations.len(),
+                SettingsSection::Studio => crate::chrome::settings::STUDIO_ROWS,
             },
             _ => 0,
         }
@@ -155,13 +177,18 @@ impl App {
     /// `server.reload-config` method; the reload is client-local.
     fn save_settings_edit(&mut self, edit: crate::config::write::ConfigEdit<'_>) -> bool {
         // A theme goes to the file the theme is read from (backlot's own
-        // unless `source = "herdr"`); everything else stays in herdr's.
-        let path = match edit {
-            crate::config::write::ConfigEdit::Theme(_) => self
-                .shell
-                .own_theme
-                .save_path(&self.shell.local_config_path),
-            _ => &self.shell.local_config_path,
+        // unless `source = "herdr"`); a backlot edit goes to backlot's
+        // own `config.toml`; everything else stays in herdr's.
+        let path = if edit.is_backlot() {
+            &self.panel_config_path
+        } else {
+            match edit {
+                crate::config::write::ConfigEdit::Theme(_) => self
+                    .shell
+                    .own_theme
+                    .save_path(&self.shell.local_config_path),
+                _ => &self.shell.local_config_path,
+            }
         };
         if let Err(error) = crate::config::write::write_edit_at(path, edit) {
             self.show_notice("Settings", &error);
@@ -209,6 +236,66 @@ impl App {
             }
             // No `integration.install` method exists — Enter is inert.
             SettingsSection::Integrations => {}
+            SettingsSection::Studio => self.apply_studio_row(selected),
+        }
+    }
+
+    /// The studio tab's rows: the start policy and dock width cycle
+    /// their choices, `Alt+Y` toggles; the overseer row is read-only
+    /// until the S3/S4 dialogs bring a native setup. Every write
+    /// lands in backlot's own `config.toml`.
+    fn apply_studio_row(&mut self, row: usize) {
+        use crate::chrome::settings::{STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_START};
+        use crate::panel::CallSheetStart;
+        match row {
+            STUDIO_START => {
+                let next = match self.panel_config.call_sheet_start {
+                    CallSheetStart::Collapsed => CallSheetStart::WhenWaiting,
+                    CallSheetStart::WhenWaiting => CallSheetStart::Expanded,
+                    CallSheetStart::Expanded => CallSheetStart::Collapsed,
+                };
+                self.panel_config.call_sheet_start = next;
+                self.save_settings_edit(crate::config::write::ConfigEdit::CallSheetStart(
+                    next.as_str(),
+                ));
+            }
+            STUDIO_ALT_Y => {
+                let on = self.hollywood_key.is_some_and(|keys| keys.direct.is_some());
+                if on {
+                    self.panel_config.keys_call_sheet = Some(String::new());
+                    self.hollywood_key =
+                        self.hollywood_key
+                            .map(|keys| crate::hollywood::CallSheetKeys {
+                                direct: None,
+                                ..keys
+                            });
+                } else {
+                    self.panel_config.keys_call_sheet = None;
+                    if let Some(combo) = crate::config::parse_key_combo("alt+y") {
+                        self.hollywood_key = Some(crate::hollywood::CallSheetKeys {
+                            direct: Some(combo),
+                            chord: self.hollywood_key.and_then(|keys| keys.chord),
+                        });
+                    }
+                }
+                self.save_settings_edit(crate::config::write::ConfigEdit::CallSheetToggle(!on));
+            }
+            STUDIO_DOCK_WIDTH => {
+                let next = match self.panel_config.width {
+                    36 => 42,
+                    42 => 48,
+                    _ => 36,
+                };
+                self.panel_config.width = next;
+                self.save_settings_edit(crate::config::write::ConfigEdit::DockWidth(next));
+            }
+            // The overseer row is read-only — a native setup dialog is
+            // S3/S4's; Enter does nothing.
+            _ => {}
+        }
+        let view = self.studio_view();
+        if let Some(settings) = self.settings.as_mut() {
+            settings.studio = view;
         }
     }
 

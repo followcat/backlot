@@ -4,8 +4,8 @@
 use super::*;
 use crate::chrome::palette::Palette;
 use crate::panel::config::StudioKeys;
-use crate::panel::rows::Mark;
-use crate::panel::{Panel, PanelMode, Target, mark_color, mark_symbol, render};
+use crate::panel::{Panel, PanelMode, Target, render};
+use crate::studio::glyphs::Person;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -54,6 +54,7 @@ fn draw(
         current.as_ref(),
         None,
         &keys(),
+        None,
         &palette(),
     );
     (buf, hits)
@@ -62,23 +63,27 @@ fn draw(
 #[test]
 fn every_state_has_its_own_mark_and_color() {
     let palette = palette();
+    // States that share a glyph — the two `×` prompts, the `!`
+    // stall/fail/lost, the two `✓` closed — differ by colour; the
+    // rest differ by glyph (interaction spec §1).
     let marks = [
-        Mark::Working,
-        Mark::Waiting,
-        Mark::Blocked,
-        Mark::Lost,
-        Mark::Closed,
+        Person::Working,
+        Person::Idle,
+        Person::Slot,
+        Person::UserPrompt,
+        Person::DirPrompt,
+        Person::Stalled,
+        Person::Failed,
+        Person::Resumable,
+        Person::Closed,
     ];
-    let symbols: Vec<_> = marks.iter().map(|m| mark_symbol(*m, 0)).collect();
-    for (i, a) in symbols.iter().enumerate() {
-        for b in &symbols[i + 1..] {
-            assert_ne!(a, b, "marks must differ, not only colors");
-        }
-    }
-    let colors: Vec<_> = marks.iter().map(|m| mark_color(*m, &palette)).collect();
-    for (i, a) in colors.iter().enumerate() {
-        for b in &colors[i + 1..] {
-            assert_ne!(a, b, "each state gets its own color");
+    let styles: Vec<_> = marks
+        .iter()
+        .map(|m| (m.glyph(0), m.color(&palette)))
+        .collect();
+    for (i, a) in styles.iter().enumerate() {
+        for b in &styles[i + 1..] {
+            assert_ne!(a, b, "every state reads differently");
         }
     }
 }
@@ -87,11 +92,16 @@ fn every_state_has_its_own_mark_and_color() {
 fn the_working_mark_changes_between_frames() {
     let mut seen = std::collections::BTreeSet::new();
     for spin in 0..20 {
-        seen.insert(mark_symbol(Mark::Working, spin));
+        seen.insert(Person::Working.glyph(spin));
     }
     assert!(seen.len() > 1, "the working mark animates");
-    for mark in [Mark::Waiting, Mark::Blocked, Mark::Lost, Mark::Closed] {
-        assert_eq!(mark_symbol(mark, 0), mark_symbol(mark, 7));
+    for mark in [
+        Person::Idle,
+        Person::DirPrompt,
+        Person::Lost,
+        Person::Closed,
+    ] {
+        assert_eq!(mark.glyph(0), mark.glyph(7));
     }
 }
 
@@ -103,7 +113,7 @@ fn expanded_block_draws_frame_people_dividers_and_state_words() {
         let area = Rect::new(0, 0, width, 30);
         let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
         let text = lines(&buf, area).join("\n");
-        assert!(text.contains("studios 1"), "w{width}: {text}");
+        assert!(text.contains("lot · 1"), "w{width}: {text}");
         assert!(text.contains("╭"), "w{width}: {text}");
         assert!(text.contains("╰"), "w{width}: {text}");
         assert!(text.contains("├"), "w{width}: {text}");
@@ -120,16 +130,30 @@ fn expanded_block_draws_frame_people_dividers_and_state_words() {
 }
 
 #[test]
-fn the_current_studio_frame_is_accent_others_are_muted() {
+fn borders_are_honest_about_focus() {
     let summary = summary();
-    let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 26, 30);
-    let (buf, _) = draw(area, Some(&summary), &panel, Some("acme-shop"));
     let top_y = 1; // title row 0, the block's top border row 1
-    assert_eq!(buf[(area.x, top_y)].fg, palette().accent);
-    // Without a current studio the frame is muted surface.
-    let (buf, _) = draw(area, Some(&summary), &panel, None);
-    assert_eq!(buf[(area.x, top_y)].fg, palette().surface_dim);
+    let corner = (area.x + area.width - 1, top_y); // `╮`, past the ▌
+    // Focused and selected: the block draws in the accent, the ▌ at
+    // the row's left edge.
+    let mut focused = panel(PanelMode::Expanded);
+    focused.focused = true;
+    focused.selected = Some(Target::Studio("acme-shop".into()));
+    let (buf, _) = draw(area, Some(&summary), &focused, None);
+    assert_eq!(buf[corner].fg, palette().accent);
+    assert_eq!(buf[(area.x, top_y)].symbol(), "▌");
+    // Unfocused, the same selection still draws `surface1` (A2.3) —
+    // the focused-terminal studio's mark is the `▸`, not the border,
+    // and no part of the selection shows: the `╭` is back, no `▌`.
+    let mut unfocused = panel(PanelMode::Expanded);
+    unfocused.selected = Some(Target::Studio("acme-shop".into()));
+    let (buf, _) = draw(area, Some(&summary), &unfocused, Some("acme-shop"));
+    assert_eq!(buf[corner].fg, palette().surface1);
+    assert_eq!(buf[(area.x, top_y)].symbol(), "╭");
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("▸"), "the focused studio's ▸ mark: {text}");
+    assert!(!text.contains('▌'), "unfocused draws no selection: {text}");
 }
 
 #[test]
@@ -281,7 +305,7 @@ fn collapsed_strip_draws_id_working_count_and_attention() {
     let area = Rect::new(0, 0, 16, 12);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("studios"), "{text}");
+    assert!(text.contains("lot"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
     assert!(
         hits.rows
@@ -330,6 +354,7 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         None,
         None,
         &keys(),
+        None,
         &palette(),
     );
     for y in area.y..area.y + area.height {
@@ -358,6 +383,7 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
         None,
         None,
         &keys(),
+        None,
         &palette(),
     );
     let text = lines(&buf, area).join("\n");
@@ -366,8 +392,38 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
 }
 
 #[test]
-fn a_selected_row_is_highlighted() {
+fn a_selected_row_is_highlighted_inside_its_borders() {
     let summary = summary();
+    let palette = palette();
+    let mut panel = panel(PanelMode::Expanded);
+    panel.focused = true;
+    panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    let area = Rect::new(0, 0, 30, 20);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    // The `▌` and the highlight sit inside the block's `│`s: the two
+    // border cells keep the border glyph on the panel background.
+    assert_eq!(buf[(alice.x + 1, alice.y)].symbol(), "▌");
+    assert_eq!(buf[(alice.x + 2, alice.y)].bg, palette.selection_bg);
+    for edge in [alice.x, alice.x + alice.width - 1] {
+        let cell = &buf[(edge, alice.y)];
+        assert_eq!(cell.symbol(), "│", "the border glyph stays");
+        assert_ne!(
+            cell.bg, palette.selection_bg,
+            "the border keeps its own look"
+        );
+    }
+}
+
+#[test]
+fn an_unfocused_panel_draws_no_selection_but_keeps_the_row() {
+    let summary = summary();
+    let palette = palette();
     let mut panel = panel(PanelMode::Expanded);
     panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
     let area = Rect::new(0, 0, 30, 20);
@@ -378,8 +434,16 @@ fn a_selected_row_is_highlighted() {
         .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
-    let cell = &buf[(alice.x, alice.y)];
-    assert_eq!(cell.bg, palette().active_row_bg);
+    for x in alice.x..alice.x + alice.width {
+        let cell = &buf[(x, alice.y)];
+        assert_ne!(cell.bg, palette.selection_bg, "no highlight unfocused");
+        assert_ne!(cell.symbol(), "▌", "no cursor unfocused");
+    }
+    // The remembered row survives — focusing again restores it.
+    assert_eq!(
+        panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-alice".into()))
+    );
 }
 
 #[test]
@@ -401,13 +465,14 @@ fn studios_spanning_machines_name_their_machine() {
         None,
         Some(crate::project::LOCAL_LABEL),
         &keys(),
+        None,
         &palette(),
     );
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("acme-shop · Local"), "{text}");
     assert!(text.contains("acme-shop · host-b"), "{text}");
     // The title's count spans machines too.
-    assert!(text.contains("studios 2"), "{text}");
+    assert!(text.contains("lot · 2"), "{text}");
 }
 
 #[test]
@@ -431,10 +496,11 @@ fn one_machine_keeps_the_bare_id_headers() {
         None,
         Some(crate::project::LOCAL_LABEL),
         &keys(),
+        None,
         &palette(),
     );
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("acme-shop"), "{text}");
-    assert!(!text.contains("·"), "{text}");
-    assert!(text.contains("studios 1"), "{text}");
+    assert!(!text.contains("acme-shop ·"), "{text}");
+    assert!(text.contains("lot · 1"), "{text}");
 }

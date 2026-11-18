@@ -1,14 +1,13 @@
 //! The Hollywood layer (H4): a client-side floating view of the
-//! `backlot` summary document's `hollywood` object — hidden, a
-//! collapsed strip at the top row's right end, or a panel that drops
+//! `backlot` summary document's `hollywood` object — hidden, the lot
+//! pill's collapsed face (the chrome draws it), or a band that drops
 //! down from the top. It never reserves columns or rows: the pane
 //! layout is never recomputed for it and no program is resized. All
 //! the data it shows comes from the document; everything it changes
 //! goes through `backlot` commands spawned off the event loop.
 //!
-//! With no `[hollywood]` in the config the layer stays `Hidden`: no
-//! cells, no consumed key, no timer — the frame is byte-identical to
-//! before the layer existed (D15, D6).
+//! `--plain` keeps the layer `Hidden`: no cells, no consumed key, no
+//! timer — the frame is byte-identical to herdr (D15, D6).
 
 mod actions;
 mod band;
@@ -18,12 +17,11 @@ mod keys;
 mod new_frame;
 mod plan;
 mod rows;
-mod strip;
 mod view;
 
 pub(crate) use actions::{HollywoodAction, HollywoodRunner, spawn_runner};
 pub(crate) use draw::{BtnKind, CardBtn, HollywoodRender, render};
-pub(crate) use keys::{HollywoodKey, resolve_key};
+pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use rows::{Target, band_rows, frames};
 pub(crate) use view::CardView;
 
@@ -64,8 +62,8 @@ pub(crate) struct Hollywood {
     /// rebuild each frame, so selection survives document updates by
     /// target, not index.
     pub selected: Option<Target>,
-    /// The first frame drawn: the strip scrolls sideways when more
-    /// frames exist than fit.
+    /// The first frame drawn: the frames scroll sideways when more
+    /// exist than fit.
     pub frame_scroll: usize,
     /// First card row drawn.
     pub scroll: usize,
@@ -91,7 +89,7 @@ impl Hollywood {
         }
     }
 
-    /// Drawn at all — the strip or the panel.
+    /// Drawn at all — the pill face counts.
     pub fn visible(&self) -> bool {
         self.mode != LayerMode::Hidden
     }

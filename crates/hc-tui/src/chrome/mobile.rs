@@ -64,6 +64,7 @@ pub(crate) fn render_mobile_header(
     config: &super::ClientShellConfig,
     hits: &mut ShellHitMap,
     update_latest: Option<&str>,
+    lot: Option<&super::lot::LotFrame<'_>>,
 ) {
     if area.is_empty() {
         return;
@@ -78,7 +79,19 @@ pub(crate) fn render_mobile_header(
         area.height,
     );
     hits.mobile_switch = button;
-    let status_width = button.x.saturating_sub(area.x).saturating_sub(1);
+    // The pill sits left of the switch button — its mobile tier.
+    let pill_w = lot
+        .filter(|l| l.pill)
+        .map(|l| {
+            super::lot::pill_width(&l.counts, super::lot::PillTier::Mobile, l.agent)
+                .min(button.x.saturating_sub(area.x).saturating_sub(2))
+        })
+        .unwrap_or(0);
+    let status_width = button
+        .x
+        .saturating_sub(area.x)
+        .saturating_sub(1)
+        .saturating_sub(pill_w);
     // The version badge claims a right slot only when the status keeps
     // a readable width — the hint drops first, then the whole badge.
     let full = super::render::version_badge_width(update_latest);
@@ -93,7 +106,25 @@ pub(crate) fn render_mobile_header(
         status_width.saturating_sub(if badge_w > 0 { badge_w + 1 } else { 0 }),
         area.height,
     );
-    render_header_status(buffer, status, snapshot, config);
+    render_header_status(buffer, status, snapshot, config, lot);
+    if pill_w > 0 {
+        let lot = lot.unwrap();
+        hits.lot_pill = super::lot::render_pill(
+            buffer,
+            Rect::new(
+                status
+                    .right()
+                    .saturating_add(1 + u16::from(badge_w > 0) * badge_w),
+                area.y,
+                pill_w,
+                1,
+            ),
+            &lot.counts,
+            super::lot::PillTier::Mobile,
+            lot.agent,
+            palette,
+        );
+    }
     render_header_button(buffer, button, snapshot, config);
     if badge_w > 0 {
         let slot = Rect::new(status.right().saturating_add(1), area.y, badge_w, 1);
@@ -107,11 +138,37 @@ fn render_header_status(
     area: Rect,
     snapshot: &ClientShellSnapshot,
     config: &super::ClientShellConfig,
+    lot: Option<&super::lot::LotFrame<'_>>,
 ) {
     if area.is_empty() {
         return;
     }
     let palette = &config.palette;
+    // A studio workspace's label is its header text — `acme-shop ›
+    // actor-a t1` — with no tab status: the workspace's tabs are its
+    // cast, not herdr tabs.
+    if let Some(header) = lot.and_then(|l| l.header) {
+        put_text(
+            buffer,
+            area.x,
+            area.y,
+            area.width,
+            &format!(" {}", super::lot::header_text(header)),
+            Style::default()
+                .fg(palette.text)
+                .bg(palette.panel_bg)
+                .add_modifier(Modifier::BOLD),
+        );
+        if area.height > 1 {
+            render_agent_summary(
+                buffer,
+                Rect::new(area.x, area.y + 1, area.width, 1),
+                snapshot,
+                config,
+            );
+        }
+        return;
+    }
     let Some(workspace) = snapshot.focused_workspace_id.as_deref().and_then(|id| {
         snapshot
             .workspaces

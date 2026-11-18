@@ -250,7 +250,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
     // The studio panel's own config — herdr's `config.toml` load above
     // is untouched. A malformed file is defaults plus the position.
     let (panel_config, panel_notice) = crate::panel::load(&crate::panel::config_path(env));
-    app.set_panel_config(panel_config, panel_notice);
+    app.set_panel_config(panel_config, panel_notice, &crate::panel::config_path(env));
     app.set_panel_endpoint(endpoint);
     if let Ok(exe) = std::env::current_exe() {
         app.set_panel_runner(crate::panel::spawn_runner(exe));
@@ -265,6 +265,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
         .collect();
     let hwood_path = backlot_stage::config::config_path(&env_map);
     app.set_hollywood(backlot_stage::config::hollywood(&env_map), &hwood_path);
+    // The settings tab's `<r>` — a PATH scan only, never a probe.
+    app.set_setup_runner_hint(backlot_stage::detect::first(&backlot_stage::Env {
+        vars: env_map.clone(),
+    }));
     if let Ok(exe) = std::env::current_exe() {
         app.set_hollywood_runner(crate::hollywood::spawn_runner(exe));
     }

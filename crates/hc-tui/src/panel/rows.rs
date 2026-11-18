@@ -3,14 +3,12 @@
 //! block border, a person, a `├──┤` divider or a stacked block's
 //! `╶ id …` line — so the scroll math stays in one-line steps.
 
-use backlot_model::summary::{RoleSummary, StudioSummary, Work};
+use backlot_model::summary::{RoleSummary, StudioSummary};
 
 use super::data::{MachineSummary, StudioRef};
 use super::{Panel, PanelMode};
-use crate::chrome::palette::Palette;
-use crate::chrome::status::{AgentStatus, status_color};
 use crate::studio::StudioKey;
-use ratatui::style::Color;
+use crate::studio::glyphs::Person;
 
 /// Role groups in display order. `producer`/`director`/`writer` are
 /// the fixed role keys; every other role is an actor.
@@ -27,17 +25,15 @@ pub(crate) fn group_of(role: &RoleSummary) -> &'static str {
 
 /// A selected/clicked row's stable identity. Rows rebuild per frame,
 /// so anything the user can act on is named by machine plus document
-/// ids, never by position.
+/// ids, never by position. Rows that only inform — the title,
+/// dividers, block bottoms, spacers and state notes — carry `None`
+/// and are skipped by the cursor keys and clicks alike (A2.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Target {
-    Title,
-    /// A "stage not running" line — shown, not actionable.
-    StageDown,
-    /// The empty-state line — shown, not actionable.
-    Empty,
-    /// Any chrome row of an expanded block — top border, divider,
-    /// error/next line or bottom. Enter/click makes the studio
-    /// current.
+    /// Shown, not actionable.
+    None,
+    /// Any header row of an expanded block — the top border, an
+    /// error or a next line. Enter/click makes the studio current.
     Studio(StudioKey),
     /// A stacked block's `╶ id …` line — Enter/click expands it.
     Block(StudioKey),
@@ -45,9 +41,20 @@ pub(crate) enum Target {
     Strip(StudioKey),
     /// `(studio, role)` — a person row or one of its extra lines.
     Person(StudioKey, String),
-    /// H4: the expanded panel's "no hollywood" hint — shown, not
-    /// actionable.
-    SetupHint,
+}
+
+impl Target {
+    /// The studio a row target belongs to — the selected block's
+    /// accent border and the header's `▸` mark follow it (A2.3/A7.2).
+    pub(crate) fn studio(&self) -> Option<&StudioKey> {
+        match self {
+            Target::Studio(key)
+            | Target::Block(key)
+            | Target::Strip(key)
+            | Target::Person(key, _) => Some(key),
+            Target::None => Option::None,
+        }
+    }
 }
 
 /// An extra line under a person.
@@ -106,22 +113,24 @@ pub(crate) enum Row<'a> {
 
 impl Row<'_> {
     /// The row's stable identity for selection, clicks and Enter.
+    /// Header rows inside a block share `Target::Studio`; dividers,
+    /// bottoms and every non-row are `Target::None` (A2.2).
     pub fn target(&self) -> Target {
         match self {
-            Row::Title => Target::Title,
-            Row::StageDown { .. } => Target::StageDown,
-            Row::Empty => Target::Empty,
-            Row::BlockTop(studio)
-            | Row::BlockError(studio)
-            | Row::BlockNext(studio)
-            | Row::Divider(studio)
-            | Row::BlockBottom(studio) => Target::Studio(studio.key()),
+            Row::Title
+            | Row::StageDown { .. }
+            | Row::Empty
+            | Row::Divider(_)
+            | Row::BlockBottom(_)
+            | Row::SetupHint => Target::None,
+            Row::BlockTop(studio) | Row::BlockError(studio) | Row::BlockNext(studio) => {
+                Target::Studio(studio.key())
+            }
             Row::Person { studio, role } | Row::PersonLine { studio, role, .. } => {
                 Target::Person(studio.key(), role.role.clone())
             }
             Row::Stacked(studio) => Target::Block(studio.key()),
             Row::Strip(studio) => Target::Strip(studio.key()),
-            Row::SetupHint => Target::SetupHint,
         }
     }
 
@@ -132,96 +141,31 @@ impl Row<'_> {
     }
 }
 
-/// The five work states the panel distinguishes (R17). Each has its
-/// own mark *and* its own `AgentStatus` color — never a hardcoded
-/// color.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Mark {
-    Working,
-    Waiting,
-    Blocked,
-    Lost,
-    Closed,
-}
-
-impl Mark {
-    /// A person's state word + work sample → the shown mark. A live
-    /// person with no (or a degraded) sample reads as waiting; lost and
-    /// closed override any sample.
-    pub fn of(role: &RoleSummary) -> Mark {
-        match role.state.as_str() {
-            "closed" => Mark::Closed,
-            "lost" => Mark::Lost,
-            _ => match role.work {
-                Some(Work::Working) => Mark::Working,
-                Some(Work::Blocked) => Mark::Blocked,
-                _ => Mark::Waiting,
-            },
-        }
-    }
-
-    /// The one-line block's state word (R17): `working`, `idle`,
-    /// `blocked`, `lost` or `closed`.
-    pub fn word(self) -> &'static str {
-        match self {
-            Mark::Working => "working",
-            Mark::Waiting => "idle",
-            Mark::Blocked => "blocked",
-            Mark::Lost => "lost",
-            Mark::Closed => "closed",
-        }
-    }
-}
-
-/// The mark's color, mapped through `chrome/status.rs` like every
-/// other status indicator: working yellow, waiting green, blocked
-/// red, lost dim, closed teal.
-pub(crate) fn mark_color(mark: Mark, palette: &Palette) -> Color {
-    status_color(
-        match mark {
-            Mark::Working => AgentStatus::Working,
-            Mark::Waiting => AgentStatus::Idle,
-            Mark::Blocked => AgentStatus::Blocked,
-            Mark::Lost => AgentStatus::Unknown,
-            Mark::Closed => AgentStatus::Done,
-        },
-        palette,
-    )
-}
-
-/// Spinner frames for a working mark (~8.3 fps at the 120 ms tick).
-const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-/// The mark's symbol for spinner frame `spin`.
-pub(crate) fn mark_symbol(mark: Mark, spin: usize) -> &'static str {
-    match mark {
-        Mark::Working => SPINNER[spin % SPINNER.len()],
-        Mark::Waiting => "○",
-        Mark::Blocked => "×",
-        Mark::Lost => "!",
-        Mark::Closed => "✓",
-    }
-}
-
-/// The mark order a stacked block's counts follow.
-const MARK_ORDER: [Mark; 5] = [
-    Mark::Working,
-    Mark::Waiting,
-    Mark::Blocked,
-    Mark::Lost,
-    Mark::Closed,
+/// The order a stacked block's mark counts follow — the urgents
+/// first, then the working and quiet states.
+const MARK_ORDER: [Person; 10] = [
+    Person::UserPrompt,
+    Person::DirPrompt,
+    Person::Stalled,
+    Person::Failed,
+    Person::Lost,
+    Person::Working,
+    Person::Slot,
+    Person::Idle,
+    Person::Resumable,
+    Person::Closed,
 ];
 
 /// A stacked block's mark counts — `(mark, n)` for each nonzero mark
 /// in `MARK_ORDER`.
-pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Mark, usize)> {
+pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Person, usize)> {
     MARK_ORDER
         .into_iter()
         .filter_map(|mark| {
             let n = studio
                 .roles
                 .iter()
-                .filter(|role| Mark::of(role) == mark)
+                .filter(|role| Person::of(role) == mark)
                 .count();
             (n > 0).then_some((mark, n))
         })

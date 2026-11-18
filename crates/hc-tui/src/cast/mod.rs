@@ -182,20 +182,20 @@ pub(crate) struct ShellRow {
     pub(crate) cwd_tail: String,
     /// The agent-status mark when the shell runs an agent — `None`
     /// for a plain shell, which shows a dim `$`.
-    pub(crate) mark: Option<crate::panel::Mark>,
+    pub(crate) mark: Option<crate::studio::glyphs::Person>,
 }
 
-/// A shell's mark: the terminal's 7501 status word mapped to a cast
-/// mark — a live agent's working/waiting/blocked — or `None`.
-fn shell_mark(term: &hc_proto::terminal::Terminal) -> Option<crate::panel::Mark> {
-    use crate::panel::Mark;
+/// A shell's mark: the terminal's 7501 status word mapped to the
+/// shared vocabulary — a shell's prompt is the user's.
+fn shell_mark(term: &hc_proto::terminal::Terminal) -> Option<crate::studio::glyphs::Person> {
+    use crate::studio::glyphs::Person;
     term.status
         .as_ref()
         .map(|status| match status.state.as_str() {
-            "working" => Mark::Working,
-            "blocked" => Mark::Blocked,
-            "done" | "closed" => Mark::Closed,
-            _ => Mark::Waiting,
+            "working" => Person::Working,
+            "blocked" => Person::UserPrompt,
+            "done" | "closed" => Person::Closed,
+            _ => Person::Idle,
         })
 }
 

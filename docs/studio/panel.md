@@ -61,9 +61,11 @@ on a live person or studio focuses the terminal and leaves the panel open unfocu
 
 ## The blocks
 
-Expanded, the panel is a narrow column (`[panel] width`, default 26, clamped to 22–60) whose top
-line is `studios <n>` — one **block per studio**, in document order, drawn as a rounded frame
-(`╭╮╰╯`).
+Expanded, the panel is a narrow column (`[dock] width`, default 36, clamped to 28–48) whose top
+line is `lot · <n>` — one **block per studio**, in document order, drawn as a rounded frame
+(`╭╮╰╯`). The selection is `selection_bg` with an accent `▌` in the first column; it lands only
+on actionable rows — titles, dividers, block bottoms and spacers are skipped — and borders are
+honest about focus: unfocused, every block edge is `surface1`.
 
 - The studio id sits in the top border; its open-attention count sits at the right end of that
   border as `!<n>` in the blocked colour, only when above zero. The current studio's frame is the
@@ -125,14 +127,18 @@ that is neither a studio person, a studio shell, the stage nor Hollywood (what h
 width = 26   # cast sidebar width in studio mode, clamped to 20-60
 
 [panel]
-width = 26   # expanded column width, clamped to 22-60
 key = "y"    # the chord tail after the prefix
+
+[dock]
+width = 36   # expanded column width, clamped to 28-48
 
 [keys]
 previous_studio = "alt+up"
 next_studio = "alt+down"
 previous_role = "alt+left"
 next_role = "alt+right"
+call_sheet = "alt+y"            # the direct call-sheet key; "" unbinds it
+prefix_call_sheet = "i"         # the prefix-chord tail; "" unbinds it
 ```
 
 A missing file means defaults. A malformed file means defaults plus one notice carrying only

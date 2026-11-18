@@ -64,6 +64,7 @@ impl App {
             peek: None,
             panel: crate::panel::Panel::new(),
             panel_config: crate::panel::PanelConfig::default(),
+            panel_config_path: std::path::PathBuf::new(),
             panel_key_combo: crate::config::parse_key_combo("y"),
             panel_hits: crate::panel::PanelRender::default(),
             panel_anim_deadline: None,
@@ -84,6 +85,8 @@ impl App {
             hollywood: crate::hollywood::Hollywood::new(),
             hollywood_key: None,
             has_hollywood_cfg: false,
+            hollywood_overseer: None,
+            setup_runner_hint: None,
             hollywood_hits: crate::hollywood::HollywoodRender::default(),
             // Never spawn here — cli installs `spawn_runner` like the
             // panel's before the loop starts.

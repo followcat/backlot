@@ -15,7 +15,7 @@ use std::path::Path;
 use backlot_model::summary::Summary;
 
 use super::App;
-use crate::hollywood::{self, CardView, HollywoodKey, LayerMode, Target};
+use crate::hollywood::{self, CallSheetKeys, CardView, LayerMode, Target};
 
 impl App {
     // ---------- config ----------
@@ -36,28 +36,43 @@ impl App {
             Err(e) => (None, Some(format!("Hollywood config: {e}"))),
         };
         self.has_hollywood_cfg = cfg.is_some();
+        // The settings tab's read-only overseer row.
+        self.hollywood_overseer = cfg.as_ref().map(|c| format!("{} · {}", c.runner, c.model));
         // R22: the expanded studio panel names `hollywood setup` only
         // while no table exists.
         self.panel.hollywood_hint = !self.has_hollywood_cfg;
-        match cfg {
-            Some(cfg) => {
-                let (key, key_notice) = hollywood::resolve_key(
-                    cfg.key.as_deref(),
-                    &self.panel_config.keys,
-                    self.panel_key_combo,
-                    path,
-                );
-                self.hollywood_key = Some(key);
-                if let Some(key_notice) = key_notice {
-                    self.show_notice("Hollywood config", &key_notice);
-                }
-                if self.hollywood.mode == LayerMode::Hidden && !self.plain {
-                    self.hollywood.mode = LayerMode::Collapsed;
-                }
-            }
-            None => {
-                self.hollywood_key = None;
-                self.hollywood.mode = LayerMode::Hidden;
+        // The toggle resolves from the same inputs either way:
+        // `[keys] call_sheet`/`prefix_call_sheet`, then `[hollywood]
+        // key` for whichever slots those leave open — read leniently
+        // from the panel config so a client-only table still counts.
+        let raw_key = cfg
+            .as_ref()
+            .and_then(|c| c.key.as_deref())
+            .or(self.panel_config.hollywood_key.as_deref());
+        let (key, key_notices) = hollywood::resolve_toggle(
+            self.panel_config.keys_call_sheet.as_deref(),
+            self.panel_config.keys_prefix_call_sheet.as_deref(),
+            raw_key,
+            &self.panel_config.keys,
+            self.panel_key_combo,
+            path,
+        );
+        self.hollywood_key = Some(key);
+        for key_notice in key_notices {
+            self.show_notice("Hollywood config", &key_notice);
+        }
+        // U7: studio mode always has the bar — configured or not —
+        // collapsed; `--plain` hides it in `sync_hollywood_plain`.
+        if self.hollywood.mode == LayerMode::Hidden && !self.plain {
+            self.hollywood.mode = LayerMode::Collapsed;
+        }
+        // The start policy applies once on the first publish — or
+        // right now when the read lands after the settle already ran.
+        if !self.studio.lot.start_applied {
+            self.studio.lot.start_pending = true;
+            if self.opening.ready() && !self.plain {
+                let machines = self.panel_summaries();
+                self.sync_lot(&machines);
             }
         }
         // U7: studio mode always has the bar; `--plain` never does.
@@ -65,6 +80,12 @@ impl App {
         if let Some(notice) = notice {
             self.show_notice("Hollywood config", &notice);
         }
+    }
+
+    /// cli hands over the detector's first runner — the `<r>` in the
+    /// overseer row's setup hint while `[hollywood]` is unset.
+    pub(crate) fn set_setup_runner_hint(&mut self, runner: Option<String>) {
+        self.setup_runner_hint = runner;
     }
 
     /// The `--plain` latch on the layer (D6, D15a): plain has no
@@ -79,7 +100,10 @@ impl App {
             self.hollywood.editing = false;
             self.hollywood.view = None;
         } else if self.hollywood_key.is_none() {
-            self.hollywood_key = Some(HollywoodKey::fallback());
+            self.hollywood_key = Some(CallSheetKeys {
+                direct: crate::config::parse_key_combo("alt+y"),
+                chord: crate::config::parse_key_combo("i"),
+            });
             if self.hollywood.mode == LayerMode::Hidden {
                 self.hollywood.mode = LayerMode::Collapsed;
             }
@@ -161,10 +185,19 @@ impl App {
 
     // ---------- the toggle ----------
 
+    /// Open the bar expanded — the toggle's open arm and the start
+    /// policy's `expanded`/`when_waiting` branches share it.
+    pub(crate) fn hollywood_open(&mut self) {
+        self.hollywood.mode = LayerMode::Expanded;
+        self.hollywood.selected = self.hollywood_frames().first().cloned();
+        self.hollywood.frame_scroll = 0;
+        self.hollywood.scroll = 0;
+    }
+
     /// The configured toggle (`alt+y` direct or its `[hollywood] key`
-    /// override): hidden shows the strip, the strip expands, expanded
-    /// collapses back to the strip. Opening selects the first frame,
-    /// so Enter works before the first arrow press.
+    /// override): hidden shows the pill's bar collapsed, collapsed
+    /// expands, expanded collapses back. Opening selects the first
+    /// frame, so Enter works before the first arrow press.
     pub(crate) fn hollywood_toggle(&mut self) {
         self.hollywood.mode = match self.hollywood.mode {
             LayerMode::Hidden => LayerMode::Collapsed,
@@ -182,9 +215,9 @@ impl App {
         }
     }
 
-    /// Whether the press is the configured toggle — a direct binding
-    /// matched like a studio key, or the chord tail while the prefix
-    /// is armed. `None` without `[hollywood]` — the key is not ours.
+    /// Whether the press is the configured toggle — the direct
+    /// binding matched like a studio key, or the chord tail while the
+    /// prefix is armed. `None` without a table — the key is not ours.
     pub(crate) fn hollywood_key_press(&self, key: &super::input::TerminalKey) -> bool {
         // U7: no layer until the first read settled — the key is not
         // ours while it is on the wire.
@@ -192,15 +225,8 @@ impl App {
             return false;
         }
         let matched = crate::input::terminal_key_of(key);
-        match self.hollywood_key {
-            Some(HollywoodKey::Direct(combo)) => {
-                crate::config::terminal_key_matches_combo(&matched, combo)
-            }
-            Some(HollywoodKey::Chord(combo)) => {
-                self.prefix.armed() && crate::config::terminal_key_matches_combo(&matched, combo)
-            }
-            None => false,
-        }
+        self.hollywood_key
+            .is_some_and(|keys| keys.press(&matched, self.prefix.armed()))
     }
 
     // ---------- frames and rows ----------
