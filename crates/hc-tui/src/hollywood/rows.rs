@@ -1,16 +1,18 @@
 //! The bar's model: one frame per studio — every machine's — plus
-//! the trailing new-studio frame, the band rows under them, and the
-//! collapsed strip's content. Pure functions of the `backlot`
-//! documents — nothing is scraped from Hollywood's terminal.
+//! the trailing new-studio frame and the band rows under them. Pure
+//! functions of the `backlot` documents — nothing is scraped from
+//! Hollywood's terminal.
 //!
 //! Frame and row identities are document ids, never positions: the
 //! frames rebuild on every publish and the selection has to survive.
 //! A studio identity is `(machine, id)` — the same id on two
 //! machines is two studios.
 
+use ratatui::style::Color;
+
 use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
 
-use crate::panel::data::{MachineSummary, StudioRef, studio_count};
+use crate::panel::data::{MachineSummary, StudioRef};
 use crate::studio::StudioKey;
 
 /// A selected/clicked thing's stable identity.
@@ -126,17 +128,6 @@ pub(crate) const SETUP_LEAD: &str =
 /// The command the setup line names — `backlot hollywood setup`.
 pub(crate) const SETUP_COMMAND: &str = "backlot hollywood setup --runner <runner> --model <model>";
 
-/// The collapsed strip's content: the agent's role state (`None`
-/// without an agent, drawn dim), how many studios there are across
-/// every machine, and how many things wait on you.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Strip<'a> {
-    pub state: Option<&'a str>,
-    pub studios: usize,
-    /// The studios' open attentions, summed.
-    pub waiting: u32,
-}
-
 /// This core's parsed document inside the aggregate — the headline,
 /// the cards and the agent's state stay this core's.
 pub(crate) fn local_summary(machines: &[MachineSummary]) -> Option<&Summary> {
@@ -146,36 +137,15 @@ pub(crate) fn local_summary(machines: &[MachineSummary]) -> Option<&Summary> {
         .map(|m| &m.summary)
 }
 
-/// Read the strip's content out of the documents: the studio count
-/// and waiting sum span machines; the agent's state is this core's.
-pub(crate) fn strip(machines: &[MachineSummary], agent: bool) -> Strip<'_> {
-    let hollywood = local_summary(machines).and_then(|s| s.hollywood.as_ref());
-    Strip {
-        state: agent.then(|| hollywood.map(|h| h.state.as_str()).unwrap_or("down")),
-        studios: studio_count(machines),
-        waiting: machines
-            .iter()
-            .flat_map(|m| m.summary.studios.iter())
-            .map(|s| s.waiting)
-            .sum(),
+/// A role state's colour: live green, lost red, closed teal,
+/// anything else dim — the band's agent square reads it.
+pub(crate) fn state_color(state: &str, palette: &crate::chrome::palette::Palette) -> Color {
+    match state {
+        "live" => palette.green,
+        "lost" => palette.red,
+        "closed" => palette.teal,
+        _ => palette.overlay0,
     }
-}
-
-/// The strip's plain text, in draw order — the same text the
-/// renderer writes, piece for piece. The tests read it; the renderer
-/// builds the coloured pieces itself.
-#[cfg(test)]
-pub(crate) fn strip_text(machines: &[MachineSummary], agent: bool) -> String {
-    let strip = strip(machines, agent);
-    let mut text = format!(
-        "✦ hollywood  ■ {} studio{}",
-        strip.studios,
-        if strip.studios == 1 { "" } else { "s" }
-    );
-    if strip.waiting > 0 {
-        text.push_str(&format!("  !{} ", strip.waiting));
-    }
-    text
 }
 
 /// The role that is on set now: the first working one, else the

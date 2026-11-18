@@ -52,7 +52,7 @@ async fn open_close_open_repaints_both_regions() {
     assert!(text.contains("alice task-1"), "{text}");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     // The right 26 columns are all panel: no pane paint remains there.
-    let right = columns_text(&open, 94, 120);
+    let right = columns_text(&open, 84, 120);
     assert!(right.contains("lot"), "{right}");
     assert!(!right.contains("PANE-ALPHA"), "{right}");
 
@@ -86,7 +86,7 @@ async fn a_pane_update_while_the_panel_is_open_repaints_cleanly() {
     let text = screen_lines(&open).join("\n");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     assert!(text.contains("PANE-BRAVO"), "{text}");
-    let right = columns_text(&open, 94, 120);
+    let right = columns_text(&open, 84, 120);
     assert!(right.contains("lot"), "{right}");
     assert!(!right.contains("PANE"), "{right}");
 }
@@ -97,7 +97,7 @@ async fn a_resize_moves_the_panel_between_beside_and_fullscreen() {
     app.area = (120, 24);
     open_panel(&mut app);
     draw_to(&mut app, 120, 24);
-    // 80 − 26 = 54 < 60 panes columns: the panel takes the frame.
+    // 80 − 36 = 44 < 60 panes columns: the panel takes the frame.
     app.area = (80, 24);
     let wide = draw_to(&mut app, 80, 24);
     let text = screen_lines(&wide).join("\n");
@@ -108,7 +108,7 @@ async fn a_resize_moves_the_panel_between_beside_and_fullscreen() {
     let back = draw_to(&mut app, 120, 24);
     let text = screen_lines(&back).join("\n");
     assert!(text.contains("PANE-ALPHA"), "{text}");
-    let right = columns_text(&back, 94, 120);
+    let right = columns_text(&back, 84, 120);
     assert!(right.contains("lot"), "{right}");
     assert!(!right.contains("PANE-ALPHA"), "{right}");
 }
@@ -152,6 +152,6 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
     // Expanding again puts the full column back.
     app.panel.mode = PanelMode::Expanded;
     let expanded = draw_to(&mut app, 120, 24);
-    let right = columns_text(&expanded, 94, 120);
+    let right = columns_text(&expanded, 84, 120);
     assert!(right.contains("alice task-1"), "{right}");
 }

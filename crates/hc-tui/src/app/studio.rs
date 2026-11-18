@@ -24,6 +24,7 @@ impl App {
         self.studio.active = !self.plain;
         let machines = self.panel_summaries();
         self.studio.sync(&machines, self.focused.as_deref());
+        self.sync_lot(&machines);
         if self.studio.active != was && !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
         }

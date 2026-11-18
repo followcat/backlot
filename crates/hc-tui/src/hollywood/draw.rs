@@ -1,13 +1,13 @@
-//! The bar's renderer (U7): the collapsed strip at the top row's
-//! right end, or the film-strip band dropped from the top over the
+//! The bar's renderer (U7): the film-strip band dropped from the
+//! top over the
 //! whole width — sprocket rows, the title row, one frame per studio
 //! and the new-studio frame, then the headline, the cards and the
 //! input line. It never reserves a row or a column: the pane layout
 //! is never recomputed for it.
 //!
 //! The frames live in `frames.rs`, the band rows in `band.rs`; this
-//! file owns the strip, the title row, the height ladder and the
-//! hit map.
+//! file owns the band, the title row, the height ladder and the hit
+//! map.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -16,7 +16,7 @@ use ratatui::style::{Modifier, Style};
 use super::plan::{self, Plan};
 use super::rows::{self, Row, Target};
 use super::view;
-use super::{Hollywood, LayerMode, LayerOpts, band, frames, strip};
+use super::{Hollywood, LayerMode, LayerOpts, band, frames};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics};
@@ -48,7 +48,7 @@ pub(crate) enum BtnKind {
 /// input line, the cards' scroll metrics and the open view's map.
 #[derive(Default)]
 pub(crate) struct HollywoodRender {
-    /// The strip's or the band's rect — the click boundary.
+    /// The band's rect — the click boundary.
     pub area: Rect,
     /// The title row (expanded).
     pub title: Rect,
@@ -80,8 +80,7 @@ pub(crate) struct HollywoodRender {
 }
 
 impl HollywoodRender {
-    /// The point sits on the bar — a strip click or anywhere in the
-    /// band.
+    /// The point sits anywhere on the band.
     pub fn contains(&self, point: (u16, u16)) -> bool {
         self.area.contains(ratatui::layout::Position {
             x: point.0,
@@ -108,7 +107,10 @@ pub(crate) fn render(
 ) -> HollywoodRender {
     match hollywood.mode {
         LayerMode::Hidden => HollywoodRender::default(),
-        LayerMode::Collapsed => strip::render(buf, frame, machines, opts.agent, palette),
+        // The collapsed bar is the lot pill in the chrome's own row —
+        // the floating strip is gone, so a collapsed layer draws
+        // nothing here.
+        LayerMode::Collapsed => HollywoodRender::default(),
         LayerMode::Expanded => render_band(
             buf,
             frame,
@@ -388,7 +390,7 @@ fn draw_title(
         text = pick(room);
     }
     if agent {
-        let colour = strip::state_color(state.unwrap_or("down"), palette);
+        let colour = rows::state_color(state.unwrap_or("down"), palette);
         put_text(buf, x, y, 1, "■", base.fg(colour));
     } else {
         put_text(buf, x, y, 1, "■", base.fg(palette.overlay0));

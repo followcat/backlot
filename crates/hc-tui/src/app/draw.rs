@@ -86,6 +86,15 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             app.panel.spin,
         )
     });
+    let lot = (app.studio.lot.pill || app.studio.lot.header.is_some()).then_some(
+        crate::chrome::lot::LotFrame {
+            counts: app.studio.lot.counts,
+            agent: app.has_hollywood_cfg,
+            pill: app.studio.lot.pill,
+            header: app.studio.lot.header.as_ref(),
+            cols: app.area.0,
+        },
+    );
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -108,6 +117,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         update_latest: app.update_latest.as_deref(),
         cast,
         cast_scroll: &mut app.studio.cast_scroll,
+        lot,
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

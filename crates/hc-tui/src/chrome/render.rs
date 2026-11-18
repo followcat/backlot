@@ -102,6 +102,13 @@ pub(crate) struct ShellHitMap {
     pub context_menu_rows: Vec<(Rect, usize)>,
     /// The studio cast's `others` toggle row (empty in herdr mode).
     pub cast_others: Rect,
+    /// The lot pill's segment at the bar's right end — clicking it
+    /// toggles the Hollywood bar.
+    pub lot_pill: Rect,
+    /// The studio name inside a studio header — clicking it focuses
+    /// the dock on that studio.
+    pub studio_header: Rect,
+    pub studio_key: Option<crate::studio::StudioKey>,
 }
 
 /// Diagnostics shown on endpoint rows. hc-tui has no saved-endpoint auth
@@ -151,6 +158,9 @@ pub(crate) struct ShellRenderState<'a> {
     pub cast: Option<crate::cast::CastView<'a>>,
     /// The cast section's scroll — written back like `agent_scroll`.
     pub cast_scroll: &'a mut usize,
+    /// The lot latch for this frame — `None` in plain mode and
+    /// whenever there is nothing for the pill to say.
+    pub lot: Option<super::lot::LotFrame<'a>>,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {
@@ -189,6 +199,7 @@ pub(crate) fn render_shell(
             config,
             &mut hits,
             state.update_latest,
+            state.lot.as_ref(),
         );
     }
     if layout.sidebar.width > 0 {
@@ -234,16 +245,56 @@ pub(crate) fn render_shell(
         }
     }
     if layout.tab_bar.height > 0 {
-        super::tabs::render_tab_bar(
-            buffer,
-            layout.tab_bar,
-            snapshot,
-            config,
-            state.tab_scroll,
-            state.reveal_focused_tab,
-            state.tab_drag_insert_index,
-            &mut hits,
-        );
+        let lot = state.lot.as_ref();
+        let tier = lot
+            .map(|l| super::lot::pill_tier(l.cols, config.mobile_width_threshold))
+            .unwrap_or(super::lot::PillTier::Full);
+        if let Some(lot) = lot.filter(|l| l.header.is_some()) {
+            // A studio workspace: its own one-row header where the
+            // tab bar was, with the pill at the right end.
+            super::lot::render_studio_header(
+                buffer,
+                layout.tab_bar,
+                lot,
+                tier,
+                &config.palette,
+                &mut hits,
+            );
+        } else {
+            // Any other workspace keeps herdr's tab bar; the pill is
+            // a reserved segment at its right end.
+            let pill_w = lot
+                .filter(|l| l.pill)
+                .map(|l| super::lot::pill_width(&l.counts, tier, l.agent))
+                .unwrap_or(0)
+                .min(layout.tab_bar.width);
+            let tabs_area = Rect::new(
+                layout.tab_bar.x,
+                layout.tab_bar.y,
+                layout.tab_bar.width - pill_w,
+                layout.tab_bar.height,
+            );
+            super::tabs::render_tab_bar(
+                buffer,
+                tabs_area,
+                snapshot,
+                config,
+                state.tab_scroll,
+                state.reveal_focused_tab,
+                state.tab_drag_insert_index,
+                &mut hits,
+            );
+            if pill_w > 0 {
+                hits.lot_pill = super::lot::render_pill(
+                    buffer,
+                    Rect::new(layout.tab_bar.right() - pill_w, layout.tab_bar.y, pill_w, 1),
+                    &lot.map(|l| l.counts).unwrap_or_default(),
+                    tier,
+                    lot.is_some_and(|l| l.agent),
+                    &config.palette,
+                );
+            }
+        }
     }
     if !config.mouse_capture {
         hits.sidebar_divider = Rect::default();

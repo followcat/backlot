@@ -16,7 +16,7 @@ fn a_missing_file_is_defaults() {
     let dir = std::env::temp_dir().join(format!("panel-none-{}", std::process::id()));
     let (config, notice) = load(&dir.join("config.toml"));
     assert!(notice.is_none());
-    assert_eq!(config.width, 26);
+    assert_eq!(config.width, 36);
     assert_eq!(config.key, "y");
     assert_eq!(config.sidebar_width, 26);
     assert_eq!(
@@ -60,7 +60,7 @@ fn write(dir: &std::path::Path, text: &str) -> std::path::PathBuf {
 }
 
 #[test]
-fn width_clamps_into_the_22_60_band() {
+fn width_clamps_into_the_28_48_band() {
     let dir = std::env::temp_dir().join(format!("panel-w-{}", std::process::id()));
     for (given, want) in [(12, WIDTH_MIN), (40, 40), (90, WIDTH_MAX)] {
         let (config, notice) = load(&write(&dir, &format!("[panel]\nwidth = {given}\n")));

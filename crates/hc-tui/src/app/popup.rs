@@ -268,6 +268,7 @@ impl App {
                 self.shell_state.sidebar_collapsed,
                 super::pane_geometry::focused_tab_count(self),
                 self.sidebar_width,
+                self.studio.lot.pill || self.studio.lot.header.is_some(),
             )
             .pane_surface
     }

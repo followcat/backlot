@@ -156,85 +156,28 @@ fn hidden_draws_nothing_and_maps_no_hits() {
 // ---------- collapsed ----------
 
 #[test]
-fn the_strip_sits_at_the_top_right_and_caps_at_a_third() {
+fn a_collapsed_bar_draws_nothing_its_face_is_the_lot_pill() {
+    // The collapsed state is the chrome's lot pill now — the layer
+    // itself paints nothing and reports no hits.
     let summary = summary();
     for palette in &palettes() {
-        for cols in [200u16, 120, 80, 40] {
-            let area = Rect::new(0, 0, cols, 24);
-            let (buf, hits) = draw(
-                area,
-                Some(&summary),
-                true,
-                &layer(LayerMode::Collapsed),
-                cols <= 64,
-                palette,
-            );
-            let cap = cols / 3;
-            assert_eq!(hits.area.height, 1, "w{cols}");
-            assert_eq!(hits.area.y, 0, "w{cols}");
-            assert!(hits.area.width <= cap.max(1), "w{cols}");
-            assert_eq!(hits.area.x + hits.area.width, cols, "w{cols}: right edge");
-            let row = row_of(&buf, area, 0);
-            assert!(row.contains("✦ hollywood"), "w{cols}: {row}");
-            if cols >= 80 {
-                assert!(row.contains("3 studio"), "w{cols}: {row}");
+        let area = Rect::new(0, 0, 120, 24);
+        let (buf, hits) = draw(
+            area,
+            Some(&summary),
+            true,
+            &layer(LayerMode::Collapsed),
+            false,
+            palette,
+        );
+        assert!(hits.area.is_empty());
+        assert!(hits.rows.is_empty());
+        for x in 0..area.width {
+            for y in 0..area.height {
+                assert_eq!(buf[(x, y)].symbol(), " ", "x{x} y{y}");
             }
-            // The strip sits on surface_dim, the waiting chip on peach.
-            for x in hits.area.x..hits.area.x + hits.area.width {
-                let bg = buf[(x, 0)].bg;
-                assert!(
-                    bg == palette.surface_dim || bg == palette.peach,
-                    "w{cols} x{x}: {bg:?}"
-                );
-            }
-            assert_eq!(buf[(hits.area.x, 0)].bg, palette.surface_dim);
-            // A click on it expands — the whole strip is the target.
-            assert!(hits.contains((cols - 1, 0)), "w{cols}");
         }
     }
-}
-
-#[test]
-fn the_strip_shows_the_waiting_chip_only_when_something_waits() {
-    let palette = palettes()[0].clone();
-    let summary = summary();
-    let area = Rect::new(0, 0, 120, 24);
-    let (buf, hits) = draw(
-        area,
-        Some(&summary),
-        true,
-        &layer(LayerMode::Collapsed),
-        false,
-        &palette,
-    );
-    let row = row_of(&buf, area, 0);
-    assert!(row.contains("!2"), "{row}");
-    // The chip's cells are the peach ones on the row.
-    let chip: Vec<u16> = (hits.area.x..hits.area.x + hits.area.width)
-        .filter(|x| buf[(*x, 0)].bg == palette.peach)
-        .collect();
-    assert!(!chip.is_empty(), "the peach chip: {row}");
-    assert!(
-        chip.iter()
-            .map(|x| buf[(*x, 0)].symbol())
-            .collect::<String>()
-            .contains('!'),
-        "the chip carries the count: {row}"
-    );
-    // Nothing waiting: no chip.
-    let mut value = summary_json();
-    value["studios"][0]["waiting"] = serde_json::json!(0);
-    let quiet: Summary = serde_json::from_value(value).unwrap();
-    let (buf, _) = draw(
-        area,
-        Some(&quiet),
-        true,
-        &layer(LayerMode::Collapsed),
-        false,
-        &palette,
-    );
-    let row = row_of(&buf, area, 0);
-    assert!(!row.contains('!'), "{row}");
 }
 
 // ---------- the band ----------
@@ -437,22 +380,6 @@ fn without_an_agent_the_band_is_the_setup_line() {
     assert!(!text.contains("acme-shop needs a look"), "{text}");
     assert!(!text.contains("apply"), "{text}");
     assert!(hits.input.is_empty(), "no input line without an agent");
-}
-
-#[test]
-fn the_strip_without_an_agent_names_the_studios() {
-    let summary = summary();
-    let area = Rect::new(0, 0, 120, 24);
-    let (buf, _) = draw_without_agent(
-        area,
-        Some(&summary),
-        true,
-        &layer(LayerMode::Collapsed),
-        &palettes()[0],
-    );
-    let row = row_of(&buf, area, 0);
-    assert!(row.contains("✦ hollywood"), "{row}");
-    assert!(row.contains("3 studios"), "{row}");
 }
 
 #[test]

@@ -196,6 +196,8 @@ pub struct ClientShellLayoutConfig {
 }
 
 impl ClientShellLayoutConfig {
+    /// `force_chrome_row` keeps the bar's row alive even when the
+    /// single-tab rule would hide it — the lot pill lives there.
     pub(crate) fn layout(
         &self,
         cols: u16,
@@ -203,6 +205,7 @@ impl ClientShellLayoutConfig {
         sidebar_collapsed: bool,
         tab_count: usize,
         sidebar_width: u16,
+        force_chrome_row: bool,
     ) -> ClientShellLayout {
         if cols <= self.mobile_width_threshold {
             let header_height = rows.min(2);
@@ -229,7 +232,8 @@ impl ClientShellLayoutConfig {
         }
         .min(cols.saturating_sub(1));
         let main = Rect::new(sidebar_width, 0, cols.saturating_sub(sidebar_width), rows);
-        let show_tab_bar = rows > 1 && !(self.hide_tab_bar_when_single_tab && tab_count == 1);
+        let show_tab_bar = rows > 1
+            && (force_chrome_row || !(self.hide_tab_bar_when_single_tab && tab_count == 1));
         let tab_height = u16::from(show_tab_bar);
         let (tab_bar, pane_surface) = match self.tab_bar_position {
             TabBarPositionConfig::Top => (

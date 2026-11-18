@@ -203,16 +203,23 @@ impl App {
                 && self.popup.as_ref().is_some_and(|popup| popup.persistent)
                 && let Some(nav) = self.panel_config.keys.nav(&popup_combo)
             {
-                self.popup_key_suppress.insert(press.identity());
-                self.studio_nav(nav);
-                return None;
+                let role_key = matches!(
+                    nav,
+                    crate::panel::StudioNav::PreviousRole | crate::panel::StudioNav::NextRole
+                );
+                // The role keys only win in a studio workspace; in
+                // any other workspace they fall through to herdr's
+                // own binding so tabs still switch there.
+                if !role_key || self.studio.lot.studio_workspace {
+                    self.popup_key_suppress.insert(press.identity());
+                    self.studio_nav(nav);
+                    return None;
+                }
             }
             // H4: Hollywood's direct toggle parks a persistent float
             // exactly like the studio keys — ephemeral popups keep it.
-            if matches!(
-                self.hollywood_key,
-                Some(crate::hollywood::HollywoodKey::Direct(_))
-            ) && self.popup.as_ref().is_some_and(|popup| popup.persistent)
+            if self.hollywood_key.is_some_and(|keys| keys.direct.is_some())
+                && self.popup.as_ref().is_some_and(|popup| popup.persistent)
                 && self.hollywood_key_press(&press)
             {
                 self.popup_key_suppress.insert(press.identity());
@@ -358,12 +365,21 @@ impl App {
                 .keys
                 .nav(&crate::input::terminal_key_of(&press))
         {
-            // Like the panel chord: an armed prefix disarms on the
-            // intercepted press.
-            self.prefix.reset();
-            self.prefix.swallow(&press);
-            self.studio_nav(nav);
-            return None;
+            let role_key = matches!(
+                nav,
+                crate::panel::StudioNav::PreviousRole | crate::panel::StudioNav::NextRole
+            );
+            // The role keys only win in a studio workspace — where a
+            // studio header sits — and fall through to herdr's own
+            // binding everywhere else, so tabs still switch there.
+            if !role_key || self.studio.lot.studio_workspace {
+                // Like the panel chord: an armed prefix disarms on
+                // the intercepted press.
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.studio_nav(nav);
+                return None;
+            }
         }
         // H4: Hollywood's own binding — `alt+y` direct by default, or
         // the `[hollywood] key` override as a direct binding or a

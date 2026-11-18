@@ -106,8 +106,12 @@ fn hollywood_in(text: &str) -> Result<Option<HollywoodCfg>, String> {
             },
         }
     };
-    let runner =
-        string("runner")?.ok_or_else(|| "config.toml: hollywood.runner is required".to_string())?;
+    // A table without `runner` carries client-only settings (`key`,
+    // `start`, …) — the agent stays unconfigured; a `runner` without
+    // `model` is still the malformed case.
+    let Some(runner) = string("runner")? else {
+        return Ok(None);
+    };
     if !crate::runners::supported(&runner) {
         return Err(format!(
             "config.toml: hollywood.runner '{runner}' is not a supported runner"
@@ -233,12 +237,14 @@ mod tests {
         );
     }
 
-    /// `runner` and `model` are required; the runner must be one the
-    /// stage has an adapter for.
+    /// A table without `runner` is client-only — `key`, `start` and
+    /// friends need no agent, so the read is `Ok(None)`. A `runner`
+    /// without `model` is still malformed, and the runner must be
+    /// one the stage has an adapter for.
     #[test]
     fn hollywood_requires_runner_and_model() {
-        let err = hollywood_in("[hollywood]\nmodel = \"m\"\n").unwrap_err();
-        assert!(err.contains("runner"), "{err}");
+        let cfg = hollywood_in("[hollywood]\nmodel = \"m\"\nkey = \"alt+h\"\n").unwrap();
+        assert!(cfg.is_none(), "a runner-less table is client-only");
         let err = hollywood_in("[hollywood]\nrunner = \"fake\"\n").unwrap_err();
         assert!(err.contains("model"), "{err}");
         let err = hollywood_in("[hollywood]\nrunner = \"runner-x\"\nmodel = \"m\"\n").unwrap_err();

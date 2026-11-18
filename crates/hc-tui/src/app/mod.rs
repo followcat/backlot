@@ -32,6 +32,7 @@ mod key_leases;
 mod key_routing;
 mod layout_actions;
 pub(crate) mod layout_mouse;
+mod lot;
 mod mouse;
 mod multipane;
 mod navigation;
@@ -268,7 +269,7 @@ pub struct App {
     hollywood: crate::hollywood::Hollywood,
     /// The resolved toggle binding — `None` without `[hollywood]`, so
     /// Alt+Y reaches the focused program exactly as before.
-    hollywood_key: Option<crate::hollywood::HollywoodKey>,
+    hollywood_key: Option<crate::hollywood::CallSheetKeys>,
     /// Whether a `[hollywood]` table exists — the expanded studio
     /// panel shows the setup hint only without one.
     has_hollywood_cfg: bool,

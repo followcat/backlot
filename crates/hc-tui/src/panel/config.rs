@@ -7,11 +7,14 @@ use std::path::{Path, PathBuf};
 
 use crate::config::KeyCombo;
 
-/// `[panel]` defaults: expanded width 26 (clamped 22–60), toggle key
-/// `y` (chorded as `prefix+y`; the reference leaves `y` unbound).
+/// `[dock] width` is the dock's expanded width (clamped 28–48,
+/// default 36); a `[panel] width` from an older file still feeds it.
 /// `[sidebar] width` (clamped 20–60) applies only in studio mode —
 /// outside it herdr's `ui.sidebar_width` rules the sidebar exactly as
-/// before. `[keys]` binds the four direct studio keys.
+/// before. `[keys]` binds the four direct studio keys plus the call
+/// sheet's own pair, and `[hollywood] start` is the bar's start
+/// policy. The dock's toggle key is `y` (chorded as `prefix+y`) from
+/// `[panel] key`, or `[keys] prefix_dock` in a newer file.
 #[derive(Debug, Clone)]
 pub(crate) struct PanelConfig {
     /// Expanded width after clamping.
@@ -22,11 +25,36 @@ pub(crate) struct PanelConfig {
     pub sidebar_width: u16,
     /// The four direct studio navigation keys.
     pub keys: StudioKeys,
+    /// `[hollywood].start` — when the bar opens by itself.
+    pub call_sheet_start: CallSheetStart,
+    /// `[keys].call_sheet` raw — `""` turns the direct key off.
+    pub keys_call_sheet: Option<String>,
+    /// `[keys].prefix_call_sheet` raw — `""` turns the chord off.
+    pub keys_prefix_call_sheet: Option<String>,
+    /// `[hollywood].key` read leniently — survives a client-only
+    /// `[hollywood]` table the stage's strict parser drops.
+    pub hollywood_key: Option<String>,
+    /// Any `[hollywood]` table exists — the pill shows for it even
+    /// without an agent (`runner`/`model`).
+    pub hollywood_table: bool,
 }
 
-pub(crate) const WIDTH_MIN: u16 = 22;
-pub(crate) const WIDTH_MAX: u16 = 60;
-const WIDTH_DEFAULT: u16 = 26;
+/// The bar's start policy (`[hollywood] start`): the default is
+/// `collapsed` — the bar no longer opens expanded at start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum CallSheetStart {
+    /// Always the pill only — the bar waits for the toggle.
+    #[default]
+    Collapsed,
+    /// Expanded only while U > 0 — and again on the edge up.
+    WhenWaiting,
+    /// Always expanded at start.
+    Expanded,
+}
+
+pub(crate) const WIDTH_MIN: u16 = 28;
+pub(crate) const WIDTH_MAX: u16 = 48;
+const WIDTH_DEFAULT: u16 = 36;
 
 pub(crate) const SIDEBAR_WIDTH_MIN: u16 = 20;
 pub(crate) const SIDEBAR_WIDTH_MAX: u16 = 60;
@@ -172,6 +200,11 @@ impl Default for PanelConfig {
             key: "y".into(),
             sidebar_width: SIDEBAR_WIDTH_DEFAULT,
             keys: StudioKeys::default(),
+            call_sheet_start: CallSheetStart::default(),
+            keys_call_sheet: None,
+            keys_prefix_call_sheet: None,
+            hollywood_key: None,
+            hollywood_table: false,
         }
     }
 }
@@ -181,6 +214,8 @@ struct File {
     panel: Option<Section>,
     sidebar: Option<SidebarSection>,
     keys: Option<KeysSection>,
+    dock: Option<DockSection>,
+    hollywood: Option<HollywoodSection>,
 }
 
 #[derive(serde::Deserialize)]
@@ -195,11 +230,31 @@ struct SidebarSection {
 }
 
 #[derive(serde::Deserialize)]
+struct DockSection {
+    width: Option<i64>,
+}
+
+/// `[hollywood]` read leniently — only the client's own keys. A
+/// client-only table (`key`/`start` without `runner`) parses fine
+/// here even though the stage's strict reader skips it.
+#[derive(serde::Deserialize)]
+struct HollywoodSection {
+    start: Option<String>,
+    key: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
 struct KeysSection {
     previous_studio: Option<String>,
     next_studio: Option<String>,
     previous_role: Option<String>,
     next_role: Option<String>,
+    /// `prev_studio`/`prev_role` spellings from the spec's table.
+    prev_studio: Option<String>,
+    prev_role: Option<String>,
+    call_sheet: Option<String>,
+    prefix_call_sheet: Option<String>,
+    prefix_dock: Option<String>,
 }
 
 /// The config's own path: `$XDG_CONFIG_HOME/backlot/config.toml`,
@@ -260,7 +315,6 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
     if let Some(panel) = parsed.panel {
         if let Some(width) = panel.width {
             config.width = width.clamp(1, i64::from(u16::MAX)) as u16;
-            config.width = config.width.clamp(WIDTH_MIN, WIDTH_MAX);
         }
         if let Some(key) = panel.key.filter(|k| !k.trim().is_empty()) {
             if crate::config::parse_key_combo(&key).is_some() {
@@ -272,14 +326,35 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
             }
         }
     }
+    if let Some(width) = parsed.dock.and_then(|d| d.width) {
+        config.width = width.clamp(1, i64::from(u16::MAX)) as u16;
+    }
+    config.width = config.width.clamp(WIDTH_MIN, WIDTH_MAX);
     if let Some(width) = parsed.sidebar.and_then(|s| s.width) {
         config.sidebar_width = (width.clamp(1, i64::from(u16::MAX)) as u16)
             .clamp(SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX);
     }
+    if let Some(hollywood) = parsed.hollywood {
+        config.hollywood_table = true;
+        config.hollywood_key = hollywood.key;
+        if let Some(start) = hollywood.start.filter(|s| !s.trim().is_empty()) {
+            match start.trim() {
+                "collapsed" => config.call_sheet_start = CallSheetStart::Collapsed,
+                "when_waiting" => config.call_sheet_start = CallSheetStart::WhenWaiting,
+                "expanded" => config.call_sheet_start = CallSheetStart::Expanded,
+                _ => {
+                    return (
+                        config,
+                        Some(format!("{path:?} ignored: invalid hollywood.start")),
+                    );
+                }
+            }
+        }
+    }
     if let Some(keys) = parsed.keys {
         let mut notice = None;
         config.keys.previous_studio = studio_key(
-            keys.previous_studio,
+            keys.previous_studio.or(keys.prev_studio),
             "alt+up",
             "previous_studio",
             path,
@@ -293,7 +368,7 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
             &mut notice,
         );
         config.keys.previous_role = studio_key(
-            keys.previous_role,
+            keys.previous_role.or(keys.prev_role),
             "alt+left",
             "previous_role",
             path,
@@ -303,6 +378,18 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
             studio_key(keys.next_role, "alt+right", "next_role", path, &mut notice);
         if notice.is_some() {
             return (config, notice);
+        }
+        config.keys_call_sheet = keys.call_sheet;
+        config.keys_prefix_call_sheet = keys.prefix_call_sheet;
+        if let Some(tail) = keys.prefix_dock.filter(|k| !k.trim().is_empty()) {
+            if crate::config::parse_key_combo(&tail).is_some() {
+                config.key = tail;
+            } else {
+                return (
+                    config,
+                    Some(format!("{path:?} ignored: invalid keys.prefix_dock")),
+                );
+            }
         }
     }
     (config, None)

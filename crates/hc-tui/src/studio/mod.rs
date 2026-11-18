@@ -79,6 +79,9 @@ pub(crate) struct Studio {
     /// The cast section's scroll offset — its own, so the agents
     /// list's scroll survives a mode flip either way.
     pub(crate) cast_scroll: usize,
+    /// The lot latch — the pill's counts and the focused workspace's
+    /// studio header, rebuilt by `sync_studio`.
+    pub(crate) lot: crate::chrome::lot::Lot,
 }
 
 impl Studio {

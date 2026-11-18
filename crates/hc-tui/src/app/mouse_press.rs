@@ -123,6 +123,25 @@ impl App {
             }
             return;
         }
+        // The lot pill owns its reserved segment before the tab bar's
+        // own hits — it opens the Hollywood bar like `alt+y`.
+        if contains(hits.lot_pill, point) {
+            self.hollywood_toggle();
+            return;
+        }
+        // The studio header's name focuses the dock on that studio.
+        if contains(hits.studio_header, point)
+            && let Some(key) = hits.studio_key.clone()
+        {
+            self.studio.current = Some(key.clone());
+            if !self.panel.open() {
+                self.panel.mode = crate::panel::PanelMode::Expanded;
+            }
+            self.panel.focused = true;
+            self.panel.selected = Some(crate::panel::Target::Studio(key));
+            self.panel.selected_row = None;
+            return;
+        }
         if contains(hits.tab_scroll_left, point) {
             self.shell_state.tab_scroll = self.shell_state.tab_scroll.saturating_sub(1);
             return;

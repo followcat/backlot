@@ -220,6 +220,7 @@ async fn a_closed_panel_reserves_nothing_at_any_width() {
             app.shell_state.sidebar_collapsed,
             crate::app::pane_geometry::focused_tab_count(&app),
             app.sidebar_width,
+            false,
         );
         let chrome = app.chrome_layout(cols, 24);
         assert_eq!(chrome.pane_surface, direct.pane_surface, "cols {cols}");
@@ -244,6 +245,7 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
             app.shell_state.sidebar_collapsed,
             crate::app::pane_geometry::focused_tab_count(&app),
             app.sidebar_width,
+            false,
         );
         assert_eq!(layout.pane_surface, direct.pane_surface, "cols {cols}");
         let region = cols - app.panel_width();
@@ -259,10 +261,10 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
 #[tokio::test]
 async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
     let mut app = app_with_panel_doc();
-    // 80 − 16 = 64 and 88 − 26 = 62 dip under the 64-column mobile
+    // 80 − 16 = 64 and 96 − 36 = 60 dip under the 64-column mobile
     // threshold; the window itself is still desktop-width, so the
     // chrome must keep its desktop layout and sidebar.
-    for (cols, width) in [(80u16, PanelMode::Collapsed), (88, PanelMode::Expanded)] {
+    for (cols, width) in [(80u16, PanelMode::Collapsed), (96, PanelMode::Expanded)] {
         app.panel.mode = width;
         app.area = (cols, 24);
         assert!(app.panel_beside(cols), "cols {cols}");
@@ -285,6 +287,7 @@ async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
             app.shell_state.sidebar_collapsed,
             crate::app::pane_geometry::focused_tab_count(&app),
             app.sidebar_width,
+            false,
         );
         assert_eq!(app.chrome_layout(cols, 24), direct, "cols {cols}");
     }
@@ -306,6 +309,7 @@ async fn a_panel_that_cannot_fit_draws_full_screen() {
             app.shell_state.sidebar_collapsed,
             crate::app::pane_geometry::focused_tab_count(&app),
             app.sidebar_width,
+            false,
         );
         assert_eq!(
             app.chrome_layout(cols, 24).pane_surface,
@@ -350,6 +354,7 @@ async fn a_closed_panel_is_identical_in_geometry_keys_and_cells() {
             app.shell_state.sidebar_collapsed,
             crate::app::pane_geometry::focused_tab_count(&app),
             app.sidebar_width,
+            false,
         );
         assert_eq!(
             app.chrome_layout(cols, 24).pane_surface,

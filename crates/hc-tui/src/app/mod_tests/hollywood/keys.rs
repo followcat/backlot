@@ -10,10 +10,11 @@ async fn a_configured_direct_key_replaces_alt_y() {
         Ok(Some(cfg(Some("ctrl+h")))),
         std::path::Path::new("config.toml"),
     );
-    assert_eq!(app.hollywood.mode, LayerMode::Expanded, "the entry state");
-    // The strip is the state this test toggles from.
-    key(&mut app, hc_vt::Key::Escape);
-    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert_eq!(
+        app.hollywood.mode,
+        LayerMode::Collapsed,
+        "the entry state — the pill is the bar's face (S0)"
+    );
     app.area = (120, 24);
     // Alt+Y is no longer the layer's — the strip stays a strip.
     alt_y(&mut app);
@@ -32,7 +33,11 @@ async fn a_configured_chord_toggles_through_the_prefix() {
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     app.area = (120, 24);
+    // The direct slot `[hollywood] key` never claimed keeps its
+    // `alt+y` default — only `[keys] call_sheet = ""` frees it.
     alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     prefix(&mut app);
     key(&mut app, hc_vt::Key::Char('h'));

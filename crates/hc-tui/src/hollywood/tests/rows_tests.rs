@@ -1,7 +1,7 @@
-//! The bar's model: the frames, the band rows, the strip's content
+//! The bar's model: the frames and the band rows.
 //! and the cast marks — all pure reads of the document.
 use super::*;
-use crate::hollywood::rows::{Frame, Row, Target, band_rows, frames, on_set, strip, strip_text};
+use crate::hollywood::rows::{Frame, Row, Target, band_rows, frames, on_set};
 use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
 
@@ -61,11 +61,7 @@ fn without_an_agent_the_band_is_the_setup_line() {
     let all = band_rows(Some(&summary), true, false);
     assert_eq!(all.len(), 1);
     assert!(matches!(all[0], Row::Setup));
-    let text = strip_text(&machines(Some(&summary)), false);
-    assert!(text.contains("3 studios"), "{text}");
-    assert!(!text.contains("card"), "{text}");
-    // The square stays, dim: it is the bar's mark, not the agent's.
-    assert!(text.contains('■'), "{text}");
+    assert_eq!(frames(&machines(Some(&summary))).len(), 4);
 }
 
 #[test]
@@ -79,29 +75,6 @@ fn a_document_without_a_hollywood_object_has_a_setup_free_band() {
     assert_eq!(all.len(), 1);
     assert!(matches!(all[0], Row::Setup));
     assert_eq!(frames(&machines(Some(&summary))).len(), 4);
-}
-
-#[test]
-fn the_strip_names_the_agent_the_studios_and_what_waits() {
-    let summary = summary();
-    let list = machines(Some(&summary));
-    let content = strip(&list, true);
-    assert_eq!(content.state, Some("live"));
-    assert_eq!(content.studios, 3);
-    assert_eq!(content.waiting, 2);
-    let text = strip_text(&list, true);
-    assert!(text.contains("✦ hollywood"), "{text}");
-    assert!(text.contains("3 studios"), "{text}");
-    assert!(text.contains("!2"), "{text}");
-    // Without an agent the state is gone and the count stays.
-    let content = strip(&list, false);
-    assert_eq!(content.state, None);
-    assert!(strip_text(&list, false).contains("3 studios"));
-    // A missing document reads as no studios.
-    let content = strip(&[], true);
-    assert_eq!(content.studios, 0);
-    assert_eq!(content.state, Some("down"));
-    assert!(strip_text(&[], true).contains("0 studios"));
 }
 
 #[test]

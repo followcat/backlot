@@ -201,6 +201,7 @@ async fn wide_and_combining_labels_fit_on_boundaries() {
             app.shell_state.sidebar_collapsed,
             1,
             app.sidebar_width,
+            false,
         )
         .sidebar
         .width;

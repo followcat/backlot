@@ -217,7 +217,7 @@ async fn next_and_previous_role_skip_the_closed_and_wrap() {
 }
 
 #[tokio::test]
-async fn a_role_key_from_outside_the_studio_focuses_the_remembered() {
+async fn a_role_key_from_outside_the_studio_falls_through() {
     let mut app = two_studio_app();
     app.focused = Some("t4".into());
     app.refresh_projection();
@@ -228,9 +228,16 @@ async fn a_role_key_from_outside_the_studio_focuses_the_remembered() {
             .map(String::as_str),
         Some("actor-alice")
     );
-    // Focus a terminal no person owns → still acme's current, but
-    // `inside` is false → the first press lands on alice again.
+    // Focus a terminal no person owns → not a studio workspace, so
+    // the role key falls through to herdr's binding (unbound here:
+    // nothing happens), and acme's remembered role stays put.
     app.focused = Some("t99".into());
+    app.refresh_projection();
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.focused.as_deref(), Some("t99"), "herdr got the key");
+    // Back inside the studio the same key cycles the cast — and the
+    // remembered alice is where a studio hop lands.
+    app.focused = Some("t1".into());
     app.refresh_projection();
     alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t4"));

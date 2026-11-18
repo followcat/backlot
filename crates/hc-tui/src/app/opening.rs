@@ -67,15 +67,18 @@ impl App {
         }
         self.opening.settled = true;
         self.opening.cap = None;
-        // U7: a client that opens with studios meets the bar open;
-        // one that opens on the card keeps it collapsed, and the
-        // first studio to arrive later does not pull it open.
+        // S0: the bar's face is the lot pill — the start policy, not
+        // the settle, decides whether it opens expanded (`expanded`,
+        // or `when_waiting` with U > 0, applied in `sync_lot` once
+        // the first summary's counts land). The settle only arms it
+        // and floors the mode at collapsed.
         if !self.plain {
-            self.hollywood.mode = if self.studioless() {
-                crate::hollywood::LayerMode::Collapsed
-            } else {
-                crate::hollywood::LayerMode::Expanded
-            };
+            if self.hollywood.mode == crate::hollywood::LayerMode::Hidden {
+                self.hollywood.mode = crate::hollywood::LayerMode::Collapsed;
+            }
+            if !self.studio.lot.start_applied {
+                self.studio.lot.start_pending = true;
+            }
         }
         self.sched.mark_dirty(now);
     }

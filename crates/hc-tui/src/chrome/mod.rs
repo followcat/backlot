@@ -12,6 +12,7 @@ pub mod endpoint_sidebar;
 pub mod endpoint_sidebar_expanded;
 pub mod endpoints;
 pub(crate) mod help;
+pub(crate) mod lot;
 pub(crate) mod menu;
 pub mod mobile;
 pub mod mobile_items;
