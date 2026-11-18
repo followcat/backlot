@@ -230,6 +230,13 @@ pub(crate) fn one_file(
 }
 
 pub(crate) fn report(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    // `report show --studio <s> --file <relpath>` (G3) is the
+    // read-only stream; a first `show` word takes that branch and
+    // the actor's `--node` form keeps its own parse below.
+    if it.peek() == Some("show") {
+        let _ = it.next();
+        return report_show(common, it);
+    }
     let mut node = None;
     let mut file = None;
     while let Some(arg) = it.next() {
@@ -251,6 +258,31 @@ pub(crate) fn report(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), 
         std::mem::take(common),
         Cmd::Report {
             node: node.ok_or_else(|| usage("missing --node", U_REPORT))?,
+            file: file.ok_or_else(|| usage("missing --file", U_REPORT))?,
+        },
+    ))
+}
+
+/// `report show`: `--file` plus the common flags only (`--studio`
+/// names the studio); `--node` is the actor form's and stays out.
+fn report_show(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut file = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_REPORT)));
+        }
+        if common_flag(it, common, &arg, U_REPORT)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--file" => file = Some(PathBuf::from(it.value("--file", U_REPORT)?)),
+            _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REPORT)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::ReportShow {
             file: file.ok_or_else(|| usage("missing --file", U_REPORT))?,
         },
     ))

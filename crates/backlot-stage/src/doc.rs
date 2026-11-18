@@ -118,6 +118,7 @@ mod tests {
                     ready_to_finish: false,
                     tasks_done: 0,
                     tasks_total: 0,
+                    tasks: Vec::new(),
                     roles: Vec::new(),
                 })
                 .collect(),

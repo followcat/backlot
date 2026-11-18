@@ -659,5 +659,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 Vec::new(),
             ))
         })),
+        // `report show` is read-only — `hwood_read` serves it and
+        // the append path never sees it (R24).
+        Cmd::ReportShow { .. } => Err(Fail::refused("report show appends nothing")),
     }
 }

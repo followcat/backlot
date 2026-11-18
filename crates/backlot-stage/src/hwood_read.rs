@@ -21,6 +21,10 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
         Cmd::Status { json, all: true } => Some(status_all(env, base, *json)),
         Cmd::Status { json, .. } => Some(status(common, env, base, *json)),
         Cmd::Records { json, all } => Some(records(common, env, base, *json, *all)),
+        Cmd::ReportShow { file } => {
+            let mut out = std::io::stdout().lock();
+            Some(report_show(common, env, base, file, &mut out).map(|()| String::new()))
+        }
         Cmd::StudioNew {
             dry_run: true,
             interactive: false,
@@ -102,6 +106,114 @@ fn records(common: &Common, env: &Env, base: &Path, json: bool, all: bool) -> Re
     } else {
         render::records(&recs)
     })
+}
+
+/// `report show --studio <s> --file <relpath>` (G3): streams one
+/// studio artifact to `out`. Only `reports/…`, `checks/…`,
+/// `attention/<seq>.txt` and `requirements/v<n>.md` (the on-disk
+/// `req/` directory — `req/v<n>.md` is accepted as the same root)
+/// are served, the bytes are capped at 1 MiB, and the resolved path
+/// must stay inside the studio directory — `..`, absolute paths and
+/// symlinks that leave it are refused. `out` is a parameter so the
+/// read can be captured in tests; production hands it stdout.
+pub(crate) fn report_show(
+    common: &Common,
+    env: &Env,
+    base: &Path,
+    file: &Path,
+    out: &mut dyn std::io::Write,
+) -> Result<(), Fail> {
+    const MAX_BYTES: u64 = 1024 * 1024;
+    let name = crate::cli::studio_name(common, env)?;
+    let dir = store::studio_dir(base, &name);
+    if !dir.join("events.jsonl").is_file() {
+        return Err(Fail::refused(format!("no studio '{name}'")));
+    }
+    let rel = report_relpath(file)?;
+    let root = dir
+        .canonicalize()
+        .map_err(|e| Fail::refused(e.to_string()))?;
+    let real = dir
+        .join(&rel)
+        .canonicalize()
+        .map_err(|_| Fail::refused(format!("no file '{}'", rel.display())))?;
+    if !real.starts_with(&root) || !real.is_file() {
+        return Err(Fail::refused(format!(
+            "'{}' is outside studio '{name}'",
+            rel.display()
+        )));
+    }
+    let bytes = real
+        .metadata()
+        .map_err(|e| Fail::refused(e.to_string()))?
+        .len();
+    if bytes > MAX_BYTES {
+        return Err(Fail::refused(format!(
+            "'{}' is {} bytes — the report show limit is {} bytes",
+            rel.display(),
+            bytes,
+            MAX_BYTES
+        )));
+    }
+    let mut src = std::fs::File::open(&real).map_err(|e| Fail::refused(e.to_string()))?;
+    std::io::copy(&mut src, out).map_err(|e| Fail::refused(e.to_string()))?;
+    Ok(())
+}
+
+/// The `--file` argument as a validated studio-relative path — the
+/// same check `report_show` runs before touching the filesystem.
+fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
+    use std::path::Component;
+    if file.is_absolute() || file.as_os_str().is_empty() {
+        return Err(Fail::refused(format!(
+            "--file '{}' must be a studio-relative path",
+            file.display()
+        )));
+    }
+    let parts: Vec<String> = file
+        .components()
+        .map(|c| match c {
+            Component::Normal(p) => Ok(p.to_string_lossy().into_owned()),
+            _ => Err(Fail::refused(format!(
+                "--file '{}' must not contain '..'",
+                file.display()
+            ))),
+        })
+        .collect::<Result<_, _>>()?;
+    let Some(root) = parts.first() else {
+        return Err(Fail::refused("--file names no folder"));
+    };
+    let tail_ok =
+        |parts: &[String], want: fn(&str) -> bool| parts.len() == 2 && want(parts[1].as_str());
+    let name = parts.last().map(String::as_str).unwrap_or_default();
+    let ok = match root.as_str() {
+        "reports" | "checks" => parts.len() >= 2,
+        "attention" => tail_ok(&parts, |n| {
+            n.strip_suffix(".txt")
+                .is_some_and(|seq| !seq.is_empty() && seq.chars().all(|c| c.is_ascii_digit()))
+        }),
+        // `requirements/` is the G3 name for the ledger's `req/`.
+        "requirements" | "req" => tail_ok(&parts, |n| {
+            n.strip_suffix(".md").is_some_and(|v| {
+                v.strip_prefix('v')
+                    .is_some_and(|ver| !ver.is_empty() && ver.chars().all(|c| c.is_ascii_digit()))
+            })
+        }),
+        _ => false,
+    };
+    if !ok {
+        return Err(Fail::refused(format!(
+            "--file '{name}' is not under reports/, checks/, attention/ or requirements/"
+        )));
+    }
+    let mut rel = std::path::PathBuf::from(root.as_str());
+    if root == "requirements" {
+        rel = std::path::PathBuf::from("req");
+    }
+    for part in &parts[1..] {
+        rel.push(part);
+    }
+    Ok(rel)
 }
 
 /// `studio new --dry-run`: every `studio new` check plus the draft's

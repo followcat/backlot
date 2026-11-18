@@ -55,6 +55,12 @@ pub enum Cmd {
         node: String,
         file: PathBuf,
     },
+    /// `report show --studio <s> --file <relpath>` (G3): streams a
+    /// studio artifact under `reports/`, `checks/`, `attention/` or
+    /// `requirements/` to stdout — read-only, no event appended.
+    ReportShow {
+        file: PathBuf,
+    },
     Ask {
         file: PathBuf,
     },
@@ -167,7 +173,7 @@ pub(crate) const U_REQ: &str = "usage: backlot req revise --file <f> --summary <
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
 pub(crate) const U_DISPATCH: &str = "usage: backlot dispatch --file <f>";
-pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>";
+pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n       backlot report show --studio <s> --file <relpath>";
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
 pub(crate) const U_TELL: &str =
     "usage: backlot tell <role> --file <f>\n       backlot tell hollywood \"<text>\"";
@@ -212,6 +218,10 @@ impl<'a> It<'a> {
     pub(crate) fn value(&mut self, flag: &str, u: &'static str) -> Result<String, Fail> {
         self.next()
             .ok_or_else(|| usage(format!("{flag} needs a value"), u))
+    }
+    /// The next word without consuming it — subcommand dispatch.
+    pub(crate) fn peek(&mut self) -> Option<&str> {
+        self.it.peek().map(|s| s.as_str())
     }
 }
 
