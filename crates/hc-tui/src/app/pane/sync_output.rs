@@ -137,10 +137,11 @@ fn next_marker(bytes: &[u8], from: usize) -> Option<(usize, bool)> {
     None
 }
 
-/// Length of the longest suffix of `bytes` that is a proper prefix of a
-/// marker — bytes the next chunk may complete.
+/// Length of the longest suffix of `bytes` that is a prefix of a marker —
+/// bytes the next chunk may complete. The whole 7-byte prefix counts: a
+/// chunk can end exactly there and continue with `h` or `l`.
 fn partial_marker_len(bytes: &[u8]) -> usize {
-    let max = (PREFIX.len() - 1).min(bytes.len());
+    let max = PREFIX.len().min(bytes.len());
     (1..=max)
         .rev()
         .find(|len| bytes[bytes.len() - len..] == PREFIX[..*len])
@@ -256,6 +257,21 @@ mod tests {
         assert_eq!(sync.push(b"\x1b[?2026hframe\x1b[?20", now), b"\x1b[?2026h");
         assert!(sync.holding());
         assert_eq!(sync.push(b"26l", now), b"frame\x1b[?2026l");
+        assert!(!sync.holding());
+    }
+
+    /// The chunk boundary can fall exactly after the whole 7-byte prefix:
+    /// the next chunk's `l` must still close the frame, and the `ESC` must
+    /// not have been fed alone.
+    #[test]
+    fn a_split_after_the_whole_prefix_still_closes_the_frame() {
+        let mut sync = split();
+        let now = Instant::now();
+        assert_eq!(
+            sync.push(b"\x1b[?2026hframe\x1b[?2026", now),
+            b"\x1b[?2026h"
+        );
+        assert_eq!(sync.push(b"l", now), b"frame\x1b[?2026l");
         assert!(!sync.holding());
     }
 
