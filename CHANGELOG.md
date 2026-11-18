@@ -15,6 +15,8 @@ All notable changes to hc-tui are documented here. The format follows
   second and 256 KiB, a frame boundary inside one DATA chunk paints the frame
   before it, and markers split across chunks are bridged.
 
+## 0.1.14 — 2026-11-18
+
 ### Added
 
 - `[advanced] attach_history_lines` — scrollback a cold attach asks the core to
@@ -36,6 +38,12 @@ All notable changes to hc-tui are documented here. The format follows
   sizes the client VT for the focused pane and every cached observer alike;
   the former 256 KiB / 64 KiB role split is gone, so a cached tab keeps the
   history it left.
+
+### Fixed
+
+- Leaving a tab now hands its screen to the cached observer. `sync_target`
+  read the target after the outgoing wire had idled the pane, so the handover
+  never ran and every switch dropped the screen it had.
 
 ## 0.1.13 — 2026-11-18
 
