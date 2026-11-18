@@ -145,10 +145,13 @@ of 32 off-tab panes. The focused terminal has a separate active input wire.
 Rendering prefers the persistent observer's completed paint, so routine cached
 switching preserves live cursor style, OSC 12 and OSC 4 state. The observer
 connections send no input, resize, focus or display-fact claims. VT scrollback
-is bounded per role: 256 KiB for the active pane and 64 KiB for observers; the
-off-tab cache is a fixed 32-entry LRU. An observer evicted past the LRU drops
-its attach at once — it receives no background output while evicted — and a
-revisit reattaches and repaints from core history. Current-tab
+is bounded by `[advanced] scrollback_limit_bytes` (Herdr's key, 10 MB default)
+for the active pane and every cached observer alike; a cold attach asks for
+`[advanced] attach_history_lines` (5000 default) and a switch onto a cached
+screen asks for the screen only, adopting the observer's VT at the first
+paint. The off-tab cache is a fixed 32-entry LRU. An observer evicted past the
+LRU drops its attach at once — it receives no background output while
+evicted — and a revisit reattaches and repaints from core history. Current-tab
 panes are pinned, so memory also scales with the explicitly displayed layout.
 
 Visible current-tab panes also hold silent size leases, including the focused

@@ -9,7 +9,7 @@
 //! `hc-tui.command` labels let a restarted client adopt the record
 //! without a resize.
 
-use super::pane::{Pane, Role, Spec};
+use super::pane::{Role, Spec};
 use super::popup::{FLOAT_COMMAND_LABEL, FLOAT_OWNER_LABEL, POPUP_LABEL, PopupState, popup_fit};
 use super::*;
 use crate::config::CustomCommandKeybind;
@@ -243,11 +243,10 @@ impl App {
                 other.restore = false;
             }
         }
-        let mut pane = self.size_leases.remove(&entry.terminal).unwrap_or_else(|| {
-            let mut pane = Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-            pane.set_host_facts(self.host_facts.clone());
-            pane
-        });
+        let mut pane = self
+            .size_leases
+            .remove(&entry.terminal)
+            .unwrap_or_else(|| self.new_pane());
         pane.want(Some(Spec {
             terminal: entry.terminal.clone(),
             role: Role::Active,
@@ -281,8 +280,7 @@ impl App {
         height: Option<PopupSize>,
         created_ms: u64,
     ) {
-        let mut pane = Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-        pane.set_host_facts(self.host_facts.clone());
+        let mut pane = self.new_pane();
         pane.want(Some(Spec {
             terminal: terminal.clone(),
             role: Role::Active,
@@ -316,8 +314,7 @@ impl App {
     /// rediscovered record. The lease takes the record's own size when
     /// known (adoption must not resize), else the popup geometry.
     pub(super) fn hide_float(&mut self, key: FloatKey, entry: FloatEntry) {
-        let mut lease = Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-        lease.set_host_facts(self.host_facts.clone());
+        let mut lease = self.new_pane();
         let (cols, rows) = self
             .view
             .inventory

@@ -14,6 +14,7 @@ impl Pane {
         };
         let (spec, attempts) = (spec.clone(), *attempts);
         self.state = State::Idle;
+        self.wire_lost();
         if unsupported {
             self.state = State::Gone {
                 spec,
@@ -42,6 +43,9 @@ impl Pane {
         if matches!(self.state, State::Live(_)) {
             self.discard_pending_incarnation();
         }
+        // The wire is gone: it may have missed bytes, so its VT is no
+        // longer current and no attach may continue it.
+        self.wire_lost();
         let delay = RETRY_MIN
             .saturating_mul(1u32 << attempts.min(10))
             .min(RETRY_MAX);

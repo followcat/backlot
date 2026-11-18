@@ -38,8 +38,9 @@ const KNOWN_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
 /// Top-level sections hc-tui actually models. A `serde_ignored` path under
 /// one of these means a real typo worth diagnosing; a path under a known
 /// section this client does not consume (`terminal`, `server`, `remote`,
-/// `session`, `advanced`) is a scoped deferral, not an unknown key.
+/// `session`) is a scoped deferral, not an unknown key.
 const CONSUMED_TOP_LEVEL_CONFIG_KEYS: &[&str] = &[
+    "advanced",
     "onboarding",
     "theme",
     "update",

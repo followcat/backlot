@@ -1,16 +1,22 @@
 use super::*;
 
-/// The VT scrollback budget is role-scoped: cached observers — which
-/// outnumber visible panes by the off-tab LRU budget — get the tight
-/// cap; the focused viewer keeps the larger budget for copy mode.
+/// Every role that builds a VT takes its budget from
+/// `[advanced] scrollback_limit_bytes`: the focused viewer and a cached
+/// observer keep the *same* history, so a tab switch back finds what it
+/// left instead of a role-sized slice of it.
 #[test]
-fn scrollback_limit_is_role_scoped() {
-    assert_eq!(scrollback_limit(Role::Observe), OBSERVER_SCROLLBACK);
-    assert_eq!(scrollback_limit(Role::Observe), 64 * 1024);
-    assert_eq!(scrollback_limit(Role::Active), ACTIVE_SCROLLBACK);
-    assert_eq!(scrollback_limit(Role::Active), 256 * 1024);
-    // Size holders never build a VT; the arm exists for totality.
-    assert_eq!(scrollback_limit(Role::SizeLease), ACTIVE_SCROLLBACK);
+fn every_vt_takes_the_configured_scrollback_budget() {
+    let (mut pane, _rx, _accept) = rig();
+    assert_eq!(
+        pane.budgets(),
+        (
+            crate::config::DEFAULT_ATTACH_HISTORY_LINES,
+            crate::config::DEFAULT_SCROLLBACK_LIMIT_BYTES
+        )
+    );
+    pane.set_scrollback_bytes(2_000_000);
+    pane.set_attach_history(700);
+    assert_eq!(pane.budgets(), (700, 2_000_000));
 }
 
 /// Feeds `lines` numbered rows through the wire and reports the
@@ -56,16 +62,17 @@ async fn feed_numbered_lines(
 
 #[tokio::test]
 async fn observer_vt_reports_its_cap_and_evicts_under_load() {
+    // A small budget keeps the feed short; the point is that the pane's
+    // configured cap reaches libghostty and prunes.
+    const BUDGET: usize = 256 * 1024;
     let (mut pane, mut rx, mut accept) = rig();
+    pane.set_scrollback_bytes(BUDGET);
     pane.want(Some(spec(Role::Observe)));
     let mut core = serve(&mut accept, true).await;
     step(&mut pane, &mut rx).await;
     paint(&mut pane, &mut rx, &mut core, b"paint").await;
-    // The constructed VT carries the role's configured cap.
-    assert_eq!(
-        pane.vt().unwrap().scrollback_max_bytes(),
-        Some(OBSERVER_SCROLLBACK)
-    );
+    // The constructed VT carries the configured cap.
+    assert_eq!(pane.vt().unwrap().scrollback_max_bytes(), Some(BUDGET));
     // ~124 KiB of numbered lines overflows the byte cap: the earliest
     // rows are evicted and the buffer stays bounded rather than
     // growing with the feed.
@@ -74,22 +81,18 @@ async fn observer_vt_reports_its_cap_and_evicts_under_load() {
         obs_first > 0,
         "observer scrollback must evict its earliest rows, first={obs_first}"
     );
-    // The active viewer gets the larger configured budget; the
-    // observer never retains more than it. libghostty enforces byte
-    // caps at page granularity (a ~2 standard-page floor), so today
-    // the two land on the same effective bound.
+    // The active viewer gets the same configured budget — a cached tab
+    // must not keep less history than the focused one.
     let (mut active, mut rx2, mut accept2) = rig();
+    active.set_scrollback_bytes(BUDGET);
     active.want(Some(spec(Role::Active)));
     let mut core2 = serve(&mut accept2, true).await;
     step(&mut active, &mut rx2).await;
     paint(&mut active, &mut rx2, &mut core2, b"paint").await;
-    assert_eq!(
-        active.vt().unwrap().scrollback_max_bytes(),
-        Some(ACTIVE_SCROLLBACK)
-    );
+    assert_eq!(active.vt().unwrap().scrollback_max_bytes(), Some(BUDGET));
     let (act_total, act_first) = feed_numbered_lines(&mut active, &mut rx2, &mut core2, 2000).await;
-    assert!(obs_total <= act_total);
-    assert!(obs_first >= act_first);
+    assert_eq!(obs_total, act_total);
+    assert_eq!(obs_first, act_first);
 }
 
 #[tokio::test]
@@ -101,11 +104,11 @@ async fn same_terminal_role_change_keeps_the_screen_and_rebuilds_the_vt() {
     paint(&mut pane, &mut rx, &mut core, b"kept screen").await;
     assert_eq!(
         pane.vt().unwrap().scrollback_max_bytes(),
-        Some(OBSERVER_SCROLLBACK)
+        Some(crate::config::DEFAULT_SCROLLBACK_LIMIT_BYTES)
     );
     // An Observe→Active change on the same terminal retains the last
-    // paint; the fresh attach's first DATA builds the VT under the
-    // new role's cap.
+    // paint; the fresh attach's first DATA builds a new VT under the
+    // configured cap.
     pane.want(Some(spec(Role::Active)));
     assert!(
         pane.vt().is_some(),
@@ -124,7 +127,7 @@ async fn same_terminal_role_change_keeps_the_screen_and_rebuilds_the_vt() {
     paint(&mut pane, &mut rx, &mut core2, b"fresh paint").await;
     assert_eq!(
         pane.vt().unwrap().scrollback_max_bytes(),
-        Some(ACTIVE_SCROLLBACK)
+        Some(crate::config::DEFAULT_SCROLLBACK_LIMIT_BYTES)
     );
     assert!(vt_text(&mut pane).contains("fresh paint"));
 }

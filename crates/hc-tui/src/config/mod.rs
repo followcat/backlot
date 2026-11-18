@@ -55,6 +55,16 @@ use serde::Deserialize;
 pub const CONFIG_PATH_ENV_VAR: &str = "HERDR_CONFIG_PATH";
 pub const DEFAULT_MOUSE_SCROLL_LINES: usize = 3;
 pub const DEFAULT_MOBILE_WIDTH_THRESHOLD: u16 = 64;
+/// Herdr's `[advanced] scrollback_limit_bytes` default: 10 MB per pane
+/// terminal.
+pub const DEFAULT_SCROLLBACK_LIMIT_BYTES: usize = 10_000_000;
+/// hc-tui's `[advanced] attach_history_lines` default: the scrollback a
+/// cold attach asks the core to replay on its first paint.
+pub const DEFAULT_ATTACH_HISTORY_LINES: u64 = 5000;
+/// The most history a cold attach may ask for. A core keeps 5 MB per
+/// terminal; asking for more than this paints lines no screen can show and
+/// costs the wire without returning anything.
+pub const MAX_ATTACH_HISTORY_LINES: u64 = 50_000;
 
 /// hc-tui deliberately reads the stable `herdr` config directory in all
 /// build profiles; herdr's own debug `app_dir_name` would say `herdr-dev`.
@@ -100,6 +110,8 @@ pub struct Config {
     pub ui: UiConfig,
     pub worktrees: WorktreesConfig,
     pub experimental: ExperimentalConfig,
+    /// `[advanced]`: Herdr's scrollback budget and hc-tui's attach history.
+    pub advanced: AdvancedConfig,
 }
 
 impl Config {

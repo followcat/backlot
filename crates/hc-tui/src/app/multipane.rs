@@ -3,6 +3,7 @@
 //! The focused pane keeps
 //! its existing original-wire input leases, including across focus changes.
 use super::*;
+use hc_proto::client::Output;
 
 /// The current tab is pinned; retain at most this many off-tab VTs. Every
 /// cached VT wire is observe-only. Scrollback remains bounded per Pane.
@@ -173,22 +174,61 @@ impl App {
             if active_target == Some(id.as_str()) && !self.observers.contains_key(&id) {
                 continue;
             }
-            let pane = self.observers.entry(id.clone()).or_insert_with(|| {
-                let mut pane = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-                pane.set_host_facts(self.host_facts.clone());
+            if !self.observers.contains_key(&id) {
+                let mut pane = self.new_pane();
                 pane.want(Some(Spec {
-                    terminal: id,
+                    terminal: id.clone(),
                     role: Role::Observe,
                 }));
-                pane
-            });
-            pane.on_view(&self.view);
+                self.observers.insert(id.clone(), pane);
+            }
+            if let Some(pane) = self.observers.get_mut(&id) {
+                pane.on_view(&self.view);
+            }
         }
         // Off-tab observers pace their DATA onto the shared flush grid;
         // visible ones are rendered surfaces and stay live.
         let visible = self.visible_panes();
         for (id, pane) in &mut self.observers {
             pane.set_off_tab(!visible.iter().any(|v| v == id));
+        }
+    }
+
+    /// The active wire's first paint replaces a cached observer's screen.
+    /// While the switch is in flight that observer stays live and keeps
+    /// feeding the VT, so nothing printed between the switch and this
+    /// paint is lost; the paint then lands in that VT instead of a fresh
+    /// one replaying history. Adopting and dropping the observer in the
+    /// same step is what makes the handover atomic.
+    fn adopt_cached_screen(&mut self, event: &PaneEv) {
+        let PaneEv::Out {
+            generation,
+            out: Output::Data(_),
+        } = event
+        else {
+            return;
+        };
+        if *generation != self.pane.generation() || !self.pane.awaits_warm_paint() {
+            return;
+        }
+        let Some(id) = self.pane.target().map(str::to_owned) else {
+            return;
+        };
+        // The promise is kept only by the incarnation it was made for.
+        // Anything else is left to the pane's own cold reopen, which
+        // still asks for full history.
+        let current = self.pane.incarnation();
+        let usable = self
+            .observers
+            .get(&id)
+            .and_then(|observer| observer.warm_ticket())
+            .is_some_and(|warm| Some(warm.incarnation) == current);
+        if !usable {
+            return;
+        }
+        if let Some(retained) = self.observers.get_mut(&id).and_then(pane::Pane::take_warm) {
+            self.pane.adopt_warm(retained);
+            self.observers.remove(&id);
         }
     }
 
@@ -199,6 +239,7 @@ impl App {
     pub(super) fn pane_event(&mut self, event: PaneEv, now: Instant) -> bool {
         let route = event.route();
         if self.pane.owns_route(route) {
+            self.adopt_cached_screen(&event);
             let dirty = visible_pane_event(&mut self.pane, event, now);
             // The focused wire's fresh paint retires the stale observer
             // kept warm for the switch — close it now instead of

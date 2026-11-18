@@ -78,17 +78,16 @@ impl App {
             if settling && !self.size_leases.contains_key(&info.id) {
                 continue;
             }
-            let lease = self.size_leases.entry(info.id.clone()).or_insert_with(|| {
-                let mut lease = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-                lease.set_host_facts(self.host_facts.clone());
+            if !self.size_leases.contains_key(&info.id) {
+                let mut lease = self.new_pane();
                 lease.allocated(inner.width.max(1), inner.height.max(1));
                 lease.want(Some(Spec {
-                    terminal: info.id,
+                    terminal: info.id.clone(),
                     role: Role::SizeLease,
                 }));
-                lease
-            });
-            if !settling {
+                self.size_leases.insert(info.id.clone(), lease);
+            }
+            if !settling && let Some(lease) = self.size_leases.get_mut(&info.id) {
                 lease.allocated(inner.width.max(1), inner.height.max(1));
             }
         }

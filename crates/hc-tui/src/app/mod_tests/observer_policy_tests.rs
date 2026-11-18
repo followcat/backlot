@@ -99,7 +99,10 @@ async fn evicted_observer_closes_its_attach_and_a_revisit_repaints_history() {
     // history — nothing was retained off the wire while evicted.
     visit(&mut app, "t1");
     let (mut core1b, params1b) = serve_observer(&mut requests, "t1", 9).await;
-    assert_eq!(params1b.history, pane::HISTORY);
+    assert_eq!(
+        params1b.history,
+        crate::config::DEFAULT_ATTACH_HISTORY_LINES
+    );
     core1b
         .send_stream(
             9,

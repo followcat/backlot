@@ -85,6 +85,12 @@ pub struct ClientShellConfig {
     pub tab_bar_right: Vec<crate::config::TabBarRightEntryConfig>,
     pub tab_bar_right_separator: String,
     pub mouse_scroll_lines: usize,
+    /// `[advanced] attach_history_lines` — scrollback a cold attach asks
+    /// the core to replay on its first paint (0 = the screen only).
+    pub attach_history_lines: u64,
+    /// `[advanced] scrollback_limit_bytes` — Herdr's per-pane VT budget,
+    /// used for the focused viewer and every cached observer alike.
+    pub scrollback_limit_bytes: usize,
     pub right_click_passthrough_modifiers: Option<hc_vt::Mods>,
     pub prompt_new_tab_name: bool,
     pub prompt_new_workspace_name: bool,
@@ -173,6 +179,8 @@ impl ClientShellConfig {
             tab_bar_right: ui.tab_bar_right.clone(),
             tab_bar_right_separator: ui.tab_bar_right_separator.clone(),
             mouse_scroll_lines: ui.mouse_scroll_lines(),
+            attach_history_lines: config.advanced.attach_history(),
+            scrollback_limit_bytes: config.advanced.scrollback_limit_bytes,
             right_click_passthrough_modifiers: ui.right_click_passthrough_modifiers().map(|mods| {
                 let mut value = hc_vt::Mods::NONE;
                 for (key, bit) in [
