@@ -31,15 +31,19 @@ pub(crate) struct CursorState {
 }
 fn help_lines(
     keybinds: &LiveKeybindConfig,
+    backlot: Option<Vec<crate::keybind_help::KeybindHelpGroup>>,
     query: &str,
     palette: &Palette,
 ) -> Vec<(usize, ratatui::text::Line<'static>)> {
     use ratatui::text::{Line, Span};
 
-    let groups = crate::keybind_help::filter_keybind_help_groups(
-        crate::keybind_help::keybind_help_groups(&keybinds.keybinds, &keybinds.prefix),
-        query,
-    );
+    let mut groups = crate::keybind_help::keybind_help_groups(&keybinds.keybinds, &keybinds.prefix);
+    // Studio mode only: backlot's own sections and the legend sit
+    // under herdr's. Plain never builds them (D6).
+    if let Some(backlot) = backlot {
+        groups.extend(backlot);
+    }
+    let groups = crate::keybind_help::filter_keybind_help_groups(groups, query);
     let key_width = groups
         .iter()
         .flat_map(|(_, entries)| entries.iter().map(|(key, _)| key.chars().count()))
@@ -97,6 +101,7 @@ pub(crate) fn render_help_overlay(
     b: &mut Buffer,
     h: &HelpState,
     k: &LiveKeybindConfig,
+    backlot: Option<Vec<crate::keybind_help::KeybindHelpGroup>>,
     p: &Palette,
 ) -> Option<HelpRender> {
     use ratatui::widgets::{Paragraph, Widget, Wrap};
@@ -158,7 +163,7 @@ pub(crate) fn render_help_overlay(
     };
 
     let body = Rect::new(i.x, i.y + 3, i.width, i.height.saturating_sub(5));
-    let lines = help_lines(k, &h.query, p);
+    let lines = help_lines(k, backlot, &h.query, p);
     let viewport_rows = usize::from(body.height.max(1));
     let wrapped_rows = |width: u16| {
         let width = usize::from(width.max(1));

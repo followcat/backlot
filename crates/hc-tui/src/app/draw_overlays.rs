@@ -94,8 +94,12 @@ pub(super) fn render_overlays_and_cursor(
             app.studio.current.as_ref(),
             Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,
-            app.hollywood_key
-                .map(|key| format!("{} sheet", key.label())),
+            app.hollywood_key.map(|key| {
+                format!(
+                    "{} sheet",
+                    key.label(&crate::config::format_prefix_combos(&app.live.prefix))
+                )
+            }),
             &app.shell.palette,
         );
         if hits.working_drawn {
@@ -194,6 +198,15 @@ pub(super) fn render_overlays_and_cursor(
             buf,
             &app.help_state,
             &app.live,
+            app.studio.active.then(|| {
+                crate::keybind_help::backlot_help_groups(
+                    &app.live.keybinds,
+                    &app.live.prefix,
+                    &app.panel_config,
+                    app.hollywood_key.unwrap_or_default(),
+                    app.panel_key_combo,
+                )
+            }),
             &app.shell.palette,
         )
         .unwrap_or_default()

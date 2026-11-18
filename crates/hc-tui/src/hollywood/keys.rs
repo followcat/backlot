@@ -42,24 +42,19 @@ pub(crate) struct CallSheetKeys {
 }
 
 impl CallSheetKeys {
-    /// The label for hints and the help overlay: `alt+y / ^B i` when
-    /// both bind, the bound one alone otherwise.
-    pub(crate) fn label(&self) -> String {
-        use crate::panel::{code_label, mods_label};
-        let combo = |c: KeyCombo| {
-            let (code, mods) = c;
-            if mods.is_empty() {
-                code_label(code)
-            } else {
-                format!("{}{}", mods_label(mods), code_label(code))
-            }
-        };
+    /// The label for hints and the help overlay: `alt+y / ctrl+b i`
+    /// when both bind, the bound one alone otherwise. `prefix` is the
+    /// configured prefix's label.
+    pub(crate) fn label(&self, prefix: &str) -> String {
         let mut parts = Vec::new();
         if let Some(direct) = self.direct {
-            parts.push(combo(direct));
+            parts.push(crate::config::format_key_combo(direct));
         }
         if let Some(chord) = self.chord {
-            parts.push(format!("^B {}", combo(chord)));
+            parts.push(format!(
+                "{prefix} {}",
+                crate::config::format_key_combo(chord)
+            ));
         }
         if parts.is_empty() {
             "—".to_string()
