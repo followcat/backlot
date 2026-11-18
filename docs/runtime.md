@@ -72,6 +72,17 @@ notice offers a click to take control. Core does not identify the other
 owner, so the message describes a possible competing viewer. An explicit
 click sends a fresh resize request even when its dimensions did not change.
 
+Synchronized output (DECSET 2026) is honored per pane: a program that brackets a
+redraw in `CSI ? 2026 h` … `CSI ? 2026 l` has that frame's bytes held until the
+reset, so the pane's VT — and every paint of it, focused or observer, tab or
+split — only ever holds a complete frame. The mode set itself is fed
+immediately, so the VT's own mode state (and its DECRQM answer) stays truthful;
+a reset inside one DATA chunk paints the frame before it and starts holding the
+next, and a marker split across chunks is bridged. The hold is bounded: after
+one second (Ghostty's value) or 256 KiB of a single frame the bytes are fed
+anyway, so a program that forgets the reset costs a visible second instead of a
+frozen pane. A new wire drops whatever the old program had held.
+
 Broken connections retain the inventory and last pane paint, with a
 visible notice. Recovery has bounded backoff and waits for the complete first-paint mode
 marker before encoding queued semantic input. Attach reply incarnation
