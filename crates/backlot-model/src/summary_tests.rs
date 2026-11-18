@@ -958,3 +958,218 @@ fn summary_fields_parse_old_and_new() {
     assert!(s.studios[0].ready_to_finish);
     assert!(s.studios[0].roles[0].attention_user);
 }
+
+/// S1: an open attention publishes its seq and its display detail —
+/// the `"; [needs the user; ]screen saved to attention/<seq>.txt"`
+/// tail trimmed; a cleared one publishes neither.
+#[test]
+fn attention_seq_and_detail_follow_the_open_attention() {
+    let mut base = base_events();
+    base.push(ev(4, "director", cast("t1", "actor-a", "a")));
+    let raise = |seq: u64, role: &str, detail: String| Event {
+        seq,
+        ts_ms: 0,
+        by: crate::event::EventBy::role("stage"),
+        kind: EventKind::AttentionRaised {
+            role: role.into(),
+            reason: crate::event::PERMISSION_PROMPT.into(),
+            detail,
+            needs_user: true,
+        },
+    };
+    let state = state_with(
+        &base,
+        vec![
+            ("stage", started("actor-t1-c1", "t7", "a")),
+            ("stage", started("writer", "t8", "w")),
+            ("stage", started("tester", "t9", "t")),
+        ],
+    );
+    let mut state = state;
+    crate::state::apply(
+        &mut state,
+        &raise(
+            9,
+            "actor-t1-c1",
+            "Bash: env -i cargo metadata --no-deps; needs the user; screen saved to attention/9.txt"
+                .into(),
+        ),
+    );
+    crate::state::apply(
+        &mut state,
+        &raise(
+            10,
+            "writer",
+            "needs the user; screen saved to attention/10.txt".into(),
+        ),
+    );
+    let s = summary(
+        &[("acme-shop".into(), state.clone())],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let role = |name: &str| s.studios[0].roles.iter().find(|r| r.role == name).unwrap();
+    let actor = role("actor-t1-c1");
+    assert_eq!(actor.attention_seq, Some(9));
+    assert_eq!(
+        actor.attention_detail.as_deref(),
+        Some("Bash: env -i cargo metadata --no-deps")
+    );
+    // No tool line at all: the detail is only the saved-screen tail.
+    let writer = role("writer");
+    assert_eq!(writer.attention_seq, Some(10));
+    assert_eq!(
+        writer.attention_detail.as_deref(),
+        Some("unbound prompt — peek screen")
+    );
+    // A role with no open attention carries neither field.
+    let tester = role("tester");
+    assert_eq!(tester.attention_seq, None);
+    assert_eq!(tester.attention_detail, None);
+
+    // Once cleared both fields drop.
+    let mut cleared = state;
+    crate::state::apply(
+        &mut cleared,
+        &Event {
+            seq: 11,
+            ts_ms: 0,
+            by: crate::event::EventBy::role("stage"),
+            kind: EventKind::AttentionCleared {
+                target: 9,
+                reason: Some("sent y".into()),
+            },
+        },
+    );
+    let s = summary(
+        &[("acme-shop".into(), cleared)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let actor = s.studios[0]
+        .roles
+        .iter()
+        .find(|r| r.role == "actor-t1-c1")
+        .unwrap();
+    assert_eq!(actor.attention_seq, None);
+    assert_eq!(actor.attention_detail, None);
+}
+
+/// S1: `tasks_done` counts accepted and partially accepted tasks;
+/// `tasks_total` every recorded task.
+#[test]
+fn task_counts_follow_the_ledger() {
+    let mut base = base_events();
+    base.push(ev(4, "director", task_created("t2", "feature", 1)));
+    base.push(ev(5, "director", task_created("t3", "feature", 1)));
+    let state = state_with(
+        &base,
+        vec![
+            ("producer", delivered("t1", 1, "a", 1)),
+            ("director", reviewed("t1", 1, Verdict::Accepted, vec![])),
+            ("producer", delivered("t2", 1, "b", 1)),
+            (
+                "director",
+                reviewed("t2", 1, Verdict::PartiallyAccepted, vec![]),
+            ),
+        ],
+    );
+    let s = summary(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    let studio = &s.studios[0];
+    assert_eq!(studio.tasks_done, 2);
+    assert_eq!(studio.tasks_total, 3);
+}
+
+/// S1: documents an older stage wrote — no `attention_seq`, no
+/// `attention_detail`, no `tasks_*` — parse with defaults, and a
+/// serialised current summary parses them back.
+#[test]
+fn s1_fields_parse_old_and_new() {
+    let old = r#"{
+        "schema": "backlot/1",
+        "updated_ms": 7,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "acme shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 1,
+            "roles": [{
+                "role": "director",
+                "name": "director",
+                "state": "live",
+                "since_ms": 3,
+                "attention": "permission prompt — needs the user",
+                "attention_user": true
+            }]
+        }]
+    }"#;
+    let s: Summary = serde_json::from_str(old).unwrap();
+    let studio = &s.studios[0];
+    assert_eq!(studio.tasks_done, 0);
+    assert_eq!(studio.tasks_total, 0);
+    let role = &studio.roles[0];
+    assert_eq!(role.attention_seq, None);
+    assert_eq!(role.attention_detail, None);
+
+    // A newer writer's keys read back; absent keys still default.
+    let new = r#"{
+        "schema": "backlot/1",
+        "updated_ms": 7,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "acme shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 1,
+            "tasks_done": 2,
+            "tasks_total": 3,
+            "roles": [{
+                "role": "director",
+                "name": "director",
+                "state": "live",
+                "since_ms": 3,
+                "attention_user": true,
+                "attention_seq": 9,
+                "attention_detail": "Bash: env -i cargo metadata --no-deps"
+            }]
+        }]
+    }"#;
+    let s: Summary = serde_json::from_str(new).unwrap();
+    let studio = &s.studios[0];
+    assert_eq!(studio.tasks_done, 2);
+    assert_eq!(studio.tasks_total, 3);
+    let role = &studio.roles[0];
+    assert_eq!(role.attention_seq, Some(9));
+    assert_eq!(
+        role.attention_detail.as_deref(),
+        Some("Bash: env -i cargo metadata --no-deps")
+    );
+
+    // Serialised defaults stay absent — a zero count and a missing
+    // attention write nothing.
+    let s: Summary = serde_json::from_str(old).unwrap();
+    let json = serde_json::to_value(&s).unwrap();
+    let studio = &json["studios"][0];
+    assert!(studio.get("tasks_done").is_none());
+    assert!(studio.get("tasks_total").is_none());
+    assert!(studio["roles"][0].get("attention_seq").is_none());
+    assert!(studio["roles"][0].get("attention_detail").is_none());
+}
