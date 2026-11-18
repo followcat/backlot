@@ -123,15 +123,15 @@ conflicts retry. An ambiguous creation/write is never automatically replayed.
 
 ## Diagnostics snapshot
 
-Set `HC_TUI_DIAG=<path>` when starting the client to make it explain itself.
+Set `BACKLOT_DIAG=<path>` when starting the client to make it explain itself.
 Then `kill -USR1 <pid>` writes one JSON snapshot to `<path>`, and a run that
 returns (detach, input closing or an error) writes a final snapshot before
 exiting. Unset, the client installs no signal handler and touches no file.
 
 ```sh
-HC_TUI_DIAG=/tmp/hc-tui-diag.json hc-tui --remote host-a
-kill -USR1 "$(pgrep -f 'hc-tui --remote host-a')"
-cat /tmp/hc-tui-diag.json
+BACKLOT_DIAG=/tmp/backlot-diag.json backlot --remote host-a
+kill -USR1 "$(pgrep -f 'backlot --remote host-a')"
+cat /tmp/backlot-diag.json
 ```
 
 A snapshot is written to a temporary file beside `<path>` with mode 0600 and

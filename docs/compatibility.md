@@ -27,10 +27,10 @@ A version suffix is never a capability check: `hello.result.features` and field 
 | Agent status read from the screen | present | absent | Agents show a status only if they report OSC 7501. |
 | `automatic_input`, `resize_notifications`: attach results | may be absent | present | Accepted. Unknown result fields are ignored. |
 | `put_chunks`: `terminal.put_begin`/`put_chunk`/`put_finish` | advertised | absent until 0.1.21 | The image paste sends one `terminal.put`. |
-| `events.subscribe` `docs` (named documents) | n/a | 0.1.21 and later | Not named: hc-tui reads every terminal, and naming documents alone silences terminal events. |
+| `events.subscribe` `docs` (named documents) | n/a | 0.1.21 and later | Not named: backlot reads every terminal and only fetches the `backlot` document, and naming documents alone silences terminal events. |
 | `terminal.list`'s `machines` | n/a | 0.1.21 always sends it | An empty list means no machines; older cores omit it, which reads the same. |
 | `terminal.send` error kind `cancelled` | n/a | 0.1.21 and later | Older cores never send it; when it arrives the send is reported as refused, nothing was typed. |
-| `restore_screen`, `restart_environment` | n/a | 0.1.21 (config, capability) | Not used: hc-tui keeps its own lost-terminal placeholder and offers no core restart. |
+| `restore_screen`, `restart_environment` | n/a | 0.1.21 (config, capability) | Not used: backlot keeps its own lost-terminal placeholder and offers no core restart. |
 | Unknown fields and event kinds | n/a | possible | Ignored. Optional fields stay `None`, and unknown kinds are skipped. |
 | `backlot` document on an added machine | served per machine | served per machine | A machine that does not serve it contributes no studios — blank, not an error. |
 | `terminal.run` `on:` | routed to the named machine | routed | Studio actions land on the studio's own machine; a core refusing the field fails that action's notice. |

@@ -193,7 +193,7 @@ to reload it.
 
 ### Update
 
-`prefix+u` opens the update card when a newer hc-tui is known, or the release notes of the running version right after
+`prefix+u` opens the update card when a newer backlot is known, or the release notes of the running version right after
 an upgrade. Rebind it with `keys.update` in your Herdr config, for example `update = "prefix+x"`; a binding you set wins
 over the default.
 

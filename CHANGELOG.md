@@ -1,46 +1,57 @@
 # Changelog
 
-All notable changes to hc-tui are documented here. The format follows
+All notable changes to backlot are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
+records backlot's own releases; for the hc-tui releases merged in (up to
+v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
-## 0.1.13 — 2026-11-18
+## Unreleased
 
 ### Added
 
-- Ctrl+V image paste over SSH sends the image in acknowledged pieces
-  (`terminal.put_begin` / `put_chunk` / `put_finish`, `put_abort` on failure,
-  64 KiB per piece) when the core advertises `put_chunks`; a core without it —
-  and any terminal on another machine — keeps one `terminal.put`.
-- `hc-proto` models `events.subscribe`'s `docs` (named documents, a trailing
-  `*` is a prefix) and keeps the watcher's document subscription list in one
-  place (`WatchParams::doc_patterns`) for forks such as backlot.
+- The in-client update, on backlot's own release: `prefix+u` (or a click on
+  the `↑v…` hint) opens the update card with the release notes of every newer
+  release, `↵ update` runs backlot's `install.sh` for the latest release,
+  verifies `backlot --version`, and `↵ restart` re-executes the installed
+  binary in place. A package-managed or dev build is refused with its own
+  command, and `BACKLOT_INSTALL_DIR` names another directory.
+- A running-version badge in the sidebar header (and in the mobile header),
+  with an accent `↑v…` hint for a newer release and a green `↻v…` once an
+  install waits for its restart. `BACKLOT_NO_UPDATE_CHECK=1` still opts out.
+- `◌ waiting` for an agent whose own turn is quiet while work it started is
+  still running.
+- The sidebar and panel chrome the user changed by hand — width, the
+  spaces/agents split, collapse state, the agent-panel sort — is remembered
+  per endpoint across restarts.
+- An opt-in diagnostics snapshot.
 
 ### Changed
 
-- The pinned official test core is official `hc` 0.1.21
-  (`c7517808d64f06609e4ecf0db1757005373cc3a3`), and the OpenRPC schema fixture
-  is copied from the same commit. Older official cores keep working.
-- `terminal.send`'s `cancelled` error kind reads as a refusal: the notice says
-  nothing was typed and that the line can be sent again, never as success.
-- `terminal.list`'s `machines` is read as an answer even when empty (`[]` means
-  no machines on 0.1.21 and later); older cores that omit it read the same.
-- Documentation links the fork's client contract,
-  [docs/fork-features.md](https://github.com/followcat/herdr-core/blob/v0.1.21-followcat.1/docs/fork-features.md),
-  from the compatibility and status pages.
+- The agent panel's default sort is `priority` (waiting first), and a sort
+  the user picked is remembered.
+- Official `hc` 0.1.21 is the tested core; older 0.1.x cores keep working,
+  with each missing capability switched off. The pinned test core and the
+  schema fixture move with it, and the fork's client contract is linked from
+  the README and [core compatibility](docs/compatibility.md).
+- The studio keeps naming the `backlot` document in exactly one place
+  (`WatchParams.documents`) and names no documents in `events.subscribe`:
+  on 0.1.21 and later cores that would silence terminal events.
+- Image paste over SSH sends acknowledged pieces when the core advertises
+  `put_chunks`, and one `terminal.put` otherwise.
 
 ### Fixed
 
-- `tools/build-test-core.sh` stops git discovery at `target/`: ghostty's
-  `build.zig` runs `git describe`, and from the fetched sources git walked up
-  into this repository, where a release tag on `HEAD` made zig reject the
-  checkout (`tagged releases must be in vX.Y.Z format matching build.zig`).
-- The parity gate is meaningful again: the parity config copy selects herdr's
-  own agent-panel sort (`spaces`, header label `grouped`) and pins the audited
-  popup binding to a one-shot popup, so the default scenario reaches
-  `popup-open`'s successors; both clients stand in one fixture directory so the
-  navigator's path row compares; the harness excuses exactly the documented
-  cells it cannot unify (the version badge, the navigator's pane id, and the
-  cursor shape right after the pane command) and nothing else.
+- A `cancelled` `terminal.send` is a refusal: the stage and the client both
+  say nothing was typed, the message stays queued, and a timed-out send never
+  reads as "not typed" (the core may still type it).
+- Pane output follows the tail when a key is pressed (not row 0), attaches
+  release their call registrations when they close early, and a narrow mobile
+  header keeps the studio's name before the update hint takes its cells.
+- The parity gate compares again: herdr's own agent-panel sort in the
+  reference config, a one-shot popup pin, one fixture directory for both
+  clients, the fixture's cursor shape, and exact-cell known differences with
+  their reasons.
+

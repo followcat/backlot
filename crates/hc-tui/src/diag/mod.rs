@@ -1,4 +1,4 @@
-//! Opt-in diagnostics snapshot. With `HC_TUI_DIAG=<path>` set, SIGUSR1
+//! Opt-in diagnostics snapshot. With `BACKLOT_DIAG=<path>` set, SIGUSR1
 //! writes one JSON snapshot of the loop, the panes and the connections to
 //! `<path>`, and a clean exit writes a final one. A snapshot holds counters
 //! and protocol ids only: no terminal text, titles, paths, host names or
@@ -27,7 +27,7 @@ use signal_hook::consts::SIGUSR1;
 use signal_hook::iterator::{Handle, Signals};
 
 /// The variable that turns diagnostics on; its value is the snapshot path.
-pub const ENV: &str = "HC_TUI_DIAG";
+pub const ENV: &str = "BACKLOT_DIAG";
 
 /// The snapshot format version, bumped when a key changes meaning.
 pub const SCHEMA: u64 = 1;

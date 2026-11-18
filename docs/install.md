@@ -133,5 +133,5 @@ backlot leaves little else behind:
   picked, the studio panel's settings and `[hollywood]`.
 - The SSH control socket lives in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>`. It expires by itself, and
   you can delete the directory.
-- The update-check cache is one JSON file in `$XDG_STATE_HOME/hc-tui/` (`~/.local/state/hc-tui/` when XDG is unset).
+- The update-check cache is one JSON file in `$XDG_STATE_HOME/backlot/` (`~/.local/state/backlot/` when XDG is unset).
 - The `hc-tui` layout document is stored on the core.

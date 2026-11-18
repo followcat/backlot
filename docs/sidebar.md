@@ -122,16 +122,16 @@ labels.
 ## Attention, seen state and order
 
 Herdr's display priority is `Blocked > Done > Working > Idle > Unknown`;
-hc-tui inserts the Waiting overlay between Working and Idle (it never
+backlot inserts the Waiting overlay between Working and Idle (it never
 outranks real work). Workspace and tab aggregates use that priority. The
 default agent sort is
-`priority` (an hc-tui difference from herdr, whose configured default is
+`priority` (a backlot difference from herdr, whose configured default is
 space order); an explicit `agent_panel_sort = "spaces"` keeps space order.
 The priority sort uses the activity chronology and deterministic receipt
 rule below. Chrome choices the user makes by hand — the sort toggle,
 sidebar width, section split, collapse state and workspace group
 collapses — persist per endpoint under
-`$XDG_STATE_HOME/hc-tui/client-shell/` and win over config at the next
+`$XDG_STATE_HOME/backlot/client-shell/` and win over config at the next
 start, as herdr does.
 
 Completion comes only from a present root or named record's non-null
