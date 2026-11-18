@@ -70,7 +70,7 @@ pub(super) async fn run_action(client: &Client, action: Action) -> Result<Outcom
                     Some(json!({"terminal":terminal,"text":text})),
                 )
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(send_failure)?;
             Ok(Outcome::Done)
         }
         Action::Interrupt {
@@ -247,4 +247,22 @@ async fn verify_incarnation(
         return Err(format!("{what} target was replaced; reopen the menu"));
     }
     Ok(())
+}
+
+/// A failed `terminal.send`. The core's `cancelled` kind (hc 0.1.21 and
+/// later) means the caller went away or the core stopped before anything
+/// was typed: a refusal, shown like any other failed action and never as a
+/// success. hc-tui offers no automatic retry for a send — the message says
+/// so, and the line can be sent again from the agent menu. A client-side
+/// deadline is its own case: the request may still be held behind a
+/// person's unsent draft, so the core can type it later.
+pub(super) fn send_failure(error: hc_proto::client::CallError) -> String {
+    use hc_proto::client::CallError;
+    match error {
+        error if error.is_kind(hc_proto::jsonrpc::error_kind::CANCELLED) => {
+            "Send cancelled; nothing was typed. Send it again.".into()
+        }
+        CallError::Timeout => "Send timed out; the core may still type it.".into(),
+        error => error.to_string(),
+    }
 }

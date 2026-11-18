@@ -239,3 +239,95 @@ fn primitive_edits_preserve_concurrent_splits_and_opaque_metadata() {
     );
     assert_eq!(document.extra["future"], json!([1, 2, 3]));
 }
+
+#[tokio::test]
+async fn a_cancelled_send_is_a_refusal_never_a_success() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.send"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let send = next(&mut core, "terminal.send").await;
+        assert_eq!(
+            send["params"],
+            json!({"terminal": "t7", "text": "fix the tests"})
+        );
+        // hc 0.1.21: the caller went away or the core stopped, and
+        // nothing was typed.
+        let error = json!({"jsonrpc":"2.0","id":send["id"],"error":{"code":-32000,
+            "message":"cancelled","data":{"kind":"cancelled","hint":""}}});
+        core.send(&Frame::data(0, serde_json::to_vec(&error).unwrap()).encode())
+            .await;
+    });
+    store
+        .submit(request(Action::SendLine {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            text: "fix the tests".into(),
+        }))
+        .unwrap();
+    let error = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .err()
+        .expect("a cancelled send is never a success");
+    assert_eq!(error, "Send cancelled; nothing was typed. Send it again.");
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn an_other_send_failure_keeps_the_core_word() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.send"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let send = next(&mut core, "terminal.send").await;
+        let error = json!({"jsonrpc":"2.0","id":send["id"],"error":{"code":-32000,
+            "message":"blocked","data":{"kind":"blocked","hint":""}}});
+        core.send(&Frame::data(0, serde_json::to_vec(&error).unwrap()).encode())
+            .await;
+    });
+    store
+        .submit(request(Action::SendLine {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            text: "hi".into(),
+        }))
+        .unwrap();
+    let error = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .err()
+        .unwrap();
+    assert!(error.contains("blocked"), "{error}");
+    assert!(!error.contains("cancelled"), "{error}");
+    server.await.unwrap();
+}
+
+#[test]
+fn send_failures_are_refusals_never_successes() {
+    use hc_proto::client::CallError;
+    use hc_proto::jsonrpc::{RpcError, error_kind};
+    let cancelled = CallError::Rpc(RpcError::new(
+        -32000,
+        error_kind::CANCELLED,
+        "cancelled",
+        "",
+    ));
+    assert_eq!(
+        super::rpc_actions::send_failure(cancelled),
+        "Send cancelled; nothing was typed. Send it again."
+    );
+    assert_eq!(
+        super::rpc_actions::send_failure(CallError::Timeout),
+        "Send timed out; the core may still type it."
+    );
+    let blocked = CallError::Rpc(RpcError::new(-32000, "blocked", "blocked", ""));
+    assert_eq!(
+        super::rpc_actions::send_failure(blocked),
+        "blocked: blocked"
+    );
+}

@@ -31,6 +31,10 @@ pub mod error_kind {
     pub const UNAVAILABLE: &str = "unavailable";
     /// A versioned write found the value changed under it.
     pub const CONFLICT: &str = "conflict";
+    /// The caller went away or the core stopped before the call took
+    /// effect: nothing was done (a `terminal.send`, for example, typed
+    /// nothing).
+    pub const CANCELLED: &str = "cancelled";
 }
 
 /// Serializes as `"2.0"` and accepts only `"2.0"`.
