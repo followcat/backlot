@@ -61,6 +61,7 @@ pub mod operations;
 pub mod own_theme;
 mod panel;
 pub mod popup_size;
+mod sheet;
 mod shells;
 pub mod structure;
 mod studio;

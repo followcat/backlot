@@ -310,6 +310,13 @@ impl App {
                         kind = WakeKind::Panel;
                     }
                 },
+                reply = self.sheet_rx.recv() => {
+                    if let Some(reply) = reply {
+                        self.on_sheet_reply(reply);
+                        dirty = true;
+                        kind = WakeKind::Panel;
+                    }
+                },
                 _ = async {
                     match wake {
                         Some(deadline) => tokio::time::sleep_until(deadline.into()).await,

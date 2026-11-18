@@ -326,6 +326,17 @@ pub(crate) fn backlot_help_groups(
             ],
         ),
         (
+            "studio dock (open)",
+            vec![
+                entry("↑↓ j k", "move · ⏎ focus a terminal"),
+                entry("space / c", "drawer · fold / collapse"),
+                entry("v / o / p", "task sheet · report · peek"),
+                entry("y / d + -", "answer · priority"),
+                entry("f / r", "finish a studio / start a stage"),
+                entry("esc", "back · unfocus"),
+            ],
+        ),
+        (
             "new studio",
             vec![
                 entry("tab / ↑↓ ←→", "pane · field · value"),

@@ -19,6 +19,18 @@ impl App {
             .is_some_and(|combo| crate::config::terminal_key_matches_combo(&matched, combo))
     }
 
+    /// Whether this press is the chord's shifted tail — `prefix+Y`
+    /// closes the dock from anywhere while it is open (S2 §4).
+    pub(crate) fn panel_close_press(&self, key: &TerminalKey) -> bool {
+        if !self.panel.open() {
+            return false;
+        }
+        let matched = crate::input::terminal_key_of(key);
+        self.panel_key_combo
+            .map(|(code, mods)| (code, mods | crossterm::event::KeyModifiers::SHIFT))
+            .is_some_and(|combo| crate::config::terminal_key_matches_combo(&matched, combo))
+    }
+
     /// Keys while the panel is focused — every press is consumed here,
     /// like `handle_navigator_key`. Repeats move only; releases are
     /// dropped.
@@ -71,18 +83,43 @@ impl App {
         use crossterm::event::{KeyCode, KeyModifiers};
         match code {
             KeyCode::Esc => {
-                self.panel.reopen_confirm = None;
-                // Full-screen owns the keyboard: Esc closes, it cannot
-                // leave keys leaking to a pane nobody sees.
+                self.panel.closed_hint = None;
+                self.panel.finish_confirm = None;
                 if self.panel_fullscreen() {
-                    self.panel_close();
+                    // An overlay dock backs out one step (S2 §1): the
+                    // expanded overlay drops to the 16-column strip
+                    // when that fits beside the panes, else closes.
+                    // The collapsed overlay closes outright.
+                    if self.panel.mode == crate::panel::PanelMode::Expanded
+                        && self.area.0 >= super::STRIP_BESIDE_COLS
+                    {
+                        self.panel.mode = crate::panel::PanelMode::Collapsed;
+                    } else {
+                        self.panel_close();
+                    }
                 } else {
+                    // Beside the panes: `esc back` — the dock keeps
+                    // its place and hands the keys to the terminal.
                     self.panel.focused = false;
                 }
             }
+            KeyCode::Char('q') if plain => self.panel_close(),
             KeyCode::Char('c') if plain => self.panel_flip_mode(),
             KeyCode::Char(' ') if plain => self.panel_collapse_selected(),
             KeyCode::Enter => self.panel_activate(),
+            KeyCode::Char('v') if plain => self.panel_sheet_open(),
+            KeyCode::Char('o') if plain => self.panel_reopen_selected(),
+            KeyCode::Char('p') if plain => self.panel_peek_selected(),
+            KeyCode::Char('?') if plain => self.help = true,
+            KeyCode::Char('r') if plain => self.panel_stage_start(),
+            KeyCode::Char('f') if plain => self.panel_finish_selected(),
+            KeyCode::Char(c @ ('y' | 'd')) if plain => self.panel_decide(c == 'y'),
+            KeyCode::Char('n') if plain => {
+                self.panel.finish_confirm = None;
+            }
+            KeyCode::Char('m') if plain => {
+                self.show_notice("Menus", "menus come later");
+            }
             KeyCode::Char('+') | KeyCode::Char('=')
                 if plain || modifiers == KeyModifiers::SHIFT =>
             {
@@ -100,19 +137,28 @@ impl App {
     /// Enter/left-click on the selected row: the title flips the mode,
     /// a block top border or strip line makes that studio current
     /// through the studio-nav path, a stacked block expands, an open
-    /// person focuses their terminal, and a closed person runs the
-    /// two-step reopen.
+    /// person focuses their terminal, a closed person shows the
+    /// `closed — press o to reopen` hint (S2 §4), a task row opens
+    /// its sheet and the `✓ <n> accepted` fold toggles.
     pub(super) fn panel_activate(&mut self) {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        // Activating any row drops an armed reopen — only a second
-        // Enter on the same closed person still finds it armed.
-        let confirm = self.panel.reopen_confirm.take();
+        // Activating any row drops the closed-role hint — only Enter
+        // itself may leave it up on its own row.
+        self.panel.closed_hint = None;
         match targets.get(index).cloned() {
             Some(Target::Studio(id) | Target::Strip(id)) => {
                 self.focus_studio(&id);
                 self.panel_leave();
+            }
+            Some(Target::Task(key, task)) => {
+                self.sheet_open(key, Some(task));
+            }
+            Some(Target::Fold(id)) => {
+                if !self.panel.accepted_folds.remove(&id) {
+                    self.panel.accepted_folds.insert(id);
+                }
             }
             Some(Target::Block(id)) => {
                 // A single-line block expands — the same manual
@@ -135,11 +181,8 @@ impl App {
                         .find(|r| r.role == role_name)
                         .map(|r| (s, r))
                 });
-                let armed = confirm
-                    .as_ref()
-                    .is_some_and(|(s, r)| s == &key && r == &role_name);
                 if let Some((studio, role)) = role.map(|(s, r)| (s, r.clone())) {
-                    self.panel_person_enter(studio, &role, armed);
+                    self.panel_person_enter(studio, &role);
                 }
             }
             _ => {}
@@ -148,9 +191,9 @@ impl App {
 
     /// Enter on a person: a live one focuses its terminal — a remote
     /// one lands through the same machine-qualified address the
-    /// sidebar uses; a closed one arms the row hint first and reopens
-    /// on the second armed press — or explains why it cannot.
-    fn panel_person_enter(&mut self, studio: StudioRef<'_>, role: &RoleSummary, armed: bool) {
+    /// sidebar uses; a closed one shows the `closed — press o to
+    /// reopen` hint — `o` does the reopen itself (S2 §4).
+    fn panel_person_enter(&mut self, studio: StudioRef<'_>, role: &RoleSummary) {
         if role.state == "closed" {
             if !role.resumable {
                 self.show_notice(
@@ -159,19 +202,7 @@ impl App {
                 );
                 return;
             }
-            if armed {
-                let argv = self.panel_argv(
-                    studio,
-                    &["reopen".into(), "--person".into(), role.role.clone()],
-                );
-                self.run_panel_action(PanelAction {
-                    label: format!("reopen {}", role.name),
-                    argv,
-                    machine: studio.machine.map(str::to_owned),
-                });
-            } else {
-                self.panel.reopen_confirm = Some((studio.key(), role.role.clone()));
-            }
+            self.panel.closed_hint = Some((studio.key(), role.role.clone()));
             return;
         }
         if role.state == "live"
@@ -182,9 +213,10 @@ impl App {
         }
     }
 
-    /// `+`/`-` on a selected actor: raise/lower its task priority.
-    /// Clamped at the ends — no action is spawned there.
-    fn panel_priority(&mut self, delta: i32) {
+    /// `o` on a closed person: `backlot reopen --person <role>` on
+    /// the studio's machine — the direct reopen the closed hint
+    /// names (S2 §4). Anything else is a no-op.
+    fn panel_reopen_selected(&mut self) {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
@@ -200,8 +232,182 @@ impl App {
         }) else {
             return;
         };
-        let (Some(task), Some(priority)) = (role.task.clone(), role.priority) else {
-            return; // only actors carry a task priority
+        if role.state != "closed" {
+            return;
+        }
+        if !role.resumable {
+            self.show_notice(
+                "Cannot reopen",
+                &format!("{} has no saved session to resume", role.name),
+            );
+            return;
+        }
+        self.panel.closed_hint = None;
+        let argv = self.panel_argv(
+            studio,
+            &["reopen".into(), "--person".into(), role.role.clone()],
+        );
+        self.run_panel_action(PanelAction {
+            label: format!("reopen {}", role.name),
+            argv,
+            machine: studio.machine.map(str::to_owned),
+        });
+    }
+
+    /// `p` on a person: the role's live screen, read-only — a
+    /// user-owned prompt's peek carries the `y`/`d` answer like the
+    /// Call Sheet's (D5, S2 §4).
+    fn panel_peek_selected(&mut self) {
+        let machines = self.panel_summaries();
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
+            return;
+        };
+        let Some(role) = crate::panel::data::studio(&machines, &key)
+            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
+        else {
+            return;
+        };
+        let Some(terminal) = role.terminal.clone() else {
+            self.show_notice("Peek unavailable", "the role has no screen to peek");
+            return;
+        };
+        self.open_peek(terminal);
+        if role.attention_user
+            && let Some(peek) = self.peek.as_mut()
+        {
+            peek.prompt = Some((key.clone(), role.role.clone()));
+        }
+    }
+
+    /// `y`/`d` while the dock owns the keys: an armed finish confirm
+    /// answers first — `y` runs `studio finish`, `d` stands down;
+    /// otherwise the key answers a selected person's user-owned
+    /// prompt (`backlot approve --person <role> --decision <d>` on
+    /// the studio's machine, S2 §4).
+    fn panel_decide(&mut self, allow: bool) {
+        if let Some(key) = self.panel.finish_confirm.take() {
+            if allow {
+                self.panel_finish_run(&key);
+            }
+            return;
+        }
+        self.panel_prompt_decision(allow);
+    }
+
+    /// `r` while the selected row's studio has a down stage:
+    /// `backlot stage start` on that machine — the `[r] start` the
+    /// owed-step line prints (S2 §2). Any other row is a no-op.
+    fn panel_stage_start(&mut self) {
+        let machines = self.panel_summaries();
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        let Some(key) = targets.get(index).and_then(|t| t.studio()) else {
+            return;
+        };
+        let Some(studio) = crate::panel::data::studio(&machines, key) else {
+            return;
+        };
+        if self.machine_stage_running(studio.machine) {
+            return;
+        }
+        let mut argv = vec!["stage".into(), "start".into(), "--as".into(), "user".into()];
+        if studio.machine.is_none() {
+            argv.extend(self.panel_endpoint_args.iter().cloned());
+        }
+        self.run_panel_action(PanelAction {
+            label: format!("stage start {}", studio.machine.unwrap_or("Local")),
+            argv,
+            machine: studio.machine.map(str::to_owned),
+        });
+    }
+
+    /// `f` on a ready-to-finish studio's rows: arm the inline
+    /// `finish <id>? [y/n]` line — `y` runs `studio finish`, `n` or
+    /// `Esc` stands down (S2 §2's `[f]` hint made real).
+    fn panel_finish_selected(&mut self) {
+        let machines = self.panel_summaries();
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        let Some(key) = targets.get(index).and_then(|t| t.studio()).cloned() else {
+            return;
+        };
+        let ready =
+            crate::panel::data::studio(&machines, &key).is_some_and(|s| s.studio.ready_to_finish);
+        if ready {
+            self.panel.finish_confirm = Some(key);
+        }
+    }
+
+    /// The armed finish confirm's `y`: `backlot studio finish` on
+    /// the studio's machine — the same command the Call Sheet's
+    /// confirm runs (S1 §5).
+    fn panel_finish_run(&mut self, key: &crate::studio::StudioKey) {
+        let machines = self.panel_summaries();
+        let Some(studio) = crate::panel::data::studio(&machines, key) else {
+            return;
+        };
+        let argv = self.panel_argv(studio, &["studio".into(), "finish".into()]);
+        self.run_panel_action(PanelAction {
+            label: format!("studio finish {}", key.id),
+            argv,
+            machine: studio.machine.map(str::to_owned),
+        });
+    }
+
+    /// `y`/`d` on a person with a user-owned prompt: `backlot
+    /// approve --person <role> --decision <d>` on the studio's
+    /// machine — the same command the Call Sheet rows run (S2 §4).
+    /// A director-owned or absent prompt is a no-op.
+    fn panel_prompt_decision(&mut self, allow: bool) {
+        let machines = self.panel_summaries();
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
+            return;
+        };
+        let owned = crate::panel::data::studio(&machines, &key)
+            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
+            .is_some_and(|r| r.attention_user);
+        if owned {
+            self.hollywood_prompt_decision(&key, &role_name, allow);
+        }
+    }
+
+    /// `+`/`-` on a selected actor or task row: raise/lower the
+    /// task's priority (`backlot priority --task … --as user`, S2
+    /// §4). Clamped at the ends — no action is spawned there.
+    fn panel_priority(&mut self, delta: i32) {
+        let machines = self.panel_summaries();
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        // (studio, task id, current level, label word): a person's
+        // own task, or the task row's task itself.
+        let Some((studio, task, priority, label)) = (match targets.get(index).cloned() {
+            Some(Target::Person(key, role_name)) => crate::panel::data::studio(&machines, &key)
+                .and_then(|s| {
+                    s.studio
+                        .roles
+                        .iter()
+                        .find(|r| r.role == role_name)
+                        .map(|r| (s, r.task.clone(), r.priority, r.name.clone()))
+                }),
+            Some(Target::Task(key, id)) => {
+                crate::panel::data::studio(&machines, &key).and_then(|s| {
+                    s.studio
+                        .tasks
+                        .iter()
+                        .find(|t| t.id == id)
+                        .map(|t| (s, Some(t.id.clone()), Some(t.priority), t.id.clone()))
+                })
+            }
+            _ => None,
+        }) else {
+            return;
+        };
+        let (Some(task), Some(priority)) = (task, priority) else {
+            return; // only actors/tasks carry a task priority
         };
         let next = match (delta > 0, priority) {
             (true, Priority::Low) => Some(Priority::Normal),
@@ -222,7 +428,7 @@ impl App {
             ],
         );
         self.run_panel_action(PanelAction {
-            label: format!("priority {} {}", role.name, next),
+            label: format!("priority {} {}", label, next),
             argv,
             machine: studio.machine.map(str::to_owned),
         });

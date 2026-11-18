@@ -25,6 +25,7 @@ fn targets(
     rows(
         &machines(summary),
         |_| stage,
+        |_| true,
         panel,
         current.as_ref(),
         body_height,
@@ -55,8 +56,9 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
         100,
     );
     assert_eq!(t.first(), Some(&Target::None));
-    // The top border is the only `Studio` row here — the 3 dividers
-    // and the bottom border are `Target::None` rows now (A2.2).
+    // The top border is the only `Studio` row — the title and the
+    // bottom border are the `Target::None` rows (A2.2); S2 dropped
+    // the group dividers.
     assert_eq!(
         t.iter()
             .filter(|x| **x == Target::Studio("acme-shop".into()))
@@ -66,8 +68,8 @@ fn expanded_block_lists_people_with_frame_rows_and_group_dividers() {
     );
     assert_eq!(
         t.iter().filter(|x| **x == Target::None).count(),
-        1 + 3 + 1,
-        "title + dividers + bottom: {t:?}"
+        2,
+        "title + bottom: {t:?}"
     );
     assert_eq!(
         people(&t),
@@ -146,12 +148,21 @@ fn space_overrides_the_automatic_block_state() {
 }
 
 #[test]
-fn collapsed_strip_lists_one_row_per_studio() {
+fn collapsed_strip_lists_the_studio_and_its_busy_roles() {
     let summary = summary();
-    assert_eq!(
-        targets(Some(&summary), true, &panel(PanelMode::Collapsed), None, 0),
-        vec![Target::None, Target::Strip("acme-shop".into())]
+    let t = targets(Some(&summary), true, &panel(PanelMode::Collapsed), None, 0);
+    // Every strip row — the studio line and its active/blocked role
+    // lines — shares the studio's Strip target (A4.3). The fixture's
+    // busy roles: producer (working), alice (attention), bob
+    // (dir-prompt) and erin (blocked upstream? — whoever works).
+    assert_eq!(t[0], Target::None);
+    assert!(
+        t[1..]
+            .iter()
+            .all(|x| *x == Target::Strip("acme-shop".into())),
+        "{t:?}"
     );
+    assert!(t.len() > 2, "the strip is never blank: {t:?}");
 }
 
 #[test]
@@ -179,7 +190,7 @@ fn missing_document_is_title_plus_no_studios() {
 }
 
 #[test]
-fn a_dead_stage_adds_one_line_and_keeps_the_rows() {
+fn a_dead_stage_moves_the_stage_word_inside_the_block() {
     let summary = summary();
     let alive = targets(
         Some(&summary),
@@ -188,14 +199,19 @@ fn a_dead_stage_adds_one_line_and_keeps_the_rows() {
         Some("acme-shop"),
         100,
     );
-    assert_eq!(
-        targets(
-            Some(&summary),
-            false,
-            &panel(PanelMode::Expanded),
-            Some("acme-shop"),
-            100,
-        ),
-        [vec![Target::None, Target::None], alive[1..].to_vec()].concat()
+    let dead = targets(
+        Some(&summary),
+        false,
+        &panel(PanelMode::Expanded),
+        Some("acme-shop"),
+        100,
     );
+    // No top `stage not running` row — the owed subheader inside the
+    // block carries it now (S2 §2): one extra `None` row under the
+    // block's top border, every other row untouched.
+    assert_eq!(dead.len(), alive.len() + 1, "{dead:?}");
+    assert_eq!(dead[0], Target::None);
+    assert_eq!(dead[1], alive[1]);
+    assert_eq!(dead[2], Target::None, "the owed line joins: {dead:?}");
+    assert_eq!(&dead[3..], &alive[2..]);
 }

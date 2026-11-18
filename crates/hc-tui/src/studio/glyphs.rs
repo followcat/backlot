@@ -272,8 +272,10 @@ pub(crate) enum Health {
     Live,
     /// The machine answers but the stage is down — `◌` `peach`.
     StageDown,
-    /// No answer at all — `×` `red`.
+    /// No answer at all, or the ledger is broken — `×` `red`.
     Offline,
+    /// Ready to finish or finished — `✓` `teal`.
+    Ready,
 }
 
 #[allow(dead_code)]
@@ -284,6 +286,7 @@ impl Health {
             Health::Live => "●",
             Health::StageDown => "◌",
             Health::Offline => "×",
+            Health::Ready => "✓",
         }
     }
 
@@ -293,6 +296,7 @@ impl Health {
             Health::Live => palette.green,
             Health::StageDown => palette.peach,
             Health::Offline => palette.red,
+            Health::Ready => palette.teal,
         }
     }
 }

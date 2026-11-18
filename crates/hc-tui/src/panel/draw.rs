@@ -14,7 +14,8 @@ use ratatui::style::{Modifier, Style};
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
-    draw_inner, draw_person, draw_person_line, draw_stacked, draw_strip, draw_top, frame_style,
+    draw_drawer, draw_fold, draw_owed, draw_person, draw_person_line, draw_stacked, draw_strip,
+    draw_strip_role, draw_task, draw_top, frame_style,
 };
 use super::rows::{Row, Target};
 use super::{Panel, PanelMode, rows};
@@ -58,11 +59,13 @@ pub(crate) fn render(
     area: Rect,
     machines: &[MachineSummary],
     stage_running: impl Fn(Option<&str>) -> bool,
+    reachable: impl Fn(Option<&str>) -> bool,
     panel: &Panel,
     current: Option<&StudioKey>,
     local: Option<&str>,
     keys: &StudioKeys,
     sheet: Option<String>,
+    overlay: bool,
     palette: &Palette,
 ) -> PanelRender {
     // Reset every cell first: `set_style` alone leaves the symbols the
@@ -124,16 +127,20 @@ pub(crate) fn render(
     }
     hits.title = title;
 
-    // The last row is the dim shortcuts line — dropped under 8 rows.
+    // The last row is the dim shortcuts line — dropped under 8
+    // rows. An overlay dock's `Esc` steps back, so its footer says
+    // `esc back` rather than plain `esc` (S2 §1).
     let shortcuts = area.height >= 8;
     if shortcuts {
-        const FOCUSED_TIERS: [&str; 3] = [
-            "↑↓ move  ⏎ open  +/- priority  esc",
-            "↑↓ move  ⏎ open  esc",
-            "esc",
+        let esc = if overlay { "esc back" } else { "esc" };
+        let focused_tiers = [
+            format!("↑↓ move  m menu  ? keys  {esc}"),
+            format!("↑↓ move  ? keys  {esc}"),
+            esc.to_string(),
         ];
+        let tier_refs: Vec<&str> = focused_tiers.iter().map(String::as_str).collect();
         let keys_line = if panel.focused {
-            fit_hints(&FOCUSED_TIERS, area.width as usize).to_string()
+            fit_hints(&tier_refs, area.width as usize).to_string()
         } else {
             keys.shortcut_label()
         };
@@ -159,7 +166,14 @@ pub(crate) fn render(
         return hits;
     }
     hits.body = body;
-    let all = rows(machines, &stage_running, panel, current, body.height);
+    let all = rows(
+        machines,
+        &stage_running,
+        &reachable,
+        panel,
+        current,
+        body.height,
+    );
     let multi = spans_machines(machines);
     let label = |studio: super::data::StudioRef<'_>| {
         studio_label(&studio.studio.id, studio.machine, local, multi)
@@ -202,16 +216,21 @@ pub(crate) fn render(
             && selected == Some(&target)
             && matches!(
                 row,
-                Row::BlockTop(_)
+                Row::BlockTop { .. }
                     | Row::Person { .. }
-                    | Row::PersonLine { .. }
+                    | Row::Task { .. }
+                    | Row::AcceptedFold { .. }
                     | Row::Stacked(_)
-                    | Row::Strip(_)
+                    | Row::Strip { .. }
             );
         if paints {
-            // A person row's `│` borders keep the border colour on the
-            // panel background: the highlight lives inside them.
-            let inner = if matches!(row, Row::Person { .. } | Row::PersonLine { .. }) {
+            // A block-interior row's `│` borders keep the border
+            // colour on the panel background: the highlight lives
+            // inside them.
+            let inner = if matches!(
+                row,
+                Row::Person { .. } | Row::Task { .. } | Row::AcceptedFold { .. }
+            ) {
                 Rect {
                     x: rect.x + 1,
                     width: rect.width.saturating_sub(2),
@@ -236,56 +255,31 @@ pub(crate) fn render(
             Row::Empty => {
                 put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
             }
-            Row::BlockTop(studio) => {
+            Row::Offline { machine } => {
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    &truncate_end(&format!("× {machine} unreachable"), rect.width as usize),
+                    Style::default().fg(palette.red),
+                );
+            }
+            Row::BlockTop { studio, health } => {
                 let frame = frame_of(&studio.key());
                 draw_top(
                     buf,
                     rect,
                     *studio,
                     &label(*studio),
+                    *health,
                     current == Some(&studio.key()),
                     frame,
                     palette,
                 );
             }
-            Row::BlockError(studio) => {
-                draw_inner(buf, rect, frame_of(&studio.key()));
-                if let Some(error) = &studio.studio.error {
-                    put_text(
-                        buf,
-                        rect.x + 2,
-                        rect.y,
-                        rect.width.saturating_sub(3),
-                        &truncate_end(&format!("! {error}"), rect.width.saturating_sub(3) as usize),
-                        Style::default().fg(palette.red),
-                    );
-                }
-            }
-            Row::BlockNext(studio) => {
-                draw_inner(buf, rect, frame_of(&studio.key()));
-                if let Some(next) = &studio.studio.next {
-                    put_text(
-                        buf,
-                        rect.x + 2,
-                        rect.y,
-                        rect.width.saturating_sub(3),
-                        &truncate_end(&format!("→ {next}"), rect.width.saturating_sub(3) as usize),
-                        Style::default().fg(palette.subtext0),
-                    );
-                }
-            }
-            Row::Divider(studio) => {
-                let edge = frame_of(&studio.key());
-                put_text(buf, rect.x, rect.y, 1, "├", edge);
-                put_text(
-                    buf,
-                    rect.x + 1,
-                    rect.y,
-                    rect.width.saturating_sub(2),
-                    &"─".repeat(rect.width.saturating_sub(2) as usize),
-                    edge,
-                );
-                put_text(buf, rect.x + rect.width - 1, rect.y, 1, "┤", edge);
+            Row::Owed { studio, kind, text } => {
+                draw_owed(buf, rect, *kind, text, frame_of(&studio.key()), palette);
             }
             Row::BlockBottom(studio) => {
                 let edge = frame_of(&studio.key());
@@ -314,6 +308,15 @@ pub(crate) fn render(
             Row::PersonLine { studio, role, kind } => {
                 draw_person_line(buf, rect, role, kind, frame_of(&studio.key()), palette);
             }
+            Row::Task { studio, task } => {
+                draw_task(buf, rect, *studio, task, frame_of(&studio.key()), palette);
+            }
+            Row::AcceptedFold { studio, open } => {
+                draw_fold(buf, rect, *studio, *open, frame_of(&studio.key()), palette);
+            }
+            Row::Drawer { studio, text, .. } => {
+                draw_drawer(buf, rect, text, frame_of(&studio.key()), palette);
+            }
             Row::Stacked(studio) => {
                 draw_stacked(
                     buf,
@@ -325,8 +328,11 @@ pub(crate) fn render(
                     &mut hits,
                 );
             }
-            Row::Strip(studio) => {
-                draw_strip(buf, rect, *studio, &label(*studio), palette);
+            Row::Strip { studio, health } => {
+                draw_strip(buf, rect, *studio, *health, local, palette);
+            }
+            Row::StripRole { role, .. } => {
+                draw_strip_role(buf, rect, role, palette);
             }
             Row::SetupHint => {
                 put_text(
@@ -343,7 +349,10 @@ pub(crate) fn render(
             // `▌` over the row's left edge — inside the block border
             // on a person's row — after the content, so nothing
             // redraws over it.
-            let bar_x = if matches!(row, Row::Person { .. } | Row::PersonLine { .. }) {
+            let bar_x = if matches!(
+                row,
+                Row::Person { .. } | Row::Task { .. } | Row::AcceptedFold { .. }
+            ) {
                 rect.x + 1
             } else {
                 rect.x

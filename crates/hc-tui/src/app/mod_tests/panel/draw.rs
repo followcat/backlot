@@ -49,7 +49,7 @@ async fn open_close_open_repaints_both_regions() {
     let open = draw_to(&mut app, 120, 24);
     let text = screen_lines(&open).join("\n");
     assert!(text.contains("lot"), "{text}");
-    assert!(text.contains("alice task-1"), "{text}");
+    assert!(text.contains("alice · task-1"), "{text}");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     // The right 26 columns are all panel: no pane paint remains there.
     let right = columns_text(&open, 84, 120);
@@ -92,17 +92,21 @@ async fn a_pane_update_while_the_panel_is_open_repaints_cleanly() {
 }
 
 #[tokio::test]
-async fn a_resize_moves_the_panel_between_beside_and_fullscreen() {
+async fn a_resize_moves_the_panel_between_beside_and_overlay() {
     let mut app = app_with_live_pane();
     app.area = (120, 24);
     open_panel(&mut app);
     draw_to(&mut app, 120, 24);
-    // 80 − 36 = 44 < 60 panes columns: the panel takes the frame.
+    // At 80 the ~26-column sidebar + the 28-column dock leave 26
+    // columns of pane (< MIN_PANE_BESIDE_DOCK = 44): the dock covers
+    // the pane surface's right 28 columns as an overlay (S2 §1).
     app.area = (80, 24);
     let wide = draw_to(&mut app, 80, 24);
-    let text = screen_lines(&wide).join("\n");
-    assert!(text.contains("lot"), "{text}");
-    assert!(!text.contains("PANE-ALPHA"), "{text}");
+    let right = columns_text(&wide, 52, 80);
+    // The waiting card covers the dock's title row — the block's
+    // own rows prove the dock owns these columns.
+    assert!(right.contains("alice · task-1"), "{right}");
+    assert!(!right.contains("PANE-ALPHA"), "{right}");
     // Back at 120 the pane paint returns and the panel is a column.
     app.area = (120, 24);
     let back = draw_to(&mut app, 120, 24);
@@ -153,5 +157,5 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
     app.panel.mode = PanelMode::Expanded;
     let expanded = draw_to(&mut app, 120, 24);
     let right = columns_text(&expanded, 84, 120);
-    assert!(right.contains("alice task-1"), "{right}");
+    assert!(right.contains("alice · task-1"), "{right}");
 }

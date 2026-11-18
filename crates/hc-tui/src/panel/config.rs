@@ -19,6 +19,9 @@ use crate::config::KeyCombo;
 pub(crate) struct PanelConfig {
     /// Expanded width after clamping.
     pub width: u16,
+    /// Whether a `[dock]`/`[panel]` width in the file set `width` —
+    /// an explicit width wins over the spec's per-width tier.
+    pub width_explicit: bool,
     /// The chord tail — matched like a herdr keybind string.
     pub key: String,
     /// Studio-mode sidebar width after clamping.
@@ -208,6 +211,7 @@ impl Default for PanelConfig {
     fn default() -> PanelConfig {
         PanelConfig {
             width: WIDTH_DEFAULT,
+            width_explicit: false,
             key: "y".into(),
             sidebar_width: SIDEBAR_WIDTH_DEFAULT,
             keys: StudioKeys::default(),
@@ -326,6 +330,7 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
     if let Some(panel) = parsed.panel {
         if let Some(width) = panel.width {
             config.width = width.clamp(1, i64::from(u16::MAX)) as u16;
+            config.width_explicit = true;
         }
         if let Some(key) = panel.key.filter(|k| !k.trim().is_empty()) {
             if crate::config::parse_key_combo(&key).is_some() {
@@ -339,6 +344,7 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
     }
     if let Some(width) = parsed.dock.and_then(|d| d.width) {
         config.width = width.clamp(1, i64::from(u16::MAX)) as u16;
+        config.width_explicit = true;
     }
     config.width = config.width.clamp(WIDTH_MIN, WIDTH_MAX);
     if let Some(width) = parsed.sidebar.and_then(|s| s.width) {

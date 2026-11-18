@@ -21,7 +21,7 @@ pub(crate) use config::{
 pub(crate) use data::{key as document_key, stage_running};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use remote::RemoteRunner;
-pub(crate) use rows::{Row, Target, mark_counts, rows};
+pub(crate) use rows::{Row, Target, mark_counts, owed_text, rows};
 
 /// How the panel sits on screen. The default is `Closed`: no state,
 /// no width, no keys.
@@ -59,8 +59,19 @@ pub(crate) struct Panel {
     /// (rows shifted by a publish) degrades to the nearest
     /// surviving occurrence, never to position 0.
     pub selected_row: Option<usize>,
-    /// A closed person whose reopen is one more Enter away.
-    pub reopen_confirm: Option<(crate::studio::StudioKey, String)>,
+    /// The closed role Enter landed on — its `closed — press o to
+    /// reopen` hint line until the selection moves.
+    pub closed_hint: Option<(crate::studio::StudioKey, String)>,
+    /// The `Space` drawer's owner row — a `Person` or `Task` target;
+    /// the three drawer lines draw under it (S2 §3).
+    pub drawer: Option<Target>,
+    /// Studios whose `✓ <n> accepted` fold is open — the accepted
+    /// task rows show instead of the fold line.
+    pub accepted_folds: std::collections::BTreeSet<crate::studio::StudioKey>,
+    /// `f` on a ready-to-finish studio armed the inline
+    /// `finish <id>? [y/n]` confirm — `y` runs `studio finish`, `n`
+    /// or `Esc` stands down (S2 §2's `[f]` hint made real).
+    pub finish_confirm: Option<crate::studio::StudioKey>,
     /// Spinner frame counter for working marks (~120 ms ticks).
     pub spin: usize,
     /// H4: the expanded panel's last row names `backlot hollywood
@@ -83,7 +94,10 @@ impl Panel {
             scroll: 0,
             selected: None,
             selected_row: None,
-            reopen_confirm: None,
+            closed_hint: None,
+            drawer: None,
+            accepted_folds: Default::default(),
+            finish_confirm: None,
             spin: 0,
             // The flag stays off until `set_hollywood` reads the
             // config — panel-only construction draws no hint.
@@ -94,5 +108,11 @@ impl Panel {
     /// Drawn at all — beside the panes or full-screen.
     pub fn open(&self) -> bool {
         self.mode != PanelMode::Closed
+    }
+
+    /// Whether `key`'s accepted fold is open — the accepted task
+    /// rows draw instead of the `✓ <n> accepted` line.
+    pub(crate) fn accepted_open(&self, key: &crate::studio::StudioKey) -> bool {
+        self.accepted_folds.contains(key)
     }
 }

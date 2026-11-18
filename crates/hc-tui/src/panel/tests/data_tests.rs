@@ -40,11 +40,20 @@ fn an_empty_machines_answer_reads_as_no_added_machines() {
     assert_eq!(summaries(&unanswered).len(), 1);
     // The panel's rows say "no studios" only when no document parsed —
     // never an error row for the empty answer.
-    let rows = crate::panel::rows::rows(&machines, |_| true, &crate::panel::Panel::new(), None, 24);
+    let rows = crate::panel::rows::rows(
+        &machines,
+        |_| true,
+        |_| true,
+        &crate::panel::Panel::new(),
+        None,
+        24,
+    );
     assert!(
         rows.iter().all(|row| matches!(
             row,
-            crate::panel::rows::Row::Title | crate::panel::rows::Row::Strip(_)
+            crate::panel::rows::Row::Title
+                | crate::panel::rows::Row::Strip { .. }
+                | crate::panel::rows::Row::StripRole { .. }
         )),
         "{rows:?}"
     );

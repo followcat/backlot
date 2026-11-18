@@ -13,6 +13,7 @@ impl App {
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
         let (panel_action_tx, panel_rx) = mpsc::channel(16);
+        let (sheet_tx, sheet_rx) = mpsc::channel(16);
         let (hwood_tx, hwood_rx) = mpsc::channel(16);
         let (ns_tx, ns_rx) = mpsc::channel(16);
         let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
@@ -148,6 +149,11 @@ impl App {
             remote_runner: None,
             panel_action_tx,
             panel_rx,
+            sheet: None,
+            sheet_hits: crate::sheet::SheetRender::default(),
+            sheet_epoch: 0,
+            sheet_tx,
+            sheet_rx,
             panel_endpoint_args: Vec::new(),
             plain: false,
             studio: crate::studio::Studio::default(),

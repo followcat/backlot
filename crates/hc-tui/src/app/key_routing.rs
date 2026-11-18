@@ -271,6 +271,12 @@ impl App {
             self.new_studio_key(&press);
             return None;
         }
+        // The Task & Delivery Sheet owns every key while it is open
+        // — tabs, movement, `o` and `Esc` all run inside it (S2 §3).
+        if self.sheet.is_some() {
+            self.handle_sheet_key(&press);
+            return None;
+        }
         if self.menu.is_some() {
             self.menu_key(&press);
             return None;
@@ -365,6 +371,15 @@ impl App {
                 self.panel_toggle();
                 return None;
             }
+        }
+        // `prefix+shift+<dock key>` is the dock's close chord (S2 §4) —
+        // it fires only while a dock is open, so a herdr binding on
+        // the same tail keeps working in a dock-less client.
+        if self.prefix.armed() && self.panel_close_press(&press) {
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.panel_close();
+            return None;
         }
         // U1: the four studio keys bind in studio mode only — they win
         // over a herdr direct binding on the same key and still fire

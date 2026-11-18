@@ -120,8 +120,9 @@ impl App {
     /// The `backlot` call for a machine: `current_exe` locally with
     /// the endpoint flags, `RemoteRunner::run_output` remotely —
     /// never a remote path checked against the local disk (A6.3).
-    /// Tests inject their own through `ns_run`.
-    fn ns_runner(&self) -> NsRun {
+    /// Tests inject their own through `ns_run`. The sheet's ledger
+    /// reads and `o` report streams ride the same runner (S2 §3).
+    pub(crate) fn ns_runner(&self) -> NsRun {
         if let Some(run) = &self.ns_run {
             return run.clone();
         }

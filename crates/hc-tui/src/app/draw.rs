@@ -202,7 +202,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()
-        || app.panel_fullscreen()
+        || app.panel_fullscreen_at(area.width)
         || app.opening_visible()
         || app.mode == Mode::Copy
         || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);

@@ -1,46 +1,39 @@
-//! The panel's row model (U1): a pure `(machines, Panel, current,
+//! The panel's row model: a pure `(machines, Panel, current,
 //! body height)` → one-line rows map. Every row is a single line — a
-//! block border, a person, a `├──┤` divider or a stacked block's
-//! `╶ id …` line — so the scroll math stays in one-line steps.
+//! block border, a person, a task row, a cue or drawer line, or a
+//! stacked block's `╶ id …` line — so the scroll math stays in
+//! one-line steps.
 
-use backlot_model::summary::{RoleSummary, StudioSummary};
+use backlot_model::state::TaskStatus;
+use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
 use super::data::{MachineSummary, StudioRef};
 use super::{Panel, PanelMode};
 use crate::studio::StudioKey;
 use crate::studio::glyphs::Person;
 
-/// Role groups in display order. `producer`/`director`/`writer` are
-/// the fixed role keys; every other role is an actor.
-pub(crate) const GROUPS: [&str; 4] = ["producer", "director", "writer", "actors"];
-
-pub(crate) fn group_of(role: &RoleSummary) -> &'static str {
-    match role.role.as_str() {
-        "producer" => "producer",
-        "director" => "director",
-        "writer" => "writer",
-        _ => "actors",
-    }
-}
-
 /// A selected/clicked row's stable identity. Rows rebuild per frame,
 /// so anything the user can act on is named by machine plus document
 /// ids, never by position. Rows that only inform — the title,
-/// dividers, block bottoms, spacers and state notes — carry `None`
+/// dividers, block bottoms, cue and drawer lines — carry `None`
 /// and are skipped by the cursor keys and clicks alike (A2.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Target {
     /// Shown, not actionable.
     None,
-    /// Any header row of an expanded block — the top border, an
-    /// error or a next line. Enter/click makes the studio current.
+    /// Any header row of an expanded block — the top border, the
+    /// owed-step line. Enter/click makes the studio current.
     Studio(StudioKey),
     /// A stacked block's `╶ id …` line — Enter/click expands it.
     Block(StudioKey),
     /// A collapsed-strip row — Enter/click expands the panel.
     Strip(StudioKey),
-    /// `(studio, role)` — a person row or one of its extra lines.
+    /// `(studio, role)` — a person row.
     Person(StudioKey, String),
+    /// `(studio, task)` — a task row with no live actor row.
+    Task(StudioKey, String),
+    /// The `✓ <n> accepted` fold line — Space/Enter opens it.
+    Fold(StudioKey),
 }
 
 impl Target {
@@ -51,21 +44,40 @@ impl Target {
             Target::Studio(key)
             | Target::Block(key)
             | Target::Strip(key)
-            | Target::Person(key, _) => Some(key),
+            | Target::Person(key, _)
+            | Target::Task(key, _)
+            | Target::Fold(key) => Some(key),
             Target::None => Option::None,
         }
     }
 }
 
+/// The owed-step subheader's kind — the glyph and colour follow it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Owed {
+    /// `→ <label> · <owner name>` — a ledger step.
+    Step,
+    /// `→ finish studio · user [f]` — ready to finish.
+    Finish,
+    /// `! finish <id>? [y]` — `f` armed the inline confirm.
+    Confirm,
+    /// `◌ stage not running — [r] start`.
+    StageDown,
+    /// `× <machine> unreachable`.
+    Offline,
+    /// `! <error>` — the ledger/stage error.
+    Error,
+}
+
 /// An extra line under a person.
 #[derive(Debug)]
 pub(crate) enum PersonLine {
-    /// `! <attention>` — the blocked colour.
-    Attention,
+    /// `! <attention>` or the prompt cue — the blocked colour.
+    Cue,
     /// `! last turn failed: <e>` — only when no attention shows.
     Failed,
-    /// The armed two-step reopen hint.
-    Confirm,
+    /// `closed — press o to reopen` after Enter on a closed role.
+    ClosedHint,
 }
 
 /// One display row, borrowing its data from the summaries.
@@ -78,17 +90,25 @@ pub(crate) enum Row<'a> {
     StageDown {
         machine: Option<&'a str>,
     },
+    /// `× <machine> unreachable` — a listed machine that is not
+    /// connected; its studios cannot answer.
+    Offline {
+        machine: &'a str,
+    },
     /// No `backlot` document anywhere or an unparseable one —
     /// "no studios".
     Empty,
-    /// `╭ <id> ── !<n> ╮` — the studio id in the top border.
-    BlockTop(StudioRef<'a>),
-    /// `│ ! <error> │`
-    BlockError(StudioRef<'a>),
-    /// `│ → <next> │`
-    BlockNext(StudioRef<'a>),
-    /// `├──┤` between role groups.
-    Divider(StudioRef<'a>),
+    /// `╭─ <label> <health> ── r<ver> · <done>/<total> !<n> ─╮`.
+    BlockTop {
+        studio: StudioRef<'a>,
+        health: crate::studio::glyphs::Health,
+    },
+    /// The owed-step subheader — one line under the header.
+    Owed {
+        studio: StudioRef<'a>,
+        kind: Owed,
+        text: String,
+    },
     /// `╰──╯`
     BlockBottom(StudioRef<'a>),
     /// `│ <mark> <name> <task> <flag>   <state> │`
@@ -96,16 +116,39 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         role: &'a RoleSummary,
     },
-    /// A person's attention/failed/confirm extra line.
+    /// A person's attention-cue/failed/confirm/hint extra line.
     PersonLine {
         studio: StudioRef<'a>,
         role: &'a RoleSummary,
         kind: PersonLine,
     },
+    /// A task with no live actor row: `│ · task t2 (waits t1)  dep │`.
+    Task {
+        studio: StudioRef<'a>,
+        task: &'a TaskSummary,
+    },
+    /// `✓ <n> accepted` — the fold line when many tasks are done.
+    AcceptedFold {
+        studio: StudioRef<'a>,
+        open: bool,
+    },
+    /// A `Space` drawer's content line under its owner row.
+    Drawer {
+        studio: StudioRef<'a>,
+        text: String,
+    },
     /// A stacked block's single line: `╶ <id> ⠿2 ○3 ×1 !<n>`.
     Stacked(StudioRef<'a>),
-    /// The collapsed strip's one line per studio.
-    Strip(StudioRef<'a>),
+    /// The collapsed strip's studio line — `● id·machine  d/t`.
+    Strip {
+        studio: StudioRef<'a>,
+        health: crate::studio::glyphs::Health,
+    },
+    /// A strip's active-or-blocked role line under its studio.
+    StripRole {
+        studio: StudioRef<'a>,
+        role: &'a RoleSummary,
+    },
     /// H4: `no hollywood — backlot hollywood setup …` — the expanded
     /// panel's last row while `[hollywood]` is absent (R22).
     SetupHint,
@@ -113,24 +156,26 @@ pub(crate) enum Row<'a> {
 
 impl Row<'_> {
     /// The row's stable identity for selection, clicks and Enter.
-    /// Header rows inside a block share `Target::Studio`; dividers,
-    /// bottoms and every non-row are `Target::None` (A2.2).
+    /// Owed/cue/drawer/border rows are `Target::None` (A2.2).
     pub fn target(&self) -> Target {
         match self {
             Row::Title
             | Row::StageDown { .. }
+            | Row::Offline { .. }
             | Row::Empty
-            | Row::Divider(_)
+            | Row::Owed { .. }
             | Row::BlockBottom(_)
+            | Row::Drawer { .. }
             | Row::SetupHint => Target::None,
-            Row::BlockTop(studio) | Row::BlockError(studio) | Row::BlockNext(studio) => {
-                Target::Studio(studio.key())
-            }
-            Row::Person { studio, role } | Row::PersonLine { studio, role, .. } => {
-                Target::Person(studio.key(), role.role.clone())
-            }
+            Row::BlockTop { studio, .. } => Target::Studio(studio.key()),
+            Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
+            Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
+            Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
+            Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
             Row::Stacked(studio) => Target::Block(studio.key()),
-            Row::Strip(studio) => Target::Strip(studio.key()),
+            Row::Strip { studio, .. } | Row::StripRole { studio, .. } => {
+                Target::Strip(studio.key())
+            }
         }
     }
 
@@ -172,35 +217,288 @@ pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Person, usize)> {
         .collect()
 }
 
-/// A person's line count: itself plus an attention-or-failed line and
-/// the armed reopen hint.
-fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
-    1 + usize::from(role.attention.is_some() || role.failed.is_some())
-        + usize::from(
-            panel
-                .reopen_confirm
-                .as_ref()
-                .is_some_and(|(s, r)| s == &studio.key() && r == &role.role),
-        )
+/// The health one studio's rows share — the block header's glyph
+/// and the strip line's mark compute it the same way.
+pub(crate) fn health_of(
+    studio: &StudioSummary,
+    stage: bool,
+    reachable: bool,
+) -> crate::studio::glyphs::Health {
+    use crate::studio::glyphs::Health;
+    if !reachable || studio.error.is_some() {
+        Health::Offline
+    } else if !stage {
+        Health::StageDown
+    } else if studio.ready_to_finish || studio.state == "finished" {
+        Health::Ready
+    } else {
+        Health::Live
+    }
 }
 
-/// An expanded block's height: top + bottom borders, the `error` and
-/// `next` lines when present, each non-empty group's people, and a
-/// divider between groups.
-fn block_height(studio: StudioRef<'_>, panel: &Panel) -> usize {
-    let mut height =
-        2 + usize::from(studio.studio.error.is_some()) + usize::from(studio.studio.next.is_some());
-    let mut groups = 0usize;
-    for group in GROUPS {
-        let people = studio.studio.roles.iter().filter(|r| group_of(r) == group);
-        let mut counted = false;
-        for role in people {
-            counted = true;
-            height += person_height(studio, role, panel);
-        }
-        groups += usize::from(counted);
+/// The studio's non-closed roles in display order: `producer`,
+/// `director`, `writer` first when present, then the actors in the
+/// summary's order. Closed roles come after (S2 §2).
+pub(crate) fn live_roles(studio: &StudioSummary) -> Vec<&RoleSummary> {
+    let mut out: Vec<&RoleSummary> = Vec::new();
+    for fixed in ["producer", "director", "writer"] {
+        out.extend(
+            studio
+                .roles
+                .iter()
+                .filter(|r| r.role == fixed && r.state != "closed"),
+        );
     }
-    height + groups.saturating_sub(1)
+    out.extend(studio.roles.iter().filter(|r| {
+        r.state != "closed" && !matches!(r.role.as_str(), "producer" | "director" | "writer")
+    }));
+    out
+}
+
+/// The studio's closed roles — under the task rows (S2 §2).
+fn closed_roles(studio: &StudioSummary) -> impl Iterator<Item = &RoleSummary> {
+    studio.roles.iter().filter(|r| r.state == "closed")
+}
+
+/// Whether a live (non-closed) role's row already represents `task`.
+fn represented(studio: &StudioSummary, task: &TaskSummary) -> bool {
+    studio
+        .roles
+        .iter()
+        .any(|r| r.state != "closed" && (r.task.as_deref() == Some(task.id.as_str())))
+}
+
+/// The dock's task rows: tasks with no live actor row, minus the
+/// terminal states that never draw (`abandoned`, `taken_over`) and,
+/// while the accepted fold is shut, `accepted`/`partially_accepted`.
+/// Ledger order is the summary's order.
+fn task_rows(studio: &StudioSummary, accepted_open: bool) -> impl Iterator<Item = &TaskSummary> {
+    let accepted = studio
+        .tasks
+        .iter()
+        .filter(|t| {
+            matches!(
+                t.status,
+                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
+            )
+        })
+        .count();
+    let fold = accepted >= 6 && !accepted_open;
+    studio.tasks.iter().filter(move |t| {
+        if matches!(t.status, TaskStatus::Abandoned | TaskStatus::TakenOver)
+            || represented(studio, t)
+        {
+            return false;
+        }
+        if fold
+            && matches!(
+                t.status,
+                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
+            )
+        {
+            return false;
+        }
+        true
+    })
+}
+
+/// The number of accepted tasks behind the fold — the `✓ <n>`
+/// line's count; `0` means no fold line at all.
+fn fold_count(studio: &StudioSummary) -> usize {
+    studio
+        .tasks
+        .iter()
+        .filter(|t| {
+            matches!(
+                t.status,
+                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
+            )
+        })
+        .filter(|t| !represented(studio, t))
+        .count()
+}
+
+/// The three drawer lines under a person row: task title and
+/// requirement, the latest delivery/check/rework line, and the
+/// action hints.
+fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<String> {
+    let task = role
+        .task
+        .as_deref()
+        .and_then(|id| studio.studio.tasks.iter().find(|t| t.id == id));
+    let mut lines = Vec::with_capacity(3);
+    match task {
+        Some(t) => {
+            let mut l1 = format!("\"{}\" · r{}", t.title, t.requirement_version);
+            if t.behind {
+                l1 = format!(
+                    "\"{}\" · v{}→v{}",
+                    t.title, t.requirement_version, studio.studio.requirement_version
+                );
+            }
+            lines.push(l1);
+            let mut l2 = match (t.latest_delivery, &t.latest_checks) {
+                (Some(n), checks) => {
+                    let mut s = format!("d{n}");
+                    if let Some(c) = checks {
+                        s.push(' ');
+                        s.push_str(c);
+                    }
+                    s
+                }
+                (None, _) => "no deliveries yet".into(),
+            };
+            if t.rework_cap > 0 {
+                l2 = format!("{l2} · rework {}/{}", t.rework_rounds, t.rework_cap);
+            }
+            if let Some(v) = &t.latest_verdict {
+                let word = match v {
+                    backlot_model::event::Verdict::Accepted => "accepted",
+                    backlot_model::event::Verdict::PartiallyAccepted => "partially accepted",
+                    backlot_model::event::Verdict::ChangesRequested => "changes requested",
+                    backlot_model::event::Verdict::Blocked => "blocked",
+                };
+                l2 = format!("{l2} · {word}");
+            }
+            lines.push(l2);
+            lines.push("[v] sheet  [m] menu  [+/-]".into());
+        }
+        None => {
+            // A fixed role (`producer`/`director`/`writer`): the
+            // runner line names its engine, the second line what it
+            // is doing or what waits on it (S2 §3).
+            let agent = [&role.runner, &role.model, &role.effort]
+                .into_iter()
+                .flatten()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("/");
+            lines.push(if agent.is_empty() {
+                role.name.clone()
+            } else {
+                agent
+            });
+            let l2 = role
+                .attention_detail
+                .as_deref()
+                .or(role.attention.as_deref())
+                .map(|a| format!("! {a}"))
+                .or_else(|| role.doing.clone())
+                .unwrap_or_else(|| role.state.clone());
+            lines.push(l2);
+            lines.push("[⏎] focus  [p] peek  [m] menu".into());
+        }
+    }
+    lines
+}
+
+/// The three drawer lines under a task row: title and requirement
+/// (with `v<pin>→v<cur>` when behind), dependency/delivery detail,
+/// and the action hints.
+fn task_drawer(studio: StudioRef<'_>, task: &TaskSummary) -> Vec<String> {
+    let pin = if task.behind {
+        format!(
+            "v{}→v{}",
+            task.requirement_version, studio.studio.requirement_version
+        )
+    } else {
+        format!("r{}", task.requirement_version)
+    };
+    let l1 = format!("\"{}\" · {pin}", task.title);
+    let mut l2 = if !task.waits_for.is_empty() {
+        format!("waits {} · uncast", task.waits_for.join(", "))
+    } else {
+        let status = backlot_model::hollywood::status_str(task.status);
+        match (task.latest_delivery, &task.latest_checks) {
+            (Some(n), checks) => {
+                let mut s = format!("d{n} · {status}");
+                if let Some(c) = checks {
+                    s = format!("d{n} {c} · {status}");
+                }
+                s
+            }
+            (None, _) => status.to_string(),
+        }
+    };
+    if task.rework_cap > 0 && task.rework_rounds > 0 {
+        l2 = format!("{l2} · rework {}/{}", task.rework_rounds, task.rework_cap);
+    }
+    let l3 = "[v] sheet  [+/-] priority".to_string();
+    vec![l1, l2, l3]
+}
+
+/// The owed-step text for `next`: `"label — owner-key"` becomes
+/// `label · owner-name` — the role's display name, never the raw
+/// `actor-t1-c1` key (A11.3).
+pub(crate) fn owed_text(studio: &StudioSummary, next: &str) -> String {
+    let (label, owner) = next
+        .rsplit_once(" — ")
+        .map(|(l, o)| (l, Some(o)))
+        .unwrap_or((next, None));
+    let name = owner.and_then(|key| {
+        studio
+            .roles
+            .iter()
+            .find(|r| r.role == key)
+            .map(|r| r.name.as_str())
+            .or(if key == "user" { Some("user") } else { None })
+    });
+    match name {
+        Some(name) => format!("{label} · {name}"),
+        None => label.to_string(),
+    }
+}
+
+/// A person's line count: itself plus its cue/failed line, the
+/// closed hint and an open drawer.
+fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
+    let mut height = 1 + usize::from(role.attention.is_some() || role.failed.is_some());
+    height += usize::from(
+        panel
+            .closed_hint
+            .as_ref()
+            .is_some_and(|(s, r)| s == &studio.key() && r == &role.role),
+    );
+    height += usize::from(
+        panel
+            .drawer
+            .as_ref()
+            .is_some_and(|d| *d == Target::Person(studio.key(), role.role.clone())),
+    ) * 3;
+    height
+}
+
+/// The task section's line count: task rows plus the fold line and
+/// any open drawer under a task row.
+fn tasks_height(studio: StudioRef<'_>, panel: &Panel, accepted_open: bool) -> usize {
+    let mut height = task_rows(studio.studio, accepted_open)
+        .map(|t| {
+            1 + usize::from(
+                panel
+                    .drawer
+                    .as_ref()
+                    .is_some_and(|d| *d == Target::Task(studio.key(), t.id.clone())),
+            ) * 3
+        })
+        .sum::<usize>();
+    height += usize::from(fold_count(studio.studio) >= 6);
+    height
+}
+
+/// An expanded block's height: top + bottom borders, the owed-step
+/// line when present, the armed finish confirm, each person's
+/// lines, the task section and the closed section.
+fn block_height(studio: StudioRef<'_>, panel: &Panel, owed: bool, accepted_open: bool) -> usize {
+    let mut height =
+        2 + usize::from(owed) + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
+    for role in live_roles(studio.studio) {
+        height += person_height(studio, role, panel);
+    }
+    height += tasks_height(studio, panel, accepted_open);
+    for role in closed_roles(studio.studio) {
+        height += person_height(studio, role, panel);
+    }
+    height
 }
 
 /// Which studios draw an expanded block: all of them while every
@@ -211,13 +509,19 @@ fn expanded_set(
     panel: &Panel,
     current: Option<&StudioKey>,
     body_height: u16,
+    ctx: &dyn Fn(StudioRef<'_>) -> bool,
 ) -> std::collections::BTreeSet<StudioKey> {
-    // `body_height == 0` means the body was never drawn — no
-    // constraint measured, so every block opens.
     let fits = body_height == 0
         || studios
             .iter()
-            .map(|studio| block_height(*studio, panel))
+            .map(|studio| {
+                block_height(
+                    *studio,
+                    panel,
+                    ctx(*studio),
+                    panel.accepted_open(&studio.key()),
+                )
+            })
             .sum::<usize>()
             <= body_height as usize;
     studios
@@ -236,58 +540,101 @@ fn expanded_set(
         .collect()
 }
 
-/// One studio's expanded block: `╭ id ╮`, `error`/`next` lines, the
-/// groups divided by `├──┤` rules — empty groups skipped — `╰──╯`.
-fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: StudioRef<'a>, panel: &Panel) {
-    out.push(Row::BlockTop(studio));
-    if studio.studio.error.is_some() {
-        out.push(Row::BlockError(studio));
+/// One studio's expanded block: header, owed-step subheader, live
+/// roles, task rows, the accepted fold, closed roles, bottom border.
+fn block_rows<'a>(
+    out: &mut Vec<Row<'a>>,
+    studio: StudioRef<'a>,
+    panel: &Panel,
+    stage: bool,
+    reachable: bool,
+) {
+    let health = health_of(studio.studio, stage, reachable);
+    out.push(Row::BlockTop { studio, health });
+    let owed = if !reachable {
+        Some((
+            Owed::Offline,
+            format!("{} unreachable", studio.machine.unwrap_or("local")),
+        ))
+    } else if !stage {
+        Some((Owed::StageDown, "stage not running — [r] start".to_string()))
+    } else if let Some(error) = &studio.studio.error {
+        Some((Owed::Error, error.clone()))
+    } else if let Some(next) = &studio.studio.next {
+        Some((Owed::Step, owed_text(studio.studio, next)))
+    } else if studio.studio.ready_to_finish {
+        Some((Owed::Finish, "finish studio · user [f]".to_string()))
+    } else {
+        None
+    };
+    if let Some((kind, text)) = owed {
+        out.push(Row::Owed { studio, kind, text });
     }
-    if studio.studio.next.is_some() {
-        out.push(Row::BlockNext(studio));
+    // `f` armed the finish confirm — its `y`/`n` line sits under
+    // the owed step, cleared by Esc or a selection move (S2 §2).
+    if panel.finish_confirm.as_ref() == Some(&studio.key()) {
+        out.push(Row::Owed {
+            studio,
+            kind: Owed::Confirm,
+            text: format!("finish {}? [y/n]", studio.studio.id),
+        });
     }
-    let mut first_group = true;
-    for group in GROUPS {
-        let people: Vec<&RoleSummary> = studio
-            .studio
-            .roles
-            .iter()
-            .filter(|r| group_of(r) == group)
-            .collect();
-        if people.is_empty() {
-            continue;
+    let emit_person = |out: &mut Vec<Row<'a>>, role: &'a RoleSummary| {
+        let key = studio.key();
+        out.push(Row::Person { studio, role });
+        if role.attention.is_some() {
+            out.push(Row::PersonLine {
+                studio,
+                role,
+                kind: PersonLine::Cue,
+            });
+        } else if role.failed.is_some() {
+            out.push(Row::PersonLine {
+                studio,
+                role,
+                kind: PersonLine::Failed,
+            });
         }
-        if !first_group {
-            out.push(Row::Divider(studio));
+        if panel
+            .closed_hint
+            .as_ref()
+            .is_some_and(|(s, r)| s == &key && r == &role.role)
+        {
+            out.push(Row::PersonLine {
+                studio,
+                role,
+                kind: PersonLine::ClosedHint,
+            });
         }
-        first_group = false;
-        for role in people {
-            let confirm = panel
-                .reopen_confirm
-                .as_ref()
-                .is_some_and(|(s, r)| s == &studio.key() && r == &role.role);
-            out.push(Row::Person { studio, role });
-            if role.attention.is_some() {
-                out.push(Row::PersonLine {
-                    studio,
-                    role,
-                    kind: PersonLine::Attention,
-                });
-            } else if role.failed.is_some() {
-                out.push(Row::PersonLine {
-                    studio,
-                    role,
-                    kind: PersonLine::Failed,
-                });
-            }
-            if confirm {
-                out.push(Row::PersonLine {
-                    studio,
-                    role,
-                    kind: PersonLine::Confirm,
-                });
+        let target = Target::Person(key, role.role.clone());
+        if panel.drawer.as_ref() == Some(&target) {
+            for text in person_drawer(studio, role) {
+                out.push(Row::Drawer { studio, text });
             }
         }
+    };
+    for role in live_roles(studio.studio) {
+        emit_person(out, role);
+    }
+    let accepted_open = panel.accepted_open(&studio.key());
+    let folds = fold_count(studio.studio);
+    for task in task_rows(studio.studio, accepted_open) {
+        out.push(Row::Task { studio, task });
+        let target = Target::Task(studio.key(), task.id.clone());
+        if panel.drawer.as_ref() == Some(&target) {
+            for text in task_drawer(studio, task) {
+                out.push(Row::Drawer { studio, text });
+            }
+        }
+    }
+    if folds >= 6 {
+        out.push(Row::AcceptedFold {
+            studio,
+            open: accepted_open,
+        });
+    }
+    for role in closed_roles(studio.studio) {
+        emit_person(out, role);
     }
     out.push(Row::BlockBottom(studio));
 }
@@ -295,11 +642,12 @@ fn block_rows<'a>(out: &mut Vec<Row<'a>>, studio: StudioRef<'a>, panel: &Panel) 
 /// The whole row list for the current mode. An empty `machines` — no
 /// machine's document parsed — is the "no studios" state, never an
 /// error row. `stage_running` answers per machine (`None` is this
-/// core); a machine that answered its document but runs no stage gets
-/// its own line.
+/// core); `reachable` answers whether the machine itself is
+/// connected.
 pub(crate) fn rows<'a>(
     machines: &'a [MachineSummary],
     stage_running: impl Fn(Option<&str>) -> bool,
+    reachable: impl Fn(Option<&str>) -> bool,
     panel: &Panel,
     current: Option<&StudioKey>,
     body_height: u16,
@@ -313,6 +661,18 @@ pub(crate) fn rows<'a>(
         return out;
     }
     for machine in machines {
+        // A machine's own line only when it has no studio blocks to
+        // carry the state — inside a block the owed-step subheader
+        // says the same thing (`◌ stage not running`, `× …unreachable`).
+        if !machine.summary.studios.is_empty() {
+            continue;
+        }
+        if let Some(name) = machine.machine.as_deref()
+            && !reachable(Some(name))
+        {
+            out.push(Row::Offline { machine: name });
+            continue;
+        }
         if !stage_running(machine.machine.as_deref()) {
             out.push(Row::StageDown {
                 machine: machine.machine.as_deref(),
@@ -322,13 +682,38 @@ pub(crate) fn rows<'a>(
     let studios = super::data::studios(machines);
     match panel.mode {
         PanelMode::Closed | PanelMode::Collapsed => {
-            out.extend(studios.iter().map(|s| Row::Strip(*s)));
+            for studio in &studios {
+                let health = health_of(
+                    studio.studio,
+                    stage_running(studio.machine),
+                    reachable(studio.machine),
+                );
+                out.push(Row::Strip {
+                    studio: *studio,
+                    health,
+                });
+                for role in strip_roles(studio.studio) {
+                    out.push(Row::StripRole {
+                        studio: *studio,
+                        role,
+                    });
+                }
+            }
         }
         PanelMode::Expanded => {
-            let open = expanded_set(&studios, panel, current, body_height);
+            let owed = |studio: StudioRef<'_>| {
+                !reachable(studio.machine)
+                    || !stage_running(studio.machine)
+                    || studio.studio.error.is_some()
+                    || studio.studio.next.is_some()
+                    || studio.studio.ready_to_finish
+            };
+            let open = expanded_set(&studios, panel, current, body_height, &owed);
             for studio in studios {
                 if open.contains(&studio.key()) {
-                    block_rows(&mut out, studio, panel);
+                    let stage = stage_running(studio.machine);
+                    let reach = reachable(studio.machine);
+                    block_rows(&mut out, studio, panel, stage, reach);
                 } else {
                     out.push(Row::Stacked(studio));
                 }
@@ -341,4 +726,20 @@ pub(crate) fn rows<'a>(
         }
     }
     out
+}
+
+/// The collapsed strip's role lines: live roles that are working or
+/// carry an attention — the strip is never blank while the studio
+/// has something to say (A4.3).
+fn strip_roles(studio: &StudioSummary) -> Vec<&RoleSummary> {
+    studio
+        .roles
+        .iter()
+        .filter(|r| {
+            r.state != "closed"
+                && (r.attention.is_some()
+                    || r.work == Some(backlot_model::summary::Work::Working)
+                    || r.work == Some(backlot_model::summary::Work::Blocked))
+        })
+        .collect()
 }
