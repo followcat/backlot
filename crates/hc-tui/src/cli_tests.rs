@@ -77,6 +77,36 @@ fn the_installer_names_backlots_own_release_script() {
     }
 }
 
+/// The studio's watch parameters name no documents in
+/// `events.subscribe`: on 0.1.21+ cores that would narrow the
+/// subscription to documents alone and silence terminal events. The
+/// `backlot` document rides `documents` (the one place it is named),
+/// and `doc_patterns` stays empty.
+#[test]
+fn studio_mode_names_no_documents_in_the_subscription() {
+    let params = watch_params();
+    assert_eq!(
+        params.documents,
+        [
+            "herdr-app".to_owned(),
+            "hc-tui".to_owned(),
+            "backlot".to_owned()
+        ]
+    );
+    assert!(params.doc_patterns.is_empty(), "{:?}", params.doc_patterns);
+    assert!(
+        params.subscribe_params().docs.is_empty(),
+        "{:?}",
+        params.subscribe_params().docs
+    );
+    // The raw subscription therefore serializes with no `docs` member.
+    let wire = serde_json::to_value(params.subscribe_params()).unwrap();
+    assert!(
+        wire.get("docs").is_none(),
+        "an empty document list must not be named: {wire}"
+    );
+}
+
 /// Both endpoint kinds multiplex their attaches onto one shared
 /// framed connection: a remote's share one ssh child, a local's one
 /// Unix socket — either way a burst costs one transport + `hello`.

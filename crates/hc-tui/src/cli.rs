@@ -184,6 +184,27 @@ docs/studio/guide.md walks a studio end to end.",
     )
 }
 
+/// The watcher's parameters: the reference's traversal order, plus
+/// backlot's own `backlot` document. `documents` is the one place the
+/// studio names it.
+///
+/// It stays out of `doc_patterns`: on 0.1.21 and later cores, naming
+/// documents in `events.subscribe` narrows the subscription to those
+/// documents alone and silences terminal events, and the studio needs
+/// every terminal event. `doc_patterns` therefore stays empty while
+/// backlot wants every terminal (docs/fork-features.md, "Named document
+/// subscriptions").
+pub(crate) fn watch_params() -> WatchParams {
+    let mut params = WatchParams {
+        traversal: Some(crate::project::agent_traversal),
+        ..WatchParams::default()
+    };
+    // Every attached machine serves its own stage's summary under
+    // `DocKey { machine, name }`.
+    params.documents.push("backlot".into());
+    params
+}
+
 /// The one framed RPC connection every consumer on `endpoint` shares —
 /// the watcher's refreshes, layout actions and background seen writes
 /// all multiplex onto it (one transport, one `hello`): lazy like
@@ -256,18 +277,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
         }
     };
     shell.own_theme = own_theme;
-    let mut params = WatchParams {
-        traversal: Some(crate::project::agent_traversal),
-        ..WatchParams::default()
-    };
-    // `backlot` rides `documents`: every attached machine serves its
-    // own stage's summary under `DocKey { machine, name }`. It stays
-    // here, out of `doc_patterns`: on 0.1.21+ cores naming documents in
-    // `events.subscribe` narrows the subscription to documents alone and
-    // silences terminal events, and the studio needs every terminal
-    // event. So `doc_patterns` stays empty while backlot wants every
-    // terminal (docs/fork-features.md, "Named document subscriptions").
-    params.documents.push("backlot".into());
+    let params = watch_params();
     // One framed RPC wire: the watcher's refreshes and the operations
     // + seen workers' calls all ride clones of this single opener.
     let ssh: Option<OsString> = None;
