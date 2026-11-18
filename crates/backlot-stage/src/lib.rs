@@ -156,4 +156,5 @@ mod wizard_tests;
 mod workareas_tests;
 
 pub use cli::{Env, Fail, maybe_run};
+pub use commands::validate_cast_file;
 pub use runners::detect;
