@@ -5,6 +5,8 @@
 //! runs. Nothing may fail silently: a command's stderr lands as a
 //! notice where the user is looking (A7.1).
 
+use std::time::Instant;
+
 use super::App;
 use crate::hollywood::{self, CardView, Confirm, Target};
 use crate::studio::StudioKey;
@@ -249,6 +251,7 @@ impl App {
         (label, result, view): (String, Result<String, String>, bool),
     ) {
         self.hollywood.pending = None;
+        self.sched.mark_dirty(Instant::now());
         match result {
             Ok(stdout) if view => {
                 let title = label.trim_start_matches("card show ").to_string();

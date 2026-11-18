@@ -129,7 +129,10 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                 (format!("OFFLINE {machine}"), "×")
             } else {
                 (
-                    format!("STAGE DOWN {machine} · affects {studios} studios"),
+                    format!(
+                        "STAGE DOWN {machine} · affects {studios} studio{}",
+                        if *studios == 1 { "" } else { "s" }
+                    ),
                     "◌",
                 )
             }

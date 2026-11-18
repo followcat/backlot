@@ -394,7 +394,7 @@ fn render_band(
         title::draw_sprocket(buf, area, y, '▀', palette);
     }
     if let Some(view) = hollywood.view.as_ref() {
-        hits.view = Some(view::render_view(buf, frame, view, palette));
+        hits.view = Some(view::render_view(buf, area, view, palette));
     }
     hits
 }
