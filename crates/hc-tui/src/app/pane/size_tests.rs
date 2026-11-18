@@ -95,18 +95,28 @@ async fn resize_only(core: &mut FakeCore) -> hc_proto::frame::Frame {
 
 /// A size holder discards everything the wire sends, so asking the core
 /// to serialize scrollback on its attach is pure waste: only input and
-/// observe wires pay for `history`.
+/// observe wires pay for `history`, and they ask for the configured
+/// `[advanced] attach_history_lines`.
 #[tokio::test]
 async fn only_input_and_observe_attaches_ask_for_history() {
     for (role, history) in [
-        (Role::Active, HISTORY),
-        (Role::Observe, HISTORY),
+        (Role::Active, crate::config::DEFAULT_ATTACH_HISTORY_LINES),
+        (Role::Observe, crate::config::DEFAULT_ATTACH_HISTORY_LINES),
         (Role::SizeLease, 0),
     ] {
         let (mut pane, _rx, mut accept) = rig();
         pane.want(Some(spec(role)));
         let (_core, params) = timeout(T, accept.recv()).await.unwrap().unwrap();
         assert_eq!(params.history, history, "{role:?}");
+        pane.want(None);
+    }
+    // The configured value is what a cold attach sends — including 0.
+    for lines in [0u64, 1200, 9000] {
+        let (mut pane, _rx, mut accept) = rig();
+        pane.set_attach_history(lines);
+        pane.want(Some(spec(Role::Active)));
+        let (_core, params) = timeout(T, accept.recv()).await.unwrap().unwrap();
+        assert_eq!(params.history, lines);
         pane.want(None);
     }
 }

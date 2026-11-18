@@ -34,7 +34,7 @@ impl Pane {
             history: if spec.role == Role::SizeLease {
                 0
             } else {
-                HISTORY
+                self.attach_history
             },
             cols,
             rows,

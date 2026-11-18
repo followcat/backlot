@@ -72,13 +72,12 @@ impl App {
                     || self.observer_mru.contains(&old_target))
                 && let Some((vt, initial, cache)) = self.pane.take_retained()
             {
-                let mut observer = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
+                let mut observer = self.new_pane();
                 observer.want(Some(Spec {
                     terminal: old_target.clone(),
                     role: Role::Observe,
                 }));
                 observer.seed_retained(vt, initial, cache);
-                observer.set_host_facts(self.host_facts.clone());
                 self.observers.insert(old_target, observer);
             }
             // Retire the old target before applying the new target's geometry:

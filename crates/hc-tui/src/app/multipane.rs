@@ -173,16 +173,17 @@ impl App {
             if active_target == Some(id.as_str()) && !self.observers.contains_key(&id) {
                 continue;
             }
-            let pane = self.observers.entry(id.clone()).or_insert_with(|| {
-                let mut pane = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-                pane.set_host_facts(self.host_facts.clone());
+            if !self.observers.contains_key(&id) {
+                let mut pane = self.new_pane();
                 pane.want(Some(Spec {
-                    terminal: id,
+                    terminal: id.clone(),
                     role: Role::Observe,
                 }));
-                pane
-            });
-            pane.on_view(&self.view);
+                self.observers.insert(id.clone(), pane);
+            }
+            if let Some(pane) = self.observers.get_mut(&id) {
+                pane.on_view(&self.view);
+            }
         }
         // Off-tab observers pace their DATA onto the shared flush grid;
         // visible ones are rendered surfaces and stay live.

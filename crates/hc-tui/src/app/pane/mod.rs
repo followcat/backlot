@@ -158,8 +158,6 @@ const OUT_QUEUE: usize = 64;
 /// Pending human input bound, in items and bytes.
 const PENDING_MAX_ITEMS: usize = 128;
 const PENDING_MAX_BYTES: usize = crate::app::input::MAX_INPUT_BYTES;
-/// First-paint history lines requested on a fresh attach.
-pub(crate) const HISTORY: u64 = 200;
 
 /// A swapped-out attach parked to drain forwarded input leases: the
 /// program saw presses on this wire, so physical key-up releases must
@@ -288,6 +286,12 @@ pub struct Pane {
     pub(crate) pending_clipboard: Vec<Vec<u8>>,
     /// Off-tab pacing; the watched flag is `off_tab && fresh paint`.
     pacing: pacing::Pacing,
+    /// `[advanced] scrollback_limit_bytes` — the VT budget for every role
+    /// that builds one. Set once by the app at construction.
+    scrollback_bytes: usize,
+    /// `[advanced] attach_history_lines` — the scrollback a cold attach
+    /// asks the core to replay. A warm attach asks for the screen only.
+    attach_history: u64,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -338,8 +342,29 @@ impl Pane {
             pending_bells: 0,
             pending_clipboard: Vec::new(),
             pacing: pacing::Pacing::default(),
+            scrollback_bytes: crate::config::DEFAULT_SCROLLBACK_LIMIT_BYTES,
+            attach_history: crate::config::DEFAULT_ATTACH_HISTORY_LINES,
             attaches: 0,
         }
+    }
+
+    /// `[advanced] scrollback_limit_bytes`: the VT budget for this pane.
+    /// Applies to the VT the next first paint builds; a retained VT keeps
+    /// the budget it was created with.
+    pub(crate) fn set_scrollback_bytes(&mut self, bytes: usize) {
+        self.scrollback_bytes = bytes;
+    }
+
+    /// `[advanced] attach_history_lines`: the scrollback a cold attach
+    /// asks the core for.
+    pub(crate) fn set_attach_history(&mut self, lines: u64) {
+        self.attach_history = lines;
+    }
+
+    /// The configured VT budget and cold-open history, for tests.
+    #[cfg(test)]
+    pub(crate) fn budgets(&self) -> (u64, usize) {
+        (self.attach_history, self.scrollback_bytes)
     }
 
     /// Drain the BEL count this pane's VTs observed — live, parked and

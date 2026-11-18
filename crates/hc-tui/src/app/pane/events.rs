@@ -179,11 +179,7 @@ impl Pane {
                 }
                 if !live.paint_started {
                     live.paint_started = true;
-                    let mut vt = Vt::new(
-                        live.core_grid.0,
-                        live.core_grid.1,
-                        scrollback_limit(live.spec.role),
-                    );
+                    let mut vt = Vt::new(live.core_grid.0, live.core_grid.1, self.scrollback_bytes);
                     self.initial = seed_host(&mut vt, &self.host);
                     self.render_cache = None;
                     self.vt = Some(vt);
