@@ -72,7 +72,7 @@ pub struct UiConfig {
     pub tab_bar_right_separator: String,
     /// Format for the outer terminal window title.
     pub window_title: String,
-    /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "spaces".
+    /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "priority".
     pub agent_panel_sort: AgentPanelSortConfig,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
@@ -112,7 +112,7 @@ impl Default for UiConfig {
             tab_bar_right: Vec::new(),
             tab_bar_right_separator: " ".into(),
             window_title: super::window_title::default_window_title(),
-            agent_panel_sort: AgentPanelSortConfig::Spaces,
+            agent_panel_sort: AgentPanelSortConfig::Priority,
             status_indicators: StatusIndicatorStyle::Dots,
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),

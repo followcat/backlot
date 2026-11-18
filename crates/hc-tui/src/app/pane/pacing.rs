@@ -27,6 +27,13 @@ const REPAINT_BYPASS: Duration = Duration::from_millis(250);
 /// bridge a marker split across DATA chunk boundaries.
 const MARKER_TAIL: usize = 7;
 
+/// A size holder returns credit for its discarded stream in 64 KiB
+/// steps (`INITIAL_CREDIT / 4`): per-chunk CREDIT frames only multiply
+/// transport writes for bytes nobody renders, while the core's 256 KiB
+/// window keeps at least 192 KiB open — a paint never stalls on the
+/// withheld share.
+const SIZE_LEASE_CREDIT_STEP: usize = hc_proto::frame::INITIAL_CREDIT as usize / 4;
+
 /// The pane's pacing state: `off_tab` arrives from `App::sync_observers`
 /// each pass; `tx` carries the effective flag — off-tab AND painted —
 /// to the attach actor's forward loop.
@@ -130,6 +137,9 @@ pub(super) async fn forward_stream(
     // must never lose a race to a 500ms flush window.
     let mut repaint_until: Option<tokio::time::Instant> = None;
     let mut marker_tail: Vec<u8> = Vec::new();
+    // Consumed size-lease bytes not yet credited — released once the
+    // batch reaches `SIZE_LEASE_CREDIT_STEP`.
+    let mut lease_credit = 0usize;
     macro_rules! flush {
         () => {{
             flush_at = None;
@@ -173,10 +183,16 @@ pub(super) async fn forward_stream(
                 if role == Role::SizeLease {
                     match out {
                         Output::Data(bytes) => {
-                            if let Err(error) = attach.consume(bytes.len()) {
-                                let out = Output::Failed(format!("credit: {error}"));
-                                let _ = send_out(ev, generation, out).await;
-                                return;
+                            lease_credit += bytes.len();
+                            if lease_credit >= SIZE_LEASE_CREDIT_STEP {
+                                let step =
+                                    lease_credit - lease_credit % SIZE_LEASE_CREDIT_STEP;
+                                if let Err(error) = attach.consume(step) {
+                                    let out = Output::Failed(format!("credit: {error}"));
+                                    let _ = send_out(ev, generation, out).await;
+                                    return;
+                                }
+                                lease_credit -= step;
                             }
                             continue;
                         }

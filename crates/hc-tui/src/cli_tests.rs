@@ -195,7 +195,7 @@ async fn shared_rpc_opens_one_connection_for_every_consumer() {
     let _ = std::fs::remove_file(&socket);
     let listener = tokio::net::UnixListener::bind(&socket).unwrap();
     let endpoint = local(socket.to_str().unwrap());
-    let rpc = shared_rpc(&endpoint, &None);
+    let rpc = shared_rpc(&endpoint, &None, Arc::default());
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut hello = Vec::new();
@@ -245,4 +245,100 @@ fn caller_needs_the_verifying_socket_var() {
         self_caller(&only_socket, &local("/run/scratch/hc.sock")),
         None
     );
+}
+
+#[test]
+fn upgrade_installs_into_the_running_binary_directory_unless_configured() {
+    use crate::update_install::upgrade_install_dir;
+    let exe = std::path::Path::new("/home/user/bin/hc-tui");
+    let dir = std::path::PathBuf::from("/home/user/bin");
+    assert_eq!(upgrade_install_dir(None, Some(exe)), Some(dir.clone()));
+    assert_eq!(
+        upgrade_install_dir(Some(std::ffi::OsStr::new("")), Some(exe)),
+        Some(dir)
+    );
+    assert_eq!(
+        upgrade_install_dir(Some(std::ffi::OsStr::new("/opt/hc")), Some(exe)),
+        None
+    );
+}
+
+/// Issue #44: a package-managed or dev-build `--upgrade` refuses before
+/// the installer runs, naming its own update command.
+#[test]
+fn managed_and_dev_build_upgrades_are_refused_with_their_own_commands() {
+    let managed = [
+        (
+            crate::install_source::InstallSource::Mise {
+                tool: "github:followcat/hc-tui".into(),
+            },
+            "mise upgrade --bump github:followcat/hc-tui",
+        ),
+        (
+            crate::install_source::InstallSource::Homebrew,
+            "brew upgrade hc-tui",
+        ),
+        (
+            crate::install_source::InstallSource::Nix,
+            "Nix configuration",
+        ),
+        (crate::install_source::InstallSource::Cargo, "cargo"),
+        (crate::install_source::InstallSource::DevBuild, "dev build"),
+    ];
+    for (source, expected) in managed {
+        let ran = std::cell::Cell::new(false);
+        let status = upgrade_with(&source, None, None, &|_| {
+            ran.set(true);
+            0
+        });
+        assert_eq!(status, 1, "{source:?}");
+        assert!(!ran.get(), "{source:?} must not run the installer");
+        assert!(
+            source.refusal().unwrap().contains(expected),
+            "{source:?} refusal names its command"
+        );
+    }
+}
+
+/// An explicit `HC_TUI_INSTALL_DIR` is the user's own choice: the
+/// installer runs as asked even on a managed install.
+#[test]
+fn an_explicit_install_dir_runs_the_installer_as_asked() {
+    let ran = std::cell::Cell::new(false);
+    let status = upgrade_with(
+        &crate::install_source::InstallSource::Mise {
+            tool: "github:followcat/hc-tui".into(),
+        },
+        Some(std::ffi::OsStr::new("/opt/hc")),
+        Some(std::path::PathBuf::from("/home/user/bin")),
+        &|dir| {
+            ran.set(true);
+            assert_eq!(dir, None, "the env var already names the dir");
+            0
+        },
+    );
+    assert_eq!(status, 0);
+    assert!(ran.get());
+}
+
+/// A direct install still upgrades the running binary's directory; an
+/// empty `HC_TUI_INSTALL_DIR` counts as unset.
+#[test]
+fn a_direct_upgrade_installs_into_the_running_directory() {
+    let dir = std::path::Path::new("/home/user/bin");
+    for configured in [None, Some(std::ffi::OsStr::new(""))] {
+        let ran = std::cell::Cell::new(false);
+        let status = upgrade_with(
+            &crate::install_source::InstallSource::Direct,
+            configured,
+            Some(dir.to_path_buf()),
+            &|got| {
+                ran.set(true);
+                assert_eq!(got.as_deref(), Some(dir));
+                0
+            },
+        );
+        assert_eq!(status, 0);
+        assert!(ran.get());
+    }
 }

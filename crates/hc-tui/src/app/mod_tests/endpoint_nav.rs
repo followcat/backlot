@@ -313,6 +313,9 @@ async fn agent_row_reveal_uses_the_rendered_index_and_keeps_visible_rows() {
             machine("host-b", "connected"),
         ],
     );
+    // The spaces order fixes the rendered arrangement this scenario
+    // asserts (the priority default ties the three "working" rows).
+    app.shell.agent_panel_sort = crate::config::AgentPanelSortConfig::Spaces;
     pending_attach(&mut app);
     app.focused = Some("t1".into());
     app.refresh_projection();

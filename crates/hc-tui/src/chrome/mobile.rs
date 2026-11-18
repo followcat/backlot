@@ -63,7 +63,7 @@ pub(crate) fn render_mobile_header(
     snapshot: &ClientShellSnapshot,
     config: &super::ClientShellConfig,
     hits: &mut ShellHitMap,
-    update_latest: Option<&str>,
+    update_badge: super::render::UpdateBadge<'_>,
     lot: Option<&super::lot::LotFrame<'_>>,
 ) {
     if area.is_empty() {
@@ -94,8 +94,8 @@ pub(crate) fn render_mobile_header(
         .saturating_sub(pill_w);
     // The version badge claims a right slot only when the status keeps
     // a readable width — the hint drops first, then the whole badge.
-    let full = super::render::version_badge_width(update_latest);
-    let bare = super::render::version_badge_width(None);
+    let full = super::render::version_badge_width(update_badge);
+    let bare = super::render::version_badge_width(super::render::UpdateBadge::None);
     let badge_w = [full, bare]
         .into_iter()
         .find(|w| status_width >= w + 1 + MOBILE_STATUS_MIN)
@@ -129,7 +129,7 @@ pub(crate) fn render_mobile_header(
     if badge_w > 0 {
         let slot = Rect::new(status.right().saturating_add(1), area.y, badge_w, 1);
         hits.update_badge =
-            super::render::put_version_badge(buffer, slot, slot.x, update_latest, palette);
+            super::render::put_version_badge(buffer, slot, slot.x, update_badge, palette);
     }
 }
 
@@ -329,6 +329,7 @@ fn render_agent_summary(
         (AgentStatus::Blocked, "blocked"),
         (AgentStatus::Done, "done"),
         (AgentStatus::Working, "working"),
+        (AgentStatus::Waiting, "waiting"),
         (AgentStatus::Idle, "idle"),
     ]
     .map(|(status, label)| {
@@ -343,7 +344,7 @@ fn render_agent_summary(
         )
     });
     let total = counts.iter().map(|(_, _, count)| count).sum::<usize>();
-    let pending = counts[..3].iter().map(|(_, _, count)| count).sum::<usize>();
+    let pending = counts[..4].iter().map(|(_, _, count)| count).sum::<usize>();
     if total == 0 {
         put_text(
             buffer,

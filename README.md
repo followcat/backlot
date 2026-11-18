@@ -180,8 +180,14 @@ backlot is also the terminal you work in. The default prefix is `Ctrl+B`:
 | `Ctrl+B b` | Show or hide the sidebar |
 | `Ctrl+B s` | Settings: theme, status indicators, sound, notifications |
 | `Ctrl+B ?` | Every key, searchable |
+| `Ctrl+B u` | Check for a newer release: notes, one-key upgrade and restart |
 | `Ctrl+B q` | Detach. Everything keeps running |
 | `Ctrl+G` | Lock the keyboard, so every key goes to the program |
+
+Agents can also show `◌ waiting`: their own turn is quiet, but work they started is still running — a background
+`-c` shell under the agent's process tree, or, for Claude Code, a `shell` status in its own session file. The check
+runs every few seconds through the core (`machine.exec`, `file.read`) and never changes the agent's reported
+status, marks anything seen, or raises a notification.
 
 Once a studio exists, the client opens on the **Hollywood bar**: a frame per studio, with its state, who is on set
 and its cast, and a frame for a new studio. `←`/`→` move between frames, `Enter` opens one, `n` starts a new
@@ -220,9 +226,13 @@ Early, and honest about it:
   [docs/studio/limits.md](docs/studio/limits.md) has the details.
 - **Hollywood has only run on the test runner.** Its first run on a real agent is the next step.
 - **It runs on official `hc`**, which CI builds from source and drives the real UI against. Day-to-day use is
-  still mostly on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`. On official
-  `hc` an agent shows a status only if it reports one itself, and the sidebar's Git and hostname details are
-  unavailable. See [Core compatibility](docs/compatibility.md).
+  still mostly on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`. Official `hc`
+  0.1.21 is the tested build; older 0.1.x cores keep working, with each missing capability switched off. On
+  official `hc` an agent shows a status only if it reports one itself, and the sidebar's Git and hostname details
+  are unavailable. The fork publishes its own facts (screen-read status, Git and hostname details, completion
+  ordinals); its client contract is
+  [docs/fork-features.md](https://github.com/followcat/herdr-core/blob/v0.1.21-followcat.1/docs/fork-features.md).
+  See [Core compatibility](docs/compatibility.md).
 - **The macOS builds** pass CI but haven't been tried on a real Mac yet.
 
 ## Build from source

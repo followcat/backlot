@@ -15,8 +15,9 @@
 //! bounded batch per round, so one backed-up channel cannot starve
 //! another channel's input or CLOSE.
 
-use super::pump::CTRL_QUEUE;
-use super::table::{AttachCalls, Channels, Route};
+use super::calls::{AttachCalls, Taken};
+use super::pump::{CTRL_QUEUE, DataQueue};
+use super::table::{Channels, Route};
 use crate::client::call;
 use crate::client::error::CallError;
 use crate::client::lock;
@@ -59,9 +60,10 @@ pub(super) fn reply_channel(value: &Value) -> Option<u32> {
 }
 
 /// One channel-0 frame: attach replies go to their call — a dead
-/// receiver means the open was cancelled, so the reply's channel gets a
-/// CLOSE — and everything else is a plain pending-table reply. `Err` is
-/// a connection-level protocol violation, exactly as on an RPC wire.
+/// receiver or an orphan means the open is gone, so the reply's channel
+/// gets a CLOSE — and everything else is a plain pending-table reply.
+/// `Err` is a connection-level protocol violation, exactly as on an RPC
+/// wire.
 fn dispatch(
     frame: Frame,
     pending: &Pending,
@@ -78,24 +80,37 @@ fn dispatch(
     let Some(id) = response.id().cloned() else {
         return Err("response with a null id on the control channel".into());
     };
-    if !attach_calls.contains(&id) {
-        // Not an attach reply: the shared pending-table path handles it.
-        pump::dispatch(frame, pending)?;
-        return Ok(Dispatch::Done);
+    match attach_calls.take(&id) {
+        Taken::Waiting(sender) => {
+            let result = match response {
+                Response::Ok(r) => Ok(r.result),
+                Response::Err(r) => Err(CallError::Rpc(r.error)),
+            };
+            Ok(match sender.send(result) {
+                Ok(()) => Dispatch::Done,
+                Err(Ok(value)) => match reply_channel(&value) {
+                    Some(channel) => Dispatch::CloseChannel(channel),
+                    None => Dispatch::Done,
+                },
+                Err(Err(_)) => Dispatch::Done,
+            })
+        }
+        // A sent call whose caller went away: the reply still names a
+        // channel the core allocated — it gets its CLOSE like any late
+        // reply would, never a leaked viewer.
+        Taken::Orphan => Ok(match response {
+            Response::Ok(r) => match reply_channel(&r.result) {
+                Some(channel) => Dispatch::CloseChannel(channel),
+                None => Dispatch::Done,
+            },
+            Response::Err(_) => Dispatch::Done,
+        }),
+        Taken::Unknown => {
+            // Not an attach reply: the shared pending-table path handles it.
+            pump::dispatch(frame, pending)?;
+            Ok(Dispatch::Done)
+        }
     }
-    let sender = attach_calls.take(&id).expect("id checked present");
-    let result = match response {
-        Response::Ok(r) => Ok(r.result),
-        Response::Err(r) => Err(CallError::Rpc(r.error)),
-    };
-    Ok(match sender.send(result) {
-        Ok(()) => Dispatch::Done,
-        Err(Ok(value)) => match reply_channel(&value) {
-            Some(channel) => Dispatch::CloseChannel(channel),
-            None => Dispatch::Done,
-        },
-        Err(Err(_)) => Dispatch::Done,
-    })
 }
 
 /// Queues one channel CLOSE without awaiting — the synchronous half of
@@ -154,11 +169,35 @@ pub(super) async fn read_loop(
     on_end(reason);
 }
 
+/// Encoded bytes one writer round may gather before it must write and
+/// keep draining — a flooding round never grows the batch unboundedly.
+const WRITE_BATCH_CAP: usize = 256 * 1024;
+
+/// Writes the encoded batch in one `write_all`, then posts the write
+/// fence marks it carried — in frame order, exactly like per-frame
+/// `mark_written` after each successful write. `Err` ends the writer
+/// the same way a failed single-frame write did.
+async fn flush_batch(
+    writer: &mut Writer<WriteHalf>,
+    buf: &mut Vec<u8>,
+    marks: &mut Vec<(Arc<DataQueue>, u64)>,
+) -> std::io::Result<()> {
+    writer.write_encoded(buf).await?;
+    for (data, count) in marks.drain(..) {
+        data.mark_written(count);
+    }
+    buf.clear();
+    Ok(())
+}
+
 /// Writes queued frames until the queues close or the wire fails. Each
 /// round drains a bounded batch of control frames, then every live
 /// channel's owed credit, then a bounded input batch per channel —
 /// control stays first, but a flooding channel starves neither another
-/// channel's input nor its CLOSE.
+/// channel's input nor its CLOSE. Everything ready in the round encodes
+/// into one buffer and leaves in a single write; a frame never waits
+/// for more to join it — a lone keystroke flushes the moment its round
+/// runs.
 pub(super) async fn write_loop(
     mut writer: Writer<WriteHalf>,
     mut ctrl: mpsc::Receiver<Frame>,
@@ -167,6 +206,19 @@ pub(super) async fn write_loop(
     on_end: impl FnOnce(),
 ) {
     let mut ctrl_open = true;
+    // `marks` counts the input frames inside the batch per queue, so
+    // the write fence keeps marking completed transport writes, never
+    // queue positions.
+    let mut buf: Vec<u8> = Vec::new();
+    let mut marks: Vec<(Arc<DataQueue>, u64)> = Vec::new();
+    macro_rules! flush_at_cap {
+        () => {
+            buf.len() >= WRITE_BATCH_CAP
+                && flush_batch(&mut writer, &mut buf, &mut marks)
+                    .await
+                    .is_err()
+        };
+    }
     'outer: loop {
         let mut worked = false;
         for _ in 0..CTRL_QUEUE {
@@ -176,7 +228,8 @@ pub(super) async fn write_loop(
             match ctrl.try_recv() {
                 Ok(frame) => {
                     worked = true;
-                    if writer.write_frame(&frame).await.is_err() {
+                    frame.encode_into(&mut buf);
+                    if flush_at_cap!() {
                         break 'outer;
                     }
                 }
@@ -193,18 +246,30 @@ pub(super) async fn write_loop(
         for (stream, data) in live {
             while let Some(frame) = stream.take_owed() {
                 worked = true;
-                if writer.write_frame(&frame).await.is_err() {
+                frame.encode_into(&mut buf);
+                if flush_at_cap!() {
                     break 'outer;
                 }
             }
             for _ in 0..DATA_PER_CHANNEL {
                 let Some(frame) = data.pop() else { break };
                 worked = true;
-                if writer.write_frame(&frame).await.is_err() {
+                frame.encode_into(&mut buf);
+                match marks.last_mut() {
+                    Some((marked, count)) if Arc::ptr_eq(marked, &data) => *count += 1,
+                    _ => marks.push((Arc::clone(&data), 1)),
+                }
+                if flush_at_cap!() {
                     break 'outer;
                 }
-                data.mark_written();
             }
+        }
+        if !buf.is_empty()
+            && flush_batch(&mut writer, &mut buf, &mut marks)
+                .await
+                .is_err()
+        {
+            break 'outer;
         }
         if worked {
             continue;
@@ -215,9 +280,9 @@ pub(super) async fn write_loop(
         tokio::select! {
             frame = ctrl.recv(), if ctrl_open => {
                 match frame {
-                    Some(frame) => {
-                        if writer.write_frame(&frame).await.is_err() { break 'outer; }
-                    }
+                    // Straight into the batch: the next drain pass
+                    // writes it at once — never held for more frames.
+                    Some(frame) => frame.encode_into(&mut buf),
                     None => ctrl_open = false,
                 }
             }

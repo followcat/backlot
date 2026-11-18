@@ -18,6 +18,7 @@ pub mod hello;
 pub mod inventory;
 pub mod jsonrpc;
 pub mod machine;
+pub mod stats;
 pub mod subscribe;
 pub mod terminal;
 pub mod transport;

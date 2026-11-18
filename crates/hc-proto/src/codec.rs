@@ -209,6 +209,13 @@ impl<W: AsyncWrite + Unpin> Writer<W> {
         self.write.write_all(&frame.encode()).await
     }
 
+    /// Writes `bytes` — whole frames pre-encoded with
+    /// [`Frame::encode_into`] — in a single `write_all`: one transport
+    /// write for a whole writer round instead of one per frame.
+    pub async fn write_encoded(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        self.write.write_all(bytes).await
+    }
+
     /// Flushes the underlying writer.
     pub async fn flush(&mut self) -> std::io::Result<()> {
         self.write.flush().await

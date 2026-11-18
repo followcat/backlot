@@ -250,6 +250,7 @@ pub struct Keybinds {
     pub goto: ActionKeybinds,
     pub detach: ActionKeybinds,
     pub reload_config: ActionKeybinds,
+    pub update: ActionKeybinds,
     pub open_notification_target: ActionKeybinds,
     pub previous_workspace: ActionKeybinds,
     pub next_workspace: ActionKeybinds,

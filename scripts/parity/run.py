@@ -7,10 +7,11 @@ import subprocess
 import time
 import tomllib
 
-from checks import last_osc52, ready, title_difference, verify_restored
+from checks import (known_cursor_difference, known_differences, last_osc52, ready,
+                     title_difference, verify_restored)
 
 from fixtures import prepare_core, prepare_reference, wait_program
-from sessions import Core, Reference, digest
+from sessions import Core, Reference, digest, pin_one_shot_popup
 from repository import CASES as REPOSITORY_CASES
 from pty_host import Pty
 
@@ -38,14 +39,21 @@ def checkpoint(owner, name, size, decoder):
     return json.loads(result.stdout)
 
 
-def differences(reference, candidate):
+def differences(reference, candidate, checkpoint=None):
+    # Documented hc-tui additions are excused by exact cell in checks.py;
+    # everything else on the frame is still compared.
+    known = {(row, column) for cells in known_differences(reference, candidate).values()
+             for row, column in cells}
     differences = []
     for row_a, row_b in zip(reference['cells'], candidate['cells'], strict=True):
         for column, (a, b) in enumerate(zip(row_a['cells'], row_b['cells'], strict=True)):
-            if a != b:
+            if a != b and (row_a['y'], column) not in known:
                 differences.append({'row': row_a['y'], 'column': column, 'reference': a, 'candidate': b})
     if reference['cursor'] != candidate['cursor']:
-        differences.append({'cursor_reference': reference['cursor'], 'cursor_candidate': candidate['cursor']})
+        if known_cursor_difference(reference, candidate, checkpoint):
+            pass
+        else:
+            differences.append({'cursor_reference': reference['cursor'], 'cursor_candidate': candidate['cursor']})
     if reference['host_modes'] != candidate['host_modes']:
         differences.append({'reference_modes':reference['host_modes'], 'candidate_modes':candidate['host_modes']})
     title = title_difference(reference['title'],candidate['title'])
@@ -80,7 +88,12 @@ def one_size(args, size, binary):
     core = reference = None
     result = {'geometry': size, 'checkpoints': [], 'cleanup': {}}
     try:
-        core = Core(args.hc, args.config, out)
+        # One shared fixture cwd: the navigator footer prints the selected
+        # pane's cwd, and both clients must show the same path.
+        fixture = out / 'fixture'
+        fixture.mkdir()
+        core = Core(args.hc, args.config, out, cwd=fixture)
+        pin_one_shot_popup(core.env)
         if args.host_program:
             core.env['TERM_PROGRAM'] = args.host_program
         repository_scenario = args.scenario == 'repository'
@@ -92,7 +105,7 @@ def one_size(args, size, binary):
         if repository_scenario:
             from repository import verify_facts
             verify_facts(core, candidate_programs, args.repository_case)
-        reference = Reference(binary, args.config, out)
+        reference = Reference(binary, args.config, out, cwd=fixture)
         if args.host_program:
             reference.env['TERM_PROGRAM'] = args.host_program
         reference_paths = prepare_repository(reference, args.repository_case) if repository_scenario else None
@@ -137,13 +150,19 @@ def one_size(args, size, binary):
         def compare(name, **expected):
             a = capture_ready(reference, name, reference_programs[1], expected)
             b = capture_ready(core, name, candidate_programs[1], expected)
-            diff = differences(a, b)
+            diff = differences(a, b, name)
             (out / (name + '-diff.json')).write_text(json.dumps(diff, ensure_ascii=False, indent=2) + '\n')
+            known = known_differences(a, b)
+            cursor_reason = known_cursor_difference(a, b, name)
             bugs = diff
-            result['checkpoints'].append({'name':name, 'different_cells':len(bugs),
+            entry = {'name':name, 'different_cells':len(bugs),
 
                 'status': 'fail' if bugs else ('core-policy-difference' if expected.get('core_policy_differences') else 'pass'),
-                'core_policy_differences': expected.get('core_policy_differences', [])})
+                'core_policy_differences': expected.get('core_policy_differences', []),
+                'known_differences': {reason: len(cells) for reason, cells in known.items()}}
+            if cursor_reason:
+                entry['known_cursor_difference'] = cursor_reason
+            result['checkpoints'].append(entry)
             print(json.dumps({'geometry':size,'checkpoint':name,'differences':len(bugs),
 
                 'status':'fail' if bugs else ('core-policy-difference' if expected.get('core_policy_differences') else 'pass')}),flush=True)

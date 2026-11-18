@@ -20,6 +20,7 @@ enum Connect {
     Endpoint {
         endpoint: Endpoint,
         ssh_program: Option<OsString>,
+        stats: Arc<crate::stats::ConnStats>,
     },
     /// Scripted openers for tests.
     Injected(Opener),
@@ -84,7 +85,8 @@ impl Inner {
             Connect::Endpoint {
                 endpoint,
                 ssh_program,
-            } => Client::connect(endpoint, ssh_program.as_deref()).await,
+                stats,
+            } => Client::connect_counted(endpoint, ssh_program.as_deref(), stats).await,
             Connect::Injected(opener) => opener().await,
         }
     }
@@ -109,9 +111,19 @@ fn opener(connect: Connect) -> OpenRpc {
 /// `ssh_program` overrides the `ssh` name for tests; production passes
 /// `None`.
 pub fn shared_rpc(endpoint: Endpoint, ssh_program: Option<OsString>) -> OpenRpc {
+    shared_rpc_counted(endpoint, ssh_program, Arc::default())
+}
+
+/// [`shared_rpc`] with every connection it opens counted into `stats`.
+pub fn shared_rpc_counted(
+    endpoint: Endpoint,
+    ssh_program: Option<OsString>,
+    stats: Arc<crate::stats::ConnStats>,
+) -> OpenRpc {
     opener(Connect::Endpoint {
         endpoint,
         ssh_program,
+        stats,
     })
 }
 

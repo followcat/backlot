@@ -41,6 +41,11 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// Deadline for the `events.subscribe` reply (it includes the snapshot).
 const SUBSCRIBE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Silence bound for [`Subscription::recv`]: the core heartbeats its
+/// subscriptions every 15 s, so 45 s without any line — heartbeat or
+/// event — is a dead link, not an idle one (a blackholed path delivers
+/// no EOF for `read_line` to see). Reported exactly like a clean EOF.
+const RECV_DEADLINE: Duration = Duration::from_secs(45);
 
 /// An open `events.subscribe` stream: the initial snapshot plus a
 /// single-owner notification reader. A terminal read error latches the
@@ -61,6 +66,9 @@ pub struct Subscription {
     writer: Option<Writer<WriteHalf>>,
     /// The owned backend; its `Drop` kills and reaps an ssh child.
     guard: Option<Guard>,
+    /// The read deadline each `recv` applies — [`RECV_DEADLINE`]
+    /// unless a test overrode it.
+    recv_deadline: Duration,
 }
 
 impl Subscription {
@@ -72,12 +80,24 @@ impl Subscription {
         ssh_program: Option<&OsStr>,
         params: &SubscribeParams,
     ) -> Result<Subscription, SubscribeError> {
+        Subscription::connect_counted(endpoint, ssh_program, params, &Default::default()).await
+    }
+
+    /// [`connect`](Self::connect) with its transport counted into `stats`.
+    pub async fn connect_counted(
+        endpoint: &Endpoint,
+        ssh_program: Option<&OsStr>,
+        params: &SubscribeParams,
+        stats: &std::sync::Arc<crate::stats::ConnStats>,
+    ) -> Result<Subscription, SubscribeError> {
         let conn = tokio::time::timeout(CONNECT_TIMEOUT, transport::connect(endpoint, ssh_program))
             .await
             .map_err(|_| SubscribeError::Open(crate::client::Error::Timeout("connect")))?
             .map_err(crate::client::Error::Transport)?;
-        let (reader, writer, guard) = conn.split();
-        Subscription::negotiated(reader, writer, Some(guard), params).await
+        let (reader, writer, guard) = conn.counted(stats).split();
+        let subscription = Subscription::negotiated(reader, writer, Some(guard), params).await?;
+        stats.connected();
+        Ok(subscription)
     }
 
     /// Subscribes over an injected byte stream — tests use in-memory wires.
@@ -185,7 +205,16 @@ impl Subscription {
             reader: Some(reader),
             writer: Some(writer),
             guard,
+            recv_deadline: RECV_DEADLINE,
         })
+    }
+
+    /// Test hook: overrides [`RECV_DEADLINE`] so paused-time tests do
+    /// not drive three heartbeat periods of virtual silence.
+    #[doc(hidden)]
+    pub fn with_recv_deadline(mut self, deadline: Duration) -> Subscription {
+        self.recv_deadline = deadline;
+        self
     }
 
     /// The validated handshake: generation, identity, methods, features.
@@ -222,16 +251,18 @@ impl Subscription {
     /// the end, both halves and the owned backend drop at once (the peer
     /// sees EOF, an ssh child is killed and reaped), and every later
     /// `recv` fails promptly as `Closed` instead of resuming on an
-    /// untrusted stream.
+    /// untrusted stream. A whole [`RECV_DEADLINE`] without any line —
+    /// heartbeat or event — ends the same way: the core heartbeats its
+    /// subscriptions, so silence is a dead link, not an idle one.
     pub async fn recv(&mut self) -> Result<ServerNotification, SubscribeError> {
         loop {
             let Some(reader) = self.reader.as_mut() else {
                 return Err(SubscribeError::Closed);
             };
-            let line = match reader.read_line().await {
-                Ok(Some(line)) => line,
-                Ok(None) => return Err(self.end(SubscribeError::Closed)),
-                Err(e) => return Err(self.end(SubscribeError::Codec(e))),
+            let line = match tokio::time::timeout(self.recv_deadline, reader.read_line()).await {
+                Ok(Ok(Some(line))) => line,
+                Ok(Ok(None)) | Err(_) => return Err(self.end(SubscribeError::Closed)),
+                Ok(Err(e)) => return Err(self.end(SubscribeError::Codec(e))),
             };
             let message = match Message::parse(&line) {
                 Ok(message) => message,

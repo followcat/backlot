@@ -259,18 +259,26 @@ impl Frame {
         Frame::new(channel, Kind::AutomaticInput, payload)
     }
 
-    /// The whole frame on the wire: header plus payload. Panics when the
-    /// payload exceeds [`MAX_PAYLOAD`] — that is a bug in the caller.
-    pub fn encode(&self) -> Vec<u8> {
+    /// The whole frame on the wire — header plus payload — appended to
+    /// `out`, so a writer round can gather several frames into one write.
+    /// Panics when the payload exceeds [`MAX_PAYLOAD`] — that is a bug
+    /// in the caller.
+    pub fn encode_into(&self, out: &mut Vec<u8>) {
         assert!(
             self.payload.len() <= MAX_PAYLOAD,
             "payload exceeds {MAX_PAYLOAD} bytes"
         );
-        let mut out = Vec::with_capacity(HEADER_LEN + self.payload.len());
         out.extend_from_slice(&self.channel.to_le_bytes());
         out.push(self.kind.to_u8());
         out.extend_from_slice(&(self.payload.len() as u32).to_le_bytes());
         out.extend_from_slice(&self.payload);
+    }
+
+    /// The whole frame on the wire: header plus payload. Panics when the
+    /// payload exceeds [`MAX_PAYLOAD`] — that is a bug in the caller.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(HEADER_LEN + self.payload.len());
+        self.encode_into(&mut out);
         out
     }
 

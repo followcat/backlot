@@ -65,8 +65,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         .filter(|id| app.displayed_pane(id).is_some_and(|p| p.has_fresh_paint()))
         .collect::<Vec<_>>();
     for pane_id in painted {
-        app.presentation
-            .acknowledge(&mut app.projection, &pane_id, app.outer_focused);
+        app.presentation.acknowledge(
+            &mut app.projection,
+            &pane_id,
+            app.outer_focused,
+            &app.waiting,
+        );
     }
     let collapsed = app.shell_state.sidebar_collapsed;
     let layout = app.chrome_layout(area.width, area.height);
@@ -95,6 +99,10 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             cols: app.area.0,
         },
     );
+    let update_latest = app.update_ready_version().map(str::to_owned);
+    let restart_ready = app.restart_ready.clone();
+    let update_badge =
+        crate::chrome::render::UpdateBadge::new(update_latest.as_deref(), restart_ready.as_deref());
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -114,7 +122,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         reveal_navigation_workspace: &mut app.shell_state.reveal_navigation_workspace,
         dragged_workspace_id: None,
         workspace_drop_indicator_row: None,
-        update_latest: app.update_latest.as_deref(),
+        update_badge,
         cast,
         cast_scroll: &mut app.studio.cast_scroll,
         lot,

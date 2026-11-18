@@ -7,34 +7,29 @@
 //! its claims keep it alive, its `died` is the one shared shutdown every
 //! attach on it ends through.
 
+use super::calls::AttachCalls;
 use super::diag::open_failed;
 use super::error::AttachError;
 use super::mux::{self, Cells};
 use super::pump::{CTRL_QUEUE, DataQueue};
+use super::registry::AttachGauges;
 use super::stream::Stream;
-use super::table::{AttachCalls, Channels, Install};
+use super::table::{Channels, Install};
 use super::{Attach, Shared};
-use crate::client::call::{self, MAX_INFLIGHT};
+use crate::client::call;
 use crate::client::error::{CallError, Error};
 use crate::client::{lock, pump, wire};
 use crate::codec::{Reader, Writer};
 use crate::endpoint::Endpoint;
-use crate::frame::{CONTROL_CHANNEL, Frame, MAX_PAYLOAD};
 use crate::hello::{Capabilities, HelloResult, feature};
-use crate::jsonrpc::{Id, Request};
 use crate::method;
 use crate::terminal::{AttachParams, AttachResult};
 use crate::transport::{self, Guard, ReadHalf, WriteHalf};
-use serde_json::Value;
 use std::ffi::OsStr;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::JoinHandle;
-
-/// Deadline for the `terminal.attach` reply (it includes first paint).
-const ATTACH_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// One live shared connection: the negotiated `hello` every attach
 /// shares, the channel-0 control wire, the channel table and the two
@@ -45,11 +40,11 @@ pub(super) struct Conn {
     /// The validated `hello` every attach shares.
     hello: Arc<HelloResult>,
     /// Channel-0 control queue + the wire's dead latch.
-    wire: Arc<call::Wire>,
+    pub(super) wire: Arc<call::Wire>,
     /// The channel table the reader routes through.
     channels: Arc<Mutex<Channels>>,
-    /// Attach calls in flight — kept after their caller cancels.
-    attach_calls: Arc<AttachCalls>,
+    /// Attach calls in flight — ids their sent requests still answer.
+    pub(super) attach_calls: Arc<AttachCalls>,
     /// Wakes the shared writer for any channel's work.
     work: Arc<Notify>,
     /// Live claims — opens in flight plus installed attaches. The last
@@ -95,6 +90,7 @@ impl Conn {
     pub(super) async fn connect(
         endpoint: &Endpoint,
         ssh_program: Option<&OsStr>,
+        stats: &Arc<crate::stats::ConnStats>,
     ) -> Result<Arc<Conn>, AttachError> {
         let conn = tokio::time::timeout(
             super::super::CONNECT_TIMEOUT,
@@ -103,8 +99,21 @@ impl Conn {
         .await
         .map_err(|_| AttachError::Open(Error::Timeout("connect")))?
         .map_err(Error::Transport)?;
-        let (reader, writer, guard) = conn.split();
-        Conn::negotiate(reader, writer, Some(guard)).await
+        let (reader, writer, guard) = conn.counted(stats).split();
+        let conn = Conn::negotiate(reader, writer, Some(guard)).await?;
+        stats.connected();
+        Ok(conn)
+    }
+
+    /// What this connection holds right now, for diagnostics.
+    pub(super) fn gauges(&self) -> AttachGauges {
+        let (live, held, dead) = lock(&self.channels).census();
+        AttachGauges {
+            calls_in_flight: self.attach_calls.len(),
+            channels_live: live,
+            channels_held: held,
+            channels_dead: dead,
+        }
     }
 
     /// Negotiates `hello` over an injected byte stream — tests use
@@ -152,6 +161,7 @@ impl Conn {
                 tx: ctrl,
                 pending: pump::Pending::default(),
                 next_id: AtomicI64::new(1),
+                probing: AtomicBool::new(false),
             }),
             channels: Arc::new(Mutex::new(Channels::default())),
             attach_calls: Arc::new(AttachCalls::default()),
@@ -198,6 +208,16 @@ impl Conn {
     /// Whether the connection is dead — latched at `died`'s start.
     pub(super) fn dead(&self) -> bool {
         self.dead.load(Ordering::SeqCst)
+    }
+
+    /// The channel table's size — test access for the dead-slot bound.
+    pub(super) fn channel_map_len(&self) -> usize {
+        lock(&self.channels).len()
+    }
+
+    /// Attach calls currently registered — test access.
+    pub(super) fn attach_call_count(&self) -> usize {
+        self.attach_calls.len()
     }
 
     /// One claim on the connection's life: `Closed` once dead, checked
@@ -303,33 +323,6 @@ impl Conn {
         })
     }
 
-    /// The `terminal.attach` call itself: the reply rides `attach_calls`,
-    /// and unlike a plain RPC entry the registration survives a dropped
-    /// caller — the reply still names a channel that must get CLOSED.
-    async fn attach_call(&self, params: Value) -> Result<Value, CallError> {
-        let id = Id::Num(self.wire.next_id.fetch_add(1, Ordering::Relaxed));
-        let request = Request::new(id.clone(), method::TERMINAL_ATTACH, Some(params));
-        let payload = serde_json::to_vec(&request).map_err(CallError::Shape)?;
-        if payload.len() > MAX_PAYLOAD {
-            return Err(CallError::TooLarge {
-                size: payload.len(),
-            });
-        }
-        let rx = self.attach_calls.register(id, MAX_INFLIGHT)?;
-        let frame = Frame::data(CONTROL_CHANNEL, payload);
-        match tokio::time::timeout(ATTACH_TIMEOUT, async {
-            if self.wire.tx.send(frame).await.is_err() {
-                return Err(CallError::Closed);
-            }
-            rx.await.unwrap_or(Err(CallError::Closed))
-        })
-        .await
-        {
-            Ok(result) => result,
-            Err(_) => Err(CallError::Timeout),
-        }
-    }
-
     /// Client-side channel teardown: the attach's own end already failed
     /// its stream — this just swallows the channel's late frames.
     pub(super) fn end_channel(&self, channel: u32) {
@@ -346,7 +339,7 @@ impl Conn {
     /// channel with the same reason, aborts both halves so the streams
     /// drop (the peer sees stdin EOF) and hands the backend to the
     /// spawned close.
-    fn died(&self, reason: Option<String>, eof: bool) {
+    pub(super) fn died(&self, reason: Option<String>, eof: bool) {
         if self.dead.swap(true, Ordering::SeqCst) {
             return;
         }

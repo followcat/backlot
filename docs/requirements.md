@@ -151,8 +151,9 @@ Unofficial. Not affiliated with or endorsed by the Herdr project.
 ### R9 Popups and clipboard
 - A floating terminal popup with text selection and copy.
 - Clipboard image paste in a pane, including over SSH and with kitty press/release events.
-  - The image goes to the agent's machine with `terminal.put`, and the path is typed into the
-    pane. Port this from herdr's clipboard image forwarding.
+  - The image goes to the agent's machine with `terminal.put` (or acknowledged
+    `put_begin`/`put_chunk`/`put_finish` pieces when the core advertises `put_chunks`), and the path is
+    typed into the pane. Port this from herdr's clipboard image forwarding.
 
 ## Non-functional requirements
 - **Rust**, ratatui and crossterm. One static binary (musl) for Linux x86_64/aarch64, plus a macOS

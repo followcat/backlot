@@ -744,6 +744,74 @@ Everything else on the compared surfaces still diffs normally.
   navigator checkpoint — each filter, search-without-results, movement
   and close — is cell-identical. The row list, search, filters,
   scrolling, mouse handling and focus acceptance are unaffected.
+- **Agent-panel sort default and remembered chrome choices.** Deliberate:
+  hc-tui's `[ui] agent_panel_sort` defaults to `priority`, where the
+  reference's configured default is `spaces`; an explicit `spaces`
+  (or the `workspaces` alias) still selects space order. Like the
+  reference, hc-tui persists the manually chosen chrome state —
+  `agent_panel_sort`, `sidebar_width`, `sidebar_section_split`,
+  `sidebar_collapsed`, `collapsed_groups`, `remote_collapsed_groups` —
+  as one JSON file per endpoint under its own state root
+  (`$XDG_STATE_HOME/hc-tui/client-shell/`, else
+  `~/.local/state/hc-tui/client-shell/`), keyed by the local socket
+  path or the remote target+session, written atomically through a temp
+  file and rename. A saved choice wins over config at start and a
+  config reload keeps it; a missing or malformed file is ignored and a
+  failed write is a notice. `collapsed_endpoints` is not persisted —
+  the reference does not persist it either. The file lives in hc-tui's
+  state root, never herdr's. The parity config copy therefore selects
+  herdr's own value (`agent_panel_sort = "spaces"`), which restores the
+  reference header label and agent order; with the previous default the
+  header said `priority` and the list followed status order.
+- **Persistent float default for a shell popup.** Deliberate: an hc-tui
+  `[[keys.command]]` with `type = "popup"` whose command is a bare
+  interactive shell is the tab's persistent float unless the entry says
+  `persistent = false`. The reference always runs a one-shot popup. The
+  harness pins the audited Alt+F entry to `persistent = false` in the
+  **candidate's private config copy only**: herdr treats the unknown key
+  as a config diagnostic and draws a toast over row 0.
+- **Parity harness known differences.** The harness excuses exactly three
+  things, each by position and content and recorded per checkpoint under
+  `known_differences` with the reason: the running version badge (one
+  contiguous `vX.Y.Z` run on row 0 where the reference is blank), the
+  navigator footer's pane id (a candidate `t<N>` against a reference
+  `w<W>:p<P>`, with nothing else on that row differing), and — only on the
+  `pane-exit`/`pane-closed` checkpoints — a cursor shape/blink difference
+  at an identical position and visibility, because the reference's core
+  keeps reporting the closed Alt+P shell's last cursor shape for the
+  visible pane. Nothing else is excused, no tolerance is widened and no
+  checkpoint is skipped. Both clients also share one fixture directory,
+  because the navigator prints the pane's cwd verbatim, and the neutral
+  programs pin the host cursor shape in their first paint.
+- **In-client update card and restart.** Deliberate hc-tui addition: the reference tells the user to detach and
+  run `herdr update`. hc-tui adds the card from `prefix+u`, the header badge and the startup toast: the release notes of
+  every newer stable release (cached in `update-check.json`), the official installer run locally with
+  `HC_TUI_SKIP_CORE=1` into the running binary's directory, a `--version` check before `done`, and an in-place `exec`
+  restart. The modal frame, typography, markdown styling, the shell badges and the `NAVIGATE` status are ported from the
+  reference, and so is the managed-install refusal: a mise, Homebrew, Nix, cargo or dev-build binary gets no `↵ update`,
+  and `hc-tui --upgrade` refuses with the channel's own command (`mise upgrade --bump github:followcat/hc-tui`, `brew
+  upgrade hc-tui`) unless `HC_TUI_INSTALL_DIR` is set explicitly. Not ported yet: the reference's global command menu.
+  The `● menu` launcher shows its dot while an update
+  waits, but its click still does nothing, as before this change; the card is reached through `prefix+u` and the badge.
+  When an update and a pending restart are both known, the restart hint wins: the badge shows `↻v`, not `↑v`, because
+  the restart is what blocks the new version.
+- **Waiting status overlay.** Deliberate: the reference has no Waiting
+  state. hc-tui adds `AgentStatus::Waiting` between Working and Idle in
+  display priority — `◌`/`waiting`/peach in every status surface — but
+  never as a core word: it overlays a *shown* `Idle` only while probe
+  evidence says background work outlives the agent's turn (a `-c` tool
+  shell still a descendant of the foreground pid past a ~20 s start
+  window, via one `machine.exec` `ps` listing per machine per cycle —
+  the same shell pid must appear in two of the terminal's own
+  consecutive listings before it counts — and for `claude-code`,
+  `file.read` of
+  `~/.claude/sessions/<pid>.json` with `status` `shell`). Cycles run
+  ~3 s apart while a candidate or verdict is live, ~10 s once a listing
+  finds nothing. Seen, attention, notifications and raw
+  status are untouched; an unseen completion stays `Done` until
+  visited. On a core that offers neither `machine.exec` nor
+  `file.read`, or for agents with no background work in flight, every
+  rendered cell is identical to the reference.
 
 ## Slice 5 — popups, peek and custom commands
 

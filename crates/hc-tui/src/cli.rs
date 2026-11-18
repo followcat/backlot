@@ -4,12 +4,13 @@
 
 use std::ffi::OsString;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use hc_proto::endpoint::{self, Endpoint, Env, Platform};
 use hc_proto::watch::{WatchParams, Watcher};
 
-use crate::app::{App, OpenAttach, Probe};
+use crate::app::{App, HostOutput, OpenAttach, Probe};
 
 /// What the command line asked for.
 pub enum Action {
@@ -86,26 +87,59 @@ pub const INSTALL_COMMAND: &str =
 
 /// `backlot --upgrade`: a user-invoked network action, not a background
 /// call — the official installer runs with stdio inherited so its
-/// progress shows, and the exit code propagates.
+/// progress shows, and the exit code propagates. A package-managed
+/// install or dev build is refused before anything runs (issue #44);
+/// an explicit `HC_TUI_INSTALL_DIR` is the user's own choice.
 pub fn upgrade() -> std::process::ExitCode {
-    use std::process::ExitCode;
-    match std::process::Command::new("sh")
+    let configured = std::env::var_os("HC_TUI_INSTALL_DIR");
+    let source = crate::install_source::current(|key| std::env::var_os(key));
+    let dir = crate::update_install::upgrade_install_dir(configured.as_deref(), None);
+    let code = upgrade_with(&source, configured.as_deref(), dir, &run_installer);
+    if code == 0 {
+        println!("restart hc-tui to use the new version");
+    }
+    std::process::ExitCode::from(code)
+}
+
+/// The `--upgrade` decision, with the installer injected so tests never
+/// spawn it. An explicit non-empty `HC_TUI_INSTALL_DIR` runs as asked; a
+/// managed or dev-build binary refuses with its own command; a direct
+/// install upgrades `direct_dir`, the running binary's directory.
+pub fn upgrade_with(
+    source: &crate::install_source::InstallSource,
+    configured_dir: Option<&std::ffi::OsStr>,
+    direct_dir: Option<PathBuf>,
+    run: &dyn Fn(Option<PathBuf>) -> u8,
+) -> u8 {
+    if configured_dir.is_some_and(|dir| !dir.is_empty()) {
+        return run(None);
+    }
+    if let Some(refusal) = source.refusal() {
+        eprintln!("{refusal}");
+        return 1;
+    }
+    run(direct_dir)
+}
+
+/// Run the official installer with stdio inherited, optionally into
+/// `dir` (`BACKLOT_INSTALL_DIR`); its exit code propagates.
+fn run_installer(dir: Option<PathBuf>) -> u8 {
+    let mut command = std::process::Command::new("sh");
+    command
         .args(["-c", INSTALL_COMMAND])
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-    {
-        Ok(status) if status.success() => {
-            println!("restart backlot to use the new version");
-            ExitCode::SUCCESS
-        }
-        Ok(status) => status.code().map_or(ExitCode::FAILURE, |code| {
-            ExitCode::from(u8::try_from(code).unwrap_or(1))
-        }),
+        .stderr(std::process::Stdio::inherit());
+    if let Some(dir) = dir {
+        command.env("BACKLOT_INSTALL_DIR", dir);
+    }
+    match command.status() {
+        Ok(status) => status
+            .code()
+            .map_or(1, |code| u8::try_from(code).unwrap_or(1)),
         Err(e) => {
             eprintln!("error: upgrade: {e}");
-            ExitCode::FAILURE
+            1
         }
     }
 }
@@ -128,8 +162,10 @@ Options:
                          page (hc-tui is the general client)
   -h, --help             Print this help
   -V, --version          Print the version
-      --upgrade          Run the official installer to upgrade to the
-                         latest release, then restart backlot
+      --upgrade          Run the official installer into this binary's
+                         directory (BACKLOT_INSTALL_DIR overrides) to upgrade
+                         to the latest release, then restart backlot; a
+                         package-managed or dev build is refused instead
 
 Default keys: Ctrl+B prefix — q detach · w workspace navigation ·
 b sidebar · ? keybinds · Ctrl+B Ctrl+B literal ^B.
@@ -149,8 +185,12 @@ docs/studio/guide.md walks a studio end to end.",
 /// the watcher's refreshes, layout actions and background seen writes
 /// all multiplex onto it (one transport, one `hello`): lazy like
 /// `AttachConn`, single-flight, rebuilt once when the wire dies.
-fn shared_rpc(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::watch::OpenRpc {
-    hc_proto::client::shared_rpc(endpoint.clone(), ssh.clone())
+fn shared_rpc(
+    endpoint: &Endpoint,
+    ssh: &Option<OsString>,
+    stats: Arc<hc_proto::stats::ConnStats>,
+) -> hc_proto::watch::OpenRpc {
+    hc_proto::client::shared_rpc_counted(endpoint.clone(), ssh.clone(), stats)
 }
 
 /// The hc terminal this client runs inside, verified against the
@@ -187,8 +227,9 @@ fn shared_attach(endpoint: &Endpoint, ssh: &Option<OsString>) -> hc_proto::clien
 /// until detach. `plain` keeps the client exactly as `main` outside
 /// studio mode: Herdr's agents list, keys and layout — no studio
 /// cast, no opening page. Errors are user-facing strings — a failure
-/// leaves the terminal restored by the caller's guard.
-pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), String> {
+/// leaves the terminal restored by the caller's guard. `Some` is the
+/// restart path an in-client update asked for.
+pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<PathBuf>, String> {
     // The user's herdr config drives prefix + keybindings, read-only.
     let config_path = crate::config::config_path();
     let mut loaded = crate::config::load(&config_path);
@@ -196,27 +237,46 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
     let own_theme =
         crate::own_theme::Shell::at(crate::panel::config_path(env)).overlay(&mut loaded);
     let live = loaded.config.live_keybinds();
-    let mut shell = crate::chrome::ClientShellConfig::from_config(
+    let shell = crate::chrome::ClientShellConfig::from_config(
         &loaded.config,
         None,
         crate::config::config_diagnostic_summary(&loaded.diagnostics),
         config_path,
     );
+    // Chrome preferences key on the endpoint's own identity — the
+    // local core's socket, or a remote's target + session — so two
+    // endpoints never share a file.
+    let mut shell = match endpoint {
+        Endpoint::Local(local) => shell.with_local_endpoint(env, &local.socket),
+        Endpoint::Remote(remote) => {
+            shell.with_remote_endpoint(env, &remote.target, &remote.session)
+        }
+    };
     shell.own_theme = own_theme;
     let mut params = WatchParams {
         traversal: Some(crate::project::agent_traversal),
         ..WatchParams::default()
     };
     // `backlot` rides `documents`: every attached machine serves its
-    // own stage's summary under `DocKey { machine, name }`.
+    // own stage's summary under `DocKey { machine, name }`. It stays
+    // here, out of `doc_patterns`: on 0.1.21+ cores naming documents in
+    // `events.subscribe` narrows the subscription to documents alone and
+    // silences terminal events, and the studio needs every terminal
+    // event. So `doc_patterns` stays empty while backlot wants every
+    // terminal (docs/fork-features.md, "Named document subscriptions").
     params.documents.push("backlot".into());
     // One framed RPC wire: the watcher's refreshes and the operations
     // + seen workers' calls all ride clones of this single opener.
     let ssh: Option<OsString> = None;
-    let rpc = shared_rpc(endpoint, &ssh);
-    let watcher = Watcher::connect_with_rpc(endpoint, ssh.as_deref(), rpc.clone(), params);
+    let rpc_stats = Arc::new(hc_proto::stats::ConnStats::default());
+    let sub_stats = Arc::new(hc_proto::stats::ConnStats::default());
+    let rpc = shared_rpc(endpoint, &ssh, Arc::clone(&rpc_stats));
+    let sub =
+        hc_proto::watch::subscription_opener(endpoint, ssh.as_deref(), Arc::clone(&sub_stats));
+    let watcher = Watcher::with_openers(rpc.clone(), sub, params);
     let caller = self_caller(env, endpoint);
     let attach_conn = shared_attach(endpoint, &ssh);
+    let attach_for_diag = attach_conn.clone();
     let open: OpenAttach = Arc::new(move |params| {
         let conn = attach_conn.clone();
         let caller = caller.clone();
@@ -232,7 +292,11 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
         })
     });
     let mouse_capture = shell.mouse_capture;
-    let mut app = App::new(watcher, open, live, shell, Arc::new(Probe::default()));
+    let probe = Arc::new(Probe {
+        publish_panes: crate::diag::requested(env),
+        ..Probe::default()
+    });
+    let mut app = App::new(watcher, open, live, shell, Arc::clone(&probe));
     app.set_plain(plain);
 
     app.set_operations(rpc.clone());
@@ -278,25 +342,33 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
     // error and panic paths alike.
     let mut guard =
         crate::term::TermGuard::enter(mouse_capture).map_err(|e| format!("terminal setup: {e}"))?;
-    let backend = crate::ansi::AnsiBackend::new(std::io::stdout());
+    let backend =
+        crate::ansi::AnsiBackend::new(HostOutput::new(std::io::stdout(), Arc::clone(&probe)));
     let mut terminal = ratatui::Terminal::new(backend).map_err(|e| format!("terminal: {e}"))?;
     // The single reader owns stdin: user input and the host's query
     // replies share it — write the queries first so the reader decodes
     // replies from its armed reply windows, never as keys.
     let cell_query = crate::host::send_theme_query().map_err(|e| format!("theme query: {e}"))?;
-    let mut reader = crate::reader::spawn_reader(256, mouse_capture, true, cell_query)
-        .map_err(|e| format!("input reader: {e}"))?;
+    let mut reader =
+        crate::reader::spawn_reader(256, mouse_capture, true, cell_query, Arc::clone(&probe))
+            .map_err(|e| format!("input reader: {e}"))?;
     app.set_host_facts(crate::host::unprobed_facts());
     app.set_host_erase_byte(guard.erase_byte());
     // Host-mode control writes (keyboard pop/push) go through the real
     // stdout; the default sink is inert for tests.
     let input_control = reader.host_control();
+    let control_probe = Arc::clone(&probe);
     app.set_host_control(Box::new(move |bytes| {
         use std::io::Write;
-        let mut out = std::io::stdout();
+        let mut out = HostOutput::new(std::io::stdout(), Arc::clone(&control_probe));
         out.write_all(bytes).and_then(|()| out.flush())?;
         input_control.written(bytes);
         Ok(())
+    }));
+    // The install channel gates in-place upgrades: a package-managed
+    // or dev-build binary never gets `↵ update` (issue #44).
+    app.set_install_source(crate::install_source::current(|key| {
+        env.get(std::ffi::OsStr::new(key)).map(OsString::from)
     }));
     // Terminal setup has succeeded — a run with no terminal already
     // failed above and starts nothing. Kick the one-shot local core
@@ -309,9 +381,23 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
         env,
         loaded.config.update.version_check,
     ));
+    let diag = crate::diag::Diag::start(
+        env,
+        crate::diag::Sources::new(
+            Arc::clone(&probe),
+            endpoint,
+            sub_stats,
+            rpc_stats,
+            attach_for_diag,
+        ),
+    );
     let result = app
         .run(&mut terminal, &mut reader.ui, &mut reader.replies)
         .await;
+    let restart = app.take_restart();
+    if let Some(diag) = diag {
+        diag.finish();
+    }
     reader.stop();
     let _ = guard.writer().flush();
     result.map_err(|e| e.to_string())?;
@@ -321,7 +407,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
     if let Some(error) = reader.failure() {
         return Err(format!("input reader: {error}"));
     }
-    Ok(())
+    Ok(restart)
 }
 
 /// Resolves `--remote`/`--session` to an endpoint and runs the client.
@@ -329,7 +415,7 @@ pub async fn run_options(
     options: &Options,
     env: &Env,
     platform: &dyn Platform,
-) -> Result<(), String> {
+) -> Result<Option<PathBuf>, String> {
     let endpoint = endpoint::resolve(
         env,
         options.session.as_deref(),

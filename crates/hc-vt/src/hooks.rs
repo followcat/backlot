@@ -47,6 +47,13 @@ pub(crate) extern "C" fn on_bell(_: ffi::Terminal, ud: *mut c_void) {
 /// The largest clipboard write kept, the same limit the reference uses.
 const CLIPBOARD_MAX_BYTES: usize = 192 * 1024;
 
+/// Writes kept for the next `take_clipboard_writes`; past this the oldest
+/// is dropped. A program that copies in a loop faster than its writes are
+/// taken would otherwise grow the queue without limit. Sixteen is a
+/// judgment call: enough for a burst of copies between two takes, and with
+/// `CLIPBOARD_MAX_BYTES` it bounds the backlog at 3 MiB.
+const CLIPBOARD_MAX_WRITES: usize = 16;
+
 // `on_clipboard_write` and `capture_clipboard_write` are derived from
 // herdr crates/ghostty-vt/src/lib.rs (Apache-2.0).
 pub(crate) extern "C" fn on_clipboard_write(
@@ -110,6 +117,9 @@ unsafe fn capture_clipboard_write(hooks: &mut Hooks, request: &ffi::ClipboardWri
         return ffi::CLIPBOARD_WRITE_INVALID_DATA;
     }
     hooks.clipboard_writes.push(bytes.to_vec());
+    if hooks.clipboard_writes.len() > CLIPBOARD_MAX_WRITES {
+        hooks.clipboard_writes.remove(0);
+    }
     ffi::CLIPBOARD_WRITE_SUCCESS
 }
 

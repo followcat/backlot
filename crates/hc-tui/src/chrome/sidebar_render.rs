@@ -39,6 +39,7 @@ pub(crate) fn render_sidebar(
     } else {
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
+
     let entries = workspace_entries(snapshot, state.collapsed_groups);
     let row_heights = entries
         .iter()
@@ -97,22 +98,21 @@ pub(crate) fn render_sidebar(
             .fg(palette.overlay0)
             .add_modifier(Modifier::BOLD),
     );
-    // The version badge shares the header row, right-aligned short of
-    // the divider column and never touching the `spaces` label.
+    // The version badge shares the header row, right-aligned a cell
+    // short of the divider column and never touching `spaces`.
     let badge_row = Rect::new(
         workspace_area.x,
         workspace_area.y,
-        workspace_area.width.saturating_sub(2),
+        workspace_area.width.saturating_sub(1),
         1,
     );
     hits.update_badge = put_version_badge(
         buffer,
         badge_row,
         workspace_area.x.saturating_add(8),
-        state.update_latest,
+        state.update_badge,
         palette,
     );
-
     let body = Rect::new(
         workspace_area.x,
         workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
@@ -248,7 +248,9 @@ pub(crate) fn render_sidebar(
             " new",
             Style::default().fg(palette.overlay0),
         );
-        let launcher_width = 6.min(workspace_area.width);
+        let dot = state.update_badge.accent_style(palette);
+        let launcher_width = if dot.is_some() { 8 } else { 6 };
+        let launcher_width = launcher_width.min(workspace_area.width);
         hits.global_launcher = Rect::new(
             workspace_area.right().saturating_sub(launcher_width),
             footer_y,
@@ -262,6 +264,16 @@ pub(crate) fn render_sidebar(
             "menu",
             Style::default().fg(palette.overlay0),
         );
+        if let Some(style) = dot.filter(|_| workspace_area.width >= 6) {
+            put_text(
+                buffer,
+                workspace_area.right().saturating_sub(6),
+                footer_y,
+                2,
+                "● ",
+                style,
+            );
+        }
     }
 
     // U1: studio mode replaces the agents section with the current

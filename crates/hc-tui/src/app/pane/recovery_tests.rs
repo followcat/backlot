@@ -138,6 +138,65 @@ async fn resize_between_initial_fragments_is_applied_at_the_mode_barrier() {
     assert_eq!(pane.vt().unwrap().size().unwrap(), (40, 10));
 }
 
+/// A `view.generation` bump means a fresh subscription epoch replaced
+/// the link that parked this pane: a Down pane retries at once, keeping
+/// its attempt count, instead of waiting out a backoff armed while the
+/// wire was dead.
+#[tokio::test]
+async fn a_fresh_generation_retries_a_down_pane_at_once() {
+    let (mut pane, _rx, mut accept) = rig();
+    pane.state = State::Down {
+        spec: spec(Role::Active),
+        reason: "offline".into(),
+        retry_at: Instant::now() + Duration::from_secs(60),
+        attempts: 2,
+    };
+    let mut view = live_view(80, 24);
+    view.generation = 4;
+    pane.on_view(&view);
+    assert!(
+        matches!(pane.state, State::Down { .. }),
+        "the same epoch keeps its backoff"
+    );
+    view.generation = 5;
+    pane.on_view(&view);
+    let State::Opening { attempts, .. } = &pane.state else {
+        panic!("a fresh epoch retries a down pane at once");
+    };
+    assert_eq!(*attempts, 2, "the retry keeps its backoff count");
+    let (_core, params) = timeout(T, accept.recv())
+        .await
+        .expect("attach accept deadline")
+        .expect("attach accept");
+    assert!(params.resumed, "a generation retry is wire recovery");
+}
+
+/// The same bump leaves a live pane alone: nothing about its wire or
+/// spec changes on a fresh epoch.
+#[tokio::test]
+async fn a_fresh_generation_leaves_a_live_pane_alone() {
+    let (mut pane, mut rx, mut accept) = rig();
+    pane.want(Some(spec(Role::Active)));
+    let core = serve(&mut accept, true).await;
+    step_until_live(&mut pane, &mut rx).await;
+    let mut view = live_view(80, 24);
+    view.generation = 4;
+    pane.on_view(&view);
+    view.generation = 5;
+    pane.on_view(&view);
+    assert!(
+        matches!(pane.state, State::Live(_)),
+        "a live pane is untouched by a fresh epoch"
+    );
+    assert!(
+        timeout(Duration::from_millis(50), accept.recv())
+            .await
+            .is_err(),
+        "no reattach was opened"
+    );
+    drop(core);
+}
+
 #[tokio::test]
 async fn live_focus_control_cannot_take_a_writer_slot_before_an_older_key() {
     let (mut pane, mut rx, mut accept) = rig();

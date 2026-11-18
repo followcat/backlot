@@ -7,7 +7,7 @@
 //! optional `rpc.discover` round that refines method availability.
 
 use super::error::CallError;
-use super::{lock, pump};
+use super::{Shared, lock, pump};
 use crate::OpenRpcDocument;
 use crate::frame::{CONTROL_CHANNEL, Frame, MAX_PAYLOAD};
 use crate::hello::{Capabilities, HelloResult};
@@ -15,7 +15,7 @@ use crate::jsonrpc::{Id, Request};
 use crate::method;
 use serde_json::Value;
 use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -24,6 +24,13 @@ use tokio::sync::mpsc;
 pub(super) const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Calls waiting for a reply at once.
 pub(super) const MAX_INFLIGHT: usize = 256;
+/// The liveness probe's request after a call times out: `machine.list`
+/// is the cheapest existing request — no params, a small read-only
+/// result, and a method the watcher already calls on this wire.
+const LIVENESS_METHOD: &str = method::MACHINE_LIST;
+/// The probe's own deadline — short, but long enough that a merely-slow
+/// core still answers and keeps its connection.
+const LIVENESS_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The parts of a connection a call needs. Background actors hold this —
 /// never the whole `Shared` — so the last client handle's drop cleans up
@@ -34,6 +41,9 @@ pub(super) struct Wire {
     /// Pending calls; its dead flag is the wire's closed state.
     pub(super) pending: pump::Pending,
     pub(super) next_id: AtomicI64,
+    /// At most one liveness probe per wire — a burst of timed-out calls
+    /// shares its verdict instead of probing in parallel.
+    pub(super) probing: AtomicBool,
 }
 
 /// One raw framed call on the wire: the deadline covers both the enqueue
@@ -72,6 +82,27 @@ pub(super) async fn wire_call(
         Ok(result) => result,
         Err(_) => Err(CallError::Timeout),
     }
+}
+
+/// After a call timed out the wire may be dead without an EOF — a
+/// blackholed path reports nothing, not even a hangup. Run one cheap
+/// request under a short deadline: any reply, result or error, proves
+/// the wire lives; silence shuts the shared client down so the next
+/// `open_rpc` builds a fresh transport. The probe is spawned — the
+/// timed-out call still returns its own `Timeout`, and callers that
+/// arrive while a probe runs share its verdict.
+pub(super) fn liveness_probe(shared: &Arc<Shared>) {
+    if shared.wire.probing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let shared = Arc::clone(shared);
+    tokio::spawn(async move {
+        let result = wire_call(&shared.wire, LIVENESS_METHOD, None, LIVENESS_TIMEOUT).await;
+        shared.wire.probing.store(false, Ordering::SeqCst);
+        if matches!(result, Err(CallError::Timeout)) {
+            shared.shutdown(None);
+        }
+    });
 }
 
 /// The three discovery cells a [`super::Shared`] exposes to the task.

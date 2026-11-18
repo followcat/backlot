@@ -92,6 +92,13 @@ pub struct SubscribeParams {
     /// Only terminals carrying all of these labels.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub labels: BTreeMap<String, String>,
+    /// Only these documents, by name; a trailing `*` is a prefix. Core
+    /// 0.1.21 and later narrow documents with it, and naming anything
+    /// narrows: documents without a terminal selection hear no terminal
+    /// events. Older cores ignore the member, so it needs no capability
+    /// gate.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub docs: Vec<String>,
 }
 
 /// The `events.subscribe` result: a snapshot, then the event stream.

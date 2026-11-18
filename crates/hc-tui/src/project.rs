@@ -70,7 +70,7 @@ pub(crate) fn agent_traversal(view: &View) -> Vec<String> {
 
 /// The machine part of an address: `host-b` of `host-b/t7`, `None` for a
 /// bare local `t7`.
-fn machine_of(address: &str) -> Option<&str> {
+pub(crate) fn machine_of(address: &str) -> Option<&str> {
     address.split_once('/').map(|(prefix, _)| prefix)
 }
 

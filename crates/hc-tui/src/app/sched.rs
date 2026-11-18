@@ -22,12 +22,20 @@ pub struct Scheduler {
     pub draws: u64,
     /// Times the loop armed a timer to reach `due` (probe).
     pub armed: u64,
+    /// Dirty requests taken, whether or not they armed a draw.
+    marks: u64,
 }
 
 impl Scheduler {
+    /// Dirty requests taken so far.
+    pub fn marks(&self) -> u64 {
+        self.marks
+    }
+
     /// State changed: schedule the earliest allowed draw. `now` means
     /// "immediately allowed" — still a scheduled draw, not a sleep.
     pub fn mark_dirty(&mut self, now: Instant) {
+        self.marks += 1;
         if self.due.is_some() {
             return; // coalesced: an armed deadline covers new dirt
         }

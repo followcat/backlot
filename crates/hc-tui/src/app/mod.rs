@@ -28,6 +28,7 @@ mod image_paste;
 mod init;
 pub(crate) mod input;
 mod input_dispatch;
+mod install_flow;
 mod key_leases;
 mod key_routing;
 mod layout_actions;
@@ -48,7 +49,9 @@ mod pane_selection;
 mod panel;
 pub(crate) mod popup;
 mod popup_selection;
+mod preferences;
 mod presentation;
+mod probe;
 mod reap;
 mod reload;
 mod routing;
@@ -58,17 +61,24 @@ mod seen;
 mod selection_copy;
 mod settings;
 mod shared;
+mod shell_state;
 mod studio;
 mod studio_shell;
 mod synthesize;
 mod tab_status;
+pub(crate) mod update_flow;
+mod update_modal;
 mod view_sync;
+mod waiting;
+mod waiting_wire;
 mod wake;
 mod window_title;
 mod word_selection;
 
 pub use input::UiEvent;
 pub use pane::{OpenAttach, PaneEv, Role, Spec};
+pub use probe::{HostOutput, PANE_ROLE_NAMES, Probe, WAKE_NAMES};
+pub(crate) use shell_state::ShellState;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -103,56 +113,10 @@ pub(crate) enum Mode {
     Resize,
 }
 
-/// Instrumentation counters a test can hold across `run`.
-#[derive(Debug, Default)]
-pub struct Probe {
-    /// Redraws performed.
-    pub draws: std::sync::atomic::AtomicU64,
-    /// Attach attempts made.
-    pub attaches: std::sync::atomic::AtomicU64,
-    /// Times the select loop woke for any reason.
-    pub wakeups: std::sync::atomic::AtomicU64,
-    /// Times a deadline sleep was armed.
-    pub timers: std::sync::atomic::AtomicU64,
-    /// Times a changed `HostFacts` bundle actually re-seeded panes.
-    pub host_facts: std::sync::atomic::AtomicU64,
-    /// Projection rebuilds actually run for a publish or focus change.
-    pub projections: std::sync::atomic::AtomicU64,
-    /// VT cells copied into pane surfaces across all draws.
-    pub cells_painted: std::sync::atomic::AtomicU64,
-}
-
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
 /// notifications): the outer terminal in production, a test recorder
 /// otherwise. A boxed `FnMut` keeps the app free of global-IO calls.
 pub type HostControlSink = Box<dyn FnMut(&[u8]) -> std::io::Result<()>>;
-
-/// The chrome state `ShellRenderState` borrows each frame — scroll
-/// offsets, collapse sets, reveal flags and the sidebar split.
-#[derive(Default)]
-pub(crate) struct ShellState {
-    pub collapsed_endpoints: std::collections::HashSet<ClientEndpointId>,
-    pub collapsed_groups: std::collections::HashSet<String>,
-    pub remote_collapsed_groups:
-        std::collections::HashMap<ClientEndpointId, std::collections::HashSet<String>>,
-    pub workspace_scroll: usize,
-    pub agent_scroll: usize,
-    pub tab_scroll: usize,
-    pub reveal_focused_workspace: bool,
-    pub reveal_focused_tab: bool,
-    pub sidebar_collapsed: bool,
-    /// Expanded sidebar's spaces:agents split, `0.0..=1.0`.
-    pub sidebar_section_split: f32,
-    pub reveal_navigation_workspace: bool,
-    /// Mobile switcher viewport scroll (Navigate mode under
-    /// `mobile_width_threshold` — the switcher is the mobile picker).
-    pub mobile_switcher_scroll: usize,
-    /// Scrolls the switcher to the pending workspace highlight on move.
-    pub reveal_mobile_workspace: bool,
-    pub machine_diagnostics: crate::chrome::render::MachineDiagnostics,
-    /// Split/pane border cells keyed by the last frame's layout.
-    pub border_cache: crate::chrome::panes_draw::PaneBorderCache,
-}
 
 /// A forwarded press and the wire it went out on. `route` binds the
 /// attach generation so a release can never land on a replacement
@@ -170,6 +134,39 @@ pub struct App {
     /// The last known newer release's bare version — feeds the
     /// sidebar/mobile version badge after the toast expires.
     pub update_latest: Option<String>,
+    /// The `update-check.json` state — skip/seen/notes/show-on-startup.
+    pub(crate) update_state: crate::update_state::UpdateCheckState,
+    /// Where `update_state` persists; `None` without an XDG/HOME root.
+    update_state_path: Option<std::path::PathBuf>,
+    /// The update toast's card rect — a click opens the modal.
+    update_toast_hit: ratatui::layout::Rect,
+    /// A release-notes fetch is in flight.
+    update_notes_fetching: bool,
+    /// The release-list fetch — injected; offline under `cfg(test)`.
+    notes_fetch: update_flow::NotesFetch,
+    /// Update worker results land on this channel.
+    update_tx: mpsc::Sender<update_flow::UpdateEvent>,
+    update_rx: mpsc::Receiver<update_flow::UpdateEvent>,
+    /// The open update card, if any.
+    update_modal: Option<update_modal::UpdateModal>,
+    /// The installer run in flight or finished, if any.
+    install: Option<install_flow::Install>,
+    /// Source of installer run ids; a stale run's events are ignored.
+    install_generation: u64,
+    /// The installer's side effects — injected by tests.
+    seams: install_flow::Seams,
+    /// The version whose install finished and awaits a restart
+    /// (`esc later`): the badge shows `↻v…` until the restart happens.
+    restart_ready: Option<String>,
+    /// The installed binary `↵ restart` execs once the detach path
+    /// unwound (`releases`, `shutdown_panes`, terminal restore).
+    restart: Option<std::path::PathBuf>,
+    /// The executable whose directory an upgrade installs into; `None`
+    /// resolves `current_exe` when the card opens.
+    running_exe: Option<std::path::PathBuf>,
+    /// How the running binary was installed: package-managed installs
+    /// and dev builds refuse in-place upgrades (issue #44).
+    install_source: crate::install_source::InstallSource,
     background_failure: Option<String>,
     next_tab_status: Option<Instant>,
     last_window_title: Option<String>,
@@ -313,6 +310,12 @@ pub struct App {
     /// divider; the reference's `sidebar_width` runtime field.
     sidebar_width: u16,
     sidebar_width_manual: bool,
+    /// `shell_state.sidebar_collapsed` was toggled by hand — persisted
+    /// as `preferences.sidebar_collapsed`.
+    sidebar_collapsed_manual: bool,
+    /// `shell_state.sidebar_section_split` was dragged by hand —
+    /// persisted as `preferences.sidebar_section_split`.
+    sidebar_section_split_manual: bool,
     agent_panel_sort_manual: bool,
     /// Active chrome drag grab (`ChromeDrag`).
     chrome_drag: Option<mouse::ChromeDrag>,
@@ -363,9 +366,29 @@ pub struct App {
     /// Kitty releases of presses the image bridge consumed: the release
     /// arm consults this before the popup's unconditional release leg.
     image_paste_suppress: std::collections::HashSet<hc_vt::Key>,
-    /// The clipboard-image read — a boxed field so tests never touch a
+    /// The clipboard-image read — a shared field so tests never touch a
     /// real clipboard and can close over stub-tool environments.
-    image_paste_reader: Box<dyn Fn() -> crate::clipboard::ClipboardRead>,
+    image_paste_reader: image_paste::ImageReader,
+    /// The dropped-file image read — the same seam for the file-drop path.
+    image_drop_reader: image_paste::DropReader,
+    /// One image read in flight, holding the gesture that started it
+    /// and the terminal input that arrived since — see `image_paste`.
+    image_read: Option<image_paste::ImageRead>,
+    /// Matches a worker result to `image_read` — a late result after the
+    /// hold expired lands dead.
+    image_read_seq: u64,
+    /// The `spawn_blocking` join for `image_read` — aborted on drop.
+    image_read_task: Option<tokio::task::JoinHandle<()>>,
+    /// Worker results land on this channel; the select arm dispatches them.
+    image_read_done_tx: mpsc::Sender<image_paste::ImageReadDone>,
+    image_read_done_rx: mpsc::Receiver<image_paste::ImageReadDone>,
+    /// How long terminal-directed input waits behind one image read —
+    /// above the reader's own probe timeouts, so a never-returning
+    /// worker still resolves the gesture as a miss.
+    image_read_hold: std::time::Duration,
+    /// `true` while the held trigger is being replayed through `on_input`
+    /// after a miss — the replay must not start another read.
+    image_read_replay: bool,
     /// Last frame's clickable rects.
     pub(crate) hit_map: ShellHitMap,
     /// The host reports every key as an escape code — the reference's
@@ -449,6 +472,20 @@ pub struct App {
     /// The seen writer's task — aborted on drop so its `Client` clone
     /// never outlives the app.
     seen_task: Option<tokio::task::JoinHandle<()>>,
+    /// Live Waiting verdicts by terminal address — presentation-only
+    /// evidence, pinned to the fingerprint it was probed for.
+    waiting: crate::waiting::Verdicts,
+    /// Probe cycles queued for the worker; the worker exists only
+    /// after `set_operations` (`waiting_req_rx` holds its request end
+    /// until then).
+    waiting_tx: mpsc::Sender<waiting::Cycle>,
+    waiting_res_tx: mpsc::Sender<waiting::Outcome>,
+    waiting_rx: mpsc::Receiver<waiting::Outcome>,
+    waiting_req_rx: Option<mpsc::Receiver<waiting::Cycle>>,
+    /// The probe worker's task — aborted on drop like the seen writer.
+    waiting_task: Option<tokio::task::JoinHandle<()>>,
+    /// The armed re-probe cadence deadline (`wake_deadline` picks it up).
+    waiting_due: Option<Instant>,
     /// `(terminal, created_ms)` reaps queued for the worker — `None`
     /// until `set_operations` starts it.
     reap_tx: Option<mpsc::Sender<(String, u64)>>,

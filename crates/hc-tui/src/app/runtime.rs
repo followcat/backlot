@@ -114,6 +114,9 @@ impl App {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         } else {
             self.sched.unarm();
+            self.probe
+                .elided_draws
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
     }
@@ -183,7 +186,10 @@ impl App {
         self.sched.mark_dirty(Instant::now());
         let mut replies_open = true;
         let mut seen_open = true;
+        let mut waiting_open = true;
         let mut pane_open = true;
+        let mut image_read_done_open = true;
+        let mut update_open = true;
         let mut need_pane_sync = true;
         while !self.quitting {
             let wake = self.wake_deadline();
@@ -196,6 +202,7 @@ impl App {
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 self.sched.armed_timer();
             }
+            let marks = self.sched.marks();
             // A wakeup alone is never a draw reason — each arm reports
             // whether it changed state the frame can show. `on_view`,
             // `on_operation` and `show_notice` mark the scheduler
@@ -236,6 +243,17 @@ impl App {
                     self.on_update_check(report);
                     kind = WakeKind::View;
                 },
+                ev = self.update_rx.recv(), if update_open => match ev {
+                    Some(first) => {
+                        self.on_update_event(first);
+                        while let Ok(ev) = self.update_rx.try_recv() {
+                            self.on_update_event(ev);
+                        }
+                        dirty = true;
+                        kind = WakeKind::View;
+                    }
+                    None => update_open = false,
+                },
                 seen = self.seen_rx.recv(), if seen_open => match seen {
                     Some(first) => {
                         self.on_seen_result(first);
@@ -246,12 +264,33 @@ impl App {
                     }
                     None => seen_open = false,
                 },
+                outcome = self.waiting_rx.recv(), if waiting_open => match outcome {
+                    Some(first) => {
+                        self.on_waiting_result(first);
+                        while let Ok(outcome) = self.waiting_rx.try_recv() {
+                            self.on_waiting_result(outcome);
+                        }
+                        kind = WakeKind::Waiting;
+                    }
+                    None => waiting_open = false,
+                },
                 ev = self.pane_rx.recv(), if pane_open => match ev {
                     Some(first) => {
                         dirty |= self.drain_pane_events(first, wake, events, &mut pane_open);
                         kind = WakeKind::Pane;
                     }
                     None => pane_open = false,
+                },
+                done = self.image_read_done_rx.recv(), if image_read_done_open => match done {
+                    Some(first) => {
+                        self.on_image_read_done(first);
+                        while let Ok(done) = self.image_read_done_rx.try_recv() {
+                            self.on_image_read_done(done);
+                        }
+                        dirty = true;
+                        kind = WakeKind::Input;
+                    }
+                    None => image_read_done_open = false,
                 },
                 result = self.panel_rx.recv() => {
                     if let Some(result) = result {
@@ -271,10 +310,14 @@ impl App {
                         None => std::future::pending::<()>().await,
                     }
                 }, if wake.is_some() => {
-                    dirty |= self.pane_retry(Instant::now());
+                    let now = Instant::now();
+                    dirty |= self.pane_retry(now);
+                    dirty |= self.expire_image_read(now);
+                    dirty |= self.install_tick(now);
                     kind = WakeKind::Deadline;
                 }
             }
+            self.probe.wake_kinds[kind as usize].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             // A liveness-only wake maintains nothing; a deadline that
             // already passed is taken by the next select's arm.
             if matches!(kind, WakeKind::None) {
@@ -283,6 +326,13 @@ impl App {
             self.housekeeping(kind, wake, dirty);
             self.maybe_draw(term, Instant::now())?;
             self.post_draw_sync(kind, &mut need_pane_sync);
+            self.probe.dirty_marks[kind as usize].fetch_add(
+                self.sched.marks() - marks,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            if self.probe.publish_panes {
+                self.publish_panes();
+            }
             if self.pane.attaches > 0 {
                 self.probe
                     .attaches

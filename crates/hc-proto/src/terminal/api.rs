@@ -26,7 +26,10 @@ pub struct ListResult {
     pub terminals: Vec<Terminal>,
     /// Finished terminals left out (see `all`).
     pub hidden_finished: u64,
-    /// Machines added here and their lines. Absent when empty.
+    /// Machines added here and their lines. Core 0.1.21 and later always
+    /// send it — `[]` for a core with no machines, and for a call made from
+    /// another machine — so an empty list is an answer, not missing data.
+    /// Older cores omit it when empty; the default keeps them readable.
     #[serde(default)]
     pub machines: Vec<MachineView>,
 }

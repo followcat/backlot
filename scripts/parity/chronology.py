@@ -65,8 +65,12 @@ def run(args, size, binary):
     config = None
     phase = 0
     try:
-        core = Core(args.hc, args.config, out)
-        reference = Reference(binary, args.config, out)
+        # Both clients stand in one fixture directory: paths they render
+        # (the navigator footer, document folders) must be comparable.
+        fixture = out / 'fixture'
+        fixture.mkdir()
+        core = Core(args.hc, args.config, out, cwd=fixture)
+        reference = Reference(binary, args.config, out, cwd=fixture)
         owners = (reference, core)
         for owner in owners:
             if args.host_program:

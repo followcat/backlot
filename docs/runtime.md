@@ -120,3 +120,62 @@ Live layout actions require an online inventory subscription. Missing core
 methods or unknown owned document schemas produce a visible reason before
 creation or close. Actions run on a bounded worker; only explicit CAS
 conflicts retry. An ambiguous creation/write is never automatically replayed.
+
+## Diagnostics snapshot
+
+Set `HC_TUI_DIAG=<path>` when starting the client to make it explain itself.
+Then `kill -USR1 <pid>` writes one JSON snapshot to `<path>`, and a run that
+returns (detach, input closing or an error) writes a final snapshot before
+exiting. Unset, the client installs no signal handler and touches no file.
+
+```sh
+HC_TUI_DIAG=/tmp/hc-tui-diag.json hc-tui --remote host-a
+kill -USR1 "$(pgrep -f 'hc-tui --remote host-a')"
+cat /tmp/hc-tui-diag.json
+```
+
+A snapshot is written to a temporary file beside `<path>` with mode 0600 and
+renamed over it, so a reader never sees a partial file. A failed write is
+dropped silently; diagnostics never change what the client shows. The writer
+runs on its own thread, so a snapshot can still be taken while the loop is
+busy or stuck. Pane counts are the loop's values at its last turn.
+
+The snapshot has `schema` (currently 1), `uptime_ms`, and four sections:
+
+- `loop.wakeups`: select-loop wakes by the arm that woke the loop, plus
+  `total`. `none` counts channel-close wakes, which do no work.
+- `loop.dirty_marks`: redraw requests raised while handling each wake kind.
+- `loop.draws` and `loop.elided_draws`: frames written, and frames that
+  matched the previous one and wrote nothing.
+- `loop.projections` and `loop.cells_painted`: projection rebuilds and VT
+  cells copied into pane surfaces.
+- `loop.terminal_writes` and `loop.terminal_bytes`: write calls and bytes
+  sent to the host terminal by frames and host-mode control sequences. The
+  one-off startup and restore sequences are not counted.
+- `loop.stdin_reads` and `loop.stdin_empty_reads`: reads on the input
+  stream, and those that delivered no bytes (end of input or a spurious
+  wake).
+- `panes.by_role`: `active` (1 when the focused pane has a target),
+  `observer` (persistent observers), `size_lease` (size holders) and
+  `popup` (popups, peeks, command overlays and persistent floats).
+- `panes.attach_calls_in_flight`: `terminal.attach` requests sent on the
+  shared attach connection and not yet answered.
+- `panes.channels`: attach channels that are `live` (installed), `held`
+  (reply received, install pending) and `dead` (closed by this client,
+  waiting for the core's close).
+- `endpoints`: one entry, `index` 0, with `transport` `local` or `remote`.
+- `connections`: one entry per connection kind, each with its `endpoint`
+  index and `protocol` id (`events.subscribe` for `subscription`, `json-rpc`
+  for `shared_rpc`, `terminal.attach` for `attach_mux`). They carry `reads`,
+  `empty_reads` (reads that delivered no bytes, normally end of stream),
+  `bytes_in`, `writes`, `bytes_out`, `connects` (established connections) and
+  `reconnects` (establishments after the first).
+
+The snapshot holds counters, gauges and protocol ids only. It has no terminal
+text, titles, working directories, paths, host names, SSH targets, labels or
+user names. Endpoints are keyed by index and transport kind, never by the
+`--remote` target. A test runs a session whose fixtures contain those strings
+and checks that none of them reach the file.
+
+Not counted: dedicated attach connections opened outside the shared attach
+connection, and connections made over injected test transports.

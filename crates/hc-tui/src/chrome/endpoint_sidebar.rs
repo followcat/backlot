@@ -231,6 +231,9 @@ pub(crate) fn render_collapsed(
         hits.sidebar_toggle.y,
         hits.sidebar_toggle.width,
         "»",
-        Style::default().fg(palette.overlay0),
+        state
+            .update_badge
+            .accent_style(palette)
+            .unwrap_or(Style::default().fg(palette.overlay0)),
     );
 }

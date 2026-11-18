@@ -228,6 +228,10 @@ pub(crate) fn keybind_help_groups(
                 .collect(),
         ));
     }
+    groups.push((
+        "backlot",
+        vec![entry(binding_label(&keybinds.update), "update")],
+    ));
     groups
 }
 
@@ -380,6 +384,7 @@ fn action_name(action: crate::input::KeybindAction) -> &'static str {
         A::OpenNotificationTarget => "open_notification_target",
         A::Detach => "detach",
         A::OpenNavigator => "goto",
+        A::Update => "update",
     }
 }
 

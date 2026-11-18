@@ -107,10 +107,18 @@ fn subscribe_params_cover_all_filters() {
         labels: [("herdr.space".to_string(), "acme-shop".to_string())]
             .into_iter()
             .collect(),
+        docs: vec!["herdr-app".into(), "studio/*".into()],
     };
     assert_eq!(
         serde_json::to_value(&params).unwrap(),
-        json!({"terminal": "t7", "children_of": "t1", "labels": {"herdr.space": "acme-shop"}})
+        json!({"terminal": "t7", "children_of": "t1", "labels": {"herdr.space": "acme-shop"},
+               "docs": ["herdr-app", "studio/*"]})
+    );
+    // The named-document member is optional: unset, it stays off the wire,
+    // which is what a 0.1.18 core sees (it ignores it when it is sent).
+    assert_eq!(
+        serde_json::to_value(SubscribeParams::default()).unwrap(),
+        json!({})
     );
 }
 

@@ -3,8 +3,9 @@
 // (Apache-2.0).
 //! The R9 clipboard-image bridge: on remote-capable endpoints the
 //! configured paste key, an empty bracketed paste, or a dropped image
-//! path uploads the local image through `terminal.put` and pastes the
-//! returned path with the normal pane paste.
+//! path uploads the local image through `terminal.put` — or, on a core
+//! advertising `put_chunks` across the SSH link, in acknowledged pieces —
+//! and pastes the returned path with the normal pane paste.
 
 use super::*;
 
@@ -23,6 +24,34 @@ impl ImagePasteTarget {
         }
     }
 }
+
+/// One image read in flight: the target it resolved, the gesture that
+/// started it and the terminal input held behind it, in order. `held[0]`
+/// is always that trigger — a miss replays it first so the program sees
+/// the original input order.
+pub(super) struct ImageRead {
+    pub(super) seq: u64,
+    pub(super) target: ImagePasteTarget,
+    /// The hold bound: past it the read resolves as a miss and a late
+    /// worker result lands dead.
+    pub(super) deadline: Instant,
+    pub(super) held: std::collections::VecDeque<UiEvent>,
+}
+
+/// A finished worker read. `seq` matches it to the in-flight read.
+pub(super) struct ImageReadDone {
+    pub(super) seq: u64,
+    pub(super) read: crate::clipboard::ClipboardRead,
+}
+
+/// The clipboard-image reader seam — `Send + Sync` because the read
+/// runs on a blocking worker thread.
+pub(super) type ImageReader = Arc<dyn Fn() -> crate::clipboard::ClipboardRead + Send + Sync>;
+
+/// The dropped-file reader seam — `Send + Sync` because the read runs
+/// on a blocking worker thread.
+pub(super) type DropReader =
+    Arc<dyn Fn(&std::path::Path, &'static str) -> crate::clipboard::ClipboardRead + Send + Sync>;
 
 impl App {
     /// The client-side facts of `endpoint_accepts_local_images`: the
@@ -77,7 +106,7 @@ impl App {
     /// `None` means the key continues into normal routing — the program
     /// sees it unchanged, including an orphan repeat.
     pub(super) fn route_image_paste_key(&mut self, key: &input::TerminalKey) -> Option<()> {
-        if !self.image_paste_trigger_matches(key) {
+        if self.image_read_replay || !self.image_paste_trigger_matches(key) {
             return None;
         }
         match key.input.action {
@@ -85,7 +114,7 @@ impl App {
                 .image_paste_suppress
                 .contains(&key.identity())
                 .then_some(()),
-            hc_vt::Action::Press if self.start_clipboard_image_paste() => {
+            hc_vt::Action::Press if self.start_clipboard_image_paste(key) => {
                 // Only a release-reporting host can ever send the
                 // release — legacy hosts must not grow the set.
                 if self.host_reports_key_releases {
@@ -103,32 +132,36 @@ impl App {
         }
     }
 
-    /// The key/empty-paste trigger: read the clipboard for the resolved
-    /// target. `true` consumed the gesture (upload started or a notice
-    /// answered); `false` leaves the original input alone.
-    fn start_clipboard_image_paste(&mut self) -> bool {
+    /// The key trigger: read the clipboard for the resolved target on a
+    /// blocking worker. `true` consumed the press — it waits in `held`
+    /// until the read says whether the program should see it.
+    fn start_clipboard_image_paste(&mut self, key: &input::TerminalKey) -> bool {
         let Some(target) = self.clipboard_image_target() else {
             return false;
         };
         if !self.image_bridge_applies(target.terminal()) {
             return false;
         }
-        let read = (self.image_paste_reader)();
-        self.dispatch_image_read(target, read)
+        let reader = Arc::clone(&self.image_paste_reader);
+        self.start_image_read(target, UiEvent::Key(key.clone()), move || reader())
     }
 
     /// The paste-arm of `UiEvent::Paste`: an empty bracketed paste is
     /// the terminal's image-only Ctrl+Shift+V, and a single absolute
     /// image path is a file drop. `true` consumed the paste.
     pub(super) fn try_image_paste_bridge(&mut self, text: &[u8]) -> bool {
+        if self.image_read_replay {
+            return false;
+        }
         let Some(target) = self.clipboard_image_target() else {
             return false;
         };
         if !self.image_bridge_applies(target.terminal()) {
             return false;
         }
-        let read = if text.is_empty() {
-            (self.image_paste_reader)()
+        if text.is_empty() {
+            let reader = Arc::clone(&self.image_paste_reader);
+            self.start_image_read(target, UiEvent::Paste(text.to_vec()), move || reader())
         } else {
             let Ok(text) = std::str::from_utf8(text) else {
                 return false;
@@ -136,9 +169,126 @@ impl App {
             let Some((path, extension)) = crate::clipdrop::image_path_from_paste(text) else {
                 return false;
             };
-            crate::clipdrop::read_image_file(&path, extension)
+            let reader = Arc::clone(&self.image_drop_reader);
+            self.start_image_read(
+                target,
+                UiEvent::Paste(text.as_bytes().to_vec()),
+                move || reader(&path, extension),
+            )
+        }
+    }
+
+    /// Reads run on a blocking worker, never on the loop: the gesture
+    /// that started the read heads `held`, terminal input queues behind
+    /// it in order, and the done channel returns the result by `seq`.
+    /// One read at a time — a second gesture waits in `held`.
+    fn start_image_read(
+        &mut self,
+        target: ImagePasteTarget,
+        trigger: UiEvent,
+        work: impl FnOnce() -> crate::clipboard::ClipboardRead + Send + 'static,
+    ) -> bool {
+        if let Some(read) = self.image_read.as_mut() {
+            read.held.push_back(trigger);
+            return true;
+        }
+        self.image_read_seq = self.image_read_seq.wrapping_add(1);
+        let seq = self.image_read_seq;
+        let done = self.image_read_done_tx.clone();
+        self.image_read_task = Some(tokio::task::spawn_blocking(move || {
+            let read = work();
+            let _ = done.blocking_send(ImageReadDone { seq, read });
+        }));
+        self.image_read = Some(ImageRead {
+            seq,
+            target,
+            deadline: Instant::now() + self.image_read_hold,
+            held: std::collections::VecDeque::from([trigger]),
+        });
+        true
+    }
+
+    /// A worker's `ImageReadDone`: matching `seq` finishes the read —
+    /// anything else is a late result after the bound already resolved
+    /// the gesture and lands dead.
+    pub(super) fn on_image_read_done(&mut self, done: ImageReadDone) {
+        if self.image_read.as_ref().is_none_or(|r| r.seq != done.seq) {
+            return;
+        }
+        let Some(read) = self.image_read.take() else {
+            return;
         };
-        self.dispatch_image_read(target, read)
+        self.image_read_task = None;
+        self.finish_image_read(read, Some(done.read));
+    }
+
+    /// The hold bound: a never-returning worker resolves its gesture as
+    /// a miss — the held trigger and keys replay in order and the
+    /// eventual worker result lands dead on `seq`.
+    pub(super) fn expire_image_read(&mut self, now: Instant) -> bool {
+        if self
+            .image_read
+            .as_ref()
+            .is_none_or(|read| now < read.deadline)
+        {
+            return false;
+        }
+        if let Some(task) = self.image_read_task.take() {
+            task.abort();
+        }
+        let Some(read) = self.image_read.take() else {
+            return false;
+        };
+        self.finish_image_read(read, None);
+        true
+    }
+
+    /// Shared end of `on_image_read_done` and the expired bound:
+    /// `Some(read)` dispatches like a live answer, `None` is the miss.
+    /// A miss replays the trigger as ordinary input — `image_read_replay`
+    /// keeps it from re-entering the bridge — then the held input in
+    /// order. A read consumed its trigger; only the held input follows.
+    fn finish_image_read(
+        &mut self,
+        read: ImageRead,
+        result: Option<crate::clipboard::ClipboardRead>,
+    ) {
+        let mut held = read.held;
+        let Some(trigger) = held.pop_front() else {
+            return;
+        };
+        let consumed = match result {
+            Some(result) => self.dispatch_image_read(read.target, result),
+            None => {
+                self.show_notice(
+                    "No image to paste",
+                    "The clipboard or dropped path has no readable image",
+                );
+                false
+            }
+        };
+        if !consumed {
+            // The press was not consumed after all: drop its suppress
+            // entry so the coming release and repeats route normally,
+            // then replay it past the bridge.
+            if let UiEvent::Key(key) = &trigger
+                && key.input.action == hc_vt::Action::Press
+            {
+                self.image_paste_suppress.remove(&key.identity());
+            }
+            self.image_read_replay = true;
+            self.on_input(trigger, self.area.0);
+            self.image_read_replay = false;
+        }
+        // Held input replays in order — unless a replayed gesture just
+        // started the next read, in which case it queues behind that.
+        for ev in held {
+            if let Some(read) = self.image_read.as_mut() {
+                read.held.push_back(ev);
+            } else {
+                self.on_input(ev, self.area.0);
+            }
+        }
     }
 
     /// Shared end of both triggers: upload an image, notice a too-large
@@ -179,9 +329,12 @@ impl App {
         );
     }
 
-    /// `terminal.put` through the operations store, off the UI path.
-    /// Over the core's 8 MB bound the key is consumed with a notice —
-    /// like the reference's oversized-payload drop.
+    /// The upload through the operations store, off the UI path: one
+    /// `terminal.put` by default, or acknowledged pieces when the core
+    /// offers `put_chunks` and this image crosses an SSH link to a
+    /// terminal on that core. Over the core's 8 MB bound the key is
+    /// consumed with a notice — like the reference's oversized-payload
+    /// drop.
     fn submit_image_upload(
         &mut self,
         target: ImagePasteTarget,
@@ -207,11 +360,23 @@ impl App {
                 .unwrap_or(0),
             image.extension
         );
+        // `terminal.put_begin` only takes a terminal on the connecting
+        // core, and pieces only pay off across the SSH link this client
+        // itself crosses. Both must hold for the pieces path, and the
+        // handshake must have advertised it.
+        let pieces = (self.image_paste_remote || self.image_paste_over_ssh)
+            && !terminal.contains('/')
+            && self
+                .view
+                .features
+                .iter()
+                .any(|feature| feature == hc_proto::hello::feature::PUT_CHUNKS);
         self.submit_action(crate::operations::Action::PutImage {
             terminal,
             created_ms,
             name,
-            data: crate::selection::base64_encode(&image.bytes),
+            bytes: image.bytes,
+            pieces,
         });
     }
 

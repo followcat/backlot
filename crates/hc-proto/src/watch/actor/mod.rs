@@ -225,7 +225,7 @@ impl Actor {
                 };
             }
             let open = Arc::clone(&self.sub);
-            let subscribe = self.params.subscribe.clone();
+            let subscribe = self.params.subscribe_params();
             self.sub_open = Some(tokio::spawn(async move { open(subscribe).await }));
             opened = true;
         }
@@ -396,6 +396,10 @@ impl Drop for Actor {
 #[cfg(test)]
 mod doc_slot_tests;
 #[cfg(test)]
+mod doc_tests;
+#[cfg(test)]
 mod epoch_tests;
 #[cfg(test)]
 mod receipt_tests;
+#[cfg(test)]
+mod static_machines_tests;
