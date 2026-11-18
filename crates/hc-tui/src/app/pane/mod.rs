@@ -310,27 +310,6 @@ pub struct Pane {
     pub attaches: u64,
 }
 
-/// A screen handed from one pane to the next: the VT, its post-seed color
-/// baseline and its painted-surface cache move together, so the receiver
-/// keeps the last paint — cursor shape, palette overrides and all — while
-/// its own attach opens. `warm` is `Some` only when the giver's wire
-/// stayed live up to the handover: that is the one case where the next
-/// attach may ask for the screen alone and continue this VT.
-pub(crate) struct Retained {
-    pub vt: Vt,
-    pub initial: Option<hc_vt::Colors>,
-    pub cache: Option<render_cache::PaneRenderCache>,
-    pub warm: Option<WarmVt>,
-}
-
-/// Which terminal incarnation a cached screen belongs to. A restarted
-/// terminal gets a new `(created_ms, pid)`; its predecessor's VT must
-/// never be continued into it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct WarmVt {
-    pub incarnation: (u64, Option<u32>),
-}
-
 /// What `cell_style` needs to reproduce the reference's
 /// `ghostty_default_fg/bg` + `PaletteOverrides`: the VT's defaults at
 /// creation (detects a program `OSC 10/11/4` change) and the host's
@@ -456,6 +435,9 @@ impl Drop for Pane {
         }
     }
 }
+
+mod cache;
+pub(crate) use cache::{Retained, WarmVt};
 
 mod events;
 pub(crate) mod input;
