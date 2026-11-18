@@ -6,6 +6,28 @@ All notable changes to hc-tui are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- `[advanced] attach_history_lines` — scrollback a cold attach asks the core to
+  replay on its first paint: 5000 by default, `0` for the screen only, clamped
+  at 50000. A cold open of a 6000-line terminal now carries 5000 lines instead
+  of the hard-coded 200.
+
+### Changed
+
+- Tab switches reuse the screen they already have. Leaving a tab hands the
+  focused pane's VT to the observer that inherits the terminal, and switching
+  back adopts that VT at the new wire's first paint while the observer's live
+  wire keeps feeding it — a warm switch costs about one screen on the wire
+  (5,958 bytes against 282,496 for a cold open of 5000 lines) and the cached
+  scrollback, cursor style and palette survive. A resumed attach, a changed
+  terminal incarnation, an evicted observer or a screen that never arrives
+  each fall back to a cold attach with full history.
+- `[advanced] scrollback_limit_bytes` (Herdr's own key, default 10000000) now
+  sizes the client VT for the focused pane and every cached observer alike;
+  the former 256 KiB / 64 KiB role split is gone, so a cached tab keeps the
+  history it left.
+
 ## 0.1.13 — 2026-11-18
 
 ### Added
