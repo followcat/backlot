@@ -237,6 +237,6 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     }
 }
 
-fn display_fits(width: u16, left: &str, right: &str) -> bool {
+pub(super) fn display_fits(width: u16, left: &str, right: &str) -> bool {
     (left.len() + right.len() + 4) < width as usize
 }

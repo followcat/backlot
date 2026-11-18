@@ -198,6 +198,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     };
     let hide_cursor = app.help
         || app.dialog.is_some()
+        || app.new_studio.is_some()
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()

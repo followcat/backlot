@@ -233,22 +233,25 @@ fn chrome(
     let inner = crate::chrome::dialogs::panel(b, outer, p.accent, p.panel_bg)?;
     hints.area = outer;
     // Title: `New studio · [n/4] Step Name` left, `esc …` right.
+    // The title is clipped short of the right hint so they never
+    // collide at narrow widths.
+    let esc = match d.step {
+        Step::MachineRepo => "esc cancel",
+        _ => "esc step back",
+    };
+    let title_w = inner.width.saturating_sub(display_width(esc) as u16 + 1);
     let title = format!(" New studio · [{}/4] {} ", d.step.index(), d.step.label());
     put_text(
         b,
         inner.x,
         inner.y,
-        inner.width,
-        &title,
+        title_w,
+        &crate::chrome::text::truncate_end(&title, title_w as usize),
         Style::default()
             .fg(p.accent)
             .bg(p.panel_bg)
             .add_modifier(Modifier::BOLD),
     );
-    let esc = match d.step {
-        Step::MachineRepo => "esc cancel",
-        _ => "esc step back",
-    };
     put_right_text(
         b,
         inner,

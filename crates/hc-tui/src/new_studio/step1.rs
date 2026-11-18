@@ -78,11 +78,21 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
 
     // — Machines —
     let label_style = Style::default().fg(p.text).bg(p.panel_bg);
+    let recheck = if d.refreshing {
+        "^R re-check …"
+    } else {
+        "^R re-check"
+    };
+    // The label is clipped short of the right hint, same rule as
+    // the title row.
+    let label_w = body
+        .width
+        .saturating_sub(crate::chrome::text::display_width(recheck) as u16 + 1);
     put_text(
         b,
         body.x,
         y,
-        body.width,
+        label_w,
         "Target machine (tab to switch):",
         label_style,
     );
@@ -90,11 +100,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         b,
         body,
         y,
-        if d.refreshing {
-            "^R re-check …"
-        } else {
-            "^R re-check"
-        },
+        recheck,
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
     y += 1;
@@ -113,7 +119,19 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         };
         let x = put_segment(b, row.x + 1, y, row.right(), dot, dot_style.bg(p.panel_bg));
         let name = format!(" {:<12}", m.label);
-        let x = put_segment(b, x, y, row.right().min(x + 14), &name, name_style);
+        // Same fixed-column rule as the repo rows: clip the name
+        // inside its field and pin the detail to the field's end so
+        // a long label leaves at least one blank cell.
+        let detail_x = (x + 14).min(row.right());
+        let cell_w = detail_x.saturating_sub(x);
+        put_text(
+            b,
+            x,
+            y,
+            cell_w.saturating_sub(1),
+            &truncate(&name, cell_w.saturating_sub(1) as usize),
+            name_style,
+        );
         let (detail, ok) = machine_detail(m);
         let detail_style = if ok {
             Style::default().fg(p.subtext0).bg(p.panel_bg)
@@ -122,9 +140,9 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         };
         put_text(
             b,
-            x,
+            detail_x,
             y,
-            row.right().saturating_sub(x),
+            row.right().saturating_sub(detail_x),
             &detail,
             detail_style,
         );
@@ -238,15 +256,22 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 } else {
                     format!(" {}", e.name)
                 };
+                // The name field is `name_w` cells; the note always
+                // starts at its end, so a long name can never touch
+                // the note — clip to `name_w - 1` and keep the last
+                // cell blank.
                 let name_w = 20u16.min(body.width / 3).max(10);
-                x = put_segment(
+                let note_x = (x + name_w).min(row.right());
+                let cell_w = note_x.saturating_sub(x);
+                put_text(
                     b,
                     x,
                     y,
-                    row.right().min(x + name_w),
-                    &format!("{name:<w$}", w = name_w as usize - 2),
+                    cell_w.saturating_sub(1),
+                    &truncate(&name, cell_w.saturating_sub(1) as usize),
                     name_style,
                 );
+                x = note_x;
                 let (note, ok) = repo_note(e);
                 let note_style = if e.in_use_studio.is_some() {
                     Style::default().fg(p.peach).bg(p.panel_bg)

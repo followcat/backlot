@@ -42,15 +42,6 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         .fg(p.text)
         .bg(if focused { p.surface0 } else { p.panel_bg });
     b.set_style(field, style);
-    if let Some(cursor) = text_editor::render(
-        b,
-        Rect::new(field.x + 1, field.y, field.width.saturating_sub(2), 1),
-        &d.id,
-        style,
-    ) && focused
-    {
-        hits.cursor = Some(cursor);
-    }
     let verdict = match id_error(d.id.as_str(), &d.studios) {
         Ok(()) => (
             "✓ available".to_string(),
@@ -58,7 +49,35 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         ),
         Err(e) => (format!("× {e}"), Style::default().fg(p.red).bg(p.panel_bg)),
     };
-    put_right_text(b, field, field.y, &verdict.0, verdict.1);
+    // The verdict rides the field's right edge when a usable field
+    // remains; at narrow widths it drops to its own line instead of
+    // painting over the text.
+    let verdict_w = crate::chrome::text::display_width(&verdict.0) as u16;
+    let inline = body.width.saturating_sub(verdict_w + 2) >= 16;
+    let text_w = if inline {
+        field.width.saturating_sub(verdict_w + 4)
+    } else {
+        field.width.saturating_sub(2)
+    };
+    if let Some(cursor) =
+        text_editor::render(b, Rect::new(field.x + 1, field.y, text_w, 1), &d.id, style)
+        && focused
+    {
+        hits.cursor = Some(cursor);
+    }
+    if inline {
+        put_right_text(b, field, field.y, &verdict.0, verdict.1);
+    } else if y + 1 < body.bottom() {
+        put_text(
+            b,
+            body.x + 1,
+            y + 1,
+            body.width.saturating_sub(1),
+            &crate::chrome::text::truncate_end(&verdict.0, body.width.saturating_sub(1) as usize),
+            verdict.1,
+        );
+        y += 1;
+    }
     hits.push(field, NsHit::IdField);
     y += 2;
 

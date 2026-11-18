@@ -8,6 +8,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
+use super::step4::display_fits;
 use super::{NewStudio, NsHit, NsHits, Probe, selected_row};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::{put_segment, put_text};
@@ -108,17 +109,19 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 &crate::chrome::text::truncate_end(&head, body.width as usize - 1),
                 Style::default().fg(p.text).bg(p.panel_bg),
             );
+            // The ^E hint rides the right edge only while it clears
+            // the head — at narrow widths the head keeps the room.
             let edit_hint = "(^E open $EDITOR)";
-            put_text(
-                b,
-                body.right()
-                    .saturating_sub(edit_hint.len() as u16)
-                    .max(body.x),
-                y,
-                (edit_hint.len() as u16).min(body.width),
-                edit_hint,
-                Style::default().fg(p.overlay0).bg(p.panel_bg),
-            );
+            if display_fits(body.width, &head, edit_hint) {
+                put_text(
+                    b,
+                    body.right().saturating_sub(edit_hint.len() as u16),
+                    y,
+                    edit_hint.len() as u16,
+                    edit_hint,
+                    Style::default().fg(p.overlay0).bg(p.panel_bg),
+                );
+            }
         }
     }
     y += 2;
