@@ -10,6 +10,8 @@ v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+## 0.2.3 — 2026-11-18
+
 ### Added
 
 - The in-client update, on backlot's own release: `prefix+u` (or a click on
@@ -30,6 +32,21 @@ v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **Studio workspaces drop the tab bar.** A one-row studio header
+  (`studio › role t1 ◐ ↑`) takes its place. `Alt+↑/↓` switch studios, and `Alt+←/→` step
+  through the cast. Elsewhere Herdr's tab keys apply. Other workspaces keep Herdr's tab bar.
+- **The lot pill** (`✦ N · !U you · C card`) replaces the floating collapsed
+  strip. It turns red when something waits on you. The Hollywood bar starts
+  collapsed (`[hollywood] start`).
+- **One glyph and colour vocabulary** across the panel, the cast sidebar and
+  Hollywood. `idle` is a grey `○`, and only `working` animates.
+- **Panel selection** starts on the first actionable row. `j`/`k` skip
+  dividers. The highlight stays inside the block's borders and hides while the
+  panel is unfocused. Hints never cut a word.
+- **`Ctrl+B ?` in studio mode** leads with backlot's sections. The glyph legend
+  is pinned above the footer.
+- **Settings:** a `studio` tab with call-sheet start, direct `Alt+Y`, dock
+  width and the overseer. An unset overseer shows the setup command.
 - The agent panel's default sort is `priority` (waiting first), and a sort
   the user picked is remembered.
 - Official `hc` 0.1.21 is the tested core; older 0.1.x cores keep working,
@@ -44,6 +61,7 @@ v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- The studio cast stays in the sidebar when the core has several machines.
 - A `cancelled` `terminal.send` is a refusal: the stage and the client both
   say nothing was typed, the message stays queued, and a timed-out send never
   reads as "not typed" (the core may still type it).
