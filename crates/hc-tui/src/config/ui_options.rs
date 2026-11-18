@@ -132,6 +132,41 @@ impl UiConfig {
     }
 }
 
+/// The `[advanced]` section: Herdr's scrollback budget plus hc-tui's own
+/// attach-history key. Parsing is tolerant like every other section, so a
+/// config written for Herdr alone keeps working.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct AdvancedConfig {
+    /// Herdr's key: maximum scrollback retained per pane terminal, in
+    /// bytes. Default: 10000000. Herdr passes it straight to the terminal;
+    /// hc-tui gives the same budget to the focused VT and to every cached
+    /// observer (see `docs/runtime.md`).
+    #[serde(alias = "scrollback_lines")]
+    pub scrollback_limit_bytes: usize,
+    /// hc-tui's own key: scrollback lines a *cold* attach asks the core to
+    /// replay on its first paint. Default: 5000; `0` asks for the screen
+    /// only. Clamped to `MAX_ATTACH_HISTORY_LINES`.
+    pub attach_history_lines: u64,
+}
+
+impl Default for AdvancedConfig {
+    fn default() -> Self {
+        Self {
+            scrollback_limit_bytes: DEFAULT_SCROLLBACK_LIMIT_BYTES,
+            attach_history_lines: DEFAULT_ATTACH_HISTORY_LINES,
+        }
+    }
+}
+
+impl AdvancedConfig {
+    /// The history a cold attach asks for, clamped to a size the first
+    /// paint can still justify.
+    pub fn attach_history(&self) -> u64 {
+        self.attach_history_lines.min(MAX_ATTACH_HISTORY_LINES)
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct ExperimentalConfig {

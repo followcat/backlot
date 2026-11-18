@@ -68,8 +68,16 @@ impl Pane {
     /// never flushes under another: queued items are bound to the
     /// wire they were typed for.
     pub fn want(&mut self, spec: Option<Spec>) {
+        self.want_retained(spec, None);
+    }
+
+    /// The same, carrying a screen handed over for the attach this call
+    /// opens: the retained VT stays on screen and the new attach asks the
+    /// core for the screen only, continuing it instead of replaying
+    /// history.
+    pub(crate) fn want_retained(&mut self, spec: Option<Spec>, retained: Option<Retained>) {
         let current = self.spec().cloned();
-        if current == spec {
+        if current == spec && retained.is_none() {
             return;
         }
         self.pending.clear();
@@ -79,16 +87,28 @@ impl Pane {
         // paint until fresh bytes land.
         if spec.as_ref().map(|s| &s.terminal) != current.as_ref().map(|s| &s.terminal) {
             self.vt = None;
+            self.vt_current = false;
             self.render_cache = None;
             self.incarnation = None;
             self.inventory_incarnation = None;
             self.close_error = None;
             self.dropped_drain = None;
+        } else {
+            // The old wire is torn down without a handover here: whatever
+            // it was about to print is no longer guaranteed to be in this
+            // VT, so the next attach replays history instead of trusting
+            // it.
+            self.vt_current = false;
         }
+        self.retained = retained;
         self.teardown(false);
         match spec {
             Some(spec) => self.spawn(spec, false, 0),
-            None => self.state = State::Idle,
+            None => {
+                self.retained = None;
+                self.warm_expect = None;
+                self.state = State::Idle;
+            }
         }
     }
 
@@ -141,6 +161,7 @@ impl Pane {
         {
             self.teardown(false);
             self.vt = None;
+            self.vt_current = false;
             self.render_cache = None;
             self.initial = None;
             self.discard_pending_incarnation();
@@ -242,13 +263,15 @@ impl Pane {
     }
 
     /// The next instant the pane needs the loop awake: a Down retry,
-    /// or a live wire's armed paint fallback deadline.
+    /// a live wire's armed paint fallback deadline, or a held
+    /// synchronized frame's bounded release.
     pub fn next_wake(&self) -> Option<Instant> {
         match &self.state {
             State::Down { retry_at, .. } => Some(*retry_at),
             State::Live(live) => [
                 live.paint_gate.wake(),
                 live.repaint.as_ref().map(repaint::Repaint::deadline),
+                self.sync_output.wake(),
             ]
             .into_iter()
             .flatten()
@@ -274,7 +297,8 @@ impl Pane {
             self.spawn(spec, true, attempts);
             return true;
         }
-        self.fire_paint_fallback(now)
+        let released = self.fire_paint_fallback(now);
+        released | self.fire_sync_output(now)
     }
 
     /// The retained screen, if any — the draw layer clips/pads it.
@@ -297,39 +321,6 @@ impl Pane {
 
     pub fn vt(&mut self) -> Option<&mut Vt> {
         self.vt.as_mut()
-    }
-
-    /// The retained screen handed to a new owner: the VT, its `initial`
-    /// baseline and its painted-surface cache move together so the
-    /// receiver keeps the last paint — cursor shape, palette overrides,
-    /// warm cells and all — while its own attach opens. `None` when
-    /// there is no screen to hand over.
-    pub(crate) fn take_retained(
-        &mut self,
-    ) -> Option<(
-        Vt,
-        Option<hc_vt::Colors>,
-        Option<render_cache::PaneRenderCache>,
-    )> {
-        self.vt
-            .take()
-            .map(|vt| (vt, self.initial.take(), self.render_cache.take()))
-    }
-
-    /// Accepts a screen `take_retained` produced: it stays up until
-    /// this pane's first authoritative paint replaces it.
-    pub(crate) fn seed_retained(
-        &mut self,
-        vt: Vt,
-        initial: Option<hc_vt::Colors>,
-        cache: Option<render_cache::PaneRenderCache>,
-    ) {
-        if let Ok(grid) = vt.size() {
-            self.vt_grid = grid;
-        }
-        self.initial = initial;
-        self.render_cache = cache;
-        self.vt = Some(vt);
     }
 
     /// The live VT and the surface cache it paints through, mutably

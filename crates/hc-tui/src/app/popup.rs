@@ -237,8 +237,7 @@ impl App {
             }
             return;
         }
-        let mut pane = Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-        pane.set_host_facts(self.host_facts.clone());
+        let mut pane = self.new_pane();
         pane.want(Some(Spec {
             terminal: terminal.clone(),
             role: Role::Active,
@@ -721,8 +720,7 @@ impl App {
             return;
         };
         self.close_peek();
-        let mut pane = Pane::new(self.pane_tx.clone(), self.open_attach.clone());
-        pane.set_host_facts(self.host_facts.clone());
+        let mut pane = self.new_pane();
         pane.want(Some(Spec {
             terminal: terminal.clone(),
             role: Role::Observe,

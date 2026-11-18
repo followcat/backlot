@@ -6,12 +6,21 @@ All notable changes to backlot are documented here. The format follows
 
 backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
-v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
+v0.1.14), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
 ## Unreleased
 
 ### Changed
 
+- **A tab switch keeps its screen, and a cold open has more history.** A cold
+  attach asks the core for 5000 lines instead of 200, every pane's VT takes the
+  10 MB scrollback budget, and switching back to a tab continues the VT it left
+  instead of replaying history — about one screen on the wire instead of 5000
+  lines. `[advanced] attach_history_lines` (default 5000, clamped at 50000)
+  and `[advanced] scrollback_limit_bytes` (default 10000000) tune both. A
+  resumed attach, a changed terminal, an evicted observer or a screen that
+  never arrives fall back to a cold open with full history. The studio's role
+  terminals get the same cold open and the same warm handover.
 - **The expanded Hollywood bar is the Call Sheet.** One list of everything
   waiting on the user across every machine — user-owned prompts first, then
   stopped stages and offline machines with live studios, then open cards, then
@@ -28,6 +37,13 @@ v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - The summary document gains `attention_seq`/`attention_detail` on roles and
   `tasks_done`/`tasks_total` on studios — additive, `backlot/1` unchanged.
 - `x` in the expanded bar is the card cancel; `Esc` or the toggle collapses.
+
+### Fixed
+
+- A program that redraws with synchronized output (`CSI ? 2026 h` … `l`, as
+  Antigravity CLI and Claude Code do) no longer flickers: a frame's bytes are
+  held until it closes, bounded at one second and 256 KiB, so the pane never
+  paints a half-written line or a cursor in the middle of the old text.
 
 ## 0.2.3 — 2026-11-18
 

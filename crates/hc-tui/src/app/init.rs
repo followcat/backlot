@@ -64,6 +64,9 @@ impl App {
         let sidebar_section_split_manual = preferences.sidebar_section_split.is_some();
         let agent_panel_sort_manual = preferences.agent_panel_sort.is_some();
         let mouse_capture = shell.mouse_capture;
+        let mut pane = pane::Pane::new(pane_tx.clone(), open.clone());
+        pane.set_scrollback_bytes(shell.scrollback_limit_bytes);
+        pane.set_attach_history(shell.attach_history_lines);
         App {
             notice: None,
             core_start: None,
@@ -89,7 +92,7 @@ impl App {
             last_window_title: None,
             take_control_hit: ratatui::layout::Rect::default(),
             watcher,
-            pane: pane::Pane::new(pane_tx.clone(), open.clone()),
+            pane,
             pane_rx,
             pane_tx,
             open_attach: open,
@@ -261,5 +264,17 @@ impl App {
             outer_focused: None,
             probe,
         }
+    }
+
+    /// A pane wired to this app: the shared event channel, the attach
+    /// opener, the probed host facts and the `[advanced]` budgets. Every
+    /// pane the app owns — focused, cached observer, popup, peek, float,
+    /// size lease — is born here so no site can forget them.
+    pub(crate) fn new_pane(&self) -> pane::Pane {
+        let mut pane = pane::Pane::new(self.pane_tx.clone(), self.open_attach.clone());
+        pane.set_host_facts(self.host_facts.clone());
+        pane.set_scrollback_bytes(self.shell.scrollback_limit_bytes);
+        pane.set_attach_history(self.shell.attach_history_lines);
+        pane
     }
 }

@@ -42,22 +42,48 @@ human input, automatic replies, size claims or host facts. A role change
 opens a new attach. A recovered active attach uses `resumed` to avoid
 claiming fresh activity merely because the transport recovered.
 
-Active panes allocate a 256 KiB VT scrollback; observer panes cap it at
-64 KiB. libghostty prunes scrollback at page granularity, so the effective
-bound can exceed the configured cap. A zero cap cannot be used because
-visible tabbed panes render and scroll from the observer VT when painted,
-so setting observer scrollback to zero would drop visible pane history. Up
-to 32 off-tab observers stay live in the LRU: tab switches back onto them
-need no reattach and keep the one-shot cursor and palette state. An
-observer evicted past the LRU drops its attach immediately — it receives
-zero background feeds while evicted — and a revisit opens a fresh observe
-attach that repaints from core history.
+`[advanced] scrollback_limit_bytes` — Herdr's own key, default 10000000 —
+is the VT budget for the focused pane and for every cached observer alike:
+a cached tab must keep the history it left, so the two no longer differ.
+libghostty prunes scrollback at page granularity, so a small cap still
+retains at least two standard pages. Ten cached panes holding 5000 lines of
+150-column coloured output each measure about 59 MiB of RSS; the 32-entry
+off-tab LRU bounds the worst case. `[advanced] attach_history_lines` —
+backlot's own key, default 5000, `0` for none, clamped at 50000 — is the
+scrollback a *cold* attach asks the core to replay; a size-lease attach
+always asks for none.
+
+A tab switch reuses the screen the client already has. Leaving a tab hands
+the focused pane's VT to the observer that inherits the terminal, and that
+observer's attach asks the core for the screen only. Switching back keeps
+the observer's wire feeding the VT until the new active wire's first paint
+arrives, then adopts the VT and applies that paint to it: the cached
+scrollback survives, the paint never scrolls the old screen into it, and
+nothing is downloaded twice. A resumed attach, a changed terminal
+incarnation, an evicted observer or a promised screen that never arrives
+each fall back to a cold attach with `attach_history_lines`. Up to 32
+off-tab observers stay live in the LRU: tab switches back onto them need no
+reattach and keep the one-shot cursor and palette state. An observer
+evicted past the LRU drops its attach immediately — it receives zero
+background feeds while evicted — and a revisit opens a fresh observe attach
+that repaints from core history.
 
 The allocated pane grid and rendered inner rectangle share one geometry.
 When the authoritative core grid persistently differs, a source-style
 notice offers a click to take control. Core does not identify the other
 owner, so the message describes a possible competing viewer. An explicit
 click sends a fresh resize request even when its dimensions did not change.
+
+Synchronized output (DECSET 2026) is honored per pane: a program that brackets a
+redraw in `CSI ? 2026 h` … `CSI ? 2026 l` has that frame's bytes held until the
+reset, so the pane's VT — and every paint of it, focused or observer, tab or
+split — only ever holds a complete frame. The mode set itself is fed
+immediately, so the VT's own mode state (and its DECRQM answer) stays truthful;
+a reset inside one DATA chunk paints the frame before it and starts holding the
+next, and a marker split across chunks is bridged. The hold is bounded: after
+one second (Ghostty's value) or 256 KiB of a single frame the bytes are fed
+anyway, so a program that forgets the reset costs a visible second instead of a
+frozen pane. A new wire drops whatever the old program had held.
 
 Broken connections retain the inventory and last pane paint, with a
 visible notice. Recovery has bounded backoff and waits for the complete first-paint mode

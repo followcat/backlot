@@ -218,6 +218,12 @@ mod generation_tests;
 #[path = "scrollback_tests.rs"]
 mod scrollback_tests;
 
+#[path = "cache_tests.rs"]
+mod cache_tests;
+
+#[path = "sync_tests.rs"]
+mod sync_tests;
+
 #[path = "size_tests.rs"]
 mod size_tests;
 
