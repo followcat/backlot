@@ -18,9 +18,11 @@ layout, so toggling it resizes nothing.
 - **Hidden** draws nothing and consumes no key. In studio mode the bar exists whether or not a
   `[hollywood]` table does (U7); without one it is the no-agent bar, and `backlot --plain` has
   no bar at all, so its screen is exactly the herdr screen.
-- **Collapsed** is a one-row strip floating at the right end of the top row, at most a third of
-  the width, on `surface_dim`: the mark, the agent's square in its role state (dim without an
-  agent), the studio count and a peach chip with what waits on you. A click expands it.
+- **Collapsed** is the **lot pill** in the chrome row — a reserved, clickable segment at the
+  right end of the tab bar, or of the one-row studio header on a studio workspace. It counts
+  the urgent items (user prompts you own, stopped stages, ledger errors), the open cards and
+  studios ready to finish, and the studios (`✦`); urgent counts turn it red, and narrow widths
+  shrink it through shorter texts. A click or the toggle key expands the band.
 - **Expanded** is the **film-strip band** dropped from the top over the whole width, at most
   half the height: `▄▄`/`▀▀` sprocket rows, the `✦  H O L L Y W O O D` title with the agent's
   square, role state and runner / model / effort plus the right-hand studio count and
@@ -35,14 +37,18 @@ layout, so toggling it resizes nothing.
   `tell hollywood` line; without one, a single line naming `backlot hollywood setup`. The
   height ladder drops the blank rows, then the hints, then the headline — the frames go last.
 
-The bar starts **expanded** on a client whose first settled `backlot` read has at least one
-studio. A client that opens on the opening card keeps it collapsed, and the first studio to
-arrive later leaves it collapsed. Neither the card nor the bar draws before that first read
-settles (two seconds at most), so a client with studios never flashes the welcome card.
+The start policy is **`collapsed`** by default (`[hollywood] start` — `collapsed`,
+`when_waiting`, or `expanded`), applied once the first settled `backlot` read lands.
+`when_waiting` opens expanded only while the urgent count is above zero — and again on the edge
+up — and a studio that arrives later never pulls the bar open. Neither the card nor the bar
+draws before that first read settles (two seconds at most), so a client with studios never
+flashes the welcome card.
 
-The key is **`alt+y`**, a direct key with no prefix. It switches collapsed and expanded and shows
-the layer when hidden; `x` in the expanded bar hides it; `Esc` collapses it.
-`[hollywood] key` changes it (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
+The key is **`alt+y`**, a direct key with no prefix, plus the `Ctrl+B i` chord tail. It switches
+collapsed and expanded and shows the layer when hidden; `x` in the expanded bar hides it; `Esc`
+collapses it. `[keys] call_sheet` rebinds the direct key and `[keys] prefix_call_sheet` the
+chord tail — an empty string unbinds that slot; `[hollywood] key` fills whichever slot `[keys]`
+leaves unset (a direct binding like `alt+y`, or `prefix+<key>` for a chord). It is
 bound in studio mode with or without a `[hollywood]` table; under `--plain` it is not bound, so
 Alt+Y reaches the focused program as always. A key value that does not parse, is a bare printable
 key, or collides with one of the four studio keys or the panel chord falls back to `alt+y` with a
@@ -64,7 +70,7 @@ that studio's producer; the new-studio frame or `n` opens the wizard, with the b
 first; the title row focuses `bl-hollywood`; a card row is its Show me; the input line opens for
 editing), `a` applies and `c` cancels the selected card, `s` is Show me, `i` opens the input
 line, `x` hides the bar, `Esc` collapses it. The bar owns those keys while it is expanded — an
-armed prefix disarms into it. Mouse does the same: a click on the strip expands it, a click on a
+armed prefix disarms into it. Mouse does the same: a click on the pill expands it, a click on a
 frame selects and opens it, the card chips and the input line do what the keys do, the wheel
 scrolls the frames sideways under the pointer and the cards below them, and a click outside the
 expanded bar goes to what is under it and leaves the bar open.

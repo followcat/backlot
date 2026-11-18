@@ -28,7 +28,10 @@ The defaults you'll use most:
 `Ctrl+B Ctrl+B` sends a literal `Ctrl+B` to the program. Custom commands bound in your Herdr config work here too.
 
 Settings changed with `Ctrl+B s` (status indicators, sound, toast delivery) are saved to your Herdr config, and
-nothing else in that file changes. A theme picked there is saved to backlot's own config ([Theme](theme.md)). [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
+nothing else in that file changes. A theme picked there is saved to backlot's own config ([Theme](theme.md)). In
+studio mode the overlay gains a `studio` tab — call-sheet start policy, the direct `Alt+Y` toggle, the dock width
+and the read-only Hollywood overseer (Enter opens `backlot hollywood setup` while it is unset) — which writes to
+backlot's own `config.toml`. [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
 
 ## The studio panel
 
@@ -38,8 +41,9 @@ still wins whenever the panel does not own the keys. The chord's tail is `panel.
 `~/.config/backlot/config.toml`.
 
 The panel has three modes: closed (the default — zero width, no keys), a 16-column collapsed
-strip, and an expanded column (`[panel] width`, default 26, clamped to 22–60) of bordered studio
-blocks. While it is focused it owns these keys:
+strip, and an expanded column (`[dock] width`, default 36, clamped to 28–48) of bordered studio
+blocks. The selection is a `▌` cursor that lands only on actionable rows — titles, dividers and
+spacers are skipped. While it is focused it owns these keys:
 
 | Keys | Action |
 |---|---|
@@ -73,11 +77,17 @@ never covers the studios: it runs the new-studio wizard directly instead.
 
 ## The Hollywood bar
 
-`Alt+Y` — a direct key, no prefix — cycles the bar between hidden, its one-row strip at the top
-right and the film-strip band dropped from the top. In studio mode the bar exists even with no
-`[hollywood]` table, in its no-agent form; `backlot --plain` has no bar at all, and `Alt+Y` there
-reaches the program. `[hollywood] key` rebinds the toggle. While the band is expanded it owns
-these keys:
+`Alt+Y` — a direct key, no prefix — toggles the film-strip band dropped from the top. Collapsed,
+the bar is the **lot pill** in the chrome row: a reserved, clickable segment at the right end of
+the tab bar — or of the one-row studio header on a studio workspace — that counts the urgent
+items (`U`: your prompts, stopped stages, ledger errors), the open cards and studios ready to
+finish (`C`), and the studios (`✦`). In studio mode the bar exists even with no `[hollywood]`
+table, in its no-agent form; `backlot --plain` has no bar at all, and `Alt+Y` there reaches the
+program. `[keys] call_sheet` rebinds the direct key (empty string unbinds it), `[keys]
+prefix_call_sheet` the prefix-chord tail (`Ctrl+B i` by default), and `[hollywood] key` fills
+whichever slot `[keys]` leaves unset. `[hollywood] start` picks the start policy: `collapsed`
+(the default — the bar no longer opens by itself), `when_waiting` (expanded only while U > 0),
+or `expanded`. While the band is expanded it owns these keys:
 
 | Keys | Action |
 |---|---|
@@ -89,7 +99,7 @@ these keys:
 | `i` | Edit the `tell hollywood` line, with an agent |
 | `PageUp`/`PageDown` | Scroll the cards |
 | `x` | Hide the bar |
-| `Esc` | Collapse it to the strip |
+| `Esc` | Collapse it to the pill |
 
 A click on a frame opens it, the card chips run their action, the input line opens for editing,
 and the wheel scrolls the frames sideways or the cards under the pointer.
@@ -111,14 +121,17 @@ next_role = "alt+right"
 | Keys | Action |
 |---|---|
 | `Alt+Up`, `Alt+Down` | Previous or next studio in document order. Wraps around. Focuses the person last used there, else the studio's producer, else its first live role. A studio with no live terminal still becomes current — the cast and the panel frame follow — and a notice says so. |
-| `Alt+Left`, `Alt+Right` | Previous or next person of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered person. |
+| `Alt+Left`, `Alt+Right` | Inside a studio workspace: previous or next person of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered person. |
 
 Focusing goes through the panel's existing focus path (workspace, tab, pane): it only moves the
 focus — no pane and no program is resized.
 
 These keys exist only in studio mode — that is, always unless you run `backlot --plain`. They
 win over a Herdr binding on the same key — the usual Herdr config binds `previous_tab = "alt+left"`
-and friends — so set different chords in either file if you want both. Under `--plain` Herdr's
+and friends — so set different chords in either file if you want both; `Ctrl+B ?` lists each
+studio key with the Herdr action it shadows on your config. `Alt+Left`/`Alt+Right` own the key
+only inside a studio workspace — on your own workspaces and on the `backlot` stage workspace the
+keys fall through to Herdr's `previous_tab`/`next_tab`. Under `--plain` Herdr's
 bindings, or the program, get the keys exactly as before. An empty string unbinds a key; a value
 that does not parse falls back to the default with one notice naming the file.
 
