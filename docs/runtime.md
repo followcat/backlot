@@ -49,7 +49,7 @@ libghostty prunes scrollback at page granularity, so a small cap still
 retains at least two standard pages. Ten cached panes holding 5000 lines of
 150-column coloured output each measure about 59 MiB of RSS; the 32-entry
 off-tab LRU bounds the worst case. `[advanced] attach_history_lines` —
-hc-tui's own key, default 5000, `0` for none, clamped at 50000 — is the
+backlot's own key, default 5000, `0` for none, clamped at 50000 — is the
 scrollback a *cold* attach asks the core to replay; a size-lease attach
 always asks for none.
 
