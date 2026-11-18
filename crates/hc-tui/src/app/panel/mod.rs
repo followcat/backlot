@@ -361,12 +361,18 @@ impl App {
 
     /// cli injects the resolved `[panel]` config and, when the file
     /// was malformed or carried an invalid key, its notice.
-    pub(crate) fn set_panel_config(&mut self, config: PanelConfig, notice: Option<String>) {
+    pub(crate) fn set_panel_config(
+        &mut self,
+        config: PanelConfig,
+        notice: Option<String>,
+        path: &std::path::Path,
+    ) {
         // `load` already falls back to `y` on a bad key — guard any
         // other caller the same way so the chord can never die.
         self.panel_key_combo = crate::config::parse_key_combo(&config.key)
             .or_else(|| crate::config::parse_key_combo("y"));
         self.panel_config = config;
+        self.panel_config_path = path.to_path_buf();
         if let Some(notice) = notice {
             self.show_notice("Panel config", &notice);
         }

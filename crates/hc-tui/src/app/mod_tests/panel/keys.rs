@@ -252,7 +252,7 @@ async fn a_bad_panel_key_still_toggles_with_y() {
     let path = dir.join("config.toml");
     std::fs::write(&path, "[panel]\nkey = \"nope+\"\n").unwrap();
     let (config, notice) = crate::panel::load(&path);
-    app.set_panel_config(config, notice);
+    app.set_panel_config(config, notice, &path);
     assert!(app.notice.is_some(), "the bad key notices once");
     // The notice names the file, never the bogus value — the screen
     // shows no "nope".

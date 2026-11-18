@@ -98,7 +98,7 @@ pub(crate) fn render_settings_overlay(
         .any(|integration| integration.state == IntegrationState::Outdated);
     let mut tab_x = inner.x;
     let mut tab_hits = Vec::new();
-    for section in SettingsSection::ALL {
+    for section in &settings.sections {
         let badge = *section == SettingsSection::Integrations && integration_badge;
         let label = if badge {
             format!(" ● {} ", section.label())
@@ -221,6 +221,9 @@ pub(crate) fn render_settings_overlay(
         }
         SettingsSection::Integrations => {
             render_integrations(buffer, content, settings, palette);
+        }
+        SettingsSection::Studio => {
+            render_studio(buffer, content, settings, palette, &mut choice_hits);
         }
     }
 
@@ -407,6 +410,79 @@ fn render_integrations(
             " installing…",
             Style::default().fg(palette.overlay1).bg(palette.panel_bg),
         );
+    }
+}
+
+/// The studio tab: four rows named with their live values — the
+/// start policy and dock width cycle on Enter, `alt+y` toggles, and
+/// the overseer row opens `hollywood setup` while it is unset.
+fn render_studio(
+    buffer: &mut Buffer,
+    area: Rect,
+    settings: &SettingsOverlay,
+    palette: &Palette,
+    hits: &mut Vec<(Rect, usize)>,
+) {
+    use crate::chrome::settings::{STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_OVERSEER, STUDIO_START};
+    put_text(
+        buffer,
+        area.x,
+        area.y,
+        area.width,
+        "backlot studio",
+        Style::default()
+            .fg(palette.text)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    put_text(
+        buffer,
+        area.x,
+        area.y + 1,
+        area.width,
+        "call sheet and dock — written to backlot's own config",
+        Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+    );
+    let Some(studio) = settings.studio.as_ref() else {
+        return;
+    };
+    let overseer = studio
+        .overseer
+        .as_deref()
+        .unwrap_or("unset — ↵ opens setup");
+    let rows = [
+        (
+            STUDIO_START,
+            format!("call sheet start  {}", studio.start.as_str()),
+        ),
+        (
+            STUDIO_ALT_Y,
+            format!(
+                "direct alt+y      {}",
+                if studio.alt_y { "on" } else { "off" }
+            ),
+        ),
+        (
+            STUDIO_DOCK_WIDTH,
+            format!("dock width        {}", studio.dock_width),
+        ),
+        (STUDIO_OVERSEER, format!("overseer          {overseer}")),
+    ];
+    for (row, label) in rows {
+        let y = area.y + 3 + row as u16 * 2;
+        if y >= area.bottom() {
+            break;
+        }
+        let rect = Rect::new(area.x, y, area.width, 1);
+        draw_choice(
+            buffer,
+            rect,
+            &label,
+            row == settings.selected,
+            false,
+            palette,
+        );
+        hits.push((rect, row));
     }
 }
 

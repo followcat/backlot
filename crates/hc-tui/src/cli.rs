@@ -250,7 +250,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<(), Stri
     // The studio panel's own config — herdr's `config.toml` load above
     // is untouched. A malformed file is defaults plus the position.
     let (panel_config, panel_notice) = crate::panel::load(&crate::panel::config_path(env));
-    app.set_panel_config(panel_config, panel_notice);
+    app.set_panel_config(panel_config, panel_notice, &crate::panel::config_path(env));
     app.set_panel_endpoint(endpoint);
     if let Ok(exe) = std::env::current_exe() {
         app.set_panel_runner(crate::panel::spawn_runner(exe));

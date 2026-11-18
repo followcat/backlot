@@ -52,6 +52,17 @@ pub(crate) enum CallSheetStart {
     Expanded,
 }
 
+impl CallSheetStart {
+    /// The `[hollywood] start` spelling — what the settings write.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Collapsed => "collapsed",
+            Self::WhenWaiting => "when_waiting",
+            Self::Expanded => "expanded",
+        }
+    }
+}
+
 pub(crate) const WIDTH_MIN: u16 = 28;
 pub(crate) const WIDTH_MAX: u16 = 48;
 const WIDTH_DEFAULT: u16 = 36;

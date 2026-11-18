@@ -36,6 +36,8 @@ impl App {
             Err(e) => (None, Some(format!("Hollywood config: {e}"))),
         };
         self.has_hollywood_cfg = cfg.is_some();
+        // The settings tab's read-only overseer row.
+        self.hollywood_overseer = cfg.as_ref().map(|c| format!("{} · {}", c.runner, c.model));
         // R22: the expanded studio panel names `hollywood setup` only
         // while no table exists.
         self.panel.hollywood_hint = !self.has_hollywood_cfg;

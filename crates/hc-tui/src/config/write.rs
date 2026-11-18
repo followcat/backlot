@@ -14,6 +14,15 @@ pub(crate) enum ConfigEdit<'a> {
     StatusIndicators(super::StatusIndicatorStyle),
     Sound(bool),
     ToastDelivery(super::ToastDelivery),
+    /// `[hollywood] start` in backlot's own config — the call
+    /// sheet's start policy (S0).
+    CallSheetStart(&'a str),
+    /// `[keys] call_sheet` in backlot's config: `false` writes `""`
+    /// (direct Alt+Y off), `true` removes the line (the default
+    /// `alt+y`, or `[hollywood] key`'s fill, returns).
+    CallSheetToggle(bool),
+    /// `[dock] width` in backlot's config.
+    DockWidth(u16),
 }
 
 impl ConfigEdit<'_> {
@@ -23,7 +32,19 @@ impl ConfigEdit<'_> {
             Self::StatusIndicators(_) => "status indicators",
             Self::Sound(_) => "sound setting",
             Self::ToastDelivery(_) => "toast setting",
+            Self::CallSheetStart(_) => "call sheet start",
+            Self::CallSheetToggle(_) => "call sheet key",
+            Self::DockWidth(_) => "dock width",
         }
+    }
+
+    /// Whether the edit lands in backlot's `config.toml` rather
+    /// than herdr's — the studio tab's writes.
+    pub(crate) fn is_backlot(self) -> bool {
+        matches!(
+            self,
+            Self::CallSheetStart(_) | Self::CallSheetToggle(_) | Self::DockWidth(_)
+        )
     }
 
     pub(crate) fn apply(self, content: &str) -> String {
@@ -49,6 +70,16 @@ impl ConfigEdit<'_> {
                 };
                 let content = upsert_section_value(content, "ui.toast", "delivery", value);
                 remove_section_key(&content, "ui.toast", "enabled")
+            }
+            Self::CallSheetStart(start) => {
+                upsert_section_value(content, "hollywood", "start", &format!("\"{start}\""))
+            }
+            Self::CallSheetToggle(true) => remove_section_key(content, "keys", "call_sheet"),
+            Self::CallSheetToggle(false) => {
+                upsert_section_value(content, "keys", "call_sheet", "\"\"")
+            }
+            Self::DockWidth(width) => {
+                upsert_section_value(content, "dock", "width", &width.to_string())
             }
         }
     }

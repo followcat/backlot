@@ -363,7 +363,7 @@ async fn an_unbound_studio_key_does_nothing() {
     std::fs::write(&path, "[keys]\nnext_studio = \"\"\n").unwrap();
     let (config, notice) = crate::panel::load(&path);
     assert!(notice.is_none());
-    app.set_panel_config(config, notice);
+    app.set_panel_config(config, notice, &path);
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.studio.current,
