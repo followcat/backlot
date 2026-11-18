@@ -46,6 +46,7 @@ const COMMANDS: &[&str] = &[
     "hollywood",
     "card",
     "runners",
+    "repos",
 ];
 
 /// Failure with its exit code: `Usage` → 2, `Refused`/`Core` → 1.
@@ -320,7 +321,17 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
             return crate::hwood::run(common, cmd, env);
         }
         // `runners` is local detection only — no core, no ledger.
-        Cmd::Runners => return crate::runners::detect::report(env),
+        Cmd::Runners { json } => {
+            return match json {
+                true => crate::runners::detect::report_json(env),
+                false => crate::runners::detect::report(env),
+            };
+        }
+        // `repos` reads the directory itself; `in_use_studio` needs
+        // the ledger base, which `repos::run` resolves best-effort.
+        Cmd::Repos { json, ref from } => {
+            return crate::repos::run(env, &common, json, from.as_deref());
+        }
         _ => {}
     }
     let base = base(env, &common)?;

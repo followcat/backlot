@@ -28,6 +28,15 @@ const PREFERENCE: &[(&str, &str)] = &[
     ("fake", "m"),
 ];
 
+/// The model the draft assigns a runner — `runners --json`'s
+/// `models` list source, so the table and the dialog agree.
+pub(crate) fn draft_model(runner: &str) -> Option<&'static str> {
+    PREFERENCE
+        .iter()
+        .find(|(r, _)| *r == runner)
+        .map(|(_, m)| *m)
+}
+
 /// The drafted cast: the first installed runner seats every fixed
 /// role and both candidates, with its draft model — `cursor`,
 /// `devin` and `cmd` take no effort (the cast rule).

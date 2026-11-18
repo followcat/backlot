@@ -322,3 +322,71 @@ fn the_command_needs_nothing_but_args() {
     assert!(out.contains("claude"), "{out}");
     crate::cli_testkit::usage(&env, "runners --bogus");
 }
+
+/// `runners --json` (G4): the same verdicts as a document — every
+/// runner's status, version, path and `needs_path`, plus the models
+/// and effort levels the New Studio dialog's cast table cycles.
+/// `fake` ships no binary: it gets a row only where its `tools/`
+/// script exists — a dev build, as here.
+#[test]
+fn the_runners_json_lists_models_and_efforts() {
+    let root = dir("json");
+    let home = root.join("home");
+    let bin = root.join("bin");
+    exe(&bin, "claude", "echo 2.1.330");
+    let env = env(&[
+        ("PATH", &bin.to_string_lossy()),
+        ("HOME", &home.to_string_lossy()),
+    ]);
+    let out = detect::report_json(&env).unwrap();
+    let rows: serde_json::Value =
+        serde_json::from_str(&out).unwrap_or_else(|e| panic!("bad json '{out}': {e}"));
+    let rows = rows.as_array().unwrap();
+    let row = |runner: &str| {
+        rows.iter()
+            .find(|r| r["runner"] == runner)
+            .unwrap_or_else(|| panic!("no row for {runner}:\n{out}"))
+    };
+    // The detection rows match the table's verdicts.
+    let claude = row("claude");
+    assert_eq!(claude["status"], "found");
+    assert_eq!(claude["version"], "2.1.330");
+    assert_eq!(
+        claude["path"],
+        bin.join("claude").to_string_lossy().as_ref()
+    );
+    assert_eq!(claude["needs_path"], false);
+    assert_eq!(claude["models"], serde_json::json!(["sonnet"]));
+    assert_eq!(
+        claude["efforts"],
+        serde_json::json!(["low", "medium", "high"])
+    );
+    // A missing runner reports `missing`, no path — and still lists
+    // its draft model so the dialog's free-text hint has a start.
+    let codex = row("codex");
+    assert_eq!(codex["status"], "missing");
+    assert!(codex["path"].is_null());
+    assert_eq!(codex["models"], serde_json::json!(["gpt-5.3-codex"]));
+    // `cursor`, `devin`, `cmd` carry no effort flag (the cast rule).
+    for runner in ["cursor", "devin", "cmd"] {
+        assert_eq!(row(runner)["efforts"], serde_json::json!([]), "{runner}");
+    }
+    assert_eq!(
+        row("cline")["efforts"],
+        serde_json::json!(["none", "low", "medium", "high", "xhigh"])
+    );
+    // `fake` on a dev build: its tools script, found, with efforts.
+    let fake = row("fake");
+    assert_eq!(fake["status"], "found");
+    assert!(
+        fake["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("tools/fake-runner.sh"),
+        "{fake}"
+    );
+    assert_eq!(
+        fake["efforts"],
+        serde_json::json!(["low", "medium", "high"])
+    );
+}

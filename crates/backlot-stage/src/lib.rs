@@ -45,6 +45,7 @@ mod reasons;
 pub mod reconcile;
 mod relabel;
 pub mod render;
+mod repos;
 mod runners;
 mod sample;
 mod sendfail;
@@ -132,6 +133,8 @@ mod range_tests;
 mod render_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;
+#[cfg(test)]
+mod repos_tests;
 #[cfg(test)]
 mod role_cmd_tests;
 #[cfg(test)]
