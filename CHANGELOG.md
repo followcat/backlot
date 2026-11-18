@@ -10,6 +10,34 @@ v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **The native New Studio dialog.** Every studio-mode new-studio entry —
+  `Ctrl+B N` over a studio, `n` on the opening page or in the Call Sheet, the
+  `+ new studio` frame (a click now opens it), and the sidebar's
+  `new · <machine>` with that machine preselected — opens a four-step overlay
+  in the client instead of the cooked-stdin wizard popup: **1 Machine & Repo**
+  (Local plus every attached machine, probed for reachability and
+  `backlot --version`, `Ctrl+R` re-checks; the repository browser has a
+  breadcrumb, a `/` filter and `→`/`←` descend/ascend), **2 ID & Title** (live
+  validation and a duplicate check against that machine's studios), **3 Cast**
+  (per-role runner/model/effort cycled among what the target machine detected,
+  actor candidates added with `a` and removed with `x`, `Ctrl+E` edits the
+  generated cast.toml in `$EDITOR`), **4 Check & Start** (`studio new
+  --dry-run`, then `Enter` creates on the target machine and optionally starts
+  its stage, after which the new producer's terminal takes focus). `Esc` steps
+  back through the steps and then closes; `Ctrl+C` cancels from any step. A
+  studio can now be created on any attached machine: every question is answered
+  by running `backlot … --json` there over `terminal.run`, remote repository
+  paths are never checked against the local disk, and the generated cast
+  travels on stdin (`studio new --cast -`) so no file is left behind. In a
+  terminal, `backlot studio new --interactive` still asks the same questions.
+- `backlot repos --json [--from <dir>]` lists a directory's entries for the
+  dialog — each classified `git_ready`, `git_empty` or `dir`, with the studio
+  that uses it — defaulting to `$HOME`.
+- `backlot runners --json` prints the runner detection as JSON, with the
+  models and efforts backlot knows per runner.
+
 ### Changed
 
 - **The expanded Hollywood bar is the Call Sheet.** One list of everything

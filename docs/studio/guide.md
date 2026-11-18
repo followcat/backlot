@@ -116,14 +116,24 @@ backlot
 ```
 
 With no studio, `backlot` opens on the **opening page**: one line of what it is, then its
-actions. Press `n` — a popup runs `backlot studio new --interactive`, which asks for the
-repository, the studio id (the repository's directory name), the title and the cast. The cast is
-drafted from the agent CLIs the wizard can find on the machine — not only the `PATH` it
-inherited — shown to you, and you accept it, edit it in `$EDITOR` or refuse it — nothing is
-written before you accept. The wizard then offers to start the stage. When a studio exists, the
-page is gone and the studio is current.
+actions. Press `n` — the **New Studio dialog** opens, a four-step overlay that runs in the
+client itself: **1 Machine & Repo** (Local plus every attached machine, each checked for
+reachability and `backlot --version`; a machine without backlot or offline says why and cannot
+be picked), **2 ID & Title** (the repository's name, validated live), **3 Cast** (the runners
+the target machine's `backlot runners --json` found, cycled per role; `Ctrl+E` edits the
+generated cast.toml in `$EDITOR`), **4 Check & Start** (`studio new --dry-run` on the target
+machine, then `Enter` creates — over hc's `terminal.run` when the machine is remote — and
+optionally starts the stage before the new producer's terminal takes focus). `Esc` steps back
+and then closes; `Ctrl+C` cancels from any step. When a studio exists, the page is gone and the
+studio is current.
 
-The repository question is a full-screen picker when stdin and stdout are terminals (the plain
+The repository list comes from `backlot repos --json` on the target machine — a breadcrumb, a
+`/` filter, `→` to descend and `←` to ascend. A git repository without commits is disabled with
+its hint, a repository another studio uses warns, and a remote path is never checked against the
+local disk.
+
+In a terminal, `backlot studio new --interactive` asks the same questions. Its repository
+question is a full-screen picker when stdin and stdout are terminals (the plain
 `repository:` line otherwise, so scripted input still works):
 
 ```
@@ -163,13 +173,17 @@ the fallback reached is marked `needs PATH`, and accepting the cast writes
 yourself is never rewritten (a warning instead when it still cannot reach the binary).
 
 `backlot runners` prints the same table whenever a role says "not found" — runner, status,
-version, path, needs PATH — read-only, with no core needed.
+version, path, needs PATH — read-only, with no core needed. `backlot runners --json` prints the
+detection as JSON, with the models and efforts backlot knows per runner — it is what the New
+Studio dialog's cast table cycles. `backlot repos --json [--from <dir>]` lists a directory's
+entries the same way — each classified `git_ready`, `git_empty` or `dir`, with the studio that
+uses it — and is how the dialog browses a remote machine's repositories.
 
 The page only ever appears when there is no studio. `backlot` waits for its first `backlot`
 read before drawing it (two seconds at most), so a client with studios never flashes the page
 on its way in; with studios it opens the Hollywood bar instead (see below). Once the page has
 gone it never comes back over a studio: the `new_workspace` action — the sidebar's `new` row,
-the workspace keybind and the mobile switcher's target — runs the new-studio wizard directly
+the workspace keybind and the mobile switcher's target — opens the new-studio dialog directly
 when a studio exists, and shows the page only when none does. `Esc` hides the page for the
 session.
 
@@ -188,7 +202,9 @@ backlot stage start
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
 `--studio` flag or reads `BACKLOT_STUDIO`. `--repo` must be an absolute path. `--title` is a
 display name. With `--interactive` instead, whatever the flags leave out is asked for on the
-terminal with the same defaults as the opening-page wizard.
+terminal with the same defaults as the native dialog. `--cast -` reads the cast file from
+stdin — how the client's dialog hands a generated cast to a remote `studio new` without leaving
+a file on that machine.
 
 `backlot stage start` starts `backlot-stage`, a terminal on the same core that runs the
 scheduling loop. It is idempotent — a second `stage start` says it is already running. The stage
@@ -359,13 +375,14 @@ The expanded strip, top to bottom:
 
 Keys in the expanded bar: `←`/`→` (or `h`/`l`) move between the frames, the new-studio frame
 included; `↓`/`↑` (or `j`/`k`) leave the frames for the cards and the input line and come back;
-`Enter` opens the selected frame (a studio → its producer, the new-studio frame → the wizard,
-the title → `bl-hollywood`); `n` opens the new-studio wizard from anywhere in the bar, which
-collapses first so the popup is never under it. `a` applies and `c` cancels the selected card,
+`Enter` opens the selected frame (a studio → its producer, the new-studio frame → the dialog,
+the title → `bl-hollywood`); `n` opens the new-studio dialog from anywhere in the bar, which
+collapses first so the overlay is never under it. `a` applies and `c` cancels the selected card,
 `s` is Show me, `i` edits the `tell hollywood` line, `x` hides, `Esc` collapses. The frames
 scroll sideways when there are more than fit (a `‹` or `›` at the band edge says so) and the
-wheel does the same under the pointer; the card chips, the input line and the frame clicks take
-the mouse. On a narrow screen the frames sit two per row — one under 40 columns — and the band
+wheel does the same under the pointer; the card chips and the input line take the mouse, and a
+click on the new-studio frame opens the dialog while other rows only select. On a narrow screen
+the frames sit two per row — one under 40 columns — and the band
 scrolls vertically.
 
 Set the section up by hand or let the command write it:
@@ -407,8 +424,11 @@ on its machine, like a sidebar row does. A machine without `backlot` installed s
 notice instead of running anything.
 
 Hollywood itself — the headline, the cards and the `tell hollywood` line — stays this core's;
-only the frame list spans machines. And `n` still creates a studio on this core: choosing the
-machine at creation, and installing or upgrading `backlot` on a machine, come later.
+only the frame list spans machines. The New Studio dialog's first step picks the machine:
+`Local` or any attached machine — the create, the dry run and the `stage start` all run there
+over `terminal.run`, and the generated cast travels on stdin (`studio new --cast -`). A machine
+without `backlot` cannot be picked; installing or upgrading `backlot` on a machine is still
+manual.
 
 ## Permission prompts
 
