@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 use super::probe;
 use crate::cli::Env;
 
-pub use super::detect_report::report;
+pub use super::detect_report::{report, report_json};
 
 /// The runners `backlot runners` lists and the wizard's detection
 /// walks — `fake` ships in `tools/`, never detected.

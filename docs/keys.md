@@ -65,7 +65,7 @@ drawing the page — at most two seconds — so a client that already has studio
 
 | Keys | Action |
 |---|---|
-| `n` | New studio — a popup running `backlot studio new --interactive` |
+| `n` | New studio — the native four-step dialog (machine & repo, id & title, cast, check & start) |
 | `h` | Tell Hollywood — the input line, only when `[hollywood]` is configured |
 | `s` | Start the stage, only when it is not running |
 | `q` | Detach |
@@ -73,7 +73,7 @@ drawing the page — at most two seconds — so a client that already has studio
 
 `new_workspace` shows the page instead of an empty workspace — in studio mode every new terminal
 belongs to a studio, so the empty-workspace flow does not apply. With at least one studio it
-never covers the studios: it runs the new-studio wizard directly instead.
+never covers the studios: it opens the new-studio dialog directly instead.
 
 ## The Hollywood bar
 
@@ -100,7 +100,7 @@ or `expanded`. While the band is expanded it owns these keys:
 | `r` | On a stage row: `backlot stage start` on that machine |
 | `a` / `x` / `s` | On a card row: `backlot card apply` / `cancel` / `show` |
 | `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
-| `n` | New studio — the wizard, with the bar collapsed first |
+| `n` | New studio — the dialog, with the bar collapsed first |
 | `i` | Edit the `tell hollywood` line, with an agent |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
@@ -108,7 +108,29 @@ or `expanded`. While the band is expanded it owns these keys:
 
 A click on a row or a chip selects it — activation stays on the keys; a click on the input line
 opens it for editing, and the wheel scrolls the frames sideways or the waiting rows under the
-pointer.
+pointer. The `+ new studio` frame is the exception: it is a button, and a click opens the
+new-studio dialog directly.
+
+## The New Studio dialog
+
+Every studio-mode new-studio entry — `Ctrl+B N` over a studio, `n` on the opening page or in the
+Call Sheet, the `+ new studio` frame, the sidebar's `new · <machine>` (which preselects that
+machine) — opens the same four-step overlay: **1 Machine & Repo**, **2 ID & Title**, **3 Cast**,
+**4 Check & Start**. `Esc` steps back (4→3→2→1, then closes with the values kept), `Ctrl+C`
+cancels from any step, and a click outside closes it. Step 1's `Ctrl+R` re-checks the machines'
+reachability and `backlot --version`.
+
+| Step | Keys |
+|---|---|
+| 1 Machine & Repo | `Tab` between the machine list and the repository list; `↑`/`↓` move; `→`/`←` descend/ascend a directory; `/` filters; `Enter` picks the repository. A machine without `backlot`, or offline, shows its reason and cannot be picked; a git repository without commits is disabled with its hint; a repository another studio uses warns. |
+| 2 ID & Title | `Tab`/`↑`/`↓` between fields; the id validates live against `[a-z0-9][a-z0-9_-]*` and that machine's existing studios; `Enter` continues. |
+| 3 Cast | `↑`/`↓` pick the role, `←`/`→` cycle the runner/model/effort among what `backlot runners --json` found on the target machine; `a` adds an actor candidate, `x` removes one; `e` on a model cell types a free-text model; `Ctrl+E` edits the generated cast.toml in `$EDITOR` and reloads it; `Ctrl+R` re-probes. |
+| 4 Check & Start | `Space` toggles `[x] Ensure stage is running`; `Enter` runs `backlot studio new` on the target machine — over hc's `terminal.run` when it is remote — then `stage start` when checked, and the new producer's terminal takes focus. |
+
+The dialog creates a studio on any attached machine: every question is answered by running
+`backlot … --json` on that machine, so a remote repository path is never checked against the
+local disk. A remote studio's cast travels on stdin (`studio new --cast -`) — no file is left
+behind. In a terminal, `backlot studio new --interactive` still asks the same questions.
 
 ## Studio keys
 

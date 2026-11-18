@@ -69,14 +69,18 @@ impl App {
                     }
                     // S1's mouse is select-only: a click on a row or
                     // a chip selects it (S5 adds the activate paths).
+                    // The `+ new studio` frame is a button, not a
+                    // row — its click opens the native dialog (U6b).
                     let hit = self
                         .hollywood_hits
                         .rows
                         .iter()
                         .find(|(rect, _)| contains(*rect, point))
                         .map(|(_, target)| target.clone());
-                    if let Some(target) = hit {
-                        self.hollywood.selected = Some(target);
+                    match hit {
+                        Some(crate::hollywood::Target::NewStudio) => self.hollywood_new_studio(),
+                        Some(target) => self.hollywood.selected = Some(target),
+                        None => {}
                     }
                 }
                 MouseEventKind::ScrollUp => {

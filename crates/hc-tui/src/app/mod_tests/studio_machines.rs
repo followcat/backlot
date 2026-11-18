@@ -4,7 +4,7 @@
 //! `--plain` keeps herdr's endpoint sidebar exactly. Neutral fixtures
 //! only (`host-b`, `acme-shop`, `alice`).
 
-use super::endpoint_nav::app_multi;
+use super::endpoint_nav::{app_multi, remote};
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput};
 use crate::sidebar::fixture::{agent, machine, term};
@@ -208,6 +208,48 @@ async fn the_cast_hit_rows_focus_and_the_others_row_expands() {
         others.y,
     ));
     assert!(app.studio.others_expanded);
+}
+
+#[tokio::test]
+async fn the_new_dot_row_opens_the_dialog_with_the_active_machine() {
+    // U6b: `new · <machine>` is the endpoint sidebar's new-studio
+    // entry — its click opens the native dialog with the active
+    // endpoint's machine preselected.
+    let mut app = two_machine_studio_app();
+    app.projection.active_endpoint_id = remote("host-b");
+    app.area = (120, 24);
+    draw_to(&mut app, 120, 24);
+    let rect = app.hit_map.new_workspace;
+    assert!(!rect.is_empty(), "the `new ·` row has a hit");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        rect.x + 1,
+        rect.y,
+    ));
+    let d = app.new_studio.as_ref().expect("the dialog opened");
+    assert_eq!(d.machine_sel, 1, "host-b preselected");
+    assert_eq!(d.pane, crate::new_studio::Step1Pane::Repos);
+}
+
+#[tokio::test]
+async fn the_classic_new_row_keeps_the_workspace_flow() {
+    // One endpoint — the classic ` new` footer — still routes through
+    // `new_workspace`: studioless lands on the opening page rather
+    // than on the dialog directly.
+    let mut app = app_multi(vec![term("t1")], vec![]);
+    app.set_plain(false);
+    app.opening.settled = true;
+    app.area = (120, 24);
+    draw_to(&mut app, 120, 24);
+    let rect = app.hit_map.new_workspace;
+    assert!(!rect.is_empty(), "the classic ` new` row has a hit");
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        rect.x + 1,
+        rect.y,
+    ));
+    assert!(app.new_studio.is_none(), "no direct dialog");
+    assert!(app.opening_visible(), "the opening page came up");
 }
 
 #[tokio::test]

@@ -326,6 +326,17 @@ pub(crate) fn backlot_help_groups(
             ],
         ),
         (
+            "new studio",
+            vec![
+                entry("tab / ↑↓ ←→", "pane · field · value"),
+                entry("/ → ←", "repo filter · descend · ascend"),
+                entry("a x e ^E", "cast add · remove · cell · file"),
+                entry("^R", "re-check machines or runners"),
+                entry("space ⏎", "start-stage · next step · create"),
+                entry("esc / ^C", "step back · cancel"),
+            ],
+        ),
+        (
             "glyph legend",
             vec![
                 entry(

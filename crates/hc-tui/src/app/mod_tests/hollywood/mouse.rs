@@ -150,7 +150,7 @@ async fn an_outside_click_closes_the_show_me_view() {
 }
 
 #[tokio::test]
-async fn a_click_on_the_new_studio_frame_selects_it() {
+async fn a_click_on_the_new_studio_frame_opens_the_dialog() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
@@ -167,6 +167,6 @@ async fn a_click_on_the_new_studio_frame_selects_it() {
         frame.x + 2,
         frame.y,
     ));
-    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
-    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert!(app.new_studio.is_some(), "the native dialog opened");
+    assert!(app.popup_pending.is_none(), "the popup wizard is retired");
 }

@@ -302,3 +302,42 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         },
     ))
 }
+
+/// `runners [--json]` — the detection table or its G4 document.
+pub(crate) fn runners(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_RUNNERS)));
+        }
+        if common_flag(it, common, &arg, U_RUNNERS)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_RUNNERS)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::Runners { json }))
+}
+
+/// `repos [--json] [--from <dir>]` — the G4 directory listing.
+pub(crate) fn repos(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut json = false;
+    let mut from = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_REPOS)));
+        }
+        if common_flag(it, common, &arg, U_REPOS)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            "--from" => from = Some(it.value("--from", U_REPOS)?),
+            _ if eq(&arg, "--from").is_some() => from = eq(&arg, "--from").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REPOS)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::Repos { json, from }))
+}

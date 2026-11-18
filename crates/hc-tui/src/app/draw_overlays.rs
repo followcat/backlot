@@ -39,6 +39,7 @@ pub(super) fn render_overlays_and_cursor(
     // the context menu — Navigate can be the mode underneath it.
     let mode_bar = if app.help
         || app.dialog.is_some()
+        || app.new_studio.is_some()
         || app.menu.is_some()
         || app.navigator.is_some()
         || app.settings.is_some()
@@ -432,6 +433,27 @@ pub(super) fn render_overlays_and_cursor(
     }
     overlay_painted |= app.dialog.is_some();
     app.render_dialog(buf);
+    // The New Studio dialog dims like the help overlay and paints
+    // the same panel frame; its hit map feeds the next mouse press
+    // and its cursor wish owns the host cursor like the fields do.
+    app.ns_hits = if let Some(d) = app.new_studio.as_ref() {
+        overlay_painted = true;
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            cell.set_style(cell.style().add_modifier(Modifier::DIM));
+        }
+        crate::new_studio::render(buf, d, &app.shell.palette)
+    } else {
+        crate::new_studio::NsHits::default()
+    };
+    if let Some(cursor) = app.ns_hits.cursor.as_ref() {
+        app.want_cursor = CursorWish {
+            pos: cursor.visible.then_some((cursor.x, cursor.y)),
+            anchor: Some((cursor.x, cursor.y)),
+            shape: CursorShape::Default,
+            blinking: true,
+        };
+    }
     // The context menu is the topmost shell overlay; the reference
     // suppresses the host cursor while it is open.
     if let Some(menu) = &app.menu {

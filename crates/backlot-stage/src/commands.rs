@@ -97,8 +97,18 @@ pub(crate) struct CastFile {
 /// Read and validate a `--cast` file — the same checks `studio new`
 /// runs, shared by `--dry-run` and `hollywood propose studio-new`.
 pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
-    must_exist(path, "--cast")?;
-    let text = fs::read_to_string(path).map_err(|e| Fail::usage(format!("--cast: {e}")))?;
+    // `-` reads the cast from stdin — how the client's New Studio
+    // dialog hands a generated cast to a remote `studio new` without
+    // leaving a file on that machine.
+    let text = if path == Path::new("-") {
+        let mut buf = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin().lock(), &mut buf)
+            .map_err(|e| Fail::usage(format!("--cast -: {e}")))?;
+        buf
+    } else {
+        must_exist(path, "--cast")?;
+        fs::read_to_string(path).map_err(|e| Fail::usage(format!("--cast: {e}")))?
+    };
     let cast: CastFile = toml::from_str(&text)
         .map_err(|e| Fail::usage(format!("--cast {}: {e}", path.display())))?;
     // Zero stalls every waiting screen at once — the limit needs a
@@ -185,6 +195,14 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     Ok(cast)
 }
 
+/// Validate a `--cast` file for the client's New Studio dialog —
+/// the same checks `studio new` runs, with the failure's text.
+pub fn validate_cast_file(path: &Path) -> Result<(), String> {
+    read_cast(path)
+        .map(|_| ())
+        .map_err(|e| e.message().to_string())
+}
+
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, flag: &str) -> Result<T, Fail> {
     must_exist(path, flag)?;
     let text = fs::read_to_string(path).map_err(|e| Fail::usage(format!("{flag}: {e}")))?;
@@ -238,7 +256,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         | Cmd::StageStart
         | Cmd::StageRun
         | Cmd::StageWatch { .. }
-        | Cmd::Runners
+        | Cmd::Runners { .. }
+        | Cmd::Repos { .. }
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }

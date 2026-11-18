@@ -3,38 +3,10 @@
 //! `crate::opening`; the page is an overlay on the pane area, like
 //! the fullscreen panel — the terminals beneath stay attached.
 
-use std::collections::BTreeMap;
-
 use hc_vt::Key;
 
+use super::App;
 use super::input::TerminalKey;
-use super::popup::{POPUP_LABEL, PopupPending};
-use super::{App, creation::program_env};
-use crate::operations::Action;
-
-/// POSIX single-quote escaping for one shell word — a `'` becomes
-/// `'\''`: close the quote, literal quote, reopen. Every word the
-/// wizard line hands the shell passes through it.
-fn sh_quote(word: &str) -> String {
-    format!("'{}'", word.replace('\'', "'\\''"))
-}
-
-/// The wizard's command line inside the popup: `backlot studio new
-/// --interactive` plus the endpoint flags — a pure function so tests
-/// assert the argv without a `current_exe`.
-fn wizard_line(exe: &str, endpoint_args: &[String]) -> String {
-    let mut line = format!("{} studio new --interactive", sh_quote(exe));
-    for arg in endpoint_args {
-        line.push_str(&format!(" {}", sh_quote(arg)));
-    }
-    line
-}
-
-/// The wizard's draft is meant to be read: a `permission_profile`
-/// line already wraps at the default half-width popup. Ask for the
-/// large-popup size — still frame-clamped, so narrow terminals get
-/// the same shape relative to their pane.
-const WIZARD_POPUP: crate::popup_size::PopupSize = crate::popup_size::PopupSize::Percent(80);
 
 impl App {
     /// The first `backlot` read has landed: a value, an unwritten
@@ -195,126 +167,18 @@ impl App {
         }
     }
 
-    /// `n`: `backlot studio new --interactive` in a one-shot floating
-    /// terminal — the `type = "popup"` keybind path, shared by the
-    /// card's `n`, the layer's new-studio frame and `new_workspace`
-    /// over an existing studio. When the wizard created a studio the
-    /// publish lifts the mode latch and the page goes away on its own.
+    /// `n`: the native New Studio dialog (U6b) — shared by the
+    /// card's `n`, the Call Sheet's `n`/`+ new studio` and
+    /// `new_workspace` over an existing studio. Over a studio its
+    /// machine is the preselected target; the page goes away on its
+    /// own when the create's publish lifts the mode latch.
     pub(super) fn opening_new_studio(&mut self) {
-        if self
-            .popup_pending
+        let machine = self
+            .studio
+            .current
             .as_ref()
-            .is_some_and(|pending| pending.persistent)
-        {
-            return;
-        }
-        if self.popup.is_some() || self.popup_pending.is_some() {
-            self.dismiss_popup();
-        }
-        let params = match self.wizard_params() {
-            Ok(params) => params,
-            Err(message) => {
-                self.show_notice("New studio", &message);
-                return;
-            }
-        };
-        self.popup_pending = Some(PopupPending {
-            width: Some(WIZARD_POPUP),
-            height: Some(WIZARD_POPUP),
-            persistent: false,
-            owner: String::new(),
-            command: String::new(),
-        });
-        self.submit_action(Action::RunPopup { params });
-    }
-
-    /// The wizard's `terminal.run` parameters — split out so tests
-    /// assert them without a wire. `on` is never set: the wizard must
-    /// write where `backlot <endpoint args> studio new` writes, and
-    /// that is the host the popup itself lands on.
-    ///
-    /// Local endpoint: this exe, this cwd — the user's launch
-    /// directory is the wizard's repository default — and the
-    /// client's `BACKLOT_STATE_DIR` forwarded (the spawned terminal
-    /// inherits the core's env, not ours).
-    ///
-    /// Remote endpoint: the popup already runs on the core's host —
-    /// the SSH target — where this exe's path, this cwd and
-    /// `--remote <target>` all mean nothing. There `backlot
-    /// --session <s>` (from that host's PATH) reaches the same
-    /// ledger: `link::state_dir` keys the base dir by the core id
-    /// `hello` reports, and the same core answers `--session`. The
-    /// line says so when `backlot` is missing rather than failing
-    /// silently.
-    pub(crate) fn wizard_params(&self) -> Result<hc_proto::terminal::RunParams, String> {
-        let mut env = program_env();
-        let (line, cwd) = if self.panel_endpoint_args.iter().any(|a| a == "--remote") {
-            // Drop `--remote <target>` — on that host the pair is a
-            // loop back out. Everything else (`--session`) survives.
-            let mut args = Vec::with_capacity(self.panel_endpoint_args.len());
-            let mut skip = false;
-            for arg in &self.panel_endpoint_args {
-                if skip {
-                    skip = false;
-                    continue;
-                }
-                if arg == "--remote" {
-                    skip = true;
-                    continue;
-                }
-                args.push(arg.clone());
-            }
-            (
-                format!(
-                    "if ! command -v backlot >/dev/null 2>&1; then \
-                     echo 'studio new needs backlot on this host — \
-                     install it or run it where it is'; \
-                     exec ${{SHELL:-sh}}; fi; {}",
-                    wizard_line("backlot", &args)
-                ),
-                None,
-            )
-        } else {
-            if let Ok(dir) = std::env::var("BACKLOT_STATE_DIR") {
-                env.insert("BACKLOT_STATE_DIR".into(), dir);
-            }
-            let exe =
-                std::env::current_exe().map_err(|_| "cannot find this executable".to_string())?;
-            (
-                wizard_line(&exe.to_string_lossy(), &self.panel_endpoint_args),
-                std::env::current_dir()
-                    .ok()
-                    .map(|dir| dir.to_string_lossy().into_owned()),
-            )
-        };
-        let mut params = hc_proto::terminal::RunParams {
-            line: Some(line),
-            rm: true,
-            keep: false,
-            no_notify: true,
-            no_parent: true,
-            env,
-            labels: BTreeMap::from([(POPUP_LABEL.into(), "1".into())]),
-            display: self.host_facts.display(),
-            cwd,
-            ..Default::default()
-        };
-        // The program's pty must start at the popup's cells, like
-        // `spawn_popup`: left unset it takes the client's display and
-        // the wizard's output never scrolls into the visible rows. The
-        // size matches the `PopupPending` request — the same geometry
-        // `on_popup_spawned` resolves for the frame.
-        if let Some(geometry) = crate::popup_size::resolve_popup_geometry(
-            Some(WIZARD_POPUP),
-            Some(WIZARD_POPUP),
-            self.frame_area(),
-        ) {
-            params.size = Some(hc_proto::terminal::InitialSize {
-                cols: geometry.terminal_cols,
-                rows: geometry.terminal_rows,
-            });
-        }
-        Ok(params)
+            .and_then(|key| key.machine.clone());
+        self.new_studio_open(machine);
     }
 
     /// `s`: `backlot stage start` on this core — U6a starts stages
@@ -332,7 +196,3 @@ impl App {
         });
     }
 }
-
-#[cfg(test)]
-#[path = "opening_tests.rs"]
-mod tests;

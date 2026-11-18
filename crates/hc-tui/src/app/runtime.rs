@@ -303,6 +303,13 @@ impl App {
                         kind = WakeKind::Hollywood;
                     }
                 },
+                reply = self.ns_rx.recv() => {
+                    if let Some(reply) = reply {
+                        self.on_ns_reply(reply);
+                        dirty = true;
+                        kind = WakeKind::Panel;
+                    }
+                },
                 _ = async {
                     match wake {
                         Some(deadline) => tokio::time::sleep_until(deadline.into()).await,

@@ -55,6 +55,7 @@ mod keybind_help;
 pub mod layout;
 
 mod hollywood;
+mod new_studio;
 mod opening;
 pub mod operations;
 pub mod own_theme;

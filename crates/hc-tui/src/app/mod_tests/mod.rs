@@ -26,6 +26,7 @@ mod m4s4;
 mod m4s5;
 mod mouse_selection;
 mod narrow;
+mod new_studio;
 mod observer_policy_tests;
 mod opening;
 mod own_theme;

@@ -243,7 +243,7 @@ async fn new_workspace_brings_the_page_back() {
 }
 
 #[tokio::test]
-async fn new_workspace_over_a_studio_opens_the_wizard() {
+async fn new_workspace_over_a_studio_opens_the_dialog() {
     let mut app = no_doc_app();
     publish_summary(&mut app, one_studio());
     assert!(!app.opening_visible());
@@ -252,13 +252,11 @@ async fn new_workspace_over_a_studio_opens_the_wizard() {
         !app.opening_visible(),
         "the card must never come up over a studio"
     );
-    let pending = app.popup_pending.as_ref().expect("the wizard popup");
-    assert!(!pending.persistent);
-    assert_eq!(
-        pending.width,
-        Some(crate::popup_size::PopupSize::Percent(80)),
-        "the wizard's large popup"
+    assert!(
+        app.new_studio.is_some(),
+        "the native New Studio dialog opens over a studio"
     );
+    assert!(app.popup_pending.is_none(), "no popup wizard any more");
 }
 
 #[tokio::test]
@@ -268,116 +266,32 @@ async fn new_workspace_without_a_studio_shows_the_card() {
     assert!(!app.opening_visible());
     app.on_action(crate::input::KeybindAction::NewWorkspace, 80);
     assert!(app.opening_visible());
-    assert!(app.popup_pending.is_none(), "the card owns the new flow");
+    assert!(app.new_studio.is_none(), "the card owns the new flow");
 }
 
 #[tokio::test]
 async fn plain_new_workspace_stays_herdrs() {
     let mut app = no_doc_app();
     app.set_plain(true);
-    // `--plain`: the action is herdr's — no page, no wizard, and the
+    // `--plain`: the action is herdr's — no page, no dialog, and the
     // action reaches the layout document path (a real workspace
     // create fails here only for lack of an operations wire).
     app.on_action(crate::input::KeybindAction::NewWorkspace, 80);
     assert!(!app.opening_visible());
-    assert!(app.popup_pending.is_none(), "no wizard outside studio mode");
+    assert!(app.new_studio.is_none(), "no dialog outside studio mode");
 }
 
 // ---------- the keys ----------
 
 #[tokio::test]
-async fn n_arms_the_wizard_popup() {
+async fn n_opens_the_new_studio_dialog() {
     let mut app = no_doc_app();
     key(&mut app, hc_vt::Key::Char('n'));
-    let pending = app.popup_pending.as_ref().expect("the run is armed");
-    assert!(!pending.persistent);
-    // The action went to the operations queue — or, without a wire
-    // in tests, to a notice; the pending geometry is what matters.
-}
-
-// ---------- the wizard's RunParams (U2 round 1) ----------
-
-#[tokio::test]
-async fn the_wizard_never_targets_the_focused_machine() {
-    let mut app = no_doc_app();
-    // A focused terminal on another host must not pull the wizard
-    // onto that machine: it writes where `backlot` runs it.
-    app.focused = Some("host-b/tab:2:work".into());
-    let params = app.wizard_params().expect("params build");
-    assert!(params.on.is_none(), "{:?}", params.on);
-}
-
-#[tokio::test]
-async fn a_local_endpoint_wizard_uses_this_exe_and_cwd() {
-    let mut app = no_doc_app();
-    app.panel_endpoint_args = vec!["--session".into(), "s1".into()];
-    let params = app.wizard_params().expect("params build");
-    let line = params.line.expect("a line");
-    let exe = std::env::current_exe()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    assert!(
-        line.starts_with(&format!("'{exe}' studio new --interactive")),
-        "{line}"
-    );
-    assert!(line.contains("'--session' 's1'"), "{line}");
-    assert_eq!(
-        params.cwd.as_deref(),
-        Some(std::env::current_dir().unwrap().to_str().unwrap())
-    );
-    assert!(params.on.is_none());
-}
-
-#[tokio::test]
-async fn the_wizard_pty_starts_at_the_large_popup_size() {
-    let mut app = no_doc_app();
-    app.area = (120, 40);
-    let params = app.wizard_params().expect("params build");
-    let size = params.size.expect("the wizard's pty size");
-    let frame = app.frame_area();
-    // The draft is meant to be read: the popup asks for ~80% of the
-    // frame, not the default half — and it is clamped inside it.
-    assert!(
-        size.cols > frame.width / 2 && size.rows > frame.height / 2,
-        "size {size:?} should beat the half-size default on frame {frame:?}"
-    );
-    assert!(
-        size.cols <= frame.width && size.rows <= frame.height,
-        "size {size:?} must stay inside frame {frame:?}"
-    );
-}
-
-#[tokio::test]
-async fn a_remote_endpoint_wizard_uses_that_hosts_backlot() {
-    let mut app = no_doc_app();
-    app.panel_endpoint_args = vec![
-        "--remote".into(),
-        "host-a".into(),
-        "--session".into(),
-        "s1".into(),
-    ];
-    let params = app.wizard_params().expect("params build");
-    let line = params.line.expect("a line");
-    // The popup runs on the core's host — the SSH target: this
-    // exe's path, this cwd and `--remote <target>` all mean nothing
-    // there. `backlot` from that host's PATH with `--session` alone
-    // reaches the same ledger.
-    assert!(!line.contains("--remote"), "{line}");
-    assert!(!line.contains("host-a"), "{line}");
-    let exe = std::env::current_exe()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
-    assert!(!line.contains(&exe), "{line}");
-    assert!(
-        line.contains("'backlot' studio new --interactive '--session' 's1'"),
-        "{line}"
-    );
-    // A missing `backlot` there is said, not failed silently.
-    assert!(line.contains("command -v backlot"), "{line}");
-    assert!(params.cwd.is_none(), "{:?}", params.cwd);
-    assert!(params.on.is_none(), "{:?}", params.on);
+    assert!(app.new_studio.is_some(), "n opened the dialog");
+    assert!(app.popup_pending.is_none(), "no popup is armed");
+    // Esc on step 1 closes it — the Esc rule ends at closed.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.new_studio.is_none());
 }
 
 #[tokio::test]
