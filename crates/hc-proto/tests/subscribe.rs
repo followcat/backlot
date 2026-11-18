@@ -61,6 +61,7 @@ async fn subscribe_params_encode_filters() {
         terminal: Some("t7".into()),
         children_of: Some("t3".into()),
         labels: [("herdr.space".to_string(), "work".to_string())].into(),
+        ..SubscribeParams::default()
     };
     let sub = opening(read, write, &p).await;
     assert!(sub.filtered());
