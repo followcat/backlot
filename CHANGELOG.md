@@ -6,6 +6,8 @@ All notable changes to hc-tui are documented here. The format follows
 
 ## Unreleased
 
+## 0.1.15 — 2026-11-18
+
 ### Fixed
 
 - A program that uses synchronized output (`CSI ? 2026 h` … `l`, as both
