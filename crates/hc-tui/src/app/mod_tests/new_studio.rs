@@ -84,7 +84,7 @@ fn repos_json() -> String {
             { "name": "beta-tools", "path": "/home/user/beta-tools",
               "kind": "git_empty", "in_use_studio": null, "branch": null },
             { "name": "taken", "path": "/home/user/taken",
-              "kind": "git_ready", "in_use_studio": "taken-st", "branch": null },
+              "kind": "git_ready", "in_use_studio": "taken-stud-tool", "branch": null },
             { "name": "notes", "path": "/home/user/notes",
               "kind": "dir", "in_use_studio": null, "branch": null }
         ]
@@ -254,8 +254,11 @@ async fn an_in_use_repo_warns_but_passes() {
     let (mut app, _) = dialog_app().await;
     let d = app.new_studio.as_mut().unwrap();
     d.pane = Step1Pane::Repos;
-    d.repos.sel = 2; // taken — in use by taken-st.
-    assert_eq!(d.repo().unwrap().in_use_studio.as_deref(), Some("taken-st"));
+    d.repos.sel = 2; // taken — in use by taken-stud-tool.
+    assert_eq!(
+        d.repo().unwrap().in_use_studio.as_deref(),
+        Some("taken-stud-tool")
+    );
     assert!(
         d.step1_enter_error().is_none(),
         "in-use is a warning, not a gate"
@@ -626,4 +629,94 @@ async fn a_valid_editor_file_replaces_the_cast() {
     assert_eq!(d.cast.custom.as_deref(), Some(cast));
     assert!(d.cast.custom_error.is_none());
     assert!(!file.exists());
+}
+
+// ---------- round 2: the selection covers text, `…` truncates, the
+// strip collapses ----------
+
+/// The bg of `needle`'s first cell inside the dialog rect
+/// (`app.ns_hits.area` from the last draw).
+fn cell_bg_in_dialog(
+    b: &ratatui::backend::TestBackend,
+    area: ratatui::layout::Rect,
+    needle: &str,
+) -> Option<ratatui::style::Color> {
+    let buf = b.buffer();
+    for y in area.y..area.bottom() {
+        let line: String = (area.x..area.right())
+            .map(|x| buf[(x, y)].symbol())
+            .collect();
+        if let Some(col) = line.find(needle) {
+            return Some(buf[(area.x + col as u16, y)].bg);
+        }
+    }
+    None
+}
+
+/// The bg of `needle`'s first cell, on the row holding `row_needle`.
+fn cell_bg_on_row(
+    b: &ratatui::backend::TestBackend,
+    area: ratatui::layout::Rect,
+    row_needle: &str,
+    needle: &str,
+) -> Option<ratatui::style::Color> {
+    let buf = b.buffer();
+    for y in area.y..area.bottom() {
+        let line: String = (area.x..area.right())
+            .map(|x| buf[(x, y)].symbol())
+            .collect();
+        if line.contains(row_needle) {
+            let col = line.find(needle)?;
+            return Some(buf[(area.x + col as u16, y)].bg);
+        }
+    }
+    None
+}
+
+#[tokio::test]
+async fn the_selected_row_highlights_its_text_cells() {
+    let (mut app, _) = dialog_app().await;
+    let sel = app.shell.palette.surface0;
+    // Machines pane — the `Local` row's own text carries the selection.
+    let backend = draw_to(&mut app, 120, 36);
+    let area = app.ns_hits.area;
+    assert_eq!(cell_bg_in_dialog(&backend, area, "Local"), Some(sel));
+    // Repos pane — the selected repo's name and its note too.
+    key(&mut app, hc_vt::Key::Tab);
+    let backend = draw_to(&mut app, 120, 36);
+    let area = app.ns_hits.area;
+    assert_eq!(cell_bg_in_dialog(&backend, area, "acme-shop"), Some(sel));
+    assert_eq!(cell_bg_in_dialog(&backend, area, "git repo"), Some(sel));
+    // Cast table — the selected producer row's role and value cells.
+    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    let backend = draw_to(&mut app, 120, 36);
+    let area = app.ns_hits.area;
+    assert_eq!(cell_bg_in_dialog(&backend, area, "producer"), Some(sel));
+    assert_eq!(
+        cell_bg_on_row(&backend, area, "producer", "fake"),
+        Some(sel),
+        "the RUNNER cell on the selected row"
+    );
+}
+
+#[tokio::test]
+async fn narrow_widths_truncate_with_ellipsis_and_collapse_the_strip() {
+    let (mut app, _) = dialog_app().await;
+    for w in [40u16, 60] {
+        let backend = draw_to(&mut app, w, 24);
+        let text = screen_lines(&backend).join("\n");
+        assert!(
+            text.contains("1/4 Machine"),
+            "compact strip at {w}:\n{text}"
+        );
+        assert!(text.contains('…'), "ellipsis truncation at {w}:\n{text}");
+    }
+    let backend = draw_to(&mut app, 80, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(
+        text.contains("3 Cast") && text.contains("4 Check & Start"),
+        "the full strip at 80:\n{text}"
+    );
 }

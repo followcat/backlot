@@ -259,35 +259,61 @@ fn chrome(
         esc,
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
-    // Step tabs on the second row — the current one highlighted.
-    let mut x = inner.x;
-    let y = inner.y + 1;
-    for step in [
+    // Step tabs on the second row — the current one highlighted. When
+    // the four tabs cannot all fit the strip collapses to the compact
+    // `n/4 <label>` form so the current step is always readable.
+    let steps = [
         Step::MachineRepo,
         Step::IdTitle,
         Step::Cast,
         Step::CheckStart,
-    ] {
-        let label = format!(" {} {} ", step.index(), step.label());
-        let w = display_width(&label) as u16;
-        if x + w > inner.right() {
-            break;
+    ];
+    let tab_w: u16 = steps
+        .iter()
+        .map(|step| display_width(&format!(" {} {} ", step.index(), step.label())) as u16 + 1)
+        .sum();
+    let y = inner.y + 1;
+    if tab_w <= inner.width + 1 {
+        let mut x = inner.x;
+        for step in steps {
+            let label = format!(" {} {} ", step.index(), step.label());
+            let w = display_width(&label) as u16;
+            let style = if step == d.step {
+                Style::default()
+                    .fg(crate::chrome::dialogs::contrast(p))
+                    .bg(p.accent)
+                    .add_modifier(Modifier::BOLD)
+            } else if step.index() < d.step.index() {
+                Style::default().fg(p.subtext0).bg(p.panel_bg)
+            } else {
+                Style::default().fg(p.overlay0).bg(p.panel_bg)
+            };
+            put_text(
+                b,
+                x,
+                y,
+                w.min(inner.right().saturating_sub(x)),
+                &label,
+                style,
+            );
+            if step.index() < d.step.index() {
+                hints.push(Rect::new(x, y, w, 1), NsHit::StepTab(step));
+            }
+            x += w + 1;
         }
-        let style = if step == d.step {
+    } else {
+        let compact = format!(" {}/4 {} ", d.step.index(), d.step.label());
+        put_text(
+            b,
+            inner.x,
+            y,
+            inner.width,
+            &crate::chrome::text::truncate_end(&compact, inner.width as usize),
             Style::default()
                 .fg(crate::chrome::dialogs::contrast(p))
                 .bg(p.accent)
-                .add_modifier(Modifier::BOLD)
-        } else if step.index() < d.step.index() {
-            Style::default().fg(p.subtext0).bg(p.panel_bg)
-        } else {
-            Style::default().fg(p.overlay0).bg(p.panel_bg)
-        };
-        put_text(b, x, y, w, &label, style);
-        if step.index() < d.step.index() {
-            hints.push(Rect::new(x, y, w, 1), NsHit::StepTab(step));
-        }
-        x += w + 1;
+                .add_modifier(Modifier::BOLD),
+        );
     }
     // Bottom hint row — `fit_hints` picks the longest tier that fits.
     let hint_y = inner.bottom().saturating_sub(1);
@@ -312,6 +338,13 @@ fn chrome(
 /// `▸` row convention.
 fn selected_row(b: &mut Buffer, rect: Rect, p: &Palette) {
     b.set_style(rect, Style::default().bg(p.surface0));
+}
+
+/// The bg a row's text cells take: the selection surface when the
+/// row is highlighted, else the panel — the selection must cover
+/// the text, not just the padding around it.
+fn row_text_bg(hot: bool, p: &Palette) -> ratatui::style::Color {
+    if hot { p.surface0 } else { p.panel_bg }
 }
 
 /// The dialog's draw: dimmed backdrop is applied by the caller, the

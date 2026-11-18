@@ -53,7 +53,10 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 body.x,
                 y,
                 body.width,
-                &format!(" Detecting runners on {machine}…"),
+                &crate::chrome::text::truncate_end(
+                    &format!(" Detecting runners on {machine}…"),
+                    body.width as usize,
+                ),
                 Style::default().fg(p.overlay0).bg(p.panel_bg),
             );
             return;
@@ -136,9 +139,32 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         .add_modifier(Modifier::BOLD);
     let cols = columns(body.width);
     let role_w = role_col_width(body.width);
-    put_segment(b, body.x + 2, y, body.right(), "ROLE / CANDIDATE", header);
-    for (title, (_, off)) in [("RUNNER", cols[0]), ("MODEL", cols[1]), ("EFFORT", cols[2])] {
-        put_segment(b, body.x + off, y, body.right(), title, header);
+    // Each header stays inside its column span — the role label
+    // degrades to `ROLE` when the long form cannot fit.
+    let role_head_w = cols[0].1.saturating_sub(2) as usize;
+    put_text(
+        b,
+        body.x + 2,
+        y,
+        role_head_w as u16,
+        crate::chrome::text::fit_hints(&["ROLE / CANDIDATE", "ROLE"], role_head_w),
+        header,
+    );
+    let spans = [
+        ("RUNNER", cols[0].1, cols[1].1),
+        ("MODEL", cols[1].1, cols[2].1),
+        ("EFFORT", cols[2].1, body.width),
+    ];
+    for (title, off, end) in spans {
+        let w = end.saturating_sub(off);
+        put_text(
+            b,
+            body.x + off,
+            y,
+            w,
+            &crate::chrome::text::truncate_end(title, w as usize),
+            header,
+        );
     }
     y += 1;
 
@@ -152,16 +178,10 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         }
         let line = Rect::new(body.x, y, body.width, 1);
         let selected = i == d.cast.sel;
+        let rbg = super::row_text_bg(selected, p);
         if selected {
             selected_row(b, line, p);
-            put_text(
-                b,
-                body.x,
-                y,
-                1,
-                "▸",
-                Style::default().fg(p.accent).bg(p.panel_bg),
-            );
+            put_text(b, body.x, y, 1, "▸", Style::default().fg(p.accent).bg(rbg));
         }
         let role = if row.candidate {
             format!("{} (cand)", row.key)
@@ -173,8 +193,8 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             body.x + 2,
             y,
             (body.x + 2 + role_w).min(body.right()),
-            &role,
-            Style::default().fg(p.teal).bg(p.panel_bg),
+            &crate::chrome::text::truncate_end(&role, role_w.saturating_sub(1) as usize),
+            Style::default().fg(p.teal).bg(rbg),
         );
         hits.push(
             Rect::new(body.x + 2, y, role_w.min(body.width.saturating_sub(2)), 1),
@@ -221,13 +241,20 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                         format!("‹ {text} ›"),
                         Style::default()
                             .fg(p.accent)
-                            .bg(p.panel_bg)
+                            .bg(rbg)
                             .add_modifier(Modifier::BOLD),
                     )
                 } else {
-                    (text, Style::default().fg(p.text).bg(p.panel_bg))
+                    (text, Style::default().fg(p.text).bg(rbg))
                 };
-                put_segment(b, cell.x, y, cell.right(), &text, style);
+                put_segment(
+                    b,
+                    cell.x,
+                    y,
+                    cell.right(),
+                    &crate::chrome::text::truncate_end(&text, cell.width as usize),
+                    style,
+                );
             }
             hits.push(cell, NsHit::CastCell { row: i, col });
         }
@@ -240,7 +267,10 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             body.x + 2,
             y,
             body.width.saturating_sub(2),
-            " + [a] add candidate   [x] remove   rework cap: 2",
+            &crate::chrome::text::truncate_end(
+                " + [a] add candidate   [x] remove   rework cap: 2",
+                body.width.saturating_sub(2) as usize,
+            ),
             Style::default().fg(p.overlay0).bg(p.panel_bg),
         );
         // A hand-edited cast's error line sits right under it.

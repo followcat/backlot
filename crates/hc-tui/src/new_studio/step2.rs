@@ -26,12 +26,26 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         Some(branch) => format!(" Target: {machine} · {repo_path} (branch: {branch})"),
         None => format!(" Target: {machine} · {repo_path}"),
     };
-    put_text(b, body.x, y, body.width, &target, label);
+    put_text(
+        b,
+        body.x,
+        y,
+        body.width,
+        &crate::chrome::text::truncate_end(&target, body.width as usize),
+        label,
+    );
     y += 2;
 
     // Studio ID — the slug, with the live verdict on the right.
     let head = format!(" Studio ID   (slug on {machine}; unique across {machine} studios)");
-    put_text(b, body.x, y, body.width, &head, label);
+    put_text(
+        b,
+        body.x,
+        y,
+        body.width,
+        &crate::chrome::text::truncate_end(&head, body.width as usize),
+        label,
+    );
     y += 1;
     if y >= body.bottom() {
         return;
@@ -120,7 +134,10 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             body.x,
             y,
             body.width,
-            " Studio mode is 'standard' — the cast model has no full/light toggle yet",
+            &crate::chrome::text::truncate_end(
+                " Studio mode is 'standard' — the cast model has no full/light toggle yet",
+                body.width as usize,
+            ),
             dim,
         );
     }

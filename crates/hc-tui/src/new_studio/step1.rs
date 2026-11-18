@@ -8,7 +8,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::{MachineState, NewStudio, NsHit, NsHits, Probe, RepoKind, Step1Pane, selected_row};
+use super::{
+    MachineState, NewStudio, NsHit, NsHits, Probe, RepoKind, Step1Pane, row_text_bg, selected_row,
+};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::{put_right_text, put_segment, put_text};
 
@@ -93,7 +95,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         body.x,
         y,
         label_w,
-        "Target machine (tab to switch):",
+        &truncate("Target machine (tab to switch):", label_w as usize),
         label_style,
     );
     put_right_text(
@@ -108,16 +110,18 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     for (i, m) in d.machines.iter().take(machine_rows).enumerate() {
         let row = Rect::new(body.x, y, body.width, 1);
         let selected = i == d.machine_sel;
-        if selected && d.pane == Step1Pane::Machines {
+        let hot = selected && d.pane == Step1Pane::Machines;
+        let rbg = row_text_bg(hot, p);
+        if hot {
             selected_row(b, row, p);
         }
         let (dot, dot_style) = machine_dot(m, p);
         let name_style = if m.usable() {
-            Style::default().fg(p.text).bg(p.panel_bg)
+            Style::default().fg(p.text).bg(rbg)
         } else {
-            Style::default().fg(p.overlay0).bg(p.panel_bg)
+            Style::default().fg(p.overlay0).bg(rbg)
         };
-        let x = put_segment(b, row.x + 1, y, row.right(), dot, dot_style.bg(p.panel_bg));
+        let x = put_segment(b, row.x + 1, y, row.right(), dot, dot_style.bg(rbg));
         let name = format!(" {:<12}", m.label);
         // Same fixed-column rule as the repo rows: clip the name
         // inside its field and pin the detail to the field's end so
@@ -134,27 +138,20 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         );
         let (detail, ok) = machine_detail(m);
         let detail_style = if ok {
-            Style::default().fg(p.subtext0).bg(p.panel_bg)
+            Style::default().fg(p.subtext0).bg(rbg)
         } else {
-            Style::default().fg(p.peach).bg(p.panel_bg)
+            Style::default().fg(p.peach).bg(rbg)
         };
         put_text(
             b,
             detail_x,
             y,
             row.right().saturating_sub(detail_x),
-            &detail,
+            &truncate(&detail, row.right().saturating_sub(detail_x) as usize),
             detail_style,
         );
         if selected {
-            put_text(
-                b,
-                row.x,
-                y,
-                1,
-                "▸",
-                Style::default().fg(p.accent).bg(p.panel_bg),
-            );
+            put_text(b, row.x, y, 1, "▸", Style::default().fg(p.accent).bg(rbg));
         }
         hits.push(row, NsHit::Machine(i));
         y += 1;
@@ -173,7 +170,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         body.x,
         y,
         body.width,
-        &format!(" {head}"),
+        &truncate(&format!(" {head}"), body.width as usize),
         Style::default()
             .fg(p.accent)
             .bg(p.panel_bg)
@@ -234,22 +231,17 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 let i = scroll + vi;
                 let row = Rect::new(body.x, y, body.width, 1);
                 let selected = i == d.repos.sel;
-                if selected && d.pane == Step1Pane::Repos {
+                let hot = selected && d.pane == Step1Pane::Repos;
+                let rbg = row_text_bg(hot, p);
+                if hot {
                     selected_row(b, row, p);
                 }
                 let (glyph, glyph_style) = repo_glyph(e, p);
-                let mut x = put_segment(
-                    b,
-                    row.x + 1,
-                    y,
-                    row.right(),
-                    glyph,
-                    glyph_style.bg(p.panel_bg),
-                );
+                let mut x = put_segment(b, row.x + 1, y, row.right(), glyph, glyph_style.bg(rbg));
                 let name_style = if e.kind == RepoKind::GitEmpty {
-                    Style::default().fg(p.overlay0).bg(p.panel_bg)
+                    Style::default().fg(p.overlay0).bg(rbg)
                 } else {
-                    Style::default().fg(p.text).bg(p.panel_bg)
+                    Style::default().fg(p.text).bg(rbg)
                 };
                 let name = if e.kind == RepoKind::Dir {
                     format!(" {}/", e.name)
@@ -274,22 +266,23 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 x = note_x;
                 let (note, ok) = repo_note(e);
                 let note_style = if e.in_use_studio.is_some() {
-                    Style::default().fg(p.peach).bg(p.panel_bg)
+                    Style::default().fg(p.peach).bg(rbg)
                 } else if ok {
-                    Style::default().fg(p.subtext0).bg(p.panel_bg)
+                    Style::default().fg(p.subtext0).bg(rbg)
                 } else {
-                    Style::default().fg(p.red).bg(p.panel_bg)
+                    Style::default().fg(p.red).bg(rbg)
                 };
-                put_text(b, x, y, row.right().saturating_sub(x), &note, note_style);
+                let note_w = row.right().saturating_sub(x) as usize;
+                put_text(
+                    b,
+                    x,
+                    y,
+                    row.right().saturating_sub(x),
+                    &truncate(&note, note_w),
+                    note_style,
+                );
                 if selected {
-                    put_text(
-                        b,
-                        row.x,
-                        y,
-                        1,
-                        "▸",
-                        Style::default().fg(p.accent).bg(p.panel_bg),
-                    );
+                    put_text(b, row.x, y, 1, "▸", Style::default().fg(p.accent).bg(rbg));
                 }
                 hits.push(row, NsHit::Repo(i));
                 y += 1;

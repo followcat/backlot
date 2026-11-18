@@ -29,7 +29,7 @@ fn card_line(b: &mut Buffer, body: Rect, y: u16, p: &Palette, label: &str, value
         x,
         y,
         body.right(),
-        value,
+        &crate::chrome::text::truncate_end(value, body.right().saturating_sub(x) as usize),
         Style::default().fg(p.text).bg(p.panel_bg),
     );
 }
@@ -58,7 +58,14 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         ),
     };
     let x = put_segment(b, body.x + 1, y, body.right(), mark, style);
-    put_segment(b, x + 1, y, body.right(), &text, style);
+    put_segment(
+        b,
+        x + 1,
+        y,
+        body.right(),
+        &crate::chrome::text::truncate_end(&text, body.right().saturating_sub(x + 1) as usize),
+        style,
+    );
     let cmd = "backlot studio new --dry-run";
     if display_fits(body.width, &text, cmd) {
         put_text(
@@ -177,7 +184,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         y,
         1,
         "▸",
-        Style::default().fg(p.accent).bg(p.panel_bg),
+        Style::default().fg(p.accent).bg(p.surface0),
     );
     let check = if d.start_stage { "[x]" } else { "[ ]" };
     let toggle = format!(" {check} Ensure stage is running on {machine} and focus producer");
@@ -216,7 +223,10 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             body.x + 1,
             y,
             body.width.saturating_sub(1),
-            &format!("creating studio on {machine}…"),
+            &crate::chrome::text::truncate_end(
+                &format!("creating studio on {machine}…"),
+                body.width.saturating_sub(1) as usize,
+            ),
             Style::default().fg(p.yellow).bg(p.panel_bg),
         );
     } else if let Some(error) = &d.create_error {
