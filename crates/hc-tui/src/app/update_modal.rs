@@ -35,7 +35,7 @@ pub(crate) struct UpdateModal {
     /// The install directory as the callout names it.
     pub install_text: String,
     /// The manual command for a read-only directory (the plain
-    /// `hc-tui --upgrade` when writable, the channel's own command
+    /// `backlot --upgrade` when writable, the channel's own command
     /// when managed).
     pub chip: String,
     /// The managed-install callout line (`managed by mise: update it
@@ -153,7 +153,7 @@ impl App {
         } else if running_notes(&self.update_state).is_some() {
             Phase::WhatsNew
         } else {
-            self.show_notice("Update", &format!("hc-tui v{RUNNING} is up to date"));
+            self.show_notice("Update", &format!("backlot v{RUNNING} is up to date"));
             return;
         };
         self.open_card(phase);
@@ -172,7 +172,7 @@ impl App {
             (None, Some(dir)) if !writable => {
                 manual_command(dir, default_install_dir(home.as_deref()).as_deref())
             }
-            _ => "hc-tui --upgrade".to_owned(),
+            _ => "backlot --upgrade".to_owned(),
         };
         let install_text = dir
             .as_deref()

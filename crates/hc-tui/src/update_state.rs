@@ -1,6 +1,6 @@
 //! The `update-check.json` cache model — shared client-wide on the
 //! local machine (never per endpoint). New fields are
-//! `#[serde(default)]` so a file written by an older hc-tui still
+//! `#[serde(default)]` so a file written by an older backlot still
 //! loads; writes are atomic (temp file + rename) so a crashed client
 //! never leaves a torn cache.
 

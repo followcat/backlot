@@ -8,18 +8,18 @@ fn the_plan_pins_the_version_skips_the_core_and_names_the_directory() {
     let plan = plan(Path::new("/home/user/bin"), "0.1.13");
     assert_eq!(
         plan.pipeline,
-        "curl -fsSL https://followcat.github.io/hc-tui/install.sh | HC_TUI_VERSION=v0.1.13 HC_TUI_SKIP_CORE=1 HC_TUI_INSTALL_DIR=/home/user/bin sh"
+        "curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | BACKLOT_VERSION=v0.1.13 BACKLOT_SKIP_CORE=1 BACKLOT_INSTALL_DIR=/home/user/bin sh"
     );
     assert_eq!(
         plan.env,
         [
-            ("HC_TUI_VERSION", "v0.1.13".to_owned()),
-            ("HC_TUI_SKIP_CORE", "1".to_owned()),
-            ("HC_TUI_INSTALL_DIR", "/home/user/bin".to_owned()),
+            ("BACKLOT_VERSION", "v0.1.13".to_owned()),
+            ("BACKLOT_SKIP_CORE", "1".to_owned()),
+            ("BACKLOT_INSTALL_DIR", "/home/user/bin".to_owned()),
         ]
     );
-    assert_eq!(plan.bin, PathBuf::from("/home/user/bin/hc-tui"));
-    assert_eq!(plan.echo[2], "    HC_TUI_INSTALL_DIR=/home/user/bin sh");
+    assert_eq!(plan.bin, PathBuf::from("/home/user/bin/backlot"));
+    assert_eq!(plan.echo[2], "    BACKLOT_INSTALL_DIR=/home/user/bin sh");
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn a_directory_with_a_quote_stays_one_shell_word() {
     let plan = plan(Path::new("/home/user/it's"), "0.1.13");
     assert!(
         plan.pipeline
-            .ends_with("HC_TUI_INSTALL_DIR='/home/user/it'\\''s' sh"),
+            .ends_with("BACKLOT_INSTALL_DIR='/home/user/it'\\''s' sh"),
         "{}",
         plan.pipeline
     );
@@ -115,13 +115,13 @@ async fn the_version_probe_reads_the_binary_and_a_failure_is_none() {
     use std::os::unix::fs::PermissionsExt;
     let dir = std::env::temp_dir().join(format!("hctui-probe-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let ok = dir.join("hc-tui");
-    std::fs::write(&ok, "#!/bin/sh\necho 'hc-tui 0.1.13'\n").unwrap();
+    let ok = dir.join("backlot");
+    std::fs::write(&ok, "#!/bin/sh\necho 'backlot 0.1.13'\n").unwrap();
     std::fs::set_permissions(&ok, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let bad = dir.join("hc-tui-broken");
+    let bad = dir.join("backlot-broken");
     std::fs::write(&bad, "#!/bin/sh\nexit 1\n").unwrap();
     std::fs::set_permissions(&bad, std::fs::Permissions::from_mode(0o755)).unwrap();
-    assert_eq!(probe_version(ok).await.as_deref(), Some("hc-tui 0.1.13"));
+    assert_eq!(probe_version(ok).await.as_deref(), Some("backlot 0.1.13"));
     assert_eq!(
         probe_version(bad).await,
         None,
@@ -141,16 +141,16 @@ async fn the_version_probe_reads_the_binary_and_a_failure_is_none() {
 fn a_hostile_version_still_quotes_to_one_shell_word() {
     let plan = plan(Path::new("/home/user/bin"), "9.9.9.;id;");
     assert!(
-        plan.pipeline.contains("HC_TUI_VERSION='v9.9.9.;id;'"),
+        plan.pipeline.contains("BACKLOT_VERSION='v9.9.9.;id;'"),
         "{}",
         plan.pipeline
     );
     assert_eq!(
         plan.env,
         [
-            ("HC_TUI_VERSION", "v9.9.9.;id;".to_owned()),
-            ("HC_TUI_SKIP_CORE", "1".to_owned()),
-            ("HC_TUI_INSTALL_DIR", "/home/user/bin".to_owned()),
+            ("BACKLOT_VERSION", "v9.9.9.;id;".to_owned()),
+            ("BACKLOT_SKIP_CORE", "1".to_owned()),
+            ("BACKLOT_INSTALL_DIR", "/home/user/bin".to_owned()),
         ],
         "the env list keeps the raw value — only the pipeline quotes"
     );

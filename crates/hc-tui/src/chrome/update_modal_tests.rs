@@ -18,7 +18,7 @@ const OPENED_80: [&str; 22] = [
     "│ update ready                                                             │",
     "│                                                                          │",
     "│ ● updates this client · programs keep running                           ▐│",
-    "│ press enter to install, or run hc-tui --upgrade                         ▐│",
+    "│ press enter to install, or run backlot --upgrade                        ▐│",
     "│                                                                         ▐│",
     "│ v0.1.13 · 2026-11-16                                                    ▐│",
     "│ ADDED                                                                   ▐│",
@@ -43,7 +43,7 @@ const OPENED_60: [&str; 22] = [
     "│ update ready                                         │",
     "│                                                      │",
     "│ ● updates this client · programs keep running       ▐│",
-    "│ press enter to install, or run hc-tui --upgrade     ▐│",
+    "│ press enter to install, or run backlot --upgrade    ▐│",
     "│                                                     ▐│",
     "│ v0.1.13 · 2026-11-16                                ▐│",
     "│ ADDED                                               ▐│",
@@ -92,7 +92,7 @@ fn opened(releases: &[CachedRelease]) -> ModalView<'_> {
             callout: Some(Callout {
                 writable: true,
                 install_dir: "/home/user/.local/bin",
-                chip: "hc-tui --upgrade",
+                chip: "backlot --upgrade",
                 managed: None,
             }),
         }),
@@ -229,18 +229,18 @@ const UPDATING_80: [&str; 22] = [
     "│ updates this client · programs keep running                              │",
     "│                                                                          │",
     "│ ◐ running official installer…                                       0:04 │",
-    "│ · check new binary (hc-tui --version)                                    │",
+    "│ · check new binary (backlot --version)                                   │",
     "│                                                                          │",
     "│ OUTPUT                                                                   │",
-    "│ ▏ $ curl -fsSL https://followcat.github.io/hc-tui/install.sh \\           │",
-    "│ ▏   | HC_TUI_VERSION=v0.1.13 HC_TUI_SKIP_CORE=1 \\                        │",
-    "│ ▏     HC_TUI_INSTALL_DIR=/home/user/.local/bin sh                        │",
+    "│ ▏ $ curl -fsSL                                                           │",
+    "│ ▏   https://github.com/followcat/backlot/releases/latest/download/install│",
+    "│ ▏   .sh \\                                                                │",
+    "│ ▏   | BACKLOT_VERSION=v0.1.13 BACKLOT_SKIP_CORE=1 \\                      │",
+    "│ ▏     BACKLOT_INSTALL_DIR=/home/user/.local/bin sh                       │",
     "│ ▏                                                                        │",
     "│ ▏ waiting for installer output…                                          │",
     "│                                                                          │",
     "│ cancelling leaves v0.1.11 in place                                       │",
-    "│                                                                          │",
-    "│                                                                          │",
     "│                                                                          │",
     "│                                                                          │",
     "│                                                                          │",
@@ -254,13 +254,13 @@ const DONE_80: [&str; 22] = [
     "│ update installed · restart to use v0.1.13                                │",
     "│                                                                          │",
     "│ ✓ official installer finished                                       0:06 │",
-    "│ ✓ verified new binary: hc-tui 0.1.13                                     │",
+    "│ ✓ verified new binary: backlot 0.1.13                                    │",
     "│                                                                          │",
     "│ OUTPUT                                                                   │",
-    "│ ▏ installed hc-tui 0.1.13 (x86_64-unknown-linux-musl)                    │",
-    "│ ▏   to /home/user/.local/bin/hc-tui                                      │",
+    "│ ▏ installed backlot 0.1.13 (x86_64-unknown-linux-musl)                   │",
+    "│ ▏   to /home/user/.local/bin/backlot                                     │",
     "│                                                                          │",
-    "│ Restarting re-execs hc-tui in place and reconnects to this session.      │",
+    "│ Restarting re-execs backlot in place and reconnects to this session.     │",
     "│ Your hc core, spaces, and running programs keep running.                 │",
     "│                                                                          │",
     "│                                                                          │",
@@ -283,12 +283,12 @@ const FAILED_80: [&str; 22] = [
     "│ OUTPUT                                                                   │",
     "│ ▏ curl: (6) Could not resolve host: github.com                           │",
     "│ ▏ install.sh: download failed — does release v0.1.13 contain             │",
-    "│ ▏   hc-tui-0.1.13-x86_64-unknown-linux-musl.tar.gz?                      │",
+    "│ ▏   backlot-0.1.13-x86_64-unknown-linux-musl.tar.gz?                     │",
     "│                                                                          │",
     "│ Upgrade manually from a shell:                                           │",
-    "│   hc-tui --upgrade                                                       │",
+    "│   backlot --upgrade                                                      │",
     "│                                                                          │",
-    "│ or: curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh        │",
+    "│ or: curl -fsSL https://github.com/followcat/backlot/releases/latest/downl│",
     "│                                                                          │",
     "│                                                                          │",
     "│                                                                          │",
@@ -326,7 +326,7 @@ fn updating_at_80x24_matches_the_mockup_card() {
         verified: None,
         reason: None,
         installed: "0.1.11",
-        manual: "hc-tui --upgrade",
+        manual: "backlot --upgrade",
     };
     let (buf, _) = draw(80, 24, &status_view(Phase::Updating, status));
     assert_eq!(card(&buf), UPDATING_80);
@@ -335,8 +335,8 @@ fn updating_at_80x24_matches_the_mockup_card() {
 #[test]
 fn done_at_80x24_matches_the_mockup_card() {
     let tail = [
-        "installed hc-tui 0.1.13 (x86_64-unknown-linux-musl)".to_owned(),
-        "  to /home/user/.local/bin/hc-tui".to_owned(),
+        "installed backlot 0.1.13 (x86_64-unknown-linux-musl)".to_owned(),
+        "  to /home/user/.local/bin/backlot".to_owned(),
     ];
     let status = Status {
         step: Step::Done,
@@ -344,10 +344,10 @@ fn done_at_80x24_matches_the_mockup_card() {
         spinner: 0,
         echo: &[],
         tail: &tail,
-        verified: Some("hc-tui 0.1.13"),
+        verified: Some("backlot 0.1.13"),
         reason: None,
         installed: "0.1.11",
-        manual: "hc-tui --upgrade",
+        manual: "backlot --upgrade",
     };
     let (buf, _) = draw(80, 24, &status_view(Phase::Done, status));
     assert_eq!(card(&buf), DONE_80);
@@ -357,7 +357,7 @@ fn done_at_80x24_matches_the_mockup_card() {
 fn failed_at_80x24_matches_the_mockup_card() {
     let tail = [
         "curl: (6) Could not resolve host: github.com".to_owned(),
-        "install.sh: download failed — does release v0.1.13 contain hc-tui-0.1.13-x86_64-unknown-linux-musl.tar.gz?".to_owned(),
+        "install.sh: download failed — does release v0.1.13 contain backlot-0.1.13-x86_64-unknown-linux-musl.tar.gz?".to_owned(),
     ];
     let status = Status {
         step: Step::Failed,
@@ -368,7 +368,7 @@ fn failed_at_80x24_matches_the_mockup_card() {
         verified: None,
         reason: Some("installer exited with status 1"),
         installed: "0.1.11",
-        manual: "hc-tui --upgrade",
+        manual: "backlot --upgrade",
     };
     let (buf, _) = draw(80, 24, &status_view(Phase::Failed, status));
     assert_eq!(card(&buf), FAILED_80);
@@ -386,7 +386,7 @@ fn the_status_cards_keep_their_header_and_buttons_at_60x24() {
         verified: None,
         reason: None,
         installed: "0.1.11",
-        manual: "hc-tui --upgrade",
+        manual: "backlot --upgrade",
     };
     let (buf, rendered) = draw(60, 24, &status_view(Phase::Updating, status));
     let rows = card(&buf);

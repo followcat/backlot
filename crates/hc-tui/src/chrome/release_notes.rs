@@ -25,8 +25,8 @@ pub(crate) enum NotesState {
 pub(crate) struct Callout<'a> {
     pub writable: bool,
     pub install_dir: &'a str,
-    /// The manual command shown as the chip (`hc-tui --upgrade`, the
-    /// `HC_TUI_INSTALL_DIR=… hc-tui --upgrade` form, or the channel's
+    /// The manual command shown as the chip (`backlot --upgrade`, the
+    /// `BACKLOT_INSTALL_DIR=… backlot --upgrade` form, or the channel's
     /// own command on a managed install).
     pub chip: &'a str,
     /// The managed-install line that replaces the writable/read-only
@@ -46,7 +46,7 @@ pub(crate) struct Stream<'a> {
 
 pub(crate) type Cell = (char, Style);
 
-const RELEASE_URL: &str = "https://github.com/followcat/hc-tui/releases/tag";
+const RELEASE_URL: &str = "https://github.com/followcat/backlot/releases/tag";
 
 /// Every release body as styled lines wrapped to `width` cells.
 pub(crate) fn stream_lines(stream: &Stream<'_>, width: u16, p: &Palette) -> Vec<Line<'static>> {

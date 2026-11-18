@@ -32,50 +32,50 @@ fn mise(tool: &str) -> InstallSource {
 #[test]
 fn mise_under_the_default_home_root_names_the_github_tool() {
     let root = base("home-root");
-    let exe = root.join(".local/share/mise/installs/github-followcat-hc-tui/0.1.6/hc-tui");
+    let exe = root.join(".local/share/mise/installs/github-followcat-backlot/0.1.6/backlot");
     let source_env = env(&[("HOME", root.to_str().unwrap())]);
-    assert_eq!(detect(&exe, &source_env), mise("github:followcat/hc-tui"));
+    assert_eq!(detect(&exe, &source_env), mise("github:followcat/backlot"));
 }
 
 #[test]
 fn the_configured_mise_installs_dir_is_a_root() {
     let root = base("installs-dir");
     let installs = root.join("custom/installs");
-    let exe = installs.join("github-followcat-hc-tui/0.1.6/hc-tui");
+    let exe = installs.join("github-followcat-backlot/0.1.6/backlot");
     let source_env = env(&[("MISE_INSTALLS_DIR", installs.to_str().unwrap())]);
-    assert_eq!(detect(&exe, &source_env), mise("github:followcat/hc-tui"));
+    assert_eq!(detect(&exe, &source_env), mise("github:followcat/backlot"));
 }
 
 #[test]
 fn the_mise_data_dir_has_an_installs_root() {
     let root = base("data-dir");
     let data = root.join("mise-data");
-    let exe = data.join("installs/github-followcat-hc-tui/0.1.6/hc-tui");
+    let exe = data.join("installs/github-followcat-backlot/0.1.6/backlot");
     let source_env = env(&[("MISE_DATA_DIR", data.to_str().unwrap())]);
-    assert_eq!(detect(&exe, &source_env), mise("github:followcat/hc-tui"));
+    assert_eq!(detect(&exe, &source_env), mise("github:followcat/backlot"));
 }
 
 #[test]
 fn xdg_data_home_has_a_mise_installs_root() {
     let root = base("xdg");
     let xdg = root.join("xdg");
-    let exe = xdg.join("mise/installs/github-followcat-hc-tui/0.1.6/hc-tui");
+    let exe = xdg.join("mise/installs/github-followcat-backlot/0.1.6/backlot");
     let source_env = env(&[("XDG_DATA_HOME", xdg.to_str().unwrap())]);
-    assert_eq!(detect(&exe, &source_env), mise("github:followcat/hc-tui"));
+    assert_eq!(detect(&exe, &source_env), mise("github:followcat/backlot"));
 }
 
 #[test]
 fn mise_install_names_map_to_their_backend_tool() {
     let source_env = env(&[("HOME", "/home/user")]);
     for (dir, tool) in [
-        ("github-followcat-hc-tui", "github:followcat/hc-tui"),
-        ("ubi-followcat-hc-tui", "ubi:followcat/hc-tui"),
-        ("aqua-followcat-hc-tui", "aqua:followcat/hc-tui"),
-        ("cargo-hc-tui", "cargo:hc-tui"),
+        ("github-followcat-backlot", "github:followcat/backlot"),
+        ("ubi-followcat-backlot", "ubi:followcat/backlot"),
+        ("aqua-followcat-backlot", "aqua:followcat/backlot"),
+        ("cargo-backlot", "cargo:backlot"),
         ("plain-tool", "plain-tool"),
     ] {
         let exe = PathBuf::from(format!(
-            "/home/user/.local/share/mise/installs/{dir}/0.1.6/hc-tui"
+            "/home/user/.local/share/mise/installs/{dir}/0.1.6/backlot"
         ));
         assert_eq!(detect(&exe, &source_env), mise(tool), "{dir}");
     }
@@ -84,20 +84,20 @@ fn mise_install_names_map_to_their_backend_tool() {
 #[test]
 fn homebrew_is_found_through_a_symlinked_bin() {
     let root = base("brew");
-    let keg = root.join("Cellar/hc-tui/0.1.11/bin");
+    let keg = root.join("Cellar/backlot/0.1.11/bin");
     std::fs::create_dir_all(&keg).unwrap();
-    std::fs::write(keg.join("hc-tui"), b"#!/bin/sh\n").unwrap();
+    std::fs::write(keg.join("backlot"), b"#!/bin/sh\n").unwrap();
     std::fs::create_dir_all(root.join("bin")).unwrap();
-    let link = root.join("bin/hc-tui");
-    std::os::unix::fs::symlink(keg.join("hc-tui"), &link).unwrap();
+    let link = root.join("bin/backlot");
+    std::os::unix::fs::symlink(keg.join("backlot"), &link).unwrap();
     let exe = canonical_exe(&link);
-    assert_eq!(exe, keg.join("hc-tui"));
+    assert_eq!(exe, keg.join("backlot"));
     assert_eq!(detect(&exe, &SourceEnv::default()), InstallSource::Homebrew);
 }
 
 #[test]
 fn a_nix_store_path_is_nix_without_touching_the_disk() {
-    let exe = Path::new("/nix/store/abc123-hc-tui-0.1.11/bin/hc-tui");
+    let exe = Path::new("/nix/store/abc123-backlot-0.1.11/bin/backlot");
     assert_eq!(detect(exe, &SourceEnv::default()), InstallSource::Nix);
 }
 
@@ -105,11 +105,11 @@ fn a_nix_store_path_is_nix_without_touching_the_disk() {
 fn a_cargo_bin_is_cargo_under_cargo_home_or_the_default_home() {
     let root = base("cargo");
     let cargo_home = root.join("cargo-home");
-    let exe = cargo_home.join("bin/hc-tui");
+    let exe = cargo_home.join("bin/backlot");
     let source_env = env(&[("CARGO_HOME", cargo_home.to_str().unwrap())]);
     assert_eq!(detect(&exe, &source_env), InstallSource::Cargo);
     let home = root.join("home");
-    let exe = home.join(".cargo/bin/hc-tui");
+    let exe = home.join(".cargo/bin/backlot");
     let source_env = env(&[("HOME", home.to_str().unwrap())]);
     assert_eq!(detect(&exe, &source_env), InstallSource::Cargo);
 }
@@ -117,9 +117,9 @@ fn a_cargo_bin_is_cargo_under_cargo_home_or_the_default_home() {
 #[test]
 fn target_debug_release_and_triple_dirs_are_dev_builds() {
     for path in [
-        "/home/user/src/hc-tui/target/debug/hc-tui",
-        "/home/user/src/hc-tui/target/release/hc-tui",
-        "/home/user/src/hc-tui/target/x86_64-unknown-linux-gnu/release/hc-tui",
+        "/home/user/src/backlot/target/debug/backlot",
+        "/home/user/src/backlot/target/release/backlot",
+        "/home/user/src/backlot/target/x86_64-unknown-linux-gnu/release/backlot",
     ] {
         assert_eq!(
             detect(Path::new(path), &SourceEnv::default()),
@@ -133,7 +133,7 @@ fn target_debug_release_and_triple_dirs_are_dev_builds() {
 fn a_plain_home_bin_install_is_direct() {
     let root = base("direct");
     let home = root.join("home");
-    let exe = home.join("bin/hc-tui");
+    let exe = home.join("bin/backlot");
     let source_env = env(&[("HOME", home.to_str().unwrap())]);
     assert_eq!(detect(&exe, &source_env), InstallSource::Direct);
 }
@@ -142,10 +142,10 @@ fn a_plain_home_bin_install_is_direct() {
 fn a_path_that_only_mentions_mise_stays_direct() {
     let source_env = env(&[("HOME", "/home/user")]);
     for path in [
-        "/home/user/mise-tools/hc-tui",
-        "/opt/mise/hc-tui",
-        "/home/user/projects/mise/installs/hc-tui",
-        "/home/user/.local/share/mise/hc-tui",
+        "/home/user/mise-tools/backlot",
+        "/opt/mise/backlot",
+        "/home/user/projects/mise/installs/backlot",
+        "/home/user/.local/share/mise/backlot",
     ] {
         assert_eq!(
             detect(Path::new(path), &source_env),
@@ -158,31 +158,33 @@ fn a_path_that_only_mentions_mise_stays_direct() {
 #[test]
 fn each_channel_names_its_own_refusal() {
     assert_eq!(
-        mise("github:followcat/hc-tui").refusal().as_deref(),
-        Some("hc-tui is managed by mise; run: mise upgrade --bump github:followcat/hc-tui")
+        mise("github:followcat/backlot").refusal().as_deref(),
+        Some("backlot is managed by mise; run: mise upgrade --bump github:followcat/backlot")
     );
     assert_eq!(
         InstallSource::Homebrew.refusal().as_deref(),
-        Some("hc-tui is managed by Homebrew; run: brew upgrade hc-tui")
+        Some("backlot is managed by Homebrew; run: brew upgrade backlot")
     );
     assert_eq!(
         InstallSource::Nix.refusal().as_deref(),
-        Some("hc-tui is managed by Nix; update it through the Nix configuration that installed it")
+        Some(
+            "backlot is managed by Nix; update it through the Nix configuration that installed it"
+        )
     );
     assert_eq!(
         InstallSource::Cargo.refusal().as_deref(),
-        Some("hc-tui was installed with cargo; reinstall it with cargo the way you installed it")
+        Some("backlot was installed with cargo; reinstall it with cargo the way you installed it")
     );
     assert_eq!(
         InstallSource::DevBuild.refusal().as_deref(),
-        Some("hc-tui is a dev build and is never upgraded; rebuild it from your checkout")
+        Some("backlot is a dev build and is never upgraded; rebuild it from your checkout")
     );
     assert_eq!(InstallSource::Direct.refusal(), None);
 }
 
 #[test]
 fn only_the_managed_and_dev_channels_refuse_an_upgrade() {
-    assert!(mise("github:followcat/hc-tui").refusal().is_some());
+    assert!(mise("github:followcat/backlot").refusal().is_some());
     assert!(InstallSource::Homebrew.refusal().is_some());
     assert!(InstallSource::Nix.refusal().is_some());
     assert!(InstallSource::Cargo.refusal().is_some());
@@ -193,12 +195,12 @@ fn only_the_managed_and_dev_channels_refuse_an_upgrade() {
 #[test]
 fn the_card_names_each_channel_and_offers_its_command_as_the_chip() {
     assert_eq!(
-        mise("github:followcat/hc-tui").card_phrase().as_deref(),
+        mise("github:followcat/backlot").card_phrase().as_deref(),
         Some("managed by mise: update it there")
     );
     assert_eq!(
-        mise("github:followcat/hc-tui").card_chip().as_deref(),
-        Some("mise upgrade --bump github:followcat/hc-tui")
+        mise("github:followcat/backlot").card_chip().as_deref(),
+        Some("mise upgrade --bump github:followcat/backlot")
     );
     assert_eq!(
         InstallSource::Homebrew.card_phrase().as_deref(),
@@ -206,7 +208,7 @@ fn the_card_names_each_channel_and_offers_its_command_as_the_chip() {
     );
     assert_eq!(
         InstallSource::Homebrew.card_chip().as_deref(),
-        Some("brew upgrade hc-tui")
+        Some("brew upgrade backlot")
     );
     assert_eq!(
         InstallSource::Nix.card_phrase().as_deref(),

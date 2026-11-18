@@ -2,7 +2,7 @@
 //! Per-endpoint client chrome preferences: choices the user changed by
 //! hand — sidebar width, the spaces/agents split, collapse state and the
 //! agent-panel sort — remembered across restarts. One small JSON file
-//! per endpoint under the client state root (`hc-tui/client-shell`); a
+//! per endpoint under the client state root (`backlot/client-shell`); a
 //! missing or malformed file is ignored and a write failure is a
 //! notice, never a panic.
 
@@ -66,7 +66,7 @@ fn state_root(env: &Env) -> Option<PathBuf> {
 }
 
 fn preferences_dir(env: &Env) -> Option<PathBuf> {
-    Some(state_root(env)?.join("hc-tui").join("client-shell"))
+    Some(state_root(env)?.join("backlot").join("client-shell"))
 }
 
 /// FNV-1a over a byte sequence — a stable, non-crypto hash so a file
@@ -153,7 +153,7 @@ mod tests {
         assert_ne!(first, second);
         assert_eq!(
             first.parent().unwrap(),
-            Path::new("/state/hc-tui/client-shell")
+            Path::new("/state/backlot/client-shell")
         );
     }
 
@@ -193,14 +193,14 @@ mod tests {
             .unwrap()
             .parent()
             .unwrap(),
-            Path::new("/state/hc-tui/client-shell")
+            Path::new("/state/backlot/client-shell")
         );
         assert_eq!(
             path_for_local_endpoint(&env_with(&[("HOME", "/home")]), Path::new("/s.sock"))
                 .unwrap()
                 .parent()
                 .unwrap(),
-            Path::new("/home/.local/state/hc-tui/client-shell")
+            Path::new("/home/.local/state/backlot/client-shell")
         );
         assert!(path_for_local_endpoint(&env_with(&[]), Path::new("/s.sock")).is_none());
     }

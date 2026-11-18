@@ -205,13 +205,13 @@ impl App {
                 generation,
                 version,
             } if generation == install.generation => {
-                let expected = format!("hc-tui {latest}");
+                let expected = format!("backlot {latest}");
                 if version.as_deref() == Some(expected.as_str()) {
                     Some((Step::Done, None, Some(expected)))
                 } else {
                     let got = version
                         .as_deref()
-                        .and_then(|text| text.strip_prefix("hc-tui "))
+                        .and_then(|text| text.strip_prefix("backlot "))
                         .unwrap_or("nothing");
                     let reason = format!("binary check expected {latest}, got {got}");
                     Some((Step::Failed, Some(reason), None))

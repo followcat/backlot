@@ -16,7 +16,7 @@ pub(crate) fn canonical_exe(exe: &Path) -> PathBuf {
     })
 }
 
-/// The directory the running `hc-tui` lives in — the one the installer
+/// The directory the running `backlot` lives in — the one the installer
 /// must write, so the binary that is running is the one replaced.
 /// Symlinks resolve; on Linux a binary replaced while running shows a
 /// `" (deleted)"` suffix, which the fallback strips.
@@ -33,8 +33,8 @@ pub(crate) fn running_install_dir(exe: Option<&Path>) -> Option<PathBuf> {
     install_dir_for(&exe)
 }
 
-/// Where `hc-tui --upgrade` installs: the running binary's directory,
-/// unless `HC_TUI_INSTALL_DIR` already names one (an empty value counts as
+/// Where `backlot --upgrade` installs: the running binary's directory,
+/// unless `BACKLOT_INSTALL_DIR` already names one (an empty value counts as
 /// unset). `None` leaves the installer's own default in charge.
 pub(crate) fn upgrade_install_dir(
     configured: Option<&OsStr>,
@@ -53,7 +53,7 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 /// an existing file.
 pub(crate) fn dir_writable(dir: &Path) -> bool {
     let probe = dir.join(format!(
-        ".hc-tui-write-probe.{}.{}",
+        ".backlot-write-probe.{}.{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
@@ -67,7 +67,7 @@ pub(crate) fn dir_writable(dir: &Path) -> bool {
 }
 
 /// `$HOME/.local/bin` — the installer's default, which the manual
-/// command can omit `HC_TUI_INSTALL_DIR` for.
+/// command can omit `BACKLOT_INSTALL_DIR` for.
 pub(crate) fn default_install_dir(home: Option<&OsStr>) -> Option<PathBuf> {
     home.filter(|home| !home.is_empty())
         .map(|home| PathBuf::from(home).join(".local/bin"))
@@ -87,14 +87,14 @@ pub(crate) fn shell_quote(text: &str) -> String {
     }
 }
 
-/// The manual upgrade command for `dir`: plain `hc-tui --upgrade` when
-/// `dir` is the installer's default, else with `HC_TUI_INSTALL_DIR`.
+/// The manual upgrade command for `dir`: plain `backlot --upgrade` when
+/// `dir` is the installer's default, else with `BACKLOT_INSTALL_DIR`.
 pub(crate) fn manual_command(dir: &Path, default_dir: Option<&Path>) -> String {
     if default_dir == Some(dir) {
-        "hc-tui --upgrade".to_owned()
+        "backlot --upgrade".to_owned()
     } else {
         format!(
-            "HC_TUI_INSTALL_DIR={} hc-tui --upgrade",
+            "BACKLOT_INSTALL_DIR={} backlot --upgrade",
             shell_quote(&dir.to_string_lossy())
         )
     }
@@ -142,11 +142,11 @@ mod tests {
     #[test]
     fn the_binary_directory_is_the_install_directory() {
         assert_eq!(
-            install_dir_for(Path::new("/home/user/bin/hc-tui")),
+            install_dir_for(Path::new("/home/user/bin/backlot")),
             Some(PathBuf::from("/home/user/bin"))
         );
         assert_eq!(
-            install_dir_for(Path::new("/opt/hc/hc-tui (deleted)")),
+            install_dir_for(Path::new("/opt/hc/backlot (deleted)")),
             Some(PathBuf::from("/opt/hc"))
         );
     }
@@ -156,14 +156,14 @@ mod tests {
         let dir = Path::new("/home/user/bin");
         assert_eq!(
             manual_command(dir, Some(Path::new("/home/user/.local/bin"))),
-            "HC_TUI_INSTALL_DIR=/home/user/bin hc-tui --upgrade"
+            "BACKLOT_INSTALL_DIR=/home/user/bin backlot --upgrade"
         );
         assert_eq!(
             manual_command(
                 Path::new("/home/user/.local/bin"),
                 default_install_dir(Some(OsStr::new("/home/user"))).as_deref()
             ),
-            "hc-tui --upgrade",
+            "backlot --upgrade",
             "the default directory needs no override"
         );
     }

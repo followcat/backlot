@@ -13,8 +13,8 @@ use tokio::sync::mpsc;
 use crate::app::update_flow::UpdateEvent;
 use crate::update_install::shell_quote;
 
-/// The official installer, the same script `hc-tui --upgrade` runs.
-pub(crate) const INSTALL_URL: &str = "https://followcat.github.io/hc-tui/install.sh";
+/// backlot's installer, the same script `backlot --upgrade` runs.
+pub(crate) const INSTALL_URL: &str = crate::cli::INSTALL_URL;
 /// The binary check after a zero exit (spec 5.3).
 pub(crate) const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -40,19 +40,19 @@ pub(crate) fn plan(dir: &Path, latest: &str) -> Plan {
     let quoted = shell_quote(&dir_text);
     Plan {
         pipeline: format!(
-            "curl -fsSL {INSTALL_URL} | HC_TUI_VERSION={quoted_version} HC_TUI_SKIP_CORE=1 HC_TUI_INSTALL_DIR={quoted} sh"
+            "curl -fsSL {INSTALL_URL} | BACKLOT_VERSION={quoted_version} BACKLOT_SKIP_CORE=1 BACKLOT_INSTALL_DIR={quoted} sh"
         ),
         env: vec![
-            ("HC_TUI_VERSION", version.clone()),
-            ("HC_TUI_SKIP_CORE", "1".to_owned()),
-            ("HC_TUI_INSTALL_DIR", dir_text),
+            ("BACKLOT_VERSION", version.clone()),
+            ("BACKLOT_SKIP_CORE", "1".to_owned()),
+            ("BACKLOT_INSTALL_DIR", dir_text),
         ],
         echo: vec![
             format!("$ curl -fsSL {INSTALL_URL} \\"),
-            format!("  | HC_TUI_VERSION={quoted_version} HC_TUI_SKIP_CORE=1 \\"),
-            format!("    HC_TUI_INSTALL_DIR={quoted} sh"),
+            format!("  | BACKLOT_VERSION={quoted_version} BACKLOT_SKIP_CORE=1 \\"),
+            format!("    BACKLOT_INSTALL_DIR={quoted} sh"),
         ],
-        bin: dir.join("hc-tui"),
+        bin: dir.join("backlot"),
     }
 }
 

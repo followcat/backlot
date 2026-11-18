@@ -16,7 +16,7 @@ use crate::update_state::CachedRelease;
 /// The 20 most recent releases — drafts and prereleases are filtered
 /// locally so the endpoint never needs a token.
 pub(crate) const RELEASES_URL: &str =
-    "https://api.github.com/repos/followcat/hc-tui/releases?per_page=20";
+    "https://api.github.com/repos/followcat/backlot/releases?per_page=20";
 /// The whole fetch — connect and response — bounded so a hanging
 /// network cannot pin the spawn.
 pub(crate) const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
@@ -115,7 +115,7 @@ mod tests {
             "draft": false,
             "prerelease": false,
             "published_at": "2026-11-16T10:20:30Z",
-            "body": "### Added\n- **Waiting status:** show `waiting` (#39)\n\nInstall: hc-tui --upgrade"
+            "body": "### Added\n- **Waiting status:** show `waiting` (#39)\n\nInstall: backlot --upgrade"
         },
         {
             "tag_name": "v999.0.3",

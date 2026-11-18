@@ -246,7 +246,7 @@ async fn plain_mode_keeps_herdrs_endpoint_sidebar_unchanged() {
 // sidebar: the draggable split's divider, `agents` + `grouped`, the
 // stray agent row and the collapse toggle.
 const EXPECTED_PLAIN: &str = concat!(
-    " machines        v0.2.2  │\n",
+    " machines         v0.2.2 │\n",
     "                         │\n",
     " ▾ Local                 │\n",
     "   · acme-shop           │\n",
@@ -259,7 +259,7 @@ const EXPECTED_PLAIN: &str = concat!(
     "                         │\n",
     " new · Local         menu│\n",
     "─────────────────────────│\n",
-    " agents           grouped│\n",
+    " agents          priority│\n",
     "                         │\n",
     " ○ Local · backlot · main│\n",
     "                         │\n",

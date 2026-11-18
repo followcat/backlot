@@ -44,11 +44,11 @@ pub(crate) struct Status<'a> {
     pub echo: &'a [String],
     /// The last installer output lines, oldest first.
     pub tail: &'a [String],
-    /// `hc-tui <latest>` once verified.
+    /// `backlot <latest>` once verified.
     pub verified: Option<&'a str>,
     pub reason: Option<&'a str>,
     pub installed: &'a str,
-    /// The manual command shown on `failed` (`hc-tui --upgrade`).
+    /// The manual command shown on `failed` (`backlot --upgrade`).
     pub manual: &'a str,
 }
 
@@ -127,7 +127,7 @@ pub(crate) fn updating_lines(s: &Status<'_>, width: usize, p: &Palette) -> Vec<L
         out.push(line(&[
             (" ".into(), text(p)),
             (spinner.into(), warn_bold(p)),
-            (" checking new binary (hc-tui --version)…".into(), bold),
+            (" checking new binary (backlot --version)…".into(), bold),
         ]));
     } else {
         out.push(split_row(
@@ -141,7 +141,7 @@ pub(crate) fn updating_lines(s: &Status<'_>, width: usize, p: &Palette) -> Vec<L
             width,
         ));
         out.push(line(&[(
-            " · check new binary (hc-tui --version)".into(),
+            " · check new binary (backlot --version)".into(),
             overlay0(p),
         )]));
     }
@@ -185,12 +185,12 @@ pub(crate) fn done_lines(s: &Status<'_>, width: usize, p: &Palette) -> Vec<Line<
     out.push(Line::raw(""));
     let (first, second) = if width >= WIDE {
         (
-            " Restarting re-execs hc-tui in place and reconnects to this session.",
+            " Restarting re-execs backlot in place and reconnects to this session.",
             " Your hc core, spaces, and running programs keep running.",
         )
     } else {
         (
-            " Restarting re-execs hc-tui and reconnects to this",
+            " Restarting re-execs backlot and reconnects to this",
             " session. Programs in hc keep running.",
         )
     };
@@ -231,7 +231,7 @@ pub(crate) fn failed_lines(s: &Status<'_>, width: usize, p: &Palette) -> Vec<Lin
         out.push(line(&[
             (" or: ".into(), overlay0(p)),
             (
-                "curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh".into(),
+                "curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | sh".into(),
                 overlay1(p),
             ),
         ]));

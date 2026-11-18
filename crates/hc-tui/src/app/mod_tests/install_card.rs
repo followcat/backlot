@@ -41,7 +41,7 @@ fn offered(dir: &std::path::Path, record: &Arc<Mutex<Record>>) -> App {
     std::fs::create_dir_all(dir).unwrap();
     let mut app = app();
     app.update_latest = Some("0.1.13".into());
-    app.running_exe = Some(dir.join("hc-tui"));
+    app.running_exe = Some(dir.join("backlot"));
     app.seams = seams(record);
     app.open_update();
     app
@@ -72,7 +72,7 @@ fn scratch(label: &str) -> std::path::PathBuf {
 async fn a_verified_install_reaches_done_through_the_version_check() {
     let dir = scratch("done");
     let record = Arc::new(Mutex::new(Record {
-        probe: Some("hc-tui 0.1.13".into()),
+        probe: Some("backlot 0.1.13".into()),
         ..Record::default()
     }));
     let mut app = offered(&dir, &record);
@@ -81,7 +81,7 @@ async fn a_verified_install_reaches_done_through_the_version_check() {
     let generation = app.install_generation;
     app.on_update_event(UpdateEvent::Output {
         generation,
-        line: "installed hc-tui 0.1.13 (x86_64-unknown-linux-musl)".into(),
+        line: "installed backlot 0.1.13 (x86_64-unknown-linux-musl)".into(),
     });
     app.on_update_event(UpdateEvent::Exited {
         generation,
@@ -91,7 +91,7 @@ async fn a_verified_install_reaches_done_through_the_version_check() {
     drain(&mut app);
     assert_eq!(phase(&app), Some(Phase::Done));
     let install = app.install.as_ref().unwrap();
-    assert_eq!(install.verified.as_deref(), Some("hc-tui 0.1.13"));
+    assert_eq!(install.verified.as_deref(), Some("backlot 0.1.13"));
     assert_eq!(
         record.lock().unwrap().plans.len(),
         1,
@@ -103,7 +103,7 @@ async fn a_verified_install_reaches_done_through_the_version_check() {
 async fn a_wrong_version_reaches_failed_with_the_reason() {
     let dir = scratch("wrong");
     let record = Arc::new(Mutex::new(Record {
-        probe: Some("hc-tui 0.1.11".into()),
+        probe: Some("backlot 0.1.11".into()),
         ..Record::default()
     }));
     let mut app = offered(&dir, &record);
@@ -193,29 +193,28 @@ async fn the_pipeline_sets_the_three_variables_before_sh_and_runs_locally() {
     assert_eq!(
         plan.env,
         [
-            ("HC_TUI_VERSION", "v0.1.13".to_owned()),
-            ("HC_TUI_SKIP_CORE", "1".to_owned()),
-            ("HC_TUI_INSTALL_DIR", dir_text.clone()),
+            ("BACKLOT_VERSION", "v0.1.13".to_owned()),
+            ("BACKLOT_SKIP_CORE", "1".to_owned()),
+            ("BACKLOT_INSTALL_DIR", dir_text.clone()),
         ]
     );
     assert!(
         plan.pipeline.ends_with(&format!(
-            " HC_TUI_VERSION=v0.1.13 HC_TUI_SKIP_CORE=1 HC_TUI_INSTALL_DIR={dir_text} sh"
+            " BACKLOT_VERSION=v0.1.13 BACKLOT_SKIP_CORE=1 BACKLOT_INSTALL_DIR={dir_text} sh"
         )),
         "{}",
         plan.pipeline
     );
-    assert!(
-        plan.pipeline
-            .starts_with("curl -fsSL https://followcat.github.io/")
-    );
+    assert!(plan.pipeline.starts_with(
+        "curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh"
+    ));
 }
 
 #[tokio::test]
 async fn esc_later_keeps_the_finished_install_and_reopening_does_not_reinstall() {
     let dir = scratch("later");
     let record = Arc::new(Mutex::new(Record {
-        probe: Some("hc-tui 0.1.13".into()),
+        probe: Some("backlot 0.1.13".into()),
         ..Record::default()
     }));
     let mut app = offered(&dir, &record);
@@ -273,7 +272,7 @@ async fn events_from_a_cancelled_run_never_change_the_card() {
 async fn enter_on_a_verified_install_marks_the_version_seen_and_leaves_for_the_restart() {
     let dir = scratch("restart");
     let record = Arc::new(Mutex::new(Record {
-        probe: Some("hc-tui 0.1.13".into()),
+        probe: Some("backlot 0.1.13".into()),
         ..Record::default()
     }));
     let mut app = offered(&dir, &record);
@@ -289,7 +288,7 @@ async fn enter_on_a_verified_install_marks_the_version_seen_and_leaves_for_the_r
     press(&mut app, Key::Enter);
     assert!(app.quitting, "the run loop unwinds the way a detach does");
     assert!(app.update_modal.is_none());
-    assert_eq!(app.take_restart(), Some(dir.join("hc-tui")));
+    assert_eq!(app.take_restart(), Some(dir.join("backlot")));
     assert!(
         app.take_restart().is_none(),
         "the restart is handed back once"
@@ -306,7 +305,7 @@ async fn a_restarted_run_does_not_reopen_whats_new_but_an_upgrade_does() {
     let dir = scratch("whats-new");
     std::fs::create_dir_all(&dir).unwrap();
     let mut app = app();
-    app.running_exe = Some(dir.join("hc-tui"));
+    app.running_exe = Some(dir.join("backlot"));
     app.update_state.releases = vec![crate::update_state::CachedRelease {
         version: env!("CARGO_PKG_VERSION").into(),
         date: "2026-01-01".into(),
@@ -332,7 +331,7 @@ async fn enter_closes_the_whats_new_card_and_marks_it_seen() {
     let dir = scratch("whats-new-enter");
     std::fs::create_dir_all(&dir).unwrap();
     let mut app = app();
-    app.running_exe = Some(dir.join("hc-tui"));
+    app.running_exe = Some(dir.join("backlot"));
     app.update_state.releases = vec![crate::update_state::CachedRelease {
         version: env!("CARGO_PKG_VERSION").into(),
         date: "2026-01-01".into(),
@@ -388,7 +387,7 @@ async fn installer_output_loses_its_sequences_and_controls() {
 async fn a_probe_answer_reaches_the_reason_clean() {
     let dir = scratch("cleanprobe");
     let record = Arc::new(Mutex::new(Record {
-        probe: Some("hc-tui 0.1.12\u{1b}[2J".into()),
+        probe: Some("backlot 0.1.12\u{1b}[2J".into()),
         ..Record::default()
     }));
     let mut app = offered(&dir, &record);

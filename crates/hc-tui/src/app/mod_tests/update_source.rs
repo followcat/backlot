@@ -22,7 +22,7 @@ fn managed_app(source: InstallSource) -> App {
     let mut app = app();
     app.update_latest = Some("9.9.9".into());
     app.running_exe = Some(std::path::PathBuf::from(
-        "/home/user/.local/share/mise/installs/github-followcat-hc-tui/0.1.6/hc-tui",
+        "/home/user/.local/share/mise/installs/github-followcat-backlot/0.1.6/backlot",
     ));
     app.set_install_source(source);
     app
@@ -31,7 +31,7 @@ fn managed_app(source: InstallSource) -> App {
 #[tokio::test]
 async fn a_mise_managed_card_offers_no_update_and_ignores_enter_and_u() {
     let mut app = managed_app(InstallSource::Mise {
-        tool: "github:followcat/hc-tui".into(),
+        tool: "github:followcat/backlot".into(),
     });
     app.update_state.releases = vec![crate::update_state::CachedRelease {
         version: "9.9.9".into(),
@@ -45,7 +45,7 @@ async fn a_mise_managed_card_offers_no_update_and_ignores_enter_and_u() {
         modal.managed.as_deref(),
         Some("managed by mise: update it there")
     );
-    assert_eq!(modal.chip, "mise upgrade --bump github:followcat/hc-tui");
+    assert_eq!(modal.chip, "mise upgrade --bump github:followcat/backlot");
     key(&mut app, Key::Enter);
     key(&mut app, Key::Char('u'));
     assert!(app.install.is_none(), "no installer runs");

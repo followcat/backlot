@@ -1,6 +1,6 @@
 //! The update card on a package-managed or dev-build binary at the two
 //! design sizes: the channel's own callout and command, no `↵ update`,
-//! and never the `hc-tui --upgrade` line (issue #44).
+//! and never the `backlot --upgrade` line (issue #44).
 
 use super::tests::{card, draw, releases};
 use super::{Body, ModalView, Phase};
@@ -10,7 +10,7 @@ use crate::install_source::InstallSource;
 fn managed_sources() -> [InstallSource; 5] {
     [
         InstallSource::Mise {
-            tool: "github:followcat/hc-tui".into(),
+            tool: "github:followcat/backlot".into(),
         },
         InstallSource::Homebrew,
         InstallSource::Nix,
@@ -54,7 +54,7 @@ fn check(source: &InstallSource, width: u16, height: u16) {
         "{case}: {text}"
     );
     assert!(!text.contains("↵ update"), "{case}: {text}");
-    assert!(!text.contains("hc-tui --upgrade"), "{case}: {text}");
+    assert!(!text.contains("backlot --upgrade"), "{case}: {text}");
 }
 
 #[test]

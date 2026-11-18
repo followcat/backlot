@@ -6,7 +6,7 @@ use std::path::PathBuf;
 fn exec_gets_the_installed_path_and_the_original_arguments() {
     let seen = RefCell::new(None);
     let error = restart_with(
-        Path::new("/home/user/bin/hc-tui"),
+        Path::new("/home/user/bin/backlot"),
         ["--session", "host-a"].map(OsString::from),
         |program, argv| {
             *seen.borrow_mut() = Some((program.to_path_buf(), argv));
@@ -17,7 +17,7 @@ fn exec_gets_the_installed_path_and_the_original_arguments() {
     assert_eq!(
         seen.into_inner(),
         Some((
-            PathBuf::from("/home/user/bin/hc-tui"),
+            PathBuf::from("/home/user/bin/backlot"),
             vec![OsString::from("--session"), OsString::from("host-a")],
         ))
     );

@@ -49,7 +49,7 @@ fn bullets_hang_their_wrapped_lines_and_strip_markup() {
 #[test]
 fn inline_code_is_a_chip_without_backticks() {
     let p = palette();
-    let releases = [release("0.1.13", "", "- use `hc-tui --upgrade` now")];
+    let releases = [release("0.1.13", "", "- use `backlot --upgrade` now")];
     let lines = stream_lines(
         &Stream {
             releases: &releases,
@@ -64,17 +64,17 @@ fn inline_code_is_a_chip_without_backticks() {
     let chip = lines[1]
         .spans
         .iter()
-        .find(|s| s.content.as_ref() == "hc-tui --upgrade")
+        .find(|s| s.content.as_ref() == "backlot --upgrade")
         .expect("the code span is its own run");
     assert_eq!(chip.style.fg, Some(p.accent));
     assert_eq!(chip.style.bg, Some(p.surface0));
-    assert_eq!(text_of(&lines[1]), " • use hc-tui --upgrade now");
+    assert_eq!(text_of(&lines[1]), " • use backlot --upgrade now");
 }
 
 #[test]
 fn fenced_blocks_are_gutter_rows_filled_to_the_width() {
     let p = palette();
-    let releases = [release("0.1.13", "", "```sh\nhc-tui --upgrade\n```")];
+    let releases = [release("0.1.13", "", "```sh\nbacklot --upgrade\n```")];
     let lines = stream_lines(
         &Stream {
             releases: &releases,
@@ -88,7 +88,7 @@ fn fenced_blocks_are_gutter_rows_filled_to_the_width() {
     );
     assert_eq!(
         text_of(&lines[1]),
-        format!(" ▏ hc-tui --upgrade{}", " ".repeat(5))
+        format!(" ▏ backlot --upgrade{}", " ".repeat(4))
     );
     let gutter = lines[1]
         .spans
@@ -140,7 +140,7 @@ fn writable_callout_offers_the_manual_chip_above_the_notes() {
             callout: Some(Callout {
                 writable: true,
                 install_dir: "/home/user/.local/bin",
-                chip: "hc-tui --upgrade",
+                chip: "backlot --upgrade",
                 managed: None,
             }),
         },
@@ -153,7 +153,7 @@ fn writable_callout_offers_the_manual_chip_above_the_notes() {
     );
     assert_eq!(
         text_of(&lines[1]),
-        " press enter to install, or run hc-tui --upgrade"
+        " press enter to install, or run backlot --upgrade"
     );
     assert_eq!(text_of(&lines[2]), "");
     assert_eq!(text_of(&lines[3]), " ◐ loading release notes from GitHub…");
@@ -171,7 +171,7 @@ fn read_only_callout_names_the_directory() {
             callout: Some(Callout {
                 writable: false,
                 install_dir: "/usr/local/bin",
-                chip: "HC_TUI_INSTALL_DIR=/usr/local/bin hc-tui --upgrade",
+                chip: "BACKLOT_INSTALL_DIR=/usr/local/bin backlot --upgrade",
                 managed: None,
             }),
         },
@@ -184,7 +184,7 @@ fn read_only_callout_names_the_directory() {
     );
     assert_eq!(
         text_of(&lines[1]),
-        " upgrade from a shell: HC_TUI_INSTALL_DIR=/usr/local/bin hc-tui --upgrade"
+        " upgrade from a shell: BACKLOT_INSTALL_DIR=/usr/local/bin backlot --upgrade"
     );
     assert_eq!(text_of(&lines[3]), " release notes unavailable offline");
 }

@@ -63,6 +63,20 @@ fn upgrade_is_a_parse_action() {
     assert!(INSTALL_COMMAND.contains("install.sh"));
 }
 
+/// Both installer constants name backlot's own release script, never
+/// hc-tui's: the pipeline the update card runs and the one-liner
+/// `--upgrade` prints must not drift apart.
+#[test]
+fn the_installer_names_backlots_own_release_script() {
+    assert!(INSTALL_URL.ends_with("/followcat/backlot/releases/latest/download/install.sh"));
+    assert!(INSTALL_COMMAND.contains(INSTALL_URL));
+    assert!(INSTALL_COMMAND.ends_with("| sh"));
+    for text in [INSTALL_URL, INSTALL_COMMAND] {
+        assert!(!text.contains("hc-tui"), "{text}");
+        assert!(!text.contains("github.io"), "{text}");
+    }
+}
+
 /// Both endpoint kinds multiplex their attaches onto one shared
 /// framed connection: a remote's share one ssh child, a local's one
 /// Unix socket — either way a burst costs one transport + `hello`.
@@ -87,7 +101,7 @@ async fn local_attaches_share_one_socket_hello_and_two_channels() {
     use hc_proto::terminal::AttachParams;
     use tokio::io::AsyncWriteExt;
 
-    let dir = std::env::temp_dir().join(format!("hc-tui-cli-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("backlot-cli-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("shared-attach.sock");
     let _ = std::fs::remove_file(&socket);
@@ -189,7 +203,7 @@ async fn local_attaches_share_one_socket_hello_and_two_channels() {
 #[tokio::test]
 async fn shared_rpc_opens_one_connection_for_every_consumer() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let dir = std::env::temp_dir().join(format!("hc-tui-cli-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("backlot-cli-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("shared-rpc.sock");
     let _ = std::fs::remove_file(&socket);
@@ -250,7 +264,7 @@ fn caller_needs_the_verifying_socket_var() {
 #[test]
 fn upgrade_installs_into_the_running_binary_directory_unless_configured() {
     use crate::update_install::upgrade_install_dir;
-    let exe = std::path::Path::new("/home/user/bin/hc-tui");
+    let exe = std::path::Path::new("/home/user/bin/backlot");
     let dir = std::path::PathBuf::from("/home/user/bin");
     assert_eq!(upgrade_install_dir(None, Some(exe)), Some(dir.clone()));
     assert_eq!(
@@ -270,13 +284,13 @@ fn managed_and_dev_build_upgrades_are_refused_with_their_own_commands() {
     let managed = [
         (
             crate::install_source::InstallSource::Mise {
-                tool: "github:followcat/hc-tui".into(),
+                tool: "github:followcat/backlot".into(),
             },
-            "mise upgrade --bump github:followcat/hc-tui",
+            "mise upgrade --bump github:followcat/backlot",
         ),
         (
             crate::install_source::InstallSource::Homebrew,
-            "brew upgrade hc-tui",
+            "brew upgrade backlot",
         ),
         (
             crate::install_source::InstallSource::Nix,
@@ -300,14 +314,14 @@ fn managed_and_dev_build_upgrades_are_refused_with_their_own_commands() {
     }
 }
 
-/// An explicit `HC_TUI_INSTALL_DIR` is the user's own choice: the
+/// An explicit `BACKLOT_INSTALL_DIR` is the user's own choice: the
 /// installer runs as asked even on a managed install.
 #[test]
 fn an_explicit_install_dir_runs_the_installer_as_asked() {
     let ran = std::cell::Cell::new(false);
     let status = upgrade_with(
         &crate::install_source::InstallSource::Mise {
-            tool: "github:followcat/hc-tui".into(),
+            tool: "github:followcat/backlot".into(),
         },
         Some(std::ffi::OsStr::new("/opt/hc")),
         Some(std::path::PathBuf::from("/home/user/bin")),
@@ -322,7 +336,7 @@ fn an_explicit_install_dir_runs_the_installer_as_asked() {
 }
 
 /// A direct install still upgrades the running binary's directory; an
-/// empty `HC_TUI_INSTALL_DIR` counts as unset.
+/// empty `BACKLOT_INSTALL_DIR` counts as unset.
 #[test]
 fn a_direct_upgrade_installs_into_the_running_directory() {
     let dir = std::path::Path::new("/home/user/bin");

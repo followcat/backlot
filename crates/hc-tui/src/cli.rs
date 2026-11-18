@@ -79,9 +79,12 @@ pub fn version_text() -> String {
     format!("backlot {}", env!("CARGO_PKG_VERSION"))
 }
 
+pub const INSTALL_URL: &str =
+    "https://github.com/followcat/backlot/releases/latest/download/install.sh";
+
 /// The documented installer one-liner — the same URL `docs/install.md`
-/// publishes. Kept in one constant so `--upgrade` and the notice text
-/// can't drift apart.
+/// publishes and [`INSTALL_URL`] names. Kept together so `--upgrade`,
+/// the update card and the notice text can't drift apart.
 pub const INSTALL_COMMAND: &str =
     "curl -fsSL https://github.com/followcat/backlot/releases/latest/download/install.sh | sh";
 
@@ -96,13 +99,13 @@ pub fn upgrade() -> std::process::ExitCode {
     let dir = crate::update_install::upgrade_install_dir(configured.as_deref(), None);
     let code = upgrade_with(&source, configured.as_deref(), dir, &run_installer);
     if code == 0 {
-        println!("restart hc-tui to use the new version");
+        println!("restart backlot to use the new version");
     }
     std::process::ExitCode::from(code)
 }
 
 /// The `--upgrade` decision, with the installer injected so tests never
-/// spawn it. An explicit non-empty `HC_TUI_INSTALL_DIR` runs as asked; a
+/// spawn it. An explicit non-empty `BACKLOT_INSTALL_DIR` runs as asked; a
 /// managed or dev-build binary refuses with its own command; a direct
 /// install upgrades `direct_dir`, the running binary's directory.
 pub fn upgrade_with(

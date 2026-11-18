@@ -1,7 +1,7 @@
 // Derived from herdr src/update.rs (Apache-2.0): the managed-install
-// refusal and its per-channel update command, with hc-tui's own paths
+// refusal and its per-channel update command, with backlot's own paths
 // and commands.
-//! Which channel the running hc-tui came from, and whether `--upgrade`
+//! Which channel the running backlot came from, and whether `--upgrade`
 //! and the update card may replace that binary in place.
 
 use std::ffi::OsString;
@@ -132,13 +132,13 @@ fn mise_tool_name(dir: &str) -> String {
     dir.to_owned()
 }
 
-/// A Homebrew keg: `…/Cellar/hc-tui/<version>/…`.
+/// A Homebrew keg: `…/Cellar/backlot/<version>/…`.
 fn is_homebrew(exe: &Path) -> bool {
     let parts: Vec<_> = exe
         .components()
         .filter_map(|part| part.as_os_str().to_str())
         .collect();
-    parts.windows(2).any(|pair| pair == ["Cellar", "hc-tui"])
+    parts.windows(2).any(|pair| pair == ["Cellar", "backlot"])
 }
 
 /// A checkout build: `target/debug` or `target/release`, or the same
@@ -158,11 +158,11 @@ impl InstallSource {
     /// The `--upgrade` refusal line; `None` for a direct install.
     pub fn refusal(&self) -> Option<String> {
         Some(match self {
-            Self::Mise { tool } => format!("hc-tui is managed by mise; run: {}", mise_command(tool)),
-            Self::Homebrew => format!("hc-tui is managed by Homebrew; run: {HOMEBREW_COMMAND}"),
-            Self::Nix => "hc-tui is managed by Nix; update it through the Nix configuration that installed it".into(),
-            Self::Cargo => "hc-tui was installed with cargo; reinstall it with cargo the way you installed it".into(),
-            Self::DevBuild => "hc-tui is a dev build and is never upgraded; rebuild it from your checkout".into(),
+            Self::Mise { tool } => format!("backlot is managed by mise; run: {}", mise_command(tool)),
+            Self::Homebrew => format!("backlot is managed by Homebrew; run: {HOMEBREW_COMMAND}"),
+            Self::Nix => "backlot is managed by Nix; update it through the Nix configuration that installed it".into(),
+            Self::Cargo => "backlot was installed with cargo; reinstall it with cargo the way you installed it".into(),
+            Self::DevBuild => "backlot is a dev build and is never upgraded; rebuild it from your checkout".into(),
             Self::Direct => return None,
         })
     }
@@ -189,7 +189,7 @@ impl InstallSource {
     }
 }
 
-const HOMEBREW_COMMAND: &str = "brew upgrade hc-tui";
+const HOMEBREW_COMMAND: &str = "brew upgrade backlot";
 
 /// `--bump` rewrites an exact pin in the mise config. A plain
 /// `mise upgrade` stays inside the version the config requests, so an

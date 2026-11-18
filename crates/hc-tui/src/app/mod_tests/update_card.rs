@@ -47,7 +47,7 @@ fn notes_for(version: &str) -> CachedRelease {
 fn offered() -> App {
     let mut app = app();
     app.update_latest = Some("9.9.9".into());
-    app.running_exe = Some(std::path::PathBuf::from("/nonexistent-hc-dir/hc-tui"));
+    app.running_exe = Some(std::path::PathBuf::from("/nonexistent-hc-dir/backlot"));
     app
 }
 
@@ -128,23 +128,23 @@ async fn the_card_owns_the_keys_meant_for_the_pane() {
 async fn a_writable_install_dir_offers_update_and_a_read_only_one_hides_it() {
     let writable = Scratch::new("writable");
     let mut app = offered();
-    app.running_exe = Some(writable.0.join("hc-tui"));
+    app.running_exe = Some(writable.0.join("backlot"));
     app.open_update();
     let modal = app.update_modal.as_ref().unwrap();
     assert!(modal.writable);
-    assert_eq!(modal.chip, "hc-tui --upgrade");
+    assert_eq!(modal.chip, "backlot --upgrade");
     draw_to(&mut app, 80, 24);
     let buttons = &app.update_modal.as_ref().unwrap().render.buttons;
     assert!(buttons.iter().any(|(_, kind)| *kind == Button::Update));
 
     let mut app = offered();
-    app.running_exe = Some(std::path::PathBuf::from("/nonexistent-hc-dir/hc-tui"));
+    app.running_exe = Some(std::path::PathBuf::from("/nonexistent-hc-dir/backlot"));
     app.open_update();
     let modal = app.update_modal.as_ref().unwrap();
     assert!(!modal.writable);
     assert_eq!(
         modal.chip,
-        "HC_TUI_INSTALL_DIR=/nonexistent-hc-dir hc-tui --upgrade"
+        "BACKLOT_INSTALL_DIR=/nonexistent-hc-dir backlot --upgrade"
     );
     draw_to(&mut app, 80, 24);
     let buttons = &app.update_modal.as_ref().unwrap().render.buttons;
@@ -157,21 +157,21 @@ async fn a_writable_install_dir_offers_update_and_a_read_only_one_hides_it() {
 #[tokio::test]
 async fn a_binary_in_a_home_bin_targets_that_directory_and_quotes_it() {
     let mut app = offered();
-    app.running_exe = Some(std::path::PathBuf::from("/home/user/bin/hc-tui"));
+    app.running_exe = Some(std::path::PathBuf::from("/home/user/bin/backlot"));
     app.open_update();
     let modal = app.update_modal.as_ref().unwrap();
     assert_eq!(modal.install_text, "/home/user/bin");
     assert_eq!(
         modal.chip,
-        "HC_TUI_INSTALL_DIR=/home/user/bin hc-tui --upgrade"
+        "BACKLOT_INSTALL_DIR=/home/user/bin backlot --upgrade"
     );
 
     let mut app = offered();
-    app.running_exe = Some(std::path::PathBuf::from("/home/user/it's/hc-tui"));
+    app.running_exe = Some(std::path::PathBuf::from("/home/user/it's/backlot"));
     app.open_update();
     assert_eq!(
         app.update_modal.as_ref().unwrap().chip,
-        "HC_TUI_INSTALL_DIR='/home/user/it'\\''s' hc-tui --upgrade"
+        "BACKLOT_INSTALL_DIR='/home/user/it'\\''s' backlot --upgrade"
     );
 }
 
