@@ -443,6 +443,10 @@ fn the_frame_names_its_state_and_the_role_on_set() {
             .collect::<String>(),
         " !2 "
     );
+    // One unchipped space separates the counts and the badge —
+    // `0/0  !2 ` reads apart (round 2).
+    assert_eq!(buf[(chip[0] - 1, frame.y + 1)].symbol(), " ");
+    assert_ne!(buf[(chip[0] - 1, frame.y + 1)].bg, palette.peach);
     // The working role is on set, then what it is doing.
     let who = row_of(&buf, area, frame.y + 2);
     assert!(who.contains("producer"), "{who}");
@@ -580,6 +584,7 @@ fn the_card_view_draws_over_the_layer() {
     let summary = summary();
     let mut open = layer(LayerMode::Expanded);
     open.view = Some(CardView {
+        card: "c4".into(),
         title: "c4".into(),
         lines: (0..30).map(|i| format!("draft line {i}")).collect(),
         scroll: 0,
@@ -592,6 +597,130 @@ fn the_card_view_draws_over_the_layer() {
     assert!(text.contains("c4"), "{text}");
     let view = hits.view.expect("the view's hit map");
     assert!(view.metrics.unwrap().max_offset_from_bottom > 0);
+}
+
+#[test]
+fn the_card_view_has_a_complete_border_and_footer() {
+    // §4: the view is a real box — `─` fills the top edge after the
+    // title, `│` runs down both sides, and the bottom edge carries
+    // `a apply  x cancel  esc back`.
+    let summary = summary();
+    let mut open = layer(LayerMode::Expanded);
+    open.view = Some(CardView {
+        card: "c4".into(),
+        title: "c4".into(),
+        lines: vec!["cast: alice".into()],
+        scroll: 0,
+    });
+    let area = Rect::new(0, 0, 80, 24);
+    let palette = palettes()[0].clone();
+    let (buf, hits) = draw(area, Some(&summary), true, &open, false, &palette);
+    let view = hits.view.expect("the view's hit map");
+    let top = row_of(&buf, area, view.area.y);
+    assert!(top.contains('╭') && top.contains('╮'), "top edge: {top}");
+    // Everything after the title up to `╮` is `─`.
+    let title_end = top.rfind("c4 ").expect("the title is on the top edge") + 3;
+    let fill = &top[title_end..top.rfind('╮').unwrap()];
+    assert!(fill.chars().all(|c| c == '─'), "top fill: {fill:?}");
+    let column = |x: u16| {
+        (view.area.y..view.area.y + view.area.height)
+            .map(|y| buf[(x, y)].symbol())
+            .collect::<String>()
+    };
+    for side in [
+        column(view.area.x),
+        column(view.area.x + view.area.width - 1),
+    ] {
+        let middle: String = side
+            .chars()
+            .skip(1)
+            .take(side.chars().count() - 2)
+            .collect();
+        assert!(middle.chars().all(|c| c == '│'), "side edge: {middle:?}");
+    }
+    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    assert!(
+        bottom.contains('╰') && bottom.contains('╯'),
+        "bottom: {bottom}"
+    );
+    assert!(
+        bottom.contains("a apply") && bottom.contains("x cancel") && bottom.contains("esc back"),
+        "footer: {bottom}"
+    );
+}
+
+#[test]
+fn the_card_views_footer_shows_the_pending_mark() {
+    // An action kicked off inside the view reports `… <label>` in
+    // the footer while it runs.
+    let mut open = layer(LayerMode::Expanded);
+    open.pending = Some("card apply c4".into());
+    open.view = Some(CardView {
+        card: "c4".into(),
+        title: "c4".into(),
+        lines: vec!["cast: alice".into()],
+        scroll: 0,
+    });
+    let area = Rect::new(0, 0, 80, 24);
+    let (buf, hits) = draw(area, None, true, &open, false, &palettes()[0]);
+    let view = hits.view.expect("the view's hit map");
+    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    assert!(bottom.contains("… card apply c4"), "footer: {bottom}");
+}
+
+#[test]
+fn the_stage_and_ready_rows_compact_like_the_others() {
+    // At mobile widths every waiting row draws `[k]` chips — the
+    // stage and ready rows cannot keep their full labels while the
+    // prompt and card rows fold (round 2).
+    let mut local = summary();
+    local.studios[0].ready_to_finish = true;
+    local.studios[0].tasks_done = 0;
+    local.studios[0].tasks_total = 1;
+    let list = vec![
+        crate::panel::data::MachineSummary {
+            machine: None,
+            summary: local,
+        },
+        remote(&summary()),
+    ];
+    let status: &crate::hollywood::sheet::Status = &|machine| match machine {
+        None => (crate::hollywood::sheet::Conn::Online, true),
+        Some(_) => (crate::hollywood::sheet::Conn::Online, false),
+    };
+    for width in [40u16, 60] {
+        let area = Rect::new(0, 0, width, 24);
+        let mut buf = Buffer::empty(area);
+        render(
+            &mut buf,
+            area,
+            &list,
+            Some(crate::project::LOCAL_LABEL),
+            &status,
+            &layer(LayerMode::Expanded),
+            LayerOpts {
+                agent: true,
+                mobile: true,
+            },
+            &palettes()[0],
+        );
+        let text = lines(&buf, area).join("\n");
+        let stage = text
+            .lines()
+            .find(|l| l.contains("STAGE DOWN"))
+            .unwrap_or("");
+        let ready = text.lines().find(|l| l.contains("READY")).unwrap_or("");
+        assert!(
+            stage.contains("[r]"),
+            "stage row at {width}: {stage}\n{text}"
+        );
+        assert!(
+            ready.contains("[f]") && ready.contains("[↵]"),
+            "ready row at {width}: {ready}\n{text}"
+        );
+        assert!(!ready.contains("finish f"), "{ready}");
+        assert!(!stage.contains("start r"), "{stage}");
+    }
 }
 
 // ---------- the new-studio frame ----------

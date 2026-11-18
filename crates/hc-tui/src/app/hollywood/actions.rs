@@ -27,7 +27,12 @@ impl App {
 
     /// `y`/`d` on a prompt row: `backlot approve --person <role_key>
     /// --decision <d>`, on the prompt's own machine (D9).
-    fn hollywood_prompt_decision(&mut self, studio: &StudioKey, role: &str, allow: bool) {
+    pub(crate) fn hollywood_prompt_decision(
+        &mut self,
+        studio: &StudioKey,
+        role: &str,
+        allow: bool,
+    ) {
         let argv = self.hollywood_argv(
             &[
                 "approve".into(),
@@ -60,7 +65,14 @@ impl App {
                 .and_then(|r| r.terminal.clone())
         });
         match terminal {
-            Some(terminal) => self.open_peek(terminal),
+            Some(terminal) => {
+                self.open_peek(terminal);
+                // The peek Hollywood opened carries the prompt:
+                // `y`/`d` answer it from inside (D5).
+                if let Some(peek) = self.peek.as_mut() {
+                    peek.prompt = Some((studio.clone(), role.to_string()));
+                }
+            }
             None => self.show_notice("Hollywood", "the role has no screen to peek"),
         }
     }
@@ -99,7 +111,7 @@ impl App {
     }
 
     /// `a` / Apply on the selected card: `backlot card apply <id>`.
-    fn hollywood_card_apply(&mut self, id: &str) {
+    pub(super) fn hollywood_card_apply(&mut self, id: &str) {
         let argv = self.hollywood_argv(&["card".into(), "apply".into(), id.to_string()], None);
         self.run_hollywood_action(hollywood::HollywoodAction {
             label: format!("card apply {id}"),
@@ -111,7 +123,7 @@ impl App {
 
     /// `x` / Cancel on the selected card: `backlot card cancel <id>`
     /// with the layer's reason.
-    fn hollywood_card_cancel(&mut self, id: &str) {
+    pub(super) fn hollywood_card_cancel(&mut self, id: &str) {
         let argv = self.hollywood_argv(
             &[
                 "card".into(),
@@ -260,13 +272,27 @@ impl App {
                     self.show_notice("Hollywood", &format!("{label}: nothing to show"));
                 } else {
                     self.hollywood.view = Some(CardView {
+                        card: title.clone(),
                         title,
                         lines,
                         scroll: 0,
                     });
                 }
             }
-            Ok(_) => {}
+            Ok(_) => {
+                // A card answered from inside its read retires the
+                // view with the row — the label is `card apply <id>`
+                // or `card cancel <id>`.
+                let resolved = self
+                    .hollywood
+                    .view
+                    .as_ref()
+                    .is_some_and(|v| label.ends_with(&v.card));
+                if resolved && (label.starts_with("card apply") || label.starts_with("card cancel"))
+                {
+                    self.hollywood.view = None;
+                }
+            }
             Err(error) => {
                 self.show_notice("Hollywood action failed", &format!("{label}: {error}"));
             }

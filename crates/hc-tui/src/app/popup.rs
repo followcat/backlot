@@ -92,7 +92,10 @@ pub(super) struct CommandOverlay {
 }
 
 /// A peek overlay: an observe-only attach over a running terminal plus its
-/// keep-as-tab facts (`herdr-app`'s `terminal.peek` overlay).
+/// keep-as-tab facts (`herdr-app`'s `terminal.peek` overlay). A peek
+/// Hollywood opened for a prompt carries the prompt's target so `y`/`d`
+/// answer it in place (D5); every other peek leaves it `None` and keeps
+/// the reference's keys verbatim.
 pub(super) struct PeekState {
     pub pane: Pane,
     pub terminal: String,
@@ -100,6 +103,8 @@ pub(super) struct PeekState {
     pub owner_tab: Option<String>,
     /// Peeked terminals exist at open; loss is real immediately.
     pub seen: bool,
+    /// The Call Sheet prompt this peek is answering, when it is one.
+    pub prompt: Option<(crate::studio::StudioKey, String)>,
 }
 
 impl App {
@@ -590,13 +595,16 @@ impl App {
                 .and_then(|t| t.labels.get("herdr.title").cloned())
                 .filter(|t| !t.is_empty())
                 .unwrap_or_else(|| peek.terminal.clone());
-            let block = Block::default()
+            let mut block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(palette.accent).bg(palette.panel_bg))
                 .style(Style::default().bg(palette.panel_bg))
                 .title(format!(
                     " peek {title} — enter keeps it as a tab, esc closes "
                 ));
+            if peek.prompt.is_some() {
+                block = block.title_bottom(" y allow  d deny  ↵ focus terminal  esc back ");
+            }
             let inner = block.inner(outer);
             block.render(outer, buf);
             let header = Rect::new(inner.x, inner.y, inner.width, 1);
@@ -726,6 +734,7 @@ impl App {
             created_ms,
             owner_tab: self.projection.snapshot.focused_tab_id.clone(),
             seen: true,
+            prompt: None,
         });
     }
 
@@ -737,7 +746,8 @@ impl App {
     }
 
     /// Peek keys: `Esc` dismisses, `Enter` keeps as a tab — the peek bar's
-    /// `↗ keep` and `✕` buttons (Observe attaches never type).
+    /// `↗ keep` and `✕` buttons (Observe attaches never type). A prompt
+    /// peek adds `y`/`d`: the Call Sheet's `approve` command, then close.
     pub(super) fn peek_key(&mut self, key: &TerminalKey) -> bool {
         if self.peek.is_none() {
             return false;
@@ -745,7 +755,13 @@ impl App {
         if key.input.action != hc_vt::Action::Press {
             return true;
         }
+        let prompt = self.peek.as_ref().and_then(|peek| peek.prompt.clone());
         match (key.input.key, key.input.mods) {
+            (hc_vt::Key::Char(c @ ('y' | 'd')), hc_vt::Mods::NONE) if prompt.is_some() => {
+                let (studio, role) = prompt.expect("checked above");
+                self.hollywood_prompt_decision(&studio, &role, c == 'y');
+                self.close_peek();
+            }
             (hc_vt::Key::Escape, hc_vt::Mods::NONE) => self.close_peek(),
             (hc_vt::Key::Enter, hc_vt::Mods::NONE) => self.keep_peek(),
             _ => {}

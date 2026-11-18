@@ -24,7 +24,9 @@ pub(crate) const MARGIN: u16 = 2;
 
 /// Draw one band row across `rect`. `selected` lights the row and
 /// its primary chip; `detail` draws the item's second line (which
-/// `rect.height` already counts).
+/// `rect.height` already counts); `mobile` folds every row's chips
+/// to `[k]` — the labels matter more than the chip words at these
+/// widths.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_row(
     buf: &mut Buffer,
@@ -34,6 +36,7 @@ pub(crate) fn draw_row(
     hollywood: &Hollywood,
     local: &str,
     multi: bool,
+    mobile: bool,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -69,6 +72,7 @@ pub(crate) fn draw_row(
                 hollywood,
                 local,
                 multi,
+                mobile,
                 selected,
                 palette,
                 hits,
@@ -114,6 +118,7 @@ fn draw_wait(
     hollywood: &Hollywood,
     local: &str,
     multi: bool,
+    mobile: bool,
     selected: bool,
     palette: &Palette,
     _hits: &mut HollywoodRender,
@@ -164,7 +169,8 @@ fn draw_wait(
             .add_modifier(Modifier::BOLD),
     );
     let chips = chips_of(wait);
-    // Compact chips when the full labels cannot fit beside the head.
+    // Compact chips at the narrow cut, and whenever the full labels
+    // cannot leave the head its twenty cells.
     let full_w: u16 = chips
         .iter()
         .map(|c| display_width(&chip_text(c, false)) as u16)
@@ -176,7 +182,7 @@ fn draw_wait(
     let head_x = x + 2;
     let avail = rect.x + rect.width - MARGIN;
     let head_room_full = avail.saturating_sub(head_x + full_w + 1);
-    let compact = head_room_full < 20.min(display_width(&head) as u16);
+    let compact = mobile || head_room_full < 20.min(display_width(&head) as u16);
     let chips_w = if compact { compact_w } else { full_w };
     let head_room = avail.saturating_sub(head_x + chips_w + 1);
     // Ultra-compact at the narrowest: `× #7 dir` — the kind word

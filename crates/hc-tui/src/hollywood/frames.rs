@@ -265,7 +265,8 @@ fn draw_studio(
     } else {
         String::new()
     };
-    right_w += chip.chars().count() as u16;
+    // One unchipped space between the counts and the badge.
+    right_w += chip.chars().count() as u16 + u16::from(!chip.is_empty());
     if inner > right_w + 8 {
         let mut rx = rect.x + rect.width - 2 - right_w;
         put_text(buf, rx, y, rev.chars().count() as u16, &rev, {
@@ -273,6 +274,7 @@ fn draw_studio(
         });
         rx += rev.chars().count() as u16;
         if !chip.is_empty() {
+            rx += 1;
             let user = studio.studio.roles.iter().any(|r| r.attention_user);
             put_text(
                 buf,

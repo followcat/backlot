@@ -297,6 +297,7 @@ fn render_band(
                     hollywood,
                     local_label,
                     multi,
+                    opts.mobile,
                     palette,
                     &mut hits,
                 );
@@ -320,6 +321,7 @@ fn render_band(
                     hollywood,
                     local_label,
                     multi,
+                    opts.mobile,
                     palette,
                     &mut hits,
                 );
@@ -337,6 +339,7 @@ fn render_band(
                     hollywood,
                     local_label,
                     multi,
+                    opts.mobile,
                     palette,
                     &mut hits,
                 );
@@ -394,7 +397,13 @@ fn render_band(
         title::draw_sprocket(buf, area, y, '▀', palette);
     }
     if let Some(view) = hollywood.view.as_ref() {
-        hits.view = Some(view::render_view(buf, area, view, palette));
+        hits.view = Some(view::render_view(
+            buf,
+            area,
+            view,
+            hollywood.pending.as_deref(),
+            palette,
+        ));
     }
     hits
 }
