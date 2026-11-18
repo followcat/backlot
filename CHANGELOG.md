@@ -6,6 +6,8 @@ All notable changes to hc-tui are documented here. The format follows
 
 ## Unreleased
 
+## 0.1.13 — 2026-11-18
+
 ### Added
 
 - Ctrl+V image paste over SSH sends the image in acknowledged pieces
