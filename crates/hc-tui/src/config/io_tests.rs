@@ -74,6 +74,63 @@ fn herdr_only_experimental_keys_are_accepted_and_ignored() {
     assert!(loaded.diagnostics.is_empty());
 }
 
+/// `[advanced]` carries Herdr's own scrollback key and hc-tui's attach
+/// history. Both default without a config, parse with one, and the legacy
+/// `scrollback_lines` alias keeps a Herdr-era file working.
+#[test]
+fn advanced_keys_default_parse_and_alias() {
+    use crate::config::{
+        DEFAULT_ATTACH_HISTORY_LINES, DEFAULT_SCROLLBACK_LIMIT_BYTES, MAX_ATTACH_HISTORY_LINES,
+    };
+    let loaded = load_text("[ui]\nsidebar_width = 30\n");
+    assert_eq!(
+        loaded.config.advanced.scrollback_limit_bytes,
+        DEFAULT_SCROLLBACK_LIMIT_BYTES
+    );
+    assert_eq!(DEFAULT_SCROLLBACK_LIMIT_BYTES, 10_000_000);
+    assert_eq!(
+        loaded.config.advanced.attach_history_lines,
+        DEFAULT_ATTACH_HISTORY_LINES
+    );
+    assert_eq!(DEFAULT_ATTACH_HISTORY_LINES, 5000);
+    assert_eq!(loaded.config.advanced.attach_history(), 5000);
+    assert!(loaded.diagnostics.is_empty());
+
+    let loaded =
+        load_text("[advanced]\nscrollback_limit_bytes = 2000000\nattach_history_lines = 1200\n");
+    assert_eq!(loaded.config.advanced.scrollback_limit_bytes, 2_000_000);
+    assert_eq!(loaded.config.advanced.attach_history(), 1200);
+    assert!(loaded.diagnostics.is_empty());
+
+    let loaded = load_text("[advanced]\nscrollback_lines = 42\n");
+    assert_eq!(loaded.config.advanced.scrollback_limit_bytes, 42);
+
+    // `0` is legal and means "no history"; anything past the ceiling is
+    // clamped on use rather than rejected.
+    let loaded = load_text("[advanced]\nattach_history_lines = 0\n");
+    assert_eq!(loaded.config.advanced.attach_history(), 0);
+    let loaded = load_text(&format!(
+        "[advanced]\nattach_history_lines = {}\n",
+        MAX_ATTACH_HISTORY_LINES * 4
+    ));
+    assert_eq!(
+        loaded.config.advanced.attach_history(),
+        MAX_ATTACH_HISTORY_LINES
+    );
+}
+
+/// `[advanced]` is consumed now, so a misspelt key is diagnosed like any
+/// other modelled section — Herdr's own section has no other keys to
+/// tolerate.
+#[test]
+fn unknown_advanced_key_is_diagnosed() {
+    let loaded = load_text("[advanced]\nscrollback_limit_byte = 1\n");
+    assert_eq!(
+        loaded.diagnostics,
+        ["unknown config key advanced.scrollback_limit_byte; ignoring key"]
+    );
+}
+
 #[test]
 fn unknown_section_uses_the_reference_hint_once() {
     let loaded = load_text("[toast]\ndelivery = 'system'\n");

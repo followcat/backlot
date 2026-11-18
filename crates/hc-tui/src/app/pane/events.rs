@@ -163,6 +163,23 @@ impl Pane {
 
     /// Decode in wire order; only the complete mode barrier releases queued input.
     pub(super) fn on_output(&mut self, out: Output, now: Instant) {
+        // A warm attach whose promised screen never arrived (the observer
+        // failed, was evicted, or belongs to another incarnation) would
+        // apply a screen-only paint to nothing and lose the scrollback it
+        // was meant to keep. The cached VT is in doubt: reopen cold.
+        if matches!(out, Output::Data(_))
+            && self.await_warm
+            && self.vt.is_none()
+            && matches!(&self.state, State::Live(live) if !live.paint_started)
+        {
+            let Some(spec) = self.spec().cloned() else {
+                return;
+            };
+            self.wire_lost();
+            self.teardown(false);
+            self.spawn(spec, false, 0);
+            return;
+        }
         let State::Live(live) = &mut self.state else {
             return;
         };
@@ -179,14 +196,34 @@ impl Pane {
                 }
                 if !live.paint_started {
                     live.paint_started = true;
-                    let mut vt = Vt::new(
-                        live.core_grid.0,
-                        live.core_grid.1,
-                        scrollback_limit(live.spec.role),
-                    );
-                    self.initial = seed_host(&mut vt, &self.host);
-                    self.render_cache = None;
-                    self.vt = Some(vt);
+                    // A warm attach continues the VT its predecessor was
+                    // feeding: the screen-only paint lands in it and the
+                    // scrollback survives the switch. Anything else builds
+                    // a fresh VT at the reply's grid.
+                    let warm = self.await_warm && self.vt.is_some();
+                    self.await_warm = false;
+                    self.warm_expect = None;
+                    if warm {
+                        // The paint replaces the screen, so the surface
+                        // cache the previous painter filled no longer
+                        // describes it; resize to the reply's grid before
+                        // the paint lands.
+                        self.render_cache = None;
+                        if let Some(vt) = self.vt.as_mut()
+                            && vt.size() != Ok(live.core_grid)
+                            && let Err(error) = vt.resize(live.core_grid.0, live.core_grid.1)
+                        {
+                            live.vt_broken = Some(format!("resize: {error}"));
+                        }
+                        self.vt_current = true;
+                    } else {
+                        let mut vt =
+                            Vt::new(live.core_grid.0, live.core_grid.1, self.scrollback_bytes);
+                        self.initial = seed_host(&mut vt, &self.host);
+                        self.render_cache = None;
+                        self.vt = Some(vt);
+                        self.vt_current = true;
+                    }
                 }
                 let Some(vt) = &mut self.vt else {
                     return;

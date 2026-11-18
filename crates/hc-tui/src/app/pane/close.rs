@@ -17,32 +17,51 @@ struct Drain {
 }
 
 impl Pane {
-    pub(super) fn begin_close(&mut self, mut parked: Parked) {
+    pub(super) fn begin_close(&mut self, parked: Parked) {
         // Held-release encode failures belong to the parked terminal —
         // never to whichever target the pane serves now.
-        let served = Some(parked.terminal.as_str()) == self.target();
+        let Parked {
+            mut held,
+            route,
+            terminal,
+            attach,
+            out,
+            vt,
+            mut pending_input,
+            pending_reply,
+            reader,
+            writer,
+        } = parked;
+        let served = Some(terminal.as_str()) == self.target();
         let mut ignored = None;
         let sink = if served {
             &mut self.close_error
         } else {
             &mut ignored
         };
-        parked
-            .held
-            .release_into(&parked.vt, &mut parked.pending_input, sink);
+        held.release_into(&vt, &mut pending_input, sink);
+        // The drain's last releases are encoded and its wire has stopped
+        // feeding: the VT is the terminal's last live screen. Hand it
+        // back so the observer inheriting this terminal continues it
+        // (`take_retained`) instead of replaying history. A pane that
+        // already serves another terminal keeps its own screen.
+        let inherits = self.target().is_none_or(|target| target == terminal);
+        if inherits && self.vt.is_none() {
+            self.vt = Some(vt);
+            self.vt_current = true;
+        }
         self.start_drain(Drain {
-            route: parked.route,
-            terminal: parked.terminal,
-            attach: parked.attach,
-            out: parked.out,
-            pending: parked
-                .pending_reply
+            route,
+            terminal,
+            attach,
+            out,
+            pending: pending_reply
                 .into_iter()
                 .map(Out::Reply)
-                .chain(parked.pending_input)
+                .chain(pending_input)
                 .collect(),
-            reader: parked.reader,
-            writer: parked.writer,
+            reader,
+            writer,
         });
     }
 

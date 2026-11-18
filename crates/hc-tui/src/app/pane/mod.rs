@@ -158,8 +158,6 @@ const OUT_QUEUE: usize = 64;
 /// Pending human input bound, in items and bytes.
 const PENDING_MAX_ITEMS: usize = 128;
 const PENDING_MAX_BYTES: usize = crate::app::input::MAX_INPUT_BYTES;
-/// First-paint history lines requested on a fresh attach.
-pub(crate) const HISTORY: u64 = 200;
 
 /// A swapped-out attach parked to drain forwarded input leases: the
 /// program saw presses on this wire, so physical key-up releases must
@@ -247,6 +245,20 @@ pub struct Pane {
     /// The VT/screen — retained across Down and re-Opening for the same
     /// spec; `None` on Idle or after a spec change.
     vt: Option<Vt>,
+    /// `true` while `vt` was fed by a wire that stayed live up to the
+    /// handover. Only then may the next attach ask for the screen alone
+    /// and continue this VT instead of replaying history.
+    vt_current: bool,
+    /// A screen handed over for the attach this pane is about to open;
+    /// `want_retained` stores it; `spawn` installs it, or the app adopts it
+    /// at the first paint (`adopt_warm`).
+    retained: Option<Retained>,
+    /// This attach asked for the screen only: a warm VT must arrive
+    /// before its first paint (passed in by `expect_warm`, or already
+    /// installed from `retained`).
+    await_warm: bool,
+    /// The incarnation the awaited VT must belong to.
+    warm_expect: Option<WarmVt>,
     /// The surface `vt` last painted into — moves with the VT so a
     /// retained screen keeps its warm cache across pane handoffs.
     render_cache: Option<render_cache::PaneRenderCache>,
@@ -288,6 +300,12 @@ pub struct Pane {
     pub(crate) pending_clipboard: Vec<Vec<u8>>,
     /// Off-tab pacing; the watched flag is `off_tab && fresh paint`.
     pacing: pacing::Pacing,
+    /// `[advanced] scrollback_limit_bytes` — the VT budget for every role
+    /// that builds one. Set once by the app at construction.
+    scrollback_bytes: usize,
+    /// `[advanced] attach_history_lines` — the scrollback a cold attach
+    /// asks the core to replay. A warm attach asks for the screen only.
+    attach_history: u64,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -321,6 +339,10 @@ impl Pane {
             ev,
             open,
             vt: None,
+            vt_current: false,
+            retained: None,
+            await_warm: false,
+            warm_expect: None,
             render_cache: None,
             vt_grid: (80, 24),
             allocated: (80, 24),
@@ -338,8 +360,29 @@ impl Pane {
             pending_bells: 0,
             pending_clipboard: Vec::new(),
             pacing: pacing::Pacing::default(),
+            scrollback_bytes: crate::config::DEFAULT_SCROLLBACK_LIMIT_BYTES,
+            attach_history: crate::config::DEFAULT_ATTACH_HISTORY_LINES,
             attaches: 0,
         }
+    }
+
+    /// `[advanced] scrollback_limit_bytes`: the VT budget for this pane.
+    /// Applies to the VT the next first paint builds; a retained VT keeps
+    /// the budget it was created with.
+    pub(crate) fn set_scrollback_bytes(&mut self, bytes: usize) {
+        self.scrollback_bytes = bytes;
+    }
+
+    /// `[advanced] attach_history_lines`: the scrollback a cold attach
+    /// asks the core for.
+    pub(crate) fn set_attach_history(&mut self, lines: u64) {
+        self.attach_history = lines;
+    }
+
+    /// The configured VT budget and cold-open history, for tests.
+    #[cfg(test)]
+    pub(crate) fn budgets(&self) -> (u64, usize) {
+        (self.attach_history, self.scrollback_bytes)
     }
 
     /// Drain the BEL count this pane's VTs observed — live, parked and
@@ -392,6 +435,9 @@ impl Drop for Pane {
         }
     }
 }
+
+mod cache;
+pub(crate) use cache::{Retained, WarmVt};
 
 mod events;
 pub(crate) mod input;

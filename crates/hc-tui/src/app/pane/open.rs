@@ -25,6 +25,24 @@ impl Pane {
         };
         let term = attach.terminal();
         let incarnation = (term.created_ms, term.pid);
+        // The cached screen must belong to the terminal this reply
+        // describes. A restarted terminal has the same address and a new
+        // incarnation: its predecessor's scrollback is not its own, so
+        // the promised warmth is withdrawn and the attach reopens cold
+        // with history.
+        let warm_mismatch = self
+            .warm_expect
+            .take()
+            .is_some_and(|warm| warm.incarnation != incarnation);
+        if warm_mismatch {
+            self.wire_lost();
+            self.vt = None;
+            self.render_cache = None;
+            self.initial = None;
+            drop(attach);
+            self.spawn(spec, false, 0);
+            return;
+        }
         if resumed && self.incarnation.is_some_and(|old| old != incarnation) {
             self.discard_pending_incarnation();
         }
