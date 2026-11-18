@@ -1,7 +1,7 @@
 //! Opt-in live check: a program redrawing a block at ~30 fps inside
 //! synchronized-output frames must never reach the screen half written.
 //!
-//! hc-tui wraps its own host output in `CSI ? 2026 h/l` (ansi.rs), so the
+//! backlot wraps its own host output in `CSI ? 2026 h/l` (ansi.rs), so the
 //! PTY stream splits into the client's paints. Each paint is fed into a
 //! VT in order; a paint that shows a frame's first line must also show the
 //! rest of it.
@@ -42,9 +42,9 @@ const PAINTS: usize = 8;
 const BEGIN: &[u8] = b"\x1b[?2026h";
 const END: &[u8] = b"\x1b[?2026l";
 
-/// The `hc-tui` binary under test.
+/// The `backlot` binary under test.
 fn tui_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_hc-tui")
+    env!("CARGO_BIN_EXE_backlot")
 }
 
 /// The fixture's own environment, nothing inherited.
@@ -101,13 +101,16 @@ fn openpty(cols: u16, rows: u16) -> (OwnedFd, OwnedFd) {
     }
 }
 
-/// `hc-tui` hosted in a pty: own session, controlling terminal.
+/// `backlot --plain` hosted in a pty: own session, controlling terminal.
+/// The plain client keeps the pane on screen; studio mode's opening page
+/// would cover it.
 fn spawn_tui(scratch: &ScratchCore) -> (OwnedFd, Child) {
     let (master, slave) = openpty(COLS, ROWS);
     let sfd = slave.as_raw_fd();
     let dup = || unsafe { Stdio::from_raw_fd(libc::dup(sfd)) };
     let mut command = Command::new(tui_bin());
     command
+        .arg("--plain")
         .env_clear()
         .envs(tui_env(scratch))
         .current_dir(&scratch.work)
