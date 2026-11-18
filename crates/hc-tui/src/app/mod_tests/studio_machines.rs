@@ -79,7 +79,7 @@ fn spaced(address: &str, space: &str) -> hc_proto::terminal::Terminal {
 /// people in the `acme-shop` space and the stage plus one stray agent
 /// in `backlot`; `host-b` carries beta-tools' people. `t1` — the
 /// producer — is focused, so the local `acme-shop` is current.
-fn two_machine_studio_app() -> App {
+pub(super) fn two_machine_studio_app() -> App {
     let mut stage = spaced("t9", "backlot");
     stage.name = Some("backlot-stage".into());
     let mut stray = agent("t50", "idle");
