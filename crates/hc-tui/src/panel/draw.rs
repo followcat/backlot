@@ -195,8 +195,11 @@ pub(crate) fn render(
         // The selection paints the row it names — a block's `Studio`
         // target shows on its top border only — with `selection_bg`,
         // a bold `text` foreground and the accent `▌` at the row's
-        // left edge (inside the block border on a person's row).
-        let paints = selected == Some(&target)
+        // left edge (inside the block border on a person's row). An
+        // unfocused panel keeps the remembered row but draws none of
+        // it: no highlight, no `▌`.
+        let paints = panel.focused
+            && selected == Some(&target)
             && matches!(
                 row,
                 Row::BlockTop(_)
@@ -206,7 +209,18 @@ pub(crate) fn render(
                     | Row::Strip(_)
             );
         if paints {
-            buf.set_style(rect, glyphs::selection(palette));
+            // A person row's `│` borders keep the border colour on the
+            // panel background: the highlight lives inside them.
+            let inner = if matches!(row, Row::Person { .. } | Row::PersonLine { .. }) {
+                Rect {
+                    x: rect.x + 1,
+                    width: rect.width.saturating_sub(2),
+                    ..rect
+                }
+            } else {
+                rect
+            };
+            buf.set_style(inner, glyphs::selection(palette));
         }
         match row {
             Row::Title => {}

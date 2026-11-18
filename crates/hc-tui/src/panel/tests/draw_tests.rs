@@ -135,22 +135,25 @@ fn borders_are_honest_about_focus() {
     let area = Rect::new(0, 0, 26, 30);
     let top_y = 1; // title row 0, the block's top border row 1
     let corner = (area.x + area.width - 1, top_y); // `╮`, past the ▌
-    // Focused and selected: the block draws in the accent.
+    // Focused and selected: the block draws in the accent, the ▌ at
+    // the row's left edge.
     let mut focused = panel(PanelMode::Expanded);
     focused.focused = true;
     focused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &focused, None);
     assert_eq!(buf[corner].fg, palette().accent);
+    assert_eq!(buf[(area.x, top_y)].symbol(), "▌");
     // Unfocused, the same selection still draws `surface1` (A2.3) —
-    // the focused-terminal studio's mark is the `▸`, not the border.
+    // the focused-terminal studio's mark is the `▸`, not the border,
+    // and no part of the selection shows: the `╭` is back, no `▌`.
     let mut unfocused = panel(PanelMode::Expanded);
     unfocused.selected = Some(Target::Studio("acme-shop".into()));
     let (buf, _) = draw(area, Some(&summary), &unfocused, Some("acme-shop"));
     assert_eq!(buf[corner].fg, palette().surface1);
+    assert_eq!(buf[(area.x, top_y)].symbol(), "╭");
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("▸"), "the focused studio's ▸ mark: {text}");
-    // And the ▌ marks the selected row's left edge.
-    assert_eq!(buf[(area.x, top_y)].symbol(), "▌");
+    assert!(!text.contains('▌'), "unfocused draws no selection: {text}");
 }
 
 #[test]
@@ -389,8 +392,38 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
 }
 
 #[test]
-fn a_selected_row_is_highlighted() {
+fn a_selected_row_is_highlighted_inside_its_borders() {
     let summary = summary();
+    let palette = palette();
+    let mut panel = panel(PanelMode::Expanded);
+    panel.focused = true;
+    panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    let area = Rect::new(0, 0, 30, 20);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    // The `▌` and the highlight sit inside the block's `│`s: the two
+    // border cells keep the border glyph on the panel background.
+    assert_eq!(buf[(alice.x + 1, alice.y)].symbol(), "▌");
+    assert_eq!(buf[(alice.x + 2, alice.y)].bg, palette.selection_bg);
+    for edge in [alice.x, alice.x + alice.width - 1] {
+        let cell = &buf[(edge, alice.y)];
+        assert_eq!(cell.symbol(), "│", "the border glyph stays");
+        assert_ne!(
+            cell.bg, palette.selection_bg,
+            "the border keeps its own look"
+        );
+    }
+}
+
+#[test]
+fn an_unfocused_panel_draws_no_selection_but_keeps_the_row() {
+    let summary = summary();
+    let palette = palette();
     let mut panel = panel(PanelMode::Expanded);
     panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
     let area = Rect::new(0, 0, 30, 20);
@@ -401,8 +434,16 @@ fn a_selected_row_is_highlighted() {
         .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
         .map(|(rect, _)| *rect)
         .expect("alice row hit");
-    let cell = &buf[(alice.x, alice.y)];
-    assert_eq!(cell.bg, palette().selection_bg);
+    for x in alice.x..alice.x + alice.width {
+        let cell = &buf[(x, alice.y)];
+        assert_ne!(cell.bg, palette.selection_bg, "no highlight unfocused");
+        assert_ne!(cell.symbol(), "▌", "no cursor unfocused");
+    }
+    // The remembered row survives — focusing again restores it.
+    assert_eq!(
+        panel.selected,
+        Some(Target::Person("acme-shop".into(), "actor-alice".into()))
+    );
 }
 
 #[test]
