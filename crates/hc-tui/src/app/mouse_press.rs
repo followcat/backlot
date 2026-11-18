@@ -170,10 +170,22 @@ impl App {
             self.open_update();
             return;
         }
-        // The `+ new workspace` sidebar row — same surface the mobile
-        // switcher exposes as `ClientMobileTarget::NewWorkspace`.
+        // The sidebar's `new` row. The classic one-machine footer keeps
+        // `new_workspace` (herdr in `--plain`, the opening page or the
+        // dialog outside it); the endpoint sidebar's `new · <machine>`
+        // is the New Studio dialog's click path, with that machine
+        // preselected (U6b) — the same condition `render_shell` routes
+        // its footer on.
         if contains(hits.new_workspace, point) {
-            self.new_workspace();
+            if !self.plain && self.projection.endpoints.len() > 1 {
+                let machine = match &self.projection.active_endpoint_id {
+                    crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
+                    _ => None,
+                };
+                self.new_studio_open(machine);
+            } else {
+                self.new_workspace();
+            }
             return;
         }
         let group_toggle = hits.workspaces.iter().find_map(|hit| {
