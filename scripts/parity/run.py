@@ -151,12 +151,16 @@ def one_size(args, size, binary):
             diff = differences(a, b, name)
             (out / (name + '-diff.json')).write_text(json.dumps(diff, ensure_ascii=False, indent=2) + '\n')
             known = known_differences(a, b)
+            cursor_reason = known_cursor_difference(a, b, name)
             bugs = diff
-            result['checkpoints'].append({'name':name, 'different_cells':len(bugs),
+            entry = {'name':name, 'different_cells':len(bugs),
 
                 'status': 'fail' if bugs else ('core-policy-difference' if expected.get('core_policy_differences') else 'pass'),
                 'core_policy_differences': expected.get('core_policy_differences', []),
-                'known_differences': {reason: len(cells) for reason, cells in known.items()}})
+                'known_differences': {reason: len(cells) for reason, cells in known.items()}}
+            if cursor_reason:
+                entry['known_cursor_difference'] = cursor_reason
+            result['checkpoints'].append(entry)
             print(json.dumps({'geometry':size,'checkpoint':name,'differences':len(bugs),
 
                 'status':'fail' if bugs else ('core-policy-difference' if expected.get('core_policy_differences') else 'pass')}),flush=True)
