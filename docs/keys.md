@@ -92,17 +92,23 @@ or `expanded`. While the band is expanded it owns these keys:
 | Keys | Action |
 |---|---|
 | `←`/`→`, `h`/`l` | Move between the studio frames, the new-studio frame included |
-| `↓`/`↑`, `j`/`k` | Move to the cards and the `tell hollywood` line, and back to the frames |
-| `Enter` | Open the selected frame: a studio → its producer, the new-studio frame → the wizard, the title → `bl-hollywood` |
+| `↓`/`↑`, `j`/`k` | Move between the waiting rows, and back to the frames |
+| `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
+| `Enter` | Activate the selection — a frame opens it, a prompt opens the role, a card shows it, an offline machine reports its last read |
+| `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine |
+| `p` | On a prompt row: peek at the role's live screen, read-only |
+| `r` | On a stage row: `backlot stage start` on that machine |
+| `a` / `x` / `s` | On a card row: `backlot card apply` / `cancel` / `show` |
+| `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
 | `n` | New studio — the wizard, with the bar collapsed first |
-| `a` / `c` / `s` | Apply, cancel or Show me on the selected card |
 | `i` | Edit the `tell hollywood` line, with an agent |
-| `PageUp`/`PageDown` | Scroll the cards |
-| `x` | Hide the bar |
+| `?` | The key list, in `Ctrl+B ?` |
+| `PageUp`/`PageDown` | Scroll the waiting list |
 | `Esc` | Collapse it to the pill |
 
-A click on a frame opens it, the card chips run their action, the input line opens for editing,
-and the wheel scrolls the frames sideways or the cards under the pointer.
+A click on a row or a chip selects it — activation stays on the keys; a click on the input line
+opens it for editing, and the wheel scrolls the frames sideways or the waiting rows under the
+pointer.
 
 ## Studio keys
 

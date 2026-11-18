@@ -23,19 +23,26 @@ layout, so toggling it resizes nothing.
   the urgent items (user prompts you own, stopped stages, ledger errors), the open cards and
   studios ready to finish, and the studios (`✦`); urgent counts turn it red, and narrow widths
   shrink it through shorter texts. A click or the toggle key expands the band.
-- **Expanded** is the **film-strip band** dropped from the top over the whole width, at most
-  half the height: `▄▄`/`▀▀` sprocket rows, the `✦  H O L L Y W O O D` title with the agent's
-  square, role state and runner / model / effort plus the right-hand studio count and
-  `k waiting on you` in peach, then one seven-row frame per studio — id in the top edge
-  (accent on `selection_bg` when selected), `■ <state>` and a ` !n ` chip, the role on set,
-  what it is doing (a broken ledger's error in red), and one `◆` per cast member coloured by
-  its state (green working, peach with an attention, red failed or lost, dim idle) with
-  `<n> cast · r<version>` right-aligned. The last frame is always the dashed **new-studio**
-  frame. Frames that do not fit scroll sideways behind a `‹` or `›` at the band edge; a narrow
-  screen puts two per row, one under 40 columns. With an agent the band then shows the newest
-  headline, one row per open card with its `apply` / `cancel` / `show` chips, and the
-  `tell hollywood` line; without one, a single line naming `backlot hollywood setup`. The
-  height ladder drops the blank rows, then the hints, then the headline — the frames go last.
+- **Expanded** is the **Call Sheet** — the film-strip band dropped from the top over the
+  whole width, at most half the height (sixteen rows on a mobile width): `▄▄`/`▀▀` sprocket
+  rows, the `✦  H O L L Y W O O D` title with the agent's square, role state and runner /
+  model / effort plus the right-hand studio count and `k waiting on you` (red while a prompt
+  or a down stage waits, peach otherwise), then one seven-row frame per studio — the
+  machine-qualified id in the top edge (accent on `selection_bg` when selected), its own
+  machine's `■ live` / `◌ stage down` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
+  task counts, the role on set, what it is doing (a broken ledger's error in red), and one
+  `◆` per cast member coloured by its state. The last frame is always the dashed
+  **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`, a narrow screen
+  puts two per row. Under them the band lists the **waiting items** — everything that waits on
+  the user across every machine, sorted by urgency: user-owned prompts first (a
+  director-owned prompt never lists), then stopped stages and offline machines that have live
+  studios, then the local core's open cards, then studios ready to finish. Each row carries
+  its action chips and a detail line; when nothing waits, a calm `✓` row says so. The
+  `tell hollywood` line ends the band — or, without a `[hollywood]` table, the line that names
+  `backlot hollywood setup`. Waiting items and the `tell` line are never dropped: the height
+  ladder drops the blanks first, then the unselected details, then the 7-row frames fold into
+  a one-row chip strip, then the headline, then the hints and sprockets — and when the items
+  still outgrow the room the window scrolls and a `i/N` marker says how much is showing.
 
 The start policy is **`collapsed`** by default (`[hollywood] start` — `collapsed`,
 `when_waiting`, or `expanded`), applied once the first settled `backlot` read lands.
@@ -64,34 +71,41 @@ notice that names the file and never echoes the value. Known costs, said plainly
 The studio panel keeps `prefix+y`.
 
 Inside the expanded bar: `←` `→` (or `h` `l`) move between the frames, the new-studio frame
-included; `↓` `↑` (or `j` `k`) leave the frames for the cards and the input line and come back;
-`PageUp` / `PageDown` scroll the cards; `Enter` acts on the selection (a studio frame focuses
-that studio's producer; the new-studio frame or `n` opens the wizard, with the bar collapsed
-first; the title row focuses `bl-hollywood`; a card row is its Show me; the input line opens for
-editing), `a` applies and `c` cancels the selected card, `s` is Show me, `i` opens the input
-line, `x` hides the bar, `Esc` collapses it. The bar owns those keys while it is expanded — an
-armed prefix disarms into it. Mouse does the same: a click on the pill expands it, a click on a
-frame selects and opens it, the card chips and the input line do what the keys do, the wheel
-scrolls the frames sideways under the pointer and the cards below them, and a click outside the
-expanded bar goes to what is under it and leaves the bar open.
+included; `↓` `↑` (or `j` `k`) leave the frames for the waiting rows and come back;
+`PageUp` / `PageDown` scroll the waiting list; `1`–`9` jump to a frame and `0` to the
+new-studio frame; `Enter` activates the selection. Each waiting row has its own keys: on a
+**prompt** row `y` answers `allow` and `d` answers `deny` (`backlot approve --person <role>
+--decision <d>` on the prompt's own machine), `p` peeks at the role's live screen read-only;
+on a **stage** row `r` runs `backlot stage start` on that machine, and an offline machine's
+`Enter` reports the watcher's last read; on a **card** row `a` applies, `x` cancels and `s`
+shows the card (`backlot card show` in a read-only view); on a **ready** row `f` asks
+`finish studio? y/n` inline, and `y` runs `backlot studio finish` on the studio's own
+machine. `i` opens the `tell hollywood` line, `n` opens the new-studio wizard (the bar
+collapses first), `?` opens this help, `Esc` or the toggle collapses the bar. A prompt,
+stage or finish action on a remote machine runs there through the shared RPC connection —
+never SSH, never a local spawn; cards and `tell` run on the local core. The bar owns those
+keys while it is expanded — an armed prefix disarms into it. A click on the pill expands it,
+a click on a row or a chip selects it (activation stays on the keys), the wheel scrolls the
+frames sideways and the waiting rows vertically, and a click outside goes to what is under
+the bar and leaves it open.
 
-Show me on a `studio-new` card opens the draft's cast and brief in a read-only popup
-(`backlot card show` output); on any other card it focuses the studio the card names. The view
-owns its keys until Esc, Enter, `x` or `q` closes it — arrows / `j` `k` scroll.
+`s` on any card opens `backlot card show <id>` in the read-only view. The view owns its keys
+until Esc, Enter, `x` or `q` closes it — arrows / `j` `k` scroll.
 
 The input line (`i` or a click) is one line sent with `backlot tell hollywood "<line>"` as the
 user — never written into Hollywood's terminal. Empty sends nothing; `Esc` leaves the line;
 Enter sends and leaves it.
 
-Everything the bar draws comes from the `backlot` summary document plus the stage-running
-flag — the studio frames show even while Hollywood's own agent is down (a `closed` or `lost`
-role state colours the title's square, a broken studio's ledger error shows in its frame, and a
-stopped stage gets its own band line). Without a table the frames still draw and the band shows
-the setup line instead of the agent's rows. Everything it changes goes through `backlot`
-commands spawned as the user — `card apply`,
-`card cancel`, `card show`, `tell hollywood` — off the event loop, failures surfacing as
-notices. The only client-local state is the mode, the selection, the scroll offset and the
-input line's text.
+Everything the bar draws comes from the published `backlot` summary documents plus the
+watcher's machine and stage state — never scraped terminal output — so the frames show even
+while Hollywood's own agent is down (a `closed` or `lost` role state colours the title's
+square, a broken studio's ledger error shows in its frame, and a stopped stage gets its own
+band line). Without a table the frames still draw and the band shows the setup line instead
+of the waiting rows. Everything it changes goes through `backlot` commands run as the
+user — `approve`, `stage start`, `card apply`, `card cancel`, `card show`,
+`studio finish`, `tell hollywood` — off the event loop, failures surfacing as notices where
+you are looking. The only client-local state is the mode, the selection, the scroll offsets
+and the input line's text.
 
 ## Configuring Hollywood's agent
 
