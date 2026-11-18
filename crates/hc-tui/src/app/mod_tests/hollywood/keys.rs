@@ -72,12 +72,10 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // Opening selects the first frame.
-    assert_eq!(
-        app.hollywood.selected,
-        Some(Target::Studio("acme-shop".into()))
-    );
-    // → / l walk the frames, the new-studio frame included.
+    // Opening lands on the most urgent item — the first waiting
+    // card (S1 A2.1).
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    // → / l move within the frames from whatever is selected.
     key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(
         app.hollywood.selected,
@@ -112,15 +110,20 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
 }
 
 #[tokio::test]
-async fn x_hides_and_esc_collapses() {
+async fn esc_collapses_and_x_is_the_card_cancel() {
     let mut app = app_with_hollywood();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    // `x` is no hide now — on a selected card it is its cancel.
     alt_y(&mut app);
+    app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('x'));
-    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert!(recorded.lock().unwrap()[0][..3] == ["card", "cancel", "c3"]);
 }
 
 #[tokio::test]

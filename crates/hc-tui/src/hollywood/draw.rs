@@ -1,51 +1,96 @@
-//! The bar's renderer (U7): the film-strip band dropped from the
-//! top over the
-//! whole width — sprocket rows, the title row, one frame per studio
-//! and the new-studio frame, then the headline, the cards and the
-//! input line. It never reserves a row or a column: the pane layout
-//! is never recomputed for it.
+//! The Call Sheet's renderer (S1): the film-strip band dropped from
+//! the top over the whole width — sprocket rows, the title row, one
+//! frame per studio (or the chip strip), the headline, the waiting
+//! items with their action chips and detail lines, the `tell
+//! hollywood` line and the hint row. It never reserves a row or a
+//! column: the pane layout is never recomputed for it.
 //!
-//! The frames live in `frames.rs`, the band rows in `band.rs`; this
-//! file owns the band, the title row, the height ladder and the hit
-//! map.
+//! The frames live in `frames.rs`, the chip strip in `chips.rs`,
+//! the waiting rows in `band.rs`, the height ladder in `plan.rs`;
+//! this file owns the band, the title row, the scroll window and
+//! the hit map.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 
 use super::plan::{self, Plan};
 use super::rows::{self, Row, Target};
+use super::sheet::{Status, Wait};
 use super::view;
-use super::{Hollywood, LayerMode, LayerOpts, band, frames};
+use super::{Hollywood, LayerMode, LayerOpts, band, chips, frames, title};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics};
-use crate::panel::data::{MachineSummary, spans_machines, studio_count};
+use crate::panel::data::{MachineSummary, spans_machines};
+
+/// The band's height while expanded — the dock's seam (A5.2) reads
+/// the same number before it picks its own `y`.
+pub(crate) fn expanded_height(
+    frame: Rect,
+    machines: &[MachineSummary],
+    status: &Status<'_>,
+    hollywood: &Hollywood,
+    opts: LayerOpts,
+) -> u16 {
+    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
+    plan(frame, &waits, &band_rows, hollywood, opts).height()
+}
+
+/// The plan for one layout pass — shared by the height read and the
+/// draw so the dock's seam and the band itself never disagree.
+fn plan(
+    frame: Rect,
+    waits: &[Wait<'_>],
+    band_rows: &[Row<'_>],
+    hollywood: &Hollywood,
+    opts: LayerOpts,
+) -> Plan {
+    let cap = if opts.mobile {
+        frame.height.min(16)
+    } else {
+        (frame.height / EXPANDED_FRAC).max(12).min(frame.height)
+    };
+    // The selected waiting item keeps its detail through the ladder.
+    let selected_wait = hollywood
+        .selected
+        .as_ref()
+        .and_then(|t| waits.iter().position(|w| &w.target() == t));
+    // The armed `finish?` confirm borrows its row's detail line —
+    // keep it in the plan even though a ready row is not detailable.
+    let confirming = hollywood.confirm.as_ref().map(|c| match c {
+        super::Confirm::Finish(key) => super::Target::Ready(key.clone()),
+    });
+    let mut plan = Plan {
+        top_sprocket: true,
+        title: true,
+        blank_1: true,
+        frames_h: frames::FRAME_H,
+        blank_2: true,
+        headline: band_rows.iter().any(|r| matches!(r, Row::Headline(_))),
+        details: waits
+            .iter()
+            .map(|w| w.detailable() || confirming.as_ref() == Some(&w.target()))
+            .collect(),
+        shown: waits.len(),
+        tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
+        hints: true,
+        bottom_sprocket: true,
+    };
+    plan::fit(&mut plan, cap, frame.height, selected_wait);
+    plan
+}
 
 /// The expanded band's height cap while floating: half the frame.
 const EXPANDED_FRAC: u16 = 2;
 /// The title row's mark.
-const MARK: &str = "✦  H O L L Y W O O D";
+pub(crate) const MARK: &str = "✦  H O L L Y W O O D";
 /// The title row's left margin.
 const MARGIN: u16 = 2;
 
-/// A card row's three action targets (Apply / Cancel / Show me).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CardBtn {
-    pub card: String,
-    pub kind: BtnKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BtnKind {
-    Apply,
-    Cancel,
-    Show,
-}
-
 /// What the mouse needs: the bar's whole rect, the title row, the
-/// frames and band rows with their targets, each card's buttons, the
-/// input line, the cards' scroll metrics and the open view's map.
+/// frames and band rows with their targets, the input line, the
+/// waiting list's scroll metrics and the open view's map.
 #[derive(Default)]
 pub(crate) struct HollywoodRender {
     /// The band's rect — the click boundary.
@@ -54,26 +99,23 @@ pub(crate) struct HollywoodRender {
     pub title: Rect,
     /// The frames and band rows (expanded).
     pub body: Rect,
-    /// Hit rows with their targets — the title, the frames and the
-    /// band rows alike.
+    /// Hit rows with their targets — the title, the frames/chips
+    /// and the band rows alike (S1's mouse selects through them).
     pub rows: Vec<(Rect, Target)>,
-    /// Per-card Apply/Cancel/Show rects.
-    pub buttons: Vec<(Rect, CardBtn)>,
     /// The input line (expanded, an agent only).
     pub input: Rect,
-    /// The card list's scroll metrics — the wheel and PageUp/Down.
+    /// The waiting list's scroll metrics — the wheel and PageUp/Down.
     pub metrics: Option<ScrollMetrics>,
     /// The body's scrollbar track. The film-strip design draws none,
-    /// so this stays empty; the wheel, the drag math and PageUp/Down
-    /// still read it.
+    /// so this stays empty; the wheel and PageUp/Down still read it.
     pub scrollbar: Rect,
-    /// Card rows visible at once.
+    /// Waiting rows visible at once.
     pub viewport_rows: usize,
     /// Frames sit before the drawn window.
     pub more_left: bool,
     /// Frames sit after it.
     pub more_right: bool,
-    /// The open "Show me" view's hit map.
+    /// The open detail view's hit map.
     pub view: Option<view::ViewRender>,
     /// The input editor's cursor while the line is editing.
     pub cursor: Option<crate::chrome::help::CursorState>,
@@ -90,17 +132,17 @@ impl HollywoodRender {
 }
 
 /// Render the bar into the frame. `machines` is every machine's last
-/// good `backlot` document — the frames and the counts span them all
-/// while the headline, the cards and the input line stay this core's.
-/// `local` is this core's display name, used in studio labels once
-/// studios span machines.
+/// good `backlot` document — the frames and the waiting items span
+/// them all while the headline, the cards and the input line stay
+/// this core's. `status` answers each machine's connectivity and
+/// stage liveness; `local` is this core's display name.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
     frame: Rect,
     machines: &[MachineSummary],
     local: Option<&str>,
-    stage_running: bool,
+    status: &Status<'_>,
     hollywood: &Hollywood,
     opts: LayerOpts,
     palette: &Palette,
@@ -112,27 +154,21 @@ pub(crate) fn render(
         // nothing here.
         LayerMode::Collapsed => HollywoodRender::default(),
         LayerMode::Expanded => render_band(
-            buf,
-            frame,
-            machines,
-            local,
-            stage_running,
-            hollywood,
-            opts,
-            palette,
+            buf, frame, machines, local, status, hollywood, opts, palette,
         ),
     }
 }
 
-/// The expanded band: the plan, the frames, the band rows, the hints
-/// and the two sprocket rows, all over `surface_dim`.
+/// The expanded band: the plan, the frames or chips, the headline,
+/// the waiting rows' window, the tell line, the hints and the two
+/// sprocket rows, all over `surface_dim`.
 #[allow(clippy::too_many_arguments)]
 fn render_band(
     buf: &mut Buffer,
     frame: Rect,
     machines: &[MachineSummary],
     local: Option<&str>,
-    stage_running: bool,
+    status: &Status<'_>,
     hollywood: &Hollywood,
     opts: LayerOpts,
     palette: &Palette,
@@ -141,52 +177,28 @@ fn render_band(
         return HollywoodRender::default();
     }
     let multi = spans_machines(machines);
-    let summary = rows::local_summary(machines);
+    let local_label = local.unwrap_or("Local");
     let all_frames = rows::frames(machines);
-    let band_rows = rows::band_rows(summary, stage_running, opts.agent);
-    let cap = if opts.mobile {
-        frame.height
-    } else {
-        (frame.height / EXPANDED_FRAC).max(3).min(frame.height)
-    };
-    let (per_row, _) = frames::layout(frame.width, opts.mobile);
-    let frame_rows = all_frames.len().div_ceil(per_row).min(u16::MAX as usize) as u16;
-    let mut plan = Plan {
-        top_sprocket: true,
-        title: true,
-        blank_1: true,
-        frames_h: if opts.mobile {
-            frame_rows * frames::FRAME_H
-        } else {
-            frames::FRAME_H
-        },
-        blank_2: true,
-        band: (0..band_rows.len()).collect(),
-        hints: true,
-        bottom_sprocket: true,
-    };
-    plan::fit(&mut plan, &band_rows, cap, opts.mobile);
+    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
+    let plan = plan(frame, &waits, &band_rows, hollywood, opts);
+    let selected_wait = hollywood
+        .selected
+        .as_ref()
+        .and_then(|t| waits.iter().position(|w| &w.target() == t));
 
-    // The cards' window: the plan keeps this many card rows, the
-    // scroll offset picks which.
-    let cards = band_rows
-        .iter()
-        .filter(|row| matches!(row, Row::Card(_)))
-        .count();
-    let card_slots = plan
-        .band
-        .iter()
-        .filter(|&&i| matches!(band_rows[i], Row::Card(_)))
-        .count();
-    let start = hollywood.scroll.min(cards.saturating_sub(card_slots));
-    let mut seen = 0;
-    plan.band.retain(|&i| match band_rows[i] {
-        Row::Card(_) => {
-            let keep = seen >= start && seen < start + card_slots;
-            seen += 1;
-            keep
+    // The scroll window: `scroll` picks the first waiting row drawn;
+    // `shown` how many. Keep the selected row inside the window.
+    let scroll = hollywood
+        .scroll
+        .min(waits.len().saturating_sub(plan.shown.max(1)));
+    let scroll = selected_wait.map_or(scroll, |sel| {
+        if sel < scroll {
+            sel
+        } else if sel >= scroll + plan.shown {
+            (sel + 1).saturating_sub(plan.shown)
+        } else {
+            scroll
         }
-        _ => true,
     });
 
     let area = Rect::new(
@@ -197,6 +209,7 @@ fn render_band(
     );
     let mut hits = HollywoodRender {
         area,
+        viewport_rows: plan.shown,
         ..HollywoodRender::default()
     };
     if area.is_empty() {
@@ -213,17 +226,19 @@ fn render_band(
 
     let mut y = area.y;
     if plan.top_sprocket {
-        draw_sprocket(buf, area, y, '▄', palette);
+        title::draw_sprocket(buf, area, y, '▄', palette);
         y += 1;
     }
     if plan.title {
-        draw_title(buf, area, y, machines, opts.agent, palette, &mut hits);
+        title::draw_title(
+            buf, area, y, machines, &waits, opts.agent, palette, &mut hits,
+        );
         y += 1;
     }
     if plan.blank_1 {
         y += 1;
     }
-    if plan.frames_h > 0 {
+    if plan.frames_h == frames::FRAME_H {
         let rect = Rect::new(area.x, y, area.width, plan.frames_h);
         let drawn = frames::render(
             buf,
@@ -235,6 +250,7 @@ fn render_band(
                 mobile: opts.mobile,
                 local,
                 multi,
+                status,
             },
             palette,
         );
@@ -243,190 +259,142 @@ fn render_band(
         hits.more_right = drawn.more_right;
         hits.body = rect;
         y += drawn.height;
+    } else if plan.frames_h == 1 {
+        let rect = Rect::new(area.x, y, area.width, 1);
+        let drawn = chips::render(
+            buf,
+            rect,
+            &all_frames,
+            status,
+            hollywood.selected.as_ref(),
+            hollywood.frame_scroll,
+            local,
+            multi,
+            palette,
+        );
+        hits.rows.extend(drawn.hits);
+        hits.more_left = drawn.more_left;
+        hits.more_right = drawn.more_right;
+        hits.body = rect;
+        y += 1;
     }
     if plan.blank_2 {
         y += 1;
     }
-    let mut shown = 0;
-    for &index in &plan.band {
-        let rect = Rect::new(area.x, y, area.width, 1);
-        band::draw_row(buf, rect, &band_rows[index], hollywood, palette, &mut hits);
-        if matches!(band_rows[index], Row::Card(_)) {
-            shown += 1;
+    // The band rows: headline, then the scroll window of waiting
+    // items (each with its detail when kept), then the tail — the
+    // calm row or the input/setup line.
+    let mut wait_seen = 0usize;
+    for row in &band_rows {
+        match row {
+            Row::Headline(headline) if plan.headline => {
+                let rect = Rect::new(area.x, y, area.width, 1);
+                band::draw_row(
+                    buf,
+                    rect,
+                    &Row::Headline(headline),
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    palette,
+                    &mut hits,
+                );
+                y += 1;
+            }
+            Row::Wait(i) => {
+                let index = *i;
+                let in_window = wait_seen >= scroll && wait_seen < scroll + plan.shown;
+                wait_seen += 1;
+                if !in_window {
+                    continue;
+                }
+                let detail = plan.details.get(index).copied().unwrap_or(false);
+                let h = 1 + u16::from(detail);
+                let rect = Rect::new(area.x, y, area.width, h);
+                band::draw_row(
+                    buf,
+                    rect,
+                    row,
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    palette,
+                    &mut hits,
+                );
+                y += h;
+            }
+            Row::Calm(_) | Row::Input | Row::Setup => {
+                // The scroll marker lives on this row's right edge
+                // when items hid — `2/6` of the sheet showing.
+                let rect = Rect::new(area.x, y, area.width, 1);
+                band::draw_row(
+                    buf,
+                    rect,
+                    row,
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    palette,
+                    &mut hits,
+                );
+                if waits.len() > plan.shown {
+                    let mark = format!(
+                        "{}/{waits_len}",
+                        scroll + plan.shown.min(waits.len()),
+                        waits_len = waits.len()
+                    );
+                    let w = mark.chars().count() as u16;
+                    put_text(
+                        buf,
+                        (rect.x + rect.width).saturating_sub(MARGIN + w),
+                        rect.y,
+                        w,
+                        &mark,
+                        Style::default()
+                            .fg(palette.overlay0)
+                            .bg(palette.surface_dim),
+                    );
+                }
+                y += 1;
+            }
+            _ => {}
         }
-        y += 1;
     }
     hits.metrics = Some(list_scroll_metrics(
-        &vec![1; cards],
+        &vec![1; waits.len()],
         &[],
-        shown.max(1),
-        start,
+        plan.shown.max(1) as u16,
+        scroll,
     ));
     if plan.hints {
-        band::draw_hints(
+        let tier = crate::chrome::text::fit_hints(
+            &band::HINT_TIERS,
+            (area.width as usize).saturating_sub((MARGIN * 2) as usize),
+        );
+        let w = tier.chars().count() as u16;
+        let x = (area.x + area.width.saturating_sub(MARGIN))
+            .saturating_sub(w)
+            .max(area.x);
+        put_text(
             buf,
-            Rect::new(area.x, y, area.width, 1),
-            opts.agent,
-            palette,
+            x,
+            y,
+            w.min(area.width),
+            tier,
+            Style::default()
+                .fg(palette.overlay0)
+                .bg(palette.surface_dim),
         );
         y += 1;
     }
     if plan.bottom_sprocket {
-        draw_sprocket(buf, area, y, '▀', palette);
+        title::draw_sprocket(buf, area, y, '▀', palette);
     }
     if let Some(view) = hollywood.view.as_ref() {
         hits.view = Some(view::render_view(buf, frame, view, palette));
     }
     hits
-}
-
-/// One sprocket row: `▄▄`/`▀▀` every four columns on `sidebar_bg`,
-/// matching the opening title card.
-fn draw_sprocket(buf: &mut Buffer, area: Rect, y: u16, glyph: char, palette: &Palette) {
-    buf.set_style(
-        Rect::new(area.x, y, area.width, 1),
-        Style::default().bg(palette.sidebar_bg),
-    );
-    let style = Style::default().fg(palette.surface1).bg(palette.sidebar_bg);
-    let hole = format!("{glyph}{glyph}");
-    let mut x = area.x + 1;
-    while x + 1 < area.x + area.width.saturating_sub(1) {
-        put_text(buf, x, y, 2, &hole, style);
-        x += 4;
-    }
-}
-
-/// The display width of `text`, in cells — a floor for the title row's
-/// room sums.
-fn width_of(text: &str) -> u16 {
-    crate::chrome::text::display_width(text) as u16
-}
-
-/// The title row: the mark, the agent's square and role, and the
-/// right-aligned studio count with what waits on you. The count
-/// spans machines; the agent's words stay this core's.
-fn draw_title(
-    buf: &mut Buffer,
-    area: Rect,
-    y: u16,
-    machines: &[MachineSummary],
-    agent: bool,
-    palette: &Palette,
-    hits: &mut HollywoodRender,
-) {
-    let row = Rect::new(area.x, y, area.width, 1);
-    hits.title = row;
-    hits.rows.push((row, Target::Title));
-    let base = Style::default().bg(palette.surface_dim);
-    let mark_w = MARK.chars().count() as u16;
-    put_text(
-        buf,
-        area.x + MARGIN,
-        y,
-        mark_w,
-        MARK,
-        base.fg(palette.accent).add_modifier(Modifier::BOLD),
-    );
-    let x = area.x + MARGIN + mark_w + 3;
-
-    let studios = studio_count(machines);
-    let waiting: u32 = machines
-        .iter()
-        .flat_map(|m| m.summary.studios.iter())
-        .map(|studio| studio.waiting)
-        .sum();
-    let count = format!("{studios} studio{}", if studios == 1 { "" } else { "s" });
-    let wait = if waiting > 0 {
-        format!("  ·  {waiting} waiting on you")
-    } else {
-        String::new()
-    };
-    let summary = rows::local_summary(machines);
-    let state = summary
-        .and_then(|s| s.hollywood.as_ref())
-        .map(|h| h.state.as_str());
-    // The agent's words: the full line when it fits, the state alone
-    // when it does not. If even that is squeezed, the counts step
-    // aside — the state is what the row must say.
-    let (agent_line, short_line) = if agent {
-        let state = state.unwrap_or("down");
-        let details = summary
-            .and_then(|s| s.hollywood.as_ref())
-            .map(|h| {
-                [h.runner.as_deref(), h.model.as_deref(), h.effort.as_deref()]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>()
-                    .join(" / ")
-            })
-            .unwrap_or_default();
-        if details.is_empty() {
-            (state.to_string(), String::new())
-        } else {
-            (format!("{state} · {details}"), state.to_string())
-        }
-    } else {
-        ("no agent".to_string(), String::new())
-    };
-    let mut right_w = count.chars().count() as u16 + wait.chars().count() as u16;
-    let mut right_x = (area.x + area.width).saturating_sub(MARGIN + right_w);
-    let mut room = right_x.saturating_sub(x + 2);
-    // The longest line that fits; if none does, the counts step aside
-    // for it — the state is what the row must say.
-    let pick = |room: u16| {
-        if width_of(&agent_line) <= room {
-            agent_line.clone()
-        } else if !short_line.is_empty() && width_of(&short_line) <= room {
-            short_line.clone()
-        } else {
-            String::new()
-        }
-    };
-    let mut text = pick(room);
-    if text.is_empty() && right_w > 0 {
-        right_w = 0;
-        right_x = area.x + area.width;
-        room = right_x.saturating_sub(x + 2);
-        text = pick(room);
-    }
-    if agent {
-        let colour = rows::state_color(state.unwrap_or("down"), palette);
-        put_text(buf, x, y, 1, "■", base.fg(colour));
-    } else {
-        put_text(buf, x, y, 1, "■", base.fg(palette.overlay0));
-    }
-    if !text.is_empty() {
-        put_text(
-            buf,
-            x + 2,
-            y,
-            room,
-            &text,
-            base.fg(if agent {
-                palette.overlay1
-            } else {
-                palette.overlay0
-            }),
-        );
-    }
-    if right_w > 0 && right_x > x {
-        put_text(
-            buf,
-            right_x,
-            y,
-            count.chars().count() as u16,
-            &count,
-            base.fg(palette.overlay0),
-        );
-        if !wait.is_empty() {
-            put_text(
-                buf,
-                right_x + count.chars().count() as u16,
-                y,
-                wait.chars().count() as u16,
-                &wait,
-                base.fg(palette.peach),
-            );
-        }
-    }
 }

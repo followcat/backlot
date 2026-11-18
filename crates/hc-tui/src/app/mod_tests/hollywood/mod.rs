@@ -315,11 +315,12 @@ async fn a_client_with_studios_starts_the_bar_collapsed() {
     assert!(text.contains("acme-shop"), "{text}");
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
-    // And `x` still hides it from the expanded panel.
+    // `Esc`/the toggle are the sheet's closes now — `x` is a card's
+    // cancel (S1), not a hide.
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    key(&mut app, hc_vt::Key::Char('x'));
-    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
 }
 
 #[tokio::test]

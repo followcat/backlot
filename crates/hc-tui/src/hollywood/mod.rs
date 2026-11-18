@@ -11,18 +11,23 @@
 
 mod actions;
 mod band;
+mod chips;
 mod draw;
 mod frames;
+mod items;
 mod keys;
 mod new_frame;
 mod plan;
 mod rows;
+mod sheet;
+mod title;
 mod view;
 
 pub(crate) use actions::{HollywoodAction, HollywoodRunner, spawn_runner};
-pub(crate) use draw::{BtnKind, CardBtn, HollywoodRender, render};
+pub(crate) use draw::{HollywoodRender, expanded_height, render};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use rows::{Target, band_rows, frames};
+pub(crate) use sheet::{status_of, waiting_items};
 pub(crate) use view::CardView;
 
 use crate::chrome::text_editor::TextEditor;
@@ -74,6 +79,19 @@ pub(crate) struct Hollywood {
     /// A card's "Show me" read — `card show <id>` output in a
     /// read-only box over the layer.
     pub view: Option<CardView>,
+    /// The armed one-key confirm — S1's inline `finish` ask.
+    pub confirm: Option<Confirm>,
+    /// The running action's row label — the row draws `…` until the
+    /// result lands.
+    pub pending: Option<String>,
+}
+
+/// The inline `y/n` confirm S1 arms on a ready row: which studio
+/// `f` would finish.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Confirm {
+    /// `backlot studio finish` on this studio — `y` runs it.
+    Finish(crate::studio::StudioKey),
 }
 
 impl Hollywood {
@@ -86,6 +104,8 @@ impl Hollywood {
             input: TextEditor::new("", false),
             editing: false,
             view: None,
+            confirm: None,
+            pending: None,
         }
     }
 

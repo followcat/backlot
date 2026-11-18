@@ -13,7 +13,7 @@ async fn apply_and_cancel_run_the_exact_argv() {
     alt_y(&mut app);
     app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('a'));
-    key(&mut app, hc_vt::Key::Char('c'));
+    key(&mut app, hc_vt::Key::Char('x'));
     let argv = recorded.lock().unwrap().clone();
     assert_eq!(
         argv,
@@ -24,7 +24,7 @@ async fn apply_and_cancel_run_the_exact_argv() {
                 "cancel",
                 "c3",
                 "--reason",
-                "cancelled from the layer",
+                "cancelled from the call sheet",
                 "--as",
                 "user"
             ],
@@ -63,7 +63,8 @@ async fn show_me_on_a_studio_new_card_runs_card_show_and_opens_the_view() {
 }
 
 #[tokio::test]
-async fn show_me_on_any_other_card_focuses_its_studio() {
+async fn show_me_runs_card_show_on_any_card() {
+    // S1: `s` shows any card's detail, not only a studio-new draft.
     let mut app = app_with_hollywood();
     let (recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
@@ -71,9 +72,10 @@ async fn show_me_on_any_other_card_focuses_its_studio() {
     alt_y(&mut app);
     app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('s'));
-    assert!(recorded.lock().unwrap().is_empty(), "no command ran");
-    assert_eq!(app.focused.as_deref(), Some("t1"), "the producer focused");
-    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec!["card", "show", "c3", "--as", "user"]]
+    );
 }
 
 #[tokio::test]
@@ -119,10 +121,9 @@ async fn the_input_line_sends_tell_hollywood_and_empty_sends_nothing() {
         &[vec!["tell", "hollywood", "hi", "--as", "user"]]
     );
     assert_eq!(app.hollywood.input.as_str(), "");
-    // Enter sent and left the line — `x` is the layer's hide key
-    // again, not an editor character.
-    key(&mut app, hc_vt::Key::Char('x'));
-    assert_eq!(app.hollywood.mode, LayerMode::Hidden);
+    // Enter sent and left the line — `Esc` collapses the sheet.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
 }
 
 #[tokio::test]

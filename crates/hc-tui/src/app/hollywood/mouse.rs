@@ -37,16 +37,6 @@ impl App {
             }
             LayerMode::Expanded => match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
-                    if let Some(btn) = self
-                        .hollywood_hits
-                        .buttons
-                        .iter()
-                        .find(|(rect, _)| contains(*rect, point))
-                        .map(|(_, btn)| btn.clone())
-                    {
-                        self.hollywood_card_button(&btn);
-                        return;
-                    }
                     if contains(self.hollywood_hits.input, point) {
                         self.hollywood.editing = true;
                         return;
@@ -77,6 +67,8 @@ impl App {
                         }
                         return;
                     }
+                    // S1's mouse is select-only: a click on a row or
+                    // a chip selects it (S5 adds the activate paths).
                     let hit = self
                         .hollywood_hits
                         .rows
@@ -85,7 +77,6 @@ impl App {
                         .map(|(_, target)| target.clone());
                     if let Some(target) = hit {
                         self.hollywood.selected = Some(target);
-                        self.hollywood_activate();
                     }
                 }
                 MouseEventKind::ScrollUp => {

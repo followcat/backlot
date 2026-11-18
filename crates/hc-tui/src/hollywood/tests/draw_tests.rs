@@ -53,6 +53,14 @@ fn row_of(buf: &Buffer, area: Rect, y: u16) -> String {
         .to_string()
 }
 
+fn stage_up(_: Option<&str>) -> (crate::hollywood::sheet::Conn, bool) {
+    (crate::hollywood::sheet::Conn::Online, true)
+}
+
+fn stage_down(_: Option<&str>) -> (crate::hollywood::sheet::Conn, bool) {
+    (crate::hollywood::sheet::Conn::Online, false)
+}
+
 fn draw_with(
     area: Rect,
     summary: Option<&Summary>,
@@ -62,12 +70,17 @@ fn draw_with(
     palette: &Palette,
 ) -> (Buffer, crate::hollywood::HollywoodRender) {
     let mut buf = Buffer::empty(area);
+    let status: &crate::hollywood::sheet::Status = if stage_running {
+        &stage_up
+    } else {
+        &stage_down
+    };
     let hits = render(
         &mut buf,
         area,
         &machines(summary),
         None,
-        stage_running,
+        status,
         layer,
         opts,
         palette,
@@ -217,12 +230,12 @@ fn the_band_draws_sprockets_title_and_counts() {
         .filter(|x| buf[(*x, 1)].fg == palette.peach)
         .collect();
     assert!(!peach.is_empty(), "{title}: the waiting count");
-    // The headline, the cards and the hints follow the frames.
+    // The headline, the card rows and the hints follow the frames.
     assert!(text.contains("acme-shop needs a look"), "{text}");
-    assert!(text.contains("acme-shop · pause t1"), "{text}");
-    assert!(text.contains("apply"), "{text}");
+    assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
+    assert!(text.contains("apply a"), "{text}");
     assert!(
-        text.contains("← → move   ⏎ open   n new   a apply   c cancel   i tell   esc close"),
+        text.contains("↑↓ move   ⏎ open   y/d answer   a/x card   f finish   r start   p peek   i tell   ? help   esc close"),
         "{text}"
     );
 }
@@ -298,9 +311,10 @@ fn the_height_ladder_never_panics_and_keeps_the_frames() {
             assert_eq!(lines(&buf, area).len(), usize::from(height));
         }
     }
-    // A short band drops the hints and the headline before the frames.
+    // At 20 rows the band caps at twelve: the frames are the chip
+    // strip, the unselected detail went first, and `tell` stays.
     let area = Rect::new(0, 0, 160, 20);
-    let (buf, _) = draw(
+    let (buf, hits) = draw(
         area,
         Some(&summary),
         true,
@@ -309,53 +323,41 @@ fn the_height_ladder_never_panics_and_keeps_the_frames() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("acme-shop"), "{text}");
-    assert!(!text.contains("esc close"), "{text}");
-    assert!(!text.contains("acme-shop needs a look"), "{text}");
+    assert!(text.contains("[1 acme-shop"), "{text}");
+    assert!(text.contains("tell hollywood"), "{text}");
+    assert!(hits.area.height <= 12, "{text}");
 }
 
 #[test]
-fn the_mobile_layout_puts_two_frames_per_row() {
+fn the_frames_fold_into_the_chip_strip_under_pressure() {
+    // 80×24 caps the band at twelve: the 7-row frames fold into the
+    // one-row chips, each with its digit, label and health mark.
     let summary = summary();
     let palette = palettes()[0].clone();
-    let area = Rect::new(0, 0, 60, 20);
+    let area = Rect::new(0, 0, 80, 24);
     let (buf, hits) = draw(
         area,
         Some(&summary),
         true,
         &layer(LayerMode::Expanded),
-        true,
+        false,
         &palette,
     );
-    let frames: Vec<Rect> = hits
-        .rows
-        .iter()
-        .filter(|(_, t)| matches!(t, Target::Studio(_)))
-        .map(|(rect, _)| *rect)
-        .collect();
-    assert_eq!(frames.len(), 3, "{frames:?}");
-    assert_eq!(frames[0].y, frames[1].y, "two per row");
-    assert!(frames[2].y > frames[0].y, "the third wraps");
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("acme-shop"), "{text}");
-    // Under 40 columns a frame takes the row alone.
-    let area = Rect::new(0, 0, 36, 20);
-    let (_, hits) = draw(
-        area,
-        Some(&summary),
-        true,
-        &layer(LayerMode::Expanded),
-        true,
-        &palette,
-    );
-    let frames: Vec<Rect> = hits
+    assert!(text.contains("[1 acme-shop"), "{text}");
+    assert!(text.contains("[2 beta-tools"), "{text}");
+    assert!(text.contains("[+ new n]"), "{text}");
+    let chips: Vec<Rect> = hits
         .rows
         .iter()
         .filter(|(_, t)| matches!(t, Target::Studio(_)))
         .map(|(rect, _)| *rect)
         .collect();
-    assert!(frames.len() >= 2, "{frames:?}");
-    assert!(frames[0].y < frames[1].y, "one per row");
+    assert!(!chips.is_empty(), "the chips carry the studio hits");
+    assert!(chips.iter().all(|r| r.height == 1), "{chips:?}");
+    // `tell` and the waiting rows stay visible through the fold.
+    assert!(text.contains("tell hollywood"), "{text}");
+    assert!(text.contains("CARD c3"), "{text}");
 }
 
 // ---------- the no-agent bar ----------
@@ -376,9 +378,8 @@ fn without_an_agent_the_band_is_the_setup_line() {
     assert!(text.contains("no agent"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
     assert!(text.contains("backlot hollywood setup"), "{text}");
-    assert!(!text.contains("tell hollywood"), "{text}");
+    assert!(!text.contains("tell hollywood what"), "{text}");
     assert!(!text.contains("acme-shop needs a look"), "{text}");
-    assert!(!text.contains("apply"), "{text}");
     assert!(hits.input.is_empty(), "no input line without an agent");
 }
 
@@ -428,7 +429,7 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     );
     let frame = frame_hit(&hits, &Target::Studio("acme-shop".into())).expect("acme-shop");
     let state = row_of(&buf, area, frame.y + 1);
-    assert!(state.contains("■ live"), "{state}");
+    assert!(state.contains("● live"), "{state}");
     assert_eq!(buf[(frame.x + 2, frame.y + 1)].fg, palette.green);
     // The waiting chip: ` !2 ` on peach, right-aligned on the row.
     assert!(state.contains("!2"), "{state}");
@@ -450,7 +451,7 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     // The cast line: one mark each, coloured by role state.
     let cast = row_of(&buf, area, frame.y + 5);
     assert!(cast.contains("◐ ! ! ○"), "{cast}");
-    assert!(cast.contains("4 cast · r2"), "{cast}");
+    assert!(cast.contains("4 cast"), "{cast}");
     let marks: Vec<Color> = (frame.x..frame.x + frame.width)
         .filter(|x| matches!(buf[(*x, frame.y + 5)].symbol(), "◐" | "!" | "○"))
         .map(|x| buf[(x, frame.y + 5)].fg)
@@ -525,12 +526,13 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
                 ratatui::style::Style::default(),
             );
         }
+        let status: &crate::hollywood::sheet::Status = &stage_up;
         let hits = render(
             &mut buf,
             area,
             &machines(Some(&summary)),
             None,
-            true,
+            status,
             &layer(mode),
             LayerOpts {
                 agent: true,
@@ -652,12 +654,13 @@ fn a_remote_studios_frame_titles_its_machine() {
     list.push(remote(&summary));
     let area = Rect::new(0, 0, 160, 45);
     let mut buf = Buffer::empty(area);
+    let status: &crate::hollywood::sheet::Status = &stage_up;
     let hits = render(
         &mut buf,
         area,
         &list,
         Some(crate::project::LOCAL_LABEL),
-        true,
+        &status,
         &layer(LayerMode::Expanded),
         LayerOpts {
             agent: true,
@@ -677,34 +680,16 @@ fn a_remote_studios_frame_titles_its_machine() {
 }
 
 #[test]
-fn the_narrow_frame_cuts_the_machine_before_the_id() {
-    // Two-per-row frames at 56 columns are ~25 cells: a label too
-    // long for them falls back to the bare id — the machine name is
-    // what the cut takes.
-    let summary = summary();
-    let mut list = machines(Some(&summary));
-    let mut theirs = summary.clone();
-    theirs.studios[0].id = "acme-shop-remote-ops".into();
-    list.push(remote(&theirs));
-    let area = Rect::new(0, 0, 56, 45);
-    let mut buf = Buffer::empty(area);
-    render(
-        &mut buf,
-        area,
-        &list,
-        Some(crate::project::LOCAL_LABEL),
-        true,
-        &layer(LayerMode::Expanded),
-        LayerOpts {
-            agent: true,
-            mobile: true,
-        },
-        &palettes()[0],
-    );
-    let text = lines(&buf, area).join("\n");
-    // The short label still fits; the long one's id survives the cut
-    // (truncated itself only past the machine's share of the cells).
-    assert!(text.contains("beta-tools · host-b"), "{text}");
-    assert!(text.contains("acme-shop-remote"), "{text}");
-    assert!(!text.contains("acme-shop-remote-ops · host-b"), "{text}");
+fn the_label_fits_through_the_machine_truncation_steps() {
+    // §3: the machine truncates to four chars plus `…`, the
+    // separator shortens to `@`, the id truncates last — the
+    // machine is never dropped whole (A8.3).
+    let label = crate::panel::data::studio_label("beta-tools", Some("host-b"), Some("Local"), true);
+    assert_eq!(label.fit(19), "beta-tools · host-b");
+    assert_eq!(label.fit(18), "beta-tools · host…");
+    assert_eq!(label.fit(16), "beta-tools@host…");
+    assert_eq!(label.fit(14), "beta-to…@host…");
+    // A bare id still truncates on its own.
+    let local = crate::panel::data::studio_label("acme-shop", None, Some("Local"), false);
+    assert_eq!(local.fit(6), "acme-…");
 }
