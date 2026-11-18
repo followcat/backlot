@@ -245,6 +245,20 @@ pub struct Pane {
     /// The VT/screen — retained across Down and re-Opening for the same
     /// spec; `None` on Idle or after a spec change.
     vt: Option<Vt>,
+    /// `true` while `vt` was fed by a wire that stayed live up to the
+    /// handover. Only then may the next attach ask for the screen alone
+    /// and continue this VT instead of replaying history.
+    vt_current: bool,
+    /// A screen handed over for the attach this pane is about to open;
+    /// `want_retained` stores it; `spawn` installs it, or the app adopts it
+    /// at the first paint (`adopt_warm`).
+    retained: Option<Retained>,
+    /// This attach asked for the screen only: a warm VT must arrive
+    /// before its first paint (passed in by `expect_warm`, or already
+    /// installed from `retained`).
+    await_warm: bool,
+    /// The incarnation the awaited VT must belong to.
+    warm_expect: Option<WarmVt>,
     /// The surface `vt` last painted into — moves with the VT so a
     /// retained screen keeps its warm cache across pane handoffs.
     render_cache: Option<render_cache::PaneRenderCache>,
@@ -296,6 +310,27 @@ pub struct Pane {
     pub attaches: u64,
 }
 
+/// A screen handed from one pane to the next: the VT, its post-seed color
+/// baseline and its painted-surface cache move together, so the receiver
+/// keeps the last paint — cursor shape, palette overrides and all — while
+/// its own attach opens. `warm` is `Some` only when the giver's wire
+/// stayed live up to the handover: that is the one case where the next
+/// attach may ask for the screen alone and continue this VT.
+pub(crate) struct Retained {
+    pub vt: Vt,
+    pub initial: Option<hc_vt::Colors>,
+    pub cache: Option<render_cache::PaneRenderCache>,
+    pub warm: Option<WarmVt>,
+}
+
+/// Which terminal incarnation a cached screen belongs to. A restarted
+/// terminal gets a new `(created_ms, pid)`; its predecessor's VT must
+/// never be continued into it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WarmVt {
+    pub incarnation: (u64, Option<u32>),
+}
+
 /// What `cell_style` needs to reproduce the reference's
 /// `ghostty_default_fg/bg` + `PaletteOverrides`: the VT's defaults at
 /// creation (detects a program `OSC 10/11/4` change) and the host's
@@ -325,6 +360,10 @@ impl Pane {
             ev,
             open,
             vt: None,
+            vt_current: false,
+            retained: None,
+            await_warm: false,
+            warm_expect: None,
             render_cache: None,
             vt_grid: (80, 24),
             allocated: (80, 24),

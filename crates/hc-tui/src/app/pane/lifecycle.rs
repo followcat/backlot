@@ -9,6 +9,18 @@ impl Pane {
     /// A new incarnation drops `Encoded` leftovers — bytes bound to a
     /// dead wire are never replayed; `Key`/`Paste` re-encode fresh.
     pub(super) fn spawn(&mut self, spec: Spec, resumed: bool, attempts: u32) {
+        // A screen handed over in this tick is installed first: the
+        // retained paint stays on screen while the attach opens, and it
+        // decides whether this open may ask for the screen alone.
+        if let Some(retained) = self.retained.take() {
+            self.install_retained(retained);
+        }
+        // A resumed wire may have missed bytes: never continue a cached
+        // VT across one.
+        let expected = self.warm_expect.take().filter(|_| !resumed);
+        let installed = !resumed && self.vt_current && self.vt.is_some();
+        self.await_warm = installed || expected.is_some();
+        self.warm_expect = expected;
         // All visible panes share an event channel; a wire identity is
         // unique across panes and reincarnations.
         static NEXT_ROUTE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -30,8 +42,10 @@ impl Pane {
             resize_notifications: true,
             quiet_human_release: spec.role == Role::Active,
             // A size holder discards wire DATA at the actor — paying for
-            // serialized scrollback on its attach is pure waste.
-            history: if spec.role == Role::SizeLease {
+            // serialized scrollback on its attach is pure waste. A warm
+            // attach already holds the scrollback it needs: it asks for
+            // the screen only.
+            history: if spec.role == Role::SizeLease || self.await_warm {
                 0
             } else {
                 self.attach_history
@@ -109,6 +123,7 @@ impl Pane {
             return None;
         }
         self.render_cache = None; // the display VT moves into the drain
+        self.wire_lost(); // the drain owns the VT until `unpark` returns it
         if let Some(vt) = self.vt.take() {
             let mut pending_input = VecDeque::new();
             for item in std::mem::take(&mut self.pending) {

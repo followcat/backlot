@@ -34,6 +34,10 @@ impl App {
         let desired = self.desired_spec();
         if desired.as_ref().map(|s| s.terminal.as_str()) != self.pane.target() {
             self.release_pane_mouse();
+            // Read the outgoing target before parking: the park retires
+            // the pane to Idle, and the observer that inherits the
+            // terminal needs its address afterwards.
+            let old_target = self.pane.target().map(str::to_owned);
             let outgoing = self.pane.generation();
             let parked = self.pane.park_outgoing();
             let outgoing_leased = self
@@ -64,20 +68,24 @@ impl App {
             // A still-visible old target gains an observer that inherits
             // the retained screen: unfocusing a split pane never flashes
             // blank while the observe wire opens, and the handed-over VT
-            // keeps its one-shot cursor/palette state.
-            if let Some(old_target) = self.pane.target().map(str::to_owned)
+            // keeps its one-shot cursor/palette state. A current VT lets
+            // that observer's attach ask for the screen only, so leaving
+            // a tab no longer downloads its history a second time.
+            if let Some(old_target) = old_target
                 && self.view.inventory.get(&old_target).is_some()
                 && !self.observers.contains_key(&old_target)
                 && (self.visible_panes().contains(&old_target)
                     || self.observer_mru.contains(&old_target))
-                && let Some((vt, initial, cache)) = self.pane.take_retained()
+                && let Some(retained) = self.pane.take_retained()
             {
                 let mut observer = self.new_pane();
-                observer.want(Some(Spec {
-                    terminal: old_target.clone(),
-                    role: Role::Observe,
-                }));
-                observer.seed_retained(vt, initial, cache);
+                observer.want_retained(
+                    Some(Spec {
+                        terminal: old_target.clone(),
+                        role: Role::Observe,
+                    }),
+                    Some(retained),
+                );
                 self.observers.insert(old_target, observer);
             }
             // Retire the old target before applying the new target's geometry:
@@ -89,6 +97,17 @@ impl App {
                 let inner = pane_geometry::pane_inner(self, cols, rows);
                 self.pane.allocated(inner.width.max(1), inner.height.max(1));
             }
+            // A cached observer still holds the new target's screen and
+            // its wire keeps feeding it: the active attach asks for the
+            // screen only and adopts that VT at its first paint. No
+            // observer, a stale one or an evicted one leaves the promise
+            // empty and the attach opens cold with history.
+            self.pane.expect_warm(
+                desired
+                    .as_ref()
+                    .and_then(|spec| self.observers.get(&spec.terminal))
+                    .and_then(pane::Pane::warm_ticket),
+            );
         }
         self.pane.want(desired);
         // Focus restores (navigate cancel, sidebar clicks) re-arm Copy
