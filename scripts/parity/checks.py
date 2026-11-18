@@ -104,13 +104,13 @@ def last_osc52(output):
 
 # --- Known differences -----------------------------------------------------
 #
-# hc-tui carries features the pinned herdr reference has no way to render.
+# backlot carries features the pinned herdr reference has no way to render.
 # Each is matched by exact cell and exact content here — never by a count,
 # a column tolerance or a skipped checkpoint — and every excuse names the
 # reason below. docs/parity.md documents the user-facing contract; a
 # difference outside these cells stays a bug.
 
-BADGE_REASON = ('W1 chrome: hc-tui draws the running version badge (right-aligned in the '
+BADGE_REASON = ('W1 chrome: backlot draws the running version badge (right-aligned in the '
                 'expanded sidebar\'s header row); the reference draws nothing there')
 PANE_ID_REASON = ('navigator footer identity: hc names panes `t<N>` where the reference core '
                   'names them `w<W>:p<P>` (docs/parity.md)')
@@ -196,7 +196,7 @@ def known_differences(reference, candidate):
 
 # The Alt+P pane command's shell sets a cursor shape; when its pane closes,
 # the reference's core keeps reporting that shape for the visible pane,
-# while hc-tui shows the visible pane's own shape. Only the exact pair of
+# while backlot shows the visible pane's own shape. Only the exact pair of
 # checkpoints after that command, and only a shape/blink difference at an
 # identical position and visibility, is excused.
 PANE_COMMAND_CURSOR_REASON = ('reference core reports the closed pane command shell\'s last '

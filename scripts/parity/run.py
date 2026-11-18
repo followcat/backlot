@@ -40,7 +40,7 @@ def checkpoint(owner, name, size, decoder):
 
 
 def differences(reference, candidate, checkpoint=None):
-    # Documented hc-tui additions are excused by exact cell in checks.py;
+    # Documented backlot additions are excused by exact cell in checks.py;
     # everything else on the frame is still compared.
     known = {(row, column) for cells in known_differences(reference, candidate).values()
              for row, column in cells}

@@ -59,7 +59,7 @@ send. Command text is never printed or executed. The mouse byte fixtures additio
 their recorded neutral mouse modifier/scroll settings on the private copy.
 
 The candidate's private copy additionally pins the audited popup binding to a
-one-shot popup (`persistent = false`): hc-tui's documented choice treats a
+one-shot popup (`persistent = false`): backlot's documented choice treats a
 `type = "popup"` binding that only starts a shell as its per-tab persistent
 float, while the reference always runs a one-shot popup. The key goes into the
 candidate's copy only, because herdr reports an unknown key as a config
@@ -81,7 +81,7 @@ host-mode resets and retained-title parity, as well as termios restoration.
 
 ## Known differences
 
-Three documented hc-tui additions cannot be produced by the pinned reference.
+Three documented backlot additions cannot be produced by the pinned reference.
 `checks.py` excuses them by **exact cell and exact content** (or, for the
 cursor, an identical position and visibility), never by a count or a column
 tolerance, and records them per checkpoint under `known_differences` with
@@ -95,7 +95,7 @@ their reason:
   on the detail row, and only while nothing else on that row differs;
 - the cursor shape and blink on `pane-exit` and `pane-closed`: the reference's
   core keeps reporting the closed Alt+P shell's last shape for the visible
-  pane, while hc-tui shows that pane's own shape. Position and visibility must
+  pane, while backlot shows that pane's own shape. Position and visibility must
   match exactly and nothing else about the cursor may differ.
 
 Every other difference — any other column of row 0, any other navigator cell,
