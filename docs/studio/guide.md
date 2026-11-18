@@ -316,11 +316,16 @@ right. An open attention replaces the whole second line, model included, with `!
 a failed turn says `last turn failed` the same way. The focused person's pair of rows is highlighted with a `▌` marker. A
 trailing `others` row expands to the agents that belong to no studio.
 
-Expanded, the panel draws one bordered block per studio — the studio's id and its attention
-count in the frame — with its `error` and owed `→` lines inside, then the groups `producer`,
-`director`, `writer`, `actors` divided by rules, each person one line: mark, name and priority
-flag, and the state word at the right. An open attention adds a `! <attention>` line under its
-person. The marks:
+Expanded, the dock draws one bordered block per studio — the id in the frame, a header row
+with the health glyph (`●` live, `◌` stage stopped, `×` offline or ledger error, `✓`
+finished), `r<version> · <done>/<total>` and `!<waiting>` — then the owed-step line in role
+names (`→ deliver t1 · actor-a`), then the people: mark, name with the actor's task and
+priority flag, a `USER` badge on your own role, the `dir` tag on a director-owned prompt,
+and the state word at the right. A user-owned prompt adds a `! <attention>  [y/d/p]` cue
+line; a director-owned one gets no cue. Below the live people, task rows list the work no
+actor carries — uncast, dependency-gated, paused, at cap or blocked, and accepted — and
+six or more accepted tasks fold into one `✓ <n> accepted` line. `Space` opens a three-line
+drawer under a person or task, or folds a studio block on its header. The marks:
 
 | Mark | Meaning |
 |---|---|
@@ -330,18 +335,20 @@ person. The marks:
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
 
-The title line counts the studios (`studios 2`). `stage not running` means no live
-`backlot-stage` terminal — the panel and the cast keep the last document. When the blocks do
-not all fit, every block but the current studio's folds to a one-line summary of its marks; with
-the panel collapsed, a narrow strip lists one line per studio.
+The title line counts the studios (`lot · 2`). `stage not running` means no live
+`backlot-stage` terminal — the panel and the cast keep the last document. The collapsed
+16-column strip shows each studio's health, a short `id·machine` label and progress or
+attention, and one row per active or blocked role.
 
-Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter` acts on the row
-(person → focus its terminal, studio → focus its producer, closed person → arm `enter: reopen`
-then a second Enter runs `backlot reopen`), `Space` collapses or expands the studio's block, `c`
-switches collapsed and expanded, `+`/`-` raise and lower a task's priority, `Esc` unfocuses it
-(closes it outright when the panel covers the whole frame). While the panel is focused it owns
-the keys — `Ctrl+B y` again closes it — except the four `Alt+arrow` studio keys, which still
-switch studios and roles.
+Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter` focuses a
+live person's terminal (a closed person shows `closed — press o to reopen`; `o` reopens a
+resumable one), `Space` opens a drawer or folds a studio, `v` opens the Task & Delivery
+Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
+`+`/`-` raise and lower a task's priority, `r`/`f` start the stage and finish the studio,
+`c` switches collapsed and expanded, `q` closes, `?` opens help, `Esc` unfocuses the dock
+beside the panes and steps back over an overlay — to the strip when it fits, else closed.
+While the panel is focused it owns the keys — `Ctrl+B y` again closes it — except the four
+`Alt+arrow` studio keys, which still switch studios and roles.
 
 ## Hollywood above the studios
 
@@ -629,8 +636,11 @@ the factual record, with no score.
 
 ```toml
 [panel]
-width = 30   # expanded column width, clamped to 24-60
-key = "y"    # the chord tail after the prefix
+key = "y"      # the chord tail after the prefix
+
+[dock]
+# width = 36   # optional fixed width, clamped 28-48 — unset follows the
+               # frame's tier (38 at 160+, 36 at 100+, 28 under)
 
 [hollywood]
 runner = "claude"          # required; `backlot hollywood setup` writes this table

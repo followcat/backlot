@@ -40,20 +40,28 @@ focused closes it; while it is open but unfocused the chord focuses it. A Herdr 
 still wins whenever the panel does not own the keys. The chord's tail is `panel.key` in
 `~/.config/backlot/config.toml`.
 
-The panel has three modes: closed (the default — zero width, no keys), a 16-column collapsed
-strip, and an expanded column (`[dock] width`, default 36, clamped to 28–48) of bordered studio
-blocks. The selection is a `▌` cursor that lands only on actionable rows — titles, dividers and
-spacers are skipped. While it is focused it owns these keys:
+The panel — the studio dock — has three modes: closed (the default — zero width, no keys), a
+16-column collapsed strip, and an expanded column (38 columns at 160+, 36 at 100+, 28 under) of
+bordered studio blocks. It sits beside the panes while they keep at least 44 columns; below that
+it overlays the pane surface. The selection is a `▌` cursor that lands only on actionable rows —
+titles and spacers are skipped. While it is focused it owns these keys:
 
 | Keys | Action |
 |---|---|
 | `j`/`k`, arrows | Move the selection |
 | `PageUp`/`PageDown` | Scroll |
-| `Enter` | Act on the row (focus a terminal, make a studio current, reopen a closed person) |
-| `Space` | Collapse or expand the selected studio's block |
-| `c` | Switch collapsed and expanded |
+| `Enter` | Focus a live person's terminal / make a studio current (a closed person shows `closed — press o to reopen`) |
+| `Space` | Open or close the drawer under a person or task; fold a studio block |
+| `o` | Reopen a closed resumable person |
+| `v` | Open the Task & Delivery Sheet |
+| `p` | Peek the terminal |
+| `y`/`d` | Answer a user-owned prompt |
 | `+`/`-` | Raise or lower a task's priority |
-| `Esc` | Unfocus the panel (close it when it covers the whole frame) |
+| `r`/`f` | Start the stage / finish the studio |
+| `c` | Switch collapsed and expanded |
+| `q` | Close the dock |
+| `?` | Open this help |
+| `Esc` | Beside the panes: unfocus the dock. As an overlay: back to the strip, or close |
 
 [docs/studio/guide.md](studio/guide.md) explains what the panel's marks and blocks mean.
 
