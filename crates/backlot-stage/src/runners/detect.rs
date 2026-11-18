@@ -131,6 +131,21 @@ pub fn find(runner: &str, scope: &Scope) -> Option<Found> {
     })
 }
 
+/// The first runner's binary on `PATH`, in `RUNNERS` order — the
+/// settings overlay's `<r>` hint for `backlot hollywood setup`. A
+/// filesystem scan only: no login shell, no `--version` child, so the
+/// TUI can call it at startup without a probe's cost.
+pub fn first(env: &Env) -> Option<String> {
+    let path = env.get("PATH");
+    RUNNERS
+        .iter()
+        .find(|runner| {
+            probe::launch_program(runner)
+                .is_some_and(|bin| probe::find_on_path(bin, path).is_some())
+        })
+        .map(|runner| (*runner).to_string())
+}
+
 /// The login shell's PATH, printed between two marker lines so
 /// profile noise never lands inside it. No `$SHELL` — no step.
 fn login_path(scope: &Scope) -> Option<String> {

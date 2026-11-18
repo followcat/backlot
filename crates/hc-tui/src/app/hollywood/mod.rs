@@ -82,6 +82,12 @@ impl App {
         }
     }
 
+    /// cli hands over the detector's first runner — the `<r>` in the
+    /// overseer row's setup hint while `[hollywood]` is unset.
+    pub(crate) fn set_setup_runner_hint(&mut self, runner: Option<String>) {
+        self.setup_runner_hint = runner;
+    }
+
     /// The `--plain` latch on the layer (D6, D15a): plain has no
     /// layer, no consumed key and no timer, so the frame stays
     /// herdr's. Studio mode always has the bar — configured or not —

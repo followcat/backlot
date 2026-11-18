@@ -317,53 +317,6 @@ impl App {
         Ok(params)
     }
 
-    /// The settings tab's overseer row while `[hollywood]` is unset:
-    /// `backlot hollywood setup` in the same one-shot popup the
-    /// studio wizard uses — the command takes its `--runner`/`--model`
-    /// flags on that shell. `studio new`'s guard shapes the line the
-    /// same way; only the verb tail differs.
-    pub(crate) fn hollywood_setup(&mut self) {
-        if self
-            .popup_pending
-            .as_ref()
-            .is_some_and(|pending| pending.persistent)
-        {
-            return;
-        }
-        if self.popup.is_some() || self.popup_pending.is_some() {
-            self.dismiss_popup();
-        }
-        let params = match self.setup_params() {
-            Ok(params) => params,
-            Err(message) => {
-                self.show_notice("Hollywood setup", &message);
-                return;
-            }
-        };
-        self.popup_pending = Some(PopupPending {
-            width: Some(WIZARD_POPUP),
-            height: Some(WIZARD_POPUP),
-            persistent: false,
-            owner: String::new(),
-            command: String::new(),
-        });
-        self.submit_action(Action::RunPopup { params });
-    }
-
-    /// `wizard_params`' twin for `hollywood setup`: the same endpoint
-    /// reach rules, the setup verb swapped in, and a trailing shell so
-    /// a usage error stays readable instead of closing the popup.
-    fn setup_params(&self) -> Result<hc_proto::terminal::RunParams, String> {
-        let mut params = self.wizard_params()?;
-        if let Some(line) = params.line {
-            params.line = Some(format!(
-                "{}; exec ${{SHELL:-sh}}",
-                line.replace("studio new --interactive", "hollywood setup")
-            ));
-        }
-        Ok(params)
-    }
-
     /// `s`: `backlot stage start` on this core — U6a starts stages
     /// only locally; a stage on a chosen machine is U6b's.
     fn opening_start_stage(&mut self) {

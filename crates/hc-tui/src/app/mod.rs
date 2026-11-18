@@ -279,6 +279,9 @@ pub struct App {
     /// `runner · model` for the settings tab's read-only overseer
     /// row; `None` while `[hollywood]` is unset.
     hollywood_overseer: Option<String>,
+    /// The first detected runner — fills `<r>` in the overseer row's
+    /// setup hint; `None` leaves the placeholder.
+    setup_runner_hint: Option<String>,
     /// Last frame's layer hit rectangles (`HollywoodRender`).
     hollywood_hits: crate::hollywood::HollywoodRender,
     /// Injectable `backlot …` runner for card actions and the input

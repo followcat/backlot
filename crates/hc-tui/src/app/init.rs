@@ -86,6 +86,7 @@ impl App {
             hollywood_key: None,
             has_hollywood_cfg: false,
             hollywood_overseer: None,
+            setup_runner_hint: None,
             hollywood_hits: crate::hollywood::HollywoodRender::default(),
             // Never spawn here — cli installs `spawn_runner` like the
             // panel's before the loop starts.

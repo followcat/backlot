@@ -60,6 +60,9 @@ pub(crate) struct StudioView {
     pub dock_width: u16,
     /// `runner · model`, or `None` while `[hollywood]` is unset.
     pub overseer: Option<String>,
+    /// `not configured · backlot hollywood setup …` — shown while the
+    /// overseer is unset; the row is read-only, Enter does nothing.
+    pub setup: Option<String>,
 }
 
 /// The studio tab's row ids — its four rows are not one choice list,

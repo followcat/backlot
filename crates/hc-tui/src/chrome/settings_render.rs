@@ -449,7 +449,8 @@ fn render_studio(
     let overseer = studio
         .overseer
         .as_deref()
-        .unwrap_or("unset — ↵ opens setup");
+        .or(studio.setup.as_deref())
+        .unwrap_or("not configured");
     let rows = [
         (
             STUDIO_START,

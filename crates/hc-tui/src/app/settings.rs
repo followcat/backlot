@@ -51,6 +51,12 @@ impl App {
                 alt_y: self.hollywood_key.is_some_and(|keys| keys.direct.is_some()),
                 dock_width: self.panel_config.width,
                 overseer: self.hollywood_overseer.clone(),
+                setup: (self.hollywood_overseer.is_none()).then(|| {
+                    format!(
+                        "not configured · backlot hollywood setup --runner {} --model <m>",
+                        self.setup_runner_hint.as_deref().unwrap_or("<r>")
+                    )
+                }),
             })
     }
 
@@ -235,13 +241,11 @@ impl App {
     }
 
     /// The studio tab's rows: the start policy and dock width cycle
-    /// their choices, `Alt+Y` toggles; the overseer row opens the
-    /// Hollywood setup wizard only while no overseer is configured.
-    /// Every write lands in backlot's own `config.toml`.
+    /// their choices, `Alt+Y` toggles; the overseer row is read-only
+    /// until the S3/S4 dialogs bring a native setup. Every write
+    /// lands in backlot's own `config.toml`.
     fn apply_studio_row(&mut self, row: usize) {
-        use crate::chrome::settings::{
-            STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_OVERSEER, STUDIO_START,
-        };
+        use crate::chrome::settings::{STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_START};
         use crate::panel::CallSheetStart;
         match row {
             STUDIO_START => {
@@ -285,10 +289,8 @@ impl App {
                 self.panel_config.width = next;
                 self.save_settings_edit(crate::config::write::ConfigEdit::DockWidth(next));
             }
-            STUDIO_OVERSEER if self.hollywood_overseer.is_none() => {
-                self.cancel_settings_overlay();
-                self.hollywood_setup();
-            }
+            // The overseer row is read-only — a native setup dialog is
+            // S3/S4's; Enter does nothing.
             _ => {}
         }
         let view = self.studio_view();
