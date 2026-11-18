@@ -752,7 +752,30 @@ Everything else on the compared surfaces still diffs normally.
   config reload keeps it; a missing or malformed file is ignored and a
   failed write is a notice. `collapsed_endpoints` is not persisted —
   the reference does not persist it either. The file lives in hc-tui's
-  state root, never herdr's.
+  state root, never herdr's. The parity config copy therefore selects
+  herdr's own value (`agent_panel_sort = "spaces"`), which restores the
+  reference header label and agent order; with the previous default the
+  header said `priority` and the list followed status order.
+- **Persistent float default for a shell popup.** Deliberate: an hc-tui
+  `[[keys.command]]` with `type = "popup"` whose command is a bare
+  interactive shell is the tab's persistent float unless the entry says
+  `persistent = false`. The reference always runs a one-shot popup. The
+  harness pins the audited Alt+F entry to `persistent = false` in the
+  **candidate's private config copy only**: herdr treats the unknown key
+  as a config diagnostic and draws a toast over row 0.
+- **Parity harness known differences.** The harness excuses exactly three
+  things, each by position and content and recorded per checkpoint under
+  `known_differences` with the reason: the running version badge (one
+  contiguous `vX.Y.Z` run on row 0 where the reference is blank), the
+  navigator footer's pane id (a candidate `t<N>` against a reference
+  `w<W>:p<P>`, with nothing else on that row differing), and — only on the
+  `pane-exit`/`pane-closed` checkpoints — a cursor shape/blink difference
+  at an identical position and visibility, because the reference's core
+  keeps reporting the closed Alt+P shell's last cursor shape for the
+  visible pane. Nothing else is excused, no tolerance is widened and no
+  checkpoint is skipped. Both clients also share one fixture directory,
+  because the navigator prints the pane's cwd verbatim, and the neutral
+  programs pin the host cursor shape in their first paint.
 - **In-client update card and restart.** Deliberate hc-tui addition: the reference tells the user to detach and
   run `herdr update`. hc-tui adds the card from `prefix+u`, the header badge and the startup toast: the release notes of
   every newer stable release (cached in `update-check.json`), the official installer run locally with
