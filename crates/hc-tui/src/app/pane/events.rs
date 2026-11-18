@@ -225,25 +225,13 @@ impl Pane {
                         self.vt_current = true;
                     }
                 }
+                // A program's synchronized frame reaches the VT only when
+                // it closes: until then the pane keeps painting the last
+                // complete frame — cells and cursor.
+                sync_output::feed(&mut self.sync_output, live, &mut self.vt, &bytes, now);
                 let Some(vt) = &mut self.vt else {
                     return;
                 };
-                if let Some(repaint) = &mut live.repaint {
-                    match repaint.feed(vt, &bytes, now) {
-                        Ok(repaint::Release::Marker) => live.repaint = None,
-                        Ok(repaint::Release::Fallback) => {
-                            live.repaint = None;
-                            live.paint_fallback = Some(paint_gate::PAINT_FALLBACK_REASON);
-                        }
-                        Ok(repaint::Release::Waiting) => {}
-                        Err(error) => {
-                            live.repaint = None;
-                            live.vt_broken = Some(format!("appearance restore: {error}"));
-                        }
-                    }
-                } else {
-                    vt.feed(&bytes);
-                }
                 // Both supported core pins serialize this mode after all
                 // keyboard/paste state (viewers.rs::paint_state). DATA
                 // chunk boundaries are not initial-paint boundaries — and
