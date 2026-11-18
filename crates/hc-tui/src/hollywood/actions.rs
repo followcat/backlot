@@ -28,6 +28,10 @@ pub(crate) struct HollywoodAction {
     pub argv: Vec<String>,
     /// True only for `card show`: stdout becomes the view's text.
     pub view: bool,
+    /// The machine the command belongs on — `None` is this core.
+    /// Remote prompt, stage and finish actions run through
+    /// `RemoteRunner`; cards and `tell` stay local.
+    pub machine: Option<String>,
 }
 
 /// The real runner: spawn `exe <argv>` detached from the UI thread

@@ -15,6 +15,7 @@ use ratatui::style::{Color, Modifier, Style};
 use super::Target;
 use super::new_frame::draw_new;
 use super::rows::{Frame, on_set};
+use super::sheet::{Conn, Status};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::truncate_end;
@@ -31,7 +32,7 @@ const FRAME_W_MIN: u16 = 24;
 const FRAME_W_MAX: u16 = 36;
 
 /// Where the frames are drawn from.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct FramesView<'a> {
     pub selected: Option<&'a Target>,
     /// Index of the first frame drawn.
@@ -41,6 +42,8 @@ pub(crate) struct FramesView<'a> {
     pub local: Option<&'a str>,
     /// Studios span machines: the titles carry `· <machine>`.
     pub multi: bool,
+    /// Each frame's own machine line and stage — `machine` keyed.
+    pub status: &'a Status<'a>,
 }
 
 /// What the frames drew.
@@ -118,7 +121,7 @@ pub(crate) fn render(
                 Frame::Studio(studio) => {
                     let label =
                         studio_label(&studio.studio.id, studio.machine, view.local, view.multi);
-                    draw_studio(buf, rect, *studio, &label, selected, palette)
+                    draw_studio(buf, rect, *studio, &label, selected, view.status, palette)
                 }
                 Frame::New => draw_new(buf, rect, selected, palette),
             }
@@ -142,15 +145,17 @@ pub(crate) fn render(
     out
 }
 
-/// A studio's frame: `╭─ <id[ · machine]> ─…╮`, its state and
-/// waiting chip, the role on set, what it is doing, and the cast
-/// line. The label's machine part is what narrows first.
+/// A studio's frame: `╭─ <id[ · machine]> ─…╮`, its state line —
+/// its own machine's line and stage — the role on set, what it is
+/// doing, and the cast line. The label's machine part is what
+/// narrows first.
 fn draw_studio(
     buf: &mut Buffer,
     rect: Rect,
     studio: StudioRef<'_>,
     label: &StudioLabel,
     selected: bool,
+    status: &Status<'_>,
     palette: &Palette,
 ) {
     if rect.width < 4 || rect.height < 3 {
@@ -235,33 +240,53 @@ fn draw_studio(
     put_text(buf, rect.x + rect.width - 1, bottom, 1, "╯", edge);
 
     let inner = rect.width.saturating_sub(4);
-    let state = studio_state_color(studio.studio, palette);
-    // Row 1: `■ <state>` and the waiting chip.
+    // Row 1: the state line — this frame's own machine line and
+    // stage — and right-aligned `r<ver> · <done>/<total>` plus the
+    // waiting chip (red when a prompt is the user's).
+    let (conn, stage) = status(studio.machine);
+    let (mark, word, colour) = studio_line(studio.studio, conn, stage, palette);
     let y = rect.y + 1;
-    put_text(buf, rect.x + 2, y, 1, "■", on(state, bg));
+    put_text(buf, rect.x + 2, y, 1, mark, on(colour, bg));
     put_text(
         buf,
         rect.x + 3,
         y,
         inner.saturating_sub(1),
-        &format!(
-            " {}",
-            truncate_end(&studio.studio.state, inner.saturating_sub(2) as usize)
-        ),
-        on(state, bg).add_modifier(Modifier::BOLD),
+        &format!(" {}", truncate_end(word, inner.saturating_sub(2) as usize)),
+        on(colour, bg).add_modifier(Modifier::BOLD),
     );
-    if studio.studio.waiting > 0 {
-        let chip = format!(" !{} ", studio.studio.waiting);
-        let w = chip.chars().count() as u16;
-        if inner > w + 2 {
-            let x = rect.x + rect.width - 2 - w;
+    let rev = format!(
+        "r{} · {}/{}",
+        studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
+    );
+    let mut right_w = rev.chars().count() as u16;
+    let chip = if studio.studio.waiting > 0 {
+        format!(" !{} ", studio.studio.waiting)
+    } else {
+        String::new()
+    };
+    // One unchipped space between the counts and the badge.
+    right_w += chip.chars().count() as u16 + u16::from(!chip.is_empty());
+    if inner > right_w + 8 {
+        let mut rx = rect.x + rect.width - 2 - right_w;
+        put_text(buf, rx, y, rev.chars().count() as u16, &rev, {
+            on(palette.subtext0, bg)
+        });
+        rx += rev.chars().count() as u16;
+        if !chip.is_empty() {
+            rx += 1;
+            let user = studio.studio.roles.iter().any(|r| r.attention_user);
             put_text(
                 buf,
-                x,
+                rx,
                 y,
-                w,
+                chip.chars().count() as u16,
                 &chip,
-                on(palette.panel_bg, palette.peach).add_modifier(Modifier::BOLD),
+                on(
+                    palette.panel_bg,
+                    if user { palette.red } else { palette.peach },
+                )
+                .add_modifier(Modifier::BOLD),
             );
         }
     }
@@ -296,13 +321,13 @@ fn draw_studio(
         &format!(" {}", truncate_end(what, inner.saturating_sub(1) as usize)),
         on(colour, bg),
     );
-    // Row 5: the cast, one diamond each, and its count and revision
-    // right-aligned.
-    let cast_label = format!(
-        "{} cast · r{}",
-        studio.studio.roles.len(),
-        studio.studio.requirement_version
-    );
+    // Row 5: the cast, one glyph each; `◈ <open> rev` in blue when
+    // reviews wait, else `<N> cast`.
+    let cast_label = if studio.studio.open_reviews > 0 {
+        format!("◈ {} rev", studio.studio.open_reviews)
+    } else {
+        format!("{} cast", studio.studio.roles.len())
+    };
     let label_w = cast_label.chars().count() as u16;
     let label_x = (rect.x + rect.width - 2).saturating_sub(label_w);
     if label_x > rect.x + 2 {
@@ -312,7 +337,14 @@ fn draw_studio(
             rect.y + 5,
             label_w,
             &cast_label,
-            on(palette.overlay0, bg),
+            on(
+                if studio.studio.open_reviews > 0 {
+                    palette.blue
+                } else {
+                    palette.overlay0
+                },
+                bg,
+            ),
         );
     }
     let mut x = rect.x + 2;
@@ -333,15 +365,34 @@ fn draw_studio(
     }
 }
 
-/// A studio state's colour: a live studio green, a finished one teal,
-/// a broken one red, anything else dim.
-pub(crate) fn studio_state_color(studio: &StudioSummary, palette: &Palette) -> Color {
+/// The frame's state line, machine-aware (A8.2): `× error`, then
+/// `× offline`, `◌ stage down`, `✓ ready`, `✓ done`, `● live` —
+/// `(mark, word, colour)`.
+pub(crate) fn studio_line<'a>(
+    studio: &'a StudioSummary,
+    conn: Conn,
+    stage: bool,
+    palette: &Palette,
+) -> (&'static str, &'a str, Color) {
     if studio.error.is_some() {
-        return palette.red;
+        return ("×", "error", palette.red);
+    }
+    if conn == Conn::Offline {
+        return ("×", "offline", palette.red);
+    }
+    if !stage {
+        return ("◌", "stage down", palette.peach);
+    }
+    if studio.ready_to_finish {
+        return ("✓", "ready", palette.teal);
     }
     match studio.state.as_str() {
-        "live" => palette.green,
-        "finished" => palette.teal,
-        _ => palette.overlay0,
+        "finished" => ("✓", "done", palette.overlay1),
+        "live" => ("●", "live", palette.green),
+        other => (
+            "·",
+            if other.is_empty() { "down" } else { other },
+            palette.overlay0,
+        ),
     }
 }

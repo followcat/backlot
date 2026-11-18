@@ -1,9 +1,20 @@
-//! The bar's model: the frames and the band rows.
-//! and the cast marks — all pure reads of the document.
+//! The bar's model: the frames and the band rows — all pure reads
+//! of the document.
 use super::*;
 use crate::hollywood::rows::{Frame, Row, Target, band_rows, frames, on_set};
+use crate::hollywood::sheet::{Conn, Status};
 use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
+
+/// Every machine online, every stage running.
+fn all_live(_: Option<&str>) -> (Conn, bool) {
+    (Conn::Online, true)
+}
+
+/// Every machine online, every stage down.
+fn stage_down(_: Option<&str>) -> (Conn, bool) {
+    (Conn::Online, false)
+}
 
 #[test]
 fn the_frames_are_the_studios_then_the_new_studio_entry() {
@@ -32,10 +43,14 @@ fn a_missing_document_still_offers_the_entry() {
 }
 
 #[test]
-fn the_band_is_the_headline_the_cards_and_the_input() {
+fn the_band_is_the_headline_the_waits_and_the_input() {
     let summary = summary();
-    let all = band_rows(Some(&summary), true, true);
-    let targets: Vec<Target> = all.iter().map(|r| r.target()).collect();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    // The fixture carries two open cards and no prompts — the waits
+    // are the cards, in document order.
+    assert_eq!(waits.len(), 2);
+    let targets: Vec<Target> = rows.iter().map(|r| r.target(&waits)).collect();
     assert_eq!(
         targets,
         vec![
@@ -48,33 +63,37 @@ fn the_band_is_the_headline_the_cards_and_the_input() {
 }
 
 #[test]
-fn a_dead_stage_leads_the_band() {
+fn a_dead_stage_leads_the_waits_when_it_has_live_studios() {
     let summary = summary();
-    let all = band_rows(Some(&summary), false, true);
-    assert!(matches!(all[0], Row::StageDown));
-    assert_eq!(all[0].target(), Target::StageDown);
+    let list = machines(Some(&summary));
+    let down: &Status<'_> = &stage_down;
+    let (waits, _) = band_rows(&list, down, true);
+    assert_eq!(waits[0].target(), Target::Stage(None, false));
 }
 
 #[test]
 fn without_an_agent_the_band_is_the_setup_line() {
     let summary = summary();
-    let all = band_rows(Some(&summary), true, false);
-    assert_eq!(all.len(), 1);
-    assert!(matches!(all[0], Row::Setup));
-    assert_eq!(frames(&machines(Some(&summary))).len(), 4);
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, false);
+    // Cards stay listed without an agent — they are still the
+    // user's; only the input line becomes the setup line.
+    assert_eq!(rows.len(), 3);
+    assert!(matches!(rows.last(), Some(Row::Setup)));
+    assert!(!waits.is_empty());
+    assert_eq!(frames(&list).len(), 4);
 }
 
 #[test]
-fn a_document_without_a_hollywood_object_has_a_setup_free_band() {
-    // No agent: the studios still show as frames; the band is the
-    // setup line and nothing else.
+fn a_calm_band_still_ends_in_the_input_line() {
     let mut value = summary_json();
-    value.as_object_mut().unwrap().remove("hollywood");
+    value["hollywood"]["cards"] = serde_json::json!([]);
     let summary: Summary = serde_json::from_value(value).unwrap();
-    let all = band_rows(Some(&summary), true, false);
-    assert_eq!(all.len(), 1);
-    assert!(matches!(all[0], Row::Setup));
-    assert_eq!(frames(&machines(Some(&summary))).len(), 4);
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    assert!(waits.is_empty());
+    assert_eq!(rows.len(), 3); // headline, calm, input
+    assert!(matches!(rows[1], Row::Calm(3)));
 }
 
 #[test]

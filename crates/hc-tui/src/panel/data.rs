@@ -114,7 +114,9 @@ pub(crate) fn summaries(view: &View) -> Vec<MachineSummary> {
 }
 
 /// This core's parsed document alone — Hollywood's cards and the
-/// headline stay this core's.
+/// headline stay this core's. Tests only: the Call Sheet reads its
+/// local document through `hollywood::rows::local_summary`.
+#[cfg(test)]
 pub(crate) fn local_summary(view: &View) -> Option<Summary> {
     view.documents
         .get(&key())
@@ -156,27 +158,47 @@ pub(crate) fn spans_machines(machines: &[MachineSummary]) -> bool {
         > 1
 }
 
-/// A studio's header text pair: the `id · machine` label and the
-/// bare id it falls back to when the label does not fit — the
-/// machine name is cut before the studio id is.
+/// A studio's header text pair: the `id · machine` label, its bare
+/// id and its bare machine — the machine narrows first but is never
+/// dropped whole while one is set (A8.3).
 #[derive(Debug, Clone)]
 pub(crate) struct StudioLabel {
     /// `id · machine`, or `id` alone.
     pub full: String,
     /// The studio id.
     pub id: String,
+    /// The machine name when one is labelled.
+    pub machine: Option<String>,
 }
 
 impl StudioLabel {
-    /// The label at `width`: `full` when it fits, else the id
-    /// truncated — the machine name goes first.
+    /// The label at `width` (A8.3): `id · machine` when it fits;
+    /// else the machine truncated to a floor of four chars plus `…`
+    /// (`beta-tools · hos…`); else the separator shortens to `@`
+    /// (`beta-tools@hos…`) and the id truncates last
+    /// (`beta-too…@hos…`). Without a machine it is the id truncated.
     pub(crate) fn fit(&self, width: usize) -> String {
         use crate::chrome::text::{display_width, truncate_end};
         if display_width(&self.full) <= width {
-            self.full.clone()
-        } else {
-            truncate_end(&self.id, width)
+            return self.full.clone();
         }
+        let Some(machine) = self.machine.as_deref() else {
+            return truncate_end(&self.id, width);
+        };
+        // Step 2: `id · <mach…>` — the machine keeps four chars.
+        let m = truncate_end(machine, 5); // 4 chars + `…`
+        let with_dots = format!("{} · {}", self.id, m);
+        if display_width(&with_dots) <= width {
+            return with_dots;
+        }
+        // Step 3: `id@<mach…>` — the separator shortens.
+        let at = format!("{}@{}", self.id, m);
+        if display_width(&at) <= width {
+            return at;
+        }
+        // Step 4: the id itself truncates inside `id@mach…`.
+        let room = width.saturating_sub(display_width(&format!("@{m}")));
+        format!("{}@{}", truncate_end(&self.id, room), m)
     }
 }
 
@@ -189,13 +211,17 @@ pub(crate) fn studio_label(
     local: Option<&str>,
     multi: bool,
 ) -> StudioLabel {
-    let full = match machine.or(local).filter(|_| multi) {
-        Some(machine) => format!("{id} · {machine}"),
-        None => id.to_string(),
-    };
-    StudioLabel {
-        full,
-        id: id.to_string(),
+    match machine.or(local).filter(|_| multi) {
+        Some(machine) => StudioLabel {
+            full: format!("{id} · {machine}"),
+            id: id.to_string(),
+            machine: Some(machine.to_string()),
+        },
+        None => StudioLabel {
+            full: id.to_string(),
+            id: id.to_string(),
+            machine: None,
+        },
     }
 }
 

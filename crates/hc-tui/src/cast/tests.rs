@@ -82,6 +82,7 @@ fn cast_view<'a>(
         label: Some(crate::panel::data::StudioLabel {
             full: "acme-shop".into(),
             id: "acme-shop".into(),
+            machine: None,
         }),
         index: 0,
         total: 1,

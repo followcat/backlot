@@ -78,11 +78,34 @@ pub(super) fn render_overlays_and_cursor(
     // whole frame — always under the popup/notice/overlay stack so
     // dialogs and action notices still win. A full-screen panel writes
     // over the cached pane surfaces, so the wide-tail pass must rescan.
+    // The beside-dock seam (A5.2): while the Call Sheet is expanded
+    // the dock draws from `y = bar_h` — under the band, never under
+    // the panes' own layout and never a PTY resize.
+    let bar_h = if app.hollywood.expanded() && app.opening.ready() && !app.opening_visible() {
+        let machines = app.panel_summaries();
+        crate::hollywood::expanded_height(
+            area,
+            &machines,
+            &crate::hollywood::status_of(&app.view),
+            &app.hollywood,
+            crate::hollywood::LayerOpts {
+                agent: app.has_hollywood_cfg,
+                mobile: app.area.0 <= app.shell.mobile_width_threshold,
+            },
+        )
+    } else {
+        0
+    };
     app.panel_hits = if app.panel.open() {
         overlay_painted |= app.panel_fullscreen();
         let rect = if app.panel_beside(area.width) {
             let width = app.panel_width();
-            Rect::new(area.x + area.width - width, area.y, width, area.height)
+            Rect::new(
+                area.x + area.width - width,
+                area.y + bar_h,
+                width,
+                area.height.saturating_sub(bar_h),
+            )
         } else {
             area
         };
@@ -150,7 +173,7 @@ pub(super) fn render_overlays_and_cursor(
             hollywood_area,
             &machines,
             Some(crate::project::LOCAL_LABEL),
-            crate::panel::stage_running(&app.view, None),
+            &crate::hollywood::status_of(&app.view),
             &app.hollywood,
             crate::hollywood::LayerOpts {
                 agent: app.has_hollywood_cfg,

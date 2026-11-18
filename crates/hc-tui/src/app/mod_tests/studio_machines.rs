@@ -165,7 +165,9 @@ async fn the_endpoint_sidebar_keeps_the_cast_under_the_machine_tree() {
     assert!(sidebar.contains("host-b"), "{sidebar}");
     // The lower section is the current studio's cast — the
     // single-endpoint sidebar's section, herdr's agents header gone.
-    assert!(sidebar.contains("cast · acme-shop"), "{sidebar}");
+    // A8.3: the machine tag is never dropped whole — it truncates
+    // inside `id@machine` instead.
+    assert!(sidebar.contains("cast · acme-…@Local"), "{sidebar}");
     assert!(sidebar.contains("producer"), "{sidebar}");
     assert!(sidebar.contains("director"), "{sidebar}");
     assert!(sidebar.contains("alice task-1"), "{sidebar}");
@@ -218,7 +220,8 @@ async fn plain_mode_keeps_herdrs_endpoint_sidebar_unchanged() {
     app.area = (120, 24);
     let backend = draw_to(&mut app, 120, 24);
     let sidebar = sidebar_text(&backend);
-    assert_eq!(sidebar, EXPECTED_PLAIN, "\n--- sidebar ---\n{sidebar}\n---");
+    let expected = expected_plain();
+    assert_eq!(sidebar, expected, "\n--- sidebar ---\n{sidebar}\n---");
     // The headers and the split divider keep herdr's styling.
     let palette = &app.shell.palette;
     let buf = backend.buffer();
@@ -244,9 +247,14 @@ async fn plain_mode_keeps_herdrs_endpoint_sidebar_unchanged() {
 
 // The `--plain` sidebar cell for cell — herdr's expanded endpoint
 // sidebar: the draggable split's divider, `agents` + `grouped`, the
-// stray agent row and the collapse toggle.
-const EXPECTED_PLAIN: &str = concat!(
-    " machines         v0.2.2 │\n",
+// stray agent row and the collapse toggle. The header right-aligns
+// the running crate's version.
+fn expected_plain() -> String {
+    let version = format!("v{}", crate::app::update_modal::RUNNING);
+    format!(" {:<8}{:>15} │\n{EXPECTED_PLAIN_TAIL}", "machines", version)
+}
+
+const EXPECTED_PLAIN_TAIL: &str = concat!(
     "                         │\n",
     " ▾ Local                 │\n",
     "   · acme-shop           │\n",

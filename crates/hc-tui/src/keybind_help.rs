@@ -314,6 +314,18 @@ pub(crate) fn backlot_help_groups(
             ],
         ),
         (
+            "call sheet (open)",
+            vec![
+                entry("↑↓ ←→", "move · ⏎ open"),
+                entry("y / d", "answer a prompt"),
+                entry("a / x / s", "apply / cancel / show a card"),
+                entry("f / r", "finish a studio / start a stage"),
+                entry("p / i / n", "peek / tell / new studio"),
+                entry("1–9 0", "frame · new studio"),
+                entry("esc", "collapse"),
+            ],
+        ),
+        (
             "glyph legend",
             vec![
                 entry(

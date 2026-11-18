@@ -12,6 +12,7 @@ use ratatui::style::Color;
 
 use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
 
+use super::sheet::{Status, Wait, waiting_items};
 use crate::panel::data::{MachineSummary, StudioRef};
 use crate::studio::StudioKey;
 
@@ -20,16 +21,24 @@ use crate::studio::StudioKey;
 pub(crate) enum Target {
     /// The `✦  H O L L Y W O O D` row — Enter focuses `bl-hollywood`.
     Title,
-    /// The "stage not running" line — shown, not actionable.
-    StageDown,
-    /// A studio's frame — Enter focuses that studio's producer.
+    /// A studio's frame or chip — Enter focuses its producer.
     Studio(StudioKey),
     /// The trailing `+ new studio` frame — Enter opens the wizard.
     NewStudio,
     /// Hollywood's newest headline — shown, not actionable.
     Headline,
-    /// An open card row — `a` applies, `c` cancels, `s`/Enter shows.
+    /// A user-owned prompt row (studio, role) — `y`/`d` decide, `p`
+    /// peeks, Enter focuses the role's terminal.
+    Prompt(StudioKey, String),
+    /// A machine whose stage is down (`offline == false`) or that is
+    /// unreachable — `r` restarts the stage.
+    Stage(Option<String>, bool),
+    /// An open card row — `a` applies, `x` cancels, `s`/Enter shows.
     Card(String),
+    /// A ready-to-finish studio — `f` finishes, Enter focuses it.
+    Ready(StudioKey),
+    /// The calm row — shown, not actionable.
+    Calm,
     /// The input line — `i`/Enter opens it for editing.
     Input,
     /// The no-agent bar's setup line — shown, not actionable.
@@ -69,56 +78,59 @@ pub(crate) fn frames(machines: &[MachineSummary]) -> Vec<Frame<'_>> {
     out
 }
 
-/// One band row, borrowing its data from the summary.
-#[derive(Debug)]
+/// One band row, borrowing its data from the documents.
 pub(crate) enum Row<'a> {
-    /// `stage not running` — same one-line read as the panel's.
-    StageDown,
     /// The newest `hollywood.reported` headline.
     Headline(&'a str),
-    /// `c<n> · <studio> · <action> — <why>` with its Apply/Cancel/Show
-    /// targets.
-    Card(&'a backlot_model::summary::CardSummary),
+    /// A waiting item — an index into the sheet's `waits`.
+    Wait(usize),
+    /// `✓ nothing waiting on you across <S> studios` — the calm row.
+    Calm(usize),
     /// `› <input>` — the `tell hollywood` line.
     Input,
-    /// `✦ an agent can watch every studio …: backlot hollywood setup …`
-    /// — the bar without an agent (U7).
+    /// `✦ an agent can watch every studio …` — the bar without an
+    /// agent (U7).
     Setup,
 }
 
 impl Row<'_> {
-    pub fn target(&self) -> Target {
+    pub fn target(&self, waits: &[Wait<'_>]) -> Target {
         match self {
-            Row::StageDown => Target::StageDown,
             Row::Headline(_) => Target::Headline,
-            Row::Card(card) => Target::Card(card.id.clone()),
+            Row::Wait(i) => waits[*i].target(),
+            Row::Calm(_) => Target::Calm,
             Row::Input => Target::Input,
             Row::Setup => Target::Setup,
         }
     }
 }
 
-/// The band's rows in draw order: the stage line while the stage is
-/// down, then (with an agent) the headline and the open cards, then
-/// the input line — or, without an agent, the setup line in their
-/// place.
+/// The band's rows in draw order: the headline (with an agent), the
+/// waiting items — or the calm row — then the input line, or the
+/// setup line without an agent. The waits list is what `Row::Wait`
+/// indexes and what scroll/detail bookkeeping numbers.
 pub(crate) fn band_rows<'a>(
-    summary: Option<&'a Summary>,
-    stage_running: bool,
+    machines: &'a [MachineSummary],
+    status: &Status<'a>,
     agent: bool,
-) -> Vec<Row<'a>> {
-    let mut out = Vec::new();
-    if !stage_running {
-        out.push(Row::StageDown);
+) -> (Vec<Wait<'a>>, Vec<Row<'a>>) {
+    let mut out: Vec<Row<'a>> = Vec::new();
+    let summary = local_summary(machines);
+    if agent
+        && let Some(headline) = summary
+            .and_then(|s| s.hollywood.as_ref())
+            .and_then(|h| h.headline.as_deref())
+    {
+        out.push(Row::Headline(headline));
     }
-    if agent && let Some(hollywood) = summary.and_then(|s| s.hollywood.as_ref()) {
-        if let Some(headline) = hollywood.headline.as_deref() {
-            out.push(Row::Headline(headline));
-        }
-        out.extend(hollywood.cards.iter().map(Row::Card));
+    let waits = waiting_items(machines, status);
+    if waits.is_empty() {
+        out.push(Row::Calm(crate::panel::data::studio_count(machines)));
+    } else {
+        out.extend((0..waits.len()).map(Row::Wait));
     }
     out.push(if agent { Row::Input } else { Row::Setup });
-    out
+    (waits, out)
 }
 
 /// The setup line a bar without an agent shows: what an agent would

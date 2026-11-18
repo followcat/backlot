@@ -10,6 +10,25 @@ v0.1.13), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Changed
+
+- **The expanded Hollywood bar is the Call Sheet.** One list of everything
+  waiting on the user across every machine — user-owned prompts first, then
+  stopped stages and offline machines with live studios, then open cards, then
+  studios ready to finish — each row answered from the bar with keys: `y`/`d`/`p`
+  on a prompt, `r` on a stage, `a`/`x`/`s` on a card, `f` with an inline `y/n`
+  confirm on a ready studio, `i` for `tell hollywood`, `?` for help. Remote
+  prompt, stage and finish actions run on their own machine; cards and `tell`
+  run on the local core. Clicks select; activation stays on the keys.
+- Frames carry their own machine's stage and connectivity, and a
+  machine-qualified label (`beta-tools · host-b`) that truncates the machine
+  before the id. Under height pressure the frames fold into a one-row chip
+  strip, details and the headline go before the waiting rows do, and the list
+  scrolls with a `i/N` marker.
+- The summary document gains `attention_seq`/`attention_detail` on roles and
+  `tasks_done`/`tasks_total` on studios — additive, `backlot/1` unchanged.
+- `x` in the expanded bar is the card cancel; `Esc` or the toggle collapses.
+
 ## 0.2.3 — 2026-11-18
 
 ### Added

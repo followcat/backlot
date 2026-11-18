@@ -72,6 +72,13 @@ pub struct StudioSummary {
     /// user's. Documents an older stage wrote read as `false`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub ready_to_finish: bool,
+    /// Tasks in `accepted` or `partially accepted` — the ready row's
+    /// `<done>/<total>` (S1). Documents an older stage wrote read 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tasks_done: u32,
+    /// Every task the ledger recorded.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tasks_total: u32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
 }
@@ -132,6 +139,16 @@ pub struct RoleSummary {
     /// (D9). Documents an older stage wrote read as `false`.
     #[serde(default, skip_serializing_if = "is_false")]
     pub attention_user: bool,
+    /// The first open attention record's seq — the `#<seq>` the Call
+    /// Sheet shows and `attention clear <seq>` takes (S1). `None`
+    /// while the role has no open attention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention_seq: Option<u64>,
+    /// The first open attention's detail minus the
+    /// `"; [needs the user; ]screen saved to attention/<seq>.txt"`
+    /// tail — the prompt row's second line (S1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention_detail: Option<String>,
 }
 
 /// The whole document body.
@@ -164,6 +181,10 @@ pub(crate) fn cap(s: &str) -> String {
 
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// A studio is finished when every task it knows is terminal and no
@@ -250,6 +271,32 @@ fn role_attention(state: &StudioState, role: &str) -> Option<String> {
     })
 }
 
+/// The open attention's display detail (S1): the
+/// `"; [needs the user; ]screen saved to attention/<seq>.txt"` tail
+/// trimmed, then the usual cap. A raise that carried no tool line at
+/// all — a prompt nothing bound to — reads `unbound prompt — peek
+/// screen`.
+fn attention_detail(a: &crate::state::Attention) -> String {
+    let tail = format!("screen saved to attention/{}.txt", a.seq);
+    let body = a
+        .detail
+        .rsplit_once(tail.as_str())
+        .map(|(head, _)| head)
+        .unwrap_or(a.detail.as_str());
+    let body = trim_tail(body);
+    let body = body.strip_suffix("needs the user").map_or(body, trim_tail);
+    if body.is_empty() {
+        "unbound prompt — peek screen".to_string()
+    } else {
+        cap(body)
+    }
+}
+
+/// `"; "`, `" — "` and whitespace off a detail's right edge.
+fn trim_tail(s: &str) -> &str {
+    s.trim_end_matches(|c: char| c == ';' || c.is_whitespace() || c == '—')
+}
+
 /// The role's open attention is the user's to answer — the same rule
 /// the `needs the user` marker follows, as a flag clients can count
 /// without re-reading the text (the lot pill's urgent count).
@@ -315,6 +362,7 @@ fn role_summary(
         .and_then(|t| state.tasks.get(t))
         .map(|t| t.priority);
     let actor = r.actor.as_ref();
+    let open = state.open_attention().find(|a| a.role == role);
     Some(RoleSummary {
         role: cap(role),
         name: role_name(state, role),
@@ -338,6 +386,8 @@ fn role_summary(
         since_ms: r.since_ms,
         attention: role_attention(state, role),
         attention_user: role_attention_user(state, role),
+        attention_seq: open.map(|a| a.seq),
+        attention_detail: open.map(attention_detail),
     })
 }
 
@@ -381,6 +431,8 @@ pub fn summary(
                     next: None,
                     repo: None,
                     ready_to_finish: false,
+                    tasks_done: 0,
+                    tasks_total: 0,
                     roles: Vec::new(),
                 });
             }
@@ -437,6 +489,8 @@ pub fn summary(
                 since_ms: 0,
                 attention: None,
                 attention_user: false,
+                attention_seq: None,
+                attention_detail: None,
             });
         }
         let entry = StudioSummary {
@@ -459,6 +513,17 @@ pub fn summary(
             ready_to_finish: !state.tasks.is_empty()
                 && state.tasks.values().all(|t| t.status.is_terminal())
                 && state.finished.is_none(),
+            tasks_done: state
+                .tasks
+                .values()
+                .filter(|t| {
+                    matches!(
+                        t.status,
+                        TaskStatus::Accepted | TaskStatus::PartiallyAccepted
+                    )
+                })
+                .count() as u32,
+            tasks_total: state.tasks.len() as u32,
             roles,
         };
         if done {
