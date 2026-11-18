@@ -11,10 +11,19 @@ use std::sync::atomic::Ordering::Relaxed;
 use super::App;
 
 /// Wake kinds, one counter slot each, in `WakeKind` order.
-pub const WAKE_KINDS: usize = 8;
+pub const WAKE_KINDS: usize = 10;
 /// Snapshot names of the wake kinds, indexed like the counters.
 pub const WAKE_NAMES: [&str; WAKE_KINDS] = [
-    "none", "input", "replies", "view", "seen", "waiting", "pane", "deadline",
+    "none",
+    "input",
+    "replies",
+    "view",
+    "seen",
+    "waiting",
+    "pane",
+    "deadline",
+    "panel",
+    "hollywood",
 ];
 /// Pane roles, one `Probe::panes` slot each.
 pub const PANE_ROLES: usize = 4;
@@ -118,5 +127,16 @@ mod tests {
         assert_eq!(out.inner, b"abcde");
         assert_eq!(probe.terminal_writes.load(Relaxed), 2);
         assert_eq!(probe.terminal_bytes.load(Relaxed), 5);
+    }
+
+    #[test]
+    fn every_wake_kind_has_a_counter_slot() {
+        // The last `WakeKind` variant's index must fit the arrays —
+        // the loop indexes them by `kind as usize`.
+        assert_eq!(
+            WAKE_KINDS,
+            super::super::wake::WakeKind::Hollywood as usize + 1
+        );
+        assert_eq!(WAKE_KINDS, WAKE_NAMES.len());
     }
 }
