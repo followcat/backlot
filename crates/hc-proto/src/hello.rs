@@ -23,6 +23,9 @@ pub mod feature {
     /// Observers may opt in to core-to-viewer RESIZE before replacement
     /// paints.
     pub const RESIZE_NOTIFICATIONS: &str = "resize_notifications";
+    /// `terminal.put_begin`/`put_chunk`/`put_finish`/`put_abort`: a file
+    /// sent in acknowledged pieces instead of one `terminal.put`.
+    pub const PUT_CHUNKS: &str = "put_chunks";
 }
 
 /// Who a core is: a permanent random id and a display name.

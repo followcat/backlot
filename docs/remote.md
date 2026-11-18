@@ -29,9 +29,12 @@ on the core. [Runtime](runtime.md) has the details.
 `Ctrl+Shift+V` pastes text. The program receives it as a bracketed paste, unchanged.
 
 `Ctrl+V` pastes a clipboard image. hc-tui reads your local clipboard, uploads the image to the remote core with
-`terminal.put`, and the program receives the path of the uploaded file. The same applies to a focused terminal on
-another machine (`machine/tN`) and to hc-tui itself running inside an SSH session. On a plain local endpoint `Ctrl+V`
-is left alone. Local programs read the clipboard themselves.
+`terminal.put` — or, when the core advertises `put_chunks` (official `hc` 0.1.21 and later, and the followcat fork),
+in acknowledged pieces (`terminal.put_begin`/`put_chunk`/`put_finish`) so a slow link cannot time out mid-file —
+and the program receives the path of the uploaded file. A terminal on another machine (`machine/tN`), and hc-tui
+itself running inside an SSH session, take the same route: the core moves the file to that machine. A core without
+`put_chunks` keeps one `terminal.put`. On a plain local endpoint `Ctrl+V` is left alone. Local programs read the
+clipboard themselves.
 
 On Linux the clipboard read needs `wl-paste` under Wayland or `xclip` under X11. PNG, JPEG, GIF, WebP and BMP are
 recognized, up to the 8 MB `terminal.put` limit. A copied image file counts as well: file managers offer

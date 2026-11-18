@@ -205,25 +205,170 @@ pub(super) async fn run_action(client: &Client, action: Action) -> Result<Outcom
             terminal,
             created_ms,
             name,
-            data,
+            bytes,
+            pieces,
         } => {
+            let capabilities = client.capabilities();
+            let pieces_ok = pieces
+                && capabilities.has_feature(hc_proto::hello::feature::PUT_CHUNKS)
+                && capabilities.has_method("terminal.put_begin")
+                && capabilities.has_method("terminal.put_chunk")
+                && capabilities.has_method("terminal.put_finish");
+            // Refuse before any call when neither path can run: a core
+            // that offers neither the pieces nor `terminal.put` gets no
+            // probe, exactly like the old static gate.
+            if !pieces_ok && let Some(reason) = capabilities.explain_unavailable("terminal.put") {
+                return Err(reason);
+            }
             verify_incarnation(client, &terminal, created_ms, "Image paste").await?;
-            let result = client
-                .call(
-                    "terminal.put",
-                    Some(json!({"terminal":terminal,"name":name,"data":data})),
-                )
-                .await
-                .map_err(|e| e.to_string())?;
-            let path = result["path"]
-                .as_str()
-                .ok_or("terminal.put replied without a path")?
-                .to_owned();
+            let path = if pieces_ok {
+                put_pieces(client, &terminal, &name, &bytes).await?
+            } else {
+                put_whole(client, &terminal, &name, &bytes).await?
+            };
             Ok(Outcome::Put { terminal, path })
         }
         Action::Edit(_) | Action::Create(_) | Action::Close { .. } | Action::Forget { .. } => {
             unreachable!("dispatched in rpc::run")
         }
+    }
+}
+
+/// Raw bytes per acknowledged piece. The core caps one piece at 1 MB; a
+/// 64 KiB piece keeps each base64 line well inside that and lets typing
+/// and credit cross between pieces on a slow SSH link.
+pub(super) const PUT_CHUNK_BYTES: usize = 64 * 1024;
+
+/// One `terminal.put`: the whole file in a single base64 parameter. Every
+/// core that offers `terminal.put` takes it — older cores keep this path.
+async fn put_whole(
+    client: &Client,
+    terminal: &str,
+    name: &str,
+    bytes: &[u8],
+) -> Result<String, String> {
+    let result = client
+        .call(
+            "terminal.put",
+            Some(json!({
+                "terminal": terminal,
+                "name": name,
+                "data": crate::selection::base64_encode(bytes),
+            })),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    result["path"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "terminal.put replied without a path".into())
+}
+
+/// `terminal.put_begin` → `terminal.put_chunk` (repeated, each acknowledged)
+/// → `terminal.put_finish`; `terminal.put_abort` when a piece fails. Only
+/// for a core advertising `put_chunks`, and only for a terminal on that
+/// core (its `put_begin` rejects `machine/tN` addresses).
+async fn put_pieces(
+    client: &Client,
+    terminal: &str,
+    name: &str,
+    bytes: &[u8],
+) -> Result<String, String> {
+    let transfer = transfer_handle();
+    client
+        .call(
+            "terminal.put_begin",
+            Some(json!({
+                "terminal": terminal,
+                "name": name,
+                "bytes": bytes.len(),
+                "transfer": transfer,
+            })),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut sent = 0;
+    while sent < bytes.len() {
+        let end = (sent + PUT_CHUNK_BYTES).min(bytes.len());
+        let reply = client
+            .call(
+                "terminal.put_chunk",
+                Some(json!({
+                    "transfer": transfer,
+                    "offset": sent,
+                    "data": crate::selection::base64_encode(&bytes[sent..end]),
+                })),
+            )
+            .await;
+        match reply {
+            // Each piece is answered with the bytes the core holds now:
+            // a different count means the transfer cannot continue.
+            Ok(value) if value["bytes"].as_u64() == Some(end as u64) => sent = end,
+            Ok(_) => {
+                return Err(
+                    put_abort(client, &transfer, "the core did not acknowledge the chunk").await,
+                );
+            }
+            Err(e) => return Err(put_abort(client, &transfer, &e.to_string()).await),
+        }
+    }
+    // A finish that fails is not retried: the core may already have the
+    // file, so it carries the same warning the core's own client gives.
+    match client
+        .call("terminal.put_finish", Some(json!({ "transfer": transfer })))
+        .await
+    {
+        Ok(result) => result["path"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| "terminal.put_finish replied without a path".into()),
+        Err(e) => Err(format!("{e}; the upload may have landed")),
+    }
+}
+
+/// Removes a transfer the core still holds and reports `reason`. The
+/// abort's own failure never replaces the real error.
+async fn put_abort(client: &Client, transfer: &str, reason: &str) -> String {
+    let _ = client
+        .call("terminal.put_abort", Some(json!({ "transfer": transfer })))
+        .await;
+    reason.to_owned()
+}
+
+/// A transfer handle: 32 hex digits, inside the core's 16–64 range.
+/// `/dev/urandom` when it opens; the clock and process id otherwise, so
+/// two transfers never share a handle even then.
+fn transfer_handle() -> String {
+    use std::io::Read;
+    let mut bytes = [0u8; 16];
+    if std::fs::File::open("/dev/urandom")
+        .and_then(|mut file| file.read_exact(&mut bytes))
+        .is_err()
+    {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        bytes.copy_from_slice(&(nanos ^ (u128::from(std::process::id()) << 96)).to_be_bytes());
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// A failed `terminal.send`. The core's `cancelled` kind (hc 0.1.21 and
+/// later) means the caller went away or the core stopped before anything
+/// was typed: a refusal, shown like any other failed action and never as a
+/// success. hc-tui offers no automatic retry for a send — the message says
+/// so, and the line can be sent again from the agent menu. A client-side
+/// deadline is its own case: the request may still be held behind a
+/// person's unsent draft, so the core can type it later.
+pub(super) fn send_failure(error: hc_proto::client::CallError) -> String {
+    use hc_proto::client::CallError;
+    match error {
+        error if error.is_kind(hc_proto::jsonrpc::error_kind::CANCELLED) => {
+            "Send cancelled; nothing was typed. Send it again.".into()
+        }
+        CallError::Timeout => "Send timed out; the core may still type it.".into(),
+        error => error.to_string(),
     }
 }
 
@@ -247,22 +392,4 @@ async fn verify_incarnation(
         return Err(format!("{what} target was replaced; reopen the menu"));
     }
     Ok(())
-}
-
-/// A failed `terminal.send`. The core's `cancelled` kind (hc 0.1.21 and
-/// later) means the caller went away or the core stopped before anything
-/// was typed: a refusal, shown like any other failed action and never as a
-/// success. hc-tui offers no automatic retry for a send — the message says
-/// so, and the line can be sent again from the agent menu. A client-side
-/// deadline is its own case: the request may still be held behind a
-/// person's unsent draft, so the core can type it later.
-pub(super) fn send_failure(error: hc_proto::client::CallError) -> String {
-    use hc_proto::client::CallError;
-    match error {
-        error if error.is_kind(hc_proto::jsonrpc::error_kind::CANCELLED) => {
-            "Send cancelled; nothing was typed. Send it again.".into()
-        }
-        CallError::Timeout => "Send timed out; the core may still type it.".into(),
-        error => error.to_string(),
-    }
 }

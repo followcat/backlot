@@ -3,8 +3,9 @@
 // (Apache-2.0).
 //! The R9 clipboard-image bridge: on remote-capable endpoints the
 //! configured paste key, an empty bracketed paste, or a dropped image
-//! path uploads the local image through `terminal.put` and pastes the
-//! returned path with the normal pane paste.
+//! path uploads the local image through `terminal.put` — or, on a core
+//! advertising `put_chunks` across the SSH link, in acknowledged pieces —
+//! and pastes the returned path with the normal pane paste.
 
 use super::*;
 
@@ -327,9 +328,12 @@ impl App {
         );
     }
 
-    /// `terminal.put` through the operations store, off the UI path.
-    /// Over the core's 8 MB bound the key is consumed with a notice —
-    /// like the reference's oversized-payload drop.
+    /// The upload through the operations store, off the UI path: one
+    /// `terminal.put` by default, or acknowledged pieces when the core
+    /// offers `put_chunks` and this image crosses an SSH link to a
+    /// terminal on that core. Over the core's 8 MB bound the key is
+    /// consumed with a notice — like the reference's oversized-payload
+    /// drop.
     fn submit_image_upload(
         &mut self,
         target: ImagePasteTarget,
@@ -355,11 +359,23 @@ impl App {
                 .unwrap_or(0),
             image.extension
         );
+        // `terminal.put_begin` only takes a terminal on the connecting
+        // core, and pieces only pay off across the SSH link this client
+        // itself crosses. Both must hold for the pieces path, and the
+        // handshake must have advertised it.
+        let pieces = (self.image_paste_remote || self.image_paste_over_ssh)
+            && !terminal.contains('/')
+            && self
+                .view
+                .features
+                .iter()
+                .any(|feature| feature == hc_proto::hello::feature::PUT_CHUNKS);
         self.submit_action(crate::operations::Action::PutImage {
             terminal,
             created_ms,
             name,
-            data: crate::selection::base64_encode(&image.bytes),
+            bytes: image.bytes,
+            pieces,
         });
     }
 
