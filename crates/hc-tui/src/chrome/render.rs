@@ -328,7 +328,7 @@ pub(crate) fn put_right_text(buffer: &mut Buffer, area: Rect, y: u16, text: &str
     );
 }
 
-pub(super) fn put_segment(
+pub(crate) fn put_segment(
     buffer: &mut Buffer,
     x: u16,
     y: u16,

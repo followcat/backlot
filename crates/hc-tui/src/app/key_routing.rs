@@ -151,6 +151,7 @@ impl App {
             && (self.keyboard_locked
                 || (!self.help
                     && self.dialog.is_none()
+                    && self.new_studio.is_none()
                     && self.menu.is_none()
                     && self.navigator.is_none()
                     && self.settings.is_none()))
@@ -262,6 +263,12 @@ impl App {
         }
         if self.dialog.is_some() {
             self.dialog_key(&press);
+            return None;
+        }
+        // The New Studio dialog owns every key while it is open —
+        // Esc steps back or closes, nothing reaches a program.
+        if self.new_studio.is_some() {
+            self.new_studio_key(&press);
             return None;
         }
         if self.menu.is_some() {

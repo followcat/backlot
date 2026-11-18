@@ -183,7 +183,8 @@ async fn n_opens_the_new_studio_wizard_and_collapses_the_bar() {
         LayerMode::Collapsed,
         "the popup is never under the bar"
     );
-    assert!(app.popup_pending.is_some(), "the wizard is armed");
+    assert!(app.new_studio.is_some(), "the native dialog opened");
+    assert!(app.popup_pending.is_none(), "the popup wizard is retired");
 }
 
 #[tokio::test]
@@ -194,5 +195,6 @@ async fn enter_on_the_new_studio_frame_opens_the_wizard() {
     app.hollywood.selected = Some(Target::NewStudio);
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
-    assert!(app.popup_pending.is_some(), "the wizard is armed");
+    assert!(app.new_studio.is_some(), "the native dialog opened");
+    assert!(app.popup_pending.is_none(), "the popup wizard is retired");
 }

@@ -38,6 +38,7 @@ mod mouse;
 mod multipane;
 mod navigation;
 mod navigator;
+mod new_studio;
 mod notices;
 pub(crate) mod notifications;
 mod notifications_focus;
@@ -190,6 +191,24 @@ pub struct App {
     last_focus: Option<String>,
     dialog: Option<dialogs::Dialog>,
     dialog_hits: crate::chrome::dialogs::DialogRender,
+    /// The native New Studio dialog (U6b) — `Some` while the
+    /// four-step overlay is open. `None` keeps the frame stock.
+    new_studio: Option<crate::new_studio::NewStudio>,
+    /// Last frame's dialog hit rectangles (`NsHits`).
+    ns_hits: crate::new_studio::NsHits,
+    /// Async answers for the dialog's probes — machine versions,
+    /// the repo listing, the runner probe, the dry run, the create.
+    ns_tx: mpsc::Sender<new_studio::NsReply>,
+    ns_rx: mpsc::Receiver<new_studio::NsReply>,
+    /// The studio `studio new` just created — `view_sync` focuses
+    /// its producer once the publish lists it.
+    ns_pending_focus: Option<crate::studio::StudioKey>,
+    /// The `^E` cast editor's temp file while its popup is open.
+    ns_editor: Option<std::path::PathBuf>,
+    /// Injectable `backlot …` runner for the dialog's probes —
+    /// `None` uses `current_exe` locally and `remote_runner` on a
+    /// machine; tests record argv and feed canned JSON.
+    ns_run: Option<new_studio::NsRun>,
     /// Open right-click context menu (`ClientShellOverlay::ContextMenu`).
     menu: Option<crate::chrome::menu::ContextMenu>,
     /// Panes whose bare right-click goes to the program instead of the

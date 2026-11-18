@@ -73,6 +73,26 @@ impl RemoteRunner {
             run_on_machine(&client, &located, &machine, &argv).await
         })
     }
+
+    /// Run `backlot <argv>` on `machine` and return its full output —
+    /// the New Studio dialog's `repos --json`, `runners --json`,
+    /// `--version` and `studio new` calls. `stdin`, when set, is
+    /// base64'd into the run's shell line and piped to the program —
+    /// how a generated cast.toml reaches `--cast -` on a remote
+    /// machine without a stray file.
+    pub(crate) fn run_output(
+        &self,
+        machine: String,
+        argv: Vec<String>,
+        stdin: Option<String>,
+    ) -> BoxFut<Result<String, String>> {
+        let open = self.open.clone();
+        let located = self.located.clone();
+        Box::pin(async move {
+            let client = open().await.map_err(|e| format!("{e}"))?;
+            output_on_machine(&client, &located, &machine, &argv, stdin.as_deref()).await
+        })
+    }
 }
 
 /// One action attempt, with one re-locate/retry for a stale path.
@@ -103,6 +123,136 @@ async fn run_on_machine(
             finish(client, machine, &retried).await
         }
         _ => finish(client, machine, &out).await,
+    }
+}
+
+/// One output run, with the same one re-locate/retry a stale path
+/// gets. `stdin` is piped through `base64 -d` inside the remote
+/// shell line so no file is left on the target machine.
+async fn output_on_machine(
+    client: &Client,
+    located: &Mutex<BTreeMap<String, String>>,
+    machine: &str,
+    argv: &[String],
+    stdin: Option<&str>,
+) -> Result<String, String> {
+    let Some(path) = locate(client, located, machine).await else {
+        return Err(format!("backlot is not installed on {machine}"));
+    };
+    let head = run_head(&path, stdin);
+    let out = run_waited(client, machine, head, argv, ACTION_WAIT).await;
+    match outcome(&out) {
+        Outcome::Ok => {
+            let text = ran_output(&out);
+            rm(client, &out).await;
+            Ok(text)
+        }
+        Outcome::NotFound => {
+            located.lock().expect("locate cache").remove(machine);
+            let path = locate(client, located, machine).await;
+            rm(client, &out).await;
+            let Some(path) = path else {
+                return Err(format!("backlot is not installed on {machine}"));
+            };
+            let retried =
+                run_waited(client, machine, run_head(&path, stdin), argv, ACTION_WAIT).await;
+            finish_output(client, machine, &retried).await
+        }
+        _ => finish_output(client, machine, &out).await,
+    }
+}
+
+/// The argv head for an output run: the bare backlot path, or a
+/// `sh -c` wrapper piping the base64'd stdin into it.
+fn run_head(path: &str, stdin: Option<&str>) -> Vec<String> {
+    match stdin {
+        None => vec![path.to_owned()],
+        Some(data) => {
+            let b64 = base64_encode(data.as_bytes());
+            vec![
+                "sh".into(),
+                "-c".into(),
+                format!("printf %s {b64} | base64 -d | \"$@\""),
+                "sh".into(),
+                path.to_owned(),
+            ]
+        }
+    }
+}
+
+/// Minimal RFC 4648 base64 — the remote side decodes with the
+/// ubiquitous `base64` tool, so no crate is needed here.
+fn base64_encode(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let b = [
+            c.first().copied().unwrap_or(0),
+            c.get(1).copied().unwrap_or(0),
+            c.get(2).copied().unwrap_or(0),
+        ];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(T[(n >> 18) as usize & 63] as char);
+        out.push(T[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// The captured output of a run that finished, empty on an RPC or
+/// guard path.
+fn ran_output(out: &RunOutcome) -> String {
+    match out {
+        RunOutcome::Ran(result) => result.output.clone().unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+/// An output run's verdict: `Ok(output)` on exit 0 — the dialog
+/// wants stdout, not a `()` — and the whole captured output as the
+/// failure text otherwise, so a dry run's error is shown verbatim.
+async fn finish_output(client: &Client, machine: &str, out: &RunOutcome) -> Result<String, String> {
+    match outcome(out) {
+        Outcome::Ok => {
+            let text = ran_output(out);
+            rm(client, out).await;
+            Ok(text)
+        }
+        Outcome::NotFound => {
+            rm(client, out).await;
+            Err(format!("backlot is not installed on {machine}"))
+        }
+        Outcome::Failed(_) => {
+            let text = ran_output(out);
+            rm(client, out).await;
+            Err(if text.trim().is_empty() {
+                "command failed".into()
+            } else {
+                text
+            })
+        }
+        Outcome::TimedOut => {
+            if let RunOutcome::Ran(result) = out {
+                let _ = client
+                    .terminal_kill(TerminalParams {
+                        terminal: result.terminal.address.clone(),
+                        caller: None,
+                    })
+                    .await;
+            }
+            rm(client, out).await;
+            Err(format!("timed out after {} s", ACTION_WAIT as u64))
+        }
+        Outcome::Rpc(e) => Err(e),
     }
 }
 

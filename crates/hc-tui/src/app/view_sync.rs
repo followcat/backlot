@@ -123,6 +123,10 @@ impl App {
         // reports `Done` only while its workspace stayed background.
         self.mark_active_seen();
         self.sync_target();
+        // A `studio new` just published its studio — focus its
+        // producer. The publish also refreshed the projection, so the
+        // new terminal's pane exists and `focus_pane` sticks.
+        self.ns_focus_pending();
         self.pane.on_view(&self.view);
         if let Some(popup) = self.popup.as_mut() {
             popup.pane.on_view(&self.view);
@@ -132,6 +136,9 @@ impl App {
         }
         self.sync_observers();
         self.reconcile_popups();
+        // The `^E` cast editor's popup just closed (or never got to
+        // close) — reload and validate the file it left.
+        self.ns_editor_check();
         self.synthesize_alerts(Instant::now());
         self.share_seen();
         self.reap_exited();

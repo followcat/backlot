@@ -14,6 +14,7 @@ impl App {
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
         let (panel_action_tx, panel_rx) = mpsc::channel(16);
         let (hwood_tx, hwood_rx) = mpsc::channel(16);
+        let (ns_tx, ns_rx) = mpsc::channel(16);
         let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
         let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
         let (image_read_done_tx, image_read_done_rx) = mpsc::channel(8);
@@ -107,6 +108,13 @@ impl App {
             last_focus: None,
             dialog: None,
             dialog_hits: Default::default(),
+            new_studio: None,
+            ns_hits: crate::new_studio::NsHits::default(),
+            ns_tx,
+            ns_rx,
+            ns_pending_focus: None,
+            ns_editor: None,
+            ns_run: None,
             menu: None,
             right_click_panes: Default::default(),
             help: false,

@@ -133,6 +133,13 @@ impl App {
             self.dialog_mouse(mouse);
             return;
         }
+        // The New Studio dialog is a modal like the dialogs above:
+        // its cells activate on press, a click outside cancels.
+        if self.new_studio.is_some() {
+            self.new_studio_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         // The context menu overlays everything but a dialog; it owns move
         // highlight and press activation until it closes.
         if self.menu.is_some() {
