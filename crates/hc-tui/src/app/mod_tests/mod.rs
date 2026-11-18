@@ -31,6 +31,7 @@ mod reload;
 mod remote_children;
 mod review_regressions;
 mod shared_rpc;
+mod sync_output;
 mod update_card;
 mod update_source;
 mod version_badge;

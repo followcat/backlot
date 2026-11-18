@@ -13,7 +13,7 @@ use tokio::time::timeout;
 
 /// The real loop's order on a focus change: retarget the pane, let it
 /// reconcile against the view, then (after the frame) open the observers.
-fn visit(app: &mut App, id: &str) {
+pub(super) fn visit(app: &mut App, id: &str) {
     app.focused = Some(id.into());
     app.refresh_projection();
     app.sync_target();
@@ -22,7 +22,7 @@ fn visit(app: &mut App, id: &str) {
     app.sync_observers();
 }
 
-fn with_openers(app: &mut App) -> mpsc::Receiver<(testcore::FakeCore, AttachParams)> {
+pub(super) fn with_openers(app: &mut App) -> mpsc::Receiver<(testcore::FakeCore, AttachParams)> {
     let (accepted, requests) = mpsc::channel(64);
     app.open_attach = Arc::new(move |params: AttachParams| {
         let accepted = accepted.clone();
@@ -40,7 +40,7 @@ fn with_openers(app: &mut App) -> mpsc::Receiver<(testcore::FakeCore, AttachPara
 }
 
 /// The next attach the app asks for, driving pane events while it waits.
-async fn next_attach(
+pub(super) async fn next_attach(
     app: &mut App,
     requests: &mut mpsc::Receiver<(testcore::FakeCore, AttachParams)>,
 ) -> (testcore::FakeCore, AttachParams) {
@@ -59,7 +59,7 @@ async fn next_attach(
 }
 
 /// Replies to an attach for `params.terminal` and returns the wire.
-async fn serve(
+pub(super) async fn serve(
     mut core: testcore::FakeCore,
     params: &AttachParams,
     channel: u32,
@@ -74,7 +74,7 @@ async fn serve(
 }
 
 /// Drives the app loop until `done` holds for the focused pane.
-async fn drive_until(app: &mut App, mut done: impl FnMut(&App) -> bool) {
+pub(super) async fn drive_until(app: &mut App, mut done: impl FnMut(&App) -> bool) {
     timeout(testcore::DEADLINE, async {
         while !done(app) {
             let event = app.pane_rx.recv().await.expect("pane event");

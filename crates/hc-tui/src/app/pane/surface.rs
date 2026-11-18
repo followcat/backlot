@@ -263,13 +263,15 @@ impl Pane {
     }
 
     /// The next instant the pane needs the loop awake: a Down retry,
-    /// or a live wire's armed paint fallback deadline.
+    /// a live wire's armed paint fallback deadline, or a held
+    /// synchronized frame's bounded release.
     pub fn next_wake(&self) -> Option<Instant> {
         match &self.state {
             State::Down { retry_at, .. } => Some(*retry_at),
             State::Live(live) => [
                 live.paint_gate.wake(),
                 live.repaint.as_ref().map(repaint::Repaint::deadline),
+                self.sync_output.wake(),
             ]
             .into_iter()
             .flatten()
@@ -295,7 +297,8 @@ impl Pane {
             self.spawn(spec, true, attempts);
             return true;
         }
-        self.fire_paint_fallback(now)
+        let released = self.fire_paint_fallback(now);
+        released | self.fire_sync_output(now)
     }
 
     /// The retained screen, if any — the draw layer clips/pads it.

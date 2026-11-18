@@ -84,6 +84,9 @@ impl Pane {
     /// Drops the current attach attempt/stream. `graceful` spawns the
     /// CLOSE handshake when sole-owned; `Attach::drop` bounds teardown.
     pub(super) fn teardown(&mut self, graceful: bool) {
+        // Held synchronized-frame bytes belong to the wire that just went
+        // away: a half frame must never reach the replacement wire's VT.
+        self.sync_output.clear();
         let state = std::mem::replace(&mut self.state, State::Idle);
         match state {
             State::Opening { task, .. } => task.abort(),

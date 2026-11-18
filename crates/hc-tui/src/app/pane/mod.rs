@@ -306,6 +306,10 @@ pub struct Pane {
     /// `[advanced] attach_history_lines` — the scrollback a cold attach
     /// asks the core to replay. A warm attach asks for the screen only.
     attach_history: u64,
+    /// Synchronized-output frames: bytes between `2026h` and `2026l` are
+    /// held here until the frame closes, so the VT never shows half of
+    /// one.
+    sync_output: sync_output::SyncOutput,
     /// Attach attempts made (probe).
     pub attaches: u64,
 }
@@ -362,6 +366,7 @@ impl Pane {
             pacing: pacing::Pacing::default(),
             scrollback_bytes: crate::config::DEFAULT_SCROLLBACK_LIMIT_BYTES,
             attach_history: crate::config::DEFAULT_ATTACH_HISTORY_LINES,
+            sync_output: sync_output::SyncOutput::default(),
             attaches: 0,
         }
     }
@@ -449,3 +454,4 @@ mod state;
 mod tests;
 
 mod surface;
+mod sync_output;

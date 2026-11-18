@@ -6,6 +6,15 @@ All notable changes to hc-tui are documented here. The format follows
 
 ## Unreleased
 
+### Fixed
+
+- A program that uses synchronized output (`CSI ? 2026 h` … `l`, as both
+  Antigravity CLI and Claude Code do) no longer flickers: a frame's bytes are
+  held until it closes, so the pane never paints a half-written line or a
+  cursor sitting in the middle of the old text. The hold is bounded at one
+  second and 256 KiB, a frame boundary inside one DATA chunk paints the frame
+  before it, and markers split across chunks are bridged.
+
 ## 0.1.14 — 2026-11-18
 
 ### Added
