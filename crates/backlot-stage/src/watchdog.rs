@@ -135,7 +135,11 @@ async fn run(common: &Common, env: &Env, target: Option<String>) -> Result<(), F
                     )
                     .await;
                 if let Err(e) = sent {
-                    eprintln!("stage watch: send to {t} failed: {e}");
+                    let refusal = crate::sendfail::refusal(&e);
+                    eprintln!(
+                        "stage watch: send to {t} not delivered ({})",
+                        refusal.text()
+                    );
                 }
             }
         }

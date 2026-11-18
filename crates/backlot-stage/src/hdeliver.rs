@@ -12,7 +12,6 @@ use std::path::Path;
 use backlot_model::EventBy;
 use backlot_model::hollywood::{HMessage, HollywoodKind, NewHollywoodEvent};
 use backlot_model::state::StudioState;
-use hc_proto::client::CallError;
 use serde_json::json;
 
 use crate::cli::Fail;
@@ -21,6 +20,7 @@ use crate::deliver::{Gate, InFlight, SEND_DEADLINE, gate_open, send_outcome};
 use crate::hnotice;
 use crate::hstage::hkey;
 use crate::reconcile::LiveTerminal;
+use crate::sendfail;
 use crate::store::{self, HPending, PendingFile};
 
 /// The digest file name — `messages/digest-<top seq>.md` like the
@@ -180,8 +180,12 @@ impl Stage {
                         reason.map(|r| format!(" ({r})")).unwrap_or_default()
                     ),
                 },
-                Ok(Err(CallError::Rpc(_))) | Ok(Err(CallError::Timeout)) => {
-                    eprintln!("stage: send to hollywood refused, still queued");
+                Ok(Err(e)) if sendfail::retryable(&e) => {
+                    let refusal = sendfail::refusal(&e);
+                    eprintln!(
+                        "stage: send to hollywood not delivered ({}), still queued",
+                        refusal.text()
+                    );
                 }
                 Ok(Err(e)) => return Err(Fail::call(e)),
                 Err(e) => eprintln!("stage: send to hollywood lost: {e}"),
