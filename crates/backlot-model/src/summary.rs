@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::event::{Priority, StudioMode};
-use crate::state::{RoleLifecycle, StudioState, TaskStatus, actor_task};
+use crate::state::{RoleLifecycle, StudioState, Task, TaskStatus, actor_task};
 
 // Hollywood's section types live beside this file; the
 // `summary::` path keeps them all.
@@ -79,8 +79,48 @@ pub struct StudioSummary {
     /// Every task the ledger recorded.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub tasks_total: u32,
+    /// The compact per-task projection the dock's task rows and the
+    /// task sheet read (S2) — enough to draw every task state without
+    /// a records call. Documents an older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<TaskSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
+}
+
+/// One task's dock projection — the row the panel draws even when no
+/// live actor carries it (A4.2). No event payloads, no file text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub id: String,
+    pub title: String,
+    pub status: TaskStatus,
+    pub priority: Priority,
+    /// The requirement version the task was dispatched under (pin).
+    pub requirement_version: u32,
+    /// Unfinished and pinned behind the studio's current version.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub behind: bool,
+    pub rework_rounds: u32,
+    pub rework_cap: u32,
+    /// The current cast's role key (`actor-t1-c1`) and its candidate
+    /// display name — `None` while the task is uncast.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_name: Option<String>,
+    /// Dependencies not yet terminal — what the `dep` row names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waits_for: Vec<String>,
+    /// The latest delivery number and its actor-reported checks as
+    /// `name:pass|fail` — the drawer's `d1 units:pass`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_delivery: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checks: Option<String>,
+    /// The latest review's verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_verdict: Option<crate::event::Verdict>,
 }
 
 /// One recorded role: live, lost or closed. Closed roles stay listed
@@ -196,6 +236,51 @@ fn finished(state: &StudioState) -> bool {
             .roles
             .values()
             .all(|r| r.lifecycle() != RoleLifecycle::Live)
+}
+
+/// One task's dock projection (S2): the row state, the dependency
+/// waits, the current cast's key and candidate name, the latest
+/// delivery's number and actor-reported checks, the latest verdict.
+fn task_summary(state: &StudioState, task: &Task) -> TaskSummary {
+    let latest = task.deliveries.last();
+    let checks = latest.and_then(|d| {
+        (!d.checks.is_empty()).then(|| {
+            cap(&d
+                .checks
+                .iter()
+                .map(|c| format!("{}:{}", c.name, if c.passed { "pass" } else { "fail" }))
+                .collect::<Vec<_>>()
+                .join(" "))
+        })
+    });
+    let (actor_role, actor_name) = match &task.cast {
+        Some(cast) => (
+            Some(cap(&format!("actor-{}-c{}", task.id, task.casts.len()))),
+            Some(cap(&cast.candidate)),
+        ),
+        None => (None, None),
+    };
+    TaskSummary {
+        id: cap(&task.id),
+        title: cap(&task.title),
+        status: task.status,
+        priority: task.priority,
+        requirement_version: task.requirement_version,
+        behind: task.is_behind(state.requirement_version),
+        rework_rounds: task.rework_rounds,
+        rework_cap: state.rework_cap(),
+        actor_role,
+        actor_name,
+        waits_for: task
+            .dependencies
+            .iter()
+            .filter(|d| state.tasks.get(*d).is_some_and(|t| !t.status.is_terminal()))
+            .map(|d| cap(d))
+            .collect(),
+        latest_delivery: latest.map(|d| d.n),
+        latest_checks: checks,
+        latest_verdict: task.reviews.last().map(|r| r.verdict),
+    }
 }
 
 /// Role keys in panel order: the fixed roles first, then the actors —
@@ -433,6 +518,7 @@ pub fn summary(
                     ready_to_finish: false,
                     tasks_done: 0,
                     tasks_total: 0,
+                    tasks: Vec::new(),
                     roles: Vec::new(),
                 });
             }
@@ -524,6 +610,11 @@ pub fn summary(
                 })
                 .count() as u32,
             tasks_total: state.tasks.len() as u32,
+            tasks: state
+                .tasks
+                .values()
+                .map(|t| task_summary(state, t))
+                .collect(),
             roles,
         };
         if done {
