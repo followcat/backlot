@@ -26,6 +26,31 @@ fn a_missing_document_is_no_studios() {
 }
 
 #[test]
+fn an_empty_machines_answer_reads_as_no_added_machines() {
+    // 0.1.21 and later always send `terminal.list`'s `machines`; an
+    // empty list means "no machines", not "no information". The
+    // studio's list is the local document either way, and an absent
+    // list (an older core) reads the same.
+    let mut answered = view_with_document(summary_json());
+    answered.machines = Some(Vec::new());
+    let machines = summaries(&answered);
+    assert_eq!(machines.len(), 1);
+    assert_eq!(machines[0].machine, None);
+    let unanswered = view_with_document(summary_json());
+    assert_eq!(summaries(&unanswered).len(), 1);
+    // The panel's rows say "no studios" only when no document parsed —
+    // never an error row for the empty answer.
+    let rows = crate::panel::rows::rows(&machines, |_| true, &crate::panel::Panel::new(), None, 24);
+    assert!(
+        rows.iter().all(|row| matches!(
+            row,
+            crate::panel::rows::Row::Title | crate::panel::rows::Row::Strip(_)
+        )),
+        "{rows:?}"
+    );
+}
+
+#[test]
 fn a_malformed_document_is_no_studios() {
     let view = view_with_document(serde_json::json!({"not": "a summary"}));
     assert!(summaries(&view).is_empty());

@@ -377,3 +377,22 @@ async fn empty_paste_with_no_image_stays_an_empty_paste() {
     settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 1, "empty paste forwards");
 }
+
+/// The pieces decision backlot's paste path makes (hc-tui's, unchanged):
+/// only across an SSH link this client itself spans, to a terminal on
+/// the connecting core, with the handshake advertising `put_chunks`.
+#[test]
+fn the_pieces_decision_needs_ssh_a_local_terminal_and_the_capability() {
+    use crate::app::image_paste::upload_in_pieces;
+    let put_chunks = [hc_proto::hello::feature::PUT_CHUNKS.to_owned()];
+    assert!(upload_in_pieces(true, "t1", &put_chunks));
+    assert!(
+        !upload_in_pieces(false, "t1", &put_chunks),
+        "local endpoint"
+    );
+    assert!(
+        !upload_in_pieces(true, "machine/t1", &put_chunks),
+        "terminal on another machine"
+    );
+    assert!(!upload_in_pieces(true, "t1", &[]), "older core");
+}

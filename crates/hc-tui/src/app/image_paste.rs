@@ -9,6 +9,19 @@
 
 use super::*;
 
+/// Whether one image upload should use `put_chunks`: the client itself
+/// crosses an SSH link (`--remote`, or running inside an SSH session),
+/// the target is a terminal on that connecting core (no `machine/tN` —
+/// `terminal.put_begin` rejects those), and the handshake advertised
+/// `put_chunks`. Anything else keeps one `terminal.put`.
+pub(super) fn upload_in_pieces(crosses_ssh: bool, terminal: &str, features: &[String]) -> bool {
+    crosses_ssh
+        && !terminal.contains('/')
+        && features
+            .iter()
+            .any(|feature| feature == hc_proto::hello::feature::PUT_CHUNKS)
+}
+
 /// The terminal an image upload targets — the reference's
 /// `ClientClipboardImageTarget`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -364,13 +377,11 @@ impl App {
         // core, and pieces only pay off across the SSH link this client
         // itself crosses. Both must hold for the pieces path, and the
         // handshake must have advertised it.
-        let pieces = (self.image_paste_remote || self.image_paste_over_ssh)
-            && !terminal.contains('/')
-            && self
-                .view
-                .features
-                .iter()
-                .any(|feature| feature == hc_proto::hello::feature::PUT_CHUNKS);
+        let pieces = upload_in_pieces(
+            self.image_paste_remote || self.image_paste_over_ssh,
+            &terminal,
+            &self.view.features,
+        );
         self.submit_action(crate::operations::Action::PutImage {
             terminal,
             created_ms,
