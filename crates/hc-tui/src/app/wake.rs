@@ -20,6 +20,8 @@ pub(super) enum WakeKind {
     View,
     /// A `herdr.seen` label-write result.
     Seen,
+    /// A Waiting probe verdict.
+    Waiting,
     /// Attach-actor reports, drained as a bounded batch.
     Pane,
     /// The armed one-shot deadline.
@@ -58,7 +60,7 @@ impl WakeKind {
 
     /// The window title tracks what the user can see or drive.
     fn title(self) -> bool {
-        matches!(self, Self::View | Self::Input | Self::Pane)
+        matches!(self, Self::View | Self::Input | Self::Pane | Self::Waiting)
     }
 
     /// Pane targets and observers re-aim only on view or input —
@@ -119,6 +121,9 @@ impl App {
             .chain(self.opening_anim_deadline)
             .chain(self.opening.cap)
             .chain(self.copy_feedback_deadline)
+            .chain(self.waiting_due)
+            .chain(self.image_read.as_ref().map(|read| read.deadline))
+            .chain(self.install_tick_deadline())
             .min()
     }
 
@@ -167,6 +172,11 @@ impl App {
         {
             dirty |= self.pane_retry(now);
         }
+        // The image-read hold bound is owed on any wake that lands at
+        // or past it, not only the deadline arm itself.
+        if deadline_due {
+            dirty |= self.expire_image_read(now);
+        }
         if kind.routes() {
             self.reconcile_key_routes();
             if let Some(reason) = self.pane.take_input_rejection() {
@@ -183,6 +193,11 @@ impl App {
             if self.next_tab_status.is_some_and(|due| now >= due) {
                 dirty |= self.update_tab_status(now);
             }
+        }
+        // The armed re-probe cadence fires through the same deadline;
+        // publish-driven ticks already ran inside `on_view`.
+        if deadline_due {
+            self.tick_waiting(now);
         }
         if kind.drains() {
             self.drain_bells();

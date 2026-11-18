@@ -155,6 +155,45 @@ async fn a_program_copy_survives_an_unpainted_observer() {
 }
 
 #[tokio::test]
+async fn a_program_copying_a_b_a_leaves_a_on_the_clipboard() {
+    let mut app = app_alerts();
+    let (bytes, sink) = captured();
+    app.set_host_control(sink);
+    app.pane
+        .pending_clipboard
+        .extend([b"a".to_vec(), b"b".to_vec(), b"a".to_vec()]);
+    app.drain_clipboard_writes();
+    assert_eq!(
+        bytes.lock().unwrap().as_slice(),
+        &[
+            crate::selection::osc52_sequence(b"b").into_bytes(),
+            crate::selection::osc52_sequence(b"a").into_bytes(),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_copy_seen_by_pane_and_observer_is_sent_once_as_the_last() {
+    let mut app = app_alerts();
+    let (bytes, sink) = captured();
+    app.set_host_control(sink);
+    app.pane
+        .pending_clipboard
+        .extend([b"a".to_vec(), b"b".to_vec(), b"a".to_vec()]);
+    let mut observer = pane::Pane::new(app.pane_tx.clone(), app.open_attach.clone());
+    observer.pending_clipboard.push(b"a".to_vec());
+    app.observers.insert("t1".into(), observer);
+    app.drain_clipboard_writes();
+    assert_eq!(
+        bytes.lock().unwrap().as_slice(),
+        &[
+            crate::selection::osc52_sequence(b"b").into_bytes(),
+            crate::selection::osc52_sequence(b"a").into_bytes(),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn created_terminals_carry_the_herdr_env_marker() {
     // herdr injects HERDR_ENV=1 into every spawned pane; programs that
     // forward clipboard writes through the terminal key on it.

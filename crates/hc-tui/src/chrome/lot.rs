@@ -377,6 +377,14 @@ pub(crate) fn header_text(header: &StudioHeader) -> String {
     }
 }
 
+/// The studio id's own width, leading space included (` acme-shop`) —
+/// what a narrow mobile header must keep whole before the update hint
+/// may claim cells. The `· machine` qualifier is the first thing a
+/// tight row may clip.
+pub(crate) fn header_name_width(header: &StudioHeader) -> u16 {
+    display_width(&format!(" {}", header.studio))
+}
+
 /// The studio header's styled left pieces: ` id · machine › part`
 /// with the person glyph and priority mark in their colours.
 fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)> {

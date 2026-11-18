@@ -1,3 +1,4 @@
+use super::rpc_actions::PUT_CHUNK_BYTES;
 use super::*;
 use crate::{
     structure::Tree,
@@ -22,8 +23,12 @@ pub(super) fn store() -> (Store, FakeCore) {
 }
 
 pub(super) async fn hello(core: &mut FakeCore, methods: &[&str]) {
+    hello_with(core, methods, &[]).await;
+}
+
+pub(super) async fn hello_with(core: &mut FakeCore, methods: &[&str], features: &[&str]) {
     core.read_hello().await;
-    core.answer_hello(true, methods, &[]).await;
+    core.answer_hello(true, methods, features).await;
 }
 
 pub(super) fn edit(change: Change) -> Edit {
@@ -171,13 +176,286 @@ async fn a_changed_core_cannot_receive_a_stale_mutation() {
     server.await.unwrap();
 }
 
+#[tokio::test]
+async fn a_cancelled_send_is_a_refusal_never_a_success() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.send"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let send = next(&mut core, "terminal.send").await;
+        assert_eq!(
+            send["params"],
+            json!({"terminal": "t7", "text": "fix the tests"})
+        );
+        // hc 0.1.21: the caller went away or the core stopped, and
+        // nothing was typed.
+        let error = json!({"jsonrpc":"2.0","id":send["id"],"error":{"code":-32000,
+            "message":"cancelled","data":{"kind":"cancelled","hint":""}}});
+        core.send(&Frame::data(0, serde_json::to_vec(&error).unwrap()).encode())
+            .await;
+    });
+    store
+        .submit(request(Action::SendLine {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            text: "fix the tests".into(),
+        }))
+        .unwrap();
+    let error = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .err()
+        .expect("a cancelled send is never a success");
+    assert_eq!(error, "Send cancelled; nothing was typed. Send it again.");
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn an_other_send_failure_keeps_the_core_word() {
+    let (mut store, mut core) = store();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.send"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let send = next(&mut core, "terminal.send").await;
+        let error = json!({"jsonrpc":"2.0","id":send["id"],"error":{"code":-32000,
+            "message":"blocked","data":{"kind":"blocked","hint":""}}});
+        core.send(&Frame::data(0, serde_json::to_vec(&error).unwrap()).encode())
+            .await;
+    });
+    store
+        .submit(request(Action::SendLine {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            text: "hi".into(),
+        }))
+        .unwrap();
+    let error = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .err()
+        .unwrap();
+    assert!(error.contains("blocked"), "{error}");
+    assert!(!error.contains("cancelled"), "{error}");
+    server.await.unwrap();
+}
+
+/// `put_chunks`: the image crosses the link in acknowledged pieces and
+/// the finish's path is what the pane pastes.
+#[tokio::test]
+async fn an_image_upload_uses_acknowledged_pieces_when_offered() {
+    let (mut store, mut core) = store();
+    let image = vec![0x41u8; PUT_CHUNK_BYTES + 1024];
+    let expected = image.clone();
+    let server = tokio::spawn(async move {
+        hello_with(
+            &mut core,
+            &[
+                "terminal.get",
+                "terminal.put_begin",
+                "terminal.put_chunk",
+                "terminal.put_finish",
+                "terminal.put_abort",
+            ],
+            &[hc_proto::hello::feature::PUT_CHUNKS],
+        )
+        .await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let begin = next(&mut core, "terminal.put_begin").await;
+        assert_eq!(begin["params"]["terminal"], "t7");
+        assert_eq!(begin["params"]["bytes"], expected.len());
+        let transfer = begin["params"]["transfer"].as_str().unwrap().to_owned();
+        assert!(
+            (16..=64).contains(&transfer.len()) && transfer.bytes().all(|b| b.is_ascii_hexdigit()),
+            "a handle the core accepts: {transfer}"
+        );
+        core.reply(&begin["id"], json!({"transfer": transfer}))
+            .await;
+        let first = next(&mut core, "terminal.put_chunk").await;
+        assert_eq!(first["params"]["transfer"], transfer);
+        assert_eq!(first["params"]["offset"], 0);
+        assert_eq!(
+            first["params"]["data"],
+            crate::selection::base64_encode(&expected[..PUT_CHUNK_BYTES])
+        );
+        core.reply(&first["id"], json!({"bytes": PUT_CHUNK_BYTES}))
+            .await;
+        let second = next(&mut core, "terminal.put_chunk").await;
+        assert_eq!(second["params"]["offset"], PUT_CHUNK_BYTES);
+        assert_eq!(
+            second["params"]["data"],
+            crate::selection::base64_encode(&expected[PUT_CHUNK_BYTES..])
+        );
+        core.reply(&second["id"], json!({"bytes": expected.len()}))
+            .await;
+        let finish = next(&mut core, "terminal.put_finish").await;
+        assert_eq!(finish["params"]["transfer"], transfer);
+        core.reply(
+            &finish["id"],
+            json!({"path": "/home/user/i.png", "bytes": expected.len()}),
+        )
+        .await;
+    });
+    store
+        .submit(request(Action::PutImage {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            name: "clipboard-1.png".into(),
+            bytes: image,
+            pieces: true,
+        }))
+        .unwrap();
+    let outcome = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    match outcome {
+        Outcome::Put { terminal, path } => {
+            assert_eq!(terminal, "t7");
+            assert_eq!(path, "/home/user/i.png");
+        }
+        _ => panic!("expected a Put outcome"),
+    }
+    server.await.unwrap();
+}
+
+/// A refused piece ends the transfer: `put_abort` takes the handle and
+/// the failure surfaces instead of a half-written file.
+#[tokio::test]
+async fn a_refused_piece_aborts_the_transfer() {
+    let (mut store, mut core) = store();
+    let image = vec![0x43u8; 2048];
+    let server = tokio::spawn(async move {
+        hello_with(
+            &mut core,
+            &[
+                "terminal.get",
+                "terminal.put_begin",
+                "terminal.put_chunk",
+                "terminal.put_finish",
+                "terminal.put_abort",
+            ],
+            &[hc_proto::hello::feature::PUT_CHUNKS],
+        )
+        .await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let begin = next(&mut core, "terminal.put_begin").await;
+        let transfer = begin["params"]["transfer"].as_str().unwrap().to_owned();
+        core.reply(&begin["id"], json!({"transfer": transfer}))
+            .await;
+        let piece = next(&mut core, "terminal.put_chunk").await;
+        let error = json!({"jsonrpc":"2.0","id":piece["id"],"error":{"code":-32000,
+            "message":"unavailable","data":{"kind":"unavailable","hint":""}}});
+        core.send(&Frame::data(0, serde_json::to_vec(&error).unwrap()).encode())
+            .await;
+        let abort = next(&mut core, "terminal.put_abort").await;
+        assert_eq!(abort["params"]["transfer"], transfer);
+        core.reply(&abort["id"], json!({})).await;
+        assert!(
+            core.try_read_frame().await.is_none(),
+            "nothing follows the abort"
+        );
+    });
+    store
+        .submit(request(Action::PutImage {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            name: "clipboard-1.png".into(),
+            bytes: image,
+            pieces: true,
+        }))
+        .unwrap();
+    let error = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .err()
+        .expect("a refused piece is a failure");
+    assert!(error.contains("unavailable"), "{error}");
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn an_image_upload_falls_back_to_one_put_without_the_capability() {
+    let (mut store, mut core) = store();
+    let image = vec![0x42u8; 4096];
+    let expected = image.clone();
+    let server = tokio::spawn(async move {
+        hello(&mut core, &["terminal.get", "terminal.put"]).await;
+        let get = next(&mut core, "terminal.get").await;
+        core.reply(&get["id"], testcore::minimal_terminal()).await;
+        let put = next(&mut core, "terminal.put").await;
+        assert_eq!(put["params"]["terminal"], "t7");
+        assert_eq!(
+            put["params"]["data"],
+            crate::selection::base64_encode(&expected)
+        );
+        core.reply(&put["id"], json!({"path": "/home/user/i.png"}))
+            .await;
+    });
+    store
+        .submit(request(Action::PutImage {
+            terminal: "t7".into(),
+            created_ms: 1_700_000_000_000,
+            name: "clipboard-1.png".into(),
+            bytes: image,
+            pieces: true,
+        }))
+        .unwrap();
+    let outcome = tokio::time::timeout(testcore::DEADLINE, store.results.recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    match outcome {
+        Outcome::Put { terminal, path } => {
+            assert_eq!(terminal, "t7");
+            assert_eq!(path, "/home/user/i.png");
+        }
+        _ => panic!("expected a Put outcome"),
+    }
+    server.await.unwrap();
+}
+
+#[test]
+fn send_failures_are_refusals_never_successes() {
+    use hc_proto::client::CallError;
+    use hc_proto::jsonrpc::{RpcError, error_kind};
+    let cancelled = CallError::Rpc(RpcError::new(
+        -32000,
+        error_kind::CANCELLED,
+        "cancelled",
+        "",
+    ));
+    assert_eq!(
+        super::rpc_actions::send_failure(cancelled),
+        "Send cancelled; nothing was typed. Send it again."
+    );
+    assert_eq!(
+        super::rpc_actions::send_failure(CallError::Timeout),
+        "Send timed out; the core may still type it."
+    );
+    let blocked = CallError::Rpc(RpcError::new(-32000, "blocked", "blocked", ""));
+    assert_eq!(
+        super::rpc_actions::send_failure(blocked),
+        "blocked: blocked"
+    );
+}
+
 #[test]
 fn put_image_gets_the_call_timeout_everything_else_the_interactive_one() {
     let put = Action::PutImage {
         terminal: "t1".into(),
         created_ms: 1,
         name: "clipboard-1.png".into(),
-        data: String::new(),
+        bytes: Vec::new(),
+        pieces: false,
     };
     assert_eq!(action_deadline(&put), std::time::Duration::from_secs(120));
     for action in [

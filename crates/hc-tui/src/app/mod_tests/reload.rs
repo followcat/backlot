@@ -135,17 +135,17 @@ async fn reload_preserves_manually_selected_agent_order() {
     let mut app = app();
     let _root = config(
         &mut app,
-        "[ui]\nagent_panel_sort='spaces'\n[theme]\nname='nord'\n",
+        "[ui]\nagent_panel_sort='priority'\n[theme]\nname='nord'\n",
     );
     app.flip_agent_sort();
     assert_eq!(
         app.shell.agent_panel_sort,
-        crate::config::AgentPanelSortConfig::Priority
+        crate::config::AgentPanelSortConfig::Spaces
     );
     app.on_action(crate::input::KeybindAction::ReloadConfig, 120);
     assert_eq!(
         app.shell.agent_panel_sort,
-        crate::config::AgentPanelSortConfig::Priority
+        crate::config::AgentPanelSortConfig::Spaces
     );
     assert_eq!(app.shell.theme_name, "nord");
 }

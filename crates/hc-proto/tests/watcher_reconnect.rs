@@ -25,26 +25,41 @@ fn terminal(address: &str) -> Value {
     t
 }
 
+/// The canned answers `serve_rpc_ok*` give the watcher's reads.
+async fn answer_ok(core: &mut DuplexCore, req: &Value) {
+    match req["method"].as_str().unwrap() {
+        "machine.list" => core.reply(&req["id"], json!({"machines": []})).await,
+        "terminal.list" => {
+            core.reply(
+                &req["id"],
+                json!({"terminals": [terminal("t-static")], "hidden_finished": 0}),
+            )
+            .await;
+        }
+        "doc.get" => {
+            core.reply(&req["id"], json!({"value": {"v": 1}, "version": 1}))
+                .await;
+        }
+        _ => core.reply(&req["id"], Value::Null).await,
+    }
+}
+
 /// An rpc conn answering machine.list/terminal.list/`doc.get` sanely.
 async fn serve_rpc_ok(mut core: DuplexCore) {
     core.answer_hello(hello_result_framed(METHODS, &[], true))
         .await;
     while let Some(req) = core.try_read_request().await {
-        match req["method"].as_str().unwrap() {
-            "machine.list" => core.reply(&req["id"], json!({"machines": []})).await,
-            "terminal.list" => {
-                core.reply(
-                    &req["id"],
-                    json!({"terminals": [terminal("t-static")], "hidden_finished": 0}),
-                )
-                .await;
-            }
-            "doc.get" => {
-                core.reply(&req["id"], json!({"value": {"v": 1}, "version": 1}))
-                    .await;
-            }
-            _ => core.reply(&req["id"], Value::Null).await,
-        }
+        answer_ok(&mut core, &req).await;
+    }
+}
+
+/// `serve_rpc_ok` without the fake's I/O deadline — a paused-time test
+/// parks this conn across virtual minutes of silence.
+async fn serve_rpc_ok_alive(mut core: DuplexCore) {
+    core.answer_hello(hello_result_framed(METHODS, &[], true))
+        .await;
+    while let Some(req) = core.try_read_request_unbounded().await {
+        answer_ok(&mut core, &req).await;
     }
 }
 
@@ -391,6 +406,80 @@ async fn a_malformed_missed_reconnects_into_a_new_epoch() {
     await_view(&watcher, |v| matches!(v.link, Link::Offline { .. })).await;
     hold_tx.send(()).unwrap();
     await_view(&watcher, |v| v.generation == 2 && v.link == Link::Online).await;
+    watcher.stop();
+    fake.abort();
+}
+
+/// A subscription that stays open but goes silent — a blackholed path
+/// delivers no EOF for `read_line` to see — must end like a closed one:
+/// the inventory goes offline, the epoch ends, and a fresh subscription
+/// reconnects. The core heartbeats every 15 s, so 45 s without any line
+/// is a dead link, not an idle one. Conn 2's hello is held so the
+/// Offline state cannot race past its assertion.
+#[tokio::test(start_paused = true)]
+async fn a_silent_subscription_ends_its_epoch_and_reconnects() {
+    let (watcher, accepted) = watcher(vec![]);
+    let (hold_tx, hold_rx) = oneshot::channel::<()>();
+    let mut hold_rx = Some(hold_rx);
+    let mut plain = 0u32;
+    let fake = spawn_fake(accepted, move |core, framed| {
+        let (hold, snapshot) = if framed {
+            (None, Value::Null)
+        } else {
+            plain += 1;
+            (
+                if plain == 2 { hold_rx.take() } else { None },
+                if plain == 1 {
+                    json!({"seq": 1, "terminals": [terminal("t7")]})
+                } else {
+                    json!({"seq": 10, "terminals": [terminal("t9")]})
+                },
+            )
+        };
+        Box::pin(async move {
+            if framed {
+                serve_rpc_ok_alive(core).await;
+                return;
+            }
+            let mut core = core;
+            if let Some(rx) = hold {
+                let _ = rx.await; // conn 2's hello is test-gated
+            }
+            serve_subscribe(&mut core, METHODS, snapshot).await;
+            // The dead link: stays open, sends nothing — not even a heartbeat.
+            std::future::pending::<()>().await;
+        })
+    });
+
+    let view = await_view(&watcher, |v| {
+        v.link == Link::Online && v.inventory.get("t7").is_some()
+    })
+    .await;
+    assert_eq!(view.generation, 1);
+
+    // Three heartbeat periods of silence: the epoch ends offline while
+    // the replacement's hello is held.
+    tokio::time::advance(Duration::from_secs(46)).await;
+    let view = await_view(&watcher, |v| {
+        v.inventory.is_offline() && matches!(v.link, Link::Offline { .. })
+    })
+    .await;
+    assert!(
+        view.inventory.get("t7").is_some(),
+        "inventory survives offline"
+    );
+
+    // Release the replacement: a new epoch installs a fresh snapshot.
+    hold_tx.send(()).unwrap();
+    let view = await_view(&watcher, |v| {
+        v.generation == 2 && v.link == Link::Online && !v.inventory.is_offline()
+    })
+    .await;
+    assert!(view.inventory.get("t9").is_some());
+    assert!(
+        view.inventory.get("t7").is_none(),
+        "new epoch replaced the snapshot"
+    );
     watcher.stop();
     fake.abort();
 }

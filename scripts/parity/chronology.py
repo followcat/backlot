@@ -15,8 +15,9 @@ from sessions import Core, Reference
 NAMES = ('alpha', 'beta', 'gamma')
 
 
-def launch(owner, binary, size):
-    owner.ui = Pty([str(binary), '--session', owner.session], owner.env,
+def launch(owner, binary, size, plain=False):
+    extra = ['--plain'] if plain else []
+    owner.ui = Pty([str(binary), *extra, '--session', owner.session], owner.env,
                    owner.cwd, *size, cell_px=(10, 20))
     owner.ui.keyboard_flags_reply = 7
     owner.ui.sgr_pixel_mouse_reply = 2
@@ -65,8 +66,12 @@ def run(args, size, binary):
     config = None
     phase = 0
     try:
-        core = Core(args.hc, args.config, out)
-        reference = Reference(binary, args.config, out)
+        # Both clients stand in one fixture directory: paths they render
+        # (the navigator footer, document folders) must be comparable.
+        fixture = out / 'fixture'
+        fixture.mkdir()
+        core = Core(args.hc, args.config, out, cwd=fixture)
+        reference = Reference(binary, args.config, out, cwd=fixture)
         owners = (reference, core)
         for owner in owners:
             if args.host_program:
@@ -112,7 +117,7 @@ def run(args, size, binary):
                           '--agent', 'fixture', '--applies-to-source', 'fixture',
                           '--title', 'task-' + name, '--seq', '1')
             programs['reference'].append(p)
-        launch(core, args.hc_tui, size)
+        launch(core, args.hc_tui, size, plain=True)
         serial = 0
 
         def send(data):

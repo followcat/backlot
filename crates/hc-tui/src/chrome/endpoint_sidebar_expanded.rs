@@ -9,16 +9,15 @@ use ratatui::{
 };
 
 use super::endpoints::collapsed_groups_for_endpoint;
-use super::palette::Palette;
 use super::render::{
-    MachineDiagnostics, MachineHit, ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS,
-    WorkspaceHit, display_width, put_right_text, put_text, put_version_badge,
+    MachineHit, ShellHitMap, ShellRenderState, WORKSPACE_HEADER_ROWS, WorkspaceHit, display_width,
+    put_right_text, put_text, put_version_badge,
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_workspace_rows,
     workspace_entries, workspace_rows,
 };
-use super::snapshot::{ClientEndpointStatus, ClientShellEndpoint, ClientShellSnapshot};
+use super::snapshot::{ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
 use super::workspace::WorkspaceEntry;
 
@@ -45,6 +44,7 @@ pub(crate) fn render_expanded(
     } else {
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
+
     let empty_collapsed_groups = HashSet::new();
 
     let mut rows = Vec::new();
@@ -138,22 +138,21 @@ pub(crate) fn render_expanded(
             .fg(palette.overlay0)
             .add_modifier(Modifier::BOLD),
     );
-    // The version badge shares the header row, right-aligned short of
-    // the divider column and never touching the `machines` label.
+    // The version badge shares the header row, right-aligned a cell
+    // short of the divider column and never touching `machines`.
     let badge_row = Rect::new(
         workspace_area.x,
         workspace_area.y,
-        workspace_area.width.saturating_sub(2),
+        workspace_area.width.saturating_sub(1),
         1,
     );
     hits.update_badge = put_version_badge(
         buffer,
         badge_row,
         workspace_area.x.saturating_add(10),
-        state.update_latest,
+        state.update_badge,
         palette,
     );
-
     let body = Rect::new(
         workspace_area.x,
         workspace_area.y.saturating_add(WORKSPACE_HEADER_ROWS),
@@ -223,7 +222,7 @@ pub(crate) fn render_expanded(
                 let rect = Rect::new(body.x, y, content_width, 1);
                 let collapsed = state.collapsed_endpoints.contains(&endpoint.endpoint_id);
                 let marker = if collapsed { "▸" } else { "▾" };
-                let status_badge = render_endpoint_row(
+                let status_badge = super::endpoint_sidebar_row::render_endpoint_row(
                     buffer,
                     rect,
                     marker,
@@ -324,7 +323,10 @@ pub(crate) fn render_expanded(
 
     let footer_y = workspace_area.bottom().saturating_sub(1);
     if config.mouse_capture {
-        let label = format!(" new · {}", active_endpoint_label(state));
+        let label = format!(
+            " new · {}",
+            super::endpoint_sidebar_row::active_endpoint_label(state)
+        );
         hits.new_workspace = Rect::new(
             workspace_area.x,
             footer_y,
@@ -339,7 +341,9 @@ pub(crate) fn render_expanded(
             &label,
             Style::default().fg(palette.overlay0),
         );
-        let width = 6.min(workspace_area.width);
+        let dot = state.update_badge.accent_style(palette);
+        let width = if dot.is_some() { 8 } else { 6 };
+        let width = width.min(workspace_area.width);
         hits.global_launcher = Rect::new(
             workspace_area.right().saturating_sub(width),
             footer_y,
@@ -353,6 +357,16 @@ pub(crate) fn render_expanded(
             "menu",
             Style::default().fg(palette.overlay0),
         );
+        if let Some(style) = dot.filter(|_| workspace_area.width >= 6) {
+            put_text(
+                buffer,
+                workspace_area.right().saturating_sub(6),
+                footer_y,
+                2,
+                "● ",
+                style,
+            );
+        }
     }
     match &state.cast {
         Some(cast) => {
@@ -383,76 +397,4 @@ pub(crate) fn render_expanded(
         "«",
         Style::default().fg(palette.overlay0),
     );
-}
-
-fn active_endpoint_label<'a>(state: &'a ShellRenderState<'_>) -> &'a str {
-    state
-        .endpoints
-        .iter()
-        .find(|endpoint| &endpoint.endpoint_id == state.active_endpoint_id)
-        .map_or(crate::project::LOCAL_LABEL, |endpoint| {
-            endpoint.label.as_str()
-        })
-}
-
-fn render_endpoint_row(
-    buffer: &mut Buffer,
-    rect: Rect,
-    marker: &str,
-    endpoint: &ClientShellEndpoint,
-    highlighted: bool,
-    auth: &MachineDiagnostics,
-    palette: &Palette,
-) -> Rect {
-    if highlighted {
-        buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
-    }
-    let (glyph, state, color) =
-        super::endpoints::endpoint_status_presentation(endpoint.status, palette);
-    let state = if endpoint.status == ClientEndpointStatus::Online {
-        ""
-    } else {
-        state
-    };
-    let signal = if auth.required_for(endpoint) {
-        "! auth".to_owned()
-    } else if endpoint.status == ClientEndpointStatus::Attention {
-        "! error".to_owned()
-    } else if endpoint.endpoint_id.is_local() {
-        String::new()
-    } else if state.is_empty() {
-        glyph.to_owned()
-    } else {
-        format!("{glyph} {state}")
-    };
-    let signal_width = display_width(&signal).min(rect.width);
-    put_text(
-        buffer,
-        rect.x,
-        rect.y,
-        rect.width.saturating_sub(signal_width.saturating_add(1)),
-        &format!(" {marker} {}", endpoint.label),
-        Style::default()
-            .fg(
-                if matches!(endpoint.status, ClientEndpointStatus::Disabled) {
-                    palette.overlay0
-                } else {
-                    palette.text
-                },
-            )
-            .add_modifier(Modifier::BOLD),
-    );
-    put_right_text(
-        buffer,
-        rect,
-        rect.y,
-        &signal,
-        auth.badge_style(endpoint, palette, Style::default().fg(color)),
-    );
-    Rect::new(
-        rect.right().saturating_sub(signal_width),
-        rect.y,
-        signal_width,
-        1,
-    )
 }

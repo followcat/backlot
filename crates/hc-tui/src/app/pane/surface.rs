@@ -121,6 +121,11 @@ impl Pane {
     /// live again ("wait for restarted"). An offline inventory keeps
     /// the current state; its rows are stale, not proof of loss.
     pub fn on_view(&mut self, view: &View) {
+        // A generation bump means the watcher installed a fresh epoch on
+        // a new link — the wire whose death parked a Down pane is gone.
+        let epoch_changed =
+            self.view_generation.is_some() && self.view_generation != Some(view.generation);
+        self.view_generation = Some(view.generation);
         let Some(spec) = self.spec().cloned() else {
             return;
         };
@@ -222,6 +227,15 @@ impl Pane {
                     reason,
                     permanent: false,
                 };
+            }
+            // A fresh epoch replaced the link this pane's backoff was
+            // waiting on: retry at once — the new wire may attach where
+            // the dead one could not — `resumed`, like a fired retry,
+            // keeping the backoff count the Down state accumulated. A
+            // pane that is up is not touched by a generation bump.
+            (State::Down { attempts, .. }, None) if epoch_changed => {
+                let attempts = *attempts;
+                self.spawn(spec, true, attempts);
             }
             _ => {}
         }

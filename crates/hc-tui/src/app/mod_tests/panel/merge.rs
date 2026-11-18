@@ -77,7 +77,7 @@ async fn a_focused_panel_eats_an_image_paste() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     app.set_image_paste_context(true, false);
-    app.image_paste_reader = Box::new(|| {
+    app.image_paste_reader = Arc::new(|| {
         crate::clipboard::ClipboardRead::Image(crate::clipboard::ClipboardImage {
             bytes: b"\x89PNG".to_vec(),
             extension: "png",

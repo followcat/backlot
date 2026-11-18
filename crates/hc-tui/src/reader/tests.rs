@@ -8,7 +8,7 @@ fn pair(capacity: usize) -> (Reader, UnixStream) {
     let (input, host) = UnixStream::pair().unwrap();
     let input = File::from(OwnedFd::from(input));
     (
-        spawn_from(input, capacity, false, false, false).unwrap(),
+        spawn_from(input, capacity, false, false, false, Arc::default()).unwrap(),
         host,
     )
 }
@@ -181,7 +181,7 @@ async fn sigwinch_reads_the_owned_input_descriptor() {
     // SAFETY: each freshly returned descriptor has exactly one owner.
     let master = unsafe { File::from_raw_fd(master) };
     let slave = unsafe { File::from_raw_fd(slave) };
-    let mut reader = spawn_from(slave, 1, false, false, false).unwrap();
+    let mut reader = spawn_from(slave, 1, false, false, false, Arc::default()).unwrap();
     let size = libc::winsize {
         ws_row: 39,
         ws_col: 93,
@@ -204,8 +204,37 @@ async fn sigwinch_reads_the_owned_input_descriptor() {
 #[test]
 fn zero_capacity_is_a_setup_error() {
     let (input, _) = UnixStream::pair().unwrap();
-    let result = spawn_from(File::from(OwnedFd::from(input)), 0, false, false, false);
+    let result = spawn_from(
+        File::from(OwnedFd::from(input)),
+        0,
+        false,
+        false,
+        false,
+        Arc::default(),
+    );
     assert!(matches!(result, Err(error) if error.kind() == io::ErrorKind::InvalidInput));
+}
+
+#[tokio::test]
+async fn stdin_reads_and_empty_reads_are_counted() {
+    use std::sync::atomic::Ordering::Relaxed;
+    let (input, mut host) = UnixStream::pair().unwrap();
+    let input = File::from(OwnedFd::from(input));
+    let probe = Arc::new(crate::app::Probe::default());
+    let mut reader = spawn_from(input, 8, false, false, false, Arc::clone(&probe)).unwrap();
+    host.write_all(b"a").unwrap();
+    assert!(next(&mut reader).await.is_some());
+    host.shutdown(Shutdown::Write).unwrap();
+    while next(&mut reader).await.is_some() {}
+    let (reads, empty) = (
+        probe.stdin_reads.load(Relaxed),
+        probe.stdin_empty_reads.load(Relaxed),
+    );
+    assert!(reads >= 2, "stdin reads counted: {reads}");
+    assert!(
+        empty >= 1,
+        "end-of-input read not counted as empty: {empty}"
+    );
 }
 
 #[tokio::test]

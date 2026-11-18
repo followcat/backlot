@@ -26,6 +26,50 @@ renderer consumes herdr's status vocabulary, with the exact mapping recorded
 in [parity](parity.md#status-vocabulary). Record names, `source` extensions,
 progress and blocked-kind fields do not add backlot-specific badges.
 
+There is one deliberate exception to "no inferred status": **Waiting**, an
+overlay that stands in for a shown `Idle` — never a core word, never a core
+state change, and no agent's record maps to it. While evidence says an
+agent's own turn is quiet but work it started still runs, the shown `Idle`
+presents as `waiting`. In one line: `◌ waiting` comes from a process check
+every few seconds and Claude Code's own session file. The evidence, per
+eligible terminal (live, a foreground pid, a current `idle` or `done`
+effective word — never blocked, error, unknown, finished or lost):
+
+- **Process tree, every agent.** Once per machine per cycle, `machine.exec`
+  runs `ps -A -o pid=,ppid=,etime=,args=` (the `on` field routes to the
+  terminal's machine). A live descendant of the foreground pid at any depth
+  whose argv basename is `sh`, `bash`, `zsh`, `dash`, `fish` or `ksh` with a
+  `-c`-form argument counts — unless the shell started within ~20 s of the
+  agent itself (startup helpers). Long-lived helpers (`node`, `npm exec`,
+  `uvx`) are not shells and never count. A sighted shell is only a
+  candidate: it becomes evidence when the same pid shows in two of the
+  terminal's own consecutive listings, so a transient `sh -c` (a
+  statusLine, or a Stop/Notification hook that runs as the turn ends)
+  never flips the row.
+- **The agent's own word, the exact layer.** A table keyed by the effective
+  record's `app` holds entries verified against the program's own binary or
+  docs — today only Claude Code: `file.read` of
+  `<home>/.claude/sessions/<pid>.json` (home resolved once per machine by
+  `machine.exec`), where a parse whose `pid` equals the foreground pid and
+  whose `status` is `shell` means background tasks outlive the turn. Only
+  `pid` and `status` are read; the file's other fields are never stored or
+  shown. Agents without an entry — including Devin, Codex, Cursor Agent,
+  agy and OpenCode — get the process layer only; nothing about them was
+  verified as a wire-visible "waiting on sub agents" message.
+
+A verdict is dropped the moment its terminal stops matching the
+fingerprint it was probed for — state word, foreground pid, incarnation or
+winning record — and re-probes on a two-speed cadence: ~3 s while the
+terminal has a candidate shell or a Waiting verdict (so the row shows and
+clears quickly), ~10 s once a listing found nothing. Probe calls are
+bound to ~5 s, run off the event loop and share the operations opener; a
+connection opens only when a cycle has an eligible terminal, and a method
+the core does not offer turns its layer off quietly. Waiting never mutates
+core state, seen state, attention or notifications: no status word maps to
+it and it creates no alert. An unseen completion still shows `Done` until
+visited (herdr's rule); once acknowledged, the same evidence overlays the
+then-idle presentation.
+
 ## Program lifecycle
 
 Lifecycle is separate from a program's last report:
@@ -77,10 +121,18 @@ labels.
 
 ## Attention, seen state and order
 
-Herdr's display priority is `Blocked > Done > Working > Idle > Unknown`.
-Workspace and tab aggregates use that priority. The default agent sort is
-herdr's configured default (space order); an explicit priority sort uses
-the activity chronology and deterministic receipt rule below.
+Herdr's display priority is `Blocked > Done > Working > Idle > Unknown`;
+backlot inserts the Waiting overlay between Working and Idle (it never
+outranks real work). Workspace and tab aggregates use that priority. The
+default agent sort is
+`priority` (a backlot difference from herdr, whose configured default is
+space order); an explicit `agent_panel_sort = "spaces"` keeps space order.
+The priority sort uses the activity chronology and deterministic receipt
+rule below. Chrome choices the user makes by hand — the sort toggle,
+sidebar width, section split, collapse state and workspace group
+collapses — persist per endpoint under
+`$XDG_STATE_HOME/backlot/client-shell/` and win over config at the next
+start, as herdr does.
 
 Completion comes only from a present root or named record's non-null
 `activity.records[record].completion_ordinal`. Idle/done without a new marker

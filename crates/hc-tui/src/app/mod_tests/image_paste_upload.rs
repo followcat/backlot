@@ -29,6 +29,7 @@ async fn dropped_image_path_uploads_the_file_not_the_text() {
     let escaped = file.display().to_string().replace(' ', "\\ ");
     app.on_input(input::UiEvent::Paste(escaped.into_bytes()), 120);
     assert_eq!(app.pane.input_backlog().0, 0, "path paste consumed");
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 1);
@@ -40,6 +41,7 @@ async fn an_unreadable_dropped_image_path_explains_and_forwards() {
     let mut app = remote_app(&["t1"]);
     let gone = "/tmp/hc-tui-test-definitely-missing.png";
     app.on_input(input::UiEvent::Paste(gone.as_bytes().to_vec()), 120);
+    settle_read(&mut app).await;
     assert_eq!(
         app.pane.input_backlog().0,
         1,
@@ -119,6 +121,7 @@ async fn popup_terminal_is_the_target() {
     });
     press_key(&mut app, ctrl_v(Action::Press));
     assert_eq!(app.pane.input_backlog().0, 0);
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.popup.as_ref().unwrap().pane.input_backlog().0, 1);
@@ -148,6 +151,7 @@ async fn focus_moving_during_upload_shows_the_path_instead_of_typing() {
     press_key(&mut app, ctrl_v(Action::Press));
     // Focus moves to t2 before the put resolves.
     app.focused = Some("t2".into());
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 0, "nothing typed into t2");
@@ -179,6 +183,7 @@ async fn a_put_failure_surfaces_as_a_notice() {
             .await;
     });
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 0);
@@ -200,6 +205,7 @@ async fn a_core_without_put_surfaces_as_a_notice() {
         );
     });
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 0);
@@ -210,8 +216,9 @@ async fn a_core_without_put_surfaces_as_a_notice() {
 async fn oversized_image_consumes_with_a_notice_and_no_rpc() {
     let mut app = remote_app(&["t1"]);
     let mut rx = operations(&mut app);
-    app.image_paste_reader = Box::new(big_image);
+    app.image_paste_reader = Arc::new(big_image);
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 0, "the key is consumed");
     assert_eq!(app.pending_actions, 0, "no action submitted");
     assert!(app.notice.is_some(), "too-large notice");
@@ -237,8 +244,9 @@ async fn oversized_clipboard_image_consumes_with_a_notice_and_no_rpc() {
     let mut app = remote_app(&["t1"]);
     let mut rx = operations(&mut app);
     app.image_paste_reader =
-        Box::new(move || crate::clipboard::linux::read(&env, std::time::Duration::from_secs(15)));
+        Arc::new(move || crate::clipboard::linux::read(&env, std::time::Duration::from_secs(15)));
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 0, "the key is consumed");
     assert_eq!(app.pending_actions, 0, "no action submitted");
     assert!(app.notice.is_some(), "too-large notice");
@@ -261,6 +269,7 @@ async fn dropped_oversized_image_consumes_with_a_notice_and_no_rpc() {
         input::UiEvent::Paste(file.display().to_string().into_bytes()),
         120,
     );
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 0, "the paste is consumed");
     assert_eq!(app.pending_actions, 0, "no action submitted");
     assert!(app.notice.is_some(), "too-large notice");

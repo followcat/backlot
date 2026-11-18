@@ -2,8 +2,8 @@
 
 `hc.openrpc.json` is a copy of `schema/hc.openrpc.json` from
 [herdr-core](https://github.com/herdrdev/herdr-core) at commit
-`ec8adcdf0da38e539e8702f7c37801647da035f3` (protocol generation 1, version
-0.x), licensed under Apache-2.0 (see NOTICE).
+`c7517808d64f06609e4ecf0db1757005373cc3a3` (protocol generation 1, version
+0.1.21, Apache-2.0 — see NOTICE).
 
 Example machine and SSH target names in its descriptions were replaced with
 neutral ones (`host-b`, `alice@host-b`); the original names deliberately do

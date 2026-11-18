@@ -74,11 +74,22 @@ pub(super) async fn settle(app: &mut App) {
     app.on_operation(result);
 }
 
+/// The async counterpart of the old inline read: the blocking worker's
+/// result arrives on the done channel, and `on_image_read_done`
+/// finishes the read exactly like the runtime's select arm.
+pub(super) async fn settle_read(app: &mut App) {
+    let done = tokio::time::timeout(testcore::DEADLINE, app.image_read_done_rx.recv())
+        .await
+        .expect("the image read answered")
+        .expect("the image read channel stays open");
+    app.on_image_read_done(done);
+}
+
 pub(super) fn remote_app(addresses: &[&str]) -> App {
     let mut app = app_with(addresses);
     pending(&mut app);
     app.set_image_paste_context(true, false);
-    app.image_paste_reader = Box::new(png_image);
+    app.image_paste_reader = Arc::new(png_image);
     app.reconcile_published_view();
     app
 }
@@ -134,6 +145,7 @@ pub(super) async fn ctrl_v_press_starts_an_upload_and_is_consumed() {
     press_key(&mut app, ctrl_v(Action::Press));
     // The press was consumed: nothing reached the pane.
     assert_eq!(app.pane.input_backlog().0, 0);
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     // The returned path lands as one normal pane paste — nothing else.
@@ -158,6 +170,7 @@ async fn press_and_release_in_one_read_suppresses_the_release() {
     });
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(&mut app, ctrl_v(Action::Release));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 0, "release must not leak");
     settle(&mut app).await;
     server.await.unwrap();
@@ -174,6 +187,7 @@ async fn consumed_press_repeat_is_swallowed() {
     core_id(&mut app, "core-fake-1");
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(&mut app, ctrl_v(Action::Repeat));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 0);
 }
 
@@ -181,7 +195,7 @@ async fn consumed_press_repeat_is_swallowed() {
 async fn an_orphan_repeat_reaches_the_program_on_a_local_endpoint() {
     let mut app = app_with(&["t1"]);
     pending(&mut app);
-    app.image_paste_reader = Box::new(png_image);
+    app.image_paste_reader = Arc::new(png_image);
     app.reconcile_published_view();
     // No press of this key was ever consumed — a bare repeat matching
     // the trigger must route like ordinary input.
@@ -192,7 +206,7 @@ async fn an_orphan_repeat_reaches_the_program_on_a_local_endpoint() {
 #[tokio::test]
 async fn an_orphan_repeat_reaches_the_program_on_a_remote_endpoint() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = Box::new(no_image);
+    app.image_paste_reader = Arc::new(no_image);
     press_key(&mut app, ctrl_v(Action::Repeat));
     assert_eq!(app.pane.input_backlog().0, 1, "orphan repeat forwards");
 }
@@ -200,12 +214,13 @@ async fn an_orphan_repeat_reaches_the_program_on_a_remote_endpoint() {
 #[tokio::test]
 async fn an_unconsumed_press_clears_stale_repeat_suppression() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = Box::new(no_image);
+    app.image_paste_reader = Arc::new(no_image);
     // A suppress entry orphaned by a lost release must not survive a
     // press of the same key that was forwarded unconsumed.
     app.image_paste_suppress
         .insert(ctrl_v(Action::Press).identity());
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 1, "unconsumed press forwards");
     assert!(
         app.image_paste_suppress.is_empty(),
@@ -255,7 +270,7 @@ async fn empty_remote_image_paste_disables_the_key_trigger() {
 async fn local_endpoint_bridges_nothing() {
     let mut app = app_with(&["t1"]);
     pending(&mut app);
-    app.image_paste_reader = Box::new(png_image);
+    app.image_paste_reader = Arc::new(png_image);
     app.reconcile_published_view();
     press_key(&mut app, ctrl_v(Action::Press));
     app.on_input(input::UiEvent::Paste(Vec::new()), 120);
@@ -271,11 +286,12 @@ async fn local_endpoint_bridges_nothing() {
 async fn machine_terminal_bridges_on_a_local_endpoint() {
     let mut app = app_with(&["m1/t9"]);
     pending(&mut app);
-    app.image_paste_reader = Box::new(png_image);
+    app.image_paste_reader = Arc::new(png_image);
     app.reconcile_published_view();
     let _rx = operations(&mut app);
     app.focused = Some("m1/t9".into());
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 0);
     assert_eq!(app.pending_actions, 1, "upload action submitted");
 }
@@ -285,12 +301,13 @@ async fn machine_terminal_bridges_on_a_local_endpoint() {
 #[tokio::test]
 async fn no_image_forwards_the_key_unchanged_and_in_order() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = Box::new(no_image);
+    app.image_paste_reader = Arc::new(no_image);
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(
         &mut app,
         term_key(Key::Char('x'), Mods::NONE, Action::Press),
     );
+    settle_read(&mut app).await;
     assert_eq!(
         app.pane.input_backlog().0,
         2,
@@ -304,8 +321,9 @@ async fn no_image_forwards_the_key_unchanged_and_in_order() {
 async fn an_unreadable_clipboard_explains_and_forwards_the_key() {
     let mut app = remote_app(&["t1"]);
     app.image_paste_reader =
-        Box::new(|| crate::clipboard::ClipboardRead::Unavailable("no clipboard tool"));
+        Arc::new(|| crate::clipboard::ClipboardRead::Unavailable("no clipboard tool"));
     press_key(&mut app, ctrl_v(Action::Press));
+    settle_read(&mut app).await;
     assert_eq!(
         app.pane.input_backlog().0,
         1,
@@ -318,9 +336,10 @@ async fn an_unreadable_clipboard_explains_and_forwards_the_key() {
 #[tokio::test]
 async fn no_image_forwards_the_release_like_any_key() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = Box::new(no_image);
+    app.image_paste_reader = Arc::new(no_image);
     press_key(&mut app, ctrl_v(Action::Press));
     press_key(&mut app, ctrl_v(Action::Release));
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 2, "press and release forward");
 }
 
@@ -344,6 +363,7 @@ async fn empty_bracketed_paste_uploads_the_clipboard_image() {
     });
     app.on_input(input::UiEvent::Paste(Vec::new()), 120);
     assert_eq!(app.pane.input_backlog().0, 0, "paste consumed");
+    settle_read(&mut app).await;
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 1);
@@ -352,7 +372,27 @@ async fn empty_bracketed_paste_uploads_the_clipboard_image() {
 #[tokio::test]
 async fn empty_paste_with_no_image_stays_an_empty_paste() {
     let mut app = remote_app(&["t1"]);
-    app.image_paste_reader = Box::new(no_image);
+    app.image_paste_reader = Arc::new(no_image);
     app.on_input(input::UiEvent::Paste(Vec::new()), 120);
+    settle_read(&mut app).await;
     assert_eq!(app.pane.input_backlog().0, 1, "empty paste forwards");
+}
+
+/// The pieces decision backlot's paste path makes (hc-tui's, unchanged):
+/// only across an SSH link this client itself spans, to a terminal on
+/// the connecting core, with the handshake advertising `put_chunks`.
+#[test]
+fn the_pieces_decision_needs_ssh_a_local_terminal_and_the_capability() {
+    use crate::app::image_paste::upload_in_pieces;
+    let put_chunks = [hc_proto::hello::feature::PUT_CHUNKS.to_owned()];
+    assert!(upload_in_pieces(true, "t1", &put_chunks));
+    assert!(
+        !upload_in_pieces(false, "t1", &put_chunks),
+        "local endpoint"
+    );
+    assert!(
+        !upload_in_pieces(true, "machine/t1", &put_chunks),
+        "terminal on another machine"
+    );
+    assert!(!upload_in_pieces(true, "t1", &[]), "older core");
 }

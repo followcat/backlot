@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use super::control::{APPEARANCE, CELL_SIZE, COLORS, Control, Delivery, MOUSE_CHANGED};
-use crate::app::UiEvent;
+use crate::app::{Probe, UiEvent};
 use crate::host::HostReply;
 use crate::raw_events::{Decoded, events_from_framed_chunks};
 use crate::raw_input::RawInputByteFramer;
@@ -21,6 +21,23 @@ pub(super) struct Settings {
     pub mouse_capture: bool,
     pub queries_pending: bool,
     pub cell_size_pending: bool,
+    pub probe: Arc<Probe>,
+}
+
+/// One stdin read; a read that delivered no bytes is also empty.
+fn count_stdin_read(probe: &Probe, read: &io::Result<usize>) {
+    use std::sync::atomic::Ordering::Relaxed;
+    probe.stdin_reads.fetch_add(1, Relaxed);
+    let empty = match read {
+        Ok(count) => *count == 0,
+        Err(error) => matches!(
+            error.kind(),
+            io::ErrorKind::Interrupted | io::ErrorKind::WouldBlock
+        ),
+    };
+    if empty {
+        probe.stdin_empty_reads.fetch_add(1, Relaxed);
+    }
 }
 
 pub(super) fn run(
@@ -140,7 +157,9 @@ pub(super) fn run(
                 Instant::now() + Duration::from_millis(framer.held_input_flush_timeout_ms() as u64)
             });
         } else if fds[0].revents != 0 {
-            match (&*input).read(&mut chunk) {
+            let read = (&*input).read(&mut chunk);
+            count_stdin_read(&settings.probe, &read);
+            match read {
                 Ok(0) => {
                     pending.extend(events_from_framed_chunks(framer.finish()));
                     eof = true;

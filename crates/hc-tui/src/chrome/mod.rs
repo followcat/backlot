@@ -10,6 +10,7 @@ pub(crate) mod dialogs;
 pub mod endpoint_agents;
 pub mod endpoint_sidebar;
 pub mod endpoint_sidebar_expanded;
+pub mod endpoint_sidebar_row;
 pub mod endpoints;
 pub(crate) mod help;
 pub(crate) mod lot;
@@ -26,6 +27,7 @@ pub(crate) mod overlay;
 pub mod palette;
 pub mod panes;
 pub mod panes_draw;
+pub(crate) mod release_notes;
 pub mod render;
 pub mod scroll;
 pub(crate) mod selection_highlight;
@@ -40,6 +42,8 @@ pub mod text;
 pub(crate) mod text_editor;
 pub(crate) mod title_text;
 pub mod tokens;
+pub(crate) mod update_modal;
+pub(crate) mod update_status;
 pub mod workspace;
 
 use std::path::PathBuf;
@@ -107,6 +111,12 @@ pub struct ClientShellConfig {
     /// image-paste key trigger (empty or invalid value, diagnosed at
     /// load).
     pub remote_image_paste_key: Option<crate::config::KeyCombo>,
+    /// Per-endpoint chrome choices loaded at start; `persist` rewrites
+    /// them from the app's live state, so this stays the at-start copy.
+    pub preferences: crate::preferences::ClientChromePreferences,
+    /// The endpoint's preferences file. `None` — no resolved state
+    /// root — turns persistence off entirely.
+    pub preferences_path: Option<PathBuf>,
 }
 
 impl ClientShellConfig {
@@ -195,7 +205,43 @@ impl ClientShellConfig {
             local_config_path,
             own_theme: crate::own_theme::Shell::default(),
             remote_image_paste_key: config.remote_image_paste_key().ok().flatten(),
+            preferences: crate::preferences::ClientChromePreferences::default(),
+            preferences_path: None,
         }
+    }
+
+    /// The local endpoint's preferences: one file keyed by the core
+    /// socket so two sessions never share it.
+    pub fn with_local_endpoint(
+        self,
+        env: &hc_proto::endpoint::Env,
+        socket_path: &std::path::Path,
+    ) -> Self {
+        match crate::preferences::path_for_local_endpoint(env, socket_path) {
+            Some(path) => self.with_preferences_path(path),
+            None => self,
+        }
+    }
+
+    /// A remote endpoint's preferences, keyed by target + session.
+    pub fn with_remote_endpoint(
+        self,
+        env: &hc_proto::endpoint::Env,
+        target: &str,
+        session: &str,
+    ) -> Self {
+        match crate::preferences::path_for_remote_endpoint(env, target, session) {
+            Some(path) => self.with_preferences_path(path),
+            None => self,
+        }
+    }
+
+    /// Load the file's saved choices; a missing or malformed file
+    /// leaves the defaults in place.
+    pub fn with_preferences_path(mut self, path: std::path::PathBuf) -> Self {
+        self.preferences = crate::preferences::load(&path).unwrap_or_default();
+        self.preferences_path = Some(path);
+        self
     }
 }
 

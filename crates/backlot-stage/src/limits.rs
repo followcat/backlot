@@ -9,7 +9,6 @@
 use backlot_model::event::{EventKind, STALLED};
 use backlot_model::state::actor_task;
 use backlot_model::summary::Work;
-use hc_proto::client::CallError;
 
 use crate::act::record;
 use crate::cli::Fail;
@@ -129,7 +128,13 @@ impl Stage {
                                     },
                                 );
                             }
-                            Err(CallError::Rpc(_)) => {}
+                            Err(e) if crate::sendfail::retryable(&e) => {
+                                let refusal = crate::sendfail::refusal(&e);
+                                eprintln!(
+                                    "stage: rate-limit continue to {role} not delivered ({}), retrying later",
+                                    refusal.text()
+                                );
+                            }
                             Err(e) => return Err(Fail::call(e)),
                         }
                     }

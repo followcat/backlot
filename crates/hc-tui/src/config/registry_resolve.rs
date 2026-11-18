@@ -42,6 +42,7 @@ impl Config {
             goto: ActionKeybinds::default(),
             detach: ActionKeybinds::default(),
             reload_config: ActionKeybinds::default(),
+            update: ActionKeybinds::default(),
             open_notification_target: ActionKeybinds::default(),
             previous_workspace: ActionKeybinds::default(),
             next_workspace: ActionKeybinds::default(),
@@ -166,6 +167,7 @@ impl Config {
             apply_action!(keybinds.goto, goto, source);
             apply_action!(keybinds.detach, detach, source);
             apply_action!(keybinds.reload_config, reload_config, source);
+            apply_action!(keybinds.update, update, source);
             apply_action!(
                 keybinds.open_notification_target,
                 open_notification_target,

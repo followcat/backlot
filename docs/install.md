@@ -54,19 +54,63 @@ The archive also contains `LICENSE`, `NOTICE` and a short `README.md`.
 
 ## Upgrade
 
+How you upgrade depends on how backlot was installed. `backlot --upgrade` checks: on a package-managed install or a
+dev build it refuses before anything runs and prints the command to use instead. An explicit `BACKLOT_INSTALL_DIR` is
+taken as your own choice and runs the installer as asked.
+
+### Install script and manual installs
+
 ```sh
 backlot --upgrade
 ```
 
 `--upgrade` runs the install script again for the latest release, with its progress on your terminal, and asks you to
 restart backlot. Set `BACKLOT_VERSION=v<version>` first to move to a specific release, newer or older. Clients that are
-already running keep the old version until you restart them.
+already running keep the old version until you restart them. `--upgrade` installs into the directory of the running
+binary (`BACKLOT_INSTALL_DIR` overrides it), so the command upgrades the binary you run.
+
+Inside the client, `prefix+u` (or a click on the `↑v…` badge) opens the update card with the release notes of every
+newer release. `↵ update` runs backlot's own install script locally, even when the client is attached to a remote
+host, checks that `backlot --version` reports the new version, and then `↵ restart` re-executes the installed binary
+in place. The card offers `↵ update` only when the install directory is writable; otherwise it shows the command to
+run by hand. On a package-managed install the card never offers `↵ update` and names the package manager's own
+command instead.
+
+### mise
+
+```sh
+mise upgrade --bump github:followcat/backlot
+```
+
+`--bump` rewrites an exact version pin; a plain `mise upgrade` stays inside the version the config asks for and can
+do nothing.
+
+### Homebrew
+
+```sh
+brew upgrade backlot
+```
+
+### Nix
+
+Update backlot through the Nix configuration that installed it; there is no single upgrade command.
+
+### cargo
+
+Reinstall with cargo the way backlot was installed: build from source as the README shows
+(`cargo build --release -p hc-tui`, which produces the `backlot` binary) and replace the binary under
+`$CARGO_HOME/bin` (`~/.cargo/bin` by default).
+
+### Dev build
+
+A binary under `target/` is a build artifact, not an install: rebuild it (`cargo build --release -p hc-tui`) and run
+the new binary.
 
 ### Update check
 
 On startup backlot asks GitHub what the latest release is — one `HEAD` request to `releases/latest`, bounded to five
-seconds and fully asynchronous. When a newer release exists a toast says `backlot vX.Y.Z is out — run: backlot
---upgrade`. The answer is cached in `$XDG_STATE_HOME/backlot/update-check.json` (`~/.local/state/backlot/` when XDG is
+seconds and fully asynchronous. When a newer release exists a toast says `backlot vX.Y.Z — ctrl+b u or click
+↑vX.Y.Z`. The answer is cached in `$XDG_STATE_HOME/backlot/update-check.json` (`~/.local/state/backlot/` when XDG is
 unset) for 24 hours, so at most one real request happens per day; a cached "newer" answer still shows the toast. Any
 network or parse failure stays silent — no toast, no warning.
 
@@ -89,5 +133,5 @@ backlot leaves little else behind:
   picked, the studio panel's settings and `[hollywood]`.
 - The SSH control socket lives in `$XDG_RUNTIME_DIR/hc-tui-ssh`, or `/tmp/hc-tui-ssh-<uid>`. It expires by itself, and
   you can delete the directory.
-- The update-check cache is one JSON file in `$XDG_STATE_HOME/hc-tui/` (`~/.local/state/hc-tui/` when XDG is unset).
+- The update-check cache is one JSON file in `$XDG_STATE_HOME/backlot/` (`~/.local/state/backlot/` when XDG is unset).
 - The `hc-tui` layout document is stored on the core.

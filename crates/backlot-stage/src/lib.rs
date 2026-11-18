@@ -47,6 +47,7 @@ mod relabel;
 pub mod render;
 mod runners;
 mod sample;
+mod sendfail;
 pub mod signals;
 mod stage;
 mod stale;
@@ -78,6 +79,8 @@ mod cli_testkit;
 mod cli_tests;
 #[cfg(test)]
 mod daemon_tests;
+#[cfg(test)]
+mod deliver_refuse_tests;
 #[cfg(test)]
 mod deliver_tests;
 #[cfg(test)]

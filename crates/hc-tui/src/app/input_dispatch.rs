@@ -4,6 +4,17 @@ use super::*;
 impl App {
     /// One neutral input event.
     pub(super) fn on_input(&mut self, ev: UiEvent, width: u16) {
+        // While an image read is in flight, terminal-directed input —
+        // keys, pastes, IME text — queues behind it in order; mouse,
+        // resize and focus keep running. Replayed events from the
+        // finished read skip the hold so the drain cannot re-queue.
+        if !self.image_read_replay
+            && matches!(ev, UiEvent::Key(_) | UiEvent::Paste(_) | UiEvent::Text(_))
+            && let Some(read) = self.image_read.as_mut()
+        {
+            read.held.push_back(ev);
+            return;
+        }
         let before = self.focused.clone();
         match ev {
             UiEvent::Resize { cols, rows } => {
@@ -56,7 +67,7 @@ impl App {
                             navigator.filter = None;
                             navigator.selected = None;
                         }
-                    } else if self.settings.is_some() {
+                    } else if self.settings.is_some() || self.update_modal.is_some() {
                         // The Settings overlay has no text field — eat it.
                     } else if self.panel_focused() {
                         // The panel has no text field — eat it.
@@ -84,7 +95,7 @@ impl App {
                         navigator.filter = None;
                         navigator.selected = None;
                     }
-                } else if self.settings.is_some() {
+                } else if self.settings.is_some() || self.update_modal.is_some() {
                     // The Settings overlay has no text field — eat it.
                 } else if self.panel_focused() {
                     // The panel has no text field — eat it.

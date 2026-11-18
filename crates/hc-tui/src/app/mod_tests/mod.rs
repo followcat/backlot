@@ -1,6 +1,7 @@
 //! Read-only application tests and shared fixtures.
 mod cases_1;
 mod cases_2;
+mod chrome_marks;
 mod endpoint_nav;
 mod endpoint_nav_b;
 mod float_draw;
@@ -10,7 +11,9 @@ mod floats_lifecycle;
 mod help;
 mod hollywood;
 mod image_paste;
+mod image_paste_off_loop;
 mod image_paste_upload;
+mod install_card;
 mod layout;
 mod layout_regressions;
 mod m3a;
@@ -28,6 +31,7 @@ mod opening;
 mod own_theme;
 mod page_keys;
 mod panel;
+mod preferences;
 mod reload;
 mod remote_children;
 mod review_regressions;
@@ -37,8 +41,11 @@ mod sidebar_edge;
 mod studio;
 mod studio_machines;
 mod studio_mouse;
+mod update_card;
+mod update_source;
 mod version_badge;
 mod view_sync;
+mod waiting;
 
 use super::*;
 use ratatui::backend::TestBackend;

@@ -98,7 +98,7 @@ async fn unselected_completion_is_retained_and_acknowledged_for_the_agent() {
     );
     assert!(
         !app.presentation
-            .acknowledge(&mut app.projection, "t1", Some(false))
+            .acknowledge(&mut app.projection, "t1", Some(false), &app.waiting)
     );
 
     term.status.as_mut().unwrap().state = "idle".into();
@@ -109,7 +109,7 @@ async fn unselected_completion_is_retained_and_acknowledged_for_the_agent() {
     assert_eq!(border_label(&app, "t1").as_deref(), Some("root-title"));
     assert!(
         app.presentation
-            .acknowledge(&mut app.projection, "t1", Some(true))
+            .acknowledge(&mut app.projection, "t1", Some(true), &app.waiting)
     );
     assert_eq!(
         app.projection.snapshot.agents[0].agent_status,
@@ -133,7 +133,7 @@ async fn unselected_completion_is_retained_and_acknowledged_for_the_agent() {
     );
     assert!(
         app.presentation
-            .acknowledge(&mut app.projection, "t1", Some(true))
+            .acknowledge(&mut app.projection, "t1", Some(true), &app.waiting)
     );
     term.status.as_mut().unwrap().state = "idle".into();
     replace(&mut app, 5, &term);

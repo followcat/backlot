@@ -31,6 +31,7 @@ use crate::daemon::Stage;
 use crate::digest::{self, OutItem};
 use crate::notices;
 use crate::reconcile::{self, LiveTerminal};
+use crate::sendfail;
 use crate::stale;
 
 /// The role must be up this long before anything is sent.
@@ -216,6 +217,46 @@ pub fn send_outcome(answer: &serde_json::Value) -> Result<(), Option<String>> {
     }
 }
 
+/// The ledger's side of one finished send: what it owes, and the log
+/// phrase the stage prints. A send that succeeded records
+/// `message.delivered` for every item it covered (a repeat after a
+/// crash is tolerated). No refusal records anything — an explicit
+/// `sent: false`, the core's `cancelled` kind (nothing was typed) and
+/// a client-side timeout (the core may still type it) all leave the
+/// message queued, so none may ever read as delivered. A dead wire is
+/// the one failure that still ends the tick.
+pub fn settle(
+    dir: &Path,
+    seqs: &[u64],
+    answer: Result<serde_json::Value, CallError>,
+) -> Result<String, CallError> {
+    let answer = match answer {
+        Ok(answer) => answer,
+        Err(e) if sendfail::retryable(&e) => {
+            let refusal = sendfail::refusal(&e);
+            // A cancelled send typed nothing; a timed-out one is still
+            // ambiguous, and the log must not claim otherwise.
+            let outcome = if refusal.not_typed() {
+                "not typed"
+            } else {
+                "may still be typed"
+            };
+            return Ok(format!("{outcome} ({}), still queued", refusal.text()));
+        }
+        Err(e) => return Err(e),
+    };
+    match send_outcome(&answer) {
+        Ok(()) => {
+            for seq in seqs {
+                let _ = record(dir, EventKind::MessageDelivered { target: *seq });
+            }
+            Ok(format!("delivered {seqs:?}"))
+        }
+        Err(None) => Ok("not sent (refused), still queued".to_owned()),
+        Err(Some(reason)) => Ok(format!("not sent ({reason}), still queued")),
+    }
+}
+
 /// An in-flight `terminal.send`: the seqs it carries (one item, or
 /// the digest's whole set) and the handle the tick collects on a
 /// later pass.
@@ -330,36 +371,10 @@ impl Stage {
         for (pair, f) in done {
             self.sent_ms.borrow_mut().insert(pair.clone(), now_ms);
             match f.handle.await {
-                Ok(Ok(v)) => match send_outcome(&v) {
-                    Ok(()) => {
-                        // Every item the send covered is recorded —
-                        // already-recorded duplicates are tolerated,
-                        // a crash after the send can send twice.
-                        for seq in &f.seqs {
-                            let _ = record(dir, EventKind::MessageDelivered { target: *seq });
-                        }
-                        eprintln!("stage: delivered {:?} to {}", f.seqs, pair.1);
-                    }
-                    // An explicit `sent: false` is a refusal —
-                    // queued for a later tick, send gap applies.
-                    Err(reason) => {
-                        eprintln!(
-                            "stage: send to {} not sent{}, still queued",
-                            pair.1,
-                            reason.map(|r| format!(" ({r})")).unwrap_or_default()
-                        );
-                    }
+                Ok(answer) => match settle(dir, &f.seqs, answer) {
+                    Ok(line) => eprintln!("stage: {line} to {}", pair.1),
+                    Err(e) => return Err(Fail::call(e)),
                 },
-                // A refusal leaves it queued for a later tick — the
-                // send gap still applies. A timeout is ambiguous:
-                // the text may have gone in, so it stays queued and
-                // a duplicate is possible but harmless.
-                Ok(Err(CallError::Rpc(_))) | Ok(Err(CallError::Timeout)) => {
-                    eprintln!("stage: send to {} refused, still queued", pair.1);
-                }
-                Ok(Err(e)) => {
-                    return Err(Fail::call(e));
-                }
                 Err(e) => {
                     eprintln!("stage: send to {} lost: {e}", pair.1);
                 }

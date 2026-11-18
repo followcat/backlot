@@ -105,16 +105,42 @@ def copy_config(original, env):
     own.chmod(0o600)
 
 
+def pin_one_shot_popup(env):
+    """Pin the audited popup binding to a one-shot popup in the candidate's
+    private config.
+
+    hc-tui treats a `type = "popup"` command that only starts a shell as its
+    per-tab persistent float unless `persistent = false` says otherwise; the
+    reference has no such choice and always runs a one-shot popup. herdr
+    reports an unknown key as a config diagnostic (a toast over row 0), so
+    the key goes into the candidate's copy only — the reference's copy stays
+    the audited baseline.
+    """
+    path = Path(env['XDG_CONFIG_HOME']) / 'herdr/config.toml'
+    lines = path.read_text().splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == 'type = "popup"':
+            lines.insert(index + 1, 'persistent = false')
+            break
+    else:
+        raise ValueError('parity config has no popup binding to pin')
+    path.write_text('\n'.join(lines) + '\n')
+
+
 class Owned:
-    def __init__(self, binary, original_config, out, kind):
+    def __init__(self, binary, original_config, out, kind, cwd=None):
         self.binary = Path(binary).resolve(strict=True)
         self.original_config = original_config
         self.config_hash = digest(original_config)
         self.root = Path(tempfile.mkdtemp(prefix='hctui-parity-'))
         self.session = 'hctui-test-' + uuid.uuid4().hex[:12]
         self.env = scratch_environment(self.root)
-        self.cwd = self.root / 'acme-shop'
-        self.cwd.mkdir()
+        # The fixture directory may be shared by both owners: the navigator
+        # footer renders the selected pane's cwd verbatim, so the reference
+        # and the candidate must stand in the same path to compare. Each
+        # owner keeps its own HOME/XDG roots and fixture files regardless.
+        self.cwd = Path(cwd) if cwd is not None else self.root / 'acme-shop'
+        self.cwd.mkdir(parents=True, exist_ok=True)
         self.out = out
         self.kind = kind
         self.peer_pid = None
@@ -142,8 +168,8 @@ class Owned:
 
 
 class Core(Owned):
-    def __init__(self, binary, config, out):
-        super().__init__(binary, config, out, 'core')
+    def __init__(self, binary, config, out, cwd=None):
+        super().__init__(binary, config, out, 'core', cwd)
         self.env['HC_SESSION'] = self.session
         state = self.root / 's/herdr-core' / self.session
         state.mkdir(parents=True)
@@ -202,8 +228,8 @@ class Core(Owned):
 
 
 class Reference(Owned):
-    def __init__(self, binary, config, out):
-        super().__init__(binary, config, out, 'reference')
+    def __init__(self, binary, config, out, cwd=None):
+        super().__init__(binary, config, out, 'reference', cwd)
         self.env['HERDR_SESSION'] = self.session
         (self.root / 'bin/herdr').symlink_to(self.binary)
         self.endpoint = self.root / 'c/herdr/sessions' / self.session / 'herdr.sock'

@@ -4,6 +4,19 @@ backlot runs on official `hc` (herdr-core) and on the followcat fork. Capabiliti
 `hello`, so one sidebar can mix fork and official machines. When a capability is missing, that part of the UI is left
 blank or uses a fallback. It doesn't cause an error or a retry loop.
 
+The fork's own contract with its clients — every fact below and how to detect it — is
+[docs/fork-features.md](https://github.com/followcat/herdr-core/blob/v0.1.21-followcat.1/docs/fork-features.md).
+A version suffix is never a capability check: `hello.result.features` and field presence decide.
+
+## Versions
+
+- **Built and tested against:** official `hc` 0.1.21 (upstream `c7517808d64f06609e4ecf0db1757005373cc3a3`), the pin
+  in [integration](integration.md), and the fork `0.1.21-followcat.1`.
+- **Older official cores:** supported. Anything from 0.1.18 on works; a member or method a core does not know is
+  simply absent and its feature stays off. Two examples: `events.subscribe`'s `docs` (0.1.21) is ignored by older
+  cores, and `terminal.list`'s `machines` (always present from 0.1.21, omitted when empty before) reads the same
+  either way.
+
 | Feature | Fork `hc` | Official `hc` | On official `hc` |
 |---|---|---|---|
 | Protocol generation 1 (framed and plain) | yes | yes | Same |
@@ -13,6 +26,11 @@ blank or uses a fallback. It doesn't cause an error or a retry loop.
 | `quiet_human_release`: attach flag | advertised | absent | The flag isn't sent. |
 | Agent status read from the screen | present | absent | Agents show a status only if they report OSC 7501. |
 | `automatic_input`, `resize_notifications`: attach results | may be absent | present | Accepted. Unknown result fields are ignored. |
+| `put_chunks`: `terminal.put_begin`/`put_chunk`/`put_finish` | advertised | absent until 0.1.21 | The image paste sends one `terminal.put`. |
+| `events.subscribe` `docs` (named documents) | n/a | 0.1.21 and later | Not named: backlot reads every terminal and only fetches the `backlot` document, and naming documents alone silences terminal events. |
+| `terminal.list`'s `machines` | n/a | 0.1.21 always sends it | An empty list means no machines; older cores omit it, which reads the same. |
+| `terminal.send` error kind `cancelled` | n/a | 0.1.21 and later | Older cores never send it; when it arrives the send is reported as refused, nothing was typed. |
+| `restore_screen`, `restart_environment` | n/a | 0.1.21 (config, capability) | Not used: backlot keeps its own lost-terminal placeholder and offers no core restart. |
 | Unknown fields and event kinds | n/a | possible | Ignored. Optional fields stay `None`, and unknown kinds are skipped. |
 | `backlot` document on an added machine | served per machine | served per machine | A machine that does not serve it contributes no studios — blank, not an error. |
 | `terminal.run` `on:` | routed to the named machine | routed | Studio actions land on the studio's own machine; a core refusing the field fails that action's notice. |

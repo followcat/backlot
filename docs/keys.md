@@ -191,6 +191,12 @@ frame and the selection copies on release, through the same OSC 52 path as pane 
 None of these are bound by default. Add the ones you want to `~/.config/herdr/config.toml`, then press `Ctrl+B Shift+R`
 to reload it.
 
+### Update
+
+`prefix+u` opens the update card when a newer backlot is known, or the release notes of the running version right after
+an upgrade. Rebind it with `keys.update` in your Herdr config, for example `update = "prefix+x"`; a binding you set wins
+over the default.
+
 ### Switch tabs and agents
 
 ```toml

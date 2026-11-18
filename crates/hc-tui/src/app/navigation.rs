@@ -13,9 +13,12 @@ impl App {
                 self.help_state = crate::chrome::help::HelpState::default();
             }
             A::ReloadConfig => self.reload_config(),
+            A::Update => self.open_update(),
             A::Settings => self.open_settings_overlay(),
             A::ToggleSidebar => {
                 self.shell_state.sidebar_collapsed = !self.shell_state.sidebar_collapsed;
+                self.sidebar_collapsed_manual = true;
+                self.persist_chrome_preferences();
             }
             A::OpenNotificationTarget => self.focus_visible_notification(),
             A::CopyMode => {

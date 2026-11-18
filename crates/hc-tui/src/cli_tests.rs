@@ -63,6 +63,50 @@ fn upgrade_is_a_parse_action() {
     assert!(INSTALL_COMMAND.contains("install.sh"));
 }
 
+/// Both installer constants name backlot's own release script, never
+/// hc-tui's: the pipeline the update card runs and the one-liner
+/// `--upgrade` prints must not drift apart.
+#[test]
+fn the_installer_names_backlots_own_release_script() {
+    assert!(INSTALL_URL.ends_with("/followcat/backlot/releases/latest/download/install.sh"));
+    assert!(INSTALL_COMMAND.contains(INSTALL_URL));
+    assert!(INSTALL_COMMAND.ends_with("| sh"));
+    for text in [INSTALL_URL, INSTALL_COMMAND] {
+        assert!(!text.contains("hc-tui"), "{text}");
+        assert!(!text.contains("github.io"), "{text}");
+    }
+}
+
+/// The studio's watch parameters name no documents in
+/// `events.subscribe`: on 0.1.21+ cores that would narrow the
+/// subscription to documents alone and silence terminal events. The
+/// `backlot` document rides `documents` (the one place it is named),
+/// and `doc_patterns` stays empty.
+#[test]
+fn studio_mode_names_no_documents_in_the_subscription() {
+    let params = watch_params();
+    assert_eq!(
+        params.documents,
+        [
+            "herdr-app".to_owned(),
+            "hc-tui".to_owned(),
+            "backlot".to_owned()
+        ]
+    );
+    assert!(params.doc_patterns.is_empty(), "{:?}", params.doc_patterns);
+    assert!(
+        params.subscribe_params().docs.is_empty(),
+        "{:?}",
+        params.subscribe_params().docs
+    );
+    // The raw subscription therefore serializes with no `docs` member.
+    let wire = serde_json::to_value(params.subscribe_params()).unwrap();
+    assert!(
+        wire.get("docs").is_none(),
+        "an empty document list must not be named: {wire}"
+    );
+}
+
 /// Both endpoint kinds multiplex their attaches onto one shared
 /// framed connection: a remote's share one ssh child, a local's one
 /// Unix socket — either way a burst costs one transport + `hello`.
@@ -87,7 +131,7 @@ async fn local_attaches_share_one_socket_hello_and_two_channels() {
     use hc_proto::terminal::AttachParams;
     use tokio::io::AsyncWriteExt;
 
-    let dir = std::env::temp_dir().join(format!("hc-tui-cli-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("backlot-cli-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("shared-attach.sock");
     let _ = std::fs::remove_file(&socket);
@@ -189,13 +233,13 @@ async fn local_attaches_share_one_socket_hello_and_two_channels() {
 #[tokio::test]
 async fn shared_rpc_opens_one_connection_for_every_consumer() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let dir = std::env::temp_dir().join(format!("hc-tui-cli-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("backlot-cli-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("shared-rpc.sock");
     let _ = std::fs::remove_file(&socket);
     let listener = tokio::net::UnixListener::bind(&socket).unwrap();
     let endpoint = local(socket.to_str().unwrap());
-    let rpc = shared_rpc(&endpoint, &None);
+    let rpc = shared_rpc(&endpoint, &None, Arc::default());
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut hello = Vec::new();
@@ -245,4 +289,100 @@ fn caller_needs_the_verifying_socket_var() {
         self_caller(&only_socket, &local("/run/scratch/hc.sock")),
         None
     );
+}
+
+#[test]
+fn upgrade_installs_into_the_running_binary_directory_unless_configured() {
+    use crate::update_install::upgrade_install_dir;
+    let exe = std::path::Path::new("/home/user/bin/backlot");
+    let dir = std::path::PathBuf::from("/home/user/bin");
+    assert_eq!(upgrade_install_dir(None, Some(exe)), Some(dir.clone()));
+    assert_eq!(
+        upgrade_install_dir(Some(std::ffi::OsStr::new("")), Some(exe)),
+        Some(dir)
+    );
+    assert_eq!(
+        upgrade_install_dir(Some(std::ffi::OsStr::new("/opt/hc")), Some(exe)),
+        None
+    );
+}
+
+/// Issue #44: a package-managed or dev-build `--upgrade` refuses before
+/// the installer runs, naming its own update command.
+#[test]
+fn managed_and_dev_build_upgrades_are_refused_with_their_own_commands() {
+    let managed = [
+        (
+            crate::install_source::InstallSource::Mise {
+                tool: "github:followcat/backlot".into(),
+            },
+            "mise upgrade --bump github:followcat/backlot",
+        ),
+        (
+            crate::install_source::InstallSource::Homebrew,
+            "brew upgrade backlot",
+        ),
+        (
+            crate::install_source::InstallSource::Nix,
+            "Nix configuration",
+        ),
+        (crate::install_source::InstallSource::Cargo, "cargo"),
+        (crate::install_source::InstallSource::DevBuild, "dev build"),
+    ];
+    for (source, expected) in managed {
+        let ran = std::cell::Cell::new(false);
+        let status = upgrade_with(&source, None, None, &|_| {
+            ran.set(true);
+            0
+        });
+        assert_eq!(status, 1, "{source:?}");
+        assert!(!ran.get(), "{source:?} must not run the installer");
+        assert!(
+            source.refusal().unwrap().contains(expected),
+            "{source:?} refusal names its command"
+        );
+    }
+}
+
+/// An explicit `BACKLOT_INSTALL_DIR` is the user's own choice: the
+/// installer runs as asked even on a managed install.
+#[test]
+fn an_explicit_install_dir_runs_the_installer_as_asked() {
+    let ran = std::cell::Cell::new(false);
+    let status = upgrade_with(
+        &crate::install_source::InstallSource::Mise {
+            tool: "github:followcat/backlot".into(),
+        },
+        Some(std::ffi::OsStr::new("/opt/hc")),
+        Some(std::path::PathBuf::from("/home/user/bin")),
+        &|dir| {
+            ran.set(true);
+            assert_eq!(dir, None, "the env var already names the dir");
+            0
+        },
+    );
+    assert_eq!(status, 0);
+    assert!(ran.get());
+}
+
+/// A direct install still upgrades the running binary's directory; an
+/// empty `BACKLOT_INSTALL_DIR` counts as unset.
+#[test]
+fn a_direct_upgrade_installs_into_the_running_directory() {
+    let dir = std::path::Path::new("/home/user/bin");
+    for configured in [None, Some(std::ffi::OsStr::new(""))] {
+        let ran = std::cell::Cell::new(false);
+        let status = upgrade_with(
+            &crate::install_source::InstallSource::Direct,
+            configured,
+            Some(dir.to_path_buf()),
+            &|got| {
+                ran.set(true);
+                assert_eq!(got.as_deref(), Some(dir));
+                0
+            },
+        );
+        assert_eq!(status, 0);
+        assert!(ran.get());
+    }
 }

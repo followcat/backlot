@@ -6,14 +6,18 @@
 mod common;
 
 use common::attach::{DEADLINE, joined, observer, params, shared, shared_once};
-use common::fakecore::{ALL_METHODS, attach_result, pair};
+use common::fakecore::{ALL_METHODS, DuplexCore, attach_result, pair};
 use common::minimal_terminal;
-use hc_proto::client::{ConnectParts, Output};
+use hc_proto::client::{AttachConn, ConnectParts, Output};
 use hc_proto::frame::{Frame, Kind};
+use hc_proto::transport::WriteHalf;
 use serde_json::json;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use tokio::io::AsyncWrite;
 use tokio::sync::oneshot;
 
 /// Replies to `req` with its attach result plus `paint` in one write —
@@ -453,6 +457,163 @@ async fn transport_death_ends_every_attach_and_the_next_open_rebuilds_once() {
     drop(d);
     drop(e);
     joined(server2).await;
+}
+
+/// A write half counting `poll_write` calls: how many transport
+/// writes the connection's writer actually issues.
+struct CountWrites {
+    inner: WriteHalf,
+    writes: Arc<AtomicU64>,
+}
+
+impl AsyncWrite for CountWrites {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        self.inner.as_mut().poll_write(cx, buf)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.inner.as_mut().poll_flush(cx)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.inner.as_mut().poll_shutdown(cx)
+    }
+}
+
+/// A one-transport shared connection whose client write half counts
+/// every `poll_write` the mux writer issues.
+fn shared_counting() -> (AttachConn, DuplexCore, Arc<AtomicU64>) {
+    let (core, read, write) = pair(64 * 1024);
+    let writes = Arc::new(AtomicU64::new(0));
+    let write: WriteHalf = Box::pin(CountWrites {
+        inner: write,
+        writes: Arc::clone(&writes),
+    });
+    let conn = shared(
+        Arc::new(Mutex::new(VecDeque::from([ConnectParts {
+            read,
+            write,
+            guard: None,
+        }]))),
+        Arc::new(AtomicU64::new(0)),
+    );
+    (conn, core, writes)
+}
+
+/// Four channels owing credit at once must reach the transport in one
+/// write, not one 13-byte write per frame — and the batch keeps the
+/// exact frame order a per-frame writer produced: each channel's
+/// CREDIT ahead of its queued input.
+#[tokio::test]
+async fn credits_owed_together_on_four_channels_leave_as_one_transport_write() {
+    let (conn, mut core, writes) = shared_counting();
+    let (seen, seen_rx) = oneshot::channel::<()>();
+    let server = tokio::spawn(async move {
+        core.serve_hello(ALL_METHODS).await;
+        for channel in 1u32..=4 {
+            let req = core.read_request().await;
+            core.reply(
+                &req["id"],
+                attach_result(channel, minimal_terminal(), false, false),
+            )
+            .await;
+        }
+        for channel in 1u32..=4 {
+            core.send_stream(channel, 0, &[b'x'; 1024]).await;
+        }
+        let mut per_channel: HashMap<u32, Vec<Kind>> = HashMap::new();
+        let mut credited = 0u64;
+        for _ in 0..5 {
+            let frame = core.read_frame().await;
+            per_channel
+                .entry(frame.channel)
+                .or_default()
+                .push(frame.kind);
+            if let Ok(hc_proto::frame::Control::Credit(n)) = frame.control() {
+                credited += n as u64;
+            }
+        }
+        assert_eq!(credited, 4 * 1024);
+        for channel in 2u32..=4 {
+            assert_eq!(per_channel[&channel], [Kind::Credit]);
+        }
+        assert_eq!(per_channel[&1], [Kind::Credit, Kind::Data]);
+        seen.send(()).unwrap();
+        core.drain_until_eof().await;
+    });
+    let p = params();
+    let (a, b, c, d) = tokio::join!(
+        conn.attach(&p),
+        conn.attach(&p),
+        conn.attach(&p),
+        conn.attach(&p)
+    );
+    let mut attaches = vec![a.unwrap(), b.unwrap(), c.unwrap(), d.unwrap()];
+    attaches.sort_by_key(|attach| attach.channel());
+    assert_eq!(
+        attaches
+            .iter()
+            .map(|attach| attach.channel())
+            .collect::<Vec<_>>(),
+        [1, 2, 3, 4]
+    );
+    for attach in &attaches {
+        assert_eq!(attach.recv().await, Some(Output::Data(vec![b'x'; 1024])));
+    }
+    // Let the writer park: `before` counts only the writes this
+    // synchronous stretch produces — nothing can interleave between
+    // the input push and the four consumes on this runtime.
+    tokio::task::yield_now().await;
+    let before = writes.load(Ordering::SeqCst);
+    attaches[0].send_input(b"in-one").await.unwrap();
+    for attach in &attaches {
+        attach.consume(1024).expect("consume");
+    }
+    seen_rx.await.expect("the batch never reached the core");
+    let batch = writes.load(Ordering::SeqCst) - before;
+    assert_eq!(batch, 1, "one round's frames took {batch} writes, not 1");
+    drop(attaches);
+    joined(server).await;
+}
+
+/// A lone input frame on an idle connection is written in the round
+/// that wakes for it — batching never holds a frame back for more.
+/// (A latency guard: this also held before batching.)
+#[tokio::test]
+async fn a_single_input_frame_on_an_idle_connection_writes_at_once() {
+    let (conn, mut core, writes) = shared_counting();
+    let server = tokio::spawn(async move {
+        core.serve_hello(ALL_METHODS).await;
+        let req = core.read_request().await;
+        core.reply(
+            &req["id"],
+            attach_result(1, minimal_terminal(), false, false),
+        )
+        .await;
+        let frame = core.read_frame().await;
+        assert_eq!((frame.channel, frame.kind), (1, Kind::Data));
+        assert_eq!(frame.payload, b"key".to_vec());
+        core.drain_until_eof().await;
+    });
+    let attach = conn.attach(&params()).await.unwrap();
+    tokio::task::yield_now().await;
+    let before = writes.load(Ordering::SeqCst);
+    attach.send_input(b"key").await.unwrap();
+    tokio::time::timeout(DEADLINE, async {
+        while writes.load(Ordering::SeqCst) == before {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the input frame was never written");
+    assert_eq!(writes.load(Ordering::SeqCst) - before, 1);
+    drop(attach);
+    joined(server).await;
 }
 
 #[cfg(unix)]

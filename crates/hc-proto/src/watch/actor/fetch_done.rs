@@ -93,7 +93,10 @@ impl Actor {
 
     /// A bounded `machine.list` completed: installs the list, queues
     /// document fetches on newly seen machines and drops slots whose
-    /// machine went away.
+    /// machine went away. Publishes only when a subscriber can see a
+    /// difference — the list itself (every field the view exposes), the
+    /// `machine.list` note or `machines_enabled`. A heartbeat's
+    /// identical answer publishes nothing.
     pub(super) fn machines_done(
         &mut self,
         result: Result<(u64, Result<MachineListResult, CallError>), JoinError>,
@@ -128,19 +131,34 @@ impl Actor {
                     Arc::make_mut(&mut self.docs).retain(|key, _| keep(key));
                     self.doc_pending.retain(keep);
                 }
+                let note_cleared = self.notes.remove("machine.list").is_some();
+                let changed =
+                    self.machines.as_deref() != Some(list.machines.as_slice()) || note_cleared;
                 self.machines = Some(list.machines);
-                self.notes.remove("machine.list");
+                if changed {
+                    self.publish();
+                }
             }
             Err(CallError::Unsupported { reason, .. }) => {
+                let changed = self.machines_enabled
+                    || self.machines.is_some()
+                    || self.notes.get("machine.list") != Some(&reason);
                 self.machines_enabled = false;
                 self.machines = None;
                 self.notes.insert("machine.list".into(), reason);
+                if changed {
+                    self.publish();
+                }
             }
             Err(e) => {
-                self.notes.insert("machine.list".into(), e.to_string());
+                let reason = e.to_string();
+                let changed = self.notes.get("machine.list") != Some(&reason);
+                self.notes.insert("machine.list".into(), reason);
+                if changed {
+                    self.publish();
+                }
             }
         }
-        self.publish();
     }
 
     /// A bounded `terminal.list` for the static fallback completed.
@@ -160,8 +178,10 @@ impl Actor {
                 inventory.replace(0, list.terminals);
                 inventory.set_offline(false);
                 // `terminal.list` carries machine views too: use them
-                // when `machine.list` never produced any.
-                if self.machines.is_none() && !list.machines.is_empty() {
+                // when `machine.list` has not answered yet. An empty
+                // list is the answer — this core has no machines — and
+                // must not read as "no information".
+                if self.machines.is_none() {
                     for machine in &list.machines {
                         for doc in self.params.documents.clone() {
                             self.request_doc(DocKey {

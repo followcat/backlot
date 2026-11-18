@@ -87,6 +87,7 @@ pub struct KeysConfigOverlay {
     pub navigate_pane_right: Option<BindingConfig>,
     pub detach: Option<BindingConfig>,
     pub reload_config: Option<BindingConfig>,
+    pub update: Option<BindingConfig>,
     pub open_notification_target: Option<BindingConfig>,
     pub previous_workspace: Option<BindingConfig>,
     pub next_workspace: Option<BindingConfig>,
@@ -156,6 +157,7 @@ pub struct KeysConfig {
     pub navigate_pane_right: BindingConfig,
     pub detach: BindingConfig,
     pub reload_config: BindingConfig,
+    pub update: BindingConfig,
     pub open_notification_target: BindingConfig,
     pub previous_workspace: BindingConfig,
     pub next_workspace: BindingConfig,
@@ -225,6 +227,7 @@ impl Default for KeysConfig {
             navigate_pane_right: BindingConfig::one("l"),
             detach: BindingConfig::one("prefix+q"),
             reload_config: BindingConfig::one("prefix+shift+r"),
+            update: BindingConfig::one("prefix+u"),
             open_notification_target: BindingConfig::one("prefix+o"),
             previous_workspace: BindingConfig::empty(),
             next_workspace: BindingConfig::empty(),
@@ -334,6 +337,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
         apply_field!(navigate_pane_right);
         apply_field!(detach);
         apply_field!(reload_config);
+        apply_field!(update);
         apply_field!(open_notification_target);
         apply_field!(previous_workspace);
         apply_field!(next_workspace);

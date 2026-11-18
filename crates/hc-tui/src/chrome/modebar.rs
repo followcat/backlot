@@ -31,6 +31,7 @@ pub(crate) fn render_mode_bar(
     copy_mode: Option<&CopyModeState>,
     endpoint_error: Option<&str>,
     update_available: bool,
+    restart_ready: bool,
     keybinds: &LiveKeybindConfig,
     palette: &Palette,
 ) -> Option<Rect> {
@@ -215,17 +216,26 @@ pub(crate) fn render_mode_bar(
                 .min(remaining),
         );
     }
-    if update_available && mode == ClientShellMode::Navigate {
-        let width = 13.min(bar.width);
+    let update_status = if restart_ready {
+        Some((" restart ready", palette.green))
+    } else if update_available {
+        Some((" update ready", palette.accent))
+    } else {
+        None
+    };
+    if let Some((text, color)) = update_status.filter(|_| mode == ClientShellMode::Navigate) {
+        let width = u16::try_from(UnicodeWidthStr::width(text))
+            .unwrap_or(u16::MAX)
+            .min(bar.width);
         let area = Rect::new(bar.right().saturating_sub(width), bar.y, width, 1);
         buffer.set_style(area, Style::default().bg(palette.panel_bg));
         put_right_text(
             buffer,
             area,
             area.y,
-            " update ready",
+            text,
             Style::default()
-                .fg(palette.accent)
+                .fg(color)
                 .bg(palette.panel_bg)
                 .add_modifier(Modifier::BOLD),
         );

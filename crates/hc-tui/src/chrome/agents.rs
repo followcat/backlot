@@ -386,6 +386,7 @@ fn sidebar_status_text(status: AgentStatus) -> &'static str {
         AgentStatus::Blocked => "blocked",
         AgentStatus::Done => "done",
         AgentStatus::Working => "working",
+        AgentStatus::Waiting => "waiting",
         AgentStatus::Idle | AgentStatus::Unknown => "idle",
     }
 }

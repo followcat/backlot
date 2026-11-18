@@ -21,11 +21,11 @@ mod wire;
 
 #[doc(hidden)]
 pub use attach::ConnectParts;
-pub use attach::{Attach, AttachConn, AttachError, CloseReason, Ended, Output};
+pub use attach::{Attach, AttachConn, AttachError, AttachGauges, CloseReason, Ended, Output};
 pub use error::{CallError, Error};
-pub use shared_rpc::shared_rpc;
 #[doc(hidden)]
 pub use shared_rpc::shared_rpc_with;
+pub use shared_rpc::{shared_rpc, shared_rpc_counted};
 
 use crate::OpenRpcDocument;
 use crate::codec::{Reader, Writer};
@@ -34,7 +34,7 @@ use crate::hello::{Capabilities, CoreInfo, HelloResult};
 use crate::transport::{self, Guard, ReadHalf, WriteHalf};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
-use std::sync::atomic::AtomicI64;
+use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -139,12 +139,23 @@ impl Client {
         endpoint: &Endpoint,
         ssh_program: Option<&OsStr>,
     ) -> Result<Client, Error> {
+        Client::connect_counted(endpoint, ssh_program, &Default::default()).await
+    }
+
+    /// [`connect`](Self::connect) with its transport counted into `stats`.
+    pub async fn connect_counted(
+        endpoint: &Endpoint,
+        ssh_program: Option<&OsStr>,
+        stats: &std::sync::Arc<crate::stats::ConnStats>,
+    ) -> Result<Client, Error> {
         let conn = tokio::time::timeout(CONNECT_TIMEOUT, transport::connect(endpoint, ssh_program))
             .await
             .map_err(|_| Error::Timeout("connect"))?
             .map_err(Error::Transport)?;
-        let (reader, writer, guard) = conn.split();
-        Client::negotiated(reader, writer, Some(guard)).await
+        let (reader, writer, guard) = conn.counted(stats).split();
+        let client = Client::negotiated(reader, writer, Some(guard)).await?;
+        stats.connected();
+        Ok(client)
     }
 
     /// Negotiates over an injected byte stream — tests use in-memory wires or
@@ -237,6 +248,7 @@ impl Client {
                 tx,
                 pending: pump::Pending::default(),
                 next_id: AtomicI64::new(1),
+                probing: AtomicBool::new(false),
             }),
             guard: Mutex::new(guard),
             tasks: Mutex::new(Vec::new()),

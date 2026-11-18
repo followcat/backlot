@@ -39,6 +39,14 @@ Unicode, styled cells, history and input logs. Both PTYs receive matching
 host replies and key/mouse scripts. Reference status reports and matching
 core OSC reports are authoritative fixture actions, never screen detection.
 
+Both clients stand in the **same fixture directory** (`<out>/fixture`): the
+navigator footer prints the selected pane's cwd verbatim, so the reference and
+the candidate must occupy the same path for it to compare. Their HOME/XDG roots
+and fixture control files stay separate. The neutral programs also pin the host
+cursor shape (`CSI 0 SP q`) in their first paint, so a pane's starting shape
+comes from the fixture rather than from whatever ran in the reference's
+initial pane.
+
 The original configuration is read-only and hash-checked after teardown.
 Only its private copies disable update checks and sound. Each environment
 also gets a `backlot/config.toml` with `[theme] source = "herdr"`, so the
@@ -49,6 +57,13 @@ tables, automatic status commands and custom command bindings are rejected,
 except the specifically audited inert Alt+F binding, which scripts never
 send. Command text is never printed or executed. The mouse byte fixtures additionally set only
 their recorded neutral mouse modifier/scroll settings on the private copy.
+
+The candidate's private copy additionally pins the audited popup binding to a
+one-shot popup (`persistent = false`): backlot's documented choice treats a
+`type = "popup"` binding that only starts a shell as its per-tab persistent
+float, while the reference always runs a one-shot popup. The key goes into the
+candidate's copy only, because herdr reports an unknown key as a config
+diagnostic (a toast over row 0).
 
 Screen checkpoints include prefix/help/filtering, navigation, switching,
 sidebar dragging/collapse, live cursor/mouse modes, status transitions,
@@ -63,6 +78,29 @@ unwritten narrow blank is canonicalized to an ASCII space on both sides;
 styles and wide tails are retained. There are no region masks or byte
 stripping. Teardown output is captured separately and decoded to verify
 host-mode resets and retained-title parity, as well as termios restoration.
+
+## Known differences
+
+Three documented backlot additions cannot be produced by the pinned reference.
+`checks.py` excuses them by **exact cell and exact content** (or, for the
+cursor, an identical position and visibility), never by a count or a column
+tolerance, and records them per checkpoint under `known_differences` with
+their reason:
+
+- the running version badge in the sidebar header (row 0): exactly a contiguous
+  `vX.Y.Z` run between blanks in the candidate's header, where the reference
+  cell is blank;
+- the navigator footer's pane id: hc names panes `t<N>` where the reference
+  core names them `w<W>:p<P>`, so exactly the cells of that field are excused
+  on the detail row, and only while nothing else on that row differs;
+- the cursor shape and blink on `pane-exit` and `pane-closed`: the reference's
+  core keeps reporting the closed Alt+P shell's last shape for the visible
+  pane, while backlot shows that pane's own shape. Position and visibility must
+  match exactly and nothing else about the cursor may differ.
+
+Every other difference — any other column of row 0, any other navigator cell,
+the cursor anywhere else, the host modes and the title — stays a failure.
+`docs/parity.md` documents the user-facing contract behind all three.
 
 The input runner compares real program bytes with the committed expected
 bytes captured from the reference: 100 basic keys, 23 held/layout/live-mode/

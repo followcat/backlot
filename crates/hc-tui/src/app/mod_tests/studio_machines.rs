@@ -79,7 +79,7 @@ fn spaced(address: &str, space: &str) -> hc_proto::terminal::Terminal {
 /// people in the `acme-shop` space and the stage plus one stray agent
 /// in `backlot`; `host-b` carries beta-tools' people. `t1` — the
 /// producer — is focused, so the local `acme-shop` is current.
-fn two_machine_studio_app() -> App {
+pub(super) fn two_machine_studio_app() -> App {
     let mut stage = spaced("t9", "backlot");
     stage.name = Some("backlot-stage".into());
     let mut stray = agent("t50", "idle");
@@ -246,7 +246,7 @@ async fn plain_mode_keeps_herdrs_endpoint_sidebar_unchanged() {
 // sidebar: the draggable split's divider, `agents` + `grouped`, the
 // stray agent row and the collapse toggle.
 const EXPECTED_PLAIN: &str = concat!(
-    " machines        v0.2.2  │\n",
+    " machines         v0.2.2 │\n",
     "                         │\n",
     " ▾ Local                 │\n",
     "   · acme-shop           │\n",
@@ -259,7 +259,7 @@ const EXPECTED_PLAIN: &str = concat!(
     "                         │\n",
     " new · Local         menu│\n",
     "─────────────────────────│\n",
-    " agents           grouped│\n",
+    " agents          priority│\n",
     "                         │\n",
     " ○ Local · backlot · main│\n",
     "                         │\n",
