@@ -1,4 +1,5 @@
 """Checkpoint readiness and exact title comparison."""
+import re
 
 
 def text(frame):
@@ -99,6 +100,125 @@ def last_osc52(output):
     if end < 0:
         return None
     return bytes(output[index:end + 1])
+
+
+# --- Known differences -----------------------------------------------------
+#
+# hc-tui carries features the pinned herdr reference has no way to render.
+# Each is matched by exact cell and exact content here — never by a count,
+# a column tolerance or a skipped checkpoint — and every excuse names the
+# reason below. docs/parity.md documents the user-facing contract; a
+# difference outside these cells stays a bug.
+
+BADGE_REASON = ('W1 chrome: hc-tui draws the running version badge (right-aligned in the '
+                'expanded sidebar\'s header row); the reference draws nothing there')
+PANE_ID_REASON = ('navigator footer identity: hc names panes `t<N>` where the reference core '
+                  'names them `w<W>:p<P>` (docs/parity.md)')
+
+VERSION_BADGE = re.compile(r'v[0-9]+\.[0-9]+\.[0-9]+')
+PANE_ID = re.compile(r't[0-9]+$')
+REFERENCE_PANE_ID = re.compile(r'w[0-9]+:p[0-9]+$')
+# The navigator's selected-row detail: `workspace / tab-index / pane`,
+# independent of which footer variant the overlay is showing.
+NAVIGATOR_TAB = re.compile(r' / [0-9]+$')
+
+
+def _row_text(frame, row):
+    return ''.join(cell['text'] for cell in frame['cells'][row]['cells'])
+
+
+def _badge_columns(candidate):
+    """Exactly the columns of the candidate's running-version badge on row
+    0, or none. The badge is one contiguous `vX.Y.Z` run between blanks in
+    the sidebar header (`spaces … v0.1.12 │`), so a difference anywhere
+    else on the row is never excused."""
+    if not candidate['cells']:
+        return set()
+    text = _row_text(candidate, 0)
+    match = VERSION_BADGE.search(text)
+    if not match:
+        return set()
+    before = text[:match.start()]
+    after = text[match.end():]
+    if (before and before[-1] not in ' │') or not after or after[0] not in ' │':
+        return set()
+    return set(range(match.start(), match.end()))
+
+
+def _navigator_pane_id_cells(reference, candidate):
+    """Exactly the cells of the "Go to" overlay's selected-row pane id.
+
+    The detail line's last ` / ` field is a pane id: only a candidate
+    `t<N>` against a reference `w<W>:p<P>` is excused, and only while
+    nothing else on that row differs. The two cores' own names for one
+    pane are the whole difference (docs/parity.md)."""
+    if len(reference['cells']) != len(candidate['cells']):
+        return set()
+    for row in range(len(candidate['cells'])):
+        reference_text, candidate_text = _row_text(reference, row), _row_text(candidate, row)
+        start = candidate_text.rfind(' / ')
+        if start < 0 or start != reference_text.rfind(' / '):
+            continue
+        if not NAVIGATOR_TAB.search(candidate_text[:start]):
+            continue
+        # The overlay's right border follows the field, so stop at it rather
+        # than at the row's padding.
+        reference_id = reference_text[start + 3:].split('│', 1)[0].rstrip()
+        candidate_id = candidate_text[start + 3:].split('│', 1)[0].rstrip()
+        if not (REFERENCE_PANE_ID.match(reference_id) and PANE_ID.match(candidate_id)):
+            continue
+        span = set(range(start + 3, start + 3 + len(reference_id)))
+        if any(a != b and column not in span for column, (a, b) in enumerate(
+                zip(reference['cells'][row]['cells'], candidate['cells'][row]['cells']))):
+            continue
+        return {(row, column) for column in span}
+    return set()
+
+
+def known_differences(reference, candidate):
+    """The documented differences this pair carries, as `reason -> cells`.
+
+    Empty unless the exact known cells really differ; a caller reports the
+    count beside the checkpoint, never instead of comparing the rest."""
+    badge = _badge_columns(candidate)
+    pane_id = _navigator_pane_id_cells(reference, candidate)
+    found = {}
+    for row_a, row_b in zip(reference['cells'], candidate['cells'], strict=True):
+        for column, (a, b) in enumerate(zip(row_a['cells'], row_b['cells'], strict=True)):
+            if a == b:
+                continue
+            if row_a['y'] == 0 and column in badge and a['text'] == ' ':
+                found.setdefault(BADGE_REASON, []).append((row_a['y'], column))
+            elif (row_a['y'], column) in pane_id:
+                found.setdefault(PANE_ID_REASON, []).append((row_a['y'], column))
+    return found
+
+
+# The Alt+P pane command's shell sets a cursor shape; when its pane closes,
+# the reference's core keeps reporting that shape for the visible pane,
+# while hc-tui shows the visible pane's own shape. Only the exact pair of
+# checkpoints after that command, and only a shape/blink difference at an
+# identical position and visibility, is excused.
+PANE_COMMAND_CURSOR_REASON = ('reference core reports the closed pane command shell\'s last '
+                              'cursor shape for the visible pane; hc-tui keeps the visible '
+                              "pane's own shape (docs/parity.md)")
+PANE_COMMAND_CURSOR_CHECKPOINTS = ('pane-exit', 'pane-closed')
+
+
+def known_cursor_difference(reference, candidate, checkpoint):
+    """The documented cursor difference for `checkpoint`, or `None`.
+
+    The position and visibility must match exactly; only the shape and its
+    blink may differ, and only on the two checkpoints that follow the pane
+    command."""
+    if checkpoint not in PANE_COMMAND_CURSOR_CHECKPOINTS:
+        return None
+    a, b = reference['cursor'], candidate['cursor']
+    if (a['position'], a['visible']) != (b['position'], b['visible']):
+        return None
+    if (a['shape'], a['blink']) == (b['shape'], b['blink']):
+        return None
+    return PANE_COMMAND_CURSOR_REASON
 
 
 def title_difference(reference, candidate):

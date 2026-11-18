@@ -121,12 +121,16 @@ pub enum Action {
     },
     /// `terminal.put` — the R9 image-paste upload: write the image next
     /// to the terminal so the returned path can be pasted into it.
-    /// `data` is base64; the incarnation check matches `Kill`/`SendLine`.
+    /// `bytes` is the raw image; the incarnation check matches
+    /// `Kill`/`SendLine`. `pieces` asks for the acknowledged
+    /// `put_begin`/`put_chunk`/`put_finish` path, used when the core
+    /// advertises `put_chunks` and the image crosses an SSH link.
     PutImage {
         terminal: String,
         created_ms: u64,
         name: String,
-        data: String,
+        bytes: Vec<u8>,
+        pieces: bool,
     },
 }
 

@@ -97,13 +97,14 @@ def run(args,size,binary):
     pending_mutation=None
     expected_input={name:b'' for name in ('alpha','beta','gamma')}
     try:
-        core=Core(args.hc,args.config,out);core.start()
+        fixture=out/'fixture';fixture.mkdir()
+        core=Core(args.hc,args.config,out,cwd=fixture);core.start()
         alpha=Program(core,'alpha')
         terminal=core.rpc('terminal.run',{'argv':alpha.argv,'cwd':str(core.cwd),'labels':{'herdr.space':'work','herdr.tab':'main'},'no_parent':True,'no_notify':True})['address']
         alpha.terminal=terminal;wait_program(core,alpha);programs['core']=[alpha]
         foreign={'spaces':[{'id':'work','name':'work','folder':str(core.cwd),'tabs':[{'id':'main','name':'main','root':{'type':'block','content':{'terminal':terminal}}}]}]}
         core.rpc('doc.set',{'name':'herdr-app','version':0,'value':foreign})
-        reference=Reference(binary,args.config,out)
+        reference=Reference(binary,args.config,out,cwd=fixture)
         for owner,executable in [(reference,binary),(core,args.hc_tui)]:
             owner.ui=Pty([str(executable),'--session',owner.session],owner.env,owner.cwd,*size,cell_px=(10,20))
             owner.ui.keyboard_flags_reply=7;owner.ui.sgr_pixel_mouse_reply=2

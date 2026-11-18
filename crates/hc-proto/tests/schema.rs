@@ -1,6 +1,6 @@
 //! Conformance checks between our hand-written types and the pinned OpenRPC
 //! schema in `tests/fixtures/hc.openrpc.json` (herdr-core
-//! `ec8adcdf0da38e539e8702f7c37801647da035f3`, Apache-2.0 — see
+//! `c7517808d64f06609e4ecf0db1757005373cc3a3`, Apache-2.0 — see
 //! `fixtures/README.md`). They catch renamed/removed fields and methods the
 //! schema does not declare, in both directions where feasible.
 
@@ -200,6 +200,7 @@ fn typed_params_match_schema() {
             terminal: Some("t7".into()),
             children_of: Some("t1".into()),
             labels: BTreeMap::from([("k".into(), "v".into())]),
+            docs: vec!["herdr-app".into(), "studio/*".into()],
         },
     );
     check_params(

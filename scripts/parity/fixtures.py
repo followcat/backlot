@@ -28,7 +28,7 @@ received=os.open(log,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
 ''' + GEOMETRY + r'''
 geometry=Geometry(log+'.grid')
 geometry.sample()
-initial=("\x1b[2J\x1b[3J\x1b[Hfixture "+name+"\r\n"
+initial=("\x1b[2J\x1b[3J\x1b[H\x1b[0 qfixture "+name+"\r\n"
  "\x1b[31;4mred-under\x1b[0m\r\n"
  "\x1b[38;2;12;34;56;58;2;65;43;21;4:3mcurly\x1b[0m \x1b[4:2mdouble\x1b[0m "
  "\x1b[4:4mdotted\x1b[0m \x1b[4:5mdashed\x1b[0m\r\n"

@@ -178,8 +178,10 @@ impl Actor {
                 inventory.replace(0, list.terminals);
                 inventory.set_offline(false);
                 // `terminal.list` carries machine views too: use them
-                // when `machine.list` never produced any.
-                if self.machines.is_none() && !list.machines.is_empty() {
+                // when `machine.list` has not answered yet. An empty
+                // list is the answer — this core has no machines — and
+                // must not read as "no information".
+                if self.machines.is_none() {
                     for machine in &list.machines {
                         for doc in self.params.documents.clone() {
                             self.request_doc(DocKey {

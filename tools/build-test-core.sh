@@ -10,7 +10,7 @@
 # a pin change wipes sources, toolchains and build output first.
 set -eu
 
-CORE=06793ede1bedb1fed8d22d3cae476d3eb239edf0
+CORE=c7517808d64f06609e4ecf0db1757005373cc3a3
 GHOSTTY=1e5cdb865807abc990181efb8ebfa9122955cce2
 ZIG_VERSION=0.16.0
 ZIG_SHA256=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
@@ -55,6 +55,13 @@ if [ ! -f "$SRC/vendor/ghostty/build.zig" ]; then
     mkdir -p "$SRC/vendor/ghostty"
     tar -xzf "$OUT/ghostty.tar.gz" -C "$SRC/vendor/ghostty" --strip-components=1
 fi
+
+# ghostty's build.zig asks git for `describe`; from $SRC git walks up into
+# this repository, where a release tag on HEAD makes zig reject the
+# checkout ("tagged releases must be in vX.Y.Z format matching build.zig").
+# Stop discovery at target/ so the fetched sources look like a plain tree.
+GIT_CEILING_DIRECTORIES=$(cd "$OUT/.." && pwd)
+export GIT_CEILING_DIRECTORIES
 
 # crates/ghostty-vt/build.rs builds libghostty-vt through $ZIG. Fetch
 # its zig-pkg first: one flaky download there used to fail the job.

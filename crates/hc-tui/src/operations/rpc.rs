@@ -115,7 +115,10 @@ pub(super) async fn run(
         Action::Kill { .. } => &["terminal.get", "terminal.kill"],
         Action::Exec { .. } => &["machine.exec"],
         Action::RunPopup { .. } => &["terminal.run"],
-        Action::PutImage { .. } => &["terminal.get", "terminal.put"],
+        // `terminal.put` exists on every core hc-tui runs on; the pieces
+        // path is chosen further in, so a core without `put_chunks`
+        // still gets the whole-file upload rather than a refusal.
+        Action::PutImage { .. } => &["terminal.get"],
         Action::PeekKeep { .. } => &[
             "terminal.get",
             "terminal.label",

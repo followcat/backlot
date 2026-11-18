@@ -92,6 +92,10 @@ It runs on official `hc`. CI builds a pinned herdr-core from source and drives t
 use so far has been on [followcat/herdr-core](https://github.com/followcat/herdr-core), a fork of `hc`, so reports from
 official `hc` are especially welcome.
 
+Official `hc` 0.1.21 is the tested build; older 0.1.x cores keep working, with each missing capability switched off.
+The fork publishes its own facts (screen-read status, Git and hostname details, completion ordinals); its client
+contract is [docs/fork-features.md](https://github.com/followcat/herdr-core/blob/v0.1.21-followcat.1/docs/fork-features.md).
+
 On official `hc`, agents only show a status if they report it themselves (OSC 7501), and the sidebar has no Git or
 hostname details. See [Core compatibility](docs/compatibility.md).
 

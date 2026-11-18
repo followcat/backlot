@@ -193,6 +193,15 @@ pub struct WatchParams {
     pub subscribe: SubscribeParams,
     /// Document names to watch on this core and every added machine.
     pub documents: Vec<String>,
+    /// Document names or prefixes (a trailing `*`) to *name* in
+    /// `events.subscribe`, on top of `subscribe.docs`. Empty by default,
+    /// and hc-tui keeps it empty: the core narrows a subscription that
+    /// names documents to those alone, which silences its terminal
+    /// events, and hc-tui needs every terminal. A fork that already
+    /// narrows terminals (a label filter or one address) can name its own
+    /// documents here — one place, so backlot adds its `backlot` prefixes
+    /// beside it. Older cores ignore the member.
+    pub doc_patterns: Vec<String>,
     /// First reconnect delay; doubles each failure to `reconnect_max`.
     pub reconnect_initial: Duration,
     /// The backoff ceiling (core's `reconnect_max` is 30 s).
@@ -209,11 +218,27 @@ pub struct WatchParams {
     pub traversal: Option<fn(&View) -> Vec<String>>,
 }
 
+impl WatchParams {
+    /// The params a subscription is opened with: the configured filters
+    /// plus every named document pattern, deduplicated in order. This is
+    /// the one place a fork extends what the subscription asks for.
+    pub fn subscribe_params(&self) -> SubscribeParams {
+        let mut params = self.subscribe.clone();
+        for doc in &self.doc_patterns {
+            if !params.docs.contains(doc) {
+                params.docs.push(doc.clone());
+            }
+        }
+        params
+    }
+}
+
 impl Default for WatchParams {
     fn default() -> WatchParams {
         WatchParams {
             subscribe: SubscribeParams::default(),
             documents: vec!["herdr-app".into(), "hc-tui".into()],
+            doc_patterns: Vec::new(),
             reconnect_initial: Duration::from_millis(250),
             reconnect_max: Duration::from_secs(30),
             doc_timeout: Duration::from_secs(10),
