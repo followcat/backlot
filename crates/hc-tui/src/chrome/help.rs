@@ -37,12 +37,13 @@ fn help_lines(
 ) -> Vec<(usize, ratatui::text::Line<'static>)> {
     use ratatui::text::{Line, Span};
 
-    let mut groups = crate::keybind_help::keybind_help_groups(&keybinds.keybinds, &keybinds.prefix);
-    // Studio mode only: backlot's own sections and the legend sit
-    // under herdr's. Plain never builds them (D6).
-    if let Some(backlot) = backlot {
-        groups.extend(backlot);
-    }
+    // Studio mode: backlot's own sections lead, herdr's follow.
+    // Plain never builds them (D6) — the list is herdr's alone.
+    let mut groups = backlot.unwrap_or_default();
+    groups.extend(crate::keybind_help::keybind_help_groups(
+        &keybinds.keybinds,
+        &keybinds.prefix,
+    ));
     let groups = crate::keybind_help::filter_keybind_help_groups(groups, query);
     let key_width = groups
         .iter()
@@ -162,7 +163,34 @@ pub(crate) fn render_help_overlay(
         None
     };
 
-    let body = Rect::new(i.x, i.y + 3, i.width, i.height.saturating_sub(5));
+    // The two-line glyph legend pins above the footer — out of the
+    // scrolled list, so it stays on screen while scrolling and while
+    // a filter hides everything else. `--plain` has no legend (D6).
+    let (legend, backlot) = match backlot {
+        Some(groups) => {
+            let mut legend = Vec::new();
+            let rest = groups
+                .into_iter()
+                .filter(|(title, entries)| {
+                    if *title == "glyph legend" {
+                        legend = entries.clone();
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect::<Vec<_>>();
+            (legend, Some(rest))
+        }
+        None => (Vec::new(), None),
+    };
+    let legend_rows = u16::try_from(legend.len().min(2)).unwrap_or(0);
+    let body = Rect::new(
+        i.x,
+        i.y + 3,
+        i.width,
+        i.height.saturating_sub(5 + legend_rows),
+    );
     let lines = help_lines(k, backlot, &h.query, p);
     let viewport_rows = usize::from(body.height.max(1));
     let wrapped_rows = |width: u16| {
@@ -212,6 +240,18 @@ pub(crate) fn render_help_overlay(
                 .set_symbol("▐")
                 .set_style(Style::default().fg(p.overlay1).bg(p.panel_bg));
         }
+    }
+
+    for (idx, (key, label)) in legend.iter().enumerate() {
+        let y = i.bottom() - 1 - legend_rows + idx as u16;
+        put_text(
+            b,
+            i.x,
+            y,
+            i.width,
+            &format!(" {key:<7} {label}"),
+            Style::default().fg(p.overlay0).bg(p.panel_bg),
+        );
     }
 
     put_text(
