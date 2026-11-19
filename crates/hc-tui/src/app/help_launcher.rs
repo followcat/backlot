@@ -1,0 +1,446 @@
+//! The `Ctrl+B ?` launcher's App side (S5 §1, A1.1): the group
+//! builder that turns the Call Sheet's waiting items into runnable
+//! rows, the list's own keys (arrows move, Enter runs or focuses),
+//! and the compact target picker. Every runnable press lands in
+//! `run_studio_act` — the S3 activation arm — so a row's action
+//! tracks, toasts and dialogs exactly like its menu.
+
+use super::App;
+use crate::help_launcher::{HelpGroup, HelpPicker, HelpRow, Launch, Pick, Surface};
+use crate::hollywood::{self, Wait};
+use crate::panel::data;
+use crate::studio::StudioKey;
+use crate::studio_menu::{StudioAct, StudioMenu};
+
+impl App {
+    // ---------- the model ----------
+
+    /// The launcher's hint for "open the Call Sheet, then press
+    /// `<key>`" — the resolved toggle label, then the row's own key.
+    fn sheet_hint(&self, key: &str) -> String {
+        let keys = self.hollywood_key.unwrap_or_default();
+        format!(
+            "{} -> {key}",
+            keys.label(&crate::config::format_prefix_combos(&self.live.prefix))
+        )
+    }
+
+    /// The dock chord's label — `ctrl+b y` for the default config.
+    fn dock_chord(&self) -> String {
+        self.panel_key_combo
+            .map(|combo| {
+                format!(
+                    "{} {}",
+                    crate::config::format_prefix_combos(&self.live.prefix),
+                    crate::config::format_key_combo(combo)
+                )
+            })
+            .unwrap_or_else(|| "unset".to_owned())
+    }
+
+    /// The `waiting on you` group — every item the Call Sheet would
+    /// list, each row carrying the `StudioMenu`/`StudioAct` pair the
+    /// press runs. Order is the sheet's own urgency order.
+    fn waiting_group(&self) -> HelpGroup {
+        let machines = self.panel_summaries();
+        let status = hollywood::status_of(&self.view);
+        let local = crate::project::LOCAL_LABEL;
+        let multi = data::spans_machines(&machines);
+        let mut rows = Vec::new();
+        for wait in hollywood::waiting_items(&machines, &status) {
+            match &wait {
+                Wait::Prompt(item) => {
+                    let key = StudioKey {
+                        machine: item.machine.map(str::to_string),
+                        id: item.studio.id.clone(),
+                    };
+                    let menu =
+                        StudioMenu::role(&key, item.role, !self.machine_reachable(item.machine));
+                    let seq = item.role.attention_seq.unwrap_or(0);
+                    let place = help_place(&key, local, multi);
+                    for (word, allow, k) in [("Allow", true, "y"), ("Deny", false, "d")] {
+                        rows.push(HelpRow {
+                            label: format!("{word} prompt #{seq} · {place} · {}", item.role.name),
+                            hint: self.sheet_hint(k),
+                            glyph: "×",
+                            launch: Launch::Act {
+                                menu: Box::new(menu.clone()),
+                                act: StudioAct::Decide(allow),
+                            },
+                        });
+                    }
+                }
+                Wait::Stage(item) => {
+                    let mut menu = StudioMenu::stage(item.offline);
+                    menu.machine = item.machine.map(str::to_string);
+                    let machine = hollywood::machine_label(item.machine, local, multi);
+                    let machine = if machine.is_empty() {
+                        local.to_string()
+                    } else {
+                        machine.to_string()
+                    };
+                    if item.offline {
+                        rows.push(HelpRow {
+                            label: format!("Check machine {machine}"),
+                            hint: self.hollywood_key_label(),
+                            glyph: "×",
+                            launch: Launch::Surface(Surface::CallSheet),
+                        });
+                    } else {
+                        rows.push(HelpRow {
+                            label: format!("Start stage · {machine}"),
+                            hint: self.sheet_hint("r"),
+                            glyph: "◌",
+                            launch: Launch::Act {
+                                menu: Box::new(menu),
+                                act: StudioAct::StageStart,
+                            },
+                        });
+                    }
+                }
+                Wait::Card(card) => {
+                    let menu = StudioMenu::card(&card.id);
+                    rows.push(HelpRow {
+                        label: format!("Apply card {}: {} · {}", card.id, card.action, card.studio),
+                        hint: self.sheet_hint("a"),
+                        glyph: "◆",
+                        launch: Launch::Act {
+                            menu: Box::new(menu.clone()),
+                            act: StudioAct::CardApply,
+                        },
+                    });
+                    rows.push(HelpRow {
+                        label: format!("Cancel card {}…", card.id),
+                        hint: self.sheet_hint("x"),
+                        glyph: "◆",
+                        launch: Launch::Act {
+                            menu: Box::new(menu),
+                            act: StudioAct::CardCancel,
+                        },
+                    });
+                }
+                Wait::Ready(item) => {
+                    let key = StudioKey {
+                        machine: item.machine.map(str::to_string),
+                        id: item.studio.id.clone(),
+                    };
+                    let menu = StudioMenu::studio(
+                        &key,
+                        item.studio,
+                        !self.machine_stage_running(item.machine),
+                        !self.machine_reachable(item.machine),
+                    );
+                    rows.push(HelpRow {
+                        label: format!("Finish studio · {}", help_place(&key, local, multi)),
+                        hint: self.sheet_hint("f"),
+                        glyph: "✓",
+                        launch: Launch::Act {
+                            menu: Box::new(menu),
+                            act: StudioAct::Finish,
+                        },
+                    });
+                }
+            }
+        }
+        HelpGroup {
+            title: "waiting on you (↵ runs immediately)".to_owned(),
+            rows,
+        }
+    }
+
+    /// The `alt+y / ctrl+b i`-style toggle label alone.
+    fn hollywood_key_label(&self) -> String {
+        self.hollywood_key
+            .unwrap_or_default()
+            .label(&crate::config::format_prefix_combos(&self.live.prefix))
+    }
+
+    /// The `studio & task actions` group — the four surface rows
+    /// then the `…` pickers. A picker with no targets at all leaves
+    /// no row: the overlay never offers a no-op press.
+    fn actions_group(&self) -> HelpGroup {
+        let prefix = crate::config::format_prefix_combos(&self.live.prefix);
+        let dock = self.dock_chord();
+        let mut rows = vec![
+            HelpRow {
+                label: "Open Call Sheet (prompts, cards, tell hollywood)".to_owned(),
+                hint: self.hollywood_key_label(),
+                glyph: "",
+                launch: Launch::Surface(Surface::CallSheet),
+            },
+            HelpRow {
+                label: "Toggle Unified Studio Dock".to_owned(),
+                hint: dock.clone(),
+                glyph: "",
+                launch: Launch::Surface(Surface::Dock),
+            },
+            HelpRow {
+                label: "Context menu for focused role / studio".to_owned(),
+                hint: format!("{prefix} m / m"),
+                glyph: "",
+                launch: Launch::Surface(Surface::PaneMenu),
+            },
+            HelpRow {
+                label: "New studio on machine…".to_owned(),
+                hint: "run ↵".to_owned(),
+                glyph: "",
+                launch: Launch::Pick(Pick::Machine),
+            },
+        ];
+        if !self.picker_rows(Pick::Task).is_empty() {
+            rows.push(HelpRow {
+                label: "Inspect task deliveries, checks & reviews…".to_owned(),
+                hint: format!("{dock} -> v"),
+                glyph: "",
+                launch: Launch::Pick(Pick::Task),
+            });
+        }
+        if !self.picker_rows(Pick::Studio(StudioAct::Revise)).is_empty() {
+            rows.push(HelpRow {
+                label: "Revise studio requirement…".to_owned(),
+                hint: "run ↵".to_owned(),
+                glyph: "",
+                launch: Launch::Pick(Pick::Studio(StudioAct::Revise)),
+            });
+        }
+        if !self.picker_rows(Pick::TaskVerb).is_empty() {
+            rows.push(HelpRow {
+                label: "Pause / resume / abandon / take over task…".to_owned(),
+                hint: "run ↵".to_owned(),
+                glyph: "",
+                launch: Launch::Pick(Pick::TaskVerb),
+            });
+        }
+        if !self.picker_rows(Pick::PersonReopen).is_empty() {
+            rows.push(HelpRow {
+                label: "Reopen closed person…".to_owned(),
+                hint: format!("{dock} -> o"),
+                glyph: "",
+                launch: Launch::Pick(Pick::PersonReopen),
+            });
+        }
+        HelpGroup {
+            title: "studio & task actions".to_owned(),
+            rows,
+        }
+    }
+
+    /// The `hollywood` group — the `tell hollywood` input the bar's
+    /// `i` opens.
+    fn hollywood_group(&self) -> HelpGroup {
+        HelpGroup {
+            title: "hollywood".to_owned(),
+            rows: vec![HelpRow {
+                label: "Tell hollywood what you need…".to_owned(),
+                hint: self.sheet_hint("i"),
+                glyph: "",
+                launch: Launch::Surface(Surface::CallSheetTell),
+            }],
+        }
+    }
+
+    /// The full launcher list: the three studio groups, then the
+    /// studio surfaces' keybind references (`studio`, `call sheet
+    /// (open)`, … — S0's sections, minus the `backlot` chords the
+    /// actions group already names and the pinned `glyph legend`),
+    /// then herdr's own sections as close-on-Enter reference rows.
+    pub(crate) fn help_groups(&self) -> Vec<HelpGroup> {
+        let mut groups = vec![
+            self.waiting_group(),
+            self.actions_group(),
+            self.hollywood_group(),
+        ];
+        let reference = crate::keybind_help::backlot_help_groups(
+            &self.live.keybinds,
+            &self.live.prefix,
+            &self.panel_config,
+            self.hollywood_key.unwrap_or_default(),
+            self.panel_key_combo,
+        );
+        groups.extend(
+            reference
+                .into_iter()
+                .filter(|(title, _)| *title != "backlot" && *title != "glyph legend")
+                .map(|(title, entries)| HelpGroup {
+                    title: title.to_owned(),
+                    rows: entries
+                        .into_iter()
+                        .map(|(key, label)| HelpRow {
+                            label: label.into_owned(),
+                            hint: key,
+                            glyph: "",
+                            launch: Launch::Close,
+                        })
+                        .collect(),
+                }),
+        );
+        for (title, entries) in
+            crate::keybind_help::keybind_help_groups(&self.live.keybinds, &self.live.prefix)
+        {
+            groups.push(HelpGroup {
+                title: title.to_owned(),
+                rows: entries
+                    .into_iter()
+                    .map(|(key, label)| HelpRow {
+                        label: label.into_owned(),
+                        hint: key,
+                        glyph: "",
+                        launch: Launch::Close,
+                    })
+                    .collect(),
+            });
+        }
+        groups
+    }
+
+    /// The two pinned legend rows — the `glyph legend` section the
+    /// classic overlay draws above its footer.
+    pub(crate) fn help_legend(&self) -> Vec<(String, String)> {
+        crate::keybind_help::backlot_help_groups(
+            &self.live.keybinds,
+            &self.live.prefix,
+            &self.panel_config,
+            self.hollywood_key.unwrap_or_default(),
+            self.panel_key_combo,
+        )
+        .into_iter()
+        .find(|(title, _)| *title == "glyph legend")
+        .map(|(_, entries)| {
+            entries
+                .into_iter()
+                .map(|(key, label)| (key, label.into_owned()))
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
+    /// The query-filtered groups — a row matches on label or hint;
+    /// a group whose title matches keeps all its rows.
+    pub(crate) fn help_filtered_groups(&self) -> Vec<HelpGroup> {
+        let groups = self.help_groups();
+        let query = self.help_state.query.as_str().trim().to_lowercase();
+        if query.is_empty() {
+            return groups;
+        }
+        groups
+            .into_iter()
+            .filter_map(|mut group| {
+                if group.title.to_lowercase().contains(&query) {
+                    return Some(group);
+                }
+                group.rows.retain(|row| {
+                    row.label.to_lowercase().contains(&query)
+                        || row.hint.to_lowercase().contains(&query)
+                });
+                (!group.rows.is_empty()).then_some(group)
+            })
+            .collect()
+    }
+
+    /// The filtered row list as flat references — `selected` indexes
+    /// into it.
+    fn help_rows(&self) -> Vec<HelpRow> {
+        self.help_filtered_groups()
+            .into_iter()
+            .flat_map(|g| g.rows)
+            .collect()
+    }
+
+    // ---------- keys ----------
+
+    /// Move the selection by `delta` rows, clamped, keeping the row
+    /// inside the scroll window.
+    pub(crate) fn help_launcher_move(&mut self, delta: isize) {
+        let count = self.help_rows().len();
+        if count == 0 {
+            self.help_state.selected = 0;
+            return;
+        }
+        let next = self.help_state.selected as isize + delta;
+        self.help_state.selected = (next.clamp(0, count as isize - 1)) as usize;
+        self.help_ensure_selected_visible();
+    }
+
+    /// Scroll the list so the selected row is inside the viewport —
+    /// its draw-line position mapped through `draw_index`.
+    fn help_ensure_selected_visible(&mut self) {
+        let groups = self.help_filtered_groups();
+        let index = crate::chrome::help_launcher::draw_index(&groups);
+        let Some(pos) = index
+            .iter()
+            .position(|d| *d == Some(self.help_state.selected))
+        else {
+            return;
+        };
+        let viewport = self
+            .help_hits
+            .metrics
+            .map(|m| m.viewport_rows)
+            .unwrap_or(10)
+            .max(1);
+        if pos < self.help_state.scroll {
+            self.help_state.scroll = pos;
+        } else if pos >= self.help_state.scroll + viewport {
+            self.help_state.scroll = pos + 1 - viewport;
+        }
+    }
+
+    /// Enter on the selected row: a runnable act leaves through
+    /// `run_studio_act`, a surface row focuses its surface, a `…`
+    /// row opens its picker, herdr's rows just close the overlay.
+    pub(crate) fn help_launcher_activate(&mut self) {
+        let rows = self.help_rows();
+        let Some(row) = rows.get(self.help_state.selected).cloned() else {
+            self.help = false;
+            return;
+        };
+        match row.launch {
+            Launch::Act { menu, act } => {
+                self.help = false;
+                self.run_studio_act(&menu, act);
+            }
+            Launch::Surface(surface) => {
+                self.help = false;
+                self.open_help_surface(surface);
+            }
+            Launch::Pick(pick) => {
+                let rows = self.picker_rows(pick);
+                if rows.is_empty() {
+                    return;
+                }
+                self.help_state.picker = Some(HelpPicker {
+                    title: row.label.trim_end_matches('…').to_owned(),
+                    rows,
+                    selected: 0,
+                });
+            }
+            Launch::Close => self.help = false,
+        }
+    }
+
+    /// A surface row's focus: the Call Sheet expanded (its keys), the
+    /// `tell hollywood` line editing, the dock via its toggle, or the
+    /// focused pane's studio menu.
+    fn open_help_surface(&mut self, surface: Surface) {
+        match surface {
+            Surface::CallSheet => self.hollywood_open(),
+            Surface::CallSheetTell => {
+                self.hollywood_open();
+                self.hollywood.selected = Some(crate::hollywood::Target::Input);
+                self.hollywood.editing = true;
+            }
+            Surface::Dock => self.panel_toggle(),
+            Surface::PaneMenu => self.pane_menu(),
+        }
+    }
+}
+
+/// `acme-shop · Local` — the studio id plus its machine label when
+/// studios span machines.
+pub(super) fn help_place(key: &StudioKey, local: &str, multi: bool) -> String {
+    match (key.machine.as_deref(), multi) {
+        (Some(machine), _) => format!("{} · {machine}", key.id),
+        (None, true) => format!("{} · {local}", key.id),
+        (None, false) => key.id.clone(),
+    }
+}

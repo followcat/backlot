@@ -7,7 +7,21 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::layout::{Position, Rect};
 
 impl App {
+    /// Whether `Ctrl+B ?` is the S5 action launcher rather than the
+    /// plain keybind reference — a studio-mode client with at least
+    /// one studio or a `[hollywood]` section (D6 keeps `--plain` and
+    /// the no-studio frame on herdr's overlay).
+    pub(crate) fn help_launcher(&self) -> bool {
+        !self.plain && (self.has_hollywood_cfg || !self.panel_summaries().is_empty())
+    }
+
     pub(super) fn handle_help_key(&mut self, key: &TerminalKey) {
+        // The compact picker owns its keys while it floats inside
+        // the overlay — Esc steps back to the list.
+        if self.help_state.picker.is_some() {
+            self.help_picker_key(key);
+            return;
+        }
         let combo = crate::input::terminal_key_of(key);
         let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
         let character = crate::keybind_help::keybind_help_text_char(key);
@@ -41,9 +55,33 @@ impl App {
             return;
         }
         match code {
-            KeyCode::Esc | KeyCode::Enter => self.help = false,
+            KeyCode::Esc => self.help = false,
+            KeyCode::Enter if self.help_launcher() => self.help_launcher_activate(),
+            KeyCode::Enter => self.help = false,
+            KeyCode::Home if self.help_launcher() => {
+                self.help_state.selected = 0;
+                self.help_state.scroll = 0;
+            }
+            KeyCode::End if self.help_launcher() => {
+                self.help_state.selected = usize::MAX;
+                self.help_launcher_move(0);
+            }
             KeyCode::Home => self.help_state.scroll = 0,
             KeyCode::End => self.help_state.scroll = self.help_hits.max_scroll,
+            KeyCode::Up | KeyCode::Char('k') if self.help_launcher() => {
+                self.help_launcher_move(-1);
+            }
+            KeyCode::Down | KeyCode::Char('j') if self.help_launcher() => {
+                self.help_launcher_move(1);
+            }
+            KeyCode::PageUp | KeyCode::PageDown if self.help_launcher() => {
+                let page = self
+                    .help_hits
+                    .metrics
+                    .map(|m| m.viewport_rows.max(1))
+                    .unwrap_or(8) as isize;
+                self.help_launcher_move(if code == KeyCode::PageUp { -page } else { page });
+            }
             KeyCode::Up | KeyCode::Char('k') => self.scroll_help(-1),
             KeyCode::Down | KeyCode::Char('j') => self.scroll_help(1),
             KeyCode::PageUp => self.scroll_help(-8),
@@ -51,6 +89,7 @@ impl App {
             _ if character == Some('/') => {
                 self.help_state.search_focused = true;
                 self.help_state.scroll = 0;
+                self.help_state.selected = 0;
             }
             _ if character == Some('?') => self.help = false,
             _ => {}
@@ -81,7 +120,34 @@ impl App {
             MouseEventKind::ScrollUp => self.scroll_help(-3),
             MouseEventKind::ScrollDown => self.scroll_help(3),
             MouseEventKind::Down(MouseButton::Left) => {
-                if contains(self.help_hits.scrollbar) {
+                if self.help_state.picker.is_some() {
+                    // The picker is modal inside the overlay: a row
+                    // runs its target, anything else steps back.
+                    let row = self
+                        .help_hits
+                        .picker_rows
+                        .iter()
+                        .find(|(rect, _)| contains(*rect))
+                        .map(|(_, pos)| *pos);
+                    if let Some(pos) = row {
+                        if let Some(picker) = self.help_state.picker.as_mut() {
+                            picker.selected = pos;
+                        }
+                        self.help_picker_run();
+                    } else {
+                        self.help_state.picker = None;
+                    }
+                } else if let Some((_, row)) = self
+                    .help_hits
+                    .rows
+                    .iter()
+                    .find(|(rect, _)| contains(*rect))
+                    .map(|(r, pos)| (*r, *pos))
+                {
+                    // A launcher row: select it and run like Enter.
+                    self.help_state.selected = row;
+                    self.help_launcher_activate();
+                } else if contains(self.help_hits.scrollbar) {
                     if let Some(metrics) = self.help_hits.metrics {
                         self.help_scroll_grab = crate::chrome::scroll::scrollbar_thumb_grab_offset(
                             metrics,

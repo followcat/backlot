@@ -23,6 +23,8 @@ mod float;
 mod float_draw;
 mod float_reconcile;
 mod help;
+mod help_launcher;
+mod help_picker;
 mod hollywood;
 mod host;
 mod image_paste;

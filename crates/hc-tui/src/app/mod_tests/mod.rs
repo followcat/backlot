@@ -9,6 +9,7 @@ mod float_takeover;
 mod floats;
 mod floats_lifecycle;
 mod help;
+mod help_launcher;
 mod hollywood;
 mod image_paste;
 mod image_paste_off_loop;
