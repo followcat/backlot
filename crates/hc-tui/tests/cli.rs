@@ -10,28 +10,19 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-static SCRATCH_COUNTER: AtomicU32 = AtomicU32::new(0);
+mod support;
+
+use support::TestDir;
 
 /// Temporary HOME/XDG/bin/socket directories for one test run.
 struct ScratchEnv {
-    root: PathBuf,
+    root: TestDir,
 }
 
 impl ScratchEnv {
     fn new() -> Self {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let unique = format!(
-            "hctui-test-{}-{}-{nanos}",
-            std::process::id(),
-            SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed),
-        );
-        let root = scratch_parent().join(unique);
+        let root = TestDir::new_in(&scratch_parent(), "hctui-test");
         for dir in [
             "home", "state", "config", "data", "runtime", "socket", "bin",
         ] {
@@ -42,12 +33,6 @@ impl ScratchEnv {
 
     fn missing_socket(&self) -> PathBuf {
         self.root.join("socket").join("missing.sock")
-    }
-}
-
-impl Drop for ScratchEnv {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
     }
 }
 

@@ -7,8 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::Path;
 
 use backlot_model::event::EventKind;
 use backlot_model::hollywood::{HollywoodKind, NewHollywoodEvent};
@@ -21,17 +20,10 @@ use tokio::io::AsyncWriteExt;
 
 use crate::daemon::Stage;
 use crate::store::{self, HPending, Pending};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-hcard-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-hcard-test")
 }
 
 /// `hcards` never calls the core — a hello then silence serves.
@@ -134,7 +126,7 @@ async fn an_applied_card_runs_and_records_done() {
     happend(&hdir, "hollywood", tk::hpropose("t1"));
     happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
 
     stage.hcards(&hdir).unwrap();
     let sev = sevents(&base);
@@ -180,7 +172,7 @@ async fn a_moved_base_is_stale_not_done() {
         tk::task_state("t1", backlot_model::event::TaskStateChange::Paused, "hold"),
     );
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
 
     stage.hcards(&hdir).unwrap();
     let hev = hevents(&hdir);
@@ -205,7 +197,7 @@ async fn a_card_on_a_missing_studio_fails() {
     happend(&hdir, "hollywood", tk::hpropose("t1"));
     happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
 
     stage.hcards(&hdir).unwrap();
     let last = hevents(&hdir).pop().unwrap();
@@ -238,7 +230,7 @@ async fn an_effect_already_landed_never_repeats() {
         ),
     );
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
 
     stage.hcards(&hdir).unwrap();
     let last = hevents(&hdir).pop().unwrap();
@@ -321,7 +313,8 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
     fs::write(&cast, CAST).unwrap();
     let brief = hdir.join("drafts/acme-beta/brief.md");
     fs::write(&brief, "the beta brief\n").unwrap();
-    let repo = tmp().join("repo-beta");
+    let repo_root = tmp();
+    let repo = repo_root.join("repo-beta");
     git_repo(&repo);
     happend(
         &hdir,
@@ -340,7 +333,7 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
     );
     happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
 
     stage.hcards(&hdir).unwrap();
     let sdir = store::studio_dir(&base, "acme-beta");
@@ -376,7 +369,8 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
     fs::write(&cast2, CAST).unwrap();
     let brief2 = hdir2.join("drafts/acme-gamma/brief.md");
     fs::write(&brief2, "the gamma brief\n").unwrap();
-    let repo2 = tmp().join("repo-gamma");
+    let repo_root2 = tmp();
+    let repo2 = repo_root2.join("repo-gamma");
     git_repo(&repo2);
     let sdir2 = store::studio_dir(&base2, "acme-gamma");
     fs::create_dir_all(&sdir2).unwrap();
@@ -406,7 +400,7 @@ async fn a_studio_new_card_makes_the_studio_and_brief() {
     })
     .unwrap();
     let mut stage2 = new_stage().await;
-    stage2.base = base2.clone();
+    stage2.base = base2.to_path_buf();
     stage2.hcards(&hdir2).unwrap();
     let (sev2, _) = store::load_events(&sdir2).unwrap();
     let kinds2: Vec<&str> = sev2.iter().map(|e| e.kind.name()).collect();
@@ -440,7 +434,7 @@ async fn another_cards_marker_is_not_this_cards() {
         ),
     );
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
 
     stage.hcards(&hdir).unwrap();
     let last = hevents(&hdir).pop().unwrap();
@@ -462,11 +456,12 @@ async fn another_cards_marker_is_not_this_cards() {
 async fn a_second_studio_new_card_is_stale_not_done() {
     let base = tmp();
     let hdir = store::hollywood_dir(&base);
-    let repo = tmp().join("repo-beta");
+    let repo_root = tmp();
+    let repo = repo_root.join("repo-beta");
     git_repo(&repo);
     let c1 = propose_studio_new(&hdir, "acme-beta", &repo, "a second shop");
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
     stage.hcards(&hdir).unwrap();
     assert_eq!(hevents(&hdir).last().unwrap()["kind"], "card.done");
 
@@ -492,7 +487,7 @@ async fn cards_run_without_the_layer_configured() {
     happend(&hdir, "hollywood", tk::hpropose("t1"));
     happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
     let mut stage = new_stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
     // No config file anywhere — `env_vars` empty is the absent case.
     stage.env_vars = BTreeMap::new();
 

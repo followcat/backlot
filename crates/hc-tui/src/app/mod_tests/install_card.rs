@@ -5,6 +5,7 @@ use super::*;
 use crate::app::install_flow::Seams;
 use crate::app::update_flow::UpdateEvent;
 use crate::chrome::update_modal::Phase;
+use crate::test_support::TestDir;
 use crate::update_run::Plan;
 use hc_vt::{Action, Key, Mods};
 use std::sync::{Arc, Mutex};
@@ -64,8 +65,8 @@ fn phase(app: &App) -> Option<Phase> {
     app.update_modal.as_ref().map(|modal| modal.phase)
 }
 
-fn scratch(label: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("hctui-install-{label}-{}", std::process::id()))
+fn scratch(label: &str) -> TestDir {
+    TestDir::new(&format!("hctui-install-{label}"))
 }
 
 #[tokio::test]

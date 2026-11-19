@@ -118,7 +118,7 @@ fn tell_refuses_two_sources_and_empty_text() {
 
 #[test]
 fn tell_hollywood_takes_positional_or_text() {
-    let (_, env) = scratch();
+    let (_scratch, env) = scratch();
     let out = ok(&env, "tell hollywood hello-overseer");
     assert!(out.contains("message.sent"), "{out}");
     let out = ok(&env, "tell hollywood --text again");

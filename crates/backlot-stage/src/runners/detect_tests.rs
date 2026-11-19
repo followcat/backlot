@@ -7,22 +7,14 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::cli::Env;
 use crate::runners::detect::{self, Scope, Source};
-
-static NEXT: AtomicU64 = AtomicU64::new(0);
+use crate::test_support::TestDir;
 
 /// One scratch root per test.
-fn dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-detect-test-{}-{}-{name}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+fn dir(name: &str) -> TestDir {
+    TestDir::new(&format!("backlot-detect-test-{name}"))
 }
 
 /// An executable shell script `<dir>/<name>` running `body`.

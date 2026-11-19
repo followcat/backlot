@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use crate::checkrun::{self, CheckChild, CheckSpawn, PollOut};
 use crate::checks;
 use crate::checkwork::Running;
+use crate::test_support::TestDir;
 
 /// A scripted child: `exits` queues poll answers — `None` keeps it
 /// alive, `Some(code)` finishes it; `terms`/`kills` count
@@ -238,20 +239,12 @@ fn a_final_burst_reaches_the_log() {
 #[cfg(target_os = "linux")]
 #[test]
 fn a_pipe_held_open_marks_the_log_cut() {
-    let work = std::env::temp_dir().join(format!(
-        "checkrun-cut-{}-{:x}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::create_dir_all(&work).unwrap();
+    let work = TestDir::new("checkrun-cut");
     let mut child = checkrun::real_spawn(&CheckSpawn {
         run: "setsid sh -c 'touch ready; exec sleep 5' </dev/null & \
               while [ ! -e ready ]; do sleep 0.05; done; echo hi"
             .into(),
-        dir: work.clone(),
+        dir: work.to_path_buf(),
         env: vec![("PATH".into(), "/usr/bin:/bin".into())],
     })
     .expect("spawn");
@@ -259,7 +252,6 @@ fn a_pipe_held_open_marks_the_log_cut() {
     let text = String::from_utf8_lossy(&out.output);
     assert!(text.contains("hi"), "{text}");
     assert!(text.contains("output cut"), "{text}");
-    let _ = std::fs::remove_dir_all(&work);
 }
 
 /// The real spawn: `sh -c` under the given env, both pipes into the

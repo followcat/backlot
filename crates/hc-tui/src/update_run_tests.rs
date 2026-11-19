@@ -1,6 +1,7 @@
 //! The installer pipeline and its process group, against real local
 //! processes (`sh`, `sleep`, `echo`) — never the network.
 use super::*;
+use crate::test_support::TestDir;
 use std::time::Instant;
 
 #[test]
@@ -113,7 +114,7 @@ async fn a_group_that_survives_the_grace_period_is_killed() {
 #[tokio::test]
 async fn the_version_probe_reads_the_binary_and_a_failure_is_none() {
     use std::os::unix::fs::PermissionsExt;
-    let dir = std::env::temp_dir().join(format!("hctui-probe-{}", std::process::id()));
+    let dir = TestDir::new("hctui-probe");
     std::fs::create_dir_all(&dir).unwrap();
     let ok = dir.join("backlot");
     std::fs::write(&ok, "#!/bin/sh\necho 'backlot 0.1.13'\n").unwrap();
@@ -132,7 +133,6 @@ async fn the_version_probe_reads_the_binary_and_a_failure_is_none() {
         None,
         "a missing binary is no version"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A hostile version string still lands in the pipeline as one quoted

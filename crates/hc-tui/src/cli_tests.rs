@@ -1,6 +1,7 @@
 //! `cli` unit tests — kept in a sibling file so `cli.rs` stays under
 //! the source length limit.
 use super::*;
+use crate::test_support::TestDir;
 use hc_proto::endpoint::{Local, Remote};
 use std::path::PathBuf;
 
@@ -131,7 +132,7 @@ async fn local_attaches_share_one_socket_hello_and_two_channels() {
     use hc_proto::terminal::AttachParams;
     use tokio::io::AsyncWriteExt;
 
-    let dir = std::env::temp_dir().join(format!("backlot-cli-{}", std::process::id()));
+    let dir = TestDir::new("backlot-cli");
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("shared-attach.sock");
     let _ = std::fs::remove_file(&socket);
@@ -233,7 +234,7 @@ async fn local_attaches_share_one_socket_hello_and_two_channels() {
 #[tokio::test]
 async fn shared_rpc_opens_one_connection_for_every_consumer() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let dir = std::env::temp_dir().join(format!("backlot-cli-{}", std::process::id()));
+    let dir = TestDir::new("backlot-cli");
     std::fs::create_dir_all(&dir).unwrap();
     let socket = dir.join("shared-rpc.sock");
     let _ = std::fs::remove_file(&socket);

@@ -1,22 +1,8 @@
 use super::*;
+use crate::test_support::TestDir;
 
-struct Scratch(std::path::PathBuf);
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn scratch() -> Scratch {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let path = std::env::temp_dir().join(format!(
-        "hctui-prefs-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir(&path).unwrap();
-    Scratch(path)
+fn scratch() -> TestDir {
+    TestDir::new("hctui-prefs")
 }
 
 fn shell_with_preferences(path: &std::path::Path) -> ClientShellConfig {
@@ -53,7 +39,7 @@ async fn agent_panel_sort_defaults_to_priority() {
 #[tokio::test]
 async fn clicked_sort_persists_and_a_fresh_app_remembers_it() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     let mut app = app_with_shell(shell_with_preferences(&path));
     app.flip_agent_sort();
     assert_eq!(
@@ -76,7 +62,7 @@ async fn clicked_sort_persists_and_a_fresh_app_remembers_it() {
     assert!(restarted.agent_panel_sort_manual);
 
     // A different endpoint's file is untouched: it starts at the default.
-    let other = app_with_shell(shell_with_preferences(&root.0.join("other.json")));
+    let other = app_with_shell(shell_with_preferences(&root.join("other.json")));
     assert_eq!(
         other.shell.agent_panel_sort,
         crate::config::AgentPanelSortConfig::Priority
@@ -87,7 +73,7 @@ async fn clicked_sort_persists_and_a_fresh_app_remembers_it() {
 #[tokio::test]
 async fn a_saved_choice_wins_over_the_config_at_start() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     std::fs::write(&path, r#"{"agent_panel_sort":"spaces"}"#).unwrap();
     let app = app_with_shell(shell_with_preferences(&path));
     assert_eq!(
@@ -100,14 +86,14 @@ async fn a_saved_choice_wins_over_the_config_at_start() {
 #[tokio::test]
 async fn malformed_or_missing_preferences_fall_back_to_config() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     std::fs::write(&path, "not json {").unwrap();
     let app = app_with_shell(shell_with_preferences(&path));
     assert_eq!(
         app.shell.agent_panel_sort,
         crate::config::AgentPanelSortConfig::Priority
     );
-    let missing = app_with_shell(shell_with_preferences(&root.0.join("missing.json")));
+    let missing = app_with_shell(shell_with_preferences(&root.join("missing.json")));
     assert_eq!(
         missing.shell.agent_panel_sort,
         crate::config::AgentPanelSortConfig::Priority
@@ -117,7 +103,7 @@ async fn malformed_or_missing_preferences_fall_back_to_config() {
 #[tokio::test]
 async fn sidebar_toggle_persists_the_collapsed_choice() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     let mut app = app_with_shell(shell_with_preferences(&path));
     app.on_action(crate::input::KeybindAction::ToggleSidebar, 120);
     assert!(app.shell_state.sidebar_collapsed);
@@ -133,7 +119,7 @@ async fn sidebar_toggle_persists_the_collapsed_choice() {
 #[tokio::test]
 async fn sidebar_width_drag_persists_on_release() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     let mut app = app_with_shell(shell_with_preferences(&path));
     app.chrome_drag = Some(super::super::mouse::ChromeDrag::SidebarWidth);
     app.set_sidebar_width_from_column(29);
@@ -150,7 +136,7 @@ async fn sidebar_width_drag_persists_on_release() {
 #[tokio::test]
 async fn group_collapse_persists() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     let mut app = app_with_shell(shell_with_preferences(&path));
     app.toggle_collapsed_group(
         &crate::chrome::snapshot::ClientEndpointId::Local,
@@ -166,7 +152,7 @@ async fn group_collapse_persists() {
 #[tokio::test]
 async fn reload_keeps_the_remembered_sort_over_a_new_config_value() {
     let root = scratch();
-    let path = root.0.join("prefs.json");
+    let path = root.join("prefs.json");
     std::fs::write(&path, r#"{"agent_panel_sort":"spaces"}"#).unwrap();
     let mut app = app_with_shell(shell_with_preferences(&path));
     assert_eq!(
@@ -175,7 +161,7 @@ async fn reload_keeps_the_remembered_sort_over_a_new_config_value() {
     );
     // The config on disk now says priority; a reload keeps the remembered
     // manual choice instead of applying the file.
-    let config_path = root.0.join("config.toml");
+    let config_path = root.join("config.toml");
     std::fs::write(&config_path, "[ui]\nagent_panel_sort='priority'\n").unwrap();
     app.shell.local_config_path = config_path;
     app.on_action(crate::input::KeybindAction::ReloadConfig, 120);

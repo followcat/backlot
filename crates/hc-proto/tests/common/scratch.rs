@@ -19,6 +19,11 @@
 
 #![allow(dead_code)]
 
+#[path = "tmp.rs"]
+mod test_dir;
+
+pub use test_dir::TestDir;
+
 use std::ffi::OsStr;
 use std::fs;
 use std::os::unix::process::CommandExt;
@@ -162,8 +167,9 @@ fn wait_for(child: &mut Child, bound: Duration) -> bool {
 /// `serve` child. Dropping runs `server stop`, reaps the child, then removes
 /// the whole root — holders and programs go down with it.
 pub struct ScratchCore {
-    /// Every file the fixture owns lives under here.
-    pub root: PathBuf,
+    /// Every file the fixture owns lives under here; dropping it removes
+    /// the root unless a failed teardown kept it.
+    pub root: TestDir,
     /// The session name passed as `HC_SESSION`.
     pub session: String,
     /// `Endpoint::Local` pointing at the scratch socket.
@@ -223,14 +229,7 @@ impl ScratchCore {
         // existing directory.
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let seq = NEXT.fetch_add(1, Ordering::Relaxed);
-        let root =
-            std::env::temp_dir().join(format!("hctui-{}-{seq}-{:x}", std::process::id(), nanos()));
-        // Claim a new root atomically; never adopt an existing directory.
-        fs::create_dir(&root).unwrap();
-        let mut guard = RootGuard {
-            root: root.clone(),
-            armed: true,
-        };
+        let root = TestDir::new("hctui");
         for dir in ["state", "config", "run", "home", "work", "log"] {
             fs::create_dir_all(root.join(dir)).unwrap();
         }
@@ -265,10 +264,6 @@ impl ScratchCore {
             extra,
             stopped: None,
         };
-        // Transfer cleanup before readiness can fail or be cancelled. The
-        // root guard must not remove state that ScratchCore::drop preserves
-        // after a failed shutdown.
-        guard.armed = false;
         if let Err(e) = wait_ready(&this.endpoint).await {
             panic!("scratch core did not become ready in {READY:?}: {e}");
         }
@@ -364,10 +359,10 @@ impl ScratchCore {
     /// panicking again.
     pub fn finish(mut self) -> Result<(), PathBuf> {
         if self.stop() {
-            let _ = fs::remove_dir_all(&self.root);
             Ok(())
         } else {
-            Err(self.root.clone())
+            self.root.keep();
+            Err(self.root.path().to_path_buf())
         }
     }
 
@@ -407,30 +402,16 @@ impl ScratchCore {
 
 impl Drop for ScratchCore {
     fn drop(&mut self) {
-        if self.stop() {
-            let _ = fs::remove_dir_all(&self.root);
-        } else {
+        if !self.stop() {
             // A failed teardown must not destroy the evidence — or the
             // state a surviving holder still serves. Report, keep the
             // root, and never panic: unwind may already be in flight.
+            self.root.keep();
             eprintln!(
                 "hc-tui scratch core at {:?} could not be fully stopped; \
                  preserving the root for inspection",
-                self.root
+                self.root.path()
             );
-        }
-    }
-}
-
-/// Removes the fixture root when construction fails partway.
-struct RootGuard {
-    root: PathBuf,
-    armed: bool,
-}
-impl Drop for RootGuard {
-    fn drop(&mut self) {
-        if self.armed {
-            let _ = fs::remove_dir_all(&self.root);
         }
     }
 }

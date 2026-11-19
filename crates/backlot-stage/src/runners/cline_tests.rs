@@ -6,11 +6,10 @@
 //! `/home/user`, `acme-shop`.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::PathBuf;
 
 use super::cline::{EFFORTS, provider, session_in_argv, thinking};
 use super::{ActorIdentity, LaunchCtx, PlanError, plan};
+use crate::test_support::TestDir;
 
 pub(super) const MODEL: &str = "cline-pass/deepseek-v4.1-flash-1017";
 
@@ -41,11 +40,8 @@ pub(super) fn ctx<'a>(
     }
 }
 
-pub(super) fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("bl-cline-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+pub(super) fn tmp(tag: &str) -> TestDir {
+    TestDir::new(&format!("bl-cline-{tag}"))
 }
 
 /// A fresh launch: `-i` and `--yolo` always, the provider and the

@@ -4,23 +4,17 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::cli::{Env, Fail, run};
-
-static NEXT: AtomicU64 = AtomicU64::new(0);
+use crate::test_support::TestDir;
 
 pub struct Scratch {
-    pub dir: PathBuf,
+    pub dir: TestDir,
     pub files: PathBuf,
 }
 
 pub fn scratch() -> (Scratch, Env) {
-    let base = std::env::temp_dir().join(format!(
-        "backlot-cli-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
+    let base = TestDir::new("backlot-cli-test");
     let files = base.join("files");
     fs::create_dir_all(&files).unwrap();
     let mut vars = BTreeMap::new();

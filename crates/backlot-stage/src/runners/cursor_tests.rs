@@ -16,12 +16,10 @@ use super::cursor::{
 };
 use super::{ActorIdentity, LaunchCtx, Prep, plan, work_state};
 use crate::permit::{cursor_needs_user, prompt_block};
+use crate::test_support::TestDir;
 
-fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("bl-cursor-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp(tag: &str) -> TestDir {
+    TestDir::new(&format!("bl-cursor-{tag}"))
 }
 
 fn check(name: &str, run: &str) -> CheckDecl {

@@ -8,7 +8,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use backlot_model::event::EventKind;
 use backlot_model::state::{RoleLifecycle, StudioState};
@@ -24,17 +23,10 @@ use crate::cli::Fail;
 use crate::daemon::{Inventory, Stage, keep_or_fail, resolved_base};
 use crate::reconcile::Action;
 use crate::store::{self, Pending};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-daemon-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-daemon-test")
 }
 
 /// A symlinked base is created first when missing, then resolved to
@@ -259,7 +251,7 @@ async fn a_corrupt_ledger_is_skipped_until_it_loads() {
     fs::create_dir_all(&bad).unwrap();
     fs::write(bad.join("events.jsonl"), b"not json\n").unwrap();
     let mut stage = stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
         doing: BTreeMap::new(),
@@ -307,7 +299,7 @@ async fn a_repaired_ledger_recovers_at_the_same_length() {
     corrupt[0] = b'x';
     fs::write(&file, &corrupt).unwrap();
     let mut stage = stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
         doing: BTreeMap::new(),
@@ -351,7 +343,7 @@ async fn a_failing_pass_does_not_end_the_tick() {
     perms.set_readonly(true);
     fs::set_permissions(deaf.join("events.jsonl"), perms).unwrap();
     let mut stage = stage().await;
-    stage.base = base.clone();
+    stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
         doing: BTreeMap::new(),
@@ -432,7 +424,7 @@ async fn a_timed_out_call_does_not_end_the_tick() {
     studio(&base, "deaf");
     studio(&base, "good");
     let mut stage = stage_on(serve_mute).await;
-    stage.base = base;
+    stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
         doing: BTreeMap::new(),
@@ -459,7 +451,7 @@ async fn a_dead_wire_ends_the_tick() {
     let base = tmp();
     studio(&base, "dead");
     let mut stage = stage_on(serve_drop).await;
-    stage.base = base;
+    stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
         doing: BTreeMap::new(),
@@ -479,7 +471,7 @@ async fn a_failing_pass_shows_then_clears() {
         doing: BTreeMap::new(),
     };
     let mut stage = stage_on(serve_no_run).await;
-    stage.base = base;
+    stage.base = base.to_path_buf();
     stage.tick(&live).await.unwrap();
     let error = stage
         .summary_view(&BTreeMap::new())

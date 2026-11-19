@@ -2,6 +2,7 @@
 //! picked theme is saved, and what a reload reads.
 use super::*;
 use crate::input::KeybindAction as A;
+use crate::test_support::TestDir;
 use hc_vt::{Action, Key, Mods};
 
 fn key(app: &mut App, key: Key) {
@@ -11,22 +12,10 @@ fn key(app: &mut App, key: Key) {
     );
 }
 
-struct Scratch(std::path::PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 /// Scratch homes for both files: herdr's `config.toml` with `herdr`,
 /// backlot's with `own` (`None`: no file). Returns backlot's path.
-fn files(app: &mut App, herdr: &str, own: Option<&str>) -> (Scratch, std::path::PathBuf) {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-own-theme-app-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
+fn files(app: &mut App, herdr: &str, own: Option<&str>) -> (TestDir, std::path::PathBuf) {
+    let dir = TestDir::new("backlot-own-theme-app");
     std::fs::create_dir_all(dir.join("herdr")).unwrap();
     app.shell.local_config_path = dir.join("herdr/config.toml");
     std::fs::write(&app.shell.local_config_path, herdr).unwrap();
@@ -37,7 +26,7 @@ fn files(app: &mut App, herdr: &str, own: Option<&str>) -> (Scratch, std::path::
     }
     app.shell.own_theme = crate::own_theme::Shell::at(own_path.clone());
     app.reload_config();
-    (Scratch(dir), own_path)
+    (dir, own_path)
 }
 
 #[tokio::test]

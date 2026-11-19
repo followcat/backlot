@@ -152,6 +152,8 @@ mod stall_tests;
 #[cfg(test)]
 mod store_tests;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod text_src_tests;
 #[cfg(test)]
 mod watch_tests;

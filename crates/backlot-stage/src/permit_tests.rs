@@ -14,6 +14,7 @@ use crate::permit::{
     episode_raised, in_episode, is_actor, needs_user, open_episode, pending_approval, prompt_block,
     touches_env,
 };
+use crate::test_support::TestDir;
 
 fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
     Attention {
@@ -596,8 +597,7 @@ fn cursor_ask_reads_the_pickers_question() {
 /// and an unmeasured picker are each the user's outright.
 #[test]
 fn cursor_file_picker_needs_user_only_outside_the_area() {
-    let dir = std::env::temp_dir().join(format!("bl-permit-area-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = TestDir::new("bl-permit-area");
     let area = dir.join("work/t1");
     std::fs::create_dir_all(&area).unwrap();
     let inside = area.join("plan.md").display().to_string();
@@ -653,8 +653,7 @@ fn cursor_file_picker_needs_user_only_outside_the_area() {
 #[test]
 #[cfg(unix)]
 fn cursor_file_picker_target_through_a_symlink_is_the_users() {
-    let dir = std::env::temp_dir().join(format!("bl-permit-link-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = TestDir::new("bl-permit-link");
     let area = dir.join("work/t1");
     let outside = dir.join("outside");
     std::fs::create_dir_all(&area).unwrap();
@@ -669,7 +668,6 @@ fn cursor_file_picker_target_through_a_symlink_is_the_users() {
         ),
         "a symlink pointing out is outside"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A cursor workspace-trust dialog is the user's even on an actor —

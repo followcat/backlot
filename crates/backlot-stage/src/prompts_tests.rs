@@ -6,7 +6,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use backlot_model::event::{ActorIdentity, CheckDecl, Priority, RoleConfigs, StudioMode};
 use backlot_model::state::{StudioConfig, StudioState, Task, TaskStatus};
@@ -14,17 +13,10 @@ use backlot_model::state::{StudioConfig, StudioState, Task, TaskStatus};
 use crate::args;
 use crate::prompts::*;
 use crate::reconcile::{RoleKind, Start};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-prompt-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-prompt-test")
 }
 
 fn actor() -> ActorIdentity {

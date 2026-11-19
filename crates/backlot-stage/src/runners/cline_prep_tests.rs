@@ -4,13 +4,14 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use backlot_model::event::CheckDecl;
 
 use super::cline::{ClinePrep, allow_commands, prepare};
 use super::cline_tests::{MODEL, ctx, ident};
 use super::{Prep, plan};
+use crate::test_support::TestDir;
 
 fn check(name: &str, run: &str) -> CheckDecl {
     CheckDecl {
@@ -82,11 +83,8 @@ fn allowed_commands_per_role() {
     assert!(!h.contains(&"backlot".to_string()));
 }
 
-fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("bl-cline-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp(tag: &str) -> TestDir {
+    TestDir::new(&format!("bl-cline-{tag}"))
 }
 
 fn prep_in(dir: &Path) -> ClinePrep {

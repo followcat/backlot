@@ -3,9 +3,7 @@
 //! half drives the ledger seam directly; the second drives a real
 //! deliver tick against a fake core that answers `cancelled`.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use backlot_model::event::EventKind;
@@ -21,18 +19,10 @@ use tokio::io::{AsyncWriteExt, DuplexStream};
 use crate::deliver::{SCREEN_STABLE_MS, Screen, settle};
 use crate::reconcile::LiveTerminal;
 use crate::store::{self, Pending};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-refusal-{label}-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp(label: &str) -> TestDir {
+    TestDir::new(&format!("backlot-refusal-{label}"))
 }
 
 fn cancelled() -> CallError {

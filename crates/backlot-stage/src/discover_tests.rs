@@ -3,10 +3,11 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::discover::{ExecCall, Look, find_session, real_exec, runner_version};
+use crate::test_support::TestDir;
 
 const CWD: &str = "/home/user/acme-shop";
 
@@ -18,11 +19,8 @@ fn rollout(home: &Path, day: &str, name: &str, id: &str, cwd: &str) {
     fs::write(dir.join(name), first).unwrap();
 }
 
-fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("bl-discover-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp(tag: &str) -> TestDir {
+    TestDir::new(&format!("bl-discover-{tag}"))
 }
 
 fn no_exec(_: &ExecCall) -> Result<String, String> {
