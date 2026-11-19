@@ -223,55 +223,9 @@ pub(super) fn render_overlays_and_cursor(
         // (wire.rs u16_to_modifier drops extended underline bits), then dim
         // the whole background before the panel removes DIM in its own area.
         super::draw_overlays_s3::dim_cells(buf);
-        if app.help_launcher() {
-            // S5's action launcher: runnable rows on top, herdr's
-            // reference sections under them, the glyph legend pinned.
-            // `modal_band` keeps it off a beside dock's columns.
-            let groups = app.help_filtered_groups();
-            let legend = app.help_legend();
-            let mut hits = crate::chrome::help_launcher::render_launcher(
-                buf,
-                app.modal_band(area),
-                &app.help_state,
-                &groups,
-                &legend,
-                &app.shell.palette,
-            )
-            .unwrap_or_default();
-            if let Some(picker) = app.help_state.picker.as_ref() {
-                let inside = ratatui::layout::Rect::new(
-                    hits.area.x + 1,
-                    hits.area.y + 1,
-                    hits.area.width.saturating_sub(2),
-                    hits.area.height.saturating_sub(2),
-                );
-                crate::chrome::help_launcher::render_picker(
-                    buf,
-                    inside,
-                    picker,
-                    &mut hits,
-                    &app.shell.palette,
-                );
-            }
-            hits
-        } else {
-            crate::chrome::help::render_help_overlay(
-                buf,
-                &app.help_state,
-                &app.live,
-                app.studio.active.then(|| {
-                    crate::keybind_help::backlot_help_groups(
-                        &app.live.keybinds,
-                        &app.live.prefix,
-                        &app.panel_config,
-                        app.hollywood_key.unwrap_or_default(),
-                        app.panel_key_combo,
-                    )
-                }),
-                &app.shell.palette,
-            )
-            .unwrap_or_default()
-        }
+        // S5's launcher or herdr's overlay — `draw_overlays_s5` owns
+        // the branch and the floating picker.
+        super::draw_overlays_s5::render_help(app, buf, area)
     } else {
         crate::chrome::help::HelpRender::default()
     };

@@ -208,15 +208,9 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return;
         }
-        // A press outside the expanded Call Sheet collapses it back
-        // to the pill (A10.1) — the press itself keeps routing, so a
-        // click on a pane focuses it and hands the keys back.
-        if self.hollywood.expanded()
-            && matches!(mouse.kind, MouseEventKind::Down(_))
-            && self.hollywood.view.is_none()
-        {
-            self.hollywood_collapse();
-        }
+        // A10.1: a press outside the expanded Call Sheet collapses
+        // it; the press itself keeps routing (`hollywood/mouse.rs`).
+        self.hollywood_outside_press(mouse.kind);
         // The open panel owns its rect: rows act like Enter, the wheel
         // scrolls, the scrollbar grabs. A press outside a focused panel
         // hands focus back to the panes and routes normally.
@@ -413,19 +407,4 @@ impl App {
             self.focus_adjacent_tab(dir);
         }
     }
-}
-
-/// `pane_scrollbar_offset`: row → VT scroll offset via the hit's
-/// metrics — `offset_from_bottom` space.
-fn pane_scrollbar_offset(
-    hit: &crate::chrome::render::PaneHit,
-    row: u16,
-    grab_row_offset: Option<u16>,
-) -> Option<usize> {
-    let track = hit.scrollbar_rect?;
-    let metrics = hit.scroll?;
-    (metrics.max_offset_from_bottom > 0).then(|| match grab_row_offset {
-        Some(grab) => scroll::scrollbar_offset_from_drag_row(metrics, track, row, grab),
-        None => scroll::scrollbar_offset_from_row(metrics, track, row),
-    })
 }

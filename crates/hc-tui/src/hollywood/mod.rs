@@ -22,8 +22,9 @@ mod sheet;
 mod title;
 mod view;
 
-pub(crate) use draw::{HollywoodRender, expanded_height, render};
+pub(crate) use draw::{HollywoodRender, render};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
+pub(crate) use plan::expanded_height;
 pub(crate) use rows::{Target, band_rows, frames};
 pub(crate) use sheet::{Wait, machine_label, status_of, waiting_items};
 pub(crate) use view::CardView;

@@ -301,3 +301,18 @@ impl App {
         self.persist_chrome_preferences();
     }
 }
+
+/// `pane_scrollbar_offset`: row → VT scroll offset via the hit's
+/// metrics — `offset_from_bottom` space.
+fn pane_scrollbar_offset(
+    hit: &crate::chrome::render::PaneHit,
+    row: u16,
+    grab_row_offset: Option<u16>,
+) -> Option<usize> {
+    let track = hit.scrollbar_rect?;
+    let metrics = hit.scroll?;
+    (metrics.max_offset_from_bottom > 0).then(|| match grab_row_offset {
+        Some(grab) => scroll::scrollbar_offset_from_drag_row(metrics, track, row, grab),
+        None => scroll::scrollbar_offset_from_row(metrics, track, row),
+    })
+}

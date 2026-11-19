@@ -2,8 +2,8 @@
 //! expands it; in the expanded panel a row click selects and acts
 //! like Enter, a card's Apply/Cancel/Show hits run that action, the
 //! input line opens for editing, the scrollbar grabs and the wheel
-//! scrolls. A press outside the expanded panel is not routed here —
-//! it reaches whatever is under the layer and leaves the panel open.
+//! scrolls. A press outside the expanded panel collapses it (A10.1)
+//! and keeps routing to whatever is under the layer.
 
 use ratatui::layout::Position;
 
@@ -20,6 +20,19 @@ fn contains(rect: ratatui::layout::Rect, point: (u16, u16)) -> bool {
 }
 
 impl App {
+    /// A press outside the expanded Call Sheet collapses it back to
+    /// the pill (S5 §2, A10.1) — the press itself keeps routing, so
+    /// a click on a pane focuses it and hands the keys back. An open
+    /// "Show me" view swallows the press itself instead.
+    pub(crate) fn hollywood_outside_press(&mut self, kind: MouseEventKind) {
+        if self.hollywood.expanded()
+            && matches!(kind, MouseEventKind::Down(_))
+            && self.hollywood.view.is_none()
+        {
+            self.hollywood_collapse();
+        }
+    }
+
     /// The layer's mouse dispatch — called only when the press is
     /// inside `hollywood_hits.area` (or the wheel anywhere over it).
     pub(crate) fn hollywood_mouse(&mut self, mouse: MouseInput) {
