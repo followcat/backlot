@@ -312,6 +312,13 @@ impl App {
                         kind = WakeKind::Panel;
                     }
                 },
+                reply = self.mv_rx.recv() => {
+                    if let Some(reply) = reply {
+                        self.on_mv_reply(reply);
+                        dirty = true;
+                        kind = WakeKind::Panel;
+                    }
+                },
                 reply = self.sheet_rx.recv() => {
                     if let Some(reply) = reply {
                         self.on_sheet_reply(reply);

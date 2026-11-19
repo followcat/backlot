@@ -99,6 +99,7 @@ async fn popup_terminal_is_the_target() {
         key: None,
         created_ms: 9,
         seen: true,
+        install_machine: None,
     });
     let mut t9 = crate::sidebar::fixture::term("t9");
     t9.created_ms = 9;

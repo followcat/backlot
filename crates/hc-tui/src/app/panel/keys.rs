@@ -157,6 +157,13 @@ impl App {
                     self.panel.accepted_folds.insert(id);
                 }
             }
+            Some(Target::Stage(machine)) => {
+                // The `[r] start` the row prints (U6c) — a click or
+                // Enter on `stage not running` is the same call.
+                if !self.machine_stage_running(machine.as_deref()) {
+                    self.run_action(studio_cmds::stage_start(machine));
+                }
+            }
             Some(Target::Block(id)) => {
                 // A single-line block expands — the same manual
                 // override Space writes; the selection follows the

@@ -98,6 +98,7 @@ async fn every_pane_the_app_owns_takes_the_configured_budgets() {
         persistent: false,
         owner: "space-t1".into(),
         command: "alt+f".into(),
+        install_machine: None,
     });
     app.on_popup_spawned("t7".into(), 7);
     let popup = app.popup.as_ref().expect("popup attached");

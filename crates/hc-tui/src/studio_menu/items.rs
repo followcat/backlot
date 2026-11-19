@@ -31,10 +31,12 @@ impl StudioMenu {
             MenuKind::Card => self.card_items(&item),
             MenuKind::Stage => self.stage_items(&item),
             MenuKind::Lot => self.lot_items(&item),
+            MenuKind::Machine => self.machine_items(&item),
         };
         // An unreachable machine dims every row that runs a command —
         // Focus/Peek/sheet opens stay live: they read what is already
-        // published.
+        // published. A Machine row's connect/rename/remove are local
+        // endpoint ops — the repair path a dead machine needs (U6c).
         if self.offline {
             for it in &mut out {
                 match it.act {
@@ -42,7 +44,10 @@ impl StudioMenu {
                     | StudioAct::Peek
                     | StudioAct::Sheet
                     | StudioAct::TaskSheet
-                    | StudioAct::CardShow => {}
+                    | StudioAct::CardShow
+                    | StudioAct::MachineRename
+                    | StudioAct::MachineRemove
+                    | StudioAct::MachineAdd => {}
                     _ => {
                         it.dim.get_or_insert_with(|| "unreachable".to_owned());
                     }
@@ -337,6 +342,85 @@ impl StudioMenu {
             Some('s'),
             StudioAct::StageStart,
         )]
+    }
+
+    /// A machine row's menu (U6c §4): only the valid actions for
+    /// the row's own state — upgrade when behind the known latest,
+    /// install when the probe said `no backlot`, start vs restart
+    /// the stage on its running state, `New studio here` when a
+    /// `backlot` can answer, then the endpoint ops the herdr menu
+    /// owned before.
+    fn machine_items(
+        &self,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        let mut out = Vec::new();
+        let installed = match &self.backlot {
+            Some(MenuBacklot::Installed(version)) => Some(version.clone()),
+            _ => None,
+        };
+        let behind = installed
+            .as_deref()
+            .zip(self.latest.as_deref())
+            .is_some_and(|(installed, latest)| crate::machine_versions::behind(installed, latest));
+        if behind {
+            let latest = self.latest.clone().unwrap_or_default();
+            out.push(item(
+                format!("Upgrade backlot to v{latest}"),
+                Some('u'),
+                StudioAct::MachineInstall,
+            ));
+        } else if matches!(self.backlot, Some(MenuBacklot::Missing)) {
+            out.push(item(
+                "Install backlot".to_owned(),
+                Some('i'),
+                StudioAct::MachineInstall,
+            ));
+        }
+        if installed.is_some() && self.stage_down {
+            out.push(item(
+                "Start the stage".to_owned(),
+                Some('s'),
+                StudioAct::StageStart,
+            ));
+        } else if installed.is_some() {
+            out.push(item(
+                "Restart the stage".to_owned(),
+                Some('r'),
+                StudioAct::StageRestart,
+            ));
+        }
+        if installed.is_some() {
+            out.push(item(
+                "New studio here".to_owned(),
+                Some('n'),
+                StudioAct::NewStudio,
+            ));
+        }
+        if self.machine.is_none() {
+            out.push(item(
+                "Add machine".to_owned(),
+                Some('a'),
+                StudioAct::MachineAdd,
+            ));
+        } else {
+            out.push(item(
+                "Connect machine".to_owned(),
+                Some('c'),
+                StudioAct::MachineConnect,
+            ));
+            out.push(item(
+                "Rename machine".to_owned(),
+                Some('e'),
+                StudioAct::MachineRename,
+            ));
+            out.push(item(
+                "Remove machine".to_owned(),
+                Some('x'),
+                StudioAct::MachineRemove,
+            ));
+        }
+        out
     }
 
     /// The lot pill's quick menu (S5 §2.3) — lot-wide surfaces in

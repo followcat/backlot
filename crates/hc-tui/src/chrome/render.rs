@@ -54,6 +54,32 @@ pub(crate) struct WorkspaceHit {
     pub group_toggle: Option<(Rect, String)>,
 }
 
+/// U6c: a machine row's version sub-line in the expanded sidebar —
+/// the app renders the text and tone, the sidebar only draws it.
+/// `None` lines (plain mode) keep the row one line tall, so Herdr's
+/// `--plain` frames are untouched.
+#[derive(Debug, Clone)]
+pub(crate) struct MachineLine {
+    /// The endpoint's `hc` version when `machine.list` knows it —
+    /// drawn dim as `hc <v>` ahead of the backlot text when it fits.
+    pub hc: Option<String>,
+    /// `backlot <v>` / `↑<latest>` / `no backlot` / `backlot …`.
+    pub text: String,
+    /// The accent (`↑` update hint), normal or dim tone.
+    pub tone: MachineTone,
+}
+
+/// A machine sub-line's palette choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MachineTone {
+    /// `backlot <v>` — plain text.
+    Normal,
+    /// `↑<latest>` — the accent colour.
+    Accent,
+    /// `no backlot`, `backlot …`, `backlot ?` — dim.
+    Dim,
+}
+
 #[derive(Clone)]
 pub(crate) struct MachineHit {
     pub rect: Rect,
@@ -162,6 +188,9 @@ pub(crate) struct ShellRenderState<'a> {
     /// The lot latch for this frame — `None` in plain mode and
     /// whenever there is nothing for the pill to say.
     pub lot: Option<super::lot::LotFrame<'a>>,
+    /// U6c's per-machine version lines, keyed by endpoint id —
+    /// `None` in plain mode so Herdr's rows stay exactly one line.
+    pub machine_lines: Option<&'a std::collections::BTreeMap<ClientEndpointId, MachineLine>>,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {

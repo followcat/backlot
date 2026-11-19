@@ -66,10 +66,20 @@ pub(crate) fn render_expanded(
             );
         }
     }
+    // A machine row's second line is U6c's version sub-line —
+    // `machine_lines` is `None` in plain mode, so Herdr's rows stay
+    // one line and the scroll math is unchanged there.
+    let endpoint_height = |endpoint: &super::snapshot::ClientShellEndpoint| -> u16 {
+        1 + u16::from(
+            state
+                .machine_lines
+                .is_some_and(|lines| lines.contains_key(&endpoint.endpoint_id)),
+        )
+    };
     let row_heights = rows
         .iter()
         .map(|row| match row {
-            Row::Endpoint(_) => 1,
+            Row::Endpoint(index) => endpoint_height(&state.endpoints[*index]),
             Row::Workspace { endpoint, entry } => {
                 let endpoint = &state.endpoints[*endpoint];
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
@@ -219,18 +229,35 @@ pub(crate) fn render_expanded(
                     break;
                 }
                 let endpoint = &state.endpoints[*index];
-                let rect = Rect::new(body.x, y, content_width, 1);
+                let height = endpoint_height(endpoint).min(body.bottom().saturating_sub(y));
+                if height == 0 {
+                    break;
+                }
+                let rect = Rect::new(body.x, y, content_width, height);
+                let name_row = Rect::new(rect.x, rect.y, rect.width, 1);
                 let collapsed = state.collapsed_endpoints.contains(&endpoint.endpoint_id);
                 let marker = if collapsed { "▸" } else { "▾" };
                 let status_badge = super::endpoint_sidebar_row::render_endpoint_row(
                     buffer,
-                    rect,
+                    name_row,
                     marker,
                     endpoint,
                     collapsed && &endpoint.endpoint_id == state.active_endpoint_id,
                     state.machine_diagnostics,
                     palette,
                 );
+                if let Some(line) = state
+                    .machine_lines
+                    .and_then(|lines| lines.get(&endpoint.endpoint_id))
+                    && rect.height > 1
+                {
+                    super::endpoint_sidebar_row::render_machine_line(
+                        buffer,
+                        Rect::new(rect.x, rect.y + 1, rect.width, 1),
+                        line,
+                        palette,
+                    );
+                }
                 hits.machines.push(MachineHit {
                     rect,
                     status_badge,
@@ -243,7 +270,7 @@ pub(crate) fn render_expanded(
                     endpoint_id: endpoint.endpoint_id.clone(),
                 });
                 y = y
-                    .saturating_add(1)
+                    .saturating_add(height)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
             }
             Row::Workspace { endpoint, entry } => {

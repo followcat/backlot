@@ -155,6 +155,65 @@ impl App {
             .label(&crate::config::format_prefix_combos(&self.live.prefix))
     }
 
+    /// U6c's `machines` group — a row only where the machine has a
+    /// valid action: `Upgrade backlot to v<latest>` behind, `Install
+    /// backlot` missing, `Restart the stage` while its stage runs.
+    /// A down stage is the waiting group's `Start stage` already.
+    fn machines_group(&self) -> HelpGroup {
+        let machines = self.panel_summaries();
+        let local = crate::project::LOCAL_LABEL;
+        let multi = data::spans_machines(&machines);
+        let latest = self.latest_release();
+        let mut rows = Vec::new();
+        for endpoint in &self.projection.endpoints {
+            let menu = self.machine_menu(&endpoint.endpoint_id);
+            let machine = menu.machine.clone();
+            let name = hollywood::machine_label(machine.as_deref(), local, multi);
+            let name = if name.is_empty() { local } else { name };
+            let (label, act) = match &menu.backlot {
+                Some(crate::studio_menu::MenuBacklot::Installed(installed))
+                    if latest
+                        .as_deref()
+                        .is_some_and(|l| crate::machine_versions::behind(installed, l)) =>
+                {
+                    (
+                        format!(
+                            "Upgrade backlot to v{} · {name}",
+                            latest.clone().unwrap_or_default()
+                        ),
+                        StudioAct::MachineInstall,
+                    )
+                }
+                Some(crate::studio_menu::MenuBacklot::Missing) => (
+                    format!("Install backlot · {name}"),
+                    StudioAct::MachineInstall,
+                ),
+                Some(crate::studio_menu::MenuBacklot::Installed(_))
+                    if !menu.stage_down && !menu.offline =>
+                {
+                    (
+                        format!("Restart the stage · {name}"),
+                        StudioAct::StageRestart,
+                    )
+                }
+                _ => continue,
+            };
+            rows.push(HelpRow {
+                label,
+                hint: "run ↵".to_owned(),
+                glyph: "",
+                launch: Launch::Act {
+                    menu: Box::new(menu),
+                    act,
+                },
+            });
+        }
+        HelpGroup {
+            title: "machines".to_owned(),
+            rows,
+        }
+    }
+
     /// The `studio & task actions` group — the four surface rows
     /// then the `…` pickers. A picker with no targets at all leaves
     /// no row: the overlay never offers a no-op press.
@@ -249,7 +308,11 @@ impl App {
             self.waiting_group(),
             self.actions_group(),
             self.hollywood_group(),
+            self.machines_group(),
         ];
+        // U6c: an empty machines section (a single local endpoint,
+        // nothing to install or restart) never lists.
+        groups.retain(|g| g.title != "machines" || !g.rows.is_empty());
         let reference = crate::keybind_help::backlot_help_groups(
             &self.live.keybinds,
             &self.live.prefix,

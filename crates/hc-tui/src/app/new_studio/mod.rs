@@ -495,6 +495,7 @@ impl App {
             persistent: false,
             owner: String::new(),
             command: String::new(),
+            install_machine: None,
         });
         self.submit_action(Action::RunPopup { params });
     }

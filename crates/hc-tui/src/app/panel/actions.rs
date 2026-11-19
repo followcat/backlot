@@ -110,16 +110,28 @@ impl App {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        let Some(key) = targets.get(index).and_then(|t| t.studio()) else {
-            return;
+        let machine = match targets.get(index) {
+            // The stage-down row's own machine (U6c) — Enter/click
+            // already runs it; `r` on the row does too.
+            Some(Target::Stage(machine)) => machine.clone(),
+            Some(target) => {
+                let Some(studio) = target
+                    .studio()
+                    .and_then(|key| crate::panel::data::studio(&machines, key))
+                else {
+                    return;
+                };
+                if self.machine_stage_running(studio.machine) {
+                    return;
+                }
+                studio.machine.map(str::to_owned)
+            }
+            None => return,
         };
-        let Some(studio) = crate::panel::data::studio(&machines, key) else {
-            return;
-        };
-        if self.machine_stage_running(studio.machine) {
+        if self.machine_stage_running(machine.as_deref()) {
             return;
         }
-        self.run_action(studio_cmds::stage_start(studio.machine.map(str::to_owned)));
+        self.run_action(studio_cmds::stage_start(machine));
     }
 
     /// `f` on a ready-to-finish studio's rows: arm the inline

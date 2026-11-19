@@ -123,6 +123,10 @@ impl App {
         // the publish just invalidated cannot paint a stale Waiting.
         self.tick_waiting(Instant::now());
         self.refresh_projection();
+        // U6c: the publish decides which machines want a version
+        // probe — doc answers, reconnects and the 6h throttle all
+        // live in `machine_versions`.
+        self.sync_machine_versions();
         // Focusing marks the active tab's panes seen — an idle agent
         // reports `Done` only while its workspace stayed background.
         self.mark_active_seen();

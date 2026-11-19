@@ -107,6 +107,10 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     let restart_ready = app.restart_ready.clone();
     let update_badge =
         crate::chrome::render::UpdateBadge::new(update_latest.as_deref(), restart_ready.as_deref());
+    // U6c's per-machine version lines — `None` keeps plain mode
+    // cell-identical to Herdr; resolved before `shell_state`'s
+    // mutable borrows below.
+    let machine_lines = (!app.plain).then(|| app.machine_lines());
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         endpoints: &app.projection.endpoints,
@@ -131,6 +135,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         cast,
         cast_scroll: &mut app.studio.cast_scroll,
         lot,
+        machine_lines: machine_lines.as_ref(),
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

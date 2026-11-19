@@ -201,6 +201,7 @@ pub(crate) mod mark {
             }
             Target::Person(key, r) => Some(role(key, r)),
             Target::Task(key, t) => Some(task(key, t)),
+            Target::Stage(m) => Some(stage(m.as_deref())),
             Target::None => None,
         }
     }

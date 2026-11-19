@@ -52,6 +52,9 @@ pub(super) struct PopupState {
     /// The terminal showed up in the inventory at least once — only then
     /// does disappearance mean "exited" instead of "not yet published".
     pub seen: bool,
+    /// U6c: the machine this popup installed backlot on — its close
+    /// invalidates the machine's locate + version caches and re-probes.
+    pub install_machine: Option<String>,
 }
 
 /// The `[[keys.command]]` geometry stashed while `terminal.run` is in
@@ -65,6 +68,8 @@ pub(super) struct PopupPending {
     pub persistent: bool,
     pub owner: String,
     pub command: String,
+    /// U6c's machine-install popup — carried into `PopupState`.
+    pub install_machine: Option<String>,
 }
 
 /// A reporting popup's captured button — the reference's
@@ -200,6 +205,7 @@ impl App {
             persistent: false,
             owner: String::new(),
             command: String::new(),
+            install_machine: None,
         });
         self.submit_action(Action::RunPopup { params });
     }
@@ -257,6 +263,7 @@ impl App {
             key: None,
             created_ms,
             seen: false,
+            install_machine: pending.install_machine.clone(),
         });
     }
 
@@ -285,6 +292,11 @@ impl App {
                 created_ms: popup.created_ms,
                 allow_gone: true,
             });
+            // U6c: an install popup's close re-probes the machine —
+            // its locate cache and version verdict are both stale.
+            if let Some(machine) = popup.install_machine {
+                self.machine_install_closed(&machine);
+            }
             self.sched.mark_dirty(Instant::now());
         }
     }

@@ -190,6 +190,11 @@ impl App {
                     !self.machine_reachable(studio.machine),
                 ))
             }
+            Target::Stage(machine) => {
+                let mut menu = StudioMenu::stage(!self.machine_reachable(machine.as_deref()));
+                menu.machine = machine.clone();
+                Some(menu)
+            }
             Target::None => None,
         }
     }
