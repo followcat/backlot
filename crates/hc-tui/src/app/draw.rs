@@ -196,16 +196,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         shape: CursorShape::Default,
         blinking: true,
     };
-    let hide_cursor = app.help
-        || app.dialog.is_some()
-        || app.new_studio.is_some()
-        || app.menu.is_some()
-        || app.navigator.is_some()
-        || app.settings.is_some()
-        || app.panel_fullscreen_at(area.width)
-        || app.opening_visible()
-        || app.mode == Mode::Copy
-        || (app.mode == Mode::Navigate && app.area.0 <= app.shell.mobile_width_threshold);
+    let hide_cursor = app.hide_pane_cursor(area.width);
     let scrollbars = app.shell.pane_scrollbars;
     // The reference rebuilds the whole frame as ratatui cells whenever a
     // selection/search highlight or the copy-mode cursor paints

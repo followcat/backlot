@@ -304,6 +304,98 @@ async fn a_remote_studio_reads_and_reports_on_its_machine() {
 }
 
 #[tokio::test]
+async fn an_open_report_leaves_no_tab_text_inside_the_body() {
+    // S2 round-1 review: `o` on a populated Deliveries tab must not
+    // leave the tab's rows showing under the report.
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    let calls: Recorded = Default::default();
+    app.set_ns_run(recorded_run(
+        calls.clone(),
+        vec![(
+            "report show --studio acme-shop --file reports/d1.md".to_string(),
+            Ok("short body".to_string()),
+        )],
+    ));
+    open_panel(&mut app);
+    app.sheet_open(
+        crate::studio::StudioKey::local("acme-shop"),
+        Some("task-1".into()),
+    );
+    let status = serde_json::json!({
+        "schema": "studio/1",
+        "id": "acme-shop",
+        "requirement_version": 1, "last_seq": 3,
+        "tasks": {
+            "task-1": {
+                "id": "task-1", "title": "t", "status": "delivered",
+                "task_kind": "task",
+                "requirement_version": 1, "priority": "normal",
+                "acceptance": "it works", "rework_rounds": 0,
+                "dependencies": [],
+                "created_seq": 1, "created_ts_ms": 1, "last_ts_ms": 1,
+                "deliveries": [{
+                    "n": 1,
+                    "actor": {"runner": "agent-a", "model": "m",
+                              "permission_profile": "standard"},
+                    "commits": "5ccee8581111222233334444555566667777aa01..4121d81d9999aaaabbbbccccddddeeeeffff0000",
+                    "requirement_version": 1,
+                    "report": "reports/d1.md", "checks": [],
+                    "seq": 2, "ts_ms": 2
+                }],
+                "reviews": []
+            }
+        }
+    });
+    app.on_sheet_reply(SheetReply::Status {
+        epoch: app.sheet.as_ref().unwrap().epoch,
+        out: Ok(status.to_string()),
+    });
+    key(&mut app, hc_vt::Key::Char('2'));
+    // Short SHAs on the delivery row — the full range never fits.
+    {
+        let sheet = app.sheet.as_mut().unwrap();
+        let lines = lines_for(sheet, None);
+        let d1 = lines.iter().find(|l| l.text.contains("d1 ")).unwrap();
+        assert!(
+            d1.text.contains("5ccee858..4121d81d"),
+            "short range: {}",
+            d1.text
+        );
+        sheet.sel = lines.iter().position(|l| l.file.is_some()).unwrap_or(0);
+    }
+    key(&mut app, hc_vt::Key::Char('o'));
+    drain_sheet(&mut app).await;
+    let buf = draw_to(&mut app, 120, 36);
+    let body = app.sheet_hits.body;
+    let text: String = (body.y..body.y + body.height)
+        .map(|y| {
+            (body.x..body.x + body.width)
+                .map(|x| buf.buffer()[(x, y)].symbol().to_string())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("short body"), "{text}");
+    assert!(
+        !text.contains("agent-a"),
+        "tab text under the report: {text}"
+    );
+}
+
+#[tokio::test]
+async fn the_pane_cursor_hides_while_the_sheet_is_open() {
+    // S2 round-1 review: the focused pane's hardware cursor must not
+    // print through the sheet — the same rule the other modals get.
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    assert!(!app.hide_pane_cursor(120));
+    app.sheet_open(crate::studio::StudioKey::local("acme-shop"), None);
+    assert!(app.hide_pane_cursor(120));
+}
+
+#[tokio::test]
 async fn the_sheet_draws_inside_the_modal_band_at_every_width() {
     let mut app = app_with_panel_doc();
     app.area = (80, 24);

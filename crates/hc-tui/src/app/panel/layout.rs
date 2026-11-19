@@ -7,6 +7,7 @@ use ratatui::layout::Rect;
 
 use super::App;
 use super::{COLLAPSED_WIDTH, MIN_PANE_BESIDE_DOCK, STRIP_BESIDE_COLS};
+use crate::app::Mode;
 use crate::panel::{self, PanelMode};
 
 impl App {
@@ -120,6 +121,24 @@ impl App {
             area.width - self.dock_reserve(area.width),
             area.height,
         )
+    }
+
+    /// The focused pane's hardware cursor stays hidden while any
+    /// overlay owns the frame — every modal above plus the sheet and
+    /// a full-screen dock; otherwise it would print through the
+    /// covering surface (S2 round-1 review).
+    pub(crate) fn hide_pane_cursor(&self, cols: u16) -> bool {
+        self.help
+            || self.dialog.is_some()
+            || self.new_studio.is_some()
+            || self.sheet.is_some()
+            || self.menu.is_some()
+            || self.navigator.is_some()
+            || self.settings.is_some()
+            || self.panel_fullscreen_at(cols)
+            || self.opening_visible()
+            || self.mode == Mode::Copy
+            || (self.mode == Mode::Navigate && self.area.0 <= self.shell.mobile_width_threshold)
     }
 
     /// The one geometry helper every consumer shares: pane layout

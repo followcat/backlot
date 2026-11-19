@@ -87,6 +87,17 @@ pub(super) fn deliveries(sheet: &Sheet, out: &mut Vec<SheetLine>) {
     }
 }
 
+/// `<sha40>..<sha40>` → `abcd1234..ef567890` — the full hashes never
+/// fit the sheet's column; the first eight each name the range.
+fn short_commits(commits: &str) -> String {
+    commits
+        .split('.')
+        .filter(|side| !side.is_empty())
+        .map(|side| side.get(..8).unwrap_or(side))
+        .collect::<Vec<_>>()
+        .join("..")
+}
+
 /// One delivery's head line: `d2 <runner>/<model> · <commits> ·
 /// v<req>` — the report file rides the row for `o`.
 fn delivery_line(delivery: &DeliveryRecord, out: &mut Vec<SheetLine>) {
@@ -94,7 +105,7 @@ fn delivery_line(delivery: &DeliveryRecord, out: &mut Vec<SheetLine>) {
     let commits = if delivery.commits.is_empty() {
         "no commits".to_string()
     } else {
-        delivery.commits.clone()
+        short_commits(&delivery.commits)
     };
     let text = format!(
         "d{} {} · {} · v{}",

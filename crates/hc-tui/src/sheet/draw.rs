@@ -147,10 +147,16 @@ pub(crate) fn render(
     let scroll = sheet
         .scroll
         .min(lines.len().saturating_sub(body.height as usize));
+    // An open report owns the body — the tab's lines must not paint
+    // under it, or a shorter report line leaves the old text behind.
     for (at, line) in lines
         .iter()
         .skip(scroll)
-        .take(body.height as usize)
+        .take(if sheet.view.is_some() {
+            0
+        } else {
+            body.height as usize
+        })
         .enumerate()
     {
         let y = body.y + at as u16;
