@@ -129,13 +129,25 @@ fn any_brief(s: &StudioState) -> bool {
 
 /// A draft path on the card: relative paths resolve against
 /// Hollywood's own directory — where `hollywood propose` ran —
-/// absolute ones stay.
+/// absolute ones stay. A relative path that climbs out (`..`) is
+/// not resolved: the caller's file open simply misses inside `hdir`
+/// rather than serving a host file the card named (D17a).
 pub(crate) fn resolve_draft(hdir: &Path, p: &str) -> std::path::PathBuf {
     let path = Path::new(p);
     if path.is_absolute() {
         path.to_path_buf()
-    } else {
+    } else if path.components().all(|c| {
+        matches!(
+            c,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    }) {
         hdir.join(path)
+    } else {
+        // Any `..` (or other non-normal component): resolve inside
+        // `hdir` under a leaf that can't exist — the draft read
+        // fails closed instead of escaping.
+        hdir.join(".refused")
     }
 }
 

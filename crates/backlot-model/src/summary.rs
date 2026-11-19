@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::event::{Priority, StudioMode};
+use crate::event::{Priority, StudioMode, UsageTotals};
 use crate::state::{StudioState, TaskStatus};
 use crate::summary_build::*;
 
@@ -87,6 +87,11 @@ pub struct StudioSummary {
     /// Every task the ledger recorded.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub tasks_total: u32,
+    /// Token/cost totals the studio's deliveries reported (P4a) —
+    /// factual sums only, never a score (D8). Absent while zero so
+    /// documents for usage-less studios stay byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<UsageTotals>,
     /// The compact per-task projection the dock's task rows and the
     /// task sheet read (S2) — enough to draw every task state without
     /// a records call. Documents an older stage wrote have none.
@@ -285,6 +290,7 @@ pub fn summary(
                     ready_to_finish: false,
                     tasks_done: 0,
                     tasks_total: 0,
+                    usage: None,
                     tasks: Vec::new(),
                     roles: Vec::new(),
                 });
@@ -377,6 +383,7 @@ pub fn summary(
                 })
                 .count() as u32,
             tasks_total: state.tasks.len() as u32,
+            usage: (!state.usage.is_empty()).then_some(state.usage),
             tasks: state
                 .tasks
                 .values()

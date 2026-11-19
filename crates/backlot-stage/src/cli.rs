@@ -109,11 +109,16 @@ impl Env {
     }
 }
 
-/// Studio names are `[a-z0-9_-]{1,16}` (terminal names are
-/// `bl-<studio>-<role>`, limit 32). Checked before any path is built
-/// so a name can never escape the state directory.
+/// Studio names are `[a-z0-9_-]{1,16}` starting alphanumeric
+/// (terminal names are `bl-<studio>-<role>`, limit 32). Checked
+/// before any path is built so a name can never escape the state
+/// directory or spell an option downstream (D17a).
 pub fn valid_studio_name(name: &str) -> bool {
     (1..=16).contains(&name.len())
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
         && name
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-'))

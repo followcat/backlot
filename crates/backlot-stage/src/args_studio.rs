@@ -140,6 +140,45 @@ pub(crate) fn studio_prune(common: &mut Common, it: &mut It) -> Result<(Common, 
     ))
 }
 
+/// `studio migrate [<studio> | --all] [--dry-run]` — rewrites the
+/// ledger at the current schema version; appends nothing.
+pub(crate) fn studio_migrate(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut studio = None;
+    let mut all = false;
+    let mut dry_run = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--all" => all = true,
+            "--dry-run" => dry_run = true,
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO));
+            }
+            _ if studio.is_none() => studio = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    if studio.is_some() && all {
+        return Err(usage("give a studio or --all, not both", U_STUDIO));
+    }
+    if all && common.studio.is_some() {
+        return Err(usage("--all and --studio do not mix", U_STUDIO));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::StudioMigrate {
+            studio,
+            all,
+            dry_run,
+        },
+    ))
+}
+
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut src = Source::default();
     let mut summary = None;

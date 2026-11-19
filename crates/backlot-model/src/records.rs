@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::Serialize;
 
-use crate::event::{ActorIdentity, Event, TaskStateChange, Verdict};
+use crate::event::{ActorIdentity, Event, TaskStateChange, UsageTotals, Verdict};
 use crate::state::{StudioState, Task, TaskStatus, replay};
 
 /// One studio's name and its event log.
@@ -90,6 +90,9 @@ pub struct ActorRecord {
     pub final_outcome: FinalOutcome,
     /// Sum over the actor's tasks of created → last task event.
     pub wall_time_ms: u64,
+    /// Token/cost figures this actor's deliveries reported (P4a) —
+    /// factual sums beside `wall_time_ms`, zero while none did (D8).
+    pub usage: UsageTotals,
     /// False under `MIN_TASKS`: the CLI prints "not enough data".
     pub enough_data: bool,
 }
@@ -115,6 +118,7 @@ struct Acc {
     takeovers: usize,
     final_outcome: FinalOutcome,
     wall_time_ms: u64,
+    usage: UsageTotals,
 }
 
 impl Acc {
@@ -141,6 +145,7 @@ impl Acc {
             takeovers: self.takeovers,
             final_outcome: self.final_outcome,
             wall_time_ms: self.wall_time_ms,
+            usage: self.usage,
             enough_data: self.tasks >= MIN_TASKS,
         }
     }
@@ -246,6 +251,9 @@ fn fold_task(accs: &mut BTreeMap<(ActorIdentity, String), Acc>, task: &Task, stu
                 }
             }
             if let Some(d) = task.deliveries.iter().find(|d| d.n == *n) {
+                if let Some(u) = &d.usage {
+                    acc.usage.add(u);
+                }
                 for c in &d.checks {
                     if c.passed {
                         acc.reported_checks_passed += 1;

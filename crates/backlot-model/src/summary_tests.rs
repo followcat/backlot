@@ -967,6 +967,7 @@ fn attention_seq_and_detail_follow_the_open_attention() {
     let mut base = base_events();
     base.push(ev(4, "director", cast("t1", "actor-a", "a")));
     let raise = |seq: u64, role: &str, detail: String| Event {
+        v: crate::event::LEDGER_VERSION,
         seq,
         ts_ms: 0,
         by: crate::event::EventBy::role("stage"),
@@ -1035,6 +1036,7 @@ fn attention_seq_and_detail_follow_the_open_attention() {
     crate::state::apply(
         &mut cleared,
         &Event {
+            v: crate::event::LEDGER_VERSION,
             seq: 11,
             ts_ms: 0,
             by: crate::event::EventBy::role("stage"),

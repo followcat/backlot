@@ -111,6 +111,11 @@ pub(crate) enum Row<'a> {
         kind: Owed,
         text: String,
     },
+    /// The studio's reported token/cost line (P4a) — emitted only
+    /// while `usage` is `Some`, i.e. at least one counter moved.
+    Usage {
+        studio: StudioRef<'a>,
+    },
     /// `╰──╯`
     BlockBottom(StudioRef<'a>),
     /// `│ <mark> <name> <task> <flag>   <state> │`
@@ -176,6 +181,7 @@ impl Row<'_> {
             | Row::Offline { .. }
             | Row::Empty
             | Row::Owed { .. }
+            | Row::Usage { .. }
             | Row::BlockBottom(_)
             | Row::Drawer { .. }
             | Row::SetupHint => Target::None,
@@ -236,6 +242,11 @@ fn block_rows<'a>(
             kind: Owed::Confirm,
             text: format!("finish {}? [y/n]", studio.studio.id),
         });
+    }
+    // P4a: runner-reported usage sits beside the owed line — a
+    // factual count only while a delivery recorded any (D8).
+    if studio.studio.usage.is_some() {
+        out.push(Row::Usage { studio });
     }
     let emit_person = |out: &mut Vec<Row<'a>>, role: &'a RoleSummary| {
         let key = studio.key();

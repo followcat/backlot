@@ -271,6 +271,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         | Cmd::Runners { .. }
         | Cmd::Repos { .. }
         | Cmd::StudioPrune { .. }
+        | Cmd::StudioMigrate { .. }
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }
@@ -544,6 +545,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
             commits,
             report,
             checks,
+            usage,
         } => {
             must_exist(&report, "--report")?;
             let task = caller.task.clone().unwrap_or_default();
@@ -572,6 +574,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                         report: pf.dest.clone(),
                         requirement_version: t.requirement_version,
                         checks,
+                        usage,
                     },
                     by,
                     vec![pf],

@@ -86,6 +86,19 @@ v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   the producer and only the user or Hollywood can intervene. `backlot status` and
   `status --all` lead the studio block with a `producer alert:` line, and Hollywood's notice
   names the producer outright (`producer stalled` / `producer cannot resume — needs attention`).
+- **Ledger schema versioning and migration.** Every studio and Hollywood event now carries
+  `v: 1`; unversioned lines still load as `v: 1`, and a `v` newer than the binary refuses
+  with a clear "upgrade backlot" error. `backlot_model::migrate` is a pure step-by-step
+  pipeline ready for future versions, and `backlot studio migrate
+  [<studio> | --all] [--dry-run]` rewrites a log in place — backup kept, atomic rename,
+  replay-verified — while a current log is a no-op.
+- **Runner-reported usage and cost.** `backlot deliver` accepts `--tokens-in`,
+  `--tokens-out`, `--cache-read-tokens` and `--cost-usd` (parsed to exact integer
+  micro-dollars), recorded as an optional `usage` object on `task.delivered`. The sums are
+  factual only — `StudioState`, `ActorRecord` and the `backlot/1` summary carry totals, and
+  `backlot status`, `backlot records`, the studio dock (`∑ 12.4k/3.1k tok · $0.08`) and the
+  studio sheet show them only while a counter is non-zero. No score, per D8; `--plain` is
+  unchanged.
 
 ### Changed
 
@@ -95,6 +108,17 @@ v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - Every stage `git` call is bounded at 60 seconds. A hung git is spawned in its own process
   group, gets SIGTERM then SIGKILL (one second later), is reaped, and surfaces
   `git timed out after <n>s` instead of blocking the stage tick for every studio.
+
+### Security
+
+- **D17a boundary hardening.** A permission prompt whose block reaches for `BACKLOT_`
+  reads/`unset`/`export`/`declare`, `env -u`/`--unset`, `/proc/*/environ` reads or
+  `env`/`printenv` dumps coupled with secret/`.env` paths is now flagged `needs_user`
+  alongside the existing `env -i`/`--ignore-environment` checks. `report show --file`
+  rejects NUL bytes and keeps its canonicalized-target containment; studio and card
+  identifiers are validated before any path or argv is built (including `..` draft
+  escapes and leading `-`), and the client's action runner refuses argv or machine
+  values carrying control bytes.
 
 ## 0.2.4 — 2026-11-19
 

@@ -1,7 +1,7 @@
 //! Every command's `usage:` line — the parsers pass theirs to
 //! `args::usage`, which appends `args::COMMON`.
 
-pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]";
+pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]\n       backlot studio migrate [<studio> | --all] [--dry-run]";
 pub(crate) const U_REQ: &str = "usage: backlot req revise (--file <f> | --stdin) --summary <s>";
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
@@ -18,8 +18,7 @@ pub(crate) const U_CLOSE: &str = "usage: backlot close --person <role key>";
 pub(crate) const U_APPROVE: &str =
     "usage: backlot approve --person <role key> --decision allow|deny";
 pub(crate) const U_ATTENTION: &str = "usage: backlot attention clear <seq>";
-pub(crate) const U_DELIVER: &str =
-    "usage: backlot deliver --commits A..B --report <f> [--check name=pass|fail...]";
+pub(crate) const U_DELIVER: &str = "usage: backlot deliver --commits A..B --report <f> [--check name=pass|fail...]\n       [--tokens-in <n>] [--tokens-out <n>] [--cache-read-tokens <n>] [--cost-usd <d>]";
 pub(crate) const U_BLOCK: &str = "usage: backlot block --reason <r>";
 pub(crate) const U_REVIEW: &str = "usage: backlot review --task <id> --delivery <n> --verdict \
 accepted|partially-accepted|changes-requested|blocked --conclusion <text> \

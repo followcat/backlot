@@ -130,6 +130,11 @@ pub fn status(
     }
     let _ = writeln!(out, "  rework cap {}", studio.rework_cap);
     let _ = writeln!(out, "  stall limit {}s", studio.stall_limit_s);
+    // P4a: runner-reported usage — a factual line only while a
+    // delivery recorded any of the counters.
+    if !state.usage.is_empty() {
+        let _ = writeln!(out, "  usage: {}", state.usage.compact());
+    }
     let _ = writeln!(out, "  roles:");
     // S9f: a role whose last hook signal was a StopFailure carries
     // ` — last turn failed: <error>` on its own line until the next
@@ -319,6 +324,11 @@ pub fn records(recs: &[ActorRecord]) -> String {
             if r.tasks == 1 { "" } else { "s" },
             r.deliveries
         );
+        // P4a: reported token/cost sums — factual, shown only when
+        // a delivery recorded any.
+        if !r.usage.is_empty() {
+            let _ = write!(out, " · usage {}", r.usage.compact());
+        }
         if !r.enough_data {
             let _ = writeln!(out, " — not enough data");
             continue;

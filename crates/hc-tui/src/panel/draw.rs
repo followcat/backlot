@@ -13,7 +13,9 @@ use ratatui::style::{Modifier, Style};
 
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
-use super::draw_blocks::{draw_owed, draw_person, draw_person_line, draw_top, frame_style};
+use super::draw_blocks::{
+    draw_owed, draw_person, draw_person_line, draw_top, draw_usage, frame_style,
+};
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role};
 use super::draw_tasks::{draw_drawer, draw_fold, draw_task};
 use super::rows::{Row, Target};
@@ -282,6 +284,9 @@ pub(crate) fn render(
             }
             Row::Owed { studio, kind, text } => {
                 draw_owed(buf, rect, *kind, text, frame_of(&studio.key()), palette);
+            }
+            Row::Usage { studio } => {
+                draw_usage(buf, rect, *studio, frame_of(&studio.key()), palette);
             }
             Row::BlockBottom(studio) => {
                 let edge = frame_of(&studio.key());

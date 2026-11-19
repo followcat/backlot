@@ -28,10 +28,11 @@ pub mod steps;
 pub mod summary;
 mod summary_build;
 pub mod task_reduce;
+pub mod usage;
 pub mod validate;
 pub mod wanted;
 
-pub use event::{ActorIdentity, Event, EventBy, EventKind, NewEvent};
+pub use event::{ActorIdentity, Event, EventBy, EventKind, NewEvent, Usage, UsageTotals};
 pub use records::{ActorRecord, StudioLog, records};
 pub use state::{StudioState, TaskStatus, apply, replay};
 pub use validate::{Refusal, validate};
@@ -40,6 +41,9 @@ pub use validate::{Refusal, validate};
 /// crates' unit tests. Not part of the ledger surface.
 #[doc(hidden)]
 pub mod testkit;
+
+/// The ledger schema version and forward-migration pipeline.
+pub mod migrate;
 
 #[cfg(test)]
 mod budget_tests;
@@ -60,6 +64,8 @@ mod limits_tests;
 #[cfg(test)]
 mod loop_tests;
 #[cfg(test)]
+mod migrate_tests;
+#[cfg(test)]
 mod priority_tests;
 #[cfg(test)]
 mod records_extra_tests;
@@ -75,6 +81,8 @@ mod state_tests;
 mod steps_tests;
 #[cfg(test)]
 mod summary_tests;
+#[cfg(test)]
+mod usage_tests;
 #[cfg(test)]
 mod validate_extra_tests;
 #[cfg(test)]

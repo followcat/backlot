@@ -176,6 +176,31 @@ pub(super) fn draw_owed(
     );
 }
 
+/// The studio's usage line (P4a): `∑ 12.4k/3.1k tok · $0.08` —
+/// dim, drawn only while `usage` is `Some` so a usage-less studio
+/// never shows it. Truncates at the block's edge like `draw_owed`.
+pub(super) fn draw_usage(
+    buf: &mut Buffer,
+    rect: Rect,
+    studio: StudioRef<'_>,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    let Some(usage) = &studio.studio.usage else {
+        return;
+    };
+    let width = rect.width.saturating_sub(3);
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        width,
+        &truncate_end(&format!("∑ {}", usage.compact_dock()), width as usize),
+        Style::default().fg(palette.overlay0),
+    );
+}
+
 /// The state word's style: `USER` is a red badge, `dir` a peach tag
 /// on `surface0` (D9) — the rest are the mark's bare colour.
 pub(super) fn word_style(mark: Person, palette: &Palette) -> Style {

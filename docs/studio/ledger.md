@@ -44,7 +44,14 @@ part of this step.
 
 ## Events
 
-Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
+Every event has `v`, `seq`, `ts_ms`, `kind`, and `by` (the role and session). `v` is the ledger
+schema version — `1` today. Lines written before versioning carry no `v` and read as `v: 1`;
+a `v` newer than the binary's `LEDGER_VERSION` is refused with an "upgrade backlot" error rather
+than a serde failure. `backlot studio migrate [<studio> | --all] [--dry-run]` walks a studio's
+log (and, with `--all`, Hollywood's) under the lock, rewrites any unversioned lines to the
+current `v` through the model's step-by-step migration pipeline, keeps a `events.jsonl.v0.bak`
+backup, and verifies the migrated log replays to the same state — a current log is a no-op that
+prints `already at ledger v1`.
 
 | Kind | Main fields |
 |---|---|
@@ -59,7 +66,7 @@ Every event has `seq`, `ts_ms`, `kind`, and `by` (the role and session).
 | `task.created` | id, title, requirement version, acceptance, dependencies |
 | `task.cast` | task, actor identity, reason, optional priority, by (the caster) |
 | `task.priority` | task, priority |
-| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`), report file, requirement version, actor-reported checks |
+| `task.delivered` | task, delivery number, actor identity, resolved commit range (`sha..sha`), report file, requirement version, actor-reported checks, optional `usage` |
 | `task.reviewed` | task, delivery number, reviewer, verdict, written conclusion, findings, upstream changes |
 | `task.checked` | task, delivery number, check name, exit code, `timed_out`, output log, duration — `stage` only |
 | `task.finding` | task, delivery number, findings, by |
@@ -130,6 +137,14 @@ runs git in the task's `work/<task>` area, resolves both ends to full shas, refu
 and refuses a tip that `git merge-base --is-ancestor` does not place on the task's
 `backlot/<studio>/<task>` branch. The ledger holds `sha..sha`, never the symbolic input; the model
 itself runs no git.
+
+`task.delivered` may carry `usage` — the runner's own reported figures, optional and absent by
+default (P4a): `input_tokens`, `output_tokens`, `cache_read_tokens` and `cost_micros_usd`
+(integer micro-dollars, so the JSON stays exact — `backlot deliver --cost-usd 0.08` parses to
+`80000` with no float). They are facts the actor reports, not measurements backlot takes, and
+they aggregate the same way — `StudioState` sums every delivery's usage, an actor's record sums
+only its own, and the `backlot/1` summary carries the totals only while a counter is non-zero.
+Like every added field they are serde-optional: old logs and old summaries read unchanged.
 
 `task.checked` is the stage's own check record (S9b part 2): `studio.created` carries the cast's
 `[[checks]]` — a name, the `run` command and `timeout_s` — and `check_env`, the stage-environment

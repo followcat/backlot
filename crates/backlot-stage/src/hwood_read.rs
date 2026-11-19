@@ -164,7 +164,10 @@ pub(crate) fn report_show(
 /// same check `report_show` runs before touching the filesystem.
 fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
     use std::path::Component;
-    if file.is_absolute() || file.as_os_str().is_empty() {
+    if file.is_absolute()
+        || file.as_os_str().is_empty()
+        || file.as_os_str().to_string_lossy().contains('\0')
+    {
         return Err(Fail::refused(format!(
             "--file '{}' must be a studio-relative path",
             file.display()

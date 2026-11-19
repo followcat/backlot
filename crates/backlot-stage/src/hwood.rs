@@ -55,8 +55,13 @@ pub(crate) fn store_fail<E, V: ToString>(e: StoreError<E, V>) -> Fail {
 }
 
 /// The studio's reduced state, `None` when it has no ledger — a
-/// `studio-new` card's base, or a stale reason at apply time.
+/// `studio-new` card's base, or a stale reason at apply time. The
+/// name — which a card action carries in from the ledger — is
+/// validated before any path is built, so a hostile identifier can
+/// never walk out of `studios/` (D17a).
 pub(crate) fn studio_state(base: &Path, name: &str) -> Result<Option<StudioState>, Fail> {
+    crate::cli::check_studio_name(name)
+        .map_err(|_| Fail::refused(format!("bad studio name '{name}'")))?;
     let dir = store::studio_dir(base, name);
     if !dir.join("events.jsonl").is_file() {
         return Ok(None);

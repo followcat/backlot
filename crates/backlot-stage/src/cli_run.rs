@@ -97,6 +97,22 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             let base = base(env, &common)?;
             return crate::prune::run(&base, named, all_finished, dry_run, force);
         }
+        // `studio migrate` rewrites logs at the current schema
+        // version — under the same locks, no event appended.
+        Cmd::StudioMigrate {
+            studio,
+            all,
+            dry_run,
+        } => {
+            check_stage_caller(&common, env)?;
+            let named = match studio {
+                Some(name) => Some(name),
+                None if all => None,
+                None => Some(crate::cli::studio_name(&common, env)?),
+            };
+            let base = base(env, &common)?;
+            return crate::migrate::run(&base, named, all, dry_run);
+        }
         _ => {}
     }
     let base = base(env, &common)?;

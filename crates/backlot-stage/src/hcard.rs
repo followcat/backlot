@@ -36,7 +36,8 @@ pub(crate) enum Step {
     /// The base moved — record `card.stale`.
     Stale(String),
     /// Record this kind in the studio `by: user`, then `card.done`.
-    Act(EventKind),
+    /// Boxed: `EventKind` dwarfs the other variants.
+    Act(Box<EventKind>),
     /// `card.failed` with the reason.
     Fail(String),
 }
@@ -100,6 +101,18 @@ impl Stage {
     /// One applied card: already-done, stale-check, then the action
     /// — and its outcome in Hollywood's ledger.
     fn hcard(&self, hdir: &Path, card: &Card) -> Result<(), Fail> {
+        // A card's identifiers came in over the ledger — refuse a
+        // hostile studio name before it builds a path (D17a).
+        if !crate::cli::valid_studio_name(card.action.studio()) {
+            self.happend(
+                hdir,
+                HollywoodKind::CardFailed {
+                    card: card.seq,
+                    reason: format!("bad studio name '{}'", card.action.studio()),
+                },
+            )?;
+            return Ok(());
+        }
         let sdir = store::studio_dir(&self.base, card.action.studio());
         let sstate = hwood_state(&sdir)?;
         let step = match &card.action {
@@ -110,7 +123,7 @@ impl Stage {
                 Some(s) => match hollywood::stale(&card.action, &card.base, Some(s)) {
                     Some(r) => Step::Stale(r),
                     None => match action_kind(card) {
-                        Ok(kind) => Step::Act(kind),
+                        Ok(kind) => Step::Act(Box::new(kind)),
                         Err(e) => Step::Fail(e),
                     },
                 },
@@ -147,7 +160,7 @@ impl Stage {
                 )?;
                 eprintln!("stage: card c{} failed", card.seq);
             }
-            Step::Act(kind) => match append_studio(&sdir, kind) {
+            Step::Act(kind) => match append_studio(&sdir, *kind) {
                 Ok(()) => {
                     self.happend(
                         hdir,

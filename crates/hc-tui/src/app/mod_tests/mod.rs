@@ -1,4 +1,5 @@
 //! Read-only application tests and shared fixtures.
+mod argv_hygiene;
 mod cases_1;
 mod cases_2;
 mod chrome_marks;

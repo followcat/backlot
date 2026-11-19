@@ -119,10 +119,20 @@ pub enum Cmd {
         dry_run: bool,
         force: bool,
     },
+    /// `studio migrate [<studio> | --all] [--dry-run]`: rewrite the
+    /// ledger at the current schema version — no event is appended.
+    StudioMigrate {
+        studio: Option<String>,
+        all: bool,
+        dry_run: bool,
+    },
     Deliver {
         commits: String,
         report: PathBuf,
         checks: Vec<Check>,
+        /// Runner-reported token/cost figures (P4a) — `None` when
+        /// no `--tokens-*`/`--cost-usd` flag came in.
+        usage: Option<backlot_model::event::Usage>,
     },
     Block {
         reason: String,
@@ -292,6 +302,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "new" => args_studio::studio_new(&mut common, &mut it),
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
                 "prune" => args_studio::studio_prune(&mut common, &mut it),
+                "migrate" => args_studio::studio_migrate(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STUDIO))),
                 _ => Err(usage(
                     format!("unknown studio subcommand '{sub}'"),

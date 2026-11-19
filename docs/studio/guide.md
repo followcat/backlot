@@ -308,7 +308,8 @@ the owner means the step is yours (for example `finish` once every task is termi
 While a step sits with an idle owner the stage nudges it once after `nudge_after_s` and raises an
 `owed` attention `escalate_after_s` after the nudge was delivered — so a `next:` line that survives
 for minutes is a real hold-up, not a refresh artifact. The panel shows the first owed step as the
-`→` line under the studio.
+`→` line under the studio. When any delivery reported usage, a `usage:` line under the limits
+sums the studio's tokens and cost (nothing shows while every counter is zero).
 
 ## What happens next
 
@@ -319,7 +320,7 @@ In the normal path the steps run in this order:
 | plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
 | cast | director | `backlot task new` splits the plan into tasks — `--depends-on t1` makes a task wait for another; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. A cast on a task with an open dependency is refused, and an accepted dependency that is not merged yet refuses with `merge t1 into integration first`; `backlot status` shows `waits for t1` on the task's line. |
-| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
+| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). A runner that knows its own figures can also report `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and `--cost-usd`. The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
 | review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. An accepting verdict waits for every declared check's stage record — only you may accept over pending ones — and names each failing check in the conclusion. |
 | rework | actor | A `changes-requested` review goes back to the actor as a `[backlot]` message; it fixes and delivers again. The rework cap counts the rounds. |
 | report | director → producer → you | `backlot report` at agreed nodes; the producer reports to you in its own terminal. |
@@ -633,6 +634,23 @@ removed, pruned, deleted or kept. The ledger, `reports/`, `messages/` and `atten
 `backlot records` and `backlot status` keep the full history. To remove that history too,
 delete the studio's directory under `studios/` yourself.
 
+The ledger itself is versioned — every event line carries `v: 1`. Logs written before
+versioning read fine unversioned, but you can stamp them explicitly:
+
+```sh
+# See what would change, writing nothing.
+backlot studio migrate acme-shop --dry-run
+
+# Rewrite unversioned lines to the current schema (keeps events.jsonl.v0.bak).
+backlot studio migrate acme-shop
+
+# Every studio, plus Hollywood's own log when it exists.
+backlot studio migrate --all
+```
+
+A log already current is a no-op; a line carrying a `v` newer than the binary knows is refused
+with an "upgrade backlot" error rather than a cryptic one.
+
 ## Where the files live
 
 The state root is `$XDG_STATE_HOME/backlot/<core id>/` — `~/.local/state/backlot/<core id>/` by
@@ -678,7 +696,8 @@ written, an existing `PATH` never touched); `studio new`'s installed check count
 launch would.
 
 `backlot records` reads every studio's ledger and summarizes each actor identity's deliveries —
-the factual record, with no score.
+the factual record, with no score. An actor whose deliveries reported usage shows its token and
+cost sums after the counts.
 
 ## The panel's config
 

@@ -133,6 +133,19 @@ pub(crate) fn fail_body(err: &str) -> String {
         .to_owned()
 }
 
+/// D17a: an argv word carrying a control byte — NUL, newline, ESC —
+/// must never reach a spawned command or the ledger. The studio and
+/// card commands build argv from summary-document strings, so this
+/// is the exec boundary's check: `run_action` refuses to spawn when
+/// a word (or the machine name) has one, and the copy line's
+/// `sh_quote` is what makes the same hostile word safe to display.
+/// Identifiers that spell a flag (`--force`, `-x`) stay exactly one
+/// argv word — the backlot parser refuses them as unexpected
+/// arguments — so bytes are the check, not position.
+pub(crate) fn unsafe_word(w: &str) -> bool {
+    w.chars().any(char::is_control)
+}
+
 /// POSIX single-quote escaping for one shell word.
 fn sh_quote(word: &str) -> String {
     if word

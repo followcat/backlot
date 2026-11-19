@@ -45,11 +45,26 @@ impl App {
 
     /// The single door (§3): a duplicate press on the same target
     /// while its action runs is ignored — the row's own mark already
-    /// spins, so the press does nothing.
+    /// spins, so the press does nothing. A hostile argv — a control
+    /// byte in any word or the machine name — never spawns (D17a);
+    /// the refusal lands through the same reply path a failed run
+    /// would take.
     pub(crate) fn run_action(&mut self, action: Action) {
+        let hostile = action
+            .argv
+            .iter()
+            .chain(action.machine.iter())
+            .find(|w| crate::action::unsafe_word(w))
+            .cloned();
         let Some(id) = self.actions.start(action.clone()) else {
             return;
         };
+        if let Some(bad) = hostile {
+            self.sync_pending();
+            self.sched.mark_dirty(Instant::now());
+            self.on_action_reply((id, Err(format!("refused unsafe argument: {bad:?}"))));
+            return;
+        }
         self.sync_pending();
         // The runner is invoked eagerly — the tests' argv recorders
         // count the call itself, and the spawn only rides the reply.

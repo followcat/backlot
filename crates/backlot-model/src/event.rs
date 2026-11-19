@@ -5,6 +5,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// `Usage`/`UsageTotals` live in `crate::usage`; the `event::`
+/// path keeps working for the event payloads that carry them.
+pub use crate::usage::{Usage, UsageTotals};
+
 /// Who recorded the event: the role and, when known, the hc terminal id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventBy {
@@ -398,6 +402,10 @@ pub enum EventKind {
         requirement_version: u32,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         checks: Vec<Check>,
+        /// Runner-reported token/cost figures (P4a) — absent on logs
+        /// that predate the field and on deliveries that report none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<Usage>,
     },
     #[serde(rename = "task.reviewed")]
     TaskReviewed {
@@ -585,9 +593,24 @@ impl EventKind {
     }
 }
 
+/// The ledger schema version stamped on every `events.jsonl` line
+/// (P4a). Lines from before versioning are v1 lines — serde's
+/// `default_ledger_version` reads them as such — and a line stamped
+/// newer is refused by the `migrate` module, never silently read.
+pub const LEDGER_VERSION: u32 = 1;
+
+/// `serde(default)` for the `v` envelope field: absent means a
+/// pre-versioning line, which is a v1 line.
+pub fn default_ledger_version() -> u32 {
+    LEDGER_VERSION
+}
+
 /// An event as appended to the log.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Event {
+    /// Ledger schema version — always written.
+    #[serde(default = "default_ledger_version")]
+    pub v: u32,
     pub seq: u64,
     pub ts_ms: u64,
     pub by: EventBy,
@@ -611,6 +634,7 @@ impl NewEvent {
     /// Stamp with the seq assigned under the append lock.
     pub fn stamp(self, seq: u64, ts_ms: u64) -> Event {
         Event {
+            v: LEDGER_VERSION,
             seq,
             ts_ms,
             by: self.by,
