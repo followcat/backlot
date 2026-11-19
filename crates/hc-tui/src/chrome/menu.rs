@@ -5,6 +5,8 @@
 //! highlight styles as the reference. `Machine` rows are an hc-tui
 //! extension — the reference has no machine menu (parity.md).
 
+use std::borrow::Cow;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -12,6 +14,7 @@ use ratatui::style::{Modifier, Style};
 use super::dialogs::{contrast, panel};
 use super::palette::Palette;
 use super::render::{display_width, put_text};
+use super::text::truncate_end;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ContextMenuAction {
@@ -42,6 +45,8 @@ pub(crate) enum ContextMenuAction {
     Keep,
     Park,
     Kill,
+    /// A studio-menu row — the index into `StudioMenu::items`.
+    Studio(usize),
 }
 
 #[derive(Debug)]
@@ -69,6 +74,9 @@ pub(crate) enum ContextMenuTarget {
     Machine { name: Option<String> },
     /// hc-tui extension: the agent row menu (parity.md).
     Agent { pane_id: String },
+    /// S3: a dock, cast or Call Sheet studio menu — its item list is
+    /// the model's own (`StudioMenu::items`).
+    Studio(Box<crate::studio_menu::StudioMenu>),
 }
 
 #[derive(Debug)]
@@ -80,15 +88,27 @@ pub(crate) struct ContextMenu {
 }
 
 pub(crate) struct ContextMenuItem {
-    pub label: &'static str,
+    pub label: Cow<'static, str>,
     pub action: ContextMenuAction,
+    /// S3: a dimmed-with-reason row draws dim and does nothing.
+    pub dim: Option<String>,
+    /// S3: the key that fires it while the menu is open.
+    pub key: Option<char>,
+    /// S3: `ready_to_finish`'s finish row draws teal.
+    pub teal: bool,
 }
 
 impl ContextMenu {
     pub(crate) fn items(&self) -> Vec<ContextMenuItem> {
         use ContextMenuAction as Action;
 
-        let item = |label, action| ContextMenuItem { label, action };
+        let item = |label: &'static str, action| ContextMenuItem {
+            label: Cow::Borrowed(label),
+            action,
+            dim: None,
+            key: None,
+            teal: false,
+        };
         match &self.target {
             ContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
@@ -183,6 +203,20 @@ impl ContextMenu {
                 item("Kill", Action::Kill),
                 item("Peek", Action::Peek),
             ],
+            // S3: the studio model owns its item list; the row's
+            // index is the action.
+            ContextMenuTarget::Studio(menu) => menu
+                .items()
+                .into_iter()
+                .enumerate()
+                .map(|(index, it)| ContextMenuItem {
+                    label: Cow::Owned(it.label),
+                    action: ContextMenuAction::Studio(index),
+                    dim: it.dim,
+                    key: it.key,
+                    teal: it.teal,
+                })
+                .collect(),
         }
     }
 }
@@ -201,12 +235,18 @@ pub(crate) fn render_context_menu(
     let screen = buffer.area;
     let max_item_width = items
         .iter()
-        .map(|item| display_width(item.label))
+        .map(|item| {
+            display_width(&item.label) + item.dim.as_deref().map_or(0, |d| display_width(d) + 3)
+        })
         .max()
         .unwrap_or(0);
+    // S3 §1: menus clamp to `min(34, cols - 4)`; the reference menus
+    // fit under that cap at every tested size, so one rule serves.
+    let max_width = screen.width.saturating_sub(4).clamp(1, 34);
     let width = max_item_width
         .saturating_add(4)
         .max(14)
+        .min(max_width)
         .min(screen.width.max(1));
     let height = (items.len() as u16)
         .saturating_add(2)
@@ -234,11 +274,26 @@ pub(crate) fn render_context_menu(
                 .fg(contrast(palette))
                 .bg(palette.accent)
                 .add_modifier(Modifier::BOLD)
+        } else if item.dim.is_some() {
+            Style::default().fg(palette.overlay0).bg(palette.panel_bg)
+        } else if item.teal {
+            Style::default().fg(palette.teal).bg(palette.panel_bg)
         } else {
             Style::default().fg(palette.text).bg(palette.panel_bg)
         };
         buffer.set_style(row, style);
-        put_text(buffer, row.x, row.y, row.width, item.label, style);
+        let text = match &item.dim {
+            Some(reason) => format!("{} · {reason}", item.label),
+            None => item.label.to_string(),
+        };
+        put_text(
+            buffer,
+            row.x,
+            row.y,
+            row.width,
+            &truncate_end(&text, row.width as usize),
+            style,
+        );
         rows.push((row, index));
     }
     Some(ContextMenuRender { rows })

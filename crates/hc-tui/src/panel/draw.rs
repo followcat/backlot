@@ -51,7 +51,9 @@ pub(crate) struct PanelRender {
 /// the rightmost column carries the scrollbar on overflow; the last
 /// row is the dim shortcuts line (dropped under 8 rows). `local` is
 /// this core's display name — it labels local studios and local
-/// stage lines when studios span machines.
+/// stage lines when studios span machines. `pending` is the S3
+/// ActionTracker: a row whose target mark is in flight shows the
+/// dim `⠋ <label>` at its right edge (§3.1).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
@@ -65,6 +67,7 @@ pub(crate) fn render(
     keys: &StudioKeys,
     sheet: Option<String>,
     overlay: bool,
+    pending: &crate::action::ActionTracker,
     palette: &Palette,
 ) -> PanelRender {
     // Reset every cell first: `set_style` alone leaves the symbols the
@@ -364,6 +367,11 @@ pub(crate) fn render(
                 glyphs::SELECTION_BAR,
                 Style::default().bg(palette.selection_bg).fg(palette.accent),
             );
+        }
+        // S3's pending mark — `⠋ <label>…` while the row's action
+        // runs (§3.1).
+        if super::pending::mark(buf, rect, row, &target, pending, panel.spin, dim) {
+            hits.working_drawn = true;
         }
         hits.rows.push((rect, target));
         y += height;

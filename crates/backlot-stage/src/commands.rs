@@ -220,6 +220,16 @@ fn report_to(role: &str) -> Result<String, Fail> {
     }
 }
 
+/// The path a materialized source names — `Text` and `Stdin` only
+/// exist between `parse` and `cli::run`'s materialization, never at
+/// build time (G2).
+fn source_file(source: &crate::args::TextSource) -> Result<PathBuf, Fail> {
+    match source {
+        crate::args::TextSource::File(path) => Ok(path.clone()),
+        _ => Err(Fail::refused("internal: unresolved message source")),
+    }
+}
+
 /// A role-to-role message with its body copied into `messages/`.
 /// `purpose` tags the two command-sent messages the stage acts on:
 /// `plan` (writer wanted) and `dispatch` (writer released).
@@ -254,6 +264,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         Cmd::Status { .. }
         | Cmd::Records { .. }
         | Cmd::StageStart
+        | Cmd::StageStop
         | Cmd::StageRun
         | Cmd::StageWatch { .. }
         | Cmd::Runners { .. }
@@ -310,7 +321,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 ))
             }))
         }
-        Cmd::ReqRevise { file, summary } => {
+        Cmd::ReqRevise { source, summary } => {
+            let file = source_file(&source)?;
             must_exist(&file, "--file")?;
             Ok(Box::new(move |state, _| {
                 let version = state.requirement_version + 1;
@@ -362,7 +374,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         }
         Cmd::Dispatch { file } => message_cmd(by, file, "director".into(), Some("dispatch")),
         Cmd::Ask { file } => message_cmd(by, file, "producer".into(), None),
-        Cmd::Tell { role, file } => message_cmd(by, file, role, None),
+        Cmd::Tell { role, source } => message_cmd(by, source_file(&source)?, role, None),
         Cmd::Report { node, file, .. } => {
             must_exist(&file, "--file")?;
             let to = report_to(&caller.role)?;

@@ -329,9 +329,6 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
     let (panel_config, panel_notice) = crate::panel::load(&crate::panel::config_path(env));
     app.set_panel_config(panel_config, panel_notice, &crate::panel::config_path(env));
     app.set_panel_endpoint(endpoint);
-    if let Ok(exe) = std::env::current_exe() {
-        app.set_panel_runner(crate::panel::spawn_runner(exe));
-    }
 
     // The `[hollywood]` table (H4) from the same config file — the
     // layer starts collapsed with it and stays hidden without it, so
@@ -346,9 +343,6 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
     app.set_setup_runner_hint(backlot_stage::detect::first(&backlot_stage::Env {
         vars: env_map.clone(),
     }));
-    if let Ok(exe) = std::env::current_exe() {
-        app.set_hollywood_runner(crate::hollywood::spawn_runner(exe));
-    }
 
     // Guard declared before the terminal: the terminal drops first,
     // the guard restores raw mode/modes/cursor last — on success,

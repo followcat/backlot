@@ -24,6 +24,8 @@ use super::{App, Mode};
 
 #[path = "draw_overlays.rs"]
 mod draw_overlays;
+#[path = "draw_overlays_s3.rs"]
+mod draw_overlays_s3;
 #[path = "draw_terminal.rs"]
 mod draw_terminal;
 #[cfg(test)]

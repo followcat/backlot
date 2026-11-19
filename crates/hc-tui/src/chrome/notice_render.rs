@@ -2,6 +2,8 @@
 //! The reference mobile banner and endpoint/notification toast cards.
 
 use super::palette::Palette;
+use super::render::put_text;
+use super::text::truncate_end;
 use crate::app::notifications::{Notification, NotificationKind};
 use crate::config::ToastHerdrPosition;
 use ratatui::{
@@ -11,6 +13,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
+use unicode_width::UnicodeWidthStr;
 
 pub(crate) fn render_mobile_notice_banner(
     buffer: &mut Buffer,
@@ -207,6 +210,114 @@ pub(crate) fn render_mobile_notification_banner(
         offset_for_warning,
         palette,
     )
+}
+
+/// The S3 action toast (§3): a success card is the title alone and
+/// fades after 3.5 s; a failure carries the first `stderr` line and
+/// the `[C] copy cmd`/`[esc]` hint row and holds 8 s. Returns the
+/// card rect and the `copy cmd` chip's hit rect.
+pub(crate) fn render_action_toast(
+    buffer: &mut Buffer,
+    area: Rect,
+    title: &str,
+    body: Option<&str>,
+    top_offset: u16,
+    palette: &Palette,
+) -> (Rect, Rect) {
+    if area.is_empty() {
+        return (Rect::default(), Rect::default());
+    }
+    let hint = "[C] copy cmd  [esc] dismiss";
+    let content_width = UnicodeWidthStr::width(title)
+        .max(body.map_or(0, UnicodeWidthStr::width))
+        .max(if body.is_some() {
+            UnicodeWidthStr::width(hint)
+        } else {
+            0
+        })
+        .saturating_add(6);
+    let width = u16::try_from(content_width)
+        .unwrap_or(u16::MAX)
+        .min(area.width);
+    let lines: u16 = match body {
+        Some(_) => 3,
+        None => 1,
+    };
+    let height = (lines + 2).min(area.height);
+    let x = area.right().saturating_sub(width);
+    let max_y = area.bottom().saturating_sub(height).max(area.y);
+    let y = area.y.saturating_add(top_offset).clamp(area.y, max_y);
+    let rect = Rect::new(x, y, width, height);
+    Clear.render(rect, buffer);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(if body.is_some() {
+            palette.red
+        } else {
+            palette.overlay0
+        }))
+        .style(Style::default().bg(palette.panel_bg));
+    let inner = block.inner(rect);
+    block.render(rect, buffer);
+    let dot = if body.is_some() {
+        palette.red
+    } else {
+        palette.green
+    };
+    Paragraph::new(Line::from(vec![
+        Span::styled("●", Style::default().fg(dot)),
+        Span::raw(" "),
+        Span::styled(
+            truncate_end(title, inner.width.saturating_sub(2) as usize),
+            Style::default()
+                .fg(palette.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]))
+    .render(Rect::new(inner.x, inner.y, inner.width, 1), buffer);
+    let mut copy_hit = Rect::default();
+    if let Some(body) = body {
+        if inner.height > 1 {
+            Paragraph::new(Line::from(Span::styled(
+                truncate_end(body, inner.width.saturating_sub(2) as usize),
+                Style::default().fg(palette.overlay0),
+            )))
+            .render(
+                Rect::new(
+                    inner.x.saturating_add(2),
+                    inner.y + 1,
+                    inner.width.saturating_sub(2),
+                    1,
+                ),
+                buffer,
+            );
+        }
+        if inner.height > 2 {
+            // `[C] copy cmd` is the chip — the rest of the hint is
+            // inert text so the click target is unambiguous (§3.3).
+            let hint_y = inner.y + 2;
+            let chip_w = UnicodeWidthStr::width("[C] copy cmd") as u16;
+            put_text(
+                buffer,
+                inner.x + 2,
+                hint_y,
+                inner.width.saturating_sub(2),
+                "[C] copy cmd",
+                Style::default().fg(palette.teal),
+            );
+            put_text(
+                buffer,
+                inner.x + 2 + chip_w,
+                hint_y,
+                inner.width.saturating_sub(2 + chip_w),
+                "  [esc] dismiss",
+                Style::default().fg(palette.overlay0),
+            );
+            copy_hit = Rect::new(inner.x + 2, hint_y, chip_w.min(inner.width), 1);
+        }
+    }
+    super::overlay::fill_default_bg(buffer, rect, palette);
+    (rect, copy_hit)
 }
 
 #[cfg(test)]

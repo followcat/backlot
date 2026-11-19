@@ -11,7 +11,7 @@ use backlot_model::EventBy;
 use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
 
-use crate::args::{Cmd, Common, parse};
+use crate::args::{Cmd, Common};
 use crate::commands;
 use crate::link;
 use crate::render;
@@ -153,7 +153,7 @@ impl Caller {
 /// must be absent or equal. With the variable unset the flag works
 /// as it always has: the user's own shell and the panel pass `--as`
 /// with no `BACKLOT_ROLE`.
-fn check_identity(common: &Common, env: &Env) -> Result<(), Fail> {
+pub(crate) fn check_identity(common: &Common, env: &Env) -> Result<(), Fail> {
     for (flag, arg, var) in [
         ("--as", &common.role, "BACKLOT_ROLE"),
         ("--studio", &common.studio, "BACKLOT_STUDIO"),
@@ -215,7 +215,7 @@ fn refused<E: ToString>(e: E) -> Fail {
 
 /// `stage start` and `stage run` are a person's: an actor or writer
 /// key never launches or is the stage (S9b).
-fn check_stage_caller(common: &Common, env: &Env) -> Result<(), Fail> {
+pub(crate) fn check_stage_caller(common: &Common, env: &Env) -> Result<(), Fail> {
     let role = common
         .role
         .clone()
@@ -275,73 +275,10 @@ pub(crate) fn base(env: &Env, common: &Common) -> Result<PathBuf, Fail> {
 
 /// Run the command; the string is printed on stdout on success.
 pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
-    let (common, cmd) = parse(args)?;
-    if let Cmd::Help(u) = cmd {
-        return Ok(format!("{u}\n{}", crate::args::COMMON));
-    }
-    check_identity(&common, env)?;
-    if let Cmd::StudioNew {
-        interactive: true,
-        title,
-        repo,
-        cast_file,
-        dry_run,
-    } = &cmd
-    {
-        // The wizard resolves the answers itself, then runs the
-        // ordinary `studio new` write — `exec_event` never sees
-        // `interactive`.
-        return crate::wizard::run(
-            common,
-            crate::wizard::WizardArgs {
-                title: title.clone(),
-                repo: repo.clone(),
-                cast_file: cast_file.clone(),
-                dry_run: *dry_run,
-            },
-            env,
-        );
-    }
-    match cmd {
-        // The stage connects itself; no ledger command needs it here.
-        Cmd::StageStart => {
-            check_stage_caller(&common, env)?;
-            return crate::stage::start(&common, env);
-        }
-        Cmd::StageRun => {
-            check_stage_caller(&common, env)?;
-            return crate::stage::run(&common, env);
-        }
-        Cmd::StageWatch { ref target } => {
-            check_stage_caller(&common, env)?;
-            return crate::watchdog::watch(&common, env, target.clone());
-        }
-        // Hollywood's own ledger needs no studio at all (D13).
-        Cmd::Hollywood(..) | Cmd::Card(..) | Cmd::TellHollywood { .. } => {
-            return crate::hwood::run(common, cmd, env);
-        }
-        // `runners` is local detection only — no core, no ledger.
-        Cmd::Runners { json } => {
-            return match json {
-                true => crate::runners::detect::report_json(env),
-                false => crate::runners::detect::report(env),
-            };
-        }
-        // `repos` reads the directory itself; `in_use_studio` needs
-        // the ledger base, which `repos::run` resolves best-effort.
-        Cmd::Repos { json, ref from } => {
-            return crate::repos::run(env, &common, json, from.as_deref());
-        }
-        _ => {}
-    }
-    let base = base(env, &common)?;
-    // The reads — including the cross-studio `--all` forms and the
-    // `studio new` dry run — append nothing (R24, D19).
-    if let Some(out) = crate::hwood_read::read(&common, &cmd, env, &base) {
-        return out;
-    }
-    exec_event(common, cmd, env, &base)
+    run_stdin(args, env, None)
 }
+
+pub(crate) use crate::cli_run::run_stdin;
 
 pub(crate) fn exec_event(
     common: Common,

@@ -403,7 +403,7 @@ fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
 
 /// The adaptive hint row's tiers — the longest that fits wins.
 pub(crate) const HINT_TIERS: [&str; 4] = [
-    "↑↓ move   ⏎ open   y/d answer   a/x card   f finish   r start   p peek   i tell   ? help   esc close",
+    "↑↓ move   ⏎ open   y/d answer   a/x card   f finish   r start   p peek   i tell   m menu   ? help   esc close",
     "↑↓ move   ⏎ open   a/x card   f finish   i tell   esc close",
     "↑↓ ⏎ y/d a/x f i esc",
     "↑↓ ⏎ esc",

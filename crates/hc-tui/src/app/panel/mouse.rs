@@ -80,6 +80,34 @@ impl App {
                     }
                 }
             }
+            MouseEventKind::Down(MouseButton::Right) => {
+                // A press on the dock's surface claims its keys like
+                // the left press does — the menu's Esc must hand them
+                // back to the dock, not the focused terminal (S3 R2).
+                self.panel.focused = true;
+                // Right-click selects the row under the pointer and
+                // opens its menu there (S3 §1) — the dock never
+                // swallowed right-click before, it just had none.
+                let hit = self
+                    .panel_hits
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .find(|(_, (rect, _))| contains(*rect, point))
+                    .map(|(pos, (_, target))| (pos, target.clone()));
+                if let Some((pos, target)) = hit
+                    && target != crate::panel::Target::None
+                {
+                    let start = self
+                        .panel_hits
+                        .metrics
+                        .map(|m| m.max_offset_from_bottom - m.offset_from_bottom)
+                        .unwrap_or(0);
+                    self.panel.selected = Some(target.clone());
+                    self.panel.selected_row = Some(1 + start + pos);
+                    self.panel_menu(&target, point);
+                }
+            }
             MouseEventKind::ScrollUp => {
                 let viewport = self
                     .panel_hits

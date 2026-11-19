@@ -63,6 +63,8 @@ impl RemoteRunner {
 
     /// Run `backlot <argv>` on `machine`: locate, run waited, take
     /// the first output line as the failure text and always remove
+    /// — the remote tests' shape; actions use `run_output`.
+    #[cfg(test)]
     /// the terminal — a timeout included. The result is the same
     /// `(Ok, Err(line))` shape the local runner reports on `panel_rx`.
     pub(crate) fn run(&self, machine: String, argv: Vec<String>) -> BoxFut<Result<(), String>> {
@@ -96,6 +98,7 @@ impl RemoteRunner {
 }
 
 /// One action attempt, with one re-locate/retry for a stale path.
+#[cfg(test)]
 async fn run_on_machine(
     client: &Client,
     located: &Mutex<BTreeMap<String, String>>,
@@ -231,7 +234,7 @@ async fn finish_output(client: &Client, machine: &str, out: &RunOutcome) -> Resu
             rm(client, out).await;
             Err(format!("backlot is not installed on {machine}"))
         }
-        Outcome::Failed(_) => {
+        Outcome::Failed => {
             let text = ran_output(out);
             rm(client, out).await;
             Err(if text.trim().is_empty() {
@@ -257,12 +260,12 @@ async fn finish_output(client: &Client, machine: &str, out: &RunOutcome) -> Resu
 }
 
 /// A finished run's verdict — `Ok` on exit 0, `NotFound` when the
-/// binary was missing so the caller can re-locate, `Failed` with the
-/// first non-empty output line otherwise.
+/// binary was missing so the caller can re-locate, `Failed`
+/// otherwise; callers re-read `out` for the failure line.
 enum Outcome {
     Ok,
     NotFound,
-    Failed(String),
+    Failed,
     TimedOut,
     Rpc(String),
 }
@@ -329,14 +332,16 @@ fn outcome(out: &RunOutcome) -> Outcome {
             match code {
                 Some(0) => Outcome::Ok,
                 Some(126) | Some(127) => Outcome::NotFound,
-                _ => Outcome::Failed(first_line(result.output.as_deref().unwrap_or(""))),
+                _ => Outcome::Failed,
             }
         }
     }
 }
 
 /// Report a finished run: clean removal on every path — a timed-out
-/// run's terminal is killed first.
+/// run's terminal is killed first. Test-only: `run` is the tests'
+/// shape; actions use `finish_output` for the output run.
+#[cfg(test)]
 async fn finish(client: &Client, machine: &str, out: &RunOutcome) -> Result<(), String> {
     match outcome(out) {
         Outcome::Ok => {
@@ -347,7 +352,8 @@ async fn finish(client: &Client, machine: &str, out: &RunOutcome) -> Result<(), 
             rm(client, out).await;
             Err(format!("backlot is not installed on {machine}"))
         }
-        Outcome::Failed(line) => {
+        Outcome::Failed => {
+            let line = first_line(&ran_output(out));
             rm(client, out).await;
             Err(line)
         }
@@ -369,6 +375,7 @@ async fn finish(client: &Client, machine: &str, out: &RunOutcome) -> Result<(), 
 
 /// The first non-empty output line, or a fallback when the failure
 /// printed nothing.
+#[cfg(test)]
 fn first_line(output: &str) -> String {
     output
         .lines()

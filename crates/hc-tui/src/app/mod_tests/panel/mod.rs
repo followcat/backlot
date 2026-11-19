@@ -4,6 +4,7 @@
 //! (`acme-shop`, `alice`).
 mod draw;
 mod keys;
+mod menus;
 mod merge;
 mod mouse;
 mod sheet;

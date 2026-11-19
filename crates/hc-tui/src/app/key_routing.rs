@@ -9,6 +9,9 @@ use super::key_leases::{InputLease, InputLeaseKey, RepeatPlan};
 use super::{App, Mode};
 use hc_vt::{Action, Key};
 
+#[path = "key_routing_modals.rs"]
+mod key_routing_modals;
+
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct Context {
     mode: Mode,
@@ -261,43 +264,10 @@ impl App {
         if self.peek_key(&press) {
             return None;
         }
-        if self.dialog.is_some() {
-            self.dialog_key(&press);
-            return None;
-        }
-        // The New Studio dialog owns every key while it is open —
-        // Esc steps back or closes, nothing reaches a program.
-        if self.new_studio.is_some() {
-            self.new_studio_key(&press);
-            return None;
-        }
-        // The Task & Delivery Sheet owns every key while it is open
-        // — tabs, movement, `o` and `Esc` all run inside it (S2 §3).
-        if self.sheet.is_some() {
-            self.handle_sheet_key(&press);
-            return None;
-        }
-        if self.menu.is_some() {
-            self.menu_key(&press);
-            return None;
-        }
-        if self.mode == Mode::Resize {
-            self.resize_key(&press, width);
-            return None;
-        }
-        if self.help {
-            self.handle_help_key(&press);
-            return None;
-        }
-        if self.navigator.is_some() {
-            self.handle_navigator_key(&press);
-            return None;
-        }
-        if self.update_modal.is_some() {
-            self.handle_update_key(&press);
-            return None;
-        }
-        if self.route_settings_key(&press) {
+        // Every open modal owns the key before pane dispatch (S3's
+        // dialogs and menu among them); `Esc` inside restores the
+        // owner's focus.
+        if self.modal_key(&press, width) {
             return None;
         }
         // The reference clears the word gesture on any key and lets a
@@ -381,6 +351,21 @@ impl App {
             self.panel_close();
             return None;
         }
+        // `Ctrl+B m` from a focused pane opens that pane's studio
+        // menu — a role pane's role menu, a shell pane's studio menu
+        // (S3 §1). Studio mode only: herdr's own `m` tail never
+        // existed, so `--plain` and a studio-less client forward `m`
+        // to the pane exactly as before.
+        if self.prefix.armed() && self.studio.active {
+            let matched = crate::input::terminal_key_of(&press);
+            if matched.code == crossterm::event::KeyCode::Char('m') && matched.modifiers.is_empty()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.pane_menu();
+                return None;
+            }
+        }
         // U1: the four studio keys bind in studio mode only — they win
         // over a herdr direct binding on the same key and still fire
         // while the panel owns the keys. Outside studio mode the key
@@ -438,6 +423,12 @@ impl App {
         // took theirs above.
         if self.opening_visible() {
             self.opening_key(&press);
+            return None;
+        }
+        // The failure toast's own keys (§3.3): `C` writes the exact
+        // command through OSC 52, `Esc` dismisses — only while the
+        // card is up and no modal above took the press.
+        if self.action_toast_key(&press) {
             return None;
         }
         match (!self.prefix.armed())
@@ -574,7 +565,7 @@ impl App {
 }
 
 impl App {
-    fn resize_key(&mut self, key: &TerminalKey, width: u16) {
+    pub(super) fn resize_key(&mut self, key: &TerminalKey, width: u16) {
         use crossterm::event::KeyCode;
         let combo = crate::input::terminal_key_of(key);
         let binding = &self.live.keybinds.resize_mode;

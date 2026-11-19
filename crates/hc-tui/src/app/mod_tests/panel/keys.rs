@@ -369,7 +369,7 @@ async fn plus_and_minus_raise_and_lower_an_actors_priority() {
 async fn a_failed_action_shows_its_first_stderr_line() {
     let mut app = app_with_panel_doc();
     app.on_panel_action(("priority alice high".into(), Err("studio went away".into())));
-    assert!(app.notice.is_some());
+    assert!(app.action_toast.is_some());
     let backend = draw_to(&mut app, 120, 40);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("studio went away"), "{text}");

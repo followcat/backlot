@@ -26,11 +26,11 @@ pub(super) enum WakeKind {
     Pane,
     /// The armed one-shot deadline.
     Deadline,
-    /// A studio-panel action result — the notice it may show marks
+    /// A studio-action result — the notice or view it lands marks
     /// the scheduler itself, so no housekeeping follows it.
     Panel,
-    /// A Hollywood action result — same no-housekeeping rule as
-    /// `Panel`: the notice or view it lands marks the scheduler.
+    /// The ActionTracker's reply wake — same no-housekeeping rule
+    /// as `Panel`; S3 folded dock and sheet replies into it.
     Hollywood,
 }
 
@@ -123,6 +123,7 @@ impl App {
             .chain(self.copy_feedback_deadline)
             .chain(self.waiting_due)
             .chain(self.image_read.as_ref().map(|read| read.deadline))
+            .chain(self.action_toast.as_ref().map(|toast| toast.deadline))
             .chain(self.install_tick_deadline())
             .min()
     }
@@ -185,6 +186,7 @@ impl App {
         }
         if deadline_due || kind.clocks() {
             dirty |= self.expire_notice(now);
+            dirty |= self.expire_action_toast(now);
             dirty |= self.tick_notifications(now);
             self.tick_panel(now);
             self.settle_opening(now);

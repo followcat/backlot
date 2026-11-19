@@ -111,11 +111,6 @@ impl App {
         }
     }
 
-    /// Tests inject a recorder; production spawns `current_exe()`.
-    pub(crate) fn set_hollywood_runner(&mut self, runner: hollywood::HollywoodRunner) {
-        self.hollywood_runner = runner;
-    }
-
     // ---------- data ----------
 
     /// The frames' targets in aggregate order — every machine's
@@ -151,7 +146,7 @@ impl App {
     /// Every actionable target: the title row, the frames, then the
     /// band's rows — selection works on stable identities, never
     /// positions.
-    fn hollywood_targets(&self) -> Vec<Target> {
+    pub(crate) fn hollywood_targets(&self) -> Vec<Target> {
         let mut targets = vec![Target::Title];
         targets.extend(self.hollywood_frames());
         targets.extend(self.hollywood_band());

@@ -210,9 +210,10 @@ fn tell_hollywood(common: &Common, env: &Env, text: &str) -> Result<String, Fail
 /// the cmd.
 pub(crate) fn mirror_for(caller: &Caller, cmd: &Cmd) -> Option<PathBuf> {
     match cmd {
-        Cmd::Tell { role, file } if caller.role == "hollywood" && role == "producer" => {
-            Some(file.clone())
-        }
+        Cmd::Tell {
+            role,
+            source: crate::args::TextSource::File(file),
+        } if caller.role == "hollywood" && role == "producer" => Some(file.clone()),
         _ => None,
     }
 }

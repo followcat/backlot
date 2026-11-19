@@ -17,6 +17,7 @@ The defaults you'll use most:
 | `Ctrl+B ?` | Search the key bindings |
 | `Ctrl+B s` | Settings |
 | `Ctrl+B c` | New tab — a studio shell in the focused person's worktree |
+| `Ctrl+B m` | Studio menu for the focused pane — a role pane's role menu, a shell pane's studio menu |
 | `Ctrl+B v`, `Ctrl+B -` | Split right, split down — a studio shell joining the focused tab |
 | `Ctrl+B h/j/k/l` | Move focus |
 | `Ctrl+B z` | Zoom the pane |
@@ -58,10 +59,15 @@ titles and spacers are skipped. While it is focused it owns these keys:
 | `y`/`d` | Answer a user-owned prompt |
 | `+`/`-` | Raise or lower a task's priority |
 | `r`/`f` | Start the stage / finish the studio |
+| `m` | The row's context menu — same list a right-click opens |
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open this help |
 | `Esc` | Beside the panes: unfocus the dock. As an overlay: back to the strip, or close |
+
+Right-click on a dock row selects it and opens the same menu `m` opens on the selection.
+While an action runs its row spins a dim `⠋ <verb>…` marker on the right edge — a second
+press of the same command waits for the first to finish.
 
 [docs/studio/guide.md](studio/guide.md) explains what the panel's marks and blocks mean.
 
@@ -110,14 +116,37 @@ or `expanded`. While the band is expanded it owns these keys:
 | `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
 | `n` | New studio — the dialog, with the bar collapsed first |
 | `i` | Edit the `tell hollywood` line, with an agent |
+| `m` | The selected row's context menu |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
 | `Esc` | Collapse it to the pill |
 
-A click on a row or a chip selects it — activation stays on the keys; a click on the input line
-opens it for editing, and the wheel scrolls the frames sideways or the waiting rows under the
-pointer. The `+ new studio` frame is the exception: it is a button, and a click opens the
-new-studio dialog directly.
+A click on a row or a chip selects it — activation stays on the keys; a right-click opens the
+row's context menu; a click on the input line opens it for editing, and the wheel scrolls the
+frames sideways or the waiting rows under the pointer. The `+ new studio` frame is the
+exception: it is a button, and a click opens the new-studio dialog directly.
+
+## Studio menus and dialogs
+
+`m` on a dock row, `m` on a Call Sheet row, right-click on either (or on a cast row or the
+studio header), and `Ctrl+B m` from a focused pane all open the same context menu for that
+target: focus/peek/sheet navigation, prompt answers, task verbs, tells and the lifecycle
+commands. `↑`/`↓` and `Enter` walk it, each item's shown letter activates it, and `Esc` or a
+click outside closes it. An item that would be a no-op is dimmed with its reason (`current`,
+`no terminal`, `unreachable`) or hidden entirely.
+
+The menu's `…` items open the native dialogs — a reason field (pause, resume, abandon,
+takeover; card cancel and finish take an optional one), a confirm card (close a role, stop the
+stage, clear stale attention, answer a director-routed prompt), the four-row Tell editor, and
+the Revise editor prefilled from `requirements/v<n>.md` (`Ctrl+E` rewrites it in `$EDITOR` on a
+local studio). Every dialog cancels on `Esc` or a click outside and submits with `Enter`/`y`.
+
+Every `backlot` command the TUI runs answers the same way: the row spins `⠋ <verb>…` while it
+runs, a success toast shows for 3.5 seconds, and a failure card holds for 8 seconds with the
+command's first `stderr` line — a remote studio's toast always names its machine (`host-b:
+paused task t1` / `host-b failed: …`). `C` on the failure card, or a click on `copy cmd`,
+writes the exact command line (`ssh <machine> -- backlot …` for a remote studio) to the
+clipboard; `Esc` or a click dismisses it.
 
 ## The New Studio dialog
 

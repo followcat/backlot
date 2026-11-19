@@ -6,19 +6,18 @@
 //! to herdr: no columns are reserved, no keys are consumed and no
 //! timer is armed.
 
-mod actions;
 mod config;
 pub(crate) mod data;
 mod draw;
 mod draw_blocks;
 mod draw_cards;
 mod draw_tasks;
+mod pending;
 pub(crate) mod remote;
 mod row_lines;
 mod rows;
 mod rows_fit;
 
-pub(crate) use actions::{PanelAction, PanelRunner, spawn_runner};
 pub(crate) use config::{
     CallSheetStart, PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,
 };

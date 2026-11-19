@@ -98,6 +98,7 @@ impl App {
                 self.hollywood.editing = true;
             }
             KeyCode::Char('n') if plain => self.hollywood_new_studio(),
+            KeyCode::Char('m') if plain => self.hollywood_menu_selected(),
             KeyCode::Char('?') if plain => self.help = true,
             KeyCode::Enter => self.hollywood_activate(),
             _ if plain => {

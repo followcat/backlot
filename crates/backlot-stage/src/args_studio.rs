@@ -98,7 +98,7 @@ pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common,
 }
 
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
-    let mut file = None;
+    let mut src = Source::default();
     let mut summary = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
@@ -107,9 +107,10 @@ pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cm
         if common_flag(it, common, &arg, U_REQ)? {
             continue;
         }
+        if src.flag(it, &arg, U_REQ)? {
+            continue;
+        }
         match arg.as_str() {
-            "--file" => file = Some(PathBuf::from(it.value("--file", U_REQ)?)),
-            _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
             "--summary" => summary = Some(it.value("--summary", U_REQ)?),
             _ if eq(&arg, "--summary").is_some() => {
                 summary = eq(&arg, "--summary").map(String::from)
@@ -117,10 +118,15 @@ pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_REQ)),
         }
     }
+    // `--text` exists only for `tell`; `req revise` takes `--file`
+    // or `--stdin` (G2).
+    if src.text.is_some() {
+        return Err(usage("--text does not apply to req revise", U_REQ));
+    }
     Ok((
         std::mem::take(common),
         Cmd::ReqRevise {
-            file: file.ok_or_else(|| usage("missing --file", U_REQ))?,
+            source: src.one(U_REQ)?,
             summary: summary.ok_or_else(|| usage("missing --summary", U_REQ))?,
         },
     ))
@@ -290,7 +296,7 @@ fn report_show(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
 
 pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut role = None;
-    let mut file = None;
+    let mut src = Source::default();
     let mut text = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
@@ -299,9 +305,10 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         if common_flag(it, common, &arg, U_TELL)? {
             continue;
         }
+        if src.flag(it, &arg, U_TELL)? {
+            continue;
+        }
         match arg.as_str() {
-            "--file" => file = Some(PathBuf::from(it.value("--file", U_TELL)?)),
-            _ if eq(&arg, "--file").is_some() => file = eq(&arg, "--file").map(PathBuf::from),
             _ if arg.starts_with('-') => {
                 return Err(usage(format!("unexpected argument '{arg}'"), U_TELL));
             }
@@ -311,17 +318,26 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         }
     }
     // `tell hollywood "<text>"` is the user's line to the overseer —
-    // its own ledger, no file, no studio.
+    // its own ledger, no file, no studio. `--text` answers the same
+    // line without a positional word (G2).
     if role.as_deref() == Some("hollywood") {
-        if file.is_some() {
-            return Err(usage("--file does not apply to tell hollywood", U_TELL));
+        if src.file.is_some() || src.stdin {
+            return Err(usage(
+                "--file and --stdin do not apply to tell hollywood",
+                U_TELL,
+            ));
         }
-        return Ok((
-            std::mem::take(common),
-            Cmd::TellHollywood {
-                text: text.ok_or_else(|| usage("missing <text>", U_TELL))?,
-            },
-        ));
+        let line = match (text, src.text) {
+            (Some(_), Some(_)) => {
+                return Err(usage("give the text once, not twice", U_TELL));
+            }
+            (Some(t), None) | (None, Some(t)) => t,
+            (None, None) => return Err(usage("missing <text>", U_TELL)),
+        };
+        if line.trim().is_empty() {
+            return Err(usage("the text must not be empty", U_TELL));
+        }
+        return Ok((std::mem::take(common), Cmd::TellHollywood { text: line }));
     }
     if let Some(extra) = text {
         return Err(usage(format!("unexpected argument '{extra}'"), U_TELL));
@@ -330,7 +346,7 @@ pub(crate) fn tell(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
         std::mem::take(common),
         Cmd::Tell {
             role: role.ok_or_else(|| usage("missing role", U_TELL))?,
-            file: file.ok_or_else(|| usage("missing --file", U_TELL))?,
+            source: src.one(U_TELL)?,
         },
     ))
 }

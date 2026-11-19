@@ -133,6 +133,13 @@ impl App {
             self.dialog_mouse(mouse);
             return;
         }
+        // The S3 studio dialogs are modals the same way: field/button
+        // hits route, a press outside cancels (§2).
+        if self.studio_dialog.is_some() {
+            self.studio_dialog_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         // The New Studio dialog is a modal like the dialogs above:
         // its cells activate on press, a click outside cancels.
         if self.new_studio.is_some() {
@@ -151,6 +158,14 @@ impl App {
         // highlight and press activation until it closes.
         if self.menu.is_some() {
             self.menu_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
+        // The failure toast's `copy cmd` chip copies, a press on the
+        // card dismisses (§3.3) — other presses route normally.
+        if mouse.kind == MouseEventKind::Down(MouseButton::Left)
+            && self.action_toast_press((mouse.col, mouse.row))
+        {
             self.sched.mark_dirty(Instant::now());
             return;
         }

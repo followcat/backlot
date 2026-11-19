@@ -14,6 +14,8 @@ async fn apply_and_cancel_run_the_exact_argv() {
     app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('a'));
     key(&mut app, hc_vt::Key::Char('x'));
+    assert!(app.studio_dialog.is_some(), "the cancel reason dialog");
+    key(&mut app, hc_vt::Key::Enter);
     let argv = recorded.lock().unwrap().clone();
     assert_eq!(
         argv,
@@ -50,8 +52,8 @@ async fn show_me_on_a_studio_new_card_runs_card_show_and_opens_the_view() {
         &[vec!["card", "show", "c4", "--as", "user"]]
     );
     // The runner's reply lands as the read-only view.
-    let result = app.hwood_rx.recv().await.expect("the action's reply");
-    app.on_hollywood_action(result);
+    let result = app.action_rx.recv().await.expect("the action's reply");
+    app.on_action_reply(result);
     let view = app.hollywood.view.as_ref().expect("the Show me view");
     assert_eq!(view.title, "c4");
     assert!(view.lines.iter().any(|l| l.contains("brief")));
@@ -78,11 +80,13 @@ async fn the_view_applies_and_cancels_the_card_it_shows() {
     alt_y(&mut app);
     app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('s'));
-    let result = app.hwood_rx.recv().await.expect("the view");
-    app.on_hollywood_action(result);
+    let result = app.action_rx.recv().await.expect("the view");
+    app.on_action_reply(result);
     assert!(app.hollywood.view.is_some());
     key(&mut app, hc_vt::Key::Char('a'));
     key(&mut app, hc_vt::Key::Char('x'));
+    assert!(app.studio_dialog.is_some(), "the cancel reason dialog");
+    key(&mut app, hc_vt::Key::Enter);
     let argv = recorded.lock().unwrap().clone();
     assert_eq!(
         argv,
@@ -126,8 +130,8 @@ async fn a_card_answer_from_the_view_closes_it_on_success() {
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "apply", "c3", "--as", "user"]]
     );
-    let result = app.hwood_rx.recv().await.expect("the result");
-    app.on_hollywood_action(result);
+    let result = app.action_rx.recv().await.expect("the result");
+    app.on_action_reply(result);
     assert!(
         app.hollywood.view.is_none(),
         "a resolved card's read retires with the row"
@@ -147,7 +151,7 @@ async fn a_failed_card_answer_keeps_the_view_and_notices() {
     app.hollywood.mode = LayerMode::Expanded;
     app.on_hollywood_action(("card apply c3".into(), Err("no card 'c3'".into()), false));
     assert!(app.hollywood.view.is_some(), "the read stays on a failure");
-    assert!(app.notice.is_some());
+    assert!(app.action_toast.is_some());
     // And Enter closes it.
     key(&mut app, hc_vt::Key::Enter);
     assert!(app.hollywood.view.is_none());
@@ -294,7 +298,7 @@ async fn a_failed_action_shows_a_notice_with_the_stderr_line() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     app.on_hollywood_action(("card apply c3".into(), Err("no card 'c3'".into()), false));
-    assert!(app.notice.is_some());
+    assert!(app.action_toast.is_some());
     let text = screen_lines(&draw_to(&mut app, 120, 40)).join("\n");
     assert!(text.contains("no card 'c3'"), "{text}");
 }

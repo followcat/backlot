@@ -66,7 +66,7 @@ async fn a_workspace_right_click_opens_the_reference_menu_and_rename_writes_the_
         .unwrap()
         .items()
         .iter()
-        .map(|i| i.label)
+        .map(|i| i.label.clone())
         .collect();
     assert_eq!(labels[..2], ["Rename", "Close"]);
     let mut rx = operations(&mut app);

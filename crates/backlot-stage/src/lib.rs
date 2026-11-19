@@ -5,12 +5,15 @@
 mod act;
 pub mod args;
 mod args_hwood;
+mod args_source;
 mod args_studio;
 mod args_task;
+mod args_usage;
 mod checkrun;
 mod checks;
 mod checkwork;
 pub mod cli;
+mod cli_run;
 pub mod commands;
 pub mod config;
 mod daemon;
@@ -148,6 +151,8 @@ mod stale_tests;
 mod stall_tests;
 #[cfg(test)]
 mod store_tests;
+#[cfg(test)]
+mod text_src_tests;
 #[cfg(test)]
 mod watch_tests;
 #[cfg(test)]

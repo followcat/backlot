@@ -37,6 +37,7 @@ pub mod sidebar_render;
 pub mod snapshot;
 pub mod spans;
 pub mod status;
+pub(crate) mod studio_dialogs;
 pub mod tabs;
 pub mod text;
 pub(crate) mod text_editor;

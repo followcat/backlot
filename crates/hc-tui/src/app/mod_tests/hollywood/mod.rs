@@ -157,11 +157,11 @@ fn mouse(kind: MouseEventKind, col: u16, row: u16) -> MouseInput {
 
 fn recorder() -> (
     std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
-    crate::hollywood::HollywoodRunner,
+    crate::app::action_tracker::TestRunner,
 ) {
     let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
     let sink = recorded.clone();
-    let runner: crate::hollywood::HollywoodRunner = std::sync::Arc::new(move |argv| {
+    let runner: crate::app::action_tracker::TestRunner = std::sync::Arc::new(move |argv| {
         sink.lock().unwrap().push(argv);
         Box::pin(async { Ok(String::new()) })
     });

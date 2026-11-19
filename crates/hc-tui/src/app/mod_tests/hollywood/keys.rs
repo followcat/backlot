@@ -123,6 +123,7 @@ async fn esc_collapses_and_x_is_the_card_cancel() {
     app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('x'));
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Enter);
     assert!(recorded.lock().unwrap()[0][..3] == ["card", "cancel", "c3"]);
 }
 
@@ -197,4 +198,36 @@ async fn enter_on_the_new_studio_frame_opens_the_wizard() {
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
     assert!(app.new_studio.is_some(), "the native dialog opened");
     assert!(app.popup_pending.is_none(), "the popup wizard is retired");
+}
+
+#[tokio::test]
+async fn esc_on_a_sheet_menu_keeps_the_bar_owning_keys() {
+    // S3 round 2: closing the menu returns the keys to the surface
+    // it was opened from — the expanded bar. `m` reopens the row's
+    // menu and no byte reaches the focused terminal.
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    app.hollywood.selected = Some(Target::Card("c3".into()));
+    let before = app.pane.input_backlog().0;
+    key(&mut app, hc_vt::Key::Char('m'));
+    let studio_menu = matches!(
+        app.menu.as_ref().map(|m| &m.target),
+        Some(crate::chrome::menu::ContextMenuTarget::Studio(_))
+    );
+    assert!(studio_menu, "`m` opened the card's menu");
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.menu.is_none(), "Esc closed the menu");
+    assert!(app.hollywood.expanded(), "the bar still owns the keys");
+    key(&mut app, hc_vt::Key::Char('m'));
+    let studio_menu = matches!(
+        app.menu.as_ref().map(|m| &m.target),
+        Some(crate::chrome::menu::ContextMenuTarget::Studio(_))
+    );
+    assert!(studio_menu, "`m` opened the menu again");
+    assert_eq!(
+        app.pane.input_backlog().0,
+        before,
+        "no byte reached the pane"
+    );
 }

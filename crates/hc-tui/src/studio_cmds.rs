@@ -1,0 +1,324 @@
+//! The `backlot` argv and Action for every studio command the TUI
+//! runs (S3 §4): each carries `--studio <s> --as user` (`stage`,
+//! `card` and `tell hollywood` stay global). The `NsRun` runner adds
+//! this core's endpoint flags on local runs only — a remote call's
+//! terminal reaches its own core through `HC_*`. The Action's
+//! `done`/`name` wording is the toast text §3 sets.
+
+use crate::action::{Action, mark};
+use crate::studio::StudioKey;
+
+/// `backlot <command> --studio <id> --as user` on `machine` — the
+/// shared tail every studio call carries (§4).
+pub(crate) fn studio_argv(command: &[String], studio: &StudioKey) -> Vec<String> {
+    let mut argv = command.to_vec();
+    argv.extend([
+        "--studio".into(),
+        studio.id.clone(),
+        "--as".into(),
+        "user".into(),
+    ]);
+    argv
+}
+
+/// A global `backlot` call (no `--studio`): `stage`, `card`,
+/// `tell hollywood`, `records`. `--as user` rides the tail like the
+/// studio calls — the ledger writes the user as the actor.
+pub(crate) fn plain_argv(command: &[String]) -> Vec<String> {
+    let mut argv = command.to_vec();
+    argv.extend(["--as".into(), "user".into()]);
+    argv
+}
+
+fn action(label: String, done: String, name: String, key: &StudioKey, mk: String) -> Action {
+    Action {
+        label,
+        done,
+        name,
+        mark: mk,
+        argv: Vec::new(),
+        machine: key.machine.clone(),
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `task pause|resume|abandon|takeover --task <id> --reason <r>`
+/// (§4) — `reason` stays optional for `takeover`, matching the
+/// parser.
+pub(crate) fn task(key: &StudioKey, task: &str, verb: &str, reason: Option<&str>) -> Action {
+    let mut command = vec!["task".into(), verb.into(), "--task".into(), task.into()];
+    if let Some(reason) = reason.filter(|r| !r.is_empty()) {
+        command.extend(["--reason".into(), (*reason).into()]);
+    }
+    let mut a = action(
+        format!("{verb}ing {task}"),
+        format!("{verb}d task {task}"),
+        format!("{verb} task {task}"),
+        key,
+        mark::task(key, task),
+    );
+    a.argv = studio_argv(&command, key);
+    a
+}
+
+/// `close --person <role>` (§4).
+pub(crate) fn close(key: &StudioKey, role: &str) -> Action {
+    let mut a = action(
+        format!("closing {role}"),
+        format!("closed {role}"),
+        format!("close {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(&["close".into(), "--person".into(), role.into()], key);
+    a
+}
+
+/// `reopen --person <role>` (§4).
+pub(crate) fn reopen(key: &StudioKey, role: &str) -> Action {
+    let mut a = action(
+        format!("reopening {role}"),
+        format!("reopened {role}"),
+        format!("reopen {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(&["reopen".into(), "--person".into(), role.into()], key);
+    a
+}
+
+/// `approve --person <role> --decision <d>` — also the D9 override
+/// (`--as user` rides the tail).
+pub(crate) fn decide(key: &StudioKey, role: &str, allow: bool) -> Action {
+    let word = if allow { "allow" } else { "deny" };
+    let mut a = action(
+        format!("{word}ing {role}"),
+        format!("{word}ed {role} ({})", key.id),
+        format!("{word} {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(
+        &[
+            "approve".into(),
+            "--person".into(),
+            role.into(),
+            "--decision".into(),
+            word.into(),
+        ],
+        key,
+    );
+    a
+}
+
+/// `attention clear <seq>` (§4).
+pub(crate) fn clear_attention(key: &StudioKey, role: &str, seq: u64) -> Action {
+    let mut a = action(
+        format!("clearing #{seq}"),
+        format!("cleared attention #{seq}"),
+        format!("clear attention #{seq}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(&["attention".into(), "clear".into(), seq.to_string()], key);
+    a
+}
+
+/// `studio finish [--reason <r>]` (§4).
+pub(crate) fn finish(key: &StudioKey, reason: Option<&str>) -> Action {
+    let mut command = vec!["studio".into(), "finish".into()];
+    if let Some(reason) = reason.filter(|r| !r.is_empty()) {
+        command.extend(["--reason".into(), (*reason).into()]);
+    }
+    let mut a = action(
+        format!("finishing {}", key.id),
+        format!("finished {}", key.id),
+        format!("finish {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(&command, key);
+    a
+}
+
+/// `stage <verb>` — a machine call, not a studio one: `--as user`
+/// follows the verb.
+fn stage(verb: &str, label: String, done: String, name: String, machine: Option<String>) -> Action {
+    Action {
+        label,
+        done,
+        name,
+        mark: mark::stage(machine.as_deref()),
+        // `stage` is global — no `--as user` (the parser knows no
+        // actor for it), matching the pre-S3 argv.
+        argv: vec!["stage".into(), verb.into()],
+        machine,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `backlot stage start`.
+pub(crate) fn stage_start(machine: Option<String>) -> Action {
+    let m = machine.as_deref().unwrap_or("Local");
+    stage(
+        "start",
+        format!("starting stage {m}"),
+        format!("stage started on {m}"),
+        "start stage".into(),
+        machine,
+    )
+}
+
+/// `backlot stage stop` (G1) — the same targeting as `stage start`.
+pub(crate) fn stage_stop(machine: Option<String>) -> Action {
+    let m = machine.as_deref().unwrap_or("Local");
+    stage(
+        "stop",
+        format!("stopping stage {m}"),
+        format!("stage stopped on {m}"),
+        "stop stage".into(),
+        machine,
+    )
+}
+
+/// `tell <role> --text <msg>` (§4, G2).
+pub(crate) fn tell(key: &StudioKey, role: &str, text: &str) -> Action {
+    let mut a = action(
+        format!("telling {role}"),
+        format!("queued note to {role}"),
+        format!("tell {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(
+        &["tell".into(), role.into(), "--text".into(), text.into()],
+        key,
+    );
+    a
+}
+
+/// `req revise --stdin --summary <s>` (§4, G2) — `body` pipes
+/// through the runner's stdin, local and remote alike.
+pub(crate) fn revise(key: &StudioKey, summary: &str, body: String) -> Action {
+    let mut a = action(
+        "revising requirement".to_owned(),
+        format!("revised requirement ({})", key.id),
+        "revise requirement".to_owned(),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(
+        &[
+            "req".into(),
+            "revise".into(),
+            "--stdin".into(),
+            "--summary".into(),
+            summary.into(),
+        ],
+        key,
+    );
+    a.stdin = Some(body);
+    a
+}
+
+/// `card apply <id>` — a local call, always.
+pub(crate) fn card_apply(id: &str) -> Action {
+    Action {
+        label: format!("applying {id}"),
+        done: format!("applied card {id}"),
+        name: format!("apply card {id}"),
+        mark: mark::card(id),
+        argv: plain_argv(&["card".into(), "apply".into(), id.into()]),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `card cancel <id> [--reason <r>]` — local; the menu's reason
+/// dialog fills `reason`, the `x` key keeps its preset one.
+pub(crate) fn card_cancel(id: &str, reason: Option<&str>) -> Action {
+    let mut command = vec!["card".into(), "cancel".into(), id.into()];
+    command.extend([
+        "--reason".into(),
+        reason.unwrap_or("cancelled from the call sheet").into(),
+    ]);
+    Action {
+        label: format!("cancelling {id}"),
+        done: format!("cancelled card {id}"),
+        name: format!("cancel card {id}"),
+        mark: mark::card(id),
+        argv: plain_argv(&command),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `card show <id>` — local; `view` opens the read instead of a
+/// toast.
+pub(crate) fn card_show(id: &str) -> Action {
+    Action {
+        label: format!("card show {id}"),
+        done: format!("showed card {id}"),
+        name: format!("card show {id}"),
+        mark: mark::card(id),
+        argv: plain_argv(&["card".into(), "show".into(), id.into()]),
+        machine: None,
+        stdin: None,
+        view: true,
+    }
+}
+
+/// `priority --task <id> --level <l>` (S2 §4 through the tracker).
+pub(crate) fn priority(key: &StudioKey, task: &str, level: &str) -> Action {
+    let mut a = action(
+        format!("priority {task} {level}"),
+        format!("priority {task} → {level}"),
+        format!("priority {task}"),
+        key,
+        mark::task(key, task),
+    );
+    a.argv = studio_argv(
+        &[
+            "priority".into(),
+            "--task".into(),
+            task.into(),
+            "--level".into(),
+            level.into(),
+        ],
+        key,
+    );
+    a
+}
+
+/// `tell hollywood "<text>"` — the headline's own line (D20).
+pub(crate) fn tell_hollywood(text: &str) -> Action {
+    Action {
+        label: "telling hollywood".into(),
+        done: "told hollywood".into(),
+        name: "tell hollywood".into(),
+        mark: mark::hollywood(),
+        argv: plain_argv(&["tell".into(), "hollywood".into(), text.into()]),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `records --studio <s>` — the actor-records read, opened as a
+/// view on success.
+pub(crate) fn records(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("reading records {}", key.id),
+        format!("read records {}", key.id),
+        format!("records {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(&["records".into()], key);
+    a.view = true;
+    a
+}
