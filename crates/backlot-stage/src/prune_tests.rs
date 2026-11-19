@@ -295,44 +295,66 @@ fn missing_trees_are_pruned_and_foreign_refs_left_alone() {
 }
 
 /// macOS reaches its temp tree through `/var` → `/private/var`: git's
-/// `worktree list` prints the resolved path while the state dir is
+/// `worktree list` prints a resolved path while the state dir is
 /// spelled with the symlink. Both an existing and a vanished worktree
-/// must still read as `work/<name>` and stay in scope.
+/// must still read as `work/<name>` and stay in scope — whether git
+/// prints the fully resolved path or one under the spelled parent.
 #[cfg(unix)]
 #[test]
 fn a_symlinked_state_dir_still_matches_existing_and_missing_trees() {
     let root = TestDir::new("backlot-prune-symlink");
-    let real = root.join("state-real");
-    let work = real.join("work");
+    let spelled = root.join("state-real");
+    let work = spelled.join("work");
     fs::create_dir_all(&work).unwrap();
-    let existing = work.join("t1");
-    fs::create_dir_all(&existing).unwrap();
-    let gone = work.join("t2");
+    fs::create_dir_all(work.join("t1")).unwrap();
+    // Real git resolves the path it prints; the state dir stays a
+    // symlink. Keep both spellings, so the two runs below differ only
+    // in what `worktree list` reports.
+    let real = spelled.canonicalize().unwrap();
+    let existing = real.join("work").join("t1");
+    let gone = real.join("work").join("t2");
     std::os::unix::fs::symlink(&real, root.join("state")).unwrap();
-    // The state dir as the symlink; git prints the resolved paths.
     let dir = root.join("state");
-    let mut fake = Fake {
-        calls: Vec::new(),
-        list: listing(&[
-            (tree(&existing), "backlot/s/t1".into()),
-            (tree(&gone), "backlot/s/t2".into()),
-        ]),
-        dirty: Vec::new(),
-        branches: Vec::new(),
-        merged: Vec::new(),
-        fail_remove: false,
-    };
     let repo = root.join("repo");
-    let steps = {
+    let expect = vec![
+        Step::RemovedWorktree("work/t1".into()),
+        Step::PrunedWorktree("work/t2".into()),
+    ];
+    let run = |list: String| {
+        let mut fake = Fake {
+            calls: Vec::new(),
+            list,
+            dirty: Vec::new(),
+            branches: Vec::new(),
+            merged: Vec::new(),
+            fail_remove: false,
+        };
         let mut git = git_closure(&mut fake);
         prune_studio(&mut git, "s", &dir, &tree(&repo), true, false).unwrap()
     };
+
+    // What CI's macOS run saw: git prints the fully resolved paths.
     assert_eq!(
-        steps,
-        vec![
-            Step::RemovedWorktree("work/t1".into()),
-            Step::PrunedWorktree("work/t2".into()),
-        ]
+        run(listing(&[
+            (tree(&existing), "backlot/s/t1".into()),
+            (tree(&gone), "backlot/s/t2".into()),
+        ])),
+        expect
+    );
+    // And a path whose missing leaf has no canonicalize() of its own
+    // — the parent is still spelled through the `/var` symlink.
+    assert_eq!(
+        run(listing(&[
+            (
+                tree(&spelled.join("work").join("t1")),
+                "backlot/s/t1".into()
+            ),
+            (
+                tree(&spelled.join("work").join("t2")),
+                "backlot/s/t2".into()
+            ),
+        ])),
+        expect
     );
 }
 

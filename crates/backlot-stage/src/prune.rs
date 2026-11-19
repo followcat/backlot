@@ -54,6 +54,18 @@ fn parse_worktrees(list: &str) -> Vec<(String, Option<String>)> {
     out
 }
 
+/// Canonicalize `path`, resolving a symlinked parent even when the leaf
+/// itself is gone. `Path::canonicalize` refuses a missing leaf, so a
+/// pruned worktree folder falls back to its parent plus file name.
+fn canonicalize_with_missing_leaf(path: &Path) -> Option<PathBuf> {
+    if let Ok(p) = path.canonicalize() {
+        return Some(p);
+    }
+    let parent = path.parent()?;
+    let name = path.file_name()?;
+    Some(parent.canonicalize().ok()?.join(name))
+}
+
 /// `true` when `path` sits strictly under `root`, with symlinked state
 /// directories resolved on both sides.
 fn under(path: &Path, root: &Path) -> bool {
@@ -65,15 +77,15 @@ fn under(path: &Path, root: &Path) -> bool {
     // path while the state dir (and a worktree whose folder is gone)
     // still carries the symlink. Compare the raw path against the
     // canonical root first, so a deleted tree still matches.
-    if let Ok(canon_root) = root.canonicalize()
-        && strictly_under(path, &canon_root)
-    {
-        return true;
+    if let Some(canon_root) = canonicalize_with_missing_leaf(root) {
+        if strictly_under(path, &canon_root) {
+            return true;
+        }
+        if let Some(canon_path) = canonicalize_with_missing_leaf(path) {
+            return strictly_under(&canon_path, &canon_root);
+        }
     }
-    match (path.canonicalize(), root.canonicalize()) {
-        (Ok(p), Ok(r)) => strictly_under(&p, &r),
-        _ => false,
-    }
+    false
 }
 
 /// A path as it reads inside the studio directory when it can —
@@ -83,11 +95,11 @@ fn shown(path: &Path, dir: &Path) -> String {
     if let Ok(rel) = path.strip_prefix(dir) {
         return rel.display().to_string();
     }
-    if let Ok(canon_dir) = dir.canonicalize() {
+    if let Some(canon_dir) = canonicalize_with_missing_leaf(dir) {
         if let Ok(rel) = path.strip_prefix(&canon_dir) {
             return rel.display().to_string();
         }
-        if let Ok(canon_path) = path.canonicalize()
+        if let Some(canon_path) = canonicalize_with_missing_leaf(path)
             && let Ok(rel) = canon_path.strip_prefix(&canon_dir)
         {
             return rel.display().to_string();
