@@ -1,29 +1,9 @@
 use super::*;
-use std::sync::atomic::{AtomicU64, Ordering};
-
-struct Scratch(std::path::PathBuf);
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+use crate::test_support::TestDir;
 
 fn load_text(text: &str) -> LoadedConfig {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let root = loop {
-        let path = std::env::temp_dir().join(format!(
-            "hctui-config-test-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        match std::fs::create_dir(&path) {
-            Ok(()) => break Scratch(path),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => panic!("create owned config scratch directory: {error}"),
-        }
-    };
-    let path = root.0.join("config.toml");
+    let root = TestDir::new("hctui-config-test");
+    let path = root.join("config.toml");
     std::fs::write(&path, text).unwrap();
     let loaded = load(&path);
     assert_eq!(std::fs::read_to_string(path).unwrap(), text);

@@ -1,6 +1,7 @@
 //! R9 clipboard-image bridge tests: triggers, target policy, leases,
 //! and the `terminal.put` upload path against `testcore::FakeCore`.
 use super::*;
+use crate::test_support::TestDir;
 use crate::testcore;
 use hc_vt::{Action, Key, Mods};
 use serde_json::json;
@@ -25,23 +26,9 @@ pub(super) fn no_image() -> crate::clipboard::ClipboardRead {
     crate::clipboard::ClipboardRead::None
 }
 
-/// An owned scratch dir for one test: the per-process counter keeps
-/// parallel tests apart, and `create_dir` claims the name atomically —
-/// a leftover directory is retried, never adopted.
-pub(super) fn scratch_dir(tag: &str) -> std::path::PathBuf {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    loop {
-        let dir = std::env::temp_dir().join(format!(
-            "hc-tui-{tag}-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        match std::fs::create_dir(&dir) {
-            Ok(()) => return dir,
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => panic!("create scratch dir {}: {e}", dir.display()),
-        }
-    }
+/// An owned scratch dir for one test, removed when the test ends.
+pub(super) fn scratch_dir(tag: &str) -> TestDir {
+    TestDir::new(&format!("hc-tui-{tag}"))
 }
 
 pub(super) fn ctrl_v(action: Action) -> input::TerminalKey {

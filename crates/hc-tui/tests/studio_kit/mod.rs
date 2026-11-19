@@ -10,10 +10,8 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-static SCRATCH_COUNTER: AtomicU32 = AtomicU32::new(0);
+use super::support::TestDir;
 
 /// Parent of the scratch tree. macOS's per-user `$TMPDIR` is so long
 /// that the socket path for `--session` would exceed `sun_path` and
@@ -30,22 +28,13 @@ fn scratch_parent() -> PathBuf {
 
 /// Scratch HOME/XDG/BACKLOT_STATE_DIR for one test.
 pub struct Scratch {
-    pub root: PathBuf,
+    pub root: TestDir,
     pub state: PathBuf,
 }
 
 impl Scratch {
     pub fn new() -> Self {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let unique = format!(
-            "backlot-studio-test-{}-{}-{nanos}",
-            std::process::id(),
-            SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed),
-        );
-        let root = scratch_parent().join(unique);
+        let root = TestDir::new_in(&scratch_parent(), "backlot-studio-test");
         let state = root.join("backlot-state");
         for dir in ["home", "files"] {
             fs::create_dir_all(root.join(dir)).unwrap();
@@ -62,12 +51,6 @@ impl Scratch {
 
     pub fn events(&self) -> PathBuf {
         self.state.join("studios/acme-shop/events.jsonl")
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
     }
 }
 

@@ -4,6 +4,11 @@
 
 #![cfg(unix)]
 
+#[path = "common/tmp.rs"]
+mod tmp;
+
+use tmp::TestDir;
+
 use hc_proto::codec::{Reader, Writer};
 use hc_proto::endpoint::{self, Endpoint, Env, Local};
 use hc_proto::transport::{self, Error, ReadHalf, WriteHalf};
@@ -17,33 +22,13 @@ use std::time::Duration;
 const DEADLINE: Duration = Duration::from_secs(15);
 
 /// A unique scratch dir under the system temp dir, removed on drop.
-struct Scratch(PathBuf);
+struct Scratch(TestDir);
 
 impl Scratch {
     fn new(name: &str) -> Scratch {
-        // The per-process counter keeps parallel tests apart even on a
-        // reused name; `create_dir` claims the path atomically — a
-        // leftover directory is retried, never adopted. The prefix stays
-        // short: macOS caps a socket path at 103 bytes and its temp dir is long.
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        loop {
-            let path = std::env::temp_dir().join(format!(
-                "hct-{name}-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
-            match std::fs::create_dir(&path) {
-                Ok(()) => return Scratch(path),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(e) => panic!("create scratch dir {}: {e}", path.display()),
-            }
-        }
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        // The prefix stays short: macOS caps a socket path at 103 bytes and
+        // its temp dir is long.
+        Scratch(TestDir::new(&format!("hct-{name}")))
     }
 }
 

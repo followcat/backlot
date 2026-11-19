@@ -4,12 +4,12 @@
 
 mod common;
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use common::attach::params;
 use common::fakecore::{ALL_METHODS, attach_result, hello_result_features};
 use common::minimal_terminal;
+use common::scratch::TestDir;
 use hc_proto::client::{AttachConn, Client};
 use hc_proto::codec::{Reader, Writer};
 use hc_proto::endpoint::{Endpoint, Local};
@@ -21,15 +21,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 
 /// A fresh directory holding one test's socket, removed on drop.
-struct Scratch(PathBuf);
+struct Scratch(TestDir);
 
 impl Scratch {
     fn new(name: &str) -> Scratch {
-        let dir =
-            std::env::temp_dir().join(format!("hc-proto-stats-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        Scratch(dir)
+        Scratch(TestDir::new(&format!("hc-proto-stats-{name}")))
     }
 
     fn endpoint(&self) -> Endpoint {
@@ -37,19 +33,13 @@ impl Scratch {
             session: "hctui-test-stats".into(),
             socket: self.0.join("core.sock"),
             holder_socket: self.0.join("core.holder.sock"),
-            state: self.0.clone(),
+            state: self.0.to_path_buf(),
             config: self.0.join("config.toml"),
         })
     }
 
     fn listen(&self) -> UnixListener {
         UnixListener::bind(self.0.join("core.sock")).unwrap()
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 

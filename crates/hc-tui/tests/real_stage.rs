@@ -17,6 +17,9 @@
 mod kit;
 #[path = "../../hc-proto/tests/common/scratch.rs"]
 mod scratch;
+mod support;
+
+use support::TestDir;
 
 use kit::*;
 
@@ -2332,8 +2335,7 @@ async fn real_stage_cursor_director() {
     // The stub dir must exist before the serve inherits its PATH.
     // The scratch root does not exist yet — put the stub under the
     // test's own temp so the serve's env is complete at spawn.
-    let stub_dir = std::env::temp_dir().join(format!("bl-stubbin-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&stub_dir);
+    let stub_dir = TestDir::new("bl-stubbin");
     fs::create_dir_all(&stub_dir).unwrap();
     fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools/cursor-stub.sh"),

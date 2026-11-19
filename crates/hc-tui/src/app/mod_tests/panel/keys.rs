@@ -4,6 +4,7 @@
 use super::*;
 use crate::panel::Target;
 use crate::studio::StudioKey;
+use crate::test_support::TestDir;
 
 /// Bump `updated_ms` in both documents and land the publish — the
 /// republish rhythm a live two-machine client sees between presses.
@@ -247,7 +248,7 @@ async fn esc_disarms_the_closed_hint() {
 async fn a_bad_panel_key_still_toggles_with_y() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
-    let dir = std::env::temp_dir().join(format!("panel-key-{}", std::process::id()));
+    let dir = TestDir::new("panel-key");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("config.toml");
     std::fs::write(&path, "[panel]\nkey = \"nope+\"\n").unwrap();

@@ -2,6 +2,7 @@
 //! keys it owns, skip, and the once-only what's-new after an upgrade.
 use super::*;
 use crate::chrome::update_modal::{Button, Phase};
+use crate::test_support::TestDir;
 use crate::update_state::CachedRelease;
 use hc_vt::{Action, Key, Mods};
 
@@ -13,25 +14,8 @@ fn key(app: &mut App, key: Key) {
 }
 
 /// A scratch directory standing in for the install dir; removed on drop.
-struct Scratch(std::path::PathBuf);
-
-impl Scratch {
-    fn new(label: &str) -> Scratch {
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "hctui-card-{label}-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        Scratch(dir)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
+fn scratch(label: &str) -> TestDir {
+    TestDir::new(&format!("hctui-card-{label}"))
 }
 
 fn notes_for(version: &str) -> CachedRelease {
@@ -126,9 +110,9 @@ async fn the_card_owns_the_keys_meant_for_the_pane() {
 
 #[tokio::test]
 async fn a_writable_install_dir_offers_update_and_a_read_only_one_hides_it() {
-    let writable = Scratch::new("writable");
+    let writable = scratch("writable");
     let mut app = offered();
-    app.running_exe = Some(writable.0.join("backlot"));
+    app.running_exe = Some(writable.join("backlot"));
     app.open_update();
     let modal = app.update_modal.as_ref().unwrap();
     assert!(modal.writable);

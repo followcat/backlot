@@ -17,6 +17,9 @@ use tokio::sync::mpsc;
 
 #[path = "common/loopcore.rs"]
 mod loopcore;
+mod support;
+
+use support::TestDir;
 
 /// Fixture text that must never reach a snapshot: the `--remote` target,
 /// the machine and user names, the working directory and the title.
@@ -110,12 +113,10 @@ async fn a_snapshot_of_a_run_with_fixture_secrets_holds_none_of_them() {
         Arc::new(ConnStats::default()),
         AttachConn::new(endpoint.clone(), None),
     );
-    let dir = std::env::temp_dir().join(format!("hc-tui-diag-privacy-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = TestDir::new("hc-tui-diag-privacy");
     let path = dir.join("snap.json");
     Diag::new(path.clone(), sources).write().unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
-    let _ = std::fs::remove_dir_all(&dir);
     for secret in SECRETS {
         assert!(!text.contains(secret), "snapshot holds {secret:?}: {text}");
     }

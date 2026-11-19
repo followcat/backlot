@@ -5,6 +5,7 @@ use super::*;
 use crate::app::input::UiEvent;
 use crate::panel::PanelMode;
 use crate::studio::StudioKey;
+use crate::test_support::TestDir;
 use hc_proto::watch::{DocKey, Document};
 
 pub(super) fn doc_key() -> DocKey {
@@ -357,7 +358,7 @@ async fn the_studio_keys_fire_while_a_persistent_float_is_focused() {
 async fn an_unbound_studio_key_does_nothing() {
     let mut app = two_studio_app();
     // `next_studio` unbound through the real config file.
-    let dir = std::env::temp_dir().join(format!("studio-unbind-{}", std::process::id()));
+    let dir = TestDir::new("studio-unbind");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("config.toml");
     std::fs::write(&path, "[keys]\nnext_studio = \"\"\n").unwrap();

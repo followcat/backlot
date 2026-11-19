@@ -2,6 +2,7 @@
 //! `main`: the compiled `backlot` binary under a scratch state dir.
 
 mod studio_kit;
+mod support;
 
 use std::fs;
 

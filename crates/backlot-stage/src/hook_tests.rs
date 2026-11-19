@@ -3,23 +3,16 @@
 //! closed or failing stdin, an unwritable file.
 
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
 use serde_json::{Value, json};
 
 use crate::hook::{LINE_CAP, run_io};
+use crate::test_support::TestDir;
 
-static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-hook-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-hook-test")
 }
 
 fn args(file: &Path) -> Vec<String> {

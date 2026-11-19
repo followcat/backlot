@@ -1,5 +1,6 @@
 use super::*;
 use crate::app::Probe;
+use crate::test_support::TestDir;
 use hc_proto::client::AttachConn;
 use hc_proto::endpoint::{Endpoint, Local};
 use hc_proto::stats::ConnStats;
@@ -9,20 +10,11 @@ use std::path::Path;
 use std::sync::atomic::Ordering::Relaxed;
 
 /// A fresh scratch directory for one test, removed when the test ends.
-struct Scratch(PathBuf);
+struct Scratch(TestDir);
 
 impl Scratch {
     fn new(name: &str) -> Scratch {
-        let dir = std::env::temp_dir().join(format!("hc-tui-diag-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        Scratch(dir)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
+        Scratch(TestDir::new(&format!("hc-tui-diag-{name}")))
     }
 }
 

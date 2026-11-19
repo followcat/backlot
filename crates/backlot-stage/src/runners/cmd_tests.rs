@@ -15,12 +15,10 @@ use super::cmd::{
     CmdPrep, allow_rules, mcp_denies, prepare, session_at, session_in_argv, settings_content, slug,
 };
 use super::{ActorIdentity, LaunchCtx, Prep, plan};
+use crate::test_support::TestDir;
 
-fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("bl-cmd-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp(tag: &str) -> TestDir {
+    TestDir::new(&format!("bl-cmd-{tag}"))
 }
 
 fn check(name: &str, run: &str) -> CheckDecl {
