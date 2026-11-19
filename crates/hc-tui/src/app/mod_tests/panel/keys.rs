@@ -224,23 +224,31 @@ async fn enter_on_a_person_closes_a_full_screen_panel() {
 }
 
 #[tokio::test]
-async fn esc_disarms_the_closed_hint() {
+async fn a_closed_persons_enter_runs_reopen() {
+    // S5 §2: Enter on a resumable closed seat is its reopen — the
+    // same `backlot reopen --person` `o` runs, no hint step.
     let mut app = app_with_panel_doc();
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_panel_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv);
+        Box::pin(async { Ok(()) })
+    }));
     app.area = (120, 24);
     open_panel(&mut app);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
     key(&mut app, hc_vt::Key::Enter);
-    assert!(app.panel.closed_hint.is_some());
-    key(&mut app, hc_vt::Key::Escape);
-    assert!(app.panel.closed_hint.is_none(), "Esc drops the hint");
-    // Esc also left focus; the chord re-focuses and dave's next Enter
-    // shows the hint again.
-    prefix(&mut app);
-    key(&mut app, hc_vt::Key::Char('y'));
-    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
-        app.panel.closed_hint,
-        Some(("acme-shop".into(), "actor-dave".into()))
+        recorded.lock().unwrap().as_slice(),
+        &[vec![
+            "reopen".to_string(),
+            "--person".into(),
+            "actor-dave".into(),
+            "--studio".into(),
+            "acme-shop".into(),
+            "--as".into(),
+            "user".into(),
+        ]]
     );
 }
 
@@ -266,17 +274,13 @@ async fn a_bad_panel_key_still_toggles_with_y() {
 }
 
 #[tokio::test]
-async fn activating_another_row_disarms_the_closed_hint() {
+async fn esc_backs_out_of_the_dock() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     open_panel(&mut app);
-    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
-    key(&mut app, hc_vt::Key::Enter);
-    assert!(app.panel.closed_hint.is_some());
-    // Enter on a different person drops dave's hint.
-    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
-    key(&mut app, hc_vt::Key::Enter);
-    assert!(app.panel.closed_hint.is_none());
+    assert!(app.panel.focused);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused, "the keys went back to the pane");
 }
 
 #[tokio::test]
@@ -302,14 +306,7 @@ async fn a_closed_person_reopens_on_o() {
     app.area = (120, 24);
     open_panel(&mut app);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
-    key(&mut app, hc_vt::Key::Enter);
-    assert_eq!(
-        app.panel.closed_hint,
-        Some(("acme-shop".into(), "actor-dave".into()))
-    );
-    assert!(recorded.lock().unwrap().is_empty(), "Enter only hints");
     key(&mut app, hc_vt::Key::Char('o'));
-    assert!(app.panel.closed_hint.is_none());
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec![
@@ -331,7 +328,6 @@ async fn a_non_resumable_person_says_why_instead_of_reopening() {
     open_panel(&mut app);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-eve".into()));
     key(&mut app, hc_vt::Key::Enter);
-    assert!(app.panel.closed_hint.is_none());
     assert!(app.notice.is_some(), "the refusal notices");
 }
 

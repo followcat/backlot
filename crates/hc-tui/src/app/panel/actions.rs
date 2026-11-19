@@ -12,8 +12,7 @@ use super::App;
 
 impl App {
     /// `o` on a closed person: `backlot reopen --person <role>` on
-    /// the studio's machine — the direct reopen the closed hint
-    /// names (S2 §4). Anything else is a no-op.
+    /// the studio's machine (S2 §4). Anything else is a no-op.
     pub(super) fn panel_reopen_selected(&mut self) {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
@@ -29,14 +28,16 @@ impl App {
         if role.state != "closed" {
             return;
         }
-        if !role.resumable {
+        // The dock menu's rule: a resumable seat reopens, a fixed
+        // seat (the producer) reopens anyway.
+        let fixed = role.role == "producer" || !role.role.starts_with("actor");
+        if !(role.resumable || fixed) {
             self.show_notice(
                 "Cannot reopen",
                 &format!("{} has no saved session to resume", role.name),
             );
             return;
         }
-        self.panel.closed_hint = None;
         self.run_action(studio_cmds::reopen(&key, &role.role));
     }
 

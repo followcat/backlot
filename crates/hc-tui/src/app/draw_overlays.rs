@@ -223,22 +223,9 @@ pub(super) fn render_overlays_and_cursor(
         // (wire.rs u16_to_modifier drops extended underline bits), then dim
         // the whole background before the panel removes DIM in its own area.
         super::draw_overlays_s3::dim_cells(buf);
-        crate::chrome::help::render_help_overlay(
-            buf,
-            &app.help_state,
-            &app.live,
-            app.studio.active.then(|| {
-                crate::keybind_help::backlot_help_groups(
-                    &app.live.keybinds,
-                    &app.live.prefix,
-                    &app.panel_config,
-                    app.hollywood_key.unwrap_or_default(),
-                    app.panel_key_combo,
-                )
-            }),
-            &app.shell.palette,
-        )
-        .unwrap_or_default()
+        // S5's launcher or herdr's overlay — `draw_overlays_s5` owns
+        // the branch and the floating picker.
+        super::draw_overlays_s5::render_help(app, buf, area)
     } else {
         crate::chrome::help::HelpRender::default()
     };

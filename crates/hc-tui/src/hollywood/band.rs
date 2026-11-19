@@ -121,7 +121,7 @@ fn draw_wait(
     mobile: bool,
     selected: bool,
     palette: &Palette,
-    _hits: &mut HollywoodRender,
+    hits: &mut HollywoodRender,
 ) {
     let bg = if selected {
         palette.selection_bg
@@ -214,21 +214,18 @@ fn draw_wait(
             Style::default().fg(palette.overlay0).bg(bg),
         );
     }
-    let mut cx = avail - chips_w;
-    for chip in &chips {
-        let text = chip_text(chip, compact);
-        let w = display_width(&text) as u16;
-        let style = if selected && chip.primary {
-            Style::default()
-                .fg(crate::studio::glyphs::contrast_fg(palette))
-                .bg(palette.accent)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(palette.subtext0).bg(palette.surface0)
-        };
-        put_text(buf, cx, rect.y, w, &text, style);
-        cx += w;
-    }
+    // S5: the chips paint and record their click targets together.
+    super::draw::paint_wait_chips(
+        buf,
+        rect.y,
+        avail - chips_w,
+        wait,
+        &chips,
+        compact,
+        selected,
+        palette,
+        hits,
+    );
 }
 
 /// A waiting row's second line: the prompt's detail or the card's

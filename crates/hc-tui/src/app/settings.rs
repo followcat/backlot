@@ -42,6 +42,14 @@ impl App {
         });
     }
 
+    /// The lot menu's `Hollywood settings…` (S5 §2.3): the overlay
+    /// opened straight on the Studio section — the start policy,
+    /// `Alt+Y`, dock width and the `[hollywood]` overseer row.
+    pub(super) fn open_studio_settings(&mut self) {
+        self.open_settings_overlay();
+        self.select_settings_section(SettingsSection::Studio);
+    }
+
     /// The studio tab's current values — `None` outside studio mode.
     fn studio_view(&self) -> Option<crate::chrome::settings::StudioView> {
         self.studio

@@ -26,6 +26,16 @@ impl App {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.panel.focused = true;
+                // The expanded dock's left border is a drag handle
+                // (S5 §2) — beside the panes it resizes within
+                // `28..=48`. An overlay dock's edge is not a handle.
+                if self.panel.mode == crate::panel::PanelMode::Expanded
+                    && self.panel_beside(self.area.0)
+                    && point.0 == self.panel_hits.area.x
+                {
+                    self.chrome_drag = Some(ChromeDrag::PanelWidth);
+                    return;
+                }
                 if contains(self.panel_hits.title, point) {
                     self.panel_flip_mode();
                     return;

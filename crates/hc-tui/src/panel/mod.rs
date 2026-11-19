@@ -64,9 +64,6 @@ pub(crate) struct Panel {
     /// (rows shifted by a publish) degrades to the nearest
     /// surviving occurrence, never to position 0.
     pub selected_row: Option<usize>,
-    /// The closed role Enter landed on — its `closed — press o to
-    /// reopen` hint line until the selection moves.
-    pub closed_hint: Option<(crate::studio::StudioKey, String)>,
     /// The `Space` drawer's owner row — a `Person` or `Task` target;
     /// the three drawer lines draw under it (S2 §3).
     pub drawer: Option<Target>,
@@ -79,6 +76,9 @@ pub(crate) struct Panel {
     pub finish_confirm: Option<crate::studio::StudioKey>,
     /// Spinner frame counter for working marks (~120 ms ticks).
     pub spin: usize,
+    /// The width the dock's border drag last left — the session's
+    /// manual override of the `[dock] width`/tier (S5 §2).
+    pub drag_width: Option<u16>,
     /// H4: the expanded panel's last row names `backlot hollywood
     /// setup` while no `[hollywood]` table exists (R22). Set by
     /// `set_hollywood` — a client-local flag, never read from a doc.
@@ -99,11 +99,11 @@ impl Panel {
             scroll: 0,
             selected: None,
             selected_row: None,
-            closed_hint: None,
             drawer: None,
             accepted_folds: Default::default(),
             finish_confirm: None,
             spin: 0,
+            drag_width: None,
             // The flag stays off until `set_hollywood` reads the
             // config — panel-only construction draws no hint.
             hollywood_hint: false,

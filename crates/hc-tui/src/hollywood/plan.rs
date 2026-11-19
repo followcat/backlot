@@ -5,6 +5,76 @@
 //! top sprocket only leaves under ten rows, and a waiting row is
 //! never dropped — when they outgrow the room the window scrolls and
 //! the `i/N` marker says so. The `tell` row never leaves either.
+//!
+//! `expanded_height` and `plan` live here too — the dock's seam and
+//! the band's draw both read the same ladder.
+
+use ratatui::layout::Rect;
+
+use super::rows::{self, Row, Target};
+use super::sheet::{Status, Wait};
+use super::{Confirm, Hollywood, LayerOpts, frames};
+use crate::panel::data::MachineSummary;
+
+/// The expanded band's height cap while floating: half the frame.
+const EXPANDED_FRAC: u16 = 2;
+
+/// The band's height while expanded — the dock's seam (A5.2) reads
+/// the same number before it picks its own `y`.
+pub(crate) fn expanded_height(
+    frame: Rect,
+    machines: &[MachineSummary],
+    status: &Status<'_>,
+    hollywood: &Hollywood,
+    opts: LayerOpts,
+) -> u16 {
+    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
+    plan(frame, &waits, &band_rows, hollywood, opts).height()
+}
+
+/// The plan for one layout pass — shared by the height read and the
+/// draw so the dock's seam and the band itself never disagree.
+pub(crate) fn plan(
+    frame: Rect,
+    waits: &[Wait<'_>],
+    band_rows: &[Row<'_>],
+    hollywood: &Hollywood,
+    opts: LayerOpts,
+) -> Plan {
+    let cap = if opts.mobile {
+        frame.height.min(16)
+    } else {
+        (frame.height / EXPANDED_FRAC).max(12).min(frame.height)
+    };
+    // The selected waiting item keeps its detail through the ladder.
+    let selected_wait = hollywood
+        .selected
+        .as_ref()
+        .and_then(|t| waits.iter().position(|w| &w.target() == t));
+    // The armed `finish?` confirm borrows its row's detail line —
+    // keep it in the plan even though a ready row is not detailable.
+    let confirming = hollywood.confirm.as_ref().map(|c| match c {
+        Confirm::Finish(key) => Target::Ready(key.clone()),
+    });
+    let mut plan = Plan {
+        top_sprocket: true,
+        title: true,
+        blank_1: true,
+        frames_h: frames::FRAME_H,
+        blank_2: true,
+        headline: band_rows.iter().any(|r| matches!(r, Row::Headline(_))),
+        details: waits
+            .iter()
+            .map(|w| w.detailable() || confirming.as_ref() == Some(&w.target()))
+            .collect(),
+        shown: waits.len(),
+        tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
+        hints: true,
+        bottom_sprocket: true,
+    };
+    fit(&mut plan, cap, frame.height, selected_wait);
+    plan
+}
 
 /// One fitted plan of the expanded band.
 #[derive(Debug, Default)]

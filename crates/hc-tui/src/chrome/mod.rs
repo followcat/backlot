@@ -13,6 +13,8 @@ pub mod endpoint_sidebar_expanded;
 pub mod endpoint_sidebar_row;
 pub mod endpoints;
 pub(crate) mod help;
+pub(crate) mod help_launcher;
+pub(crate) mod help_picker;
 pub(crate) mod lot;
 pub(crate) mod menu;
 pub mod mobile;

@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
+use ratatui::widgets::{Clear, Widget};
 
 use super::dialogs::{contrast, panel};
 use super::palette::Palette;
@@ -260,6 +261,11 @@ pub(crate) fn render_context_menu(
             .saturating_add(screen.height.saturating_sub(height)),
     );
     let rect = Rect::new(x, y, width, height);
+    // S5: a studio menu never keeps the covered rows' modifiers — the
+    // panel's fill only patches. The herdr menus keep the patch fill.
+    if matches!(menu.target, ContextMenuTarget::Studio(_)) {
+        Clear.render(rect, buffer);
+    }
     let inner = panel(buffer, rect, palette.accent, palette.panel_bg)?;
     let mut rows = Vec::new();
     for (index, item) in items.iter().enumerate() {

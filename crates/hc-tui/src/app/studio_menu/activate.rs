@@ -19,7 +19,15 @@ impl App {
         if item.dim.is_some() {
             return;
         }
-        match item.act {
+        self.run_studio_act(menu, item.act);
+    }
+
+    /// One `StudioAct` on a built menu — the `Ctrl+B ?` launcher
+    /// calls this directly (S5): its rows carry the same
+    /// `StudioMenu`/`StudioAct` pair a menu press resolves to, so
+    /// actions, dialogs and focuses flow through this single arm.
+    pub(crate) fn run_studio_act(&mut self, menu: &StudioMenu, act: StudioAct) {
+        match act {
             StudioAct::FocusTerminal => self.studio_menu_focus(menu),
             StudioAct::Peek => self.studio_menu_peek(menu),
             StudioAct::Sheet => {
@@ -193,6 +201,13 @@ impl App {
                     ));
                 }
             }
+            // The lot menu's surfaces (S5 §2.3): no `backlot` command
+            // behind them — the sheet, the dock, S4's dialog and the
+            // Studio settings tab open directly.
+            StudioAct::CallSheet => self.hollywood_open(),
+            StudioAct::ToggleDock => self.panel_toggle(),
+            StudioAct::NewStudio => self.new_studio_open(None),
+            StudioAct::HollywoodSettings => self.open_studio_settings(),
         }
     }
 

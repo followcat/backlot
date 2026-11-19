@@ -2,8 +2,8 @@
 //! expands it; in the expanded panel a row click selects and acts
 //! like Enter, a card's Apply/Cancel/Show hits run that action, the
 //! input line opens for editing, the scrollbar grabs and the wheel
-//! scrolls. A press outside the expanded panel is not routed here —
-//! it reaches whatever is under the layer and leaves the panel open.
+//! scrolls. A press outside the expanded panel collapses it (A10.1)
+//! and keeps routing to whatever is under the layer.
 
 use ratatui::layout::Position;
 
@@ -20,6 +20,19 @@ fn contains(rect: ratatui::layout::Rect, point: (u16, u16)) -> bool {
 }
 
 impl App {
+    /// A press outside the expanded Call Sheet collapses it back to
+    /// the pill (S5 §2, A10.1) — the press itself keeps routing, so
+    /// a click on a pane focuses it and hands the keys back. An open
+    /// "Show me" view swallows the press itself instead.
+    pub(crate) fn hollywood_outside_press(&mut self, kind: MouseEventKind) {
+        if self.hollywood.expanded()
+            && matches!(kind, MouseEventKind::Down(_))
+            && self.hollywood.view.is_none()
+        {
+            self.hollywood_collapse();
+        }
+    }
+
     /// The layer's mouse dispatch — called only when the press is
     /// inside `hollywood_hits.area` (or the wheel anywhere over it).
     pub(crate) fn hollywood_mouse(&mut self, mouse: MouseInput) {
@@ -67,10 +80,27 @@ impl App {
                         }
                         return;
                     }
-                    // S1's mouse is select-only: a click on a row or
-                    // a chip selects it (S5 adds the activate paths).
-                    // The `+ new studio` frame is a button, not a
-                    // row — its click opens the native dialog (U6b).
+                    // A chip is its own target (S5 §2): the click
+                    // selects its row and runs the chip's key — `↵`
+                    // chips run the row's Enter.
+                    let chip = self
+                        .hollywood_hits
+                        .chips
+                        .iter()
+                        .find(|(rect, _, _)| contains(*rect, point))
+                        .map(|(_, target, key)| (target.clone(), *key));
+                    if let Some((target, key)) = chip {
+                        self.hollywood.selected = Some(target);
+                        if key == '\r' {
+                            self.hollywood_activate();
+                        } else {
+                            self.hollywood_row_key(crossterm::event::KeyCode::Char(key));
+                        }
+                        return;
+                    }
+                    // A row click selects and acts like Enter (S5
+                    // §2). The `+ new studio` frame is a button, not
+                    // a row — its click opens the native dialog (U6b).
                     let hit = self
                         .hollywood_hits
                         .rows
@@ -79,15 +109,28 @@ impl App {
                         .map(|(_, target)| target.clone());
                     match hit {
                         Some(crate::hollywood::Target::NewStudio) => self.hollywood_new_studio(),
-                        Some(target) => self.hollywood.selected = Some(target),
+                        Some(target) => {
+                            self.hollywood.selected = Some(target);
+                            self.hollywood_activate();
+                        }
                         None => {}
                     }
                 }
                 MouseEventKind::Down(MouseButton::Right) => {
-                    // Right-click selects the row under the pointer
-                    // and opens its menu there (S3 §1) — the band
-                    // never swallowed right-click before, it just
-                    // had none.
+                    // The title row opens the current studio's menu
+                    // (S5 §2); a row's right-click selects it and
+                    // opens its menu there (S3 §1).
+                    if contains(self.hollywood_hits.title, point) {
+                        if let Some(key) = self
+                            .studio
+                            .current
+                            .clone()
+                            .or_else(|| self.hit_map.studio_key.clone())
+                        {
+                            self.studio_header_menu(&key, point);
+                        }
+                        return;
+                    }
                     let hit = self
                         .hollywood_hits
                         .rows

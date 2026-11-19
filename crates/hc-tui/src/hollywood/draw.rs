@@ -12,77 +12,19 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 
-use super::plan::{self, Plan};
+use super::plan;
 use super::rows::{self, Row, Target};
 use super::sheet::{Status, Wait};
 use super::view;
-use super::{Hollywood, LayerMode, LayerOpts, band, chips, frames, title};
+use super::{Hollywood, LayerMode, LayerOpts, band, chips, frames, items, title};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics};
+use crate::chrome::text::display_width;
 use crate::panel::data::{MachineSummary, spans_machines};
 
-/// The band's height while expanded — the dock's seam (A5.2) reads
-/// the same number before it picks its own `y`.
-pub(crate) fn expanded_height(
-    frame: Rect,
-    machines: &[MachineSummary],
-    status: &Status<'_>,
-    hollywood: &Hollywood,
-    opts: LayerOpts,
-) -> u16 {
-    let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
-    plan(frame, &waits, &band_rows, hollywood, opts).height()
-}
-
-/// The plan for one layout pass — shared by the height read and the
-/// draw so the dock's seam and the band itself never disagree.
-fn plan(
-    frame: Rect,
-    waits: &[Wait<'_>],
-    band_rows: &[Row<'_>],
-    hollywood: &Hollywood,
-    opts: LayerOpts,
-) -> Plan {
-    let cap = if opts.mobile {
-        frame.height.min(16)
-    } else {
-        (frame.height / EXPANDED_FRAC).max(12).min(frame.height)
-    };
-    // The selected waiting item keeps its detail through the ladder.
-    let selected_wait = hollywood
-        .selected
-        .as_ref()
-        .and_then(|t| waits.iter().position(|w| &w.target() == t));
-    // The armed `finish?` confirm borrows its row's detail line —
-    // keep it in the plan even though a ready row is not detailable.
-    let confirming = hollywood.confirm.as_ref().map(|c| match c {
-        super::Confirm::Finish(key) => super::Target::Ready(key.clone()),
-    });
-    let mut plan = Plan {
-        top_sprocket: true,
-        title: true,
-        blank_1: true,
-        frames_h: frames::FRAME_H,
-        blank_2: true,
-        headline: band_rows.iter().any(|r| matches!(r, Row::Headline(_))),
-        details: waits
-            .iter()
-            .map(|w| w.detailable() || confirming.as_ref() == Some(&w.target()))
-            .collect(),
-        shown: waits.len(),
-        tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
-        hints: true,
-        bottom_sprocket: true,
-    };
-    plan::fit(&mut plan, cap, frame.height, selected_wait);
-    plan
-}
-
-/// The expanded band's height cap while floating: half the frame.
-const EXPANDED_FRAC: u16 = 2;
 /// The title row's mark.
 pub(crate) const MARK: &str = "✦  H O L L Y W O O D";
 /// The title row's left margin.
@@ -102,6 +44,10 @@ pub(crate) struct HollywoodRender {
     /// Hit rows with their targets — the title, the frames/chips
     /// and the band rows alike (S1's mouse selects through them).
     pub rows: Vec<(Rect, Target)>,
+    /// A waiting row's action chips (S5 §2): the chip's rect, its
+    /// row's target and its key — a chip click selects its row and
+    /// runs the key's action.
+    pub chips: Vec<(Rect, Target, char)>,
     /// The input line (expanded, an agent only).
     pub input: Rect,
     /// The waiting list's scroll metrics — the wheel and PageUp/Down.
@@ -180,7 +126,7 @@ fn render_band(
     let local_label = local.unwrap_or("Local");
     let all_frames = rows::frames(machines);
     let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
-    let plan = plan(frame, &waits, &band_rows, hollywood, opts);
+    let plan = plan::plan(frame, &waits, &band_rows, hollywood, opts);
     let selected_wait = hollywood
         .selected
         .as_ref()
@@ -406,4 +352,42 @@ fn render_band(
         ));
     }
     hits
+}
+
+/// A waiting row's action chips (S5 §2), painted right-aligned from
+/// `x` — the primary chip lit `accent` on the selected row — and
+/// recorded as click targets: `↵` maps to the row's Enter, a letter
+/// to the row's own key.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn paint_wait_chips(
+    buf: &mut Buffer,
+    y: u16,
+    mut x: u16,
+    wait: &Wait<'_>,
+    chips: &[items::Chip],
+    compact: bool,
+    selected: bool,
+    palette: &Palette,
+    hits: &mut HollywoodRender,
+) {
+    for chip in chips {
+        let text = items::chip_text(chip, compact);
+        let w = display_width(&text) as u16;
+        let style = if selected && chip.primary {
+            Style::default()
+                .fg(crate::studio::glyphs::contrast_fg(palette))
+                .bg(palette.accent)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(palette.subtext0).bg(palette.surface0)
+        };
+        put_text(buf, x, y, w, &text, style);
+        let key = if chip.key == "↵" {
+            '\r'
+        } else {
+            chip.key.chars().next().unwrap_or('\r')
+        };
+        hits.chips.push((Rect::new(x, y, w, 1), wait.target(), key));
+        x += w;
+    }
 }

@@ -53,6 +53,7 @@ mod mouse_geometry;
 mod action;
 mod ansi;
 
+mod help_launcher;
 mod keybind_help;
 
 pub mod layout;

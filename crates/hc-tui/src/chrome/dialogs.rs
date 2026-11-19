@@ -36,6 +36,9 @@ pub(crate) fn panel(
     }
     let background = Style::default().bg(bg).remove_modifier(Modifier::DIM);
     let border = Style::default().fg(c).bg(bg).remove_modifier(Modifier::DIM);
+    // The fill patches: the S3/S5 popups that must not keep the
+    // covered rows' modifiers `Clear` their area before calling this —
+    // the herdr-parity surfaces keep the patch fill.
     for y in a.y..a.bottom() {
         for x in a.x..a.right() {
             b[(x, y)].set_symbol(" ").set_style(background);

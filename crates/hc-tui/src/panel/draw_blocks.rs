@@ -275,14 +275,12 @@ pub(super) fn draw_person(
 /// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
 /// user-owned prompt, `! prompt · director reviewing` for a
 /// director-owned one (D9), `! <attention>` otherwise. `Failed`
-/// shows the last turn's error; `ClosedHint`/`Confirm` are the
-/// reopen affordances.
+/// shows the last turn's error.
 /// A person's extra line at the name column. The cue is the
 /// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
 /// user-owned prompt, `! prompt · director reviewing` for a
 /// director-owned one (D9), `! <attention>` otherwise. `Failed`
-/// shows the last turn's error; `ClosedHint`/`Confirm` are the
-/// reopen affordances.
+/// shows the last turn's error.
 pub(super) fn draw_person_line(
     buf: &mut Buffer,
     rect: Rect,
@@ -319,10 +317,6 @@ pub(super) fn draw_person_line(
                 .map(|f| format!("! last turn failed: {f}"))
                 .unwrap_or_default(),
             Person::Failed.style(palette),
-        ),
-        PersonLine::ClosedHint => (
-            "closed — press o to reopen".to_string(),
-            Style::default().fg(palette.overlay0),
         ),
     };
     put_text(

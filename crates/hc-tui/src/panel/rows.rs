@@ -76,8 +76,6 @@ pub(crate) enum PersonLine {
     Cue,
     /// `! last turn failed: <e>` — only when no attention shows.
     Failed,
-    /// `closed — press o to reopen` after Enter on a closed role.
-    ClosedHint,
 }
 
 /// One display row, borrowing its data from the summaries.
@@ -239,17 +237,6 @@ fn block_rows<'a>(
                 studio,
                 role,
                 kind: PersonLine::Failed,
-            });
-        }
-        if panel
-            .closed_hint
-            .as_ref()
-            .is_some_and(|(s, r)| s == &key && r == &role.role)
-        {
-            out.push(Row::PersonLine {
-                studio,
-                role,
-                kind: PersonLine::ClosedHint,
             });
         }
         let target = Target::Person(key, role.role.clone());

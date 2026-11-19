@@ -21,15 +21,27 @@ async fn studio_mode_leads_with_backlot_sections_and_pins_the_legend() {
             label: "alt+up".into(),
         });
     app.help = true;
-    // The first screen already shows backlot's sections — and the
-    // pinned legend at the bottom.
+    // S5's launcher leads with its action groups, the backlot
+    // reference sections follow — and the legend stays pinned.
     let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
-    assert!(text.contains("backlot"), "{text}");
-    assert!(text.contains("studio dock"), "{text}");
-    assert!(text.contains("call sheet"), "{text}");
+    assert!(text.contains("Actions & Keybinds"), "{text}");
+    assert!(text.contains("studio & task actions"), "{text}");
     assert!(text.contains("previous studio"), "{text}");
-    assert!(text.contains("next role"), "{text}");
     assert!(text.contains("shadows herdr:"), "the shadow note: {text}");
+    // The backlot reference sections keep their titles and rows
+    // below the fold — the model carries them even off-screen.
+    let groups = app.help_groups();
+    assert!(
+        groups
+            .iter()
+            .flat_map(|g| g.rows.iter())
+            .any(|r| r.label == "next role"),
+        "next role is a row"
+    );
+    let titles: Vec<String> = groups.into_iter().map(|g| g.title).collect();
+    for title in ["call sheet (open)", "studio dock (open)", "studio dialogs"] {
+        assert!(titles.iter().any(|t| t == title), "{title}: {titles:?}");
+    }
     assert!(text.contains("◐ work"), "the people row: {text}");
     assert!(text.contains("· wait"), "the tasks row: {text}");
     // Scrolled to the bottom and mid-filter, the legend stays pinned.

@@ -100,7 +100,6 @@ impl App {
         }
         self.panel.selected = Some(targets[index].clone());
         self.panel.selected_row = Some(index);
-        self.panel.closed_hint = None;
         self.panel.finish_confirm = None;
         // Keep the selection inside the scrolled body (title is fixed).
         let body_height = self.panel_hits.body.height.max(1);

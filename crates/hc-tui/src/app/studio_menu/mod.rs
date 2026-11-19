@@ -24,6 +24,13 @@ impl App {
             return false;
         }
         let pos = ratatui::layout::Position::new(point.0, point.1);
+        // S5 §2.3: the lot pill's right-click is the lot menu — the
+        // pill is the whole lot, not the current studio (Decision 5
+        // only moved the pill's *left*-click and its display).
+        if self.hit_map.lot_pill.contains(pos) {
+            self.open_studio_menu(StudioMenu::lot(), point);
+            return self.menu.is_some();
+        }
         if self.hit_map.studio_header.contains(pos)
             && let Some(key) = self.hit_map.studio_key.clone()
         {

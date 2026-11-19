@@ -111,6 +111,13 @@ impl App {
             self.studio.others_expanded = !self.studio.others_expanded;
             return;
         }
+        // The sidebar's `menu` button opens `Ctrl+B ?` (S5 §2) —
+        // studio mode only; in `--plain` herdr's dead hit stays dead.
+        if !self.plain && contains(hits.global_launcher, point) {
+            self.help = true;
+            self.help_state = crate::chrome::help::HelpState::default();
+            return;
+        }
         // Machine rows: collapse toggle (or the active endpoint's row)
         // toggles the endpoint section; other online rows would activate
         // the endpoint — hc-tui is single-endpoint, so the toggle case

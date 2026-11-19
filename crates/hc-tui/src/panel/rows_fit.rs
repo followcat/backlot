@@ -161,16 +161,10 @@ pub(super) fn fold_count(studio: &StudioSummary) -> usize {
 
 /// A person's line count: itself plus its cue/failed line, the
 /// closed hint and an open drawer.
-/// A person's line count: itself plus its cue/failed line, the
-/// closed hint and an open drawer.
+/// A person's line count: itself plus its cue/failed line and an
+/// open drawer.
 pub(super) fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
     let mut height = 1 + usize::from(role.attention.is_some() || role.failed.is_some());
-    height += usize::from(
-        panel
-            .closed_hint
-            .as_ref()
-            .is_some_and(|(s, r)| s == &studio.key() && r == &role.role),
-    );
     height += usize::from(
         panel
             .drawer

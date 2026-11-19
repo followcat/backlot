@@ -85,9 +85,10 @@ collapses first), `?` opens this help, `Esc` or the toggle collapses the bar. A 
 stage or finish action on a remote machine runs there through the shared RPC connection —
 never SSH, never a local spawn; cards and `tell` run on the local core. The bar owns those
 keys while it is expanded — an armed prefix disarms into it. A click on the pill expands it,
-a click on a row or a chip selects it (activation stays on the keys), the wheel scrolls the
-frames sideways and the waiting rows vertically, and a click outside goes to what is under
-the bar and leaves it open.
+a click on a row selects it and acts like `Enter`, a click on a chip runs that chip's action,
+the wheel scrolls the frames sideways and the waiting rows vertically, and a click outside
+collapses the bar to the pill and hands the keys to what is under it — a typed letter lands in
+the pane. Right-click on the title or a row opens the same context menu `m` opens.
 
 `s` on any card opens `backlot card show <id>` in the read-only view. The view owns its keys
 until Esc, Enter, `x` or `q` closes it — arrows / `j` `k` scroll.

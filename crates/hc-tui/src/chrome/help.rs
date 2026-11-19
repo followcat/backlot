@@ -14,6 +14,11 @@ pub(crate) struct HelpState {
     pub query: TextEditor,
     pub search_focused: bool,
     pub scroll: usize,
+    /// The launcher's selected row (S5) — a flat index into the
+    /// filtered rows; unused under `--plain`.
+    pub selected: usize,
+    /// The compact target picker a `…` row opened (S5).
+    pub picker: Option<crate::help_launcher::HelpPicker>,
 }
 #[derive(Default)]
 pub(crate) struct HelpRender {
@@ -23,6 +28,11 @@ pub(crate) struct HelpRender {
     pub metrics: Option<super::scroll::ScrollMetrics>,
     pub max_scroll: usize,
     pub cursor: Option<CursorState>,
+    /// The launcher's row hits — `(rect, row index)` in draw order.
+    pub rows: Vec<(Rect, usize)>,
+    /// The open picker's frame and row hits.
+    pub picker: Rect,
+    pub picker_rows: Vec<(Rect, usize)>,
 }
 pub(crate) struct CursorState {
     pub x: u16,
@@ -273,9 +283,10 @@ pub(crate) fn render_help_overlay(
         metrics: Some(metrics),
         max_scroll,
         cursor,
+        ..HelpRender::default()
     })
 }
-fn panel(
+pub(crate) fn panel(
     b: &mut Buffer,
     a: Rect,
     c: ratatui::style::Color,
@@ -322,7 +333,7 @@ fn popup(a: Rect, w: u16, h: u16) -> Option<Rect> {
     popup_with_width_cap(a, w, h, 4)
 }
 
-fn popup_with_width_cap(a: Rect, w: u16, h: u16, width_cap: u16) -> Option<Rect> {
+pub(crate) fn popup_with_width_cap(a: Rect, w: u16, h: u16, width_cap: u16) -> Option<Rect> {
     let w = w.min(a.width.saturating_sub(width_cap));
     let h = h.min(a.height.saturating_sub(2));
     if w < 4 || h < 4 {
@@ -335,12 +346,12 @@ fn popup_with_width_cap(a: Rect, w: u16, h: u16, width_cap: u16) -> Option<Rect>
         h,
     ))
 }
-fn button(b: &mut Buffer, r: Rect, t: &str, s: Style) {
+pub(crate) fn button(b: &mut Buffer, r: Rect, t: &str, s: Style) {
     b.set_style(r, s);
     let w = display_width(t).min(usize::from(r.width)) as u16;
     put_text(b, r.x + (r.width - w) / 2, r.y, w, t, s)
 }
-fn contrast(p: &Palette) -> ratatui::style::Color {
+pub(crate) fn contrast(p: &Palette) -> ratatui::style::Color {
     match p.panel_bg {
         ratatui::style::Color::Reset => p.surface_dim,
         c => c,

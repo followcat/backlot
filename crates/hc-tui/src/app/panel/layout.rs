@@ -19,6 +19,11 @@ impl App {
         match self.panel.mode {
             PanelMode::Closed => 0,
             PanelMode::Collapsed => COLLAPSED_WIDTH,
+            // The border drag's manual width wins for the session —
+            // over the file's width and the spec's tier (S5 §2).
+            PanelMode::Expanded if let Some(width) = self.panel.drag_width => {
+                width.clamp(panel::WIDTH_MIN, panel::WIDTH_MAX)
+            }
             PanelMode::Expanded if self.panel_config.width_explicit => self
                 .panel_config
                 .width
