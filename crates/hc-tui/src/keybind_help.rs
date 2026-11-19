@@ -287,6 +287,10 @@ pub(crate) fn backlot_help_groups(
                     sheet.label(&crate::config::format_prefix_combos(prefixes)),
                     Cow::Borrowed("call sheet") as Cow<'static, str>,
                 ),
+                (
+                    format!("{} m", crate::config::format_prefix_combos(prefixes)),
+                    Cow::Borrowed("studio menu on the focused pane") as Cow<'static, str>,
+                ),
             ],
         ),
         (
@@ -321,6 +325,7 @@ pub(crate) fn backlot_help_groups(
                 entry("a / x / s", "apply / cancel / show a card"),
                 entry("f / r", "finish a studio / start a stage"),
                 entry("p / i / n", "peek / tell / new studio"),
+                entry("m / right-click", "row menu"),
                 entry("1–9 0", "frame · new studio"),
                 entry("esc", "collapse"),
             ],
@@ -333,7 +338,17 @@ pub(crate) fn backlot_help_groups(
                 entry("v / o / p", "task sheet · report · peek"),
                 entry("y / d + -", "answer · priority"),
                 entry("f / r", "finish a studio / start a stage"),
+                entry("m / right-click", "row menu"),
                 entry("esc", "back · unfocus"),
+            ],
+        ),
+        (
+            "studio dialogs",
+            vec![
+                entry("⏎ / y", "confirm · send"),
+                entry("^E", "edit the revise body in $EDITOR"),
+                entry("tab / ⇧tab", "next · previous field"),
+                entry("esc", "cancel"),
             ],
         ),
         (

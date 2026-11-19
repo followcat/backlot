@@ -48,6 +48,7 @@ mod word_select;
 
 mod mouse_geometry;
 
+mod action;
 mod ansi;
 
 mod keybind_help;
@@ -65,3 +66,6 @@ mod sheet;
 mod shells;
 pub mod structure;
 mod studio;
+mod studio_cmds;
+mod studio_dialog;
+mod studio_menu;

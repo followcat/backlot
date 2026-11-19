@@ -12,9 +12,9 @@ impl App {
         let (pane_tx, pane_rx) = mpsc::channel(64);
         let (seen_tx, seen_req_rx) = mpsc::channel(64);
         let (seen_res_tx, seen_rx) = mpsc::channel(64);
-        let (panel_action_tx, panel_rx) = mpsc::channel(16);
         let (sheet_tx, sheet_rx) = mpsc::channel(16);
-        let (hwood_tx, hwood_rx) = mpsc::channel(16);
+        let (action_tx, action_rx) = mpsc::channel(16);
+        let (dialog_fetch_tx, dialog_fetch_rx) = mpsc::channel(4);
         let (ns_tx, ns_rx) = mpsc::channel(16);
         let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
         let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
@@ -140,15 +140,7 @@ impl App {
             panel_key_combo: crate::config::parse_key_combo("y"),
             panel_hits: crate::panel::PanelRender::default(),
             panel_anim_deadline: None,
-            // Never spawn here: tests build `App` through this path and
-            // must stay process-free. cli installs `spawn_runner` on the
-            // real binary before the loop starts.
-            panel_runner: std::sync::Arc::new(|_| {
-                Box::pin(async { Err("panel actions unavailable".into()) })
-            }),
             remote_runner: None,
-            panel_action_tx,
-            panel_rx,
             sheet: None,
             sheet_hits: crate::sheet::SheetRender::default(),
             sheet_epoch: 0,
@@ -165,13 +157,19 @@ impl App {
             hollywood_overseer: None,
             setup_runner_hint: None,
             hollywood_hits: crate::hollywood::HollywoodRender::default(),
-            // Never spawn here — cli installs `spawn_runner` like the
-            // panel's before the loop starts.
-            hollywood_runner: std::sync::Arc::new(|_| {
-                Box::pin(async { Err("hollywood actions unavailable".into()) })
-            }),
-            hwood_tx,
-            hwood_rx,
+
+            actions: crate::action::ActionTracker::default(),
+            action_tx,
+            action_rx,
+            action_toast: None,
+            action_toast_hit: ratatui::layout::Rect::default(),
+            action_copy_hit: ratatui::layout::Rect::default(),
+            studio_dialog: None,
+            studio_dialog_hits: crate::chrome::studio_dialogs::DialogHits::default(),
+            studio_dialog_gen: 0,
+            dialog_fetch_tx,
+            dialog_fetch_rx,
+            studio_editor_file: None,
             sched: sched::Scheduler::default(),
             focused: None,
             before_navigate: None,

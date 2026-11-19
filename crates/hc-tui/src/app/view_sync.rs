@@ -137,8 +137,10 @@ impl App {
         self.sync_observers();
         self.reconcile_popups();
         // The `^E` cast editor's popup just closed (or never got to
-        // close) — reload and validate the file it left.
+        // close) — reload and validate the file it left. The Revise
+        // dialog's `^E` requirement editor rides the same check.
         self.ns_editor_check();
+        self.studio_editor_check();
         self.synthesize_alerts(Instant::now());
         self.share_seen();
         self.reap_exited();

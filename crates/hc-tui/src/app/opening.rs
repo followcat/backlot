@@ -187,12 +187,6 @@ impl App {
         if crate::panel::stage_running(&self.view, None) {
             return;
         }
-        let mut argv = vec!["stage".to_string(), "start".to_string()];
-        argv.extend(self.panel_endpoint_args.iter().cloned());
-        self.run_panel_action(crate::panel::PanelAction {
-            label: "stage start".into(),
-            argv,
-            machine: None,
-        });
+        self.run_action(crate::studio_cmds::stage_start(None));
     }
 }

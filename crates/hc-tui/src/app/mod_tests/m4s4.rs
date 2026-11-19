@@ -356,7 +356,7 @@ async fn agent_right_click_opens_the_extension_menu_in_order() {
         .unwrap()
         .items()
         .iter()
-        .map(|i| i.label)
+        .map(|i| i.label.clone())
         .collect();
     assert_eq!(
         labels,

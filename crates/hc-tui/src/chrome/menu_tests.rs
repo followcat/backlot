@@ -1,7 +1,10 @@
 use super::{ContextMenu, ContextMenuTarget};
 
-fn labels(menu: &ContextMenu) -> Vec<&'static str> {
-    menu.items().iter().map(|item| item.label).collect()
+fn labels(menu: &ContextMenu) -> Vec<String> {
+    menu.items()
+        .iter()
+        .map(|item| item.label.to_string())
+        .collect()
 }
 
 fn menu(target: ContextMenuTarget) -> ContextMenu {

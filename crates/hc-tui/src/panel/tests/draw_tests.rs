@@ -57,6 +57,7 @@ fn draw(
         &keys(),
         None,
         false,
+        &Default::default(),
         &palette(),
     );
     (buf, hits)
@@ -364,6 +365,7 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         &keys(),
         None,
         false,
+        &Default::default(),
         &palette(),
     );
     for y in area.y..area.y + area.height {
@@ -395,6 +397,7 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
         &keys(),
         None,
         false,
+        &Default::default(),
         &palette(),
     );
     let text = lines(&buf, area).join("\n");
@@ -480,6 +483,7 @@ fn studios_spanning_machines_name_their_machine() {
         &keys(),
         None,
         false,
+        &Default::default(),
         &palette(),
     );
     let text = lines(&buf, area).join("\n");
@@ -513,6 +517,7 @@ fn one_machine_keeps_the_bare_id_headers() {
         &keys(),
         None,
         false,
+        &Default::default(),
         &palette(),
     );
     let text = lines(&buf, area).join("\n");

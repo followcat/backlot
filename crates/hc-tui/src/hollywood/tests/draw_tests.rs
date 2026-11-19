@@ -235,7 +235,7 @@ fn the_band_draws_sprockets_title_and_counts() {
     assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
     assert!(text.contains("apply a"), "{text}");
     assert!(
-        text.contains("↑↓ move   ⏎ open   y/d answer   a/x card   f finish   r start   p peek   i tell   ? help   esc close"),
+        text.contains("↑↓ move   ⏎ open   y/d answer   a/x card   f finish   r start   p peek   i tell   m menu   ? help   esc close"),
         "{text}"
     );
 }

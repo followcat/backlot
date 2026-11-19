@@ -116,9 +116,7 @@ impl App {
             KeyCode::Char('n') if plain => {
                 self.panel.finish_confirm = None;
             }
-            KeyCode::Char('m') if plain => {
-                self.show_notice("Menus", "menus come later");
-            }
+            KeyCode::Char('m') if plain => self.panel_menu_selected(),
             KeyCode::Char('+') | KeyCode::Char('=')
                 if plain || modifiers == KeyModifiers::SHIFT =>
             {

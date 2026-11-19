@@ -27,6 +27,12 @@ impl App {
             return;
         }
         self.release_pane_mouse();
+        // The studio surfaces first — the cast and the dock header
+        // live inside the sidebar, so they must win over the generic
+        // workspace/machine dispatch below (S3 §1).
+        if self.open_studio_menu_at(point) {
+            return;
+        }
         if let Some(hit) = self
             .hit_map
             .machines
@@ -194,6 +200,18 @@ impl App {
                 let index = menu.highlighted;
                 self.context_menu_activate(index);
             }
+            KeyCode::Char(c) => {
+                // The shown key hint activates the row while the menu
+                // is open (S3 §1.3). Dimmed items — the disabled
+                // entries — never fire.
+                let index = menu
+                    .items()
+                    .iter()
+                    .position(|i| i.key == Some(c) && i.dim.is_none());
+                if let Some(index) = index {
+                    self.context_menu_activate(index);
+                }
+            }
             _ => {}
         }
     }
@@ -345,6 +363,13 @@ impl App {
                 _ => {}
             },
             ContextMenuTarget::Agent { pane_id } => self.agent_menu_action(pane_id, action),
+            ContextMenuTarget::Studio(studio) => {
+                // A dimmed row's press just closes — its reason was
+                // already visible beside the label.
+                if items.get(index).is_some_and(|i| i.dim.is_none()) {
+                    self.studio_menu_activate(studio, index);
+                }
+            }
         }
     }
 }

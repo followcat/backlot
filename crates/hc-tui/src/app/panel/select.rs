@@ -11,7 +11,7 @@ impl App {
     /// stable identities, never positions. The stacking decision
     /// needs the drawn body's height; pre-first-draw it is zero, and
     /// `rows` reads that as "no constraint" so every block opens.
-    pub(super) fn panel_targets(&self) -> Vec<Target> {
+    pub(crate) fn panel_targets(&self) -> Vec<Target> {
         let machines = self.panel_summaries();
         panel::rows(
             &machines,
@@ -31,7 +31,7 @@ impl App {
     /// names several rows, so `selected_row` pins the occurrence the
     /// selection actually sits on; when rows shifted since (a publish
     /// above it), the nearest surviving occurrence keeps the place.
-    pub(super) fn panel_selected_index(&self, targets: &[Target]) -> usize {
+    pub(crate) fn panel_selected_index(&self, targets: &[Target]) -> usize {
         let Some(target) = self.panel.selected.as_ref() else {
             return 0;
         };

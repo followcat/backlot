@@ -9,7 +9,6 @@
 //! `--plain` keeps the layer `Hidden`: no cells, no consumed key, no
 //! timer — the frame is byte-identical to herdr (D15, D6).
 
-mod actions;
 mod band;
 mod chips;
 mod draw;
@@ -23,7 +22,6 @@ mod sheet;
 mod title;
 mod view;
 
-pub(crate) use actions::{HollywoodAction, HollywoodRunner, spawn_runner};
 pub(crate) use draw::{HollywoodRender, expanded_height, render};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use rows::{Target, band_rows, frames};

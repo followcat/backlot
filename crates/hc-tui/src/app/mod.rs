@@ -6,6 +6,7 @@
 //! M3a implements structure, layout/tab operations and bindings plus lock.
 //! Custom commands, notifications and remaining actions belong to M4.
 
+mod action_tracker;
 mod agent_ops;
 mod agent_presentation;
 mod closing;
@@ -64,6 +65,8 @@ mod settings;
 mod shared;
 mod shell_state;
 mod studio;
+mod studio_dialog;
+mod studio_menu;
 mod studio_shell;
 mod synthesize;
 mod tab_status;
@@ -257,15 +260,10 @@ pub struct App {
     /// One-shot spin deadline — armed only while a working mark is
     /// drawn, so an idle or closed panel wakes nothing (sched.rs).
     panel_anim_deadline: Option<Instant>,
-    /// Injectable `backlot …` runner — tests record argv, production
-    /// spawns `current_exe()` off the event loop.
-    panel_runner: crate::panel::PanelRunner,
     /// Runs `backlot …` on an added machine through `terminal.run
     /// on:` — `None` until cli installs the shared-RPC runner, so a
     /// test's remote action reports the machine as unreachable.
     remote_runner: Option<crate::panel::RemoteRunner>,
-    panel_action_tx: mpsc::Sender<(String, Result<(), String>)>,
-    panel_rx: mpsc::Receiver<(String, Result<(), String>)>,
     /// The Task & Delivery Sheet (`v` on the dock) — `Some` while the
     /// modal is open; it owns the keys like the other dialogs.
     sheet: Option<crate::sheet::Sheet>,
@@ -311,12 +309,34 @@ pub struct App {
     setup_runner_hint: Option<String>,
     /// Last frame's layer hit rectangles (`HollywoodRender`).
     hollywood_hits: crate::hollywood::HollywoodRender,
-    /// Injectable `backlot …` runner for card actions and the input
-    /// line — tests record argv, production spawns `current_exe()`.
-    hollywood_runner: crate::hollywood::HollywoodRunner,
     /// `(label, result, view)` — `view` opens the "Show me" read on Ok.
-    hwood_tx: mpsc::Sender<(String, Result<String, String>, bool)>,
-    hwood_rx: mpsc::Receiver<(String, Result<String, String>, bool)>,
+    /// S3's ActionTracker (A7.1): every `backlot` invocation goes
+    /// through `run_action` — the pending marks live here and the
+    /// replies land on `action_rx`.
+    actions: crate::action::ActionTracker,
+    action_tx: mpsc::Sender<(u64, Result<String, String>)>,
+    action_rx: mpsc::Receiver<(u64, Result<String, String>)>,
+    /// The §3 toast — the 3.5 s success card or the 8 s failure
+    /// card carrying `copy cmd`.
+    action_toast: Option<action_tracker::ActionToast>,
+    /// Last frame's action-toast rects — the card and its `copy
+    /// cmd` chip.
+    action_toast_hit: ratatui::layout::Rect,
+    action_copy_hit: ratatui::layout::Rect,
+    /// The S3 native dialogs — reason, confirm, Tell and Revise.
+    studio_dialog: Option<crate::studio_dialog::StudioDialog>,
+    /// Last frame's dialog hit map (`StudioDialogRender`).
+    studio_dialog_hits: crate::chrome::studio_dialogs::DialogHits,
+    /// The open generation — a stale prefill fetch or a re-opened
+    /// dialog's earlier reply never lands (the sheet's own rule).
+    studio_dialog_gen: u64,
+    /// The revise prefill's fetch replies.
+    dialog_fetch_tx: mpsc::Sender<(u64, Result<String, String>)>,
+    dialog_fetch_rx: mpsc::Receiver<(u64, Result<String, String>)>,
+    /// The revise `^E` temp file while its `$EDITOR` popup is open —
+    /// `(path, editor_gen)` so a re-opened editor's older file never
+    /// re-reads.
+    studio_editor_file: Option<(std::path::PathBuf, u64)>,
     sched: sched::Scheduler,
     /// The focused terminal address (Normal-mode spec).
     focused: Option<String>,

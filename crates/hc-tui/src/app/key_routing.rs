@@ -265,6 +265,12 @@ impl App {
             self.dialog_key(&press);
             return None;
         }
+        // The S3 native dialogs own every key while open — `Esc`
+        // always cancels cleanly (A6.2).
+        if self.studio_dialog.is_some() {
+            self.studio_dialog_key(&press);
+            return None;
+        }
         // The New Studio dialog owns every key while it is open —
         // Esc steps back or closes, nothing reaches a program.
         if self.new_studio.is_some() {
@@ -381,6 +387,21 @@ impl App {
             self.panel_close();
             return None;
         }
+        // `Ctrl+B m` from a focused pane opens that pane's studio
+        // menu — a role pane's role menu, a shell pane's studio menu
+        // (S3 §1). Studio mode only: herdr's own `m` tail never
+        // existed, so `--plain` and a studio-less client forward `m`
+        // to the pane exactly as before.
+        if self.prefix.armed() && self.studio.active {
+            let matched = crate::input::terminal_key_of(&press);
+            if matched.code == crossterm::event::KeyCode::Char('m') && matched.modifiers.is_empty()
+            {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                self.pane_menu();
+                return None;
+            }
+        }
         // U1: the four studio keys bind in studio mode only — they win
         // over a herdr direct binding on the same key and still fire
         // while the panel owns the keys. Outside studio mode the key
@@ -438,6 +459,12 @@ impl App {
         // took theirs above.
         if self.opening_visible() {
             self.opening_key(&press);
+            return None;
+        }
+        // The failure toast's own keys (§3.3): `C` writes the exact
+        // command through OSC 52, `Esc` dismisses — only while the
+        // card is up and no modal above took the press.
+        if self.action_toast_key(&press) {
             return None;
         }
         match (!self.prefix.armed())

@@ -123,6 +123,7 @@ async fn esc_collapses_and_x_is_the_card_cancel() {
     app.hollywood.selected = Some(Target::Card("c3".into()));
     key(&mut app, hc_vt::Key::Char('x'));
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    key(&mut app, hc_vt::Key::Enter);
     assert!(recorded.lock().unwrap()[0][..3] == ["card", "cancel", "c3"]);
 }
 

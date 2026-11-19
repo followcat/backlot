@@ -291,16 +291,18 @@ impl App {
                     }
                     None => image_read_done_open = false,
                 },
-                result = self.panel_rx.recv() => {
-                    if let Some(result) = result {
-                        self.on_panel_action(result);
-                        kind = WakeKind::Panel;
+                reply = self.action_rx.recv() => {
+                    if let Some(reply) = reply {
+                        self.on_action_reply(reply);
+                        dirty = true;
+                        kind = WakeKind::Hollywood;
                     }
                 },
-                result = self.hwood_rx.recv() => {
-                    if let Some(result) = result {
-                        self.on_hollywood_action(result);
-                        kind = WakeKind::Hollywood;
+                reply = self.dialog_fetch_rx.recv() => {
+                    if let Some(reply) = reply {
+                        self.on_dialog_fetch(reply);
+                        dirty = true;
+                        kind = WakeKind::Panel;
                     }
                 },
                 reply = self.ns_rx.recv() => {

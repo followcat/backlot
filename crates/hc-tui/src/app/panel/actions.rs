@@ -1,12 +1,12 @@
-//! The dock's studio actions: the `o`/`p`/`r`/`f`/`+`/`-` runners
-//! that build `backlot` argv for the selected row and spawn it on
-//! the studio's machine — the only keys that leave the view and
-//! write to the ledger.
+//! The dock's studio actions: the `o`/`p`/`r`/`f`/`+`/`-`/`y`/`d`
+//! runners that build a `studio_cmds::Action` for the selected row
+//! and run it through the one `ActionTracker` (S3 §3) — the only
+//! keys that leave the view and write to the ledger.
 
 use backlot_model::event::Priority;
 
-use crate::panel::data::StudioRef;
-use crate::panel::{PanelAction, Target};
+use crate::panel::Target;
+use crate::studio_cmds;
 
 use super::App;
 
@@ -21,13 +21,9 @@ impl App {
         let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
             return;
         };
-        let Some((studio, role)) = crate::panel::data::studio(&machines, &key).and_then(|s| {
-            s.studio
-                .roles
-                .iter()
-                .find(|r| r.role == role_name)
-                .map(|r| (s, r))
-        }) else {
+        let Some(role) = crate::panel::data::studio(&machines, &key)
+            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
+        else {
             return;
         };
         if role.state != "closed" {
@@ -41,15 +37,7 @@ impl App {
             return;
         }
         self.panel.closed_hint = None;
-        let argv = self.panel_argv(
-            studio,
-            &["reopen".into(), "--person".into(), role.role.clone()],
-        );
-        self.run_panel_action(PanelAction {
-            label: format!("reopen {}", role.name),
-            argv,
-            machine: studio.machine.map(str::to_owned),
-        });
+        self.run_action(studio_cmds::reopen(&key, &role.role));
     }
 
     /// `p` on a person: the role's live screen, read-only — a
@@ -81,9 +69,9 @@ impl App {
 
     /// `y`/`d` while the dock owns the keys: an armed finish confirm
     /// answers first — `y` runs `studio finish`, `d` stands down;
-    /// otherwise the key answers a selected person's user-owned
-    /// prompt (`backlot approve --person <role> --decision <d>` on
-    /// the studio's machine, S2 §4).
+    /// otherwise the key answers a selected person's prompt. A
+    /// user-owned prompt answers at once; a director-routed one
+    /// asks the override confirm first (D9, S3 §2.2).
     pub(super) fn panel_decide(&mut self, allow: bool) {
         if let Some(key) = self.panel.finish_confirm.take() {
             if allow {
@@ -91,7 +79,27 @@ impl App {
             }
             return;
         }
-        self.panel_prompt_decision(allow);
+        let machines = self.panel_summaries();
+        let targets = self.panel_targets();
+        let index = self.panel_selected_index(&targets);
+        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
+            return;
+        };
+        let Some(role) = crate::panel::data::studio(&machines, &key)
+            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
+            .cloned()
+        else {
+            return;
+        };
+        if role.attention_user {
+            self.run_action(studio_cmds::decide(&key, &role.role, allow));
+        } else if role.attention_seq.is_some() {
+            // D9: the prompt is routed to the director — answering it
+            // myself takes the §2.2 override confirm.
+            self.studio_dialog = Some(crate::studio_dialog::StudioDialog::dir_override(
+                &key, &role.role, allow,
+            ));
+        }
     }
 
     /// `r` while the selected row's studio has a down stage:
@@ -110,15 +118,7 @@ impl App {
         if self.machine_stage_running(studio.machine) {
             return;
         }
-        let mut argv = vec!["stage".into(), "start".into(), "--as".into(), "user".into()];
-        if studio.machine.is_none() {
-            argv.extend(self.panel_endpoint_args.iter().cloned());
-        }
-        self.run_panel_action(PanelAction {
-            label: format!("stage start {}", studio.machine.unwrap_or("Local")),
-            argv,
-            machine: studio.machine.map(str::to_owned),
-        });
+        self.run_action(studio_cmds::stage_start(studio.machine.map(str::to_owned)));
     }
 
     /// `f` on a ready-to-finish studio's rows: arm the inline
@@ -142,35 +142,7 @@ impl App {
     /// the studio's machine — the same command the Call Sheet's
     /// confirm runs (S1 §5).
     pub(super) fn panel_finish_run(&mut self, key: &crate::studio::StudioKey) {
-        let machines = self.panel_summaries();
-        let Some(studio) = crate::panel::data::studio(&machines, key) else {
-            return;
-        };
-        let argv = self.panel_argv(studio, &["studio".into(), "finish".into()]);
-        self.run_panel_action(PanelAction {
-            label: format!("studio finish {}", key.id),
-            argv,
-            machine: studio.machine.map(str::to_owned),
-        });
-    }
-
-    /// `y`/`d` on a person with a user-owned prompt: `backlot
-    /// approve --person <role> --decision <d>` on the studio's
-    /// machine — the same command the Call Sheet rows run (S2 §4).
-    /// A director-owned or absent prompt is a no-op.
-    pub(super) fn panel_prompt_decision(&mut self, allow: bool) {
-        let machines = self.panel_summaries();
-        let targets = self.panel_targets();
-        let index = self.panel_selected_index(&targets);
-        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
-            return;
-        };
-        let owned = crate::panel::data::studio(&machines, &key)
-            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
-            .is_some_and(|r| r.attention_user);
-        if owned {
-            self.hollywood_prompt_decision(&key, &role_name, allow);
-        }
+        self.run_action(studio_cmds::finish(key, None));
     }
 
     /// `+`/`-` on a selected actor or task row: raise/lower the
@@ -180,16 +152,16 @@ impl App {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        // (studio, task id, current level, label word): a person's
-        // own task, or the task row's task itself.
-        let Some((studio, task, priority, label)) = (match targets.get(index).cloned() {
+        // (studio, task id, current level): a person's own task, or
+        // the task row's task itself.
+        let Some((key, task, priority)) = (match targets.get(index).cloned() {
             Some(Target::Person(key, role_name)) => crate::panel::data::studio(&machines, &key)
                 .and_then(|s| {
                     s.studio
                         .roles
                         .iter()
                         .find(|r| r.role == role_name)
-                        .map(|r| (s, r.task.clone(), r.priority, r.name.clone()))
+                        .map(|r| (key.clone(), r.task.clone(), r.priority))
                 }),
             Some(Target::Task(key, id)) => {
                 crate::panel::data::studio(&machines, &key).and_then(|s| {
@@ -197,7 +169,7 @@ impl App {
                         .tasks
                         .iter()
                         .find(|t| t.id == id)
-                        .map(|t| (s, Some(t.id.clone()), Some(t.priority), t.id.clone()))
+                        .map(|t| (key.clone(), Some(t.id.clone()), Some(t.priority)))
                 })
             }
             _ => None,
@@ -215,72 +187,6 @@ impl App {
             _ => None,
         };
         let Some(next) = next else { return };
-        let argv = self.panel_argv(
-            studio,
-            &[
-                "priority".into(),
-                "--task".into(),
-                task,
-                "--level".into(),
-                next.to_string(),
-            ],
-        );
-        self.run_panel_action(PanelAction {
-            label: format!("priority {} {}", label, next),
-            argv,
-            machine: studio.machine.map(str::to_owned),
-        });
-    }
-
-    /// The argv tail for a panel command — the command word first
-    /// (`backlot` dispatches studio commands on argv[1]), then its
-    /// flags, then the common `--studio`/`--as` and, for a local
-    /// studio, the endpoint flags. A remote studio's tail carries no
-    /// endpoint flags: the terminal it runs in on that machine
-    /// reaches that machine's core through its own `HC_*` variables.
-    pub(super) fn panel_argv(&self, studio: StudioRef<'_>, command: &[String]) -> Vec<String> {
-        let mut argv = command.to_vec();
-        argv.extend([
-            "--studio".into(),
-            studio.studio.id.clone(),
-            "--as".into(),
-            "user".into(),
-        ]);
-        if studio.machine.is_none() {
-            argv.extend(self.panel_endpoint_args.iter().cloned());
-        }
-        argv
-    }
-
-    /// Spawn the action off the event loop through the injected
-    /// runner; the result comes back on `panel_rx`. The opening
-    /// page's `s` runs `stage start` through the same path.
-    pub(crate) fn run_panel_action(&mut self, action: PanelAction) {
-        let future = match &action.machine {
-            None => (self.panel_runner)(action.argv.clone()),
-            Some(machine) => match &self.remote_runner {
-                Some(runner) => runner.run(machine.clone(), action.argv.clone()),
-                None => {
-                    self.show_notice(
-                        "Studio action failed",
-                        &format!("{}: cannot reach {machine}", action.label),
-                    );
-                    return;
-                }
-            },
-        };
-        let tx = self.panel_action_tx.clone();
-        let label = action.label;
-        tokio::spawn(async move {
-            let _ = tx.send((label, future.await)).await;
-        });
-    }
-
-    /// The action's result — a non-zero exit shows its first stderr
-    /// line (the runner extracted it).
-    pub(crate) fn on_panel_action(&mut self, (label, result): (String, Result<(), String>)) {
-        if let Err(error) = result {
-            self.show_notice("Studio action failed", &format!("{label}: {error}"));
-        }
+        self.run_action(studio_cmds::priority(&key, &task, &next.to_string()));
     }
 }

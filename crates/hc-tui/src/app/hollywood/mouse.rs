@@ -83,6 +83,22 @@ impl App {
                         None => {}
                     }
                 }
+                MouseEventKind::Down(MouseButton::Right) => {
+                    // Right-click selects the row under the pointer
+                    // and opens its menu there (S3 §1) — the band
+                    // never swallowed right-click before, it just
+                    // had none.
+                    let hit = self
+                        .hollywood_hits
+                        .rows
+                        .iter()
+                        .find(|(rect, _)| contains(*rect, point))
+                        .map(|(_, target)| target.clone());
+                    if let Some(target) = hit {
+                        self.hollywood.selected = Some(target.clone());
+                        self.hollywood_menu(&target, point);
+                    }
+                }
                 MouseEventKind::ScrollUp => {
                     if self.hollywood_over_frames(point) {
                         self.hollywood_frame_scroll(-1);
