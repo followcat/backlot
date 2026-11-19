@@ -341,9 +341,9 @@ The title line counts the studios (`lot · 2`). `stage not running` means no liv
 attention, and one row per active or blocked role.
 
 Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter` focuses a
-live person's terminal (a closed person shows `closed — press o to reopen`; `o` reopens a
-resumable one), `Space` opens a drawer or folds a studio, `v` opens the Task & Delivery
-Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
+live person's terminal (a closed person reopens a resumable or fixed seat through the action
+tracker; `o` does the same), `Space` opens a drawer or folds a studio, `v` opens the Task &
+Delivery Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
 `+`/`-` raise and lower a task's priority, `r`/`f` start the stage and finish the studio,
 `c` switches collapsed and expanded, `q` closes, `?` opens help, `Esc` unfocuses the dock
 beside the panes and steps back over an overlay — to the strip when it fits, else closed.

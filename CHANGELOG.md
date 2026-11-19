@@ -43,8 +43,9 @@ v0.1.14), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   file under `reports/`, `checks/`, `attention/` or `requirements/` to stdout
   — `..`, absolute paths and symlinks that leave the studio are rejected, and
   the stream is capped at 1 MiB.
-- **The dock's keys.** `Enter` focuses a live terminal (a closed person shows
-  `closed — press o to reopen`), `o` reopens a resumable person, `p` peeks,
+- **The dock's keys.** `Enter` focuses a live terminal (on a closed person it
+  reopens a resumable or fixed seat through the action tracker; `o` does the
+  same for a resumable one), `p` peeks,
   `y`/`d` answer a user-owned prompt, `+`/`-` set a task's priority, `r`/`f`
   run the stage-start and studio-finish actions, `c` collapses, `q` closes,
   `?` opens help, and `m` opens the row's context menu.
@@ -108,6 +109,33 @@ v0.1.14), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   that uses it — defaulting to `$HOME`.
 - `backlot runners --json` prints the runner detection as JSON, with the
   models and efforts backlot knows per runner.
+- **`Ctrl+B ?` is the studio action launcher.** In studio mode the help
+  overlay keeps Herdr's keybind reference and gains runnable rows: a
+  `waiting on you` group first (your prompts, stopped stages, Hollywood
+  cards and studios ready to finish), then `studio & task actions` and
+  `hollywood`, then Herdr's own sections. `Enter` on a runnable row runs
+  the action through the same context-menu path a right-click uses —
+  opening a compact target picker or the S3 reason dialog when a target is
+  needed — and `Enter` on a reference row focuses its surface. `/` filters
+  (`/pause` finds `Pause task…`), the glyph legend stays pinned, and the
+  sidebar's `menu` button opens the overlay. With no studios and no
+  `[hollywood]` — or under `--plain` — the list stays Herdr's own,
+  cell-identical.
+- **Every studio surface answers the mouse.** Call Sheet rows select and
+  act like `Enter`, chips run their action, the `tell hollywood` line
+  opens for editing on click, and the bar's scrollbar drags while the
+  wheel scrolls rows vertically or the frame strip horizontally;
+  right-click on the title or a row opens its S3 menu. Clicking outside
+  the expanded bar collapses it to the lot pill and hands the keys to the
+  pane underneath. The lot pill's left-click toggles the bar and its
+  right-click opens the studio header's menu; studio header clicks focus
+  the studio; sidebar cast rows focus their person and the `others` row
+  expands in place. In the dock, left-click selects and activates,
+  right-click claims the dock's keys and opens the row menu, the scrollbar
+  clicks, drags and wheels, and dragging the left border resizes the dock
+  between 28 and 48 columns. Every path that opens an overlay or selects a
+  row claims the keys for that surface; every path that focuses a pane
+  gives them back.
 
 ### Changed
 

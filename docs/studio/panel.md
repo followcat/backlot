@@ -32,7 +32,7 @@ tail still wins while the panel is closed or unfocused.
 |---|---|
 | `j`/`k`, `↑`/`↓` | Move the selection one row |
 | `PageUp`/`PageDown` | Move one viewport |
-| `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: shows `closed — press o to reopen`. |
+| `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
 | `Space` | Open or close the three-line drawer under a person or task; on a studio header it folds the whole block |
 | `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
@@ -150,8 +150,10 @@ that is neither a studio person, a studio shell, the stage nor Hollywood (what h
 - Click on a block's top border makes that studio current (as `Alt+Down` would).
 - Click on a single-line (stacked) block expands it.
 - Click on a person focuses them; a click on a row selects it and acts like `Enter`.
-- Right-click on a row selects it and opens its context menu.
+- Right-click on a row or the dock surface claims the dock's keys, selects the row and opens
+  its context menu.
 - The wheel scrolls the body; the scrollbar clicks and drags.
+- Dragging the left border resizes the dock between 28 and 48 columns.
 - A click outside a focused panel hands focus back to the panes.
 
 ## Config

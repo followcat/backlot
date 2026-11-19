@@ -3,7 +3,14 @@
 backlot uses Herdr's key model: press a prefix, then an action key. The default prefix is `Ctrl+B`. If you have a Herdr
 config (`~/.config/herdr/config.toml`), backlot uses its prefix and bindings.
 
-Press `Ctrl+B ?` for the full list, which you can search. It always matches your config.
+Press `Ctrl+B ?` for the full list, which you can search. It always matches your config. In
+studio mode the overlay doubles as an action launcher: a `waiting on you` group comes first —
+your prompts, stopped stages, Hollywood cards and studios ready to finish — then `studio & task
+actions`, `hollywood`, and Herdr's own sections. Runnable rows carry a right-aligned hint; `Enter`
+runs the action (through the same context-menu path a right-click uses) or opens a target picker /
+reason dialog when one is needed, and pure reference rows focus their surface. `/` filters the
+rows — `/pause` finds `Pause task…`. Under `--plain`, or with no studios and no `[hollywood]`, the
+list is Herdr's own, unchanged.
 
 ![The key bindings overlay](images/keybinds.png)
 
@@ -14,7 +21,7 @@ The defaults you'll use most:
 | `Ctrl+B q` | Detach (`hc` keeps running) |
 | `Ctrl+B w` | Navigate workspaces |
 | `Ctrl+B b` | Show or hide the sidebar |
-| `Ctrl+B ?` | Search the key bindings |
+| `Ctrl+B ?` | Key bindings and the studio action launcher |
 | `Ctrl+B s` | Settings |
 | `Ctrl+B c` | New tab — a studio shell in the focused person's worktree |
 | `Ctrl+B m` | Studio menu for the focused pane — a role pane's role menu, a shell pane's studio menu |
@@ -51,7 +58,7 @@ titles and spacers are skipped. While it is focused it owns these keys:
 |---|---|
 | `j`/`k`, arrows | Move the selection |
 | `PageUp`/`PageDown` | Scroll |
-| `Enter` | Focus a live person's terminal / make a studio current (a closed person shows `closed — press o to reopen`) |
+| `Enter` | Focus a live person's terminal / make a studio current (a closed person reopens a resumable or fixed seat through the action tracker) |
 | `Space` | Open or close the drawer under a person or task; fold a studio block |
 | `o` | Reopen a closed resumable person |
 | `v` | Open the Task & Delivery Sheet |
@@ -121,10 +128,12 @@ or `expanded`. While the band is expanded it owns these keys:
 | `PageUp`/`PageDown` | Scroll the waiting list |
 | `Esc` | Collapse it to the pill |
 
-A click on a row or a chip selects it — activation stays on the keys; a right-click opens the
-row's context menu; a click on the input line opens it for editing, and the wheel scrolls the
-frames sideways or the waiting rows under the pointer. The `+ new studio` frame is the
-exception: it is a button, and a click opens the new-studio dialog directly.
+A click on a row selects it and acts like `Enter`; a click on a chip runs that chip's action.
+A right-click on the title or a row opens the context menu; a click on the input line opens it
+for editing, and the wheel scrolls the frames sideways or the waiting rows under the pointer.
+A click outside the expanded bar collapses it to the pill and hands the keys to what is under
+it. The `+ new studio` frame is the exception: it is a button, and a click opens the
+new-studio dialog directly.
 
 ## Studio menus and dialogs
 
