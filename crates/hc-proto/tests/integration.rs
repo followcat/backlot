@@ -456,7 +456,7 @@ async fn teardown_stops_detached_holders_and_programs() {
         "the holder must keep the program alive across serve death"
     );
 
-    let root = fixture.root.clone();
+    let root = fixture.root.to_path_buf();
     drop(client); // close clients before teardown: connect can autostart
     fixture
         .finish() // adopts holders via a replacement serve, then stops
