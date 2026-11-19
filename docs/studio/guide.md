@@ -489,8 +489,8 @@ stage can raise:
 | Reason | Meaning | What to do |
 |---|---|---|
 | `permission prompt` | A role's screen has sat on a permission prompt for two seconds. | An actor's is the director's; anything else is yours. Answer with `backlot approve`; the saved screen is under `attention/<seq>.txt`. |
-| `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a changed screen or a newer signal clears the attention. |
-| `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — there is no automatic way on for a fixed role. |
+| `stalled` | A live role's screen did not change for `stall_limit_s` while it counts as working — an actor whose task is `running` and whose work reads working or waiting (`blocked` never counts — a prompt has its own attention), or a fixed role sampled `working` — or, for a hook-wired Claude, its last signal reported working and went quiet for the limit. An idle one is normal and never stalls. | Look at the saved screen file — the detail says `screen unchanged` or `no hook signal for <n>s`. The role's reviewer is told; a producer's stall also tells a live director, and `backlot status` leads with a `producer alert:` line. A changed screen or a newer signal clears the attention. |
+| `cannot resume` | A lost role could not be brought back: no recorded session id, or three losses inside ten minutes. | For an actor, its reviewer is told to abandon or recast the task. The writer's and director's losses notice the producer; the producer's is on you — a live director is told only so it does not wait, and `backlot status` shows a `producer alert:` line. There is no automatic way on for a fixed role; only you (or Hollywood) can intervene. |
 | `session id not found` | A post-launch runner (`codex`, `devin`, `cursor`, `cmd`, `cline`) gave no session id within its discovery window — 60 seconds, 240 for `cmd`, whose session file lands late. | The role still runs and the stage keeps looking for up to ten minutes; a role past the default window but inside its runner's logs a warning only. If it never resolves, the role cannot be resumed after a restart — finish its work in this run. |
 | `launch refused` | `terminal.run` refused the role's launch — a taken terminal name or an argv the core rejects. | The stage retries each tick; the detail names the refusal. Check the runner exists and the terminal name is free. |
 | `not a git repository` | The studio's `--repo` path is not a git work tree — no director or actor starts. | Point the studio at a real work tree, or make the repo one; the stage retries each tick. |
@@ -568,20 +568,31 @@ Merging it into your branches is yours:
 git -C /home/user/acme-shop merge backlot/acme-shop/integration
 ```
 
-backlot removes nothing: the worktrees under `work/` and the `backlot/...` branches stay, so a
-closed person can be reopened into the same folder. To remove them yourself once the merge is
-done:
+Once the merge is done, `backlot studio prune` reaps what the studio left behind:
 
 ```sh
-git -C /home/user/acme-shop worktree list
-git -C /home/user/acme-shop worktree remove ~/.local/state/backlot/<core-id>/studios/acme-shop/work/t1
-git -C /home/user/acme-shop worktree remove ~/.local/state/backlot/<core-id>/studios/acme-shop/work/integration
-git -C /home/user/acme-shop branch -D backlot/acme-shop/t1 backlot/acme-shop/integration
+# Read-only plan for one finished studio.
+backlot studio prune acme-shop --dry-run
+
+# Remove clean worktrees and branches git considers merged.
+backlot studio prune acme-shop
+
+# Every finished studio at once.
+backlot studio prune --all-finished
+
+# Take a dirty worktree and an unmerged branch as well.
+backlot studio prune acme-shop --force
 ```
 
-Check each worktree with `git status` inside it before removing — `worktree remove` refuses a
-dirty tree. State directories are not pruned either; the ledger is the record, and removing the
-studio's directory under `studios/` removes it.
+A live studio is refused (exit 2) — prune never touches worktrees that may still be in use.
+Without `--force`, a worktree with uncommitted changes is kept and reported, and a
+`backlot/<studio>/*` branch is deleted only through `git branch -d`; a branch git will not
+delete is kept with git's reason, so unmerged integration work is never lost. `--force` uses
+`git worktree remove --force` and `git branch -D`, still only under that studio's `work/` and
+`backlot/<studio>/` namespace. `--dry-run` changes nothing and prints exactly what would be
+removed, pruned, deleted or kept. The ledger, `reports/`, `messages/` and `attention/` stay:
+`backlot records` and `backlot status` keep the full history. To remove that history too,
+delete the studio's directory under `studios/` yourself.
 
 ## Where the files live
 

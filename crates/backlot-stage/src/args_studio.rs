@@ -97,6 +97,49 @@ pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common,
     Ok((std::mem::take(common), Cmd::StudioFinish { reason }))
 }
 
+/// `studio prune [<studio> | --all-finished] [--dry-run] [--force]`:
+/// one finished studio, or every finished one. The scope rules are the
+/// runner's — this only collects the flags.
+pub(crate) fn studio_prune(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut studio = None;
+    let mut all_finished = false;
+    let mut dry_run = false;
+    let mut force = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--all-finished" => all_finished = true,
+            "--dry-run" => dry_run = true,
+            "--force" => force = true,
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO));
+            }
+            _ if studio.is_none() => studio = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    if studio.is_some() && all_finished {
+        return Err(usage("give a studio or --all-finished, not both", U_STUDIO));
+    }
+    if studio.is_none() && !all_finished {
+        return Err(usage("missing studio (or --all-finished)", U_STUDIO));
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::StudioPrune {
+            studio,
+            all_finished,
+            dry_run,
+            force,
+        },
+    ))
+}
+
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut src = Source::default();
     let mut summary = None;

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use backlot_model::event::{CANNOT_RESUME, PERMISSION_PROMPT, STALLED, Verdict};
 use backlot_model::hollywood::{self, CardState, HMessage, HollywoodKind, HollywoodState};
-use backlot_model::state::{Attention, FinishRecord, ReviewRecord, StudioState};
+use backlot_model::state::{Attention, FinishRecord, ReviewRecord, RoleState, StudioState};
 use backlot_model::testkit as tk;
 
 use crate::hnotice::{self, HNotice};
@@ -68,6 +68,41 @@ fn the_prompt_and_unrouted_stall_labels() {
         .push(attention(5, "producer", CANNOT_RESUME, false));
     let n = one(&[("acme", s)]);
     assert_eq!(n[0].label, "stalled");
+}
+
+/// A producer that stalls or cannot resume is always Hollywood's
+/// `stalled` notice, even when a live director also hears it — and its
+/// heading names the producer, not a generic unrouted stall.
+#[test]
+fn a_producer_down_leads_hollywoods_notice() {
+    let mut s = StudioState::default();
+    s.roles.insert(
+        "director".into(),
+        RoleState {
+            live: true,
+            ..RoleState::default()
+        },
+    );
+    s.attention.push(attention(4, "producer", STALLED, false));
+    s.attention
+        .push(attention(5, "producer", CANNOT_RESUME, false));
+    let n = one(&[("acme", s)]);
+    let labels: Vec<&str> = n.iter().map(|x| x.label).collect();
+    assert_eq!(labels, vec!["stalled", "stalled"], "{n:?}");
+    assert!(
+        n[0].body
+            .contains("# acme: producer stalled — needs attention"),
+        "{}",
+        n[0].body
+    );
+    assert!(
+        n[1].body
+            .contains("# acme: producer cannot resume — needs attention"),
+        "{}",
+        n[1].body
+    );
+    // One notice per attention — no duplicate send.
+    assert_eq!(n.len(), 2, "{n:?}");
 }
 
 /// `studio.finished`, an accepted delivery and a stage error each

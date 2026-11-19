@@ -56,6 +56,56 @@ fn started(seq: u64, role: &str) -> Event {
     )
 }
 
+/// A producer stall or `cannot resume` is the first line under the
+/// studio header — a glance at `backlot status` says why nothing
+/// moves, before repo, roles or attention.
+#[test]
+fn a_producer_alert_leads_the_status_block() {
+    let mut events = base_events();
+    events.push(ev(
+        4,
+        "stage",
+        EventKind::AttentionRaised {
+            role: "producer".into(),
+            reason: "stalled".into(),
+            detail: "screen unchanged for 600s".into(),
+            needs_user: false,
+        },
+    ));
+    let out = status("acme-shop", &replay(&events), &Default::default(), 10_000);
+    let alert = out
+        .lines()
+        .position(|l| l.contains("producer alert: stalled"))
+        .unwrap_or_else(|| panic!("no producer alert:\n{out}"));
+    assert!(
+        out.lines()
+            .nth(alert)
+            .unwrap()
+            .contains("screen unchanged for 600s"),
+        "{out}"
+    );
+    let repo = out.lines().position(|l| l.contains("repo ")).unwrap();
+    assert!(alert < repo, "the alert is not at the top:\n{out}");
+
+    // The same for an unresumable producer.
+    let mut events = base_events();
+    events.push(ev(
+        4,
+        "stage",
+        EventKind::AttentionRaised {
+            role: "producer".into(),
+            reason: "cannot resume".into(),
+            detail: "no session id to resume".into(),
+            needs_user: false,
+        },
+    ));
+    let out = status("acme-shop", &replay(&events), &Default::default(), 10_000);
+    assert!(
+        out.contains("producer alert: cannot resume"),
+        "missing alert:\n{out}"
+    );
+}
+
 /// cap 2 seats producer and director live; the wanted writer shows
 /// `waiting for a fake slot` in place and the cast actor gets its
 /// own waiting line after the fixed three.

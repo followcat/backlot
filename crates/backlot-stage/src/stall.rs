@@ -69,8 +69,12 @@ pub fn open_stall<'s>(state: &'s StudioState, role: &str) -> Option<&'s Attentio
 /// Who a `stalled` attention notices: an actor's task reviewer —
 /// the producer on a producer cast, the director otherwise and on a
 /// task already gone — the producer for the writer and the
-/// director, and nobody for the producer: the panel already shows
-/// its open attention.
+/// director, and for the producer itself a live director, which gets
+/// an informational word so it does not wait on a producer that cannot
+/// answer. The producer's own problem is the user's (or Hollywood's)
+/// to resolve; nobody else in the studio can restart it. A studio
+/// whose director is not live leaves the panel and `backlot status` as
+/// the only surfaces.
 pub fn notice_to(state: &StudioState, attention: &Attention) -> Option<String> {
     if let Some(task) = actor_task(&attention.role) {
         return Some(
@@ -82,16 +86,28 @@ pub fn notice_to(state: &StudioState, attention: &Attention) -> Option<String> {
         );
     }
     if attention.role == "producer" {
-        None
-    } else {
-        Some("producer".into())
+        return director_live(state).then(|| "director".into());
     }
+    Some("producer".into())
+}
+
+/// Whether the ledger's director is live — the one role a producer
+/// problem can inform without pretending the studio can restart it.
+fn director_live(state: &StudioState) -> bool {
+    state.roles.get("director").is_some_and(|r| r.live)
 }
 
 /// The `stalled` notice body: the role, the duration the raise
 /// recorded, the saved screen and the ways on — a `tell` nudge for
-/// any role, abandon-or-recast for an actor.
+/// any role, abandon-or-recast for an actor. A producer's stall names
+/// the one way on: it cannot be restarted from inside the studio.
 pub fn notice_body(attention: &Attention, screen_file: &str) -> String {
+    if attention.role == "producer" {
+        return format!(
+            "# producer stalled\n\n`producer` is not moving — {}. The screen is at `{screen_file}` — read it before acting.\n\nThe director cannot restart the producer: only the user (or Hollywood) can intervene. The studio waits meanwhile; no command here revives it.\n",
+            attention.detail,
+        );
+    }
     let ways = match actor_task(&attention.role) {
         Some(id) => format!(
             "\n- `backlot task abandon --task {id} --reason <reason>` and a new task, or recast with `backlot cast --task {id} --actor <name> --reason <reason>`"

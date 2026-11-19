@@ -10,11 +10,27 @@ v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- `backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]` reaps a finished
+  studio's worktrees and `backlot/<studio>/*` branches. A live studio is refused (exit 2);
+  without `--force` a dirty worktree is kept and branches go only through `git branch -d`, so
+  unmerged work is never lost. `--dry-run` reads git and prints the plan. The ledger,
+  `reports/`, `messages/` and `attention/` are never removed, so `backlot records` and
+  `backlot status` keep the full history.
+- A producer that stalls or cannot resume now tells a live director once that it cannot restart
+  the producer and only the user or Hollywood can intervene. `backlot status` and
+  `status --all` lead the studio block with a `producer alert:` line, and Hollywood's notice
+  names the producer outright (`producer stalled` / `producer cannot resume — needs attention`).
+
 ### Changed
 
 - Synced with hc-tui v0.1.16: the agents list follows the focused pane, so a
   tab, workspace or core-driven focus change scrolls the focused agent row
   into view (hc-tui #53).
+- Every stage `git` call is bounded at 60 seconds. A hung git is spawned in its own process
+  group, gets SIGTERM then SIGKILL (one second later), is reaped, and surfaces
+  `git timed out after <n>s` instead of blocking the stage tick for every studio.
 
 ## 0.2.4 — 2026-11-19
 

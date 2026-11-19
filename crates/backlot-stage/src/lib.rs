@@ -22,6 +22,7 @@ mod digest;
 mod discover;
 mod doc;
 mod draft;
+mod gitcmd;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
@@ -42,6 +43,7 @@ mod nudge;
 mod permission;
 mod permit;
 mod prompts;
+mod prune;
 mod range;
 mod ratelimit;
 mod reasons;
@@ -97,6 +99,8 @@ mod discover_tests;
 mod docs_tests;
 #[cfg(test)]
 mod draft_tests;
+#[cfg(test)]
+mod gitcmd_tests;
 
 #[cfg(test)]
 mod hcard_tests;
@@ -128,6 +132,10 @@ mod permit_tests;
 mod priority_cmd_tests;
 #[cfg(test)]
 mod prompts_tests;
+#[cfg(test)]
+mod prune_cli_tests;
+#[cfg(test)]
+mod prune_tests;
 #[cfg(test)]
 mod range_cmd_tests;
 #[cfg(test)]

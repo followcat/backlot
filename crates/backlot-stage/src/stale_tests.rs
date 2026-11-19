@@ -74,6 +74,33 @@ fn an_attention_notice_is_stale_once_the_attention_clears() {
     }
 }
 
+/// A producer-down notice to a live director drops the moment the
+/// producer's attention clears — the director must not be left with a
+/// stale "the producer is stuck" line.
+#[test]
+fn a_producer_notice_drops_when_the_producer_recovers() {
+    let mut log = base_events();
+    log.push(ev(4, "stage", role_started("director")));
+    log.push(ev(5, "stage", attention("producer", "stalled")));
+    let open = replay(&log);
+    let m = notice(9, 5, "stalled");
+    assert_eq!(stale_reason(&open, &m), None, "the producer is down");
+    log.push(ev(
+        6,
+        "stage",
+        EventKind::AttentionCleared {
+            target: 5,
+            reason: Some("screen moved".into()),
+        },
+    ));
+    let cleared = replay(&log);
+    assert_eq!(
+        stale_reason(&cleared, &m),
+        Some("attention cleared"),
+        "the producer recovered"
+    );
+}
+
 /// A `delivered` notice dies three ways: the delivery got a review,
 /// a newer delivery exists, or the task closed — checked in that
 /// order, since a review usually comes with the rest.
