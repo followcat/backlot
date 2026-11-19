@@ -267,6 +267,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         | Cmd::StageStop
         | Cmd::StageRun
         | Cmd::StageWatch { .. }
+        | Cmd::StageService { .. }
         | Cmd::Runners { .. }
         | Cmd::Repos { .. }
         | Cmd::StudioPrune { .. }

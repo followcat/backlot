@@ -5,16 +5,37 @@
 //! sends one `<watch>` line per condition into `--target`.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::Duration;
+use std::ffi::OsStr;
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hc_proto::client::CallError;
 use hc_proto::terminal::{ListParams, Terminal};
 
 use crate::args::Common;
 use crate::cli::{Env, Fail};
-use crate::link;
+use crate::link::{self, Link};
 use crate::reconcile;
 use crate::stage::STAGE_NAME;
 use crate::store;
+use crate::supervise::{RestartPolicy, RestartStep};
+
+/// Reconnect delays after a dead core, capped at the last value.
+const RECONNECT_MS: [u64; 4] = [2_000, 5_000, 15_000, 30_000];
+
+/// The injected epoch-ms clock the restart policy reads.
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Whether one failed call means the core itself is gone — the only
+/// failure `--restart` reconnects through.
+fn dead(e: &CallError) -> bool {
+    matches!(e, CallError::Closed | CallError::Protocol(_))
+}
 
 /// One poll round's picture: what the core and the ledgers show.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -90,33 +111,111 @@ fn view(terms: &[Terminal], state_dir: &std::path::Path, only: Option<&str>) -> 
     Ok(v)
 }
 
+/// One `<watch>` line: always on stderr, and into `--target` when a
+/// live client is at hand (a disconnect has none — the target lives
+/// on the core that just went away).
+async fn emit(client: Option<&hc_proto::client::Client>, target: Option<&str>, line: &str) {
+    let text = format!("<watch>{line}</watch>");
+    eprintln!("stage watch: {text}");
+    let (Some(client), Some(t)) = (client, target) else {
+        return;
+    };
+    let sent = client
+        .call(
+            "terminal.send",
+            Some(serde_json::json!({"terminal": t, "text": text})),
+        )
+        .await;
+    if let Err(e) = sent {
+        let refusal = crate::sendfail::refusal(&e);
+        eprintln!(
+            "stage watch: send to {t} not delivered ({})",
+            refusal.text()
+        );
+    }
+}
+
+/// Reconnect forever with a bounded backoff — 2 s, 5 s, 15 s, then
+/// 30 s — until a core answers. The caller announces the edge once.
+async fn reconnect(env: &Env, session: Option<&OsStr>, remote: Option<&str>) -> Link {
+    let mut attempt = 0usize;
+    loop {
+        let delay = RECONNECT_MS[attempt.min(RECONNECT_MS.len() - 1)];
+        attempt += 1;
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+        match link::connect(env, session, remote).await {
+            Ok(fresh) => return fresh,
+            Err(e) => eprintln!("stage watch: {}", e.message()),
+        }
+    }
+}
+
+/// The terminal list, reconnecting on a dead wire when `--restart`
+/// is set: `<watch>core disconnected, reconnecting</watch>` once,
+/// the bounded backoff, then `<watch>core reconnected</watch>` and
+/// an immediate refetch — the stage check follows in the same round.
+async fn fetch(
+    link: &mut Link,
+    env: &Env,
+    session: Option<&OsStr>,
+    remote: Option<&str>,
+    target: Option<&str>,
+    restart: bool,
+) -> Result<Vec<Terminal>, CallError> {
+    loop {
+        match link.client.terminal_list(ListParams::default()).await {
+            Ok(list) => return Ok(list.terminals),
+            Err(e) if restart && dead(&e) => {
+                emit(None, target, "core disconnected, reconnecting").await;
+                let fresh = reconnect(env, session, remote).await;
+                emit(Some(&fresh.client), target, "core reconnected").await;
+                *link = fresh;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// The poll loop: every round computes the view, diffs it against
 /// the last, and sends each new `<watch>` line into `--target`.
 /// With no target the lines go to stderr — the watch still
-/// watches. A lost core ends the watch; anything else retries.
-async fn run(common: &Common, env: &Env, target: Option<String>) -> Result<(), Fail> {
-    let link = link::connect(
-        env,
-        common.session.as_deref().map(std::ffi::OsStr::new),
-        common.remote.as_deref(),
-    )
-    .await?;
-    let state_dir = link::state_dir(
-        env,
-        common.session.as_deref().map(std::ffi::OsStr::new),
-        common.remote.as_deref(),
-    )
-    .await?;
+/// watches. A lost core ends the watch unless `--restart` reconnects
+/// it; anything else retries. With `--restart` a dead stage is
+/// started again under the supervised budget.
+async fn run(
+    common: &Common,
+    env: &Env,
+    target: Option<String>,
+    restart: bool,
+) -> Result<(), Fail> {
+    let session = common.session.as_deref().map(OsStr::new);
+    let remote = common.remote.as_deref();
+    let mut link = match link::connect(env, session, remote).await {
+        Ok(fresh) => fresh,
+        Err(e) if !restart => return Err(e),
+        Err(e) => {
+            eprintln!("stage watch: {}", e.message());
+            emit(None, target.as_deref(), "core disconnected, reconnecting").await;
+            let fresh = reconnect(env, session, remote).await;
+            emit(Some(&fresh.client), target.as_deref(), "core reconnected").await;
+            fresh
+        }
+    };
+    let state_dir = match env.get("BACKLOT_STATE_DIR") {
+        Some(dir) => PathBuf::from(dir),
+        None => store::base_dir(&env.vars, &link.core_id),
+    };
     let only = env.get("BACKLOT_STUDIO").map(String::from);
     let mut prev = View {
         stage_live: true,
         ..View::default()
     };
+    let mut policy = RestartPolicy::new();
     let mut tick = tokio::time::interval(Duration::from_secs(5));
     loop {
         tick.tick().await;
-        let terms = match link.client.terminal_list(ListParams::default()).await {
-            Ok(l) => l.terminals,
+        let terms = match fetch(&mut link, env, session, remote, target.as_deref(), restart).await {
+            Ok(terms) => terms,
             Err(e) => {
                 eprintln!("stage watch: terminal.list failed: {e}");
                 continue;
@@ -124,33 +223,42 @@ async fn run(common: &Common, env: &Env, target: Option<String>) -> Result<(), F
         };
         let now = view(&terms, &state_dir, only.as_deref())?;
         for line in diff(&prev, &now) {
-            let text = format!("<watch>{line}</watch>");
-            eprintln!("stage watch: {text}");
-            if let Some(t) = &target {
-                let sent = link
-                    .client
-                    .call(
-                        "terminal.send",
-                        Some(serde_json::json!({"terminal": t, "text": text})),
-                    )
-                    .await;
-                if let Err(e) = sent {
-                    let refusal = crate::sendfail::refusal(&e);
-                    eprintln!(
-                        "stage watch: send to {t} not delivered ({})",
-                        refusal.text()
-                    );
-                }
+            emit(Some(&link.client), target.as_deref(), &line).await;
+        }
+        prev = now.clone();
+        if !restart {
+            continue;
+        }
+        match policy.observe(now.stage_live, now_ms()) {
+            RestartStep::Wait => {}
+            RestartStep::Start => {
+                let line = match crate::stage::start_on(&link, env).await {
+                    Ok(_) => "stage restarted".to_string(),
+                    Err(e) => format!("stage restart failed: {}", e.message()),
+                };
+                emit(Some(&link.client), target.as_deref(), &line).await;
+            }
+            RestartStep::Paused => {
+                emit(
+                    Some(&link.client),
+                    target.as_deref(),
+                    "stage restart paused: too many restarts (5 in 10m)",
+                )
+                .await;
             }
         }
-        prev = now;
     }
 }
 
 /// `stage watch`: poll forever; the first round reports the stage
 /// dead only if it is absent from the start.
-pub fn watch(common: &Common, env: &Env, target: Option<String>) -> Result<String, Fail> {
-    link::runtime()?.block_on(run(common, env, target))?;
+pub fn watch(
+    common: &Common,
+    env: &Env,
+    target: Option<String>,
+    restart: bool,
+) -> Result<String, Fail> {
+    link::runtime()?.block_on(run(common, env, target, restart))?;
     Ok(String::new())
 }
 

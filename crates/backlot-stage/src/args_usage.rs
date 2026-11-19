@@ -30,6 +30,6 @@ pub(crate) const U_CORRECT: &str =
     "usage: backlot correct --event <seq> --reason <r> --set <key=value> [--set ...]";
 pub(crate) const U_STATUS: &str = "usage: backlot status [--studio <name>] [--all] [--json]";
 pub(crate) const U_RECORDS: &str = "usage: backlot records [--studio <name>] [--all] [--json]";
-pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>]";
+pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>] [--restart]\n       backlot stage service [--print | --write] [--session <s>]";
 pub(crate) const U_RUNNERS: &str = "usage: backlot runners [--json]";
 pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>]";

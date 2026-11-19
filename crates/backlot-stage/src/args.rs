@@ -158,6 +158,15 @@ pub enum Cmd {
     StageRun,
     StageWatch {
         target: Option<String>,
+        /// `--restart`: keep the stage alive, including reconnecting
+        /// the core after an `hc` restart.
+        restart: bool,
+    },
+    /// `backlot stage service [--print | --write] [--session <s>]` —
+    /// the systemd `--user` supervisor for `stage watch --restart`.
+    StageService {
+        /// `--write` instead of the default `--print`.
+        write: bool,
     },
     /// `backlot runners [--json]` — the detector's table (U5) or the
     /// G4 document, read-only.
@@ -390,6 +399,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "stop" => args_studio::common_only(&mut common, &mut it, U_STAGE, Cmd::StageStop),
                 "run" => args_studio::common_only(&mut common, &mut it, U_STAGE, Cmd::StageRun),
                 "watch" => args_studio::stage_watch(&mut common, &mut it),
+                "service" => args_studio::stage_service(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STAGE))),
                 _ => Err(usage(format!("unknown stage subcommand '{sub}'"), U_STAGE)),
             }
