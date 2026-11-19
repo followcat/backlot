@@ -226,7 +226,14 @@ pub(crate) fn render_launcher(
         if h.search_focused {
             " edit ←→/home/end · kill ^u/^k · yank ^y · back esc"
         } else {
-            " ↑↓ move   ↵ run selected action   / filter   esc close"
+            crate::chrome::text::fit_hints(
+                &[
+                    " ↑↓ move   ↵ run selected action   / filter   esc close",
+                    " ↑↓ move   ↵ run   / filter   esc close",
+                    " ↵ run   esc close",
+                ],
+                usize::from(i.width),
+            )
         },
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
