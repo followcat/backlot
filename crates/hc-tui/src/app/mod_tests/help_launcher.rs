@@ -208,6 +208,26 @@ async fn slash_pause_finds_the_task_row_then_the_picker() {
 }
 
 #[tokio::test]
+async fn an_enter_while_the_filter_is_focused_runs_the_row() {
+    // S5 A1.1: `/pause` then a single Enter opens the task-verb picker —
+    // herdr's Enter-closes-overlay rule only survives on the plain path.
+    let mut app = s5_app();
+    app.help = true;
+    key(&mut app, hc_vt::Key::Char('/'));
+    for ch in "pause".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    // `pause` also matches the card row (`pause t1`); arrow to the
+    // task-verb row, then one Enter opens its picker.
+    key(&mut app, hc_vt::Key::ArrowDown);
+    key(&mut app, hc_vt::Key::Enter);
+    let picker = app.help_state.picker.as_ref().expect("the picker opened");
+    let labels: Vec<&str> = picker.rows.iter().map(|r| r.label.as_str()).collect();
+    assert!(labels.contains(&"Pause task t1 · acme-shop"), "{labels:?}");
+    assert!(app.help, "the picker floats inside the open overlay");
+}
+
+#[tokio::test]
 async fn surface_rows_focus_their_surfaces() {
     let mut app = s5_app();
     app.help = true;

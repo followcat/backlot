@@ -29,11 +29,18 @@ impl App {
             if let Some(changed) = self.help_state.query.handle_key(key) {
                 if changed {
                     self.help_state.scroll = 0;
+                    self.help_state.selected = 0;
                 }
                 return;
             }
             match code {
                 KeyCode::Esc => self.help_back(),
+                // A filtered Enter runs the selected launcher row (S5);
+                // herdr's plain overlay keeps Enter = close.
+                KeyCode::Enter if self.help_launcher() => {
+                    self.help_state.search_focused = false;
+                    self.help_launcher_activate();
+                }
                 KeyCode::Enter => self.help = false,
                 KeyCode::Up
                 | KeyCode::Down
@@ -48,7 +55,13 @@ impl App {
                         KeyCode::PageUp => -8,
                         _ => 8,
                     };
-                    self.scroll_help(delta);
+                    // The launcher's arrows move the selection through the
+                    // filtered rows; herdr's search only scrolls the list.
+                    if self.help_launcher() {
+                        self.help_launcher_move(delta);
+                    } else {
+                        self.scroll_help(delta);
+                    }
                 }
                 _ => {}
             }
