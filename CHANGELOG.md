@@ -47,7 +47,38 @@ v0.1.14), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   `closed — press o to reopen`), `o` reopens a resumable person, `p` peeks,
   `y`/`d` answer a user-owned prompt, `+`/`-` set a task's priority, `r`/`f`
   run the stage-start and studio-finish actions, `c` collapses, `q` closes,
-  `?` opens help, and `m` is reserved for the S3 context menu.
+  `?` opens help, and `m` opens the row's context menu.
+- **Studio context menus everywhere.** `m` on a dock or Call Sheet row,
+  right-click on a dock row, a Call Sheet row, a sidebar cast row or the
+  studio header, and `Ctrl+B m` from a focused pane (a role pane's role menu,
+  a shell pane's studio menu) all open the same menu for that target —
+  focus/peek/sheet navigation, prompt answers (the D9 director override goes
+  through a confirm), task verbs, tells, stage and finish. Items a press
+  cannot run are dimmed with their reason or hidden, the menu clamps inside
+  the screen (`min(34, cols - 4)`), and each item's shown key activates it.
+- **The native studio dialogs.** Menu `…` items open a one-line reason field
+  (pause/resume/abandon/takeover; card cancel and studio finish keep the
+  reason optional), a confirm card (close a role, stop the stage, clear
+  stale attention, answer a director-routed prompt yourself), the four-row
+  Tell editor (`tell <role> --text`), and the Revise editor prefilled from
+  `requirements/v<n>.md` (`Ctrl+E` rewrites it in `$EDITOR` locally; a remote
+  studio prefills through `backlot report show` and submits `req revise
+  --stdin` over `terminal.run`). `Esc` cancels, `Enter`/`y` submits, and
+  dialogs center in the modal band beside the dock.
+- **One action lifecycle.** Every `backlot` call the TUI makes — dock keys,
+  Call Sheet rows, menus and dialogs — runs through the ActionTracker: the
+  target row spins `⠋ <verb>…` while it runs (a repeat of the same command
+  waits), a success toast holds 3.5 s, and a failure card holds 8 s with the
+  first `stderr` line, always naming a remote machine (`host-b: paused task
+  t1` / `host-b failed: …`). `C` or `copy cmd` writes the exact command —
+  `ssh <machine> -- backlot …` for a remote studio — to the clipboard
+  through OSC 52.
+- `backlot stage stop [--session <s>] [--remote <t>]` ends the stage's
+  terminal gracefully: `stage stopped`, or `stage already stopped` when no
+  stage is up.
+- `backlot tell <role>` and `backlot req revise` take `--text <msg>` /
+  `--stdin` alongside `--file` — exactly one source each, empty text
+  refused.
 - The `Ctrl+B ?` help gains a `studio dock (open)` group; dialogs (the sheet,
   the New Studio dialog, help) share one geometry and center inside the pane
   surface, so no dialog ever crosses an open dock's border.

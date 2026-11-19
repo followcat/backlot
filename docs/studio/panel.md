@@ -44,7 +44,7 @@ tail still wins while the panel is closed or unfocused.
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open `Ctrl+B ?` help |
-| `m` | Reserved for the context menu (S3) — says `menus come later` |
+| `m` | The selected row's context menu — the same list a right-click opens |
 | `Esc` | Beside the panes: leave focus — the dock stays put and its borders mute. As an overlay: back one step — the expanded dock drops to the strip when it fits, else closes |
 
 All other keys are eaten while the panel owns focus, except the prefix, which still arms the
@@ -150,6 +150,7 @@ that is neither a studio person, a studio shell, the stage nor Hollywood (what h
 - Click on a block's top border makes that studio current (as `Alt+Down` would).
 - Click on a single-line (stacked) block expands it.
 - Click on a person focuses them; a click on a row selects it and acts like `Enter`.
+- Right-click on a row selects it and opens its context menu.
 - The wheel scrolls the body; the scrollbar clicks and drags.
 - A click outside a focused panel hands focus back to the panes.
 
