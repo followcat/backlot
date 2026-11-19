@@ -1,5 +1,49 @@
 # Studio progress
 
+## P2b: rate-limit and connection-error detection, stage auto-restart (2026-11-20)
+
+- Done: `ratelimit::limited` reads a reporting core's fresh screen tail whenever its status is
+  not `working` — so Devin's rate limit (`done`, `Reached free model rate limit … reset in 54
+  minutes`) and Claude Code's session/weekly/monthly screens are observed — while `working`
+  still never matches and an `error` keeps its message-then-screen order. `hit your limit`,
+  `session limit`, `weekly limit` and `monthly limit` joined the vocabulary, and the result is a
+  `LimitHit { wait_ms, escalate_now }`: a weekly or monthly quota raises `rate limited` with
+  `needs the user` at once, records the `rate_pace` sentinel so a cleared attention never
+  re-raises on the same banner, and clears `resumed` when it goes. Short limits keep the parsed
+  reset, margin and three `continue`s. The unit tests moved to `ratelimit_tests.rs`.
+- Done: `connerr.rs` recognizes Devin's `Connection error` in an `error` message or a
+  non-working fresh tail (never a `working` screen; a rate limit on the same sample wins),
+  raises its own `connection error` attention, sends `continue` after 15 seconds, escalates
+  `needs the user` after three, and clears `resumed` when the banner goes. Its `Stage` pass
+  keeps `conn_pace` under the same adjudication invariant as `rate_pace`; `limits.rs` suppresses
+  `agent error` and clears it `connection error observed` when this pass claims the sample. The
+  stage's stall pass moved into `stall.rs` to keep `limits.rs` compact.
+- Done: `supervise.rs` is a pure, clock-injected `RestartPolicy` — at most five starts in ten
+  minutes, backoff 2→4→8→16→30 s, a stable minute resets it, and the spent budget pauses once
+  per episode until an attempt leaves the window or the stage returns. `stage watch --restart`
+  starts a dead `backlot-stage` through the extracted `stage::start_on` (the same idempotent path
+  `stage start` uses), reconnects a dead core with a 2→5→15→30 s backoff (`core disconnected,
+  reconnecting` / `core reconnected`, once per edge), and checks the stage immediately after.
+  Without `--restart` the watch behaves as before. `service.rs` renders and optionally writes
+  the systemd `--user` unit (`backlot-stage[-<session>].service`, `Type=simple`,
+  `ExecStart=… stage watch --restart`, `Restart=on-failure`, `RestartSec=5`, `PATH` and
+  `BACKLOT_STATE_DIR`), refuses `--print --write`, `--remote` and working-role callers, and
+  never runs `systemctl`.
+- Measured: 639 `backlot-stage` lib tests, including `ratelimit_tests` (reporting core at
+  `done`/`idle`/`waiting`; working ignored; stale scrollback ignored; weekly/monthly
+  `escalate_now`; the existing reset-parser cases kept intact), `connerr_tests` (sample rules,
+  both-words precedence, the full retry → escalate → `resumed` cycle for both taxonomies on a
+  fake core with an injected clock, and the weekly sentinel), `supervise_tests` (backoff
+  progression, 5-in-10m pause and recovery, pause ended by a live stage, stable-live reset, the
+  new parser forms and refusals, working-role refusal) and `service_tests` (unit contents,
+  session unit, ExecStart quoting, state-dir passthrough, unsafe session rejection, `--write`
+  inside a scratch `XDG_CONFIG_HOME` with the stdout commands, `--print` writing nothing).
+- Not verified: no real agent has hit these paths since they were written — every limit and
+  connection-error screen is a fixture, and the retry cycles ran on a fake core only. The
+  systemd unit has never been loaded by a real user manager, and the reconnect path has not met
+  a real `hc` restart. The watch's own loop was not driven against a scratch core; the policy,
+  the wire-death verdict and the parser are what the tests cover.
+
 ## U6c: per-machine backlot versions, install/upgrade and stage restart (2026-11-20)
 
 - Done: `Summary` carries an optional `backlot_version` (`backlot/1` stays — older documents

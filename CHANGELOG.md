@@ -12,6 +12,39 @@ v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Rate limits are recognized on reporting cores.** A terminal whose status
+  reads `done`, `idle` or `waiting` — Devin's rate limit reports `done` — now
+  has its fresh screen tail read like a silent core's, so Devin's
+  `Reached free model rate limit … reset in 54 minutes` and Claude Code's
+  measured screens raise `rate limited` instead of waiting for `stall_limit_s`.
+  A `working` terminal is never matched, and an `error` keeps its existing
+  message-then-screen order. `hit your limit`, `session limit`, `weekly limit`
+  and `monthly limit` are recognized words.
+- **A weekly or monthly quota escalates at once.** Limit text naming a weekly
+  or monthly limit raises `rate limited` with `needs the user` immediately —
+  no three futile `continue` retries — while a `rate_pace` sentinel keeps a
+  cleared attention from re-raising on the same banner, and the banner going
+  clears `resumed`.
+- **Connection errors are recognized and retried.** Devin stops on
+  `Connection error` until sent a short message; the stage now raises its own
+  `connection error` attention, sends `continue` after 15 seconds, and after
+  three failed attempts escalates `needs the user`. A rate limit on the same
+  sample wins, and a reporting core's bare `agent error` is suppressed while
+  the connection error holds. The banner disappearing clears `resumed`.
+- `backlot stage watch --restart` supervises the stage: a dead
+  `backlot-stage` is started again through the same idempotent path as
+  `stage start`, under a bounded budget (five starts in ten minutes, an
+  exponential 2→4→8→16→30 s backoff, reset after a stable minute), and pauses
+  once per episode when the budget is spent. A dead core is reconnected with a
+  2→5→15→30 s backoff, announcing the edge once, and the stage is checked
+  again immediately. `stage watch` without `--restart` is unchanged.
+- `backlot stage service [--print | --write] [--session <s>]` renders a
+  systemd `--user` unit (`backlot-stage.service`, or
+  `backlot-stage-<session>.service`) that runs `stage watch --restart`;
+  `--write` installs it under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`
+  and never invokes `systemctl`. Working roles are refused, `--print --write`
+  is a usage error, and `--remote` is refused because a user unit runs on the
+  local host.
 - **Every machine shows its `backlot` version.** The stage publishes
   `backlot_version` in its `backlot/1` document, so a machine whose stage runs
   answers for itself; machines without a stage (or an older stage doc) are

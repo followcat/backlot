@@ -64,8 +64,11 @@ How the structured fields are consumed:
   episode raises `needs the user` and no approval key is ever bound to it.
 - `status.state` → the work map (`working`, `blocked`, `idle`/`done`/`waiting` → waiting) with
   `status.msg` attached to the summary's doing line. `error` is the rate-limit taxonomy's input:
-  it, or a waiting screen naming a limit, raises `rate limited`, and the stage waits the parsed
-  reset out and sends `continue` — three auto-retries, then the episode escalates.
+  it, or a **non-working** reporting core's screen naming a limit, raises `rate limited`, and
+  the stage waits the parsed reset out and sends `continue` — three auto-retries, then the
+  episode escalates. A weekly or monthly limit escalates at once. A non-working screen (or an
+  `error` message) naming `Connection error` raises its own episode and gets the same bounded
+  `continue`, on a 15-second wait; a rate limit on the same sample wins.
 - `activity.revision` → the structured stall: a terminal reporting `working` whose revision does
   not move for `stall_limit_s` stalls exactly like a frozen screen, and a revision that moves
   after the raise resolves `activity resumed`.
@@ -359,8 +362,8 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 |---|---|---|---|
 | Claude Code | `Quick safety check` with `Yes, I trust this folder`, cursor on `❯ No, exit` | First use of a folder that is a git repository | One key per tick from the cursor's line: Down on `No`, Enter on `Yes`, only when the terminal's cwd is the role's own folder |
 | Codex | Workspace trust prompt | First run in a folder | Launch-time `-c 'projects={"<cwd>"={trust_level="trusted"}}'` keeps it away; if seen, answer for the actor's own work area only |
-| Devin | `Connection error` | Stopped until it gets a message | One short continue message |
-| Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | Wait, then a short retry. Do not change model |
+| Devin | `Connection error` | Stopped until it gets a message | **Recognized** — the stage raises `connection error` and sends a short `continue` after 15 s, three times, then escalates |
+| Devin | `Reached free model rate limit ... reset in N minutes` | Rate limited, status reads `done` | **Recognized** — a `done`/`idle`/`waiting` tail is read; wait the parsed reset, then a short retry. Do not change model |
 | cursor-agent | `Workspace Trust Required` with `Trust this workspace` | First launch in an untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cmd | `Do you trust the files in this folder?` with `❯ 1. Yes, proceed` | First launch in a non-empty untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cline | `Cline needs permission` with `Approve tool call?` and `[y] Approve   [n] Deny` | Auto-approve was switched off by hand — `--yolo` forces it on, so the prompt should never appear | The stage presses nothing: `y` and `n` are both a mode it must not change. The attention stays open for the user |

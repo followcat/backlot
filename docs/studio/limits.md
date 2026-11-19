@@ -31,7 +31,8 @@ and every attention raised was cleared by the end of the second run. Neither run
 to recover from or a rate limit to retry, and the producer was never a real agent.
 
 What has not run on real agents: stall detection, the at-cap notice, going on after a block,
-the rate-limit retry, and everything of Hollywood — the layer, its cards and `bl-hollywood`
+the rate-limit and connection-error retries (fixtures and fake-core tests only), and
+everything of Hollywood — the layer, its cards and `bl-hollywood`
 have only ever run on `fake` (H4's real-TUI proof is a fake-runner run; a real agent is H5).
 
 Codex and OpenCode were launched and their session IDs captured, no more — `runners.md` says
@@ -130,11 +131,32 @@ way the proven studio actions are.
 
 ## After an hc restart
 
-The person starts the stage again with `backlot stage start` — the core never re-runs the
-original commands. Anything a role was running at that moment is gone; the ledger replays and a
-role with a recorded session id resumes into it. A role with no recorded session cannot be
+By default the person starts the stage again with `backlot stage start` — the core never re-runs
+the original commands. Anything a role was running at that moment is gone; the ledger replays and
+a role with a recorded session id resumes into it. A role with no recorded session cannot be
 resumed, and three losses inside ten minutes stops automatic recovery with a `cannot resume`
 attention.
+
+`backlot stage watch --restart` is the automated version: the watch also supervises the stage.
+When `backlot-stage` is not live it starts it again through the same idempotent path as
+`stage start`, at most five times in ten minutes, waiting 2, 4, 8, 16 then 30 seconds between
+repeated failures and resetting that backoff once the stage has stayed live for a minute. When
+the ten-minute budget is spent it says `stage restart paused: too many restarts (5 in 10m)` once
+and waits for the oldest attempt to leave the window. A core that went away with the `hc` restart
+is reconnected with its own 2→5→15→30 second backoff (`core disconnected, reconnecting`, then
+`core reconnected`), after which the stage is checked again at once. The watch without
+`--restart` still only observes.
+
+`backlot stage service [--print | --write] [--session <s>]` renders the systemd `--user` unit
+that runs `stage watch --restart`: `backlot-stage.service`, or
+`backlot-stage-<session>.service` when a session is named. `--print` (the default) writes the
+unit to stdout; `--write` puts it under `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/` and
+prints the `systemctl --user daemon-reload && systemctl --user enable --now <unit>` command,
+but never runs `systemctl` itself. The unit carries `Restart=on-failure`, `RestartSec=5`, the
+executable's directory first on `PATH`, and `BACKLOT_STATE_DIR` when the stage environment has
+one. What has **not** been run: the unit under a real systemd user manager — its rendering,
+writing and refusal rules are unit-tested, but no host init started it. The reconnect path has
+likewise only met a closed wire in tests, not a real `hc` restart.
 
 On Claude Code 2.1.321 this held for both restarts of the fourth run: every live role came back
 in its own session within a second of `stage start`, closed roles stayed closed, and a prompt
@@ -147,9 +169,20 @@ re-raise one `stall_limit_s` later.
 
 ## Attention and detection limits
 
-- **Rate limits and connection errors are not recognized.** `runners.md` lists the observed
-  screens (Devin's rate-limit line, its connection-error stop) but nothing matches on them — such
-  a role reaches its reviewer as a stall, after `stall_limit_s` (600 by default).
+- **Rate limits and connection errors are recognized from measured screens only.** The stage
+  reads a reporting core's fresh screen tail when it is not `working`: Devin's rate limit
+  (`done` with `Reached free model rate limit … reset in 54 minutes`) and its
+  `Connection error` stop, and Claude Code's measured `hit your limit` / `session limit` /
+  `weekly limit` / `monthly limit` screens. A short limit waits the parsed reset and sends
+  `continue` three times before escalating; a weekly or monthly quota escalates
+  `needs the user` at once instead of burning those retries. A connection error gets the same
+  bounded treatment on a 15-second wait. A `working` terminal is never matched — the words may
+  merely be printed — and a banner deeper than the last 12 non-blank lines is scrollback, not
+  evidence. What is not verified: none of these paths has met a real agent since they were
+  written. The unit and fake-core tests cover the detection and retry cycles; Devin's,
+  Claude's and every other runner's exact live wording beyond the captured lines waits for a
+  real run. A rate limit or connection error in an ordinary frozen screen still reaches its
+  reviewer as a `stalled` once the taxonomy's words are absent.
 - **Stall detection watches an *unchanged* screen — and, for a hook-wired Claude, a silent
   signal.** A runner that keeps animating while it is stuck — a live spinner, a clock in its
   status line — never looks frozen on screen, but a Claude role whose last hook signal
