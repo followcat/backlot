@@ -433,9 +433,23 @@ notice instead of running anything.
 Hollywood itself — the headline, the cards and the `tell hollywood` line — stays this core's;
 only the frame list spans machines. The New Studio dialog's first step picks the machine:
 `Local` or any attached machine — the create, the dry run and the `stage start` all run there
-over `terminal.run`, and the generated cast travels on stdin (`studio new --cast -`). A machine
-without `backlot` cannot be picked; installing or upgrading `backlot` on a machine is still
-manual.
+over `terminal.run`, and the generated cast travels on stdin (`studio new --cast -`).
+
+Each machine row carries a small second line naming its `backlot` version — `hc <v>` for the
+endpoint's core too when it fits. A running stage publishes its own version in the document,
+so its machine needs no probe; a machine without a stage (or an older one) is asked once —
+`command -v`, a login shell, `~/.local/bin` — and the answer is cached for six hours, on
+reconnect and after an install. `backlot <v>` is what is there, `↑<latest>` when it is behind
+the newest release, `no backlot` when there is none.
+
+Right-click a machine row (or find it under `Ctrl+B ?`'s `machines` group) for its own menu —
+only what is valid there: `Install backlot`, `Upgrade backlot to v<latest>`,
+`Start`/`Restart the stage`, `New studio here`, and the endpoint ops. Install and upgrade open
+a terminal on that machine running the official installer with `BACKLOT_SKIP_CORE=1` — hc is
+never touched — and a `backlot` managed by mise, Homebrew, Nix, cargo or a dev build is refused
+first with the channel's own upgrade command. An upgraded machine whose stage ran is restarted
+afterwards: the ledger replays, so no studio state is lost. The same restart sits on the menu,
+and a `stage not running` row in the dock starts the stage on Enter or click.
 
 ## Permission prompts
 

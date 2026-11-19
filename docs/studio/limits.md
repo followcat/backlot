@@ -117,6 +117,17 @@ binary from its `PATH`, with `--session` alone, because the stage terminal lives
 binary is reported with the target and the one-line install; it leaves no `backlot-stage`
 terminal behind. This path is unit-tested only — no test has driven a real remote host.
 
+Each machine's `backlot` version shows under its sidebar row: the running stage publishes it in
+the `backlot` document (`backlot_version`, added in this release — older stage documents lack
+it and read as unprobed until the probe answers), and machines without it are probed through
+`terminal.run` at most once per six hours. The machine menu's install/upgrade opens a popup
+running the official installer on that machine (`curl | sh` with `BACKLOT_SKIP_CORE=1`), refuses
+package-managed binaries first, and restarts an upgraded machine's stage. The version read, the
+menu items, the managed-install refusal, the pinned installer line, the re-probe and the
+stop→start restart chain are all unit- and draw-tested; the installer popup's live download and
+a real remote host's install have not run — the popup itself is `terminal.run`-launched the same
+way the proven studio actions are.
+
 ## After an hc restart
 
 The person starts the stage again with `backlot stage start` — the core never re-runs the
@@ -308,8 +319,9 @@ re-raise one `stall_limit_s` later.
   identity — with a written conclusion and no score. Casting *from* actor records is not built.
 - **A studio with no candidates cannot run tasks.** `backlot cast` refuses anyone not in
   `[[candidates]]` — only the fixed roles ever start.
-- **`stage not running` is a report, not a button.** The panel shows the line and keeps the last
-  document; starting the stage from the panel is not implemented.
+- **A `stage not running` row starts the stage.** Enter, a click or `r` on the line runs
+  `backlot stage start` on that row's machine through the action tracker — the panel still
+  shows the last document while it comes up.
 
 ## Scale and platforms
 
