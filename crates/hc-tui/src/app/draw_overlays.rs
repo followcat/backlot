@@ -222,10 +222,7 @@ pub(super) fn render_overlays_and_cursor(
         // Source overlays reconstruct the wire frame as ratatui cells first
         // (wire.rs u16_to_modifier drops extended underline bits), then dim
         // the whole background before the panel removes DIM in its own area.
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
+        super::draw_overlays_s3::dim_cells(buf);
         crate::chrome::help::render_help_overlay(
             buf,
             &app.help_state,
@@ -313,27 +310,7 @@ pub(super) fn render_overlays_and_cursor(
     overlay_painted |= crate::app::notices::render(app, buf, area);
     // S3's action toast (§3) — the pending reply's card under the
     // notice slot; its `copy cmd` chip feeds the next mouse press.
-    if let Some(toast) = app.action_toast.as_ref() {
-        overlay_painted = true;
-        let offset = if app.notice.is_some() || !app.notification_hit.is_empty() {
-            5
-        } else {
-            1
-        };
-        let (rect, copy) = crate::chrome::notice_render::render_action_toast(
-            buf,
-            area,
-            &toast.title,
-            toast.fail.then_some(toast.body.as_str()),
-            offset,
-            &app.shell.palette,
-        );
-        app.action_toast_hit = rect;
-        app.action_copy_hit = copy;
-    } else {
-        app.action_toast_hit = Rect::default();
-        app.action_copy_hit = Rect::default();
-    }
+    overlay_painted |= super::draw_overlays_s3::draw_action_toast(app, buf, area);
     // The restore would repaint the bar over a full-screen panel —
     // skipped then; beside the panes the bar is never covered anyway.
     if !app.panel_fullscreen_at(area.width)
@@ -432,10 +409,7 @@ pub(super) fn render_overlays_and_cursor(
     // The Settings overlay dims its background like help/dialogs.
     app.settings_hits = if let Some(settings) = app.settings.as_ref() {
         overlay_painted = true;
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
+        super::draw_overlays_s3::dim_cells(buf);
         crate::chrome::settings_render::render_settings_overlay(buf, settings, &app.shell.palette)
             .unwrap_or_default()
     } else {
@@ -444,10 +418,7 @@ pub(super) fn render_overlays_and_cursor(
     // The update card dims the background like the other overlays.
     if let Some(modal) = app.update_modal.as_ref() {
         overlay_painted = true;
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
+        super::draw_overlays_s3::dim_cells(buf);
         let view = crate::app::update_modal::view(
             modal,
             &app.update_state,
@@ -465,34 +436,13 @@ pub(super) fn render_overlays_and_cursor(
     // The S3 native dialogs (§2): dimmed background, centred inside
     // `modal_band` — beside a dock they never cross its border
     // (A6.2); their field cursor owns the host cursor.
-    app.studio_dialog_hits = if let Some(d) = app.studio_dialog.as_ref() {
-        overlay_painted = true;
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
-        crate::chrome::studio_dialogs::render(buf, app.modal_band(area), d, &app.shell.palette)
-            .unwrap_or_default()
-    } else {
-        crate::chrome::studio_dialogs::DialogHits::default()
-    };
-    if let Some(cursor) = app.studio_dialog_hits.cursor.as_ref() {
-        app.want_cursor = CursorWish {
-            pos: cursor.visible.then_some((cursor.x, cursor.y)),
-            anchor: Some((cursor.x, cursor.y)),
-            shape: CursorShape::Default,
-            blinking: true,
-        };
-    }
+    overlay_painted |= super::draw_overlays_s3::draw_studio_dialog(app, buf, area);
     // The New Studio dialog dims like the help overlay and paints
     // the same panel frame; its hit map feeds the next mouse press
     // and its cursor wish owns the host cursor like the fields do.
     app.ns_hits = if let Some(d) = app.new_studio.as_ref() {
         overlay_painted = true;
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
+        super::draw_overlays_s3::dim_cells(buf);
         crate::new_studio::render(buf, d, &app.shell.palette, app.modal_band(area))
     } else {
         crate::new_studio::NsHits::default()
@@ -510,10 +460,7 @@ pub(super) fn render_overlays_and_cursor(
     // border (A6.2); its keys are the sheet's own while open.
     app.sheet_hits = if let Some(sheet) = app.sheet.as_ref() {
         overlay_painted = true;
-        for cell in &mut buf.content {
-            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
-            cell.set_style(cell.style().add_modifier(Modifier::DIM));
-        }
+        super::draw_overlays_s3::dim_cells(buf);
         let machines = app.panel_summaries();
         let summary = machines
             .iter()

@@ -13,6 +13,30 @@ fn studio_menu_open(app: &App) -> bool {
     )
 }
 
+/// A runner that only records its argv — the dialogs' submits.
+fn recording_runner(app: &mut App) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> {
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_panel_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv);
+        Box::pin(async { Ok(()) })
+    }));
+    recorded
+}
+
+/// A required-reason dialog over a local task pause.
+fn pause_reason_dialog() -> crate::studio_dialog::StudioDialog {
+    crate::studio_dialog::StudioDialog::reason(
+        "Pause task task-1 · acme-shop · Local".into(),
+        true,
+        crate::studio_dialog::ReasonFor::TaskVerb {
+            key: StudioKey::local("acme-shop"),
+            task: "task-1".into(),
+            verb: "pause",
+        },
+    )
+}
+
 #[tokio::test]
 async fn m_on_the_dock_opens_the_selected_rows_menu() {
     let mut app = app_with_panel_doc();
@@ -91,22 +115,9 @@ async fn prefix_m_outside_studio_mode_never_intercepts() {
 #[tokio::test]
 async fn esc_cancels_a_reason_dialog_and_runs_nothing() {
     let mut app = app_with_panel_doc();
-    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
-    let sink = recorded.clone();
-    app.set_panel_runner(std::sync::Arc::new(move |argv| {
-        sink.lock().unwrap().push(argv);
-        Box::pin(async { Ok(()) })
-    }));
+    let recorded = recording_runner(&mut app);
     app.area = (120, 24);
-    app.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
-        "Pause task task-1 · acme-shop · Local".into(),
-        true,
-        crate::studio_dialog::ReasonFor::TaskVerb {
-            key: StudioKey::local("acme-shop"),
-            task: "task-1".into(),
-            verb: "pause",
-        },
-    ));
+    app.studio_dialog = Some(pause_reason_dialog());
     key(&mut app, hc_vt::Key::Escape);
     assert!(app.studio_dialog.is_none(), "Esc closed the dialog");
     assert!(recorded.lock().unwrap().is_empty(), "nothing ran");
@@ -115,22 +126,9 @@ async fn esc_cancels_a_reason_dialog_and_runs_nothing() {
 #[tokio::test]
 async fn a_required_reason_refuses_an_empty_submit() {
     let mut app = app_with_panel_doc();
-    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
-    let sink = recorded.clone();
-    app.set_panel_runner(std::sync::Arc::new(move |argv| {
-        sink.lock().unwrap().push(argv);
-        Box::pin(async { Ok(()) })
-    }));
+    let recorded = recording_runner(&mut app);
     app.area = (120, 24);
-    app.studio_dialog = Some(crate::studio_dialog::StudioDialog::reason(
-        "Pause task task-1 · acme-shop · Local".into(),
-        true,
-        crate::studio_dialog::ReasonFor::TaskVerb {
-            key: StudioKey::local("acme-shop"),
-            task: "task-1".into(),
-            verb: "pause",
-        },
-    ));
+    app.studio_dialog = Some(pause_reason_dialog());
     key(&mut app, hc_vt::Key::Enter);
     assert!(app.studio_dialog.is_some(), "the refusal keeps it open");
     assert!(recorded.lock().unwrap().is_empty(), "nothing ran");
@@ -193,11 +191,9 @@ async fn the_failure_card_names_the_machine_and_c_copies_the_command() {
 }
 
 // ---------- focus after Esc (S3 round 2) ----------
-//
 // Closing a menu or a dialog returns the keys to the surface it was
-// opened from: a focused dock owns them again, a focused pane does.
-// `app.pane.input_backlog().0` counts the bytes that reached the
-// focused terminal — it must not grow until the pane owns keys.
+// opened from; the pane's `input_backlog().0` must not grow until
+// the pane owns keys again.
 
 fn backlog(app: &App) -> usize {
     app.pane.input_backlog().0
@@ -306,12 +302,7 @@ async fn right_click_on_an_unfocused_dock_focuses_it() {
 #[tokio::test]
 async fn a_submitted_dialog_returns_the_keys_to_the_dock() {
     let mut app = app_with_panel_doc();
-    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
-    let sink = recorded.clone();
-    app.set_panel_runner(std::sync::Arc::new(move |argv| {
-        sink.lock().unwrap().push(argv);
-        Box::pin(async { Ok(()) })
-    }));
+    let recorded = recording_runner(&mut app);
     app.area = (120, 24);
     open_panel(&mut app);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
@@ -336,7 +327,11 @@ async fn a_submitted_dialog_returns_the_keys_to_the_dock() {
     assert!(studio_menu_open(&app), "`m` opened the menu again");
     assert_eq!(backlog(&app), before, "no byte reached the pane");
     assert!(
-        recorded.lock().unwrap().iter().any(|a| a[0..2] == ["tell", "actor-alice"]),
+        recorded
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|a| a[0..2] == ["tell", "actor-alice"]),
         "the tell ran"
     );
 }

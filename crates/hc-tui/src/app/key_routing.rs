@@ -9,6 +9,9 @@ use super::key_leases::{InputLease, InputLeaseKey, RepeatPlan};
 use super::{App, Mode};
 use hc_vt::{Action, Key};
 
+#[path = "key_routing_modals.rs"]
+mod key_routing_modals;
+
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct Context {
     mode: Mode,
@@ -261,49 +264,10 @@ impl App {
         if self.peek_key(&press) {
             return None;
         }
-        if self.dialog.is_some() {
-            self.dialog_key(&press);
-            return None;
-        }
-        // The S3 native dialogs own every key while open — `Esc`
-        // always cancels cleanly (A6.2).
-        if self.studio_dialog.is_some() {
-            self.studio_dialog_key(&press);
-            return None;
-        }
-        // The New Studio dialog owns every key while it is open —
-        // Esc steps back or closes, nothing reaches a program.
-        if self.new_studio.is_some() {
-            self.new_studio_key(&press);
-            return None;
-        }
-        // The Task & Delivery Sheet owns every key while it is open
-        // — tabs, movement, `o` and `Esc` all run inside it (S2 §3).
-        if self.sheet.is_some() {
-            self.handle_sheet_key(&press);
-            return None;
-        }
-        if self.menu.is_some() {
-            self.menu_key(&press);
-            return None;
-        }
-        if self.mode == Mode::Resize {
-            self.resize_key(&press, width);
-            return None;
-        }
-        if self.help {
-            self.handle_help_key(&press);
-            return None;
-        }
-        if self.navigator.is_some() {
-            self.handle_navigator_key(&press);
-            return None;
-        }
-        if self.update_modal.is_some() {
-            self.handle_update_key(&press);
-            return None;
-        }
-        if self.route_settings_key(&press) {
+        // Every open modal owns the key before pane dispatch (S3's
+        // dialogs and menu among them); `Esc` inside restores the
+        // owner's focus.
+        if self.modal_key(&press, width) {
             return None;
         }
         // The reference clears the word gesture on any key and lets a
@@ -601,7 +565,7 @@ impl App {
 }
 
 impl App {
-    fn resize_key(&mut self, key: &TerminalKey, width: u16) {
+    pub(super) fn resize_key(&mut self, key: &TerminalKey, width: u16) {
         use crossterm::event::KeyCode;
         let combo = crate::input::terminal_key_of(key);
         let binding = &self.live.keybinds.resize_mode;
