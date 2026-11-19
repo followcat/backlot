@@ -120,9 +120,9 @@ async fn the_menu_button_stays_dead_in_plain() {
 }
 
 #[tokio::test]
-async fn a_lot_pill_right_click_opens_the_studio_menu() {
-    // Decision 5: the pill's right-click is the studio header's —
-    // the current studio's menu.
+async fn a_lot_pill_right_click_opens_the_lot_menu() {
+    // S5 §2.3: the pill's right-click is the lot menu — the pill is
+    // the whole lot, not the current studio.
     let mut app = super::help_launcher::s5_app();
     app.area = (120, 24);
     draw_to(&mut app, 120, 24);
@@ -133,13 +133,48 @@ async fn a_lot_pill_right_click_opens_the_studio_menu() {
         pill.x,
         pill.y,
     ));
-    let menu = app.menu.as_ref().expect("the studio menu opened");
-    assert!(
-        matches!(
-            menu.target,
-            crate::chrome::menu::ContextMenuTarget::Studio(_)
-        ),
-        "a studio menu"
+    let menu = app.menu.as_ref().expect("the lot menu opened");
+    let crate::chrome::menu::ContextMenuTarget::Studio(inner) = &menu.target else {
+        panic!("a studio menu");
+    };
+    assert!(matches!(inner.kind, crate::studio_menu::MenuKind::Lot));
+    let labels: Vec<String> = inner.items().iter().map(|i| i.label.clone()).collect();
+    assert_eq!(
+        labels,
+        [
+            "Open Call Sheet",
+            "Toggle Studio Dock",
+            "New studio…",
+            "Hollywood settings…"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn the_lot_menu_items_open_their_surfaces() {
+    use crate::studio_menu::{StudioAct, StudioMenu};
+    let mut app = super::help_launcher::s5_app();
+    app.area = (120, 24);
+    draw_to(&mut app, 120, 24);
+    let menu = StudioMenu::lot();
+    app.run_studio_act(&menu, StudioAct::CallSheet);
+    assert!(app.hollywood.expanded(), "Open Call Sheet expands the band");
+    app.hollywood_collapse();
+    app.run_studio_act(&menu, StudioAct::ToggleDock);
+    assert!(app.panel.open(), "Toggle Studio Dock opens the dock");
+    app.panel_toggle();
+    app.run_studio_act(&menu, StudioAct::NewStudio);
+    assert!(app.new_studio.is_some(), "New studio… opens S4's dialog");
+    app.new_studio = None;
+    app.run_studio_act(&menu, StudioAct::HollywoodSettings);
+    let settings = app
+        .settings
+        .as_ref()
+        .expect("Hollywood settings… opens Settings");
+    assert_eq!(
+        settings.section,
+        crate::chrome::settings::SettingsSection::Studio,
+        "…on the Studio section, where [hollywood] lives"
     );
 }
 

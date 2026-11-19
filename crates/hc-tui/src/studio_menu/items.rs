@@ -30,6 +30,7 @@ impl StudioMenu {
             MenuKind::Task => self.task_items(&item),
             MenuKind::Card => self.card_items(&item),
             MenuKind::Stage => self.stage_items(&item),
+            MenuKind::Lot => self.lot_items(&item),
         };
         // An unreachable machine dims every row that runs a command —
         // Focus/Peek/sheet opens stay live: they read what is already
@@ -336,5 +337,31 @@ impl StudioMenu {
             Some('s'),
             StudioAct::StageStart,
         )]
+    }
+
+    /// The lot pill's quick menu (S5 §2.3) — lot-wide surfaces in
+    /// the spec's order.
+    fn lot_items(
+        &self,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        vec![
+            item(
+                "Open Call Sheet".to_owned(),
+                Some('y'),
+                StudioAct::CallSheet,
+            ),
+            item(
+                "Toggle Studio Dock".to_owned(),
+                Some('d'),
+                StudioAct::ToggleDock,
+            ),
+            item("New studio…".to_owned(), Some('n'), StudioAct::NewStudio),
+            item(
+                "Hollywood settings…".to_owned(),
+                Some('h'),
+                StudioAct::HollywoodSettings,
+            ),
+        ]
     }
 }

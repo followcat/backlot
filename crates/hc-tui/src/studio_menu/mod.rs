@@ -84,6 +84,9 @@ pub(crate) enum MenuKind {
     Card,
     /// A machine's stage row (Call Sheet `STAGE DOWN`).
     Stage,
+    /// The lot pill's quick menu (S5 §2.3) — lot-wide surfaces,
+    /// not one studio's.
+    Lot,
 }
 
 /// What one press does — the app maps it to an action, a dialog or a
@@ -133,6 +136,15 @@ pub(crate) enum StudioAct {
     CardShow,
     /// `card cancel` through the reason dialog (reason optional).
     CardCancel,
+    /// The lot menu's `Open Call Sheet` — the expanded band.
+    CallSheet,
+    /// The lot menu's `Toggle Studio Dock`.
+    ToggleDock,
+    /// The lot menu's `New studio…` — S4's dialog.
+    NewStudio,
+    /// The lot menu's `Hollywood settings…` — Settings' Studio
+    /// section, where the `[hollywood]` rows live.
+    HollywoodSettings,
 }
 
 /// One menu line.
@@ -256,6 +268,23 @@ impl StudioMenu {
             role: None,
             task: None,
             card: Some(id.to_owned()),
+            stage_down: false,
+            offline: false,
+            ready: false,
+            req_version: 0,
+            machine: None,
+        }
+    }
+
+    /// The lot pill's menu (S5 §2.3): the whole lot's quick actions —
+    /// no studio, role, task or card facts.
+    pub(crate) fn lot() -> StudioMenu {
+        StudioMenu {
+            kind: MenuKind::Lot,
+            studio: None,
+            role: None,
+            task: None,
+            card: None,
             stage_down: false,
             offline: false,
             ready: false,

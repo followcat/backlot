@@ -201,6 +201,13 @@ impl App {
                     ));
                 }
             }
+            // The lot menu's surfaces (S5 §2.3): no `backlot` command
+            // behind them — the sheet, the dock, S4's dialog and the
+            // Studio settings tab open directly.
+            StudioAct::CallSheet => self.hollywood_open(),
+            StudioAct::ToggleDock => self.panel_toggle(),
+            StudioAct::NewStudio => self.new_studio_open(None),
+            StudioAct::HollywoodSettings => self.open_studio_settings(),
         }
     }
 
