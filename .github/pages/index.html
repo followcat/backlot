@@ -3,11 +3,700 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>hc-tui</title>
+  <title>hc-tui — Terminal UI for herdr-core (hc)</title>
+  <meta name="description" content="An unofficial terminal UI for herdr-core (hc): sidebar of spaces and agents, tabs, splits, zoom, OSC 52 selection, persistent floating terminals, and SSH support with image paste.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#181825" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#eff1f5" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://followcat.github.io/hc-tui/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://followcat.github.io/hc-tui/">
+  <meta property="og:title" content="hc-tui — Terminal UI for herdr-core (hc)">
+  <meta property="og:description" content="An unofficial terminal UI for herdr-core (hc). Manage spaces, agents, splits, floating shells, and persistent SSH sessions from your terminal.">
+  <meta property="og:image" content="https://followcat.github.io/hc-tui/images/hc-tui.png">
+  <meta property="og:image:width" content="1440">
+  <meta property="og:image:height" content="840">
+  <meta property="og:image:alt" content="hc-tui showing a sidebar of spaces and agents alongside three terminal panes">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="hc-tui — Terminal UI for herdr-core (hc)">
+  <meta name="twitter:description" content="An unofficial terminal UI for herdr-core (hc).">
+  <meta name="twitter:image" content="https://followcat.github.io/hc-tui/images/hc-tui.png">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23181825'/%3E%3Crect x='1' y='1' width='30' height='30' fill='none' stroke='%2345475a' stroke-width='2'/%3E%3Crect x='4' y='6' width='4' height='4' fill='%23f9e2af'/%3E%3Crect x='4' y='13' width='4' height='4' fill='%23f38ba8'/%3E%3Crect x='4' y='20' width='4' height='4' fill='none' stroke='%23a6e3a1' stroke-width='1.5'/%3E%3Crect x='11' y='4' width='9' height='3' fill='%2389b4fa'/%3E%3Crect x='11' y='9' width='17' height='19' fill='%231e1e2e' stroke='%2389b4fa' stroke-width='1.5'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <p>hc-tui — a terminal UI for the hc session core.</p>
-  <p><a href="https://github.com/followcat/hc-tui">github.com/followcat/hc-tui</a></p>
-  <pre><code>curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh</code></pre>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="brand-group">
+        <a class="brand-tab" href="#">hc-tui</a>
+        <span class="brand-note">unofficial · Apache-2.0</span>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <a href="#features">features</a>
+        <a href="#install">install</a>
+        <a href="#getting-started">keys</a>
+        <a href="#compatibility">compatibility</a>
+        <a href="#links">docs</a>
+        <a href="https://github.com/followcat/hc-tui">github</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="container">
+        <div class="hero-head">
+          <div class="eyebrow">
+            <span class="eyebrow-markers" aria-hidden="true">
+              <span class="sq sq--blocked"></span>
+              <span class="sq sq--done"></span>
+              <span class="sq sq--working"></span>
+              <span class="sq sq--waiting"></span>
+              <span class="sq sq--idle"></span>
+            </span>
+            <span>terminal client for herdr-core (hc)</span>
+          </div>
+          <h1>An unofficial terminal UI for herdr-core (<code>hc</code>).</h1>
+          <p class="hero-lead">
+            Use it when you work in a terminal or on a machine with no desktop, and want the Herdr TUI on top of
+            <a href="https://github.com/herdrdev/herdr-core">herdr-core</a> — locally or over plain SSH.
+          </p>
+
+          <div class="hero-install">
+            <div class="cmd-box">
+              <div class="cmd-scroll">
+                <span class="cmd-prompt" aria-hidden="true">$</span>
+                <pre><code>curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh</code></pre>
+              </div>
+              <button class="copy-btn" type="button" hidden data-copy="curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh" aria-label="Copy install command">copy</button>
+            </div>
+            <div class="hero-meta">
+              <span>Installs to <code>~/.local/bin</code> without sudo, verified against <code>sha256sums.txt</code>.</span>
+              <span class="hero-links">
+                <a href="https://github.com/followcat/hc-tui">Repository</a>
+                <a href="https://github.com/followcat/hc-tui/releases">Releases</a>
+                <a href="#getting-started">Quick start</a>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <figure class="shot shot--hero">
+          <img src="images/hc-tui.png" width="1440" height="840" fetchpriority="high" alt="hc-tui interface showing a sidebar with spaces and agents on the left and three split terminal panes on the right">
+          <figcaption>Sidebar of spaces and agents beside a multi-pane workspace (storefront tab active).</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-label"><span class="sq sq--accent" aria-hidden="true"></span><span>Features</span></div>
+          <h2>Built for terminal workflows on top of <code>hc</code></h2>
+          <p>
+            Every feature stays within a single static binary talking directly to local or remote <code>hc</code>
+            cores, sharing spaces and tabs with your existing Herdr setup.
+          </p>
+        </div>
+
+        <div class="features-stack">
+          <!-- 1. Sidebar and agent states -->
+          <article class="feature-panel">
+            <div class="feature-copy">
+              <h3 class="feature-title"><span class="sq sq--accent" aria-hidden="true"></span><span>Sidebar and agent states</span></h3>
+              <p>
+                A live sidebar lists your spaces and running agents across local and remote machines. Each agent
+                reports whether it is blocked, done, working, waiting, or idle, and spaces and tabs come from the same
+                read-only <code>herdr-app</code> document the desktop app uses.
+              </p>
+              <ul class="feature-meta-list">
+                <li>Machines added with <code>hc machine add</code> appear grouped in the same sidebar.</li>
+                <li>Default agent sort orders by priority; set <code>agent_panel_sort = "spaces"</code> for space order.</li>
+                <li>Sidebar width, split, sort toggle, and collapses persist per endpoint.</li>
+              </ul>
+            </div>
+
+            <div class="state-board" aria-label="Agent states in priority order">
+              <div class="state-board-head">
+                <span>agents · priority order</span>
+                <span>sidebar states</span>
+              </div>
+              <ul class="state-list">
+                <li class="state-item">
+                  <span class="sq sq--blocked" aria-hidden="true"></span>
+                  <span class="state-name">blocked</span>
+                  <span class="state-desc">Needs input or approval</span>
+                </li>
+                <li class="state-item">
+                  <span class="sq sq--done" aria-hidden="true"></span>
+                  <span class="state-name">done</span>
+                  <span class="state-desc">Unseen completed turn</span>
+                </li>
+                <li class="state-item">
+                  <span class="sq sq--working" aria-hidden="true"></span>
+                  <span class="state-name">working</span>
+                  <span class="state-desc">Active turn in progress</span>
+                </li>
+                <li class="state-item">
+                  <span class="sq sq--waiting" aria-hidden="true"></span>
+                  <span class="state-name">◌ waiting</span>
+                  <span class="state-desc">Quiet turn; background work still runs</span>
+                </li>
+                <li class="state-item">
+                  <span class="sq sq--idle" aria-hidden="true"></span>
+                  <span class="state-name">idle</span>
+                  <span class="state-desc">Ready for the next prompt</span>
+                </li>
+                <li class="state-item">
+                  <span class="sq sq--unknown" aria-hidden="true"></span>
+                  <span class="state-name">unknown</span>
+                  <span class="state-desc">Unrecognized reported status word</span>
+                </li>
+              </ul>
+              <div class="state-foot">Priority: blocked &gt; done &gt; working &gt; waiting &gt; idle &gt; unknown</div>
+            </div>
+          </article>
+
+          <!-- 2. Tabs, splits and zoom -->
+          <article class="feature-row">
+            <div class="feature-copy">
+              <h3 class="feature-title"><span class="sq sq--accent" aria-hidden="true"></span><span>Tabs, splits and zoom</span></h3>
+              <p>
+                Create tabs (<kbd>Ctrl+B</kbd> <kbd>c</kbd>), split panes right or down (<kbd>Ctrl+B</kbd> <kbd>v</kbd>,
+                <kbd>Ctrl+B</kbd> <kbd>-</kbd>), resize splits, and zoom a single pane full-frame (<kbd>Ctrl+B</kbd>
+                <kbd>z</kbd>). Press <kbd>Ctrl+G</kbd> to lock keyboard shortcuts so every key goes straight to the
+                program.
+              </p>
+              <p>
+                With a few optional lines in your Herdr config, <kbd>Alt+Left</kbd>/<kbd>Alt+Right</kbd> step across
+                tabs and <kbd>Alt+Up</kbd>/<kbd>Alt+Down</kbd> jump through agents across tabs, workspaces, and
+                machines without the prefix.
+              </p>
+            </div>
+            <figure class="shot">
+              <img src="images/alt-arrows.gif" width="1120" height="697" loading="lazy" alt="Animation of switching tabs with Alt+Left and Alt+Right and jumping between agents across workspaces with Alt+Up and Alt+Down">
+              <figcaption>Prefix-free switching across tabs and agents with optional Alt+arrow bindings.</figcaption>
+            </figure>
+          </article>
+
+          <!-- 3. Mouse selection with OSC 52 -->
+          <article class="feature-row feature-row--reverse">
+            <div class="feature-copy">
+              <h3 class="feature-title"><span class="sq sq--accent" aria-hidden="true"></span><span>Mouse selection with OSC 52</span></h3>
+              <p>
+                Drag with the mouse in any pane or floating popup to select text; letting go copies it straight to your
+                clipboard over OSC 52 (your outer terminal needs OSC 52 enabled).
+              </p>
+              <p>
+                Prefer the keyboard? <kbd>Ctrl+B</kbd> <kbd>[</kbd> opens vi-style
+                <a href="https://github.com/followcat/hc-tui/blob/main/docs/keys.md#copy-mode">copy mode</a> across the
+                visible screen and scrollback, with <kbd>/</kbd> and <kbd>?</kbd> search, visual line selection, and
+                <kbd>y</kbd> to yank via OSC 52.
+              </p>
+            </div>
+            <figure class="shot">
+              <img src="images/selection.png" width="1440" height="840" loading="lazy" alt="Highlighted text selected with the mouse inside an hc-tui terminal pane">
+              <figcaption>Mouse selection copies to your local clipboard on release through OSC 52.</figcaption>
+            </figure>
+          </article>
+
+          <!-- 4. Herdr config carry-over -->
+          <article class="feature-row">
+            <div class="feature-copy">
+              <h3 class="feature-title"><span class="sq sq--accent" aria-hidden="true"></span><span>Herdr config carry-over</span></h3>
+              <p>
+                Your existing <code>~/.config/herdr/config.toml</code> works right away — prefix, custom key bindings,
+                theme, sidebar layout, and pane chrome carry over automatically. Press <kbd>Ctrl+B</kbd>
+                <kbd>Shift+R</kbd> to reload config changes live.
+              </p>
+              <p>
+                Changes made inside Settings (<kbd>Ctrl+B</kbd> <kbd>s</kbd> — theme, status indicators, sound, and
+                toast delivery) save cleanly back to your Herdr config without touching the rest of the file.
+              </p>
+            </div>
+            <figure class="shot">
+              <img src="images/settings.png" width="1440" height="840" loading="lazy" alt="hc-tui Settings overlay listing built-in dark and light themes including Catppuccin, Tokyo Night, Dracula, Nord, Gruvbox, One Dark, and Solarized">
+              <figcaption>Settings overlay (<kbd>Ctrl+B</kbd> <kbd>s</kbd>) carrying over Herdr themes and preferences.</figcaption>
+            </figure>
+          </article>
+
+          <!-- 5 & 6. Local or SSH + Image paste over SSH -->
+          <div class="cards-2">
+            <article class="card">
+              <h3><span class="sq sq--accent" aria-hidden="true"></span><span>Local or SSH, with persistent terminals</span></h3>
+              <p>
+                Run locally or attach over plain SSH with <code>hc-tui --remote host-a --session work</code>. Logins
+                use your existing <code>~/.ssh/config</code>, keys, SSH agent, and <code>ProxyJump</code> — hc-tui
+                never prompts for or stores passwords.
+              </p>
+              <p>
+                Streams share one OpenSSH control socket per host (persisting 10 minutes after close). Detach with
+                <kbd>Ctrl+B</kbd> <kbd>q</kbd> or drop off the network and your terminals stay running on the server;
+                clients attached to the same core share tabs and splits.
+              </p>
+            </article>
+
+            <article class="card">
+              <h3><span class="sq sq--accent" aria-hidden="true"></span><span>Image paste over SSH</span></h3>
+              <p>
+                Over SSH — or into a remote machine pane (<code>machine/tN</code>) — <kbd>Ctrl+V</kbd> reads an image
+                or copied image file from your local clipboard, uploads it to the agent's machine via
+                <code>terminal.put</code> (or chunked <code>put_chunks</code> on <code>hc</code> 0.1.21+), and passes
+                the uploaded path to the program.
+              </p>
+              <p>
+                <kbd>Ctrl+Shift+V</kbd> stays bracketed text paste, and plain local endpoints leave <kbd>Ctrl+V</kbd>
+                untouched. Recognizes PNG, JPEG, GIF, WebP, and BMP up to 8 MB; uses <code>wl-paste</code> (Wayland) or
+                <code>xclip</code> (X11) on Linux.
+              </p>
+            </article>
+          </div>
+
+          <!-- 7. The floating terminal -->
+          <article class="feature-row feature-row--reverse">
+            <div class="feature-copy">
+              <h3 class="feature-title"><span class="sq sq--accent" aria-hidden="true"></span><span>The floating terminal</span></h3>
+              <p>
+                Bind a key such as <kbd>Alt+F</kbd> to a <code>type = "popup"</code> shell in your Herdr config for a
+                persistent floating terminal per tab. It starts in that tab's project directory, hides when you toggle
+                it or switch tabs and agents, and keeps running in the background until its program exits or the tab
+                closes.
+              </p>
+              <p>
+                Persistent floats draw a dimmed backdrop, drop shadow, and accent frame; set
+                <code>persistent = false</code> when you want a one-shot popup instead. See
+                <a href="https://github.com/followcat/hc-tui/blob/main/docs/keys.md#floating-terminal">docs/keys.md</a>
+                for the config snippet.
+              </p>
+            </div>
+            <figure class="shot">
+              <img src="images/alt-f.gif" width="1120" height="697" loading="lazy" alt="Animation of toggling a persistent floating shell overlay over a workspace tab with Alt+F">
+              <figcaption>A persistent per-tab shell popup opened and hidden with Alt+F.</figcaption>
+            </figure>
+          </article>
+
+          <!-- 8 & 9. Update check & --upgrade + The waiting state -->
+          <div class="cards-2">
+            <article class="card">
+              <h3><span class="sq sq--accent" aria-hidden="true"></span><span>Update check and <code>--upgrade</code></span></h3>
+              <p>
+                On startup, hc-tui runs one asynchronous, 5-second-bounded <code>HEAD</code> request to GitHub
+                <code>releases/latest</code>, cached for 24 hours and silent on failure. Opt out with
+                <code>update.version_check = false</code> or <code>HC_TUI_NO_UPDATE_CHECK=1</code>.
+              </p>
+              <p>
+                Run <code>hc-tui --upgrade</code> or press <kbd>Ctrl+B</kbd> <kbd>u</kbd> (or click the
+                <code>↑v…</code> badge) to read release notes, update locally, and restart in place. Binaries managed
+                by mise, Homebrew, Nix, cargo, or dev builds are refused safely with the package manager's own command
+                printed instead.
+              </p>
+            </article>
+
+            <article class="card">
+              <h3><span class="sq sq--waiting" aria-hidden="true"></span><span>The <code class="waiting-code">◌ waiting</code> state</span></h3>
+              <p>
+                When an agent's own turn is quiet (<code>Idle</code>) while background work it started is still
+                running, the sidebar overlays <code>◌ waiting</code> — ranked below <code>working</code> and above
+                <code>idle</code>. It never mutates core state, seen state, or notifications.
+              </p>
+              <dl class="mini-kv">
+                <div>
+                  <dt>Process tree check (<code>machine.exec</code>)</dt>
+                  <dd>Detects live <code>-c</code> shells (<code>sh</code>, <code>bash</code>, <code>zsh</code>, <code>dash</code>, <code>fish</code>, <code>ksh</code>) across two consecutive listings to ignore transient hooks.</dd>
+                </div>
+                <div>
+                  <dt>Session file check (<code>file.read</code>)</dt>
+                  <dd>For Claude Code, reads only <code>pid</code> and <code>status = "shell"</code> from its session file to confirm running background tasks.</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="install">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-label"><span class="sq sq--accent" aria-hidden="true"></span><span>Install and upgrade</span></div>
+          <h2>Single binary, verified before install</h2>
+          <p>
+            The installer fetches the archive for your OS and architecture, verifies its SHA-256 against the release's
+            <code>sha256sums.txt</code>, installs into <code>~/.local/bin</code> without sudo, and runs the official
+            <code>hc</code> installer if <code>hc</code> isn't already present.
+          </p>
+        </div>
+
+        <div class="install-layout">
+          <div class="install-cards">
+            <div class="card">
+              <div class="stack-sm">
+                <div class="subhead">Latest release</div>
+                <div class="cmd-box">
+                  <div class="cmd-scroll">
+                    <span class="cmd-prompt" aria-hidden="true">$</span>
+                    <pre><code>curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh</code></pre>
+                  </div>
+                  <button class="copy-btn" type="button" hidden data-copy="curl -fsSL https://followcat.github.io/hc-tui/install.sh | sh" aria-label="Copy latest install command">copy</button>
+                </div>
+                <p class="note">
+                  Also attached to every GitHub release at <code>releases/latest/download/install.sh</code>.
+                </p>
+              </div>
+
+              <div class="stack-sm">
+                <div class="subhead">Pin a specific version</div>
+                <div class="cmd-box cmd-box--multi">
+                  <div class="cmd-scroll">
+                    <pre><code>curl -fsSL https://followcat.github.io/hc-tui/install.sh \
+  | HC_TUI_VERSION=v0.1.15 sh</code></pre>
+                  </div>
+                  <button class="copy-btn" type="button" hidden data-copy="curl -fsSL https://followcat.github.io/hc-tui/install.sh | HC_TUI_VERSION=v0.1.15 sh" aria-label="Copy version-pinned install command">copy</button>
+                </div>
+                <dl class="env-list">
+                  <div>
+                    <dt><code>HC_TUI_VERSION</code></dt>
+                    <dd>Pin a release tag (<code>v0.1.15</code> or <code>0.1.15</code>); latest by default.</dd>
+                  </div>
+                  <div>
+                    <dt><code>HC_TUI_INSTALL_DIR</code></dt>
+                    <dd>Target directory (default <code>~/.local/bin</code>).</dd>
+                  </div>
+                  <div>
+                    <dt><code>HC_TUI_SKIP_CORE=1</code></dt>
+                    <dd>Skip installing the official <code>hc</code> core.</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="stack-sm">
+                <div class="subhead">Upgrade an existing install</div>
+                <div class="cmd-box">
+                  <div class="cmd-scroll">
+                    <span class="cmd-prompt" aria-hidden="true">$</span>
+                    <pre><code>hc-tui --upgrade</code></pre>
+                  </div>
+                  <button class="copy-btn" type="button" hidden data-copy="hc-tui --upgrade" aria-label="Copy upgrade command">copy</button>
+                </div>
+                <p class="note">
+                  Upgrades the directory of the running binary (or set <code>HC_TUI_VERSION=v&lt;version&gt;</code> to
+                  move to a specific release). Inside hc-tui, <kbd>Ctrl+B</kbd> <kbd>u</kbd> shows release notes,
+                  updates locally, and restarts in place.
+                </p>
+              </div>
+
+              <div class="stack-sm">
+                <div class="subhead">Package managers, uninstall, and source builds</div>
+                <p class="note">
+                  Package-managed installs are refused safely with the right command printed:
+                  <code>mise upgrade --bump github:followcat/hc-tui</code>, <code>brew upgrade hc-tui</code>, Nix, or
+                  cargo. Uninstall is <code>rm ~/.local/bin/hc-tui</code>.
+                </p>
+                <p class="note">
+                  Checksum verification uses <code>sha256sum</code>, <code>shasum</code>, or <code>openssl</code>.
+                  Building from source needs stable Rust (edition 2024) and Zig 0.16.0 — see
+                  <a href="https://github.com/followcat/hc-tui#build-from-source">Build from source</a> and
+                  <a href="https://github.com/followcat/hc-tui/blob/main/docs/install.md">docs/install.md</a>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack-sm">
+            <div class="subhead">Prebuilt release platforms</div>
+            <div class="table-wrap">
+              <table class="platforms-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Platform</th>
+                    <th scope="col">Archive target</th>
+                    <th scope="col">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Linux x86_64</td>
+                    <td><code>x86_64-unknown-linux-musl</code></td>
+                    <td>Static binary</td>
+                  </tr>
+                  <tr>
+                    <td>Linux aarch64</td>
+                    <td><code>aarch64-unknown-linux-musl</code></td>
+                    <td>Static binary</td>
+                  </tr>
+                  <tr>
+                    <td>macOS arm64</td>
+                    <td><code>aarch64-apple-darwin</code></td>
+                    <td>Passes CI; not yet tested on a real Mac</td>
+                  </tr>
+                  <tr>
+                    <td>macOS Intel</td>
+                    <td><code>x86_64-apple-darwin</code></td>
+                    <td>Passes CI; not yet tested on a real Mac</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="getting-started">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-label"><span class="sq sq--accent" aria-hidden="true"></span><span>Getting started</span></div>
+          <h2>First commands and essential keys</h2>
+          <p>
+            <code>hc-tui</code> starts a local <code>hc</code> core automatically when nothing answers on the session
+            socket. Detach with <kbd>Ctrl+B</kbd> <kbd>q</kbd> and your core and terminals keep running.
+          </p>
+        </div>
+
+        <div class="start-grid">
+          <div class="cmd-box cmd-box--multi">
+            <div class="cmd-scroll">
+              <pre><code>hc-tui                                  # default local session
+hc-tui --session work
+hc-tui --remote host-a --session work   # attach over SSH</code></pre>
+            </div>
+            <button class="copy-btn" type="button" hidden data-copy="hc-tui&#10;hc-tui --session work&#10;hc-tui --remote host-a --session work" aria-label="Copy startup commands">copy</button>
+          </div>
+
+          <div class="keys-layout">
+            <div class="stack-sm">
+              <div class="subhead">Default prefix: <kbd>Ctrl+B</kbd></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Keys</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>w</kbd></td>
+                      <td>Navigate workspaces</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>c</kbd></td>
+                      <td>New tab</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>v</kbd>, <kbd>Ctrl+B</kbd> <kbd>-</kbd></td>
+                      <td>Split right, split down</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>h</kbd>/<kbd>j</kbd>/<kbd>k</kbd>/<kbd>l</kbd></td>
+                      <td>Move focus between panes</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>z</kbd></td>
+                      <td>Zoom or unzoom pane</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>b</kbd></td>
+                      <td>Show or hide sidebar</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>[</kbd></td>
+                      <td>Copy mode (vi scrollback &amp; yank)</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>s</kbd></td>
+                      <td>Open Settings</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>u</kbd></td>
+                      <td>Release notes &amp; in-client update</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>?</kbd></td>
+                      <td>Search active key bindings</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+B</kbd> <kbd>q</kbd></td>
+                      <td>Detach (<code>hc</code> keeps running)</td>
+                    </tr>
+                    <tr>
+                      <td class="key-cell"><kbd>Ctrl+G</kbd></td>
+                      <td>Lock / unlock keyboard shortcuts</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="note">
+                Custom bindings from <code>~/.config/herdr/config.toml</code> override these defaults. For copy mode,
+                resize mode, scrolling, and optional
+                <a href="https://github.com/followcat/hc-tui/blob/main/docs/keys.md#alt-shortcuts">Alt shortcuts</a>
+                (<kbd>Alt+Left</kbd>/<kbd>Right</kbd>, <kbd>Alt+Up</kbd>/<kbd>Down</kbd>, <kbd>Alt+F</kbd>), read the
+                full <a href="https://github.com/followcat/hc-tui/blob/main/docs/keys.md">Keys guide</a> on GitHub.
+              </p>
+            </div>
+
+            <figure class="shot">
+              <img src="images/keybinds.png" width="1440" height="840" loading="lazy" alt="Searchable key bindings overlay in hc-tui opened with Ctrl+B ?">
+              <figcaption>Press <kbd>Ctrl+B</kbd> <kbd>?</kbd> anytime to search the live binding table.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="compatibility">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-label"><span class="sq sq--accent" aria-hidden="true"></span><span>Compatibility</span></div>
+          <h2>Works with official <code>hc</code> and the followcat fork</h2>
+          <p>
+            Capabilities are discovered per core from <code>hello.result.features</code> and field presence, so one
+            sidebar can mix official and fork machines cleanly. Missing capabilities stay off without errors or retry
+            loops.
+          </p>
+        </div>
+
+        <div class="compat-summary">
+          <div class="compat-pill">
+            <h3>Tested against 0.1.21</h3>
+            <p>
+              Built and tested in CI against pinned official <code>hc</code> <strong>0.1.21</strong> and the
+              <a href="https://github.com/followcat/herdr-core">followcat/herdr-core</a> fork
+              <strong>0.1.21-followcat.1</strong>.
+            </p>
+          </div>
+          <div class="compat-pill compat-pill--muted">
+            <h3>Older official cores: 0.1.18+</h3>
+            <p>
+              Official <code>hc</code> releases from <strong>0.1.18</strong> onward keep working; features absent on an
+              older core gracefully fall back or stay off.
+            </p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="compat-table">
+            <thead>
+              <tr>
+                <th scope="col">Capability</th>
+                <th scope="col">Official <code>hc</code></th>
+                <th scope="col">Fork <code>hc</code></th>
+                <th scope="col">On official <code>hc</code></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Protocol generation 1 (framed &amp; plain)</td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>yes</span></td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>yes</span></td>
+                <td>Identical behaviour.</td>
+              </tr>
+              <tr>
+                <td>Chunked image paste (<code>put_chunks</code>)</td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>0.1.21+</span></td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>advertised</span></td>
+                <td>Older cores fall back to a single <code>terminal.put</code>.</td>
+              </tr>
+              <tr>
+                <td>Agent status</td>
+                <td><span class="cell-status"><span class="sq sq--working" aria-hidden="true"></span>OSC 7501</span></td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>screen + 7501</span></td>
+                <td>Agents show a status only when they emit OSC 7501 themselves.</td>
+              </tr>
+              <tr>
+                <td>Git repo/branch &amp; OS hostname</td>
+                <td><span class="cell-status"><span class="sq sq--unknown" aria-hidden="true"></span>absent</span></td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>advertised</span></td>
+                <td>Workspace uses cwd folder name; machine uses its <code>hello</code> name.</td>
+              </tr>
+              <tr>
+                <td>Completion ordinals (<code>record_activity</code>)</td>
+                <td><span class="cell-status"><span class="sq sq--unknown" aria-hidden="true"></span>absent</span></td>
+                <td><span class="cell-status"><span class="sq sq--done" aria-hidden="true"></span>advertised</span></td>
+                <td>Falls back to per-terminal <code>turn</code> and shared <code>herdr.seen</code> label.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="note compat-foot">
+          Full capability matrix in
+          <a href="https://github.com/followcat/hc-tui/blob/main/docs/compatibility.md">docs/compatibility.md</a>, and
+          the fork's client contract in
+          <a href="https://github.com/followcat/herdr-core/blob/v0.1.21-followcat.1/docs/fork-features.md">docs/fork-features.md</a>.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" id="links">
+    <div class="container">
+      <div class="links-grid">
+        <div class="link-col">
+          <h3><span class="sq sq--accent" aria-hidden="true"></span><span>Project</span></h3>
+          <ul>
+            <li><a href="https://github.com/followcat/hc-tui">GitHub repository</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/releases">Releases &amp; checksums</a></li>
+            <li><a href="https://github.com/followcat/hc-tui#build-from-source">Build from source</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/LICENSE">Apache License 2.0</a></li>
+          </ul>
+        </div>
+
+        <div class="link-col">
+          <h3><span class="sq sq--done" aria-hidden="true"></span><span>Documentation</span></h3>
+          <ul>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/install.md">Install, upgrade, uninstall</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/keys.md">Keys &amp; Alt shortcuts</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/remote.md">Remote use over SSH</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/compatibility.md">Core compatibility</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/troubleshooting.md">Troubleshooting</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/runtime.md">Runtime behaviour</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/sidebar.md">Sidebar data &amp; presentation</a></li>
+            <li><a href="https://github.com/followcat/hc-tui/blob/main/docs/layout.md">Shared structure &amp; layout</a></li>
+          </ul>
+        </div>
+
+        <div class="link-col">
+          <h3><span class="sq sq--working" aria-hidden="true"></span><span>Core &amp; Upstream</span></h3>
+          <ul>
+            <li><a href="https://github.com/herdrdev/herdr-core">herdr-core (upstream)</a></li>
+            <li><a href="https://github.com/followcat/herdr-core">followcat/herdr-core (fork)</a></li>
+            <li><a href="https://github.com/followcat/herdr-core/blob/v0.1.21-followcat.1/docs/fork-features.md">Fork client contract</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="disclaimer">
+        <p>
+          <strong>Unofficial project:</strong> hc-tui is an independent terminal client for <code>herdr-core</code> and
+          is not affiliated with or endorsed by the Herdr project.
+        </p>
+        <p>Licensed under Apache License 2.0 · No tracking, no third-party scripts.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      document.querySelectorAll('.copy-btn[data-copy]').forEach(function (btn) {
+        btn.hidden = false;
+        btn.addEventListener('click', function () {
+          navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+            btn.textContent = 'copied';
+            btn.setAttribute('data-copied', 'true');
+            clearTimeout(btn._t);
+            btn._t = setTimeout(function () {
+              btn.textContent = 'copy';
+              btn.removeAttribute('data-copied');
+            }, 1500);
+          });
+        });
+      });
+    }
+  </script>
 </body>
 </html>

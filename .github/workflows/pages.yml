@@ -1,7 +1,8 @@
 name: pages
 
-# Publishes install.sh from the released tag so the short URL
-# https://followcat.github.io/hc-tui/install.sh tracks releases.
+# Publishes the landing page from the ref being built while always taking
+# install.sh from a published release so https://followcat.github.io/hc-tui/install.sh
+# never tracks unreleased commits on main.
 on:
   release:
     types: [published]
@@ -19,16 +20,33 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # On a release, check out that tag so install.sh matches it;
-      # workflow_dispatch uses the ref the run was started on.
+      # On a release, check out that tag so both the site and install.sh
+      # match it; on workflow_dispatch, check out the ref being built for
+      # the site files and fetch install.sh from the latest published release.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name || github.ref }}
       - name: Stage the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          mkdir _site
-          cp scripts/install.sh _site/install.sh
-          cp .github/pages/index.html _site/index.html
+          set -eu
+          mkdir -p _site/images
+          cp -R .github/pages/. _site/
+          for img in hc-tui.png alt-arrows.gif selection.png settings.png alt-f.gif keybinds.png; do
+            cp "docs/images/$img" "_site/images/$img"
+          done
+          if [ -n "$RELEASE_TAG" ]; then
+            cp scripts/install.sh _site/install.sh
+          else
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            [ -n "$tag" ] || { echo "could not resolve latest published release tag" >&2; exit 1; }
+            git fetch --no-tags --depth=1 origin "refs/tags/$tag"
+            git show "FETCH_HEAD:scripts/install.sh" > _site/install.sh
+          fi
+          test -s _site/install.sh
+          chmod 755 _site/install.sh
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
