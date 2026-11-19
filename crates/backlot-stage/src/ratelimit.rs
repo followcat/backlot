@@ -4,9 +4,10 @@
 //! reason, counted separately from `stalled` and rework. While
 //! the limit holds the stage waits the parsed reset out, then
 //! sends `continue`; three auto-retries and the episode escalates
-//! to a person. A bare `error` with no limit text observed is
-//! [`AGENT_ERROR`], never an auto-`continue` — observed, never
-//! assumed.
+//! to a person. An explicit weekly or monthly quota is a person's
+//! at once — no `continue` shortens a multi-day limit. A bare
+//! `error` with no limit text observed is [`AGENT_ERROR`], never
+//! an auto-`continue` — observed, never assumed.
 
 use backlot_model::summary::Work;
 
@@ -34,6 +35,10 @@ const LIMIT_WORDS: &[&str] = &[
     "rate-limit",
     "too many requests",
     "usage limit",
+    "hit your limit",
+    "session limit",
+    "weekly limit",
+    "monthly limit",
     "upgrade your plan",
     "try again at",
     "try again in",
@@ -44,6 +49,21 @@ const LIMIT_WORDS: &[&str] = &[
     "reset in",
 ];
 
+/// Words naming a multi-day quota: the reset is hours or days away,
+/// so the short-window retry loop would only burn its budget. The
+/// episode is a person's the moment this text is observed.
+const LONG_LIMIT_WORDS: &[&str] = &["weekly limit", "monthly limit"];
+
+/// One observed limit and what the stage should do about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LimitHit {
+    /// The wait the reset line asked for, in milliseconds.
+    pub wait_ms: u64,
+    /// The text names a weekly or monthly quota: raise it for a
+    /// person at once instead of auto-`continue`ing.
+    pub escalate_now: bool,
+}
+
 /// Whether the terminal reports `error` — regardless of whether
 /// observed limit text makes it this module's episode.
 pub(crate) fn errored(term: &LiveTerminal) -> bool {
@@ -53,31 +73,60 @@ pub(crate) fn errored(term: &LiveTerminal) -> bool {
 /// Whether the terminal is rate limited now — and how long the
 /// wait should be before a `continue`. Observed, never assumed:
 /// a reporting core's `error` counts only when limit text shows —
-/// in `status.msg`, else in the screen's fresh tail. A silent
-/// core's screen is the fallback for a core that reports nothing —
-/// and only when its derived `work` is non-working: a working
-/// screen's limit words are text the agent printed (fixture
-/// output, an edit to this file), not a state it is in. A bare
-/// `error` is [`AGENT_ERROR`]'s attention instead. `None` — not
-/// limited. `now_ms` is the injected epoch ms the `at HH:MM UTC`
-/// parses against.
-pub(crate) fn limited(term: &LiveTerminal, screen: &str, work: Work, now_ms: u64) -> Option<u64> {
-    if let Some(status) = term.status.as_ref().filter(|s| s.state == "error") {
-        let msg = status.msg.to_lowercase();
-        if limit_text(&msg) {
-            let wait = parse_wait(&msg, now_ms).unwrap_or_else(|| reset_ms(screen, now_ms));
-            return Some(wait.clamp(RETRY_MARGIN_MS, 3_600_000));
+/// in `status.msg`, else in the screen's fresh tail. A reporting
+/// core in a non-working state (`done`, `idle`, `waiting`) is read
+/// like a silent core: its screen's fresh tail is the evidence.
+/// A `working` terminal is never limited — its limit words are text
+/// the agent printed (fixture output, an edit to this file), not a
+/// state it is in. A silent core's non-working screen is the same
+/// fallback. A bare `error` is [`AGENT_ERROR`]'s attention instead.
+/// `None` — not limited. `now_ms` is the injected epoch ms the
+/// `at HH:MM UTC` parses against.
+pub(crate) fn limited(
+    term: &LiveTerminal,
+    screen: &str,
+    work: Work,
+    now_ms: u64,
+) -> Option<LimitHit> {
+    let tail = fresh_tail(screen);
+    if let Some(status) = term.status.as_ref() {
+        if status.state == "working" {
+            return None;
         }
-        if limit_text(fresh_tail(screen)) {
-            return Some(reset_ms(screen, now_ms));
+        if status.state == "error" {
+            let msg = status.msg.to_lowercase();
+            if limit_text(&msg) {
+                let wait = parse_wait(&msg, now_ms).unwrap_or_else(|| reset_ms(screen, now_ms));
+                return Some(LimitHit {
+                    wait_ms: wait.clamp(RETRY_MARGIN_MS, 3_600_000),
+                    escalate_now: long_limit(&msg) || long_limit(tail),
+                });
+            }
+            if limit_text(tail) {
+                return Some(hit(tail, reset_ms(screen, now_ms)));
+            }
+            return None;
         }
-        return None;
     }
-    let reporting = term.status.is_some();
-    if !reporting && work != Work::Working && limit_text(fresh_tail(screen)) {
-        return Some(reset_ms(screen, now_ms));
+    if work != Work::Working && limit_text(tail) {
+        return Some(hit(tail, reset_ms(screen, now_ms)));
     }
     None
+}
+
+/// One limit hit: the wait plus whether the evidence names a
+/// weekly or monthly quota.
+fn hit(text: &str, wait_ms: u64) -> LimitHit {
+    LimitHit {
+        wait_ms,
+        escalate_now: long_limit(text),
+    }
+}
+
+/// Whether `text` names a multi-day quota.
+fn long_limit(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    LONG_LIMIT_WORDS.iter().any(|w| lower.contains(w))
 }
 
 /// How much of a screen still counts as *fresh* for the taxonomy:
@@ -88,8 +137,9 @@ pub(crate) fn limited(term: &LiveTerminal, screen: &str, work: Work, now_ms: u64
 const FRESH_NONBLANK: usize = 12;
 
 /// The screen's fresh tail — up to [`FRESH_NONBLANK`] non-blank
-/// lines off the bottom.
-fn fresh_tail(screen: &str) -> &str {
+/// lines off the bottom. Shared with the connection-error pass so
+/// both read exactly the same window.
+pub(crate) fn fresh_tail(screen: &str) -> &str {
     let mut tail = 0usize;
     let mut nonblank = 0usize;
     for line in screen.rsplit('\n') {
@@ -291,203 +341,5 @@ pub(crate) fn step(pace: RatePace, retries_left: bool, now_ms: u64) -> Step {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A fixed `now_ms` at 12:00:00 UTC — the `at HH:MM UTC` cases
-    /// read their waits off it.
-    const NOON: u64 = 86_400_000 * 20_000 + 12 * 3_600_000;
-
-    #[test]
-    fn reset_words_parse() {
-        assert_eq!(
-            reset_ms("rate limit reached, try again in 90s", NOON),
-            90_000
-        );
-        assert_eq!(reset_ms("usage limit, resets in 5m", NOON), 300_000);
-        assert_eq!(reset_ms("retry after 2h", NOON), 3_600_000);
-        // Nothing parseable → the default minute.
-        assert_eq!(reset_ms("Upgrade your plan to continue", NOON), 60_000);
-        // A week never parks the loop.
-        assert_eq!(reset_ms("resets in 48h", NOON), 3_600_000);
-    }
-
-    #[test]
-    fn the_absolute_reset_wins_over_the_relative() {
-        // Devin's real banner carries both forms; the `at` clause
-        // is preferred — and it must not hang the parser (S12d
-        // review: the old one spun on `54 minutes` forever).
-        let banner = "your limit will reset in 54 minutes (at 12:06 utc).";
-        assert_eq!(reset_ms(banner, NOON), 6 * 60_000);
-        assert_eq!(
-            reset_ms("your limit will reset in 54 minutes", NOON),
-            54 * 60_000
-        );
-        assert_eq!(reset_ms("try again in 45 seconds", NOON), 45_000);
-        // Two hours out clamps to the parking limit.
-        assert_eq!(reset_ms("try again in 2 hours", NOON), 3_600_000);
-        // A bare clock with no UTC marker is not a parse — it could
-        // be local time; the relative form answers instead.
-        assert_eq!(
-            reset_ms("your limit resets at 12:06 — try again in 9 minutes", NOON),
-            9 * 60_000
-        );
-        // A clock already past wraps to tomorrow — clamped to the
-        // hour, never a day.
-        assert_eq!(reset_ms("your limit resets at 11:00 utc", NOON), 3_600_000);
-    }
-
-    #[test]
-    fn only_the_latest_limit_lines_clause_counts() {
-        // Stacked banners in scrollback: the freshest one's reset
-        // wins — the stale `54` above must not answer.
-        let screen = "usage limit, resets in 54 minutes\nusage limit, resets in 51 minutes\n";
-        assert_eq!(reset_ms(screen, NOON), 51 * 60_000);
-    }
-
-    #[test]
-    fn the_parser_never_hangs_and_never_panics() {
-        // The reproduced killers (S12d review): digits followed by
-        // a non-unit spun the `continue` loop forever; a non-ascii
-        // or empty tail panicked on `&tail[1..]`.
-        for text in [
-            "logged in ✓ ready",
-            "signed in ",
-            " in ",
-            "in",
-            "your limit will reset in 54 minutes (at 12:06 utc).",
-        ] {
-            let _ = parse_wait(text, NOON);
-        }
-        // Every char-boundary suffix of a unicode-heavy screen.
-        let screen = "─ ❭ ✓ ⠋ usage limit: resets in 54 minutes (at 12:06 utc) ─";
-        for (i, _) in screen.char_indices() {
-            let _ = reset_ms(&screen[i..], NOON);
-        }
-        // A unit lookalike is not a unit: `months` parses nothing,
-        // and the line still answers the default through reset_ms.
-        assert_eq!(reset_ms("come back in 5 months", NOON), 60_000);
-    }
-
-    #[test]
-    fn an_error_is_limited_only_when_limit_text_is_observed() {
-        use hc_proto::terminal::Status;
-        let err = |msg: &str| LiveTerminal {
-            status: Some(Status {
-                state: "error".into(),
-                msg: msg.into(),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        assert!(errored(&err("denied")));
-        // Limit text in the status message — the wait parses off
-        // the message itself.
-        assert_eq!(
-            limited(&err("429, try again in 30s"), "", Work::Waiting, NOON),
-            Some(30_000)
-        );
-        // Limit text only on the screen — the latest block carries
-        // the observed evidence and the wait.
-        assert_eq!(
-            limited(
-                &err("denied"),
-                "usage limit resets in 2m",
-                Work::Waiting,
-                NOON
-            ),
-            Some(120_000)
-        );
-        // A bare error with clean text everywhere is NOT a limit —
-        // it is `agent error`'s, and no `continue` ever leaves.
-        assert_eq!(
-            limited(&err(""), "everything is fine", Work::Waiting, NOON),
-            None
-        );
-        assert_eq!(
-            limited(&err("denied"), "all clean", Work::Waiting, NOON),
-            None
-        );
-        // A silent core: a non-working screen's limit line carries
-        // it — but a working screen is only *printing* the words
-        // (fixture output, an edit to this file), never limited.
-        let silent = LiveTerminal::default();
-        assert!(!errored(&silent));
-        assert_eq!(
-            limited(
-                &silent,
-                "rate limit reached, try again in 10s",
-                Work::Waiting,
-                NOON
-            ),
-            Some(10_000)
-        );
-        assert_eq!(
-            limited(
-                &silent,
-                "rate limit reached, try again in 90s",
-                Work::Working,
-                NOON
-            ),
-            None
-        );
-        // Working with an ordinary screen is not limited.
-        let working = LiveTerminal {
-            status: Some(Status {
-                state: "working".into(),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        assert_eq!(limited(&working, "progress", Work::Working, NOON), None);
-    }
-
-    #[test]
-    fn only_the_fresh_tail_counts_as_screen_evidence() {
-        use hc_proto::terminal::Status;
-        let err = |msg: &str| LiveTerminal {
-            status: Some(Status {
-                state: "error".into(),
-                msg: msg.into(),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        // A stale banner above the fresh tail is scrollback, not
-        // evidence — the plain error is `agent error`'s.
-        let stale = format!(
-            "usage limit, resets in 5m\n{}",
-            "a fresh output line\n".repeat(FRESH_NONBLANK + 1)
-        );
-        assert_eq!(
-            limited(&err("transport died"), &stale, Work::Waiting, NOON),
-            None
-        );
-        // The same banner inside the tail is observed.
-        let fresh = "usage limit, resets in 5m\na fresh output line\n";
-        assert_eq!(
-            limited(&err("transport died"), fresh, Work::Waiting, NOON),
-            Some(300_000)
-        );
-        // And a silent core reads the tail the same way.
-        assert_eq!(
-            limited(&LiveTerminal::default(), &stale, Work::Waiting, NOON),
-            None
-        );
-        assert_eq!(
-            limited(&LiveTerminal::default(), fresh, Work::Waiting, NOON),
-            Some(300_000)
-        );
-    }
-
-    #[test]
-    fn the_retry_budget_escalates() {
-        let pace = RatePace {
-            retries: 0,
-            due_ms: 100,
-        };
-        assert!(matches!(step(pace, true, 99), Step::Wait));
-        assert!(matches!(step(pace, true, 100), Step::Send));
-        assert!(matches!(step(pace, false, 9_999), Step::Escalate));
-    }
-}
+#[path = "ratelimit_tests.rs"]
+mod tests;

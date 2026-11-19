@@ -27,6 +27,7 @@ use crate::checks;
 use crate::checkwork;
 use crate::cli::{Env, Fail};
 use crate::config;
+use crate::connerr;
 use crate::deliver;
 use crate::discover;
 use crate::doc;
@@ -206,6 +207,10 @@ pub(crate) struct Stage {
     /// a manually cleared or escalated limit never re-raises while
     /// it holds.
     pub(crate) rate_pace: std::cell::RefCell<BTreeMap<(String, String), ratelimit::RatePace>>,
+    /// `(studio, role)` → the connection-error retry exchange: the
+    /// same adjudication invariant as `rate_pace`, on a shorter
+    /// 15-second wait.
+    pub(crate) conn_pace: std::cell::RefCell<BTreeMap<(String, String), connerr::ConnPace>>,
     /// `(studio, role)` pairs whose session-less state passed the
     /// default window and already logged its soft warning — the
     /// runner's own window still bounds the attention.
@@ -585,6 +590,7 @@ impl Stage {
             last_signal: std::cell::RefCell::new(BTreeMap::new()),
             revision_since: std::cell::RefCell::new(BTreeMap::new()),
             rate_pace: std::cell::RefCell::new(BTreeMap::new()),
+            conn_pace: std::cell::RefCell::new(BTreeMap::new()),
             session_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
             cached: BTreeMap::new(),
             seen: BTreeMap::new(),
@@ -673,6 +679,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         last_signal: std::cell::RefCell::new(BTreeMap::new()),
         revision_since: std::cell::RefCell::new(BTreeMap::new()),
         rate_pace: std::cell::RefCell::new(BTreeMap::new()),
+        conn_pace: std::cell::RefCell::new(BTreeMap::new()),
         session_warned: std::cell::RefCell::new(std::collections::BTreeSet::new()),
         cached: BTreeMap::new(),
         seen: BTreeMap::new(),

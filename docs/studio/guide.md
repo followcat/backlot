@@ -232,6 +232,25 @@ back), a role terminal disappearing while its ledger still wants it live, and a 
 attention growing. Each condition reports once per edge. Without `--target` the lines go to the
 watch's own stderr; `--studio` narrows the ledgers to one studio.
 
+Add `--restart` to have the watch keep the stage alive as well — it starts a dead
+`backlot-stage` again (five attempts in ten minutes, an exponential 2→4→8→16→30 second backoff
+that a stable minute resets, then a pause announced once), reconnects the core after an `hc`
+restart with a 2→5→15→30 second backoff, and reports `stage restarted` or
+`stage restart failed: <reason>` into `--target`. The watch without `--restart` only observes.
+
+To keep that running without a terminal, let systemd own it:
+
+```sh
+backlot stage service --write
+```
+
+The command writes `backlot-stage.service` under `~/.config/systemd/user/` (or
+`backlot-stage-<session>.service` with `--session <s>`) and prints the
+`systemctl --user daemon-reload && systemctl --user enable --now <unit>` line to run; it never
+calls `systemctl` itself. `--print` (the default) shows the unit instead of writing it, and a
+working role cannot run the command. The unit runs `stage watch --restart` with the stage's
+`PATH` and `BACKLOT_STATE_DIR`; it has not been exercised under a real systemd user manager.
+
 Run `backlot` to open the UI. The client is always in studio mode: the sidebar's agents section
 is the **cast** of the current studio — one two-line entry per person, live ones first — and
 `Ctrl+B y` — prefix, then `y` — opens the studio panel on the right as a column
@@ -521,8 +540,9 @@ stage can raise:
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
 | `cmd prep failed` | A cmd role's per-session setup failed — its workdir `.commandcode/settings.json` could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
 | `cline prep failed` | A cline role's per-session setup failed — `<cwd>/.cline/hooks/PreToolUse.sh`, the MCP mask file or the worktree's `info/exclude` could not be written. Without the hook the role would run every tool unguarded, so nothing starts. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
-| `rate limited` | Limit text was observed — in the `error` status's message or in the fresh tail of a non-working screen — counted separately from `stalled` and rework. | Usually nothing: the stage waits the parsed reset out and sends `continue`, up to three auto-retries. A successful resume resolves `resumed`; an episode that outlives the budget re-raises `needs the user` — answer it by hand. |
-| `agent error` | The role's terminal reports `error` with no limit text in its message or the screen's fresh tail — a plain agent error, not a limit. | The stage sends nothing: an actor's is the director's to retry, reword or recast; anyone else's is yours. It clears `status recovered` when the status leaves `error`, or `rate limit text observed` if a limit banner shows. |
+| `rate limited` | Limit text was observed — in the `error` status's message or in the fresh tail of a non-working screen, including a reporting core reading `done`, `idle` or `waiting` — counted separately from `stalled` and rework. A `working` screen is never matched. | Usually nothing: the stage waits the parsed reset out and sends `continue`, up to three auto-retries. A successful resume resolves `resumed`; an episode that outlives the budget re-raises `needs the user` — answer it by hand. A **weekly or monthly** limit is different: it raises `needs the user` at once (no `continue` can shorten it), and the same banner never re-raises while it holds. |
+| `connection error` | A non-working screen — or an `error` status's message — shows `Connection error`, as Devin does when it stops until someone writes to it. A rate limit on the same sample takes precedence. | Usually nothing: the stage sends `continue` after 15 seconds, up to three times, then re-raises `needs the user`. The banner disappearing clears it `resumed`. |
+| `agent error` | The role's terminal reports `error` with no limit text in its message or the screen's fresh tail and no connection-error line — a plain agent error, not a limit. | The stage sends nothing: an actor's is the director's to retry, reword or recast; anyone else's is yours. It clears `status recovered` when the status leaves `error`, `rate limit text observed` if a limit banner shows, or `connection error observed` if the connection-error pass claimed it. |
 
 A stale open attention — one whose condition no longer holds, such as a stage-restart leftover —
 closes by hand:
@@ -546,6 +566,11 @@ commands. Start the stage again:
 ```sh
 backlot stage start
 ```
+
+Or let `backlot stage watch --restart` do it: a running watch reconnects to the returning core
+and starts the stage again as soon as it notices it is down, under the same bounded budget
+described above. `backlot stage service --write` installs that watch as a systemd `--user` unit
+so a reboot or an `hc` restart needs no one at the keyboard.
 
 The ledger replays, so everything recorded — requirements, tasks, casts, deliveries, reviews,
 approvals — comes back, and `backlot status` shows it. What does not come back: every terminal

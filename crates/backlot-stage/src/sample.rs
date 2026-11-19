@@ -1,8 +1,9 @@
 //! The per-role screen sample: classify the visible screen into the
 //! `work` map for the summary and the send gate's stability track,
 //! then hand the same text to the attention-episode passes — the
-//! `permission prompt` episode in `permission.rs`, the `stalled`
-//! and `rate limited` episodes in `limits.rs`.
+//! `permission prompt` episode in `permission.rs`, the `stalled` one
+//! in `stall.rs`, the `rate limited` and `agent error` ones in
+//! `limits.rs`, and the `connection error` one in `connerr.rs`.
 
 use std::path::Path;
 
@@ -120,7 +121,10 @@ impl Stage {
         self.permission(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
         self.stall(studio, w, work, now_ms).await?;
-        self.rate_limit(studio, w, &text, screen_work, now_ms).await
+        self.rate_limit(studio, w, &text, screen_work, now_ms)
+            .await?;
+        self.connection_error(studio, w, &text, screen_work, now_ms)
+            .await
     }
 
     /// `attention.raised` with the screen saved to
