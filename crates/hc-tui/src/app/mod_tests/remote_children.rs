@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::operations::{Action, MachineOp};
+use crate::test_support::TestDir;
 use hc_proto::client::AttachConn;
 use hc_proto::endpoint::{Endpoint, Remote};
 use hc_proto::watch::{OpenRpc, WatchParams};
@@ -21,7 +22,7 @@ const DEADLINE: Duration = Duration::from_secs(15);
 /// A scratch dir holding the scripted `ssh` and its spawn ledger —
 /// every invocation appends one line before answering `hello`.
 struct Fixture {
-    dir: PathBuf,
+    _dir: TestDir,
     script: PathBuf,
     spawns: PathBuf,
 }
@@ -33,13 +34,7 @@ impl Fixture {
     /// snapshot, then sleeps holding every wire open: a live conn is a
     /// live conn, and pending calls never respawn.
     fn new() -> Fixture {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let dir =
-            std::env::temp_dir().join(format!("hc-tui-remote-{}-{nanos:x}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TestDir::new("hc-tui-remote");
         let spawns = dir.join("spawns");
         let script = dir.join("fake-ssh");
         let hello = |framed: bool| {
@@ -82,7 +77,7 @@ impl Fixture {
         std::fs::write(&script, body).unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
         Fixture {
-            dir,
+            _dir: dir,
             script,
             spawns,
         }
@@ -90,12 +85,6 @@ impl Fixture {
 
     fn count(&self) -> usize {
         std::fs::read_to_string(&self.spawns).map_or(0, |s| s.lines().count())
-    }
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 

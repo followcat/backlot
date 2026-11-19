@@ -35,6 +35,8 @@ pub mod term;
 pub mod terminal_modes;
 pub mod terminal_notify;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod testcore;
 pub mod update_check;
 pub(crate) mod update_install;

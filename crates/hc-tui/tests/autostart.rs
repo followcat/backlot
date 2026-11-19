@@ -11,11 +11,14 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use hc_vt::Vt;
 use pty::{POLL, Pty, screen};
+
+mod support;
+
+use support::TestDir;
 
 const COLS: u16 = 120;
 const ROWS: u16 = 34;
@@ -25,23 +28,16 @@ const DEADLINE: Duration = Duration::from_secs(10);
 /// fake was never invoked — far past the start task's dispatch.
 const SETTLE: Duration = Duration::from_secs(2);
 
-static SCRATCH_COUNTER: AtomicU32 = AtomicU32::new(0);
-
 /// Temporary HOME/XDG/bin directories for one PTY run.
 struct ScratchEnv {
-    root: PathBuf,
+    root: TestDir,
 }
 
 impl ScratchEnv {
     fn new() -> Self {
         // Short root: the resolved `herdr-core/<session>.holder.sock`
         // under it must fit `sun_path`.
-        let unique = format!(
-            "hctui-as-{}-{}",
-            std::process::id(),
-            SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed),
-        );
-        let root = scratch_parent().join(unique);
+        let root = TestDir::new_in(&scratch_parent(), "hctui-as");
         for dir in ["home", "state", "config", "data", "runtime", "bin", "work"] {
             fs::create_dir_all(root.join(dir)).unwrap();
         }
@@ -55,12 +51,6 @@ impl ScratchEnv {
             .join("runtime")
             .join("herdr-core")
             .join(format!("{session}.sock"))
-    }
-}
-
-impl Drop for ScratchEnv {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
     }
 }
 
