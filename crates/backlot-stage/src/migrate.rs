@@ -143,17 +143,18 @@ fn migrate_log(t: &Target, dry_run: bool) -> Result<String, Fail> {
         lines.push(serde_json::to_string(&val).map_err(|e| Fail::refused(e.to_string()))?);
     }
 
+    let ver = backlot_model::event::LEDGER_VERSION;
     if changed == 0 && !torn {
         return Ok(format!(
-            "{}: already at ledger v1 ({} events)",
-            t.name, total
+            "{}: already at ledger v{} ({} events)",
+            t.name, ver, total
         ));
     }
     if dry_run {
         let tail = if torn { "; a torn tail would drop" } else { "" };
         return Ok(format!(
-            "{}: would migrate {}/{} events to ledger v1{}",
-            t.name, changed, total, tail
+            "{}: would migrate {}/{} events to ledger v{}{}",
+            t.name, changed, total, ver, tail
         ));
     }
 
@@ -197,7 +198,7 @@ fn migrate_log(t: &Target, dry_run: bool) -> Result<String, Fail> {
     }
     let tail = if torn { "; dropped a torn tail" } else { "" };
     Ok(format!(
-        "{}: migrated {}/{} events to ledger v1{}",
-        t.name, changed, total, tail
+        "{}: migrated {}/{} events to ledger v{}{}",
+        t.name, changed, total, ver, tail
     ))
 }

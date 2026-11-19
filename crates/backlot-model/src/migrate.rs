@@ -60,6 +60,12 @@ impl fmt::Display for MigrateError {
 
 impl std::error::Error for MigrateError {}
 
+/// The schema version of a line written before versioning existed.
+/// Pre-versioning logs are v1 lines *specifically* — stamping
+/// `LEDGER_VERSION` on one would skip its `1 -> 2 -> ...` steps once
+/// those exist.
+const LEGACY_VERSION: u32 = 1;
+
 /// One `v<from> -> v<from+1>` rewrite of a line's object — a plain
 /// function pointer so the step tables are `Sync`. A step only
 /// edits the object; the pipeline owns the `v` bump.
@@ -100,9 +106,9 @@ pub(crate) fn migrate_with(
     let mut changed = false;
     let mut version = match obj.get("v") {
         None => {
-            obj.insert("v".into(), Value::from(u64::from(LEDGER_VERSION)));
+            obj.insert("v".into(), Value::from(u64::from(LEGACY_VERSION)));
             changed = true;
-            LEDGER_VERSION
+            LEGACY_VERSION
         }
         Some(v) => {
             let n = v.as_u64().ok_or(MigrateError::InvalidVersion)?;
