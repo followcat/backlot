@@ -67,8 +67,16 @@ pub(crate) fn label(m: &Message) -> Option<&str> {
 
 /// The `lost` notice body for a `cannot resume` attention: the
 /// role, why it cannot come back, and for an actor the ways on —
-/// the reviewer abandons the task or recasts it.
+/// the reviewer abandons the task or recasts it. A producer is the
+/// one role no command in the studio can bring back: only the user
+/// (or Hollywood) can, and a live director is told exactly that.
 fn cannot_resume_body(a: &backlot_model::state::Attention) -> String {
+    if a.role == "producer" {
+        return format!(
+            "# producer cannot resume\n\n`producer`'s terminal was lost and the stage could not resume it — {}.\n\nThe director cannot restart the producer: only the user (or Hollywood) can intervene. The studio waits meanwhile; no command here revives it.\n",
+            a.detail,
+        );
+    }
     let ways = match backlot_model::state::actor_task(&a.role) {
         Some(id) => format!(
             "\nWays on:\n\n- `backlot task abandon --task {id} --reason <reason>` and a new task\n- recast it with `backlot cast --task {id} --actor <name> --reason <reason>`\n"

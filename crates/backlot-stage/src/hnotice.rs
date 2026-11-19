@@ -73,11 +73,17 @@ fn told(h: &HollywoodState, n: &HNotice) -> bool {
 }
 
 /// The label and body one `attention.raised` owes Hollywood: a
-/// prompt only the user may answer, a stall it could not route,
-/// else a plain attention.
+/// prompt only the user may answer, a stall it could not route, else a
+/// plain attention. A producer that stalls or cannot resume is always
+/// Hollywood's — the studio can only tell its live director, and only
+/// the user or Hollywood can put the producer back — so its notice
+/// leads with the producer, not the generic unrouted wording.
 fn attention_notice(studio: &str, s: &StudioState, a: &backlot_model::state::Attention) -> HNotice {
-    let unrouted =
-        matches!(a.reason.as_str(), STALLED | CANNOT_RESUME) && stall::notice_to(s, a).is_none();
+    let producer_down =
+        a.role == "producer" && matches!(a.reason.as_str(), STALLED | CANNOT_RESUME);
+    let unrouted = producer_down
+        || (matches!(a.reason.as_str(), STALLED | CANNOT_RESUME)
+            && stall::notice_to(s, a).is_none());
     let user_owned =
         a.reason == PERMISSION_PROMPT && (a.needs_user || actor_task(&a.role).is_none());
     let (label, head) = if user_owned {
@@ -85,6 +91,13 @@ fn attention_notice(studio: &str, s: &StudioState, a: &backlot_model::state::Att
             "prompt",
             format!("# {studio}: permission prompt — needs the user"),
         )
+    } else if producer_down {
+        let what = if a.reason == STALLED {
+            "producer stalled"
+        } else {
+            "producer cannot resume"
+        };
+        ("stalled", format!("# {studio}: {what} — needs attention"))
     } else if unrouted {
         (
             "stalled",

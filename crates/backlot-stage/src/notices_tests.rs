@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use backlot_model::event::{CANNOT_RESUME, EventKind, TaskStateChange, Verdict};
-use backlot_model::state::{Message, StudioState, apply};
+use backlot_model::state::{Attention, Message, StudioState, apply, replay};
 use backlot_model::testkit::*;
 
 use crate::notices;
@@ -321,6 +321,64 @@ fn a_cannot_resume_owes_one_lost_notice_on_the_stalled_route() {
             delivered_ms: None,
         });
     }
+    assert!(
+        notices::owed(&state, dir())
+            .iter()
+            .all(|n| n.label != "lost")
+    );
+}
+
+/// A producer that cannot resume is the user's (or Hollywood's) to
+/// fix, but a live director is told — once, with the body that says
+/// no studio command revives it. No director live means no notice.
+#[test]
+fn a_cannot_resume_producer_tells_a_live_director() {
+    let mut state = state_with(&base_events(), vec![("director", role_started("director"))]);
+    state.attention.push(Attention {
+        seq: 20,
+        role: "producer".into(),
+        reason: CANNOT_RESUME.into(),
+        detail: "no session id to resume".into(),
+        open: true,
+        ts_ms: 0,
+        needs_user: false,
+        cleared_reason: None,
+    });
+    let owed = notices::owed(&state, dir());
+    let lost: Vec<_> = owed.iter().filter(|n| n.label == "lost").collect();
+    assert_eq!(lost.len(), 1, "{owed:?}");
+    assert_eq!(lost[0].to, "director");
+    assert_eq!(lost[0].source_seq, 20);
+    for want in [
+        "producer cannot resume",
+        "no session id to resume",
+        "cannot restart the producer",
+        "only the user (or Hollywood) can intervene",
+    ] {
+        assert!(
+            lost[0].body.contains(want),
+            "producer lost body misses {want}: {}",
+            lost[0].body
+        );
+    }
+    assert!(
+        !lost[0].body.contains("backlot tell producer"),
+        "{}",
+        lost[0].body
+    );
+
+    // No director live: the panel and `backlot status` carry it alone.
+    let mut state = replay(&base_events());
+    state.attention.push(Attention {
+        seq: 20,
+        role: "producer".into(),
+        reason: CANNOT_RESUME.into(),
+        detail: "no session id to resume".into(),
+        open: true,
+        ts_ms: 0,
+        needs_user: false,
+        cleared_reason: None,
+    });
     assert!(
         notices::owed(&state, dir())
             .iter()

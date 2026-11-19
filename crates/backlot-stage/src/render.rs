@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use backlot_model::event::{CheckDecl, EventKind};
+use backlot_model::event::{CANNOT_RESUME, CheckDecl, EventKind, STALLED};
 use backlot_model::state::{StudioState, Task, TaskStatus};
 use backlot_model::{ActorIdentity, ActorRecord};
 
@@ -109,6 +109,18 @@ pub fn status(
         "studio {name}: \"{}\" ({:?})",
         studio.title, studio.mode
     );
+    // The producer's own stall or unresumable terminal is the one
+    // problem no role in the studio can fix; put it above everything
+    // else so a glance at `backlot status` says why nothing moves.
+    for a in state.open_attention() {
+        if a.role == "producer" && matches!(a.reason.as_str(), STALLED | CANNOT_RESUME) {
+            let _ = writeln!(
+                out,
+                "  producer alert: {} — {} (needs the user or Hollywood)",
+                a.reason, a.detail
+            );
+        }
+    }
     let _ = writeln!(out, "  repo {}", studio.repo);
     if state.requirement_version > 0 {
         let cur = &state.requirements[state.requirements.len() - 1];

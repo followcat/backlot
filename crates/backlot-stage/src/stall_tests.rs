@@ -146,8 +146,8 @@ fn raised(seq: u64, role: &str) -> Attention {
 
 /// A `stalled` attention owes exactly one notice: the actor's to
 /// its reviewer — the producer on a producer cast — the writer's
-/// and the director's to the producer, and the producer's to
-/// nobody.
+/// and the director's to the producer, and the producer's to nobody
+/// while no director is live.
 #[test]
 fn stalled_notice_routes_per_role() {
     let base = base_events();
@@ -193,6 +193,35 @@ fn stalled_notice_routes_per_role() {
     let mut state = replay(&base);
     state.attention.push(raised(20, "producer"));
     assert!(notices::owed(&state, dir()).is_empty());
+
+    // A live director is told its producer is down — once, with the
+    // informational body that says it cannot restart it.
+    let mut state = state_with(&base, vec![("director", role_started("director"))]);
+    state.attention.push(raised(20, "producer"));
+    let owed = notices::owed(&state, dir());
+    assert_eq!(owed.len(), 1, "{owed:?}");
+    assert_eq!(owed[0].to, "director");
+    assert_eq!(owed[0].label, "stalled");
+    assert_eq!(owed[0].source_seq, 20);
+    for want in [
+        "producer",
+        "screen unchanged for 5s",
+        "attention/20.txt",
+        "cannot restart the producer",
+        "only the user (or Hollywood) can intervene",
+    ] {
+        assert!(
+            owed[0].body.contains(want),
+            "producer body misses {want}: {}",
+            owed[0].body
+        );
+    }
+    // No nudge command: the producer cannot be told to continue.
+    assert!(
+        !owed[0].body.contains("backlot tell producer"),
+        "{}",
+        owed[0].body
+    );
 }
 
 /// The notice names the role, how long the screen held still, the
