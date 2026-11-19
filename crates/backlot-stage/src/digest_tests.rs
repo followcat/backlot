@@ -5,23 +5,14 @@
 //! sent on its own.
 
 use std::fs;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use backlot_model::state::{Message, ReportRecord};
 
 use crate::digest::{self, OutItem};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let d = std::env::temp_dir().join(format!(
-        "backlot-digest-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::SeqCst)
-    ));
-    fs::create_dir_all(&d).unwrap();
-    d
+fn tmp() -> TestDir {
+    TestDir::new("backlot-digest")
 }
 
 fn message(

@@ -5,8 +5,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use backlot_model::event::{EventKind, PERMISSION_PROMPT, STALLED};
@@ -25,17 +24,10 @@ use crate::sample::Watched;
 use crate::signals::{self, Signal};
 use crate::stall;
 use crate::store::{self, Pending};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-signals-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-signals-test")
 }
 
 fn now_ms() -> u64 {

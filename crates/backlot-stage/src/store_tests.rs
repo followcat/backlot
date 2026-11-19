@@ -2,23 +2,15 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use backlot_model::event::EventKind;
 use backlot_model::{EventBy, NewEvent};
 
 use crate::store::*;
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-store-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-store-test")
 }
 
 fn msg(i: impl std::fmt::Display) -> NewEvent {
@@ -147,7 +139,7 @@ fn concurrent_appends_keep_one_total_order() {
     let per: usize = 25;
     let mut handles = Vec::new();
     for _ in 0..threads {
-        let d = dir.clone();
+        let d = dir.path().to_path_buf();
         handles.push(std::thread::spawn(move || {
             for i in 0..per {
                 append::<String, _>(&d, |_, _| {

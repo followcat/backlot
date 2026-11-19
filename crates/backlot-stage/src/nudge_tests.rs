@@ -5,8 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::Path;
 
 use backlot_model::event::*;
 use backlot_model::state::{apply, replay};
@@ -23,17 +22,10 @@ use crate::nudge::{self, Move};
 use crate::reasons;
 use crate::reconcile::LiveTerminal;
 use crate::store::{self, Pending};
+use crate::test_support::TestDir;
 
-static NEXT: AtomicU64 = AtomicU64::new(0);
-
-fn tmp() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-nudge-test-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmp() -> TestDir {
+    TestDir::new("backlot-nudge-test")
 }
 
 /// `hello`, then silence: the nudge pass makes no terminal calls.

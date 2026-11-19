@@ -4,18 +4,16 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use super::cline_hook::{MESSAGE, Spec, TARGET_CAP, script};
+use crate::test_support::TestDir;
 
 const WORKTREE: &str = "/home/user/acme-shop/work";
 
-pub(super) fn tmp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("bl-cline-hook-{tag}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    dir
+pub(super) fn tmp(tag: &str) -> TestDir {
+    TestDir::new(&format!("bl-cline-hook-{tag}"))
 }
 
 fn rules() -> Vec<String> {
