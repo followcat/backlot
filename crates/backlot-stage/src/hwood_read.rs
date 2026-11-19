@@ -20,7 +20,10 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
     match cmd {
         Cmd::Status { json, all: true } => Some(status_all(env, base, *json)),
         Cmd::Status { json, .. } => Some(status(common, env, base, *json)),
-        Cmd::Records { json, all } => Some(records(common, env, base, *json, *all)),
+        Cmd::Records { json, all, kind } => {
+            Some(records(common, env, base, *json, *all, kind.as_deref()))
+        }
+        Cmd::CastSuggest { json } => Some(cast_suggest(common, env, base, *json)),
         Cmd::ReportShow { file } => {
             let mut out = std::io::stdout().lock();
             Some(report_show(common, env, base, file, &mut out).map(|()| String::new()))
@@ -31,6 +34,7 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             title,
             repo,
             cast_file,
+            ..
         } => Some(dry_run(
             common,
             env,
@@ -70,7 +74,14 @@ fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String,
 /// `records [--studio <name> | --all]`: `--studio` scopes to one;
 /// plain and `--all` keep the every-studio read records has always
 /// had.
-fn records(common: &Common, env: &Env, base: &Path, json: bool, all: bool) -> Result<String, Fail> {
+fn records(
+    common: &Common,
+    env: &Env,
+    base: &Path,
+    json: bool,
+    all: bool,
+    kind: Option<&str>,
+) -> Result<String, Fail> {
     let _ = env;
     let names = match (all, &common.studio) {
         (false, Some(name)) => {
@@ -85,9 +96,29 @@ fn records(common: &Common, env: &Env, base: &Path, json: bool, all: bool) -> Re
         }
         _ => store::studios(base).map_err(|e| Fail::refused(e.to_string()))?,
     };
+    let logs = studio_logs(base, &names)?;
+    let mut recs = backlot_model::records(&logs);
+    // `--kind <task_kind>` keeps only that kind's rows (L3).
+    if let Some(kind) = kind {
+        recs.retain(|r| r.task_kind == kind);
+    }
+    Ok(if json {
+        serde_json::to_string_pretty(&recs).map_err(|e| Fail::refused(e.to_string()))?
+    } else if recs.is_empty()
+        && let Some(kind) = kind
+    {
+        format!("no deliveries recorded for kind '{kind}'\n")
+    } else {
+        render::records(&recs)
+    })
+}
+
+/// Every named studio's log for the cross-studio reads — the same
+/// loader `records` and `cast --suggest` share.
+fn studio_logs(base: &Path, names: &[String]) -> Result<Vec<backlot_model::StudioLog>, Fail> {
     let mut logs = Vec::new();
     for name in names {
-        let (events, _) = store::load_events(&store::studio_dir(base, &name)).map_err(|e| {
+        let (events, _) = store::load_events(&store::studio_dir(base, name)).map_err(|e| {
             let detail = match e {
                 StoreError::Io(e) => e.to_string(),
                 StoreError::Corrupt(c) => c.to_string(),
@@ -96,15 +127,50 @@ fn records(common: &Common, env: &Env, base: &Path, json: bool, all: bool) -> Re
             Fail::refused(format!("studio '{name}': {detail}"))
         })?;
         logs.push(backlot_model::StudioLog {
-            studio: name,
+            studio: name.clone(),
             events,
         });
     }
+    Ok(logs)
+}
+
+/// `cast --task <id> --suggest` (L3, D8): each declared candidate's
+/// factual record for the task's kind across every studio's log —
+/// counts and honest notices only, never a score or a pick.
+fn cast_suggest(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
+    let name = crate::cli::studio_name(common, env)?;
+    let task = common
+        .task
+        .clone()
+        .or_else(|| env.get("BACKLOT_TASK").map(String::from))
+        .ok_or_else(|| Fail::usage("missing task: set BACKLOT_TASK or pass --task"))?;
+    let dir = store::studio_dir(base, &name);
+    if !dir.join("events.jsonl").is_file() {
+        return Err(Fail::refused(format!("no studio '{name}'")));
+    }
+    let state = store::load_state(&dir).map_err(store_fail)?;
+    let t = state
+        .tasks
+        .get(&task)
+        .ok_or_else(|| Fail::refused(format!("no task '{task}'")))?;
+    let candidates = state
+        .studio
+        .as_ref()
+        .map(|s| s.candidates.as_slice())
+        .unwrap_or(&[]);
+    if candidates.is_empty() {
+        return Err(Fail::refused(format!(
+            "studio '{name}' declares no candidates"
+        )));
+    }
+    let names = store::studios(base).map_err(|e| Fail::refused(e.to_string()))?;
+    let logs = studio_logs(base, &names)?;
     let recs = backlot_model::records(&logs);
+    let history = backlot_model::casting::candidate_history(candidates, &t.task_kind, &recs);
     Ok(if json {
-        serde_json::to_string_pretty(&recs).map_err(|e| Fail::refused(e.to_string()))?
+        serde_json::to_string_pretty(&history).map_err(|e| Fail::refused(e.to_string()))?
     } else {
-        render::records(&recs)
+        render::cast_suggest(&task, &t.task_kind, &history)
     })
 }
 

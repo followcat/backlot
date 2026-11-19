@@ -92,6 +92,8 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
     let mut actor = None;
     let mut reason = None;
     let mut priority = None;
+    let mut suggest = false;
+    let mut json = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_CAST)));
@@ -108,8 +110,24 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
             _ if eq(&arg, "--priority").is_some() => {
                 priority = Some(parse_level(eq(&arg, "--priority").unwrap(), U_CAST)?)
             }
+            "--suggest" => suggest = true,
+            "--json" => json = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_CAST)),
         }
+    }
+    if suggest {
+        // The suggestion view is task-level and read-only: no actor,
+        // no reason or priority to record.
+        if actor.is_some() {
+            return Err(usage("--suggest and --actor do not mix", U_CAST));
+        }
+        if reason.is_some() || priority.is_some() {
+            return Err(usage("--suggest takes no --reason or --priority", U_CAST));
+        }
+        return Ok((std::mem::take(common), Cmd::CastSuggest { json }));
+    }
+    if json {
+        return Err(usage("--json goes with --suggest", U_CAST));
     }
     Ok((
         std::mem::take(common),
@@ -119,6 +137,34 @@ pub(crate) fn cast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fa
             priority,
         },
     ))
+}
+
+/// `records`: `--json`, `--all` and `--kind <task_kind>` on top of
+/// the common flags. `--all` and `--studio` do not mix — the flag
+/// means every studio, the common flag one.
+pub(crate) fn records(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut json = false;
+    let mut all = false;
+    let mut kind = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_RECORDS)));
+        }
+        if common_flag(it, common, &arg, U_RECORDS)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            "--all" => all = true,
+            "--kind" => kind = Some(it.value("--kind", U_RECORDS)?),
+            _ if eq(&arg, "--kind").is_some() => kind = eq(&arg, "--kind").map(String::from),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_RECORDS)),
+        }
+    }
+    if all && common.studio.is_some() {
+        return Err(usage("--all and --studio do not mix", U_RECORDS));
+    }
+    Ok((std::mem::take(common), Cmd::Records { json, all, kind }))
 }
 
 /// `reopen`/`close --person <role key>`: common flags plus the key.

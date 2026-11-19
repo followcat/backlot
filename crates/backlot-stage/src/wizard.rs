@@ -17,12 +17,14 @@ use crate::runners::detect::{self, Found};
 use crate::workareas;
 
 /// What the wizard still needs after the flags — `None` is asked
-/// for. The cast file, when given, skips the draft entirely.
+/// for. The cast file, when given, skips the draft entirely; a
+/// `--mode` given on the command line skips the mode question.
 pub(crate) struct WizardArgs {
     pub title: Option<String>,
     pub repo: Option<String>,
     pub cast_file: Option<PathBuf>,
     pub dry_run: bool,
+    pub mode: Option<backlot_model::event::StudioMode>,
 }
 
 /// The `$VISUAL`/`$EDITOR` seam — the edited file stays where it is.
@@ -239,9 +241,24 @@ pub(crate) fn run_io(
         Some(title) => title,
         None => ask(io, "title", Some(&id))?,
     };
+    // R14: `--mode` answers ahead; otherwise the wizard asks —
+    // `standard` on a bare Enter, anything else re-asked.
+    let mode = match args.mode {
+        Some(mode) => mode,
+        None => loop {
+            match ask(io, "mode [standard|experimental]", Some("standard"))?.as_str() {
+                "standard" => break backlot_model::event::StudioMode::Standard,
+                "experimental" => break backlot_model::event::StudioMode::Experimental,
+                other => {
+                    writeln!(io.out, "bad mode '{other}': want standard|experimental")
+                        .map_err(io_fail)?;
+                }
+            }
+        },
+    };
     let (cast_file, drafted) = match args.cast_file {
         Some(file) => (file, false),
-        None => (crate::wizard_cast::cast_draft(io, env)?, true),
+        None => (crate::wizard_cast::cast_draft(io, env, mode)?, true),
     };
     // Every check `studio new` runs — same messages — before the
     // write is even offered. Nothing exists before this point but
@@ -263,6 +280,7 @@ pub(crate) fn run_io(
                 cast_file: Some(cast_file.clone()),
                 dry_run: false,
                 interactive: false,
+                mode: Some(mode),
             },
             env,
             &base,

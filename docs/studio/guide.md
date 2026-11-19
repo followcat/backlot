@@ -98,7 +98,7 @@ timeout_s = 120
 | `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; cline `--thinking` — `none`, `low`, `medium`, `high` or `xhigh`; OpenCode has no flag). `cursor` and `devin` carry the depth in the model id and `cmd`'s flag writes global config, so all three omit it — a set `effort` on any of them is refused. |
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
-| `mode` | Optional. `standard` is the default and the only process that exists; `experimental` is a reserved name (R14, not built). |
+| `mode` | Optional. `standard` is the default. `experimental` (R14) marks the studio an experimental production — `backlot studio new --mode` overrides it, the wizard and the New Studio dialog offer both, each role's prompt gains research-level guidance (hypotheses, competing variants, honest negatives), a task may be created with no recorded requirement for direct-to-task exploration, and `status` plus the dock/sheet flag it `[experimental]`/`exp`. |
 | `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
 | `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. |
 
@@ -204,7 +204,8 @@ backlot stage start
 display name. With `--interactive` instead, whatever the flags leave out is asked for on the
 terminal with the same defaults as the native dialog. `--cast -` reads the cast file from
 stdin — how the client's dialog hands a generated cast to a remote `studio new` without leaving
-a file on that machine.
+a file on that machine. `--mode standard|experimental` overrides the cast file's `mode` — an
+invalid value is a usage error.
 
 `backlot stage start` starts `backlot-stage`, a terminal on the same core that runs the
 scheduling loop. It is idempotent — a second `stage start` says it is already running. The stage
@@ -319,7 +320,7 @@ In the normal path the steps run in this order:
 |---|---|---|
 | plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
-| cast | director | `backlot task new` splits the plan into tasks — `--depends-on t1` makes a task wait for another; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. A cast on a task with an open dependency is refused, and an accepted dependency that is not merged yet refuses with `merge t1 into integration first`; `backlot status` shows `waits for t1` on the task's line. |
+| cast | director | `backlot task new` splits the plan into tasks — `--depends-on t1` makes a task wait for another; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. A cast on a task with an open dependency is refused, and an accepted dependency that is not merged yet refuses with `merge t1 into integration first`; `backlot status` shows `waits for t1` on the task's line. `backlot cast --task <id> --suggest` first shows every candidate's factual record for the task's kind across all studios — counts and honest notices only, never a pick; `--json` prints the same view structured. |
 | deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). A runner that knows its own figures can also report `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and `--cost-usd`. The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
 | review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. An accepting verdict waits for every declared check's stage record — only you may accept over pending ones — and names each failing check in the conclusion. |
 | rework | actor | A `changes-requested` review goes back to the actor as a `[backlot]` message; it fixes and delivers again. The rework cap counts the rounds. |
@@ -696,8 +697,11 @@ written, an existing `PATH` never touched); `studio new`'s installed check count
 launch would.
 
 `backlot records` reads every studio's ledger and summarizes each actor identity's deliveries —
-the factual record, with no score. An actor whose deliveries reported usage shows its token and
-cost sums after the counts.
+the factual record, with no score. `--kind <task_kind>` keeps only one task kind's rows (and
+answers plainly when nothing delivered on it). An actor whose deliveries reported usage shows
+its token and cost sums after the counts. The same records feed `backlot cast --task <id>
+--suggest`, which lays them beside the studio's `[[candidates]]` for the task's kind — the
+director still casts with `--actor` and `--reason` itself.
 
 ## The panel's config
 

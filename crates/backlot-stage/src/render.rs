@@ -104,9 +104,15 @@ pub fn status(
     let Some(studio) = &state.studio else {
         return format!("studio {name}: no events yet\n");
     };
+    // R14: an experimental studio flags itself in the header; a
+    // standard studio's line stays exactly what it was.
+    let badge = match studio.mode {
+        backlot_model::event::StudioMode::Experimental => " [experimental]",
+        backlot_model::event::StudioMode::Standard => "",
+    };
     let _ = writeln!(
         out,
-        "studio {name}: \"{}\" ({:?})",
+        "studio {name}: \"{}\" ({:?}){badge}",
         studio.title, studio.mode
     );
     // The producer's own stall or unresumable terminal is the one
@@ -377,6 +383,123 @@ pub fn records(recs: &[ActorRecord]) -> String {
             fo.open
         );
         let _ = writeln!(out, "    wall time: {}", fmt_ms(r.wall_time_ms));
+    }
+    out
+}
+
+/// The detail lines one `ActorRecord` contributes in
+/// `cast --suggest`. `indent` leads every line. `records` keeps its
+/// own wording — its output stays byte-identical.
+fn record_lines(out: &mut String, indent: &str, r: &ActorRecord) {
+    let _ = write!(
+        out,
+        "{indent}{}: {} task{}, {} deliveries",
+        r.task_kind,
+        r.tasks,
+        if r.tasks == 1 { "" } else { "s" },
+        r.deliveries
+    );
+    // P4a: reported token/cost sums — factual, shown only when a
+    // delivery recorded any.
+    if !r.usage.is_empty() {
+        let _ = write!(out, " · usage {}", r.usage.compact());
+    }
+    if !r.enough_data {
+        let _ = writeln!(
+            out,
+            " (not enough data: {}/{})",
+            r.tasks,
+            backlot_model::records::MIN_TASKS
+        );
+        return;
+    }
+    let _ = writeln!(out);
+    let f = &r.first_delivery;
+    let _ = writeln!(
+        out,
+        "{indent}  first delivery: {} accepted, {} partial, {} changes requested, {} blocked, {} unreviewed",
+        f.accepted, f.partially_accepted, f.changes_requested, f.blocked, f.unreviewed
+    );
+    let _ = writeln!(
+        out,
+        "{indent}  defects: {} ({} actor-fault), {} closed, {} open, {} repeats, {} new-in-rework, {} later",
+        r.defects,
+        r.actor_fault_defects,
+        r.defects_closed,
+        r.defects_open,
+        r.defect_repeats,
+        r.new_in_rework,
+        r.later_defects
+    );
+    let _ = writeln!(
+        out,
+        "{indent}  checks: stage ran {} pass, {} fail; actor reported {} pass, {} fail",
+        r.stage_checks_passed,
+        r.stage_checks_failed,
+        r.reported_checks_passed,
+        r.reported_checks_failed
+    );
+    let _ = writeln!(
+        out,
+        "{indent}  upstream changes: {}, takeovers: {}",
+        r.upstream_changes, r.takeovers
+    );
+    let fo = &r.final_outcome;
+    let _ = writeln!(
+        out,
+        "{indent}  final: {} accepted, {} partial, {} blocked, {} abandoned, {} at cap, {} taken over, {} open",
+        fo.accepted,
+        fo.partially_accepted,
+        fo.blocked,
+        fo.abandoned,
+        fo.at_cap,
+        fo.taken_over,
+        fo.open
+    );
+    let _ = writeln!(out, "{indent}  wall time: {}", fmt_ms(r.wall_time_ms));
+}
+
+/// `backlot cast --task <id> --suggest` (L3, D8): each candidate's
+/// factual record for the task's kind. Declaration order, counts
+/// and honest notices — the view never ranks or picks.
+pub fn cast_suggest(
+    task: &str,
+    task_kind: &str,
+    history: &[backlot_model::casting::CandidateHistory],
+) -> String {
+    let mut out =
+        format!("task {task} kind '{task_kind}' — candidate history (factual, no ranking)\n");
+    for h in history {
+        let ident = h.candidate.actor();
+        let effort = match &ident.effort {
+            None => String::new(),
+            Some(e) => format!("/{e}"),
+        };
+        let version_note = match h.version_matched {
+            Some(backlot_model::casting::VersionMatch::AcrossVersions) => {
+                " [matched across runner versions]"
+            }
+            _ => "",
+        };
+        let _ = writeln!(
+            out,
+            "  {} — {}/{}{} ({}){version_note}",
+            h.candidate.name, ident.runner, ident.model, effort, ident.permission_profile
+        );
+        match &h.exact_kind {
+            Some(r) => record_lines(&mut out, "    ", r),
+            None => {
+                let _ = writeln!(out, "    (no history for '{task_kind}')");
+            }
+        }
+        if !h.other_kinds.is_empty() {
+            let kinds: Vec<String> = h
+                .other_kinds
+                .iter()
+                .map(|r| format!("{} ({} tasks)", r.task_kind, r.tasks))
+                .collect();
+            let _ = writeln!(out, "    other kinds: {}", kinds.join(", "));
+        }
     }
     out
 }

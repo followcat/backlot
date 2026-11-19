@@ -21,6 +21,7 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
         repo,
         cast_file,
         dry_run,
+        mode,
     } = &cmd
     {
         // The wizard resolves the answers itself, then runs the
@@ -33,6 +34,7 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
                 repo: repo.clone(),
                 cast_file: cast_file.clone(),
                 dry_run: *dry_run,
+                mode: *mode,
             },
             env,
         );

@@ -126,18 +126,48 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     hits.push(field, NsHit::TitleField);
     y += 2;
 
-    // The cast model has no full/light mode today — say so in one
-    // dim line rather than drawing a dead toggle.
+    // Mode (R14): a two-value toggle — `←`/`→`/space or a click
+    // flips it; the focused field takes the selection surface like
+    // the text fields do.
+    if y >= body.bottom() {
+        return;
+    }
+    put_text(b, body.x, y, body.width, " Mode", label);
+    y += 1;
+    if y >= body.bottom() {
+        return;
+    }
+    let field = Rect::new(body.x, y, body.width, 1);
+    let focused = d.field == Step2Field::Mode;
+    let bg = if focused { p.surface0 } else { p.panel_bg };
+    b.set_style(field, Style::default().fg(p.text).bg(bg));
+    let experimental = d.mode == backlot_model::event::StudioMode::Experimental;
+    let on = Style::default().fg(p.accent).bg(bg);
+    let off = Style::default().fg(p.overlay0).bg(bg);
+    let (s_style, e_style) = if experimental { (off, on) } else { (on, off) };
+    let mut x = field.x + 1;
+    for (word, style) in [("standard", s_style), ("|", off), ("experimental", e_style)] {
+        put_text(b, x, y, field.right().saturating_sub(x), word, style);
+        x += crate::chrome::text::display_width(word) as u16 + 1;
+        if x >= field.right() {
+            break;
+        }
+    }
+    hits.push(field, NsHit::ModeField);
+    y += 2;
+
+    // What the mode means — one dim line under the toggle.
     if y < body.bottom() {
+        let note = match experimental {
+            true => " Experimental: hypotheses, competing variants, honest negatives",
+            false => " Standard: the cast model's usual production flow",
+        };
         put_text(
             b,
             body.x,
             y,
             body.width,
-            &crate::chrome::text::truncate_end(
-                " Studio mode is 'standard' — the cast model has no full/light toggle yet",
-                body.width as usize,
-            ),
+            &crate::chrome::text::truncate_end(note, body.width as usize),
             dim,
         );
     }

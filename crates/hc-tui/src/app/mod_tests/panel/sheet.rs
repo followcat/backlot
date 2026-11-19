@@ -383,6 +383,29 @@ async fn an_open_report_leaves_no_tab_text_inside_the_body() {
     );
 }
 
+/// R14: an experimental studio's overview head carries `exp` —
+/// a standard studio's head line is what it always was.
+#[tokio::test]
+async fn an_experimental_studio_flags_the_sheet_head() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    let mut value = summary_json();
+    value["studios"][0]["mode"] = serde_json::json!("experimental");
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    open_panel(&mut app);
+    app.sheet_open(StudioKey::local("acme-shop"), None);
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text.contains("acme-shop — live exp"), "{text}");
+}
+
 #[tokio::test]
 async fn the_pane_cursor_hides_while_the_sheet_is_open() {
     // S2 round-1 review: the focused pane's hardware cursor must not

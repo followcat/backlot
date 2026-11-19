@@ -6,7 +6,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use backlot_model::event::{ApprovalDecision, Check, PlanKind, Priority, TaskStateChange, Verdict};
+use backlot_model::event::{
+    ApprovalDecision, Check, PlanKind, Priority, StudioMode, TaskStateChange, Verdict,
+};
 
 use crate::cli::Fail;
 use crate::{args_hwood, args_studio, args_task};
@@ -43,6 +45,9 @@ pub enum Cmd {
         /// `--interactive`: the wizard asks on the terminal for what
         /// is missing (U2).
         interactive: bool,
+        /// `--mode standard|experimental` — overrides the cast
+        /// file's `mode`; `None` leaves the TOML or the default.
+        mode: Option<StudioMode>,
     },
     ReqRevise {
         source: TextSource,
@@ -91,6 +96,12 @@ pub enum Cmd {
         actor: String,
         reason: String,
         priority: Option<Priority>,
+    },
+    /// `cast --task <id> --suggest [--json]` (L3): the candidates'
+    /// factual records for that task's kind — read-only, appends
+    /// nothing (D8).
+    CastSuggest {
+        json: bool,
     },
     Priority {
         level: Priority,
@@ -162,6 +173,8 @@ pub enum Cmd {
         json: bool,
         /// `--all`: every studio's log (the default without a pin).
         all: bool,
+        /// `--kind <task_kind>`: only records of that task kind.
+        kind: Option<String>,
     },
     StageStart,
     StageStop,
@@ -396,9 +409,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "status" => args_task::flags_only(&mut common, &mut it, U_STATUS, |json, all| {
             Cmd::Status { json, all }
         }),
-        "records" => args_task::flags_only(&mut common, &mut it, U_RECORDS, |json, all| {
-            Cmd::Records { json, all }
-        }),
+        "records" => args_task::records(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
         "stage" => {

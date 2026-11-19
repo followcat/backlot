@@ -283,7 +283,7 @@ impl App {
             Probe::Done(r) => r.as_slice(),
             _ => &[],
         };
-        Some((d.machine_name(), argv, d.cast.toml(runners)))
+        Some((d.machine_name(), argv, d.cast.toml(runners, d.mode)))
     }
 
     /// Step 4's dry run — `studio new … --dry-run` on the target

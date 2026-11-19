@@ -117,6 +117,68 @@ fn fields(
     ])
 }
 
+/// R14: the appendix an experimental studio adds to each role's
+/// prompt — research-level process guidance on top of the shared
+/// one. A standard studio appends nothing, so its rendered prompts
+/// stay byte-identical.
+fn mode_guidance(kind: RoleKind, state: &StudioState) -> &'static str {
+    use backlot_model::event::StudioMode;
+    if state.studio.as_ref().map(|s| s.mode) != Some(StudioMode::Experimental) {
+        return "";
+    }
+    match kind {
+        RoleKind::Producer => concat!(
+            "\n## Experimental production\n",
+            "\n",
+            "This studio runs in `experimental` mode: the product is\n",
+            "knowledge, not only a shipped change. Before the work\n",
+            "starts, write the research questions and hypotheses down,\n",
+            "the criteria that will judge them, and the conditions\n",
+            "that kill or pivot the line. Prefer a comparison of\n",
+            "competing approaches over a single guess when the\n",
+            "question allows it. A delivery that disproves a\n",
+            "hypothesis is a result: record it honestly in the\n",
+            "requirement notes rather than forcing a ship.\n",
+        ),
+        RoleKind::Director => concat!(
+            "\n## Experimental production\n",
+            "\n",
+            "This studio runs in `experimental` mode. Where the\n",
+            "question allows it, split competing approaches into\n",
+            "parallel tasks and cast them across candidates —\n",
+            "`backlot cast --task <task> --suggest` shows each\n",
+            "candidate's factual record for the task's kind first.\n",
+            "Review each delivery against the hypothesis and its\n",
+            "evidence: a well-documented negative finding that rules\n",
+            "out an approach is a valid `accepted` outcome. In node\n",
+            "reports, compare the variants and state which evidence\n",
+            "decided — including hypotheses that did not hold.\n",
+        ),
+        RoleKind::Writer => concat!(
+            "\n## Experimental production\n",
+            "\n",
+            "This studio runs in `experimental` mode. In plans and\n",
+            "acceptance lists, state the hypothesis being tested, the\n",
+            "competing designs or baselines it is compared against,\n",
+            "the measurable criteria that decide between them, and\n",
+            "the conditions that would falsify the hypothesis. Write\n",
+            "criteria a delivery can actually be checked against —\n",
+            "numbers, outputs, behaviors — not aspirations.\n",
+        ),
+        RoleKind::Actor => concat!(
+            "\n## Experimental production\n",
+            "\n",
+            "This studio runs in `experimental` mode. Treat the task\n",
+            "as a controlled experiment: isolate the variant on your\n",
+            "task branch, keep the baseline it is compared against\n",
+            "untouched, and record the exact commands, measurements\n",
+            "and caveats in your delivery report so the result\n",
+            "reproduces. Never fabricate a metric or soften a failed\n",
+            "hypothesis — a clean negative result is a deliverable.\n",
+        ),
+    }
+}
+
 /// Render the role's prompt to `<dir>/prompts/<role>.md` and return
 /// the path — the work folder is the area `ensure` made (or will).
 pub fn prepare(
@@ -128,10 +190,11 @@ pub fn prepare(
     let prompts = dir.join("prompts");
     fs::create_dir_all(&prompts)?;
     let work = workareas::role_dir(dir, &start.repo, &start.role);
-    let text = render(
+    let mut text = render(
         template(start.kind),
         &fields(studio, dir, start, state, &work),
     );
+    text.push_str(mode_guidance(start.kind, state));
     let file = prompts.join(format!("{}.md", start.role));
     fs::write(&file, text)?;
     Ok(file)

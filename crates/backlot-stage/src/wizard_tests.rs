@@ -64,6 +64,7 @@ fn args() -> WizardArgs {
         repo: None,
         cast_file: None,
         dry_run: false,
+        mode: None,
     }
 }
 
@@ -95,7 +96,7 @@ fn every_prompt_defaults_and_accepts() {
     // name, the title default the id, the cast the drafted `fake`
     // runner — every prompt answered with a bare newline.
     let repo = repo(&scratch, "acme-shop");
-    let answers = format!("{repo}\n\n\n\nn\n");
+    let answers = format!("{repo}\n\n\n\n\nn\n");
     let (res, out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
     let out_str = res.unwrap();
     assert!(out_str.contains("studio.created"), "{out_str}");
@@ -129,23 +130,66 @@ fn flags_answer_their_own_questions() {
         repo: Some(repo),
         cast_file: Some(PathBuf::from(cast)),
         dry_run: false,
+        mode: None,
     };
     let common = Common {
         studio: Some("flag-shop".into()),
         ..Common::default()
     };
-    // Only the stage offer remains to answer.
-    let (res, out) = run(common, a, &env, b"n\n", None);
+    // Only the mode question and the stage offer remain to answer.
+    let (res, out) = run(common, a, &env, b"\nn\n", None);
     assert!(res.unwrap().contains("studio.created"));
     assert!(!out.contains("repository"), "{out}");
     assert!(scratch.dir.join("studios/flag-shop/events.jsonl").is_file());
+}
+
+/// R14: the mode question — `experimental` drafts an experimental
+/// cast and the written `studio.created` carries the mode; a bad
+/// answer re-asks, and `--mode` skips the question entirely.
+#[test]
+fn the_mode_question_lands_on_studio_created() {
+    let (scratch, env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    // repo, studio, title, mode(bad→reprompt→experimental), cast a, stage n.
+    let answers = format!("{repo}\n\n\nbogus\nexperimental\n\nn\n");
+    let (res, out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
+    assert!(res.unwrap().contains("studio.created"), "{out}");
+    assert!(out.contains("mode [standard|experimental]"), "{out}");
+    assert!(out.contains("bad mode 'bogus'"), "{out}");
+    assert!(out.contains("mode = \"experimental\""), "{out}");
+    let (events, _) =
+        crate::store::load_events(&crate::store::studio_dir(&scratch.dir, "acme-shop")).unwrap();
+    match &events[0].kind {
+        backlot_model::event::EventKind::StudioCreated { mode, .. } => {
+            assert_eq!(*mode, backlot_model::event::StudioMode::Experimental)
+        }
+        other => panic!("wrong event: {other:?}"),
+    }
+}
+
+/// `--mode` answers the question ahead of the wizard — it never
+/// prints, and an experimental draft still carries the mode line.
+#[test]
+fn a_mode_flag_skips_the_question() {
+    let (scratch, env) = scratch();
+    let repo = repo(&scratch, "acme-shop");
+    let a = WizardArgs {
+        mode: Some(backlot_model::event::StudioMode::Experimental),
+        ..args()
+    };
+    // repo, studio, title, cast a, stage n — no mode answer needed.
+    let answers = format!("{repo}\n\n\n\nn\n");
+    let (res, out) = run(Common::default(), a, &env, answers.as_bytes(), None);
+    assert!(res.unwrap().contains("studio.created"), "{out}");
+    assert!(!out.contains("mode ["), "{out}");
+    assert!(out.contains("mode = \"experimental\""), "{out}");
 }
 
 #[test]
 fn a_bad_id_reprompts_until_valid() {
     let (scratch, env) = scratch();
     let repo = repo(&scratch, "acme-shop");
-    let answers = format!("{repo}\nBad Name!\nok-shop\n\n\nn\n");
+    let answers = format!("{repo}\nBad Name!\nok-shop\n\n\n\nn\n");
     let (res, out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
     assert!(res.unwrap().contains("studio.created"));
     assert!(out.contains("bad studio name"), "{out}");
@@ -167,7 +211,7 @@ fn eof_refuses_without_writing() {
 fn a_refused_cast_writes_nothing() {
     let (scratch, env) = scratch();
     let repo = repo(&scratch, "acme-shop");
-    let answers = format!("{repo}\n\n\nrefuse\n");
+    let answers = format!("{repo}\n\n\n\nrefuse\n");
     let (res, _out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
     match res {
         Err(Fail::Refused(m)) => assert!(m.contains("cast refused"), "{m}"),
@@ -183,7 +227,7 @@ fn an_edited_cast_is_what_gets_written() {
     // `e` opens the editor; the injected one writes a cast whose
     // producer runs on a different runner model; `a` then accepts.
     let edited = CAST_FAKE.replace("model = \"m\"", "model = \"edited-m\"");
-    let answers = format!("{repo}\n\n\ne\na\nn\n");
+    let answers = format!("{repo}\n\n\n\ne\na\nn\n");
     let (res, out) = run(
         Common::default(),
         args(),
@@ -200,7 +244,7 @@ fn an_edited_cast_is_what_gets_written() {
 fn a_repo_that_is_not_git_is_refused_like_the_dry_run() {
     let (scratch, env) = scratch();
     let plain = fixture(&scratch, "plain-dir", "x");
-    let answers = format!("{plain}\n\n\na\n");
+    let answers = format!("{plain}\n\n\n\na\n");
     let (res, _out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
     match res {
         Err(Fail::Refused(m)) => assert!(m.contains("not a git repository"), "{m}"),
@@ -214,7 +258,7 @@ fn no_runner_installed_refuses_the_draft() {
     let _lock = DRAFT_LOCK.lock().unwrap();
     let (scratch, env) = scratch();
     let repo = repo(&scratch, "acme-shop");
-    let answers = format!("{repo}\n\n\n");
+    let answers = format!("{repo}\n\n\n\n");
     let mut input = answers.as_bytes();
     let mut out = Vec::new();
     let mut io = Io {
@@ -256,7 +300,7 @@ fn the_reserved_name_is_refused() {
         studio: Some("hollywood".into()),
         ..Common::default()
     };
-    let answers = format!("{repo}\n\na\n");
+    let answers = format!("{repo}\n\n\na\n");
     let (res, _out) = run(common, args(), &env, answers.as_bytes(), None);
     match res {
         Err(Fail::Refused(m)) => assert!(m.contains("reserved"), "{m}"),
@@ -274,7 +318,7 @@ fn a_terminal_pick_replaces_the_line_prompt() {
     let (scratch, env) = scratch();
     let repo = repo(&scratch, "acme-shop");
     let picked = PathBuf::from(&repo);
-    let answers = b"\n\na\nn\n".as_slice();
+    let answers = b"\n\n\na\nn\n".as_slice();
     let mut input = answers;
     let mut out = Vec::new();
     let mut io = Io {
@@ -383,7 +427,7 @@ fn the_draft_shows_where_each_runner_came_from() {
         .insert("HOME".into(), scratch.files.to_string_lossy().into_owned());
     let claude_dir = scratch.files.join(".nvm/versions/node/v24.19.0/bin");
     let claude = exe(&claude_dir, "claude", "echo 2.1.330");
-    let answers = format!("{repo}\n\n\nrefuse\n");
+    let answers = format!("{repo}\n\n\n\nrefuse\n");
     let mut input = answers.as_bytes();
     let mut out = Vec::new();
     let found = Found {
@@ -423,7 +467,7 @@ fn accepting_a_cast_writes_the_runner_path() {
     env.vars.insert("PATH".into(), "/nonexistent-dir".into());
     let bin = scratch.files.join("agent-bin");
     let claude = exe(&bin, "claude", "echo 2.1.330");
-    let answers = format!("{repo}\n\n\na\nn\n");
+    let answers = format!("{repo}\n\n\n\na\nn\n");
     let mut input = answers.as_bytes();
     let mut out = Vec::new();
     let found = Found {
@@ -479,7 +523,7 @@ fn an_existing_runner_path_is_never_touched() {
     let claude = exe(&bin, "claude", "echo 2.1.330");
     let config = scratch.dir.join("config.toml");
     fs::write(&config, "[runner_env.claude]\nPATH = \"/elsewhere\"\n").unwrap();
-    let answers = format!("{repo}\n\n\na\n");
+    let answers = format!("{repo}\n\n\n\na\n");
     let mut input = answers.as_bytes();
     let mut out = Vec::new();
     let found = Found {
@@ -528,7 +572,7 @@ fn a_configured_path_that_reaches_the_binary_is_left_alone() {
         format!("[runner_env.claude]\nPATH = \"{}\"\n", bin.display()),
     )
     .unwrap();
-    let answers = format!("{repo}\n\n\na\nn\n");
+    let answers = format!("{repo}\n\n\n\na\nn\n");
     let mut input = answers.as_bytes();
     let mut out = Vec::new();
     let found = Found {

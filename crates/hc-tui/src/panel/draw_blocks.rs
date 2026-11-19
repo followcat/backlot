@@ -117,6 +117,10 @@ pub(super) fn draw_top(
                 .add_modifier(Modifier::BOLD),
         );
     }
+    // R14: an experimental studio's `exp` badge rides after the
+    // label — the label gets the full budget and a dock too narrow
+    // for both drops the badge first.
+    let badge = studio.studio.mode == backlot_model::event::StudioMode::Experimental;
     let id_text = label.fit(id_width as usize);
     let drawn = display_width(&id_text) as u16;
     if id_width > 0 {
@@ -133,7 +137,20 @@ pub(super) fn draw_top(
             }),
         );
     }
-    let fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
+    let mut fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
+    if badge && fill_start + 3 < id_end {
+        put_text(
+            buf,
+            fill_start,
+            rect.y,
+            3,
+            "exp",
+            Style::default()
+                .fg(palette.peach)
+                .add_modifier(Modifier::BOLD),
+        );
+        fill_start += 4;
+    }
     if id_end > fill_start {
         put_text(
             buf,

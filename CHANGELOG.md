@@ -12,6 +12,27 @@ v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Factual casting advisor (L3).** `backlot cast --task <id> --suggest [--json]`
+  lays the studio's `[[candidates]]` beside their cross-studio actor records for
+  the task's kind: task and delivery counts, first-delivery outcomes, defects,
+  stage checks, upstream changes, takeovers, final outcomes, wall time and
+  usage — in declaration order, with `(not enough data: n/5)` and
+  `(no history for '<kind>')` notices where the history is thin or absent.
+  Matching tolerates runner-version differences and prints
+  `[matched across runner versions]` when it applies. There is no score, rank
+  or automatic pick (D8) — the director still casts with `--actor` and
+  `--reason`. `backlot records --kind <task_kind>` filters the record view by
+  task kind.
+- **Experimental production mode (R14).** `mode = "experimental"` is a
+  first-class studio mode: `backlot studio new --mode standard|experimental`
+  overrides the cast file's `mode` (a bad value is a usage error), the
+  `--interactive` wizard asks for the mode and the New Studio dialog's step 2
+  toggles it. `backlot status` prints `[experimental]` on the studio header and
+  the dock/sheet carry an `exp` badge — standard studios and `--plain` are
+  unchanged. Each role's prompt gains a research-level appendix only in this
+  mode (hypotheses, competing variants, honest negative findings), and an
+  experimental studio may create a task with no recorded requirement for
+  direct-to-task exploration.
 - **Rate limits are recognized on reporting cores.** A terminal whose status
   reads `done`, `idle` or `waiting` — Devin's rate limit reports `done` — now
   has its fresh screen tail read like a silent core's, so Devin's

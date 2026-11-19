@@ -1,5 +1,46 @@
 # Studio progress
 
+## P4b: factual casting advisor and experimental production mode (L3, R14)
+
+- Done (L3): `backlot cast --task <id> --suggest [--json]` joins the studio's
+  `[[candidates]]` against the cross-studio `ActorRecord` history for the task's
+  `task_kind`. The model's `casting` module matches each candidate's exact identity
+  first, then the same `(runner, model, effort, permission_profile)` across runner
+  versions — recorded `version_matched: across_versions` and printed
+  `[matched across runner versions]`. Output is factual counts only (tasks,
+  deliveries, first-delivery outcomes, defects, checks, upstream changes,
+  takeovers, final outcomes, wall time, usage), `(not enough data: n/5)` under
+  `MIN_TASKS`, `(no history for '<kind>')` when empty, and a dim `other kinds:`
+  line when exact-kind history is thin — declaration order, no score, no rank,
+  no pick (D8). `--json` prints the structured `CandidateHistory` view; it
+  serializes no score field. `backlot records --kind <task_kind>` filters the
+  record view by kind, answering plainly when nothing delivered on it.
+- Done (R14): `mode = "experimental"` is wired end to end. `studio new --mode
+  standard|experimental` parses through `correct::parse_mode`, overrides the
+  cast file's `mode`, and refuses a bad value as usage; the `--interactive`
+  wizard asks `mode [standard|experimental]` (Enter → standard, a bad answer
+  re-asks, `--mode` skips the question) and drafts `mode = "experimental"`;
+  the New Studio dialog's step 2 carries a `standard|experimental` toggle.
+  `status` prints `[experimental]` on an experimental studio's header and the
+  dock/sheet draw an `exp` badge — standard studios and `--plain` unchanged.
+  Each role's prompt gains a research appendix only under the mode (producer:
+  questions, hypotheses, criteria, kill/pivot conditions; writer: baselines and
+  falsifiable criteria; director: competing variants, `cast --suggest`,
+  documented negative findings; actor: isolated variants and honest
+  measurements). Validation lets an experimental studio create a task with
+  `requirement_version` 0 — direct-to-task exploration without a formal spec —
+  while standard keeps requiring a recorded version.
+- Measured: model tests cover exact/cross-version matching, merged records,
+  thin-data and no-history notices, declaration order and the no-score JSON
+  shape, plus experimental `requirement_version` 0 acceptance and standard
+  refusal; stage tests cover the suggest view text and JSON, the `--actor`
+  usage error, unknown-task refusal, `records --kind`, `--mode` flag/TOML/CLI
+  precedence, wizard mode selection and re-prompt, the status badge, and the
+  direct-to-task allowance; hc-tui tests cover the `exp` badge on dock and
+  sheet and the mode toggle.
+- Not verified: no real agent has run an experimental studio or produced a
+  record a suggestion read — every history in the tests is seeded.
+
 ## P4a: ledger schema versioning, boundary hardening, usage & cost (2026-11-21)
 
 - Done: every studio and Hollywood event envelope carries `v: 1`
