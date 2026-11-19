@@ -39,8 +39,10 @@ pub(crate) fn draft_model(runner: &str) -> Option<&'static str> {
 
 /// The drafted cast: the first installed runner seats every fixed
 /// role and both candidates, with its draft model — `cursor`,
-/// `devin` and `cmd` take no effort (the cast rule).
-fn draft_text(io: &Io) -> Result<String, Fail> {
+/// `devin` and `cmd` take no effort (the cast rule). An experimental
+/// studio's draft shows `mode = "experimental"` up top; a standard
+/// draft writes no mode line at all.
+fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String, Fail> {
     let Some((runner, model)) = PREFERENCE.iter().find(|(r, _)| (io.installed)(r)) else {
         return Err(Fail::refused(
             "no supported runner is installed — the wizard cannot draft a cast",
@@ -60,9 +62,14 @@ fn draft_text(io: &Io) -> Result<String, Fail> {
             effort(runner)
         )
     };
+    let mode_line = match mode {
+        backlot_model::event::StudioMode::Experimental => "mode = \"experimental\"\n\n",
+        backlot_model::event::StudioMode::Standard => "",
+    };
     Ok(format!(
         "# Drafted by `backlot studio new --interactive` — edit or accept as is.\n\
          \n\
+         {mode_line}\
          [producer]\n{}\n\n\
          [director]\n{}\n\n\
          [writer]\n{}\n\n\
@@ -132,11 +139,15 @@ fn runner_lines(io: &mut Io, env: &Env) -> Vec<String> {
 /// The cast step: draft, show, `accept`/`edit`/`refuse` — the file
 /// the checks and the write read is a temporary one; `refuse`
 /// writes nothing anywhere.
-pub(crate) fn cast_draft(io: &mut Io, env: &Env) -> Result<PathBuf, Fail> {
+pub(crate) fn cast_draft(
+    io: &mut Io,
+    env: &Env,
+    mode: backlot_model::event::StudioMode,
+) -> Result<PathBuf, Fail> {
     for line in runner_lines(io, env) {
         writeln!(io.out, "{line}").map_err(io_fail)?;
     }
-    let mut text = draft_text(io)?;
+    let mut text = draft_text(io, mode)?;
     // The file is born only when the draft is accepted or the
     // editor needs it — a refused cast writes nothing anywhere.
     let mut path: Option<PathBuf> = None;

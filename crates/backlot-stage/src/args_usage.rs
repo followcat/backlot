@@ -1,7 +1,7 @@
 //! Every command's `usage:` line — the parsers pass theirs to
 //! `args::usage`, which appends `args::COMMON`.
 
-pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]\n       backlot studio migrate [<studio> | --all] [--dry-run]";
+pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--mode standard|experimental] [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>] [--mode standard|experimental]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]\n       backlot studio migrate [<studio> | --all] [--dry-run]";
 pub(crate) const U_REQ: &str = "usage: backlot req revise (--file <f> | --stdin) --summary <s>";
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";

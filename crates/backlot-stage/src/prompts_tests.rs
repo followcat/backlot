@@ -453,6 +453,71 @@ fn prompts_share_the_one_command_rule() {
     }
 }
 
+/// R14: an experimental studio appends the research-level guidance
+/// to every role's prompt; a standard studio's rendered prompts are
+/// byte-identical to what they always were.
+#[test]
+fn experimental_mode_appends_the_research_guidance() {
+    let dir = tmp();
+    for (kind, role, task, want) in [
+        (
+            RoleKind::Producer,
+            "producer",
+            None,
+            "research questions and hypotheses",
+        ),
+        (
+            RoleKind::Director,
+            "director",
+            None,
+            "backlot cast --task <task> --suggest",
+        ),
+        (RoleKind::Writer, "writer", None, "falsify the hypothesis"),
+        (
+            RoleKind::Actor,
+            "actor-t1-c1",
+            Some("t1"),
+            "Never fabricate a metric",
+        ),
+    ] {
+        let st = start(kind, role, task);
+        // Standard: no appendix at all — the template is the text.
+        let mut state = state_with_task();
+        state.studio = Some(studio_config(Vec::new()));
+        let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+        let std_text = fs::read_to_string(&file).unwrap();
+        assert!(
+            !std_text.contains("## Experimental production"),
+            "{role}: standard prompt carries the appendix"
+        );
+        // Experimental: the appendix lands and names the mode.
+        state.studio.as_mut().unwrap().mode = StudioMode::Experimental;
+        let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
+        let exp_text = fs::read_to_string(&file).unwrap();
+        assert!(
+            exp_text.starts_with(&std_text),
+            "{role}: the appendix is not a clean suffix"
+        );
+        assert!(
+            exp_text.contains("## Experimental production"),
+            "{role} misses the appendix"
+        );
+        assert!(exp_text.contains(want), "{role} misses '{want}'");
+        // The backticked command inside it still parses.
+        let appended = exp_text.strip_prefix(&std_text).unwrap();
+        for span in appended.split('`').skip(1).step_by(2) {
+            let Some(c) = span.strip_prefix("backlot ") else {
+                continue;
+            };
+            let words: Vec<String> = c.split(' ').map(String::from).collect();
+            assert!(
+                args::parse(&words).is_ok(),
+                "{role}: `backlot {c}` fails to parse"
+            );
+        }
+    }
+}
+
 /// The first prompt is one line pointing at the rendered file; for
 /// `devin` the line itself lands in a file the argv names.
 #[test]

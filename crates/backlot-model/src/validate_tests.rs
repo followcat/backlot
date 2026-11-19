@@ -229,6 +229,43 @@ fn cast_refused_on_paused_and_terminal_tasks() {
     );
 }
 
+/// R14: an experimental studio may dispatch a task straight at the
+/// exploration — `requirement_version` 0 pins it to no formal spec;
+/// a standard studio keeps requiring one.
+#[test]
+fn experimental_studio_dispatches_without_a_spec() {
+    let mut studio = studio_kind();
+    let EventKind::StudioCreated { mode, .. } = &mut studio else {
+        unreachable!()
+    };
+    *mode = StudioMode::Experimental;
+    let state = replay(&[ev(1, "user", studio)]);
+    // Version 0 — no requirement recorded at all — is allowed.
+    assert_eq!(
+        validate(
+            &state,
+            &new_ev("director", task_created("t1", "research", 0))
+        ),
+        Ok(())
+    );
+    // A named version must still be a recorded one.
+    assert_eq!(
+        validate(
+            &state,
+            &new_ev("director", task_created("t2", "research", 1))
+        ),
+        Err(Refusal::UnknownReqVersion(1))
+    );
+    // A standard studio keeps refusing 0.
+    assert_eq!(
+        validate(
+            &base_state(),
+            &new_ev("director", task_created("t9", "fix", 0))
+        ),
+        Err(Refusal::UnknownReqVersion(0))
+    );
+}
+
 /// Deliver only on a running task; numbers increase by one.
 #[test]
 fn deliver_only_on_running_task_in_order() {

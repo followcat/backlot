@@ -12,6 +12,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
     let mut title = None;
     let mut repo = None;
     let mut cast_file = None;
+    let mut mode = None;
     let mut dry_run = false;
     let mut interactive = false;
     while let Some(arg) = it.next() {
@@ -28,6 +29,10 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             _ if eq(&arg, "--repo").is_some() => repo = eq(&arg, "--repo").map(String::from),
             "--cast" => cast_file = Some(PathBuf::from(it.value("--cast", U_STUDIO)?)),
             _ if eq(&arg, "--cast").is_some() => cast_file = eq(&arg, "--cast").map(PathBuf::from),
+            "--mode" => mode = Some(parse_mode(&it.value("--mode", U_STUDIO)?)?),
+            _ if eq(&arg, "--mode").is_some() => {
+                mode = Some(parse_mode(eq(&arg, "--mode").unwrap())?)
+            }
             "--dry-run" => dry_run = true,
             "--interactive" => interactive = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
@@ -42,6 +47,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             cast_file,
             dry_run,
             interactive: true,
+            mode,
         },
         false => Cmd::StudioNew {
             title: Some(title.ok_or_else(|| usage("missing --title", U_STUDIO))?),
@@ -51,9 +57,21 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             cast_file: Some(cast_file.ok_or_else(|| usage("missing --cast", U_STUDIO))?),
             dry_run,
             interactive: false,
+            mode,
         },
     };
     Ok((std::mem::take(common), cmd))
+}
+
+/// `standard|experimental` for `--mode` (R14) — the cast file's
+/// `mode` accepts the same two words through `CastFile.mode`.
+fn parse_mode(v: &str) -> Result<backlot_model::event::StudioMode, Fail> {
+    backlot_model::correct::parse_mode(v).ok_or_else(|| {
+        usage(
+            format!("bad --mode '{v}', want standard|experimental"),
+            U_STUDIO,
+        )
+    })
 }
 
 /// `--repo` must be absolute: a relative path would bind the studio

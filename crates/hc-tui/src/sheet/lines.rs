@@ -148,7 +148,16 @@ fn studio_overview(
     out: &mut Vec<SheetLine>,
 ) {
     if let Some(studio) = summary {
-        out.push(line(format!("{} — {}", studio.id, studio.state), Row::Head));
+        // R14: an experimental studio's `exp` badge rides the head
+        // line; a standard studio's line is byte-identical.
+        let badge = match studio.mode {
+            backlot_model::event::StudioMode::Experimental => " exp",
+            backlot_model::event::StudioMode::Standard => "",
+        };
+        out.push(line(
+            format!("{} — {}{}", studio.id, studio.state, badge),
+            Row::Head,
+        ));
         if let Some(repo) = &studio.repo {
             out.push(line(format!("repo {repo}"), Row::Text));
         }

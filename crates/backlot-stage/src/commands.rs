@@ -285,6 +285,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
             cast_file,
             dry_run,
             interactive,
+            mode,
         } => {
             debug_assert!(!dry_run, "dry-run is answered in cli::run");
             debug_assert!(!interactive, "--interactive is answered by the wizard");
@@ -302,7 +303,9 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                     EventKind::StudioCreated {
                         title: title.expect("non-interactive parses require --title"),
                         repo: repo.expect("non-interactive parses require --repo"),
-                        mode: cast.mode.unwrap_or_default(),
+                        // `--mode` on the command line wins over the
+                        // cast file's `mode`; both default to standard.
+                        mode: mode.or(cast.mode).unwrap_or_default(),
                         roles: Box::new(RoleConfigs {
                             producer: cast.producer,
                             director: cast.director,

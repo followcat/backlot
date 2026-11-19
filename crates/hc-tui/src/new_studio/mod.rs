@@ -31,11 +31,13 @@ use crate::chrome::render::{put_right_text, put_text};
 use crate::chrome::text::{display_width, fit_hints};
 use crate::chrome::text_editor::TextEditor;
 
-/// Step 2's focusable fields.
+/// Step 2's focusable fields — `Mode` is a two-value toggle, not
+/// a text field: `←`/`→`/space flips it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Step2Field {
     Id,
     Title,
+    Mode,
 }
 
 /// The whole dialog. All probes are generation-tagged: a stale
@@ -57,6 +59,8 @@ pub(crate) struct NewStudio {
     pub id: TextEditor,
     pub title: TextEditor,
     pub field: Step2Field,
+    /// The studio's production mode (R14) — `standard` default.
+    pub mode: backlot_model::event::StudioMode,
     /// The repo path the id/title prefills came from — re-picking
     /// the same repo keeps the user's edits (Esc-back's rule).
     pub prefilled_for: Option<String>,
@@ -89,6 +93,7 @@ pub(crate) enum NsHit {
     StepTab(Step),
     IdField,
     TitleField,
+    ModeField,
     CastCell { row: usize, col: usize },
     StartToggle,
     Create,
@@ -129,6 +134,7 @@ impl NewStudio {
             id: TextEditor::new("", false),
             title: TextEditor::new("", false),
             field: Step2Field::Id,
+            mode: backlot_model::event::StudioMode::Standard,
             prefilled_for: None,
             studios: Vec::new(),
             runners: Probe::Pending,
@@ -373,8 +379,8 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
             "esc",
         ],
         Step::IdTitle => &[
-            "tab/↑↓ next field  ⏎ continue to cast  esc back to repo",
-            "tab field  ⏎ continue  esc back",
+            "tab/↑↓ next field  ←→ mode  ⏎ continue to cast  esc back to repo",
+            "tab field  ←→ mode  ⏎ continue  esc back",
             "⏎  esc",
         ],
         Step::Cast => &[

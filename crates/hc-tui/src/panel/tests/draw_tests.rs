@@ -557,3 +557,23 @@ fn one_machine_keeps_the_bare_id_headers() {
     assert!(!text.contains("acme-shop ·"), "{text}");
     assert!(text.contains("lot · 1"), "{text}");
 }
+
+/// R14: an experimental studio's block header carries `exp` after
+/// the id; a standard studio's header is exactly what it was.
+#[test]
+fn an_experimental_studio_flags_its_header() {
+    let mut value = summary_json();
+    value["studios"][0]["mode"] = serde_json::json!("experimental");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, Some("acme-shop"));
+    let top = &lines(&buf, area)[1];
+    assert!(top.contains("acme-shop exp"), "{top}");
+
+    let standard = super::summary();
+    let (buf, _) = draw(area, Some(&standard), &panel, Some("acme-shop"));
+    let top = &lines(&buf, area)[1];
+    assert!(top.contains("acme-shop"), "{top}");
+    assert!(!top.contains("acme-shop exp"), "{top}");
+}

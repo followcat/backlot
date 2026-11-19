@@ -104,9 +104,15 @@ pub fn status(
     let Some(studio) = &state.studio else {
         return format!("studio {name}: no events yet\n");
     };
+    // R14: an experimental studio flags itself in the header; a
+    // standard studio's line stays exactly what it was.
+    let badge = match studio.mode {
+        backlot_model::event::StudioMode::Experimental => " [experimental]",
+        backlot_model::event::StudioMode::Standard => "",
+    };
     let _ = writeln!(
         out,
-        "studio {name}: \"{}\" ({:?})",
+        "studio {name}: \"{}\" ({:?}){badge}",
         studio.title, studio.mode
     );
     // The producer's own stall or unresumable terminal is the one

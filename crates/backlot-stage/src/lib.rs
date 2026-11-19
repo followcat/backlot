@@ -82,6 +82,8 @@ mod checks_tests;
 #[cfg(test)]
 mod checkwork_tests;
 #[cfg(test)]
+mod cli_mode_tests;
+#[cfg(test)]
 mod cli_state_tests;
 #[cfg(test)]
 mod cli_suggest_tests;

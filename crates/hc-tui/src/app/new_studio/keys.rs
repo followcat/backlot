@@ -232,15 +232,17 @@ impl App {
         d.field = Step2Field::Id;
     }
 
-    /// Step 2: `tab`/`↑↓` between the fields, `Enter` steps forward
-    /// when the id validates — the error stays drawn under it.
+    /// Step 2: `tab`/`↑↓` between the three fields, `←`/`→`/space
+    /// toggles the mode field, `Enter` steps forward when the id
+    /// validates — the error stays drawn under it.
     fn ns_key_step2(&mut self, key: &TerminalKey) {
         match key.input.key {
             Key::Tab | Key::BackTab | Key::ArrowUp | Key::ArrowDown => {
                 let d = self.new_studio.as_mut().unwrap();
                 d.field = match d.field {
                     Step2Field::Id => Step2Field::Title,
-                    Step2Field::Title => Step2Field::Id,
+                    Step2Field::Title => Step2Field::Mode,
+                    Step2Field::Mode => Step2Field::Id,
                 };
             }
             Key::Enter => {
@@ -256,11 +258,29 @@ impl App {
             }
             _ => {
                 let d = self.new_studio.as_mut().unwrap();
-                let editor = match d.field {
-                    Step2Field::Id => &mut d.id,
-                    Step2Field::Title => &mut d.title,
-                };
-                editor.handle_key(key);
+                match d.field {
+                    // R14: the mode field is a toggle, not a text
+                    // editor — arrows and space flip it, other keys
+                    // do nothing.
+                    Step2Field::Mode => {
+                        if matches!(
+                            key.input.key,
+                            Key::ArrowLeft | Key::ArrowRight | Key::Char(' ')
+                        ) {
+                            use backlot_model::event::StudioMode;
+                            d.mode = match d.mode {
+                                StudioMode::Standard => StudioMode::Experimental,
+                                StudioMode::Experimental => StudioMode::Standard,
+                            };
+                        }
+                    }
+                    Step2Field::Id => {
+                        d.id.handle_key(key);
+                    }
+                    Step2Field::Title => {
+                        d.title.handle_key(key);
+                    }
+                }
             }
         }
     }
@@ -346,7 +366,7 @@ impl App {
     fn ns_open_cast_editor(&mut self) {
         let Some(d) = &self.new_studio else { return };
         let runners = runners_of(d);
-        let text = d.cast.toml(runners);
+        let text = d.cast.toml(runners, d.mode);
         let file = std::env::temp_dir().join(format!("backlot-cast-{}.toml", std::process::id()));
         if std::fs::write(&file, text).is_err() {
             self.show_notice("New studio", "cannot write the cast file for editing");
@@ -494,6 +514,16 @@ impl App {
                 NsHit::TitleField => {
                     if let Some(d) = &mut self.new_studio {
                         d.field = Step2Field::Title;
+                    }
+                }
+                NsHit::ModeField => {
+                    if let Some(d) = &mut self.new_studio {
+                        use backlot_model::event::StudioMode;
+                        d.field = Step2Field::Mode;
+                        d.mode = match d.mode {
+                            StudioMode::Standard => StudioMode::Experimental,
+                            StudioMode::Experimental => StudioMode::Standard,
+                        };
                     }
                 }
                 NsHit::CastCell { row, col } => {

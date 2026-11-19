@@ -6,7 +6,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use backlot_model::event::{ApprovalDecision, Check, PlanKind, Priority, TaskStateChange, Verdict};
+use backlot_model::event::{
+    ApprovalDecision, Check, PlanKind, Priority, StudioMode, TaskStateChange, Verdict,
+};
 
 use crate::cli::Fail;
 use crate::{args_hwood, args_studio, args_task};
@@ -43,6 +45,9 @@ pub enum Cmd {
         /// `--interactive`: the wizard asks on the terminal for what
         /// is missing (U2).
         interactive: bool,
+        /// `--mode standard|experimental` — overrides the cast
+        /// file's `mode`; `None` leaves the TOML or the default.
+        mode: Option<StudioMode>,
     },
     ReqRevise {
         source: TextSource,

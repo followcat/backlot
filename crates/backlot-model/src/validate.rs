@@ -236,7 +236,15 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             if state.tasks.contains_key(task) {
                 return Err(Refusal::TaskExists(task.clone()));
             }
-            if *requirement_version == 0 || *requirement_version > state.requirement_version {
+            // R14: an experimental studio may dispatch a task straight
+            // at the exploration — `requirement_version` 0 pins it to
+            // no formal spec. A standard studio keeps requiring one.
+            let no_spec_ok = *requirement_version == 0
+                && state.studio.as_ref().map(|s| s.mode)
+                    == Some(crate::event::StudioMode::Experimental);
+            if (*requirement_version == 0 && !no_spec_ok)
+                || *requirement_version > state.requirement_version
+            {
                 return Err(Refusal::UnknownReqVersion(*requirement_version));
             }
             for dep in dependencies {
