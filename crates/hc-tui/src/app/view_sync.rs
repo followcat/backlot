@@ -29,6 +29,10 @@ impl App {
         if self.focused != self.last_focus {
             self.previous_pane = self.last_focus.clone();
             self.last_focus = self.focused.clone();
+            // Every focus path — keys, clicks, the shared layout document
+            // or another client — lands here, so the agents list follows
+            // the focused pane from this one comparison.
+            self.shell_state.reveal_focused_agent = true;
         }
         if !self
             .project_cache
