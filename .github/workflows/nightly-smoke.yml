@@ -1,0 +1,88 @@
+name: nightly-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for the smoke cast
+        type: choice
+        options:
+          - fake
+          - claude
+          - codex
+          - opencode
+          - cmd
+        default: fake
+      model:
+        description: Model name (empty uses the harness default)
+        type: string
+        default: ""
+      timeout_seconds:
+        description: Wall-clock bound in seconds
+        type: string
+        default: "900"
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    # Scheduled runs are a guaranteed no-op unless the repository owner
+    # opts in; a manual dispatch always runs.
+    if: github.event_name == 'workflow_dispatch' || vars.ENABLE_NIGHTLY_SMOKE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SMOKE_RUNNER: ${{ inputs.runner || 'fake' }}
+      SMOKE_MODEL: ${{ inputs.model || '' }}
+      SMOKE_TIMEOUT: ${{ inputs.timeout_seconds || '900' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        id: zig-cache
+        with:
+          path: ${{ runner.temp }}/hc-tui-zig-0.16.0
+          key: zig-0.16.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/install-zig.sh') }}
+      - name: Install Zig 0.16.0
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        run: tools/install-zig.sh "${{ runner.temp }}/hc-tui-zig-0.16.0"
+      - name: Add Zig to PATH
+        run: echo "${{ runner.temp }}/hc-tui-zig-0.16.0" >> "$GITHUB_PATH"
+      - name: Check Zig version
+        run: test "$(zig version)" = "0.16.0"
+      - uses: ./.github/actions/zig-deps
+      - uses: actions/cache@v4
+        with:
+          path: target/test-core
+          key: test-core-${{ hashFiles('tools/build-test-core.sh') }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the pinned test core
+        run: tools/build-test-core.sh
+      - name: Build backlot
+        run: cargo build -p hc-tui --bin backlot
+      - name: Run the bounded smoke
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          scripts/smoke/run-smoke.sh \
+            --runner "$SMOKE_RUNNER" \
+            --model "$SMOKE_MODEL" \
+            --timeout "$SMOKE_TIMEOUT" \
+            --root "$RUNNER_TEMP/backlot-smoke" \
+            --artifacts "$RUNNER_TEMP/smoke-artifacts" \
+            --backlot target/debug/backlot \
+            --core target/test-core/herdr-core
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-artifacts
+          path: ${{ runner.temp }}/smoke-artifacts
+          retention-days: 7
+          if-no-files-found: ignore
