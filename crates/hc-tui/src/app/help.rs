@@ -68,6 +68,13 @@ impl App {
             return;
         }
         match code {
+            // S5: with a filter applied, Esc clears it first — a
+            // second Esc (or herdr's overlay's one) closes.
+            KeyCode::Esc if self.help_launcher() && !self.help_state.query.as_str().is_empty() => {
+                self.help_state.query.clear();
+                self.help_state.scroll = 0;
+                self.help_state.selected = 0;
+            }
             KeyCode::Esc => self.help = false,
             KeyCode::Enter if self.help_launcher() => self.help_launcher_activate(),
             KeyCode::Enter => self.help = false,

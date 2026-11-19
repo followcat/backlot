@@ -16,7 +16,7 @@ use super::render::put_text;
 use super::scroll::{self, ScrollMetrics};
 use super::text::{display_width, truncate_end};
 use super::text_editor;
-use crate::help_launcher::{HelpGroup, HelpPicker};
+use crate::help_launcher::HelpGroup;
 
 /// One draw line in the scroll window: a group header (`None`) or a
 /// selectable row's flat index (`Some`).
@@ -37,9 +37,45 @@ pub(crate) fn draw_index(groups: &[HelpGroup]) -> Vec<Option<usize>> {
     out
 }
 
-/// The overlay's frame — the same size ladder the keybind popup
-/// follows (§3): 76x22 capped at the band minus four columns and two
-/// rows.
+/// §3's launcher ladder: the listed sizes, linearly interpolated
+/// between them and capped to the band minus a one-cell margin.
+/// Herdr's own keybind overlay keeps its own sizes (D6).
+fn launcher_area(area: Rect) -> Option<Rect> {
+    const W: [(u16, u16); 5] = [(40, 38), (60, 58), (80, 76), (120, 88), (160, 96)];
+    const H: [(u16, u16); 3] = [(24, 20), (36, 28), (47, 32)];
+    let w = ladder(&W, area.width).min(area.width.saturating_sub(2));
+    let h = ladder(&H, area.height).min(area.height.saturating_sub(2));
+    if w < 4 || h < 4 {
+        return None;
+    }
+    Some(Rect::new(
+        area.x + (area.width - w) / 2,
+        area.y + (area.height - h) / 2,
+        w,
+        h,
+    ))
+}
+
+/// Piecewise-linear interpolation between `points`, clamped at the
+/// ladder's ends.
+fn ladder(points: &[(u16, u16)], x: u16) -> u16 {
+    let Some(&(first_x, first_y)) = points.first() else {
+        return 0;
+    };
+    if x <= first_x {
+        return first_y;
+    }
+    for pair in points.windows(2) {
+        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
+        if x <= x1 {
+            return y0 + (x - x0) * (y1 - y0) / (x1 - x0);
+        }
+    }
+    points.last().map(|&(_, y)| y).unwrap_or_default()
+}
+
+/// The overlay's frame — §3's launcher sizes (96x32 at 160x47,
+/// 88x28 at 120x36, 76x20 at 80x24, 58x20 at 60x24, 38x20 at 40x24).
 pub(crate) fn render_launcher(
     b: &mut Buffer,
     area: Rect,
@@ -48,7 +84,7 @@ pub(crate) fn render_launcher(
     legend: &[(String, String)],
     p: &Palette,
 ) -> Option<HelpRender> {
-    let q = help::popup_with_width_cap(area, 76, 22, 4)?;
+    let q = launcher_area(area)?;
     let i = help::panel(b, q, p.accent, p.panel_bg)?;
     if i.width < 20 || i.height < 6 {
         return None;
@@ -79,6 +115,9 @@ pub(crate) fn render_launcher(
             .add_modifier(Modifier::BOLD),
     );
     let sy = i.y + 1;
+    // An applied filter stays visible after the editor unfocuses —
+    // `/ pause` dimmed, with `esc clears` while it fits (S5 §1).
+    let applied = !h.search_focused && !h.query.as_str().is_empty();
     put_text(
         b,
         i.x,
@@ -86,6 +125,8 @@ pub(crate) fn render_launcher(
         i.width,
         &if h.search_focused {
             " / ".to_owned()
+        } else if applied {
+            format!(" / {}", h.query.as_str())
         } else {
             " / press / to filter by command or shortcut".to_owned()
         },
@@ -93,6 +134,21 @@ pub(crate) fn render_launcher(
             .fg(if h.search_focused { p.text } else { p.overlay0 })
             .bg(p.panel_bg),
     );
+    if applied {
+        let hint = " esc clears ";
+        let hint_w = display_width(hint) as u16;
+        let used = 3 + display_width(h.query.as_str()) as u16;
+        if used + hint_w < i.width {
+            put_text(
+                b,
+                i.right().saturating_sub(hint_w),
+                sy,
+                hint_w,
+                hint,
+                Style::default().fg(p.overlay0).bg(p.panel_bg),
+            );
+        }
+    }
     let cursor = if h.search_focused {
         text_editor::render(
             b,
@@ -288,73 +344,5 @@ fn paint_row(
         hint_w,
         &truncate_end(&row.hint, hint_w as usize),
         Style::default().fg(p.mauve).bg(bg),
-    );
-}
-
-/// The compact target picker — a floating list inside the overlay's
-/// panel, named by the row that opened it. Returns the frame and
-/// per-row rects through the `HelpRender` the caller already owns.
-pub(crate) fn render_picker(
-    b: &mut Buffer,
-    inside: Rect,
-    picker: &HelpPicker,
-    hits: &mut HelpRender,
-    p: &Palette,
-) {
-    let width = inside.width.min(48);
-    let height = (picker.rows.len() as u16 + 4).min(inside.height);
-    if width < 12 || height < 5 {
-        return;
-    }
-    let q = Rect::new(
-        inside.x + (inside.width - width) / 2,
-        inside.y + (inside.height - height) / 2,
-        width,
-        height,
-    );
-    let Some(i) = help::panel(b, q, p.accent, p.panel_bg) else {
-        return;
-    };
-    hits.picker = q;
-    put_text(
-        b,
-        i.x,
-        i.y,
-        i.width,
-        &truncate_end(&format!(" {}", picker.title), i.width as usize),
-        Style::default()
-            .fg(p.accent)
-            .bg(p.panel_bg)
-            .add_modifier(Modifier::BOLD),
-    );
-    let rows_h = i.height.saturating_sub(2);
-    for (pos, row) in picker.rows.iter().enumerate().take(rows_h as usize) {
-        let y = i.y + 1 + pos as u16;
-        let rect = Rect::new(i.x, y, i.width, 1);
-        let selected = pos == picker.selected;
-        let bg = if selected { p.selection_bg } else { p.panel_bg };
-        b.set_style(rect, Style::default().bg(bg));
-        let text = if selected {
-            format!("▸ {}", row.label)
-        } else {
-            format!("  {}", row.label)
-        };
-        put_text(
-            b,
-            i.x,
-            y,
-            i.width,
-            &truncate_end(&text, i.width as usize),
-            Style::default().fg(p.text).bg(bg),
-        );
-        hits.picker_rows.push((rect, pos));
-    }
-    put_text(
-        b,
-        i.x,
-        i.bottom() - 1,
-        i.width,
-        " ↑↓ pick   ↵ run   esc back",
-        Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
 }

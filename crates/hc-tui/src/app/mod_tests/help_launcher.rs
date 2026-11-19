@@ -282,13 +282,13 @@ async fn the_legend_stays_pinned_and_the_sizes_hold() {
     app.help_state.scroll = usize::MAX;
     let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(text.contains("◐ work"), "scrolled: {text}");
-    // §3's size ladder — the same popup the keybind overlay draws.
+    // §3's launcher ladder — herdr's overlay keeps its own sizes.
     for (cols, rows, want) in [
-        (160u16, 47u16, (76u16, 22u16)),
-        (120, 36, (76, 22)),
-        (80, 24, (76, 22)),
-        (60, 24, (56, 22)),
-        (40, 24, (36, 22)),
+        (160u16, 47u16, (96u16, 32u16)),
+        (120, 36, (88, 28)),
+        (80, 24, (76, 20)),
+        (60, 24, (58, 20)),
+        (40, 24, (38, 20)),
     ] {
         draw_to(&mut app, cols, rows);
         assert_eq!(
@@ -358,4 +358,24 @@ async fn plain_keeps_enter_as_close() {
     app.help = true;
     key(&mut app, hc_vt::Key::Enter);
     assert!(!app.help, "plain's Enter still just closes");
+}
+
+#[tokio::test]
+async fn an_applied_filter_shows_and_esc_clears_then_closes() {
+    let mut app = s5_app();
+    app.help = true;
+    app.help_state.query.insert("pause");
+    // The applied query stays on the header line once the editor is
+    // unfocused — `/ pause` dimmed, `esc clears` while it fits.
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text.contains("/ pause"), "{text}");
+    assert!(text.contains("esc clears"), "{text}");
+    // Esc clears the filter first; the overlay stays open.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.help, "first Esc clears, not closes");
+    assert!(app.help_state.query.as_str().is_empty());
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(text.contains("press / to filter"), "{text}");
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.help, "second Esc closes");
 }
