@@ -24,6 +24,7 @@ mod float_draw;
 mod float_reconcile;
 mod help;
 mod help_launcher;
+mod help_launcher_keys;
 mod help_picker;
 mod hollywood;
 mod host;
