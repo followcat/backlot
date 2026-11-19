@@ -102,9 +102,10 @@ fn the_missing_backlot_message_names_the_target_and_the_fix() {
     );
 }
 
-#[test]
-fn a_finished_start_is_judged_by_its_exit() {
-    let term = |state: &str, exit: Option<i32>| hc_proto::terminal::Terminal {
+/// A `Terminal` shell for the probe/stop tests: the fields the
+/// verdicts read, defaults for the rest.
+fn term(state: &str, exit: Option<i32>) -> hc_proto::terminal::Terminal {
+    hc_proto::terminal::Terminal {
         address: "t7".into(),
         name: Some(STAGE_NAME.into()),
         labels: BTreeMap::new(),
@@ -142,11 +143,42 @@ fn a_finished_start_is_judged_by_its_exit() {
         repository: None,
         activity: None,
         extra: Default::default(),
-    };
+    }
+}
+
+#[test]
+fn a_finished_start_is_judged_by_its_exit() {
     assert_eq!(probe_state(&term("live", None)), Probe::Live);
     assert_eq!(probe_state(&term("finished", Some(127))), Probe::Missing);
     assert_eq!(probe_state(&term("finished", Some(1))), Probe::Exited(1));
     assert_eq!(probe_state(&term("finished", None)), Probe::Exited(-1));
+}
+
+/// G1's verdict: a live `backlot-stage` names its address and says
+/// "stage stopped"; anything else is "already stopped" — the two
+/// exit-0 answers `stop` can give.
+#[test]
+fn stage_stop_finds_only_a_live_named_terminal() {
+    let mut live = term("live", None);
+    live.address = "t9".into();
+    let (address, report) = stop_verdict(std::slice::from_ref(&live));
+    assert_eq!(address.as_deref(), Some("t9"));
+    assert_eq!(report, "stage stopped");
+
+    let mut other = term("live", None);
+    other.name = Some("shell".into());
+    let mut dead = term("finished", Some(0));
+    dead.name = Some(STAGE_NAME.into());
+    for list in [
+        vec![],
+        vec![other.clone()],
+        vec![dead],
+        vec![other, term("finished", Some(1))],
+    ] {
+        let (address, report) = stop_verdict(&list);
+        assert_eq!(address, None);
+        assert_eq!(report, "stage already stopped");
+    }
 }
 
 /// A scripted stage host: each probe pops the next state, `tick`

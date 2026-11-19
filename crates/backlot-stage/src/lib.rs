@@ -149,6 +149,8 @@ mod stall_tests;
 #[cfg(test)]
 mod store_tests;
 #[cfg(test)]
+mod text_src_tests;
+#[cfg(test)]
 mod watch_tests;
 #[cfg(test)]
 mod wizard_tests;

@@ -259,6 +259,50 @@ pub fn start(common: &Common, env: &Env) -> Result<String, Fail> {
     link::runtime()?.block_on(start_async(common, env))
 }
 
+/// The stop verdict (G1): the live stage terminal's address to kill
+/// plus the report — `None` is "already stopped". Both exit 0.
+fn stop_verdict(terminals: &[Terminal]) -> (Option<String>, &'static str) {
+    match terminals
+        .iter()
+        .find(|t| t.state == "live" && t.name.as_deref() == Some(STAGE_NAME))
+    {
+        Some(t) => (Some(t.address.clone()), "stage stopped"),
+        None => (None, "stage already stopped"),
+    }
+}
+
+/// `stage stop` (G1): `terminal.kill` on the core's live
+/// `backlot-stage` — the core's own graceful end. No live stage is
+/// still an exit-0 answer.
+async fn stop_async(common: &Common, env: &Env) -> Result<String, Fail> {
+    let link = link::connect(
+        env,
+        common.session.as_deref().map(std::ffi::OsStr::new),
+        common.remote.as_deref(),
+    )
+    .await?;
+    let list = link
+        .client
+        .terminal_list(ListParams::default())
+        .await
+        .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
+    let (address, report) = stop_verdict(&list.terminals);
+    if let Some(terminal) = address {
+        link.client
+            .terminal_kill(TerminalParams {
+                terminal,
+                caller: None,
+            })
+            .await
+            .map_err(|e| Fail::refused(format!("terminal.kill failed: {e}")))?;
+    }
+    Ok(report.into())
+}
+
+pub fn stop(common: &Common, env: &Env) -> Result<String, Fail> {
+    link::runtime()?.block_on(stop_async(common, env))
+}
+
 /// `stage run`: only inside the stage terminal.
 pub fn run(common: &Common, env: &Env) -> Result<String, Fail> {
     if env.get("BACKLOT_STAGE") != Some("1") {

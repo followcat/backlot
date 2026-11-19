@@ -275,7 +275,13 @@ pub(crate) fn base(env: &Env, common: &Common) -> Result<PathBuf, Fail> {
 
 /// Run the command; the string is printed on stdout on success.
 pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
-    let (common, cmd) = parse(args)?;
+    run_stdin(args, env, None)
+}
+
+/// `run` with stdin already read — the tests' seam: `None` reads the
+/// real stream, and only when a `--stdin` command asks for it (G2).
+pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Result<String, Fail> {
+    let (common, mut cmd) = parse(args)?;
     if let Cmd::Help(u) = cmd {
         return Ok(format!("{u}\n{}", crate::args::COMMON));
     }
@@ -312,6 +318,10 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
             check_stage_caller(&common, env)?;
             return crate::stage::run(&common, env);
         }
+        Cmd::StageStop => {
+            check_stage_caller(&common, env)?;
+            return crate::stage::stop(&common, env);
+        }
         Cmd::StageWatch { ref target } => {
             check_stage_caller(&common, env)?;
             return crate::watchdog::watch(&common, env, target.clone());
@@ -340,7 +350,54 @@ pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     if let Some(out) = crate::hwood_read::read(&common, &cmd, env, &base) {
         return out;
     }
-    exec_event(common, cmd, env, &base)
+    // G2: a `--text`/`--stdin` body lands in a temp file the `--file`
+    // path then copies; `commands` only ever sees files.
+    let temp = materialize(&mut cmd, stdin)?;
+    let out = exec_event(common, cmd, env, &base);
+    if let Some(path) = temp {
+        let _ = std::fs::remove_file(path);
+    }
+    out
+}
+
+/// `--text`/`--stdin` materialization (G2): the body a `--file`
+/// command copies lands in a temp file the caller removes after the
+/// append. An empty body is refused before any file is written.
+fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fail> {
+    use crate::args::TextSource;
+    let source = match cmd {
+        Cmd::Tell { source, .. } | Cmd::ReqRevise { source, .. } => source,
+        _ => return Ok(None),
+    };
+    let body = match source {
+        TextSource::File(_) => return Ok(None),
+        TextSource::Text(text) => text.clone(),
+        TextSource::Stdin => match stdin {
+            Some(text) => text.to_string(),
+            None => std::io::read_to_string(std::io::stdin())
+                .map_err(|e| Fail::refused(format!("cannot read stdin: {e}")))?,
+        },
+    };
+    if body.trim().is_empty() {
+        return Err(Fail::refused("the message body is empty"));
+    }
+    let path = body_file(&body)?;
+    *source = TextSource::File(path.clone());
+    Ok(Some(path))
+}
+
+/// The unique temp file a `--text`/`--stdin` body is staged in.
+fn body_file(body: &str) -> Result<PathBuf, Fail> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "backlot-body-{}-{}.txt",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&path, body)
+        .map_err(|e| Fail::refused(format!("cannot stage the message body: {e}")))?;
+    Ok(path)
 }
 
 pub(crate) fn exec_event(
