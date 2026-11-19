@@ -111,6 +111,14 @@ pub enum Cmd {
     StudioFinish {
         reason: String,
     },
+    /// `studio prune`: remove a finished studio's worktrees and
+    /// `backlot/<studio>/*` branches — never its ledger.
+    StudioPrune {
+        studio: Option<String>,
+        all_finished: bool,
+        dry_run: bool,
+        force: bool,
+    },
     Deliver {
         commits: String,
         report: PathBuf,
@@ -274,6 +282,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
             match sub.as_str() {
                 "new" => args_studio::studio_new(&mut common, &mut it),
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
+                "prune" => args_studio::studio_prune(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STUDIO))),
                 _ => Err(usage(
                     format!("unknown studio subcommand '{sub}'"),

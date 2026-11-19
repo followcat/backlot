@@ -71,6 +71,25 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
         Cmd::Repos { json, ref from } => {
             return crate::repos::run(env, &common, json, from.as_deref());
         }
+        // `studio prune` reads the ledgers and reaps finished work —
+        // no studio event is appended.
+        Cmd::StudioPrune {
+            studio,
+            all_finished,
+            dry_run,
+            force,
+        } => {
+            // A positional studio wins; otherwise the pinned
+            // `BACKLOT_STUDIO`/`--studio` names it. `--all-finished`
+            // deliberately ignores a pinned studio.
+            let named = match studio {
+                Some(name) => Some(name),
+                None if all_finished => None,
+                None => Some(crate::cli::studio_name(&common, env)?),
+            };
+            let base = base(env, &common)?;
+            return crate::prune::run(&base, named, all_finished, dry_run, force);
+        }
         _ => {}
     }
     let base = base(env, &common)?;

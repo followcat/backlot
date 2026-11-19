@@ -43,6 +43,7 @@ mod nudge;
 mod permission;
 mod permit;
 mod prompts;
+mod prune;
 mod range;
 mod ratelimit;
 mod reasons;
@@ -131,6 +132,10 @@ mod permit_tests;
 mod priority_cmd_tests;
 #[cfg(test)]
 mod prompts_tests;
+#[cfg(test)]
+mod prune_cli_tests;
+#[cfg(test)]
+mod prune_tests;
 #[cfg(test)]
 mod range_cmd_tests;
 #[cfg(test)]
