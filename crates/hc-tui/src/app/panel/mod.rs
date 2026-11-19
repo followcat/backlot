@@ -106,7 +106,6 @@ impl App {
         self.panel.focused = false;
         self.panel.selected = None;
         self.panel.selected_row = None;
-        self.panel.closed_hint = None;
         self.panel.drawer = None;
         self.panel_anim_deadline = None;
     }

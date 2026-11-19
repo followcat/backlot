@@ -102,6 +102,10 @@ pub(crate) struct HollywoodRender {
     /// Hit rows with their targets — the title, the frames/chips
     /// and the band rows alike (S1's mouse selects through them).
     pub rows: Vec<(Rect, Target)>,
+    /// A waiting row's action chips (S5 §2): the chip's rect, its
+    /// row's target and its key — a chip click selects its row and
+    /// runs the key's action.
+    pub chips: Vec<(Rect, Target, char)>,
     /// The input line (expanded, an agent only).
     pub input: Rect,
     /// The waiting list's scroll metrics — the wheel and PageUp/Down.

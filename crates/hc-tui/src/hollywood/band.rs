@@ -121,7 +121,7 @@ fn draw_wait(
     mobile: bool,
     selected: bool,
     palette: &Palette,
-    _hits: &mut HollywoodRender,
+    hits: &mut HollywoodRender,
 ) {
     let bg = if selected {
         palette.selection_bg
@@ -227,6 +227,15 @@ fn draw_wait(
             Style::default().fg(palette.subtext0).bg(palette.surface0)
         };
         put_text(buf, cx, rect.y, w, &text, style);
+        // S5: the chip is its own click target — `↵` means the row's
+        // Enter, a letter the row's own key.
+        let key = if chip.key == "↵" {
+            '\r'
+        } else {
+            chip.key.chars().next().unwrap_or('\r')
+        };
+        hits.chips
+            .push((Rect::new(cx, rect.y, w, 1), wait.target(), key));
         cx += w;
     }
 }

@@ -67,10 +67,27 @@ impl App {
                         }
                         return;
                     }
-                    // S1's mouse is select-only: a click on a row or
-                    // a chip selects it (S5 adds the activate paths).
-                    // The `+ new studio` frame is a button, not a
-                    // row — its click opens the native dialog (U6b).
+                    // A chip is its own target (S5 §2): the click
+                    // selects its row and runs the chip's key — `↵`
+                    // chips run the row's Enter.
+                    let chip = self
+                        .hollywood_hits
+                        .chips
+                        .iter()
+                        .find(|(rect, _, _)| contains(*rect, point))
+                        .map(|(_, target, key)| (target.clone(), *key));
+                    if let Some((target, key)) = chip {
+                        self.hollywood.selected = Some(target);
+                        if key == '\r' {
+                            self.hollywood_activate();
+                        } else {
+                            self.hollywood_row_key(crossterm::event::KeyCode::Char(key));
+                        }
+                        return;
+                    }
+                    // A row click selects and acts like Enter (S5
+                    // §2). The `+ new studio` frame is a button, not
+                    // a row — its click opens the native dialog (U6b).
                     let hit = self
                         .hollywood_hits
                         .rows
@@ -79,15 +96,28 @@ impl App {
                         .map(|(_, target)| target.clone());
                     match hit {
                         Some(crate::hollywood::Target::NewStudio) => self.hollywood_new_studio(),
-                        Some(target) => self.hollywood.selected = Some(target),
+                        Some(target) => {
+                            self.hollywood.selected = Some(target);
+                            self.hollywood_activate();
+                        }
                         None => {}
                     }
                 }
                 MouseEventKind::Down(MouseButton::Right) => {
-                    // Right-click selects the row under the pointer
-                    // and opens its menu there (S3 §1) — the band
-                    // never swallowed right-click before, it just
-                    // had none.
+                    // The title row opens the current studio's menu
+                    // (S5 §2); a row's right-click selects it and
+                    // opens its menu there (S3 §1).
+                    if contains(self.hollywood_hits.title, point) {
+                        if let Some(key) = self
+                            .studio
+                            .current
+                            .clone()
+                            .or_else(|| self.hit_map.studio_key.clone())
+                        {
+                            self.studio_header_menu(&key, point);
+                        }
+                        return;
+                    }
                     let hit = self
                         .hollywood_hits
                         .rows

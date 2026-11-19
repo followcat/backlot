@@ -58,6 +58,9 @@ pub(crate) enum ChromeDrag {
     PanelScrollbar {
         grab_row_offset: u16,
     },
+    /// The beside dock's left border — dragging it resizes the dock
+    /// within `28..=48` (S5 §2).
+    PanelWidth,
     /// The Hollywood layer's body scrollbar.
     HollywoodScrollbar {
         grab_row_offset: u16,
@@ -204,6 +207,15 @@ impl App {
             self.hollywood_mouse(mouse);
             self.sched.mark_dirty(Instant::now());
             return;
+        }
+        // A press outside the expanded Call Sheet collapses it back
+        // to the pill (A10.1) — the press itself keeps routing, so a
+        // click on a pane focuses it and hands the keys back.
+        if self.hollywood.expanded()
+            && matches!(mouse.kind, MouseEventKind::Down(_))
+            && self.hollywood.view.is_none()
+        {
+            self.hollywood_collapse();
         }
         // The open panel owns its rect: rows act like Enter, the wheel
         // scrolls, the scrollbar grabs. A press outside a focused panel

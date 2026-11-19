@@ -29,7 +29,7 @@ async fn a_row_click_selects_and_acts_like_enter() {
         .expect("alice hit row");
     app.on_mouse(mouse(
         MouseEventKind::Down(MouseButton::Left),
-        alice.x,
+        alice.x + 2,
         alice.y,
     ));
     assert_eq!(app.focused.as_deref(), Some("t4"));
@@ -48,29 +48,85 @@ async fn a_click_outside_a_focused_panel_returns_focus_to_the_panes() {
 }
 
 #[tokio::test]
-async fn a_click_on_another_row_disarms_the_closed_hint() {
+async fn a_closed_persons_click_reopens_it() {
+    // S5 §2: a resumable closed seat's click is its Enter — the
+    // `backlot reopen` action runs straight away.
     let mut app = app_with_panel_doc();
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_panel_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv);
+        Box::pin(async { Ok(()) })
+    }));
     app.area = (120, 24);
     open_panel(&mut app);
-    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
-    key(&mut app, hc_vt::Key::Enter);
-    assert!(app.panel.closed_hint.is_some());
     draw_to(&mut app, 120, 24);
-    // A click on the studio row goes through `panel_activate` — it
-    // drops dave's hint like Enter would.
-    let studio = app
+    let dave = app
         .panel_hits
         .rows
         .iter()
-        .find(|(_, t)| matches!(t, Target::Studio(id) if id == "acme-shop"))
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-dave"))
         .map(|(r, _)| *r)
-        .expect("studio hit row");
+        .expect("dave's hit row");
     app.on_mouse(mouse(
         MouseEventKind::Down(MouseButton::Left),
-        studio.x,
-        studio.y,
+        dave.x + 2,
+        dave.y,
     ));
-    assert!(app.panel.closed_hint.is_none(), "the click disarmed it");
+    assert_eq!(recorded.lock().unwrap().len(), 1, "the reopen ran");
+    assert_eq!(recorded.lock().unwrap()[0][0], "reopen");
+}
+
+#[tokio::test]
+async fn dragging_the_left_border_resizes_the_dock() {
+    // S5 §2: the beside dock's left border is a resize handle —
+    // session-local, clamped to `28..=48`.
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    draw_to(&mut app, 120, 24);
+    let edge = app.panel_hits.area.x;
+    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), edge, 10));
+    assert!(
+        matches!(
+            app.chrome_drag,
+            Some(crate::app::mouse::ChromeDrag::PanelWidth)
+        ),
+        "the border grab"
+    );
+    // Drag left: 120 - 80 = 40 columns wide.
+    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 80, 10));
+    assert_eq!(app.panel.drag_width, Some(40));
+    // The drag width wins over the tiered one at the next draw.
+    assert_eq!(app.panel_width(120), 40);
+    // Past the max it clamps to 48; at the screen's right edge to 28.
+    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 60, 10));
+    assert_eq!(app.panel.drag_width, Some(48));
+    app.on_mouse(mouse(MouseEventKind::Drag(MouseButton::Left), 118, 10));
+    assert_eq!(app.panel.drag_width, Some(28));
+    app.on_mouse(mouse(MouseEventKind::Up(MouseButton::Left), 118, 10));
+    assert!(app.chrome_drag.is_none(), "released");
+}
+
+#[tokio::test]
+async fn an_overlay_docks_edge_is_not_a_handle() {
+    // Narrow screens draw the dock over the panes — its edge is a
+    // border, not a handle (S5 §2).
+    let mut app = app_with_panel_doc();
+    app.area = (60, 24);
+    open_panel(&mut app);
+    draw_to(&mut app, 60, 24);
+    assert!(!app.panel_beside(60), "the dock overlays at 60");
+    let edge = app.panel_hits.area.x;
+    app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), edge, 10));
+    assert!(
+        !matches!(
+            app.chrome_drag,
+            Some(crate::app::mouse::ChromeDrag::PanelWidth)
+        ),
+        "no resize handle over the panes"
+    );
+    assert_eq!(app.panel.drag_width, None);
 }
 
 #[tokio::test]

@@ -62,6 +62,17 @@ impl App {
             Some(ChromeDrag::PanelScrollbar { grab_row_offset }) => {
                 self.panel_drag_scrollbar(point.1, grab_row_offset);
             }
+            Some(ChromeDrag::PanelWidth) => {
+                // The dock's left edge tracks the pointer: the width
+                // is the columns from the pointer to the frame's
+                // right edge, clamped to `28..=48` (S5 §2).
+                let width = self
+                    .area
+                    .0
+                    .saturating_sub(point.0)
+                    .clamp(crate::panel::WIDTH_MIN, crate::panel::WIDTH_MAX);
+                self.panel.drag_width = Some(width);
+            }
             Some(ChromeDrag::HollywoodScrollbar { grab_row_offset }) => {
                 self.hollywood_drag_scrollbar(point.1, grab_row_offset);
             }
