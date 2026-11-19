@@ -6,6 +6,14 @@ All notable changes to hc-tui are documented here. The format follows
 
 ## Unreleased
 
+### Fixed
+
+- The agents list now scrolls to the focused agent row whenever the focused
+  pane changes — a tab or workspace switch, a sidebar click, a focus key or a
+  focus that arrives from the core — instead of leaving the highlighted row
+  out of view. A manual scroll stays until the next focus change, and
+  focusing a plain shell touches nothing.
+
 ## 0.1.15 — 2026-11-18
 
 ### Fixed

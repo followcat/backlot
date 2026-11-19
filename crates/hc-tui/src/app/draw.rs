@@ -96,6 +96,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         tab_scroll: &mut app.shell_state.tab_scroll,
         reveal_focused_workspace: &mut app.shell_state.reveal_focused_workspace,
         reveal_focused_tab: &mut app.shell_state.reveal_focused_tab,
+        reveal_focused_agent: &mut app.shell_state.reveal_focused_agent,
         sidebar_collapsed: collapsed,
         sidebar_section_split: app.shell_state.sidebar_section_split,
         tab_drag_insert_index: app.tab_drag_index,

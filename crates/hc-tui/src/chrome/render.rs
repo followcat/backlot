@@ -134,6 +134,7 @@ pub(crate) struct ShellRenderState<'a> {
     pub tab_scroll: &'a mut usize,
     pub reveal_focused_workspace: &'a mut bool,
     pub reveal_focused_tab: &'a mut bool,
+    pub reveal_focused_agent: &'a mut bool,
     pub sidebar_collapsed: bool,
     pub sidebar_section_split: f32,
     pub tab_drag_insert_index: Option<usize>,
@@ -246,6 +247,10 @@ pub(crate) fn render_shell(
         hits.new_tab = Rect::default();
         hits.update_badge = Rect::default();
     }
+    // The reveal belongs to the frame that armed it: whichever agents list
+    // drew consumed it, and a sidebar that scrolls no agent list at all
+    // drops it so a later manual scroll is never overridden.
+    *state.reveal_focused_agent = false;
     hits
 }
 
