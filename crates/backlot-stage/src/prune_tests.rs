@@ -294,6 +294,48 @@ fn missing_trees_are_pruned_and_foreign_refs_left_alone() {
     );
 }
 
+/// macOS reaches its temp tree through `/var` → `/private/var`: git's
+/// `worktree list` prints the resolved path while the state dir is
+/// spelled with the symlink. Both an existing and a vanished worktree
+/// must still read as `work/<name>` and stay in scope.
+#[cfg(unix)]
+#[test]
+fn a_symlinked_state_dir_still_matches_existing_and_missing_trees() {
+    let root = TestDir::new("backlot-prune-symlink");
+    let real = root.join("state-real");
+    let work = real.join("work");
+    fs::create_dir_all(&work).unwrap();
+    let existing = work.join("t1");
+    fs::create_dir_all(&existing).unwrap();
+    let gone = work.join("t2");
+    std::os::unix::fs::symlink(&real, root.join("state")).unwrap();
+    // The state dir as the symlink; git prints the resolved paths.
+    let dir = root.join("state");
+    let mut fake = Fake {
+        calls: Vec::new(),
+        list: listing(&[
+            (tree(&existing), "backlot/s/t1".into()),
+            (tree(&gone), "backlot/s/t2".into()),
+        ]),
+        dirty: Vec::new(),
+        branches: Vec::new(),
+        merged: Vec::new(),
+        fail_remove: false,
+    };
+    let repo = root.join("repo");
+    let steps = {
+        let mut git = git_closure(&mut fake);
+        prune_studio(&mut git, "s", &dir, &tree(&repo), true, false).unwrap()
+    };
+    assert_eq!(
+        steps,
+        vec![
+            Step::RemovedWorktree("work/t1".into()),
+            Step::PrunedWorktree("work/t2".into()),
+        ]
+    );
+}
+
 /// A worktree remove that git refuses is reported as kept, never as a
 /// success.
 #[test]

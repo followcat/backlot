@@ -61,15 +61,39 @@ fn under(path: &Path, root: &Path) -> bool {
     if strictly_under(path, root) {
         return true;
     }
+    // macOS resolves `/var` to `/private/var`: git prints the real
+    // path while the state dir (and a worktree whose folder is gone)
+    // still carries the symlink. Compare the raw path against the
+    // canonical root first, so a deleted tree still matches.
+    if let Ok(canon_root) = root.canonicalize()
+        && strictly_under(path, &canon_root)
+    {
+        return true;
+    }
     match (path.canonicalize(), root.canonicalize()) {
         (Ok(p), Ok(r)) => strictly_under(&p, &r),
         _ => false,
     }
 }
 
-/// A path as it reads inside the studio directory when it can.
+/// A path as it reads inside the studio directory when it can —
+/// trying the spelled directory, its canonical form (macOS
+/// `/var` → `/private/var`), and the canonical path as a last resort.
 fn shown(path: &Path, dir: &Path) -> String {
-    path.strip_prefix(dir).unwrap_or(path).display().to_string()
+    if let Ok(rel) = path.strip_prefix(dir) {
+        return rel.display().to_string();
+    }
+    if let Ok(canon_dir) = dir.canonicalize() {
+        if let Ok(rel) = path.strip_prefix(&canon_dir) {
+            return rel.display().to_string();
+        }
+        if let Ok(canon_path) = path.canonicalize()
+            && let Ok(rel) = canon_path.strip_prefix(&canon_dir)
+        {
+            return rel.display().to_string();
+        }
+    }
+    path.display().to_string()
 }
 
 /// The `backlot/<studio>/` branch prefix — the only branches prune may
