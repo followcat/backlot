@@ -1,5 +1,43 @@
 # Studio progress
 
+## P2a: stage resilience — git timeouts, producer notices, studio prune (2026-11-19)
+
+- Done: `gitcmd.rs` gives every stage git call a 60-second bound. `real_git` spawns git in
+  its own process group, drains stdout and stderr on reader threads into capped tails, and on
+  timeout sends SIGTERM to the group, waits one second, then SIGKILLs and reaps the child. The
+  failure reads `git timed out after <n>s: git <argv>`, and `err_line` prefers that line, so
+  `work area failed` names the timeout instead of hanging the stage.
+- Done: a producer `stalled` or `cannot resume` now tells a live director once — an
+  informational body saying the director cannot restart the producer and only the user or
+  Hollywood can intervene — and `backlot status`/`status --all` lead the studio block with
+  `producer alert: <reason> — <detail> (needs the user or Hollywood)`. Hollywood's notice for
+  the same event is always `stalled`, headed `<studio>: producer stalled` or
+  `producer cannot resume — needs attention`. A producer still notifies nobody when no
+  director is live; the notice drops `attention cleared` when the producer recovers.
+- Done: `backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]` reaps a
+  finished studio's `work/` worktrees and `backlot/<studio>/*` branches. A live studio exits 2.
+  Without `--force` a dirty worktree is kept, clean ones go through `git worktree remove`, a
+  vanished tree goes through `git worktree prune`, and branches go only through `git branch -d`
+  so unmerged work is kept with git's reason. `--force` adds `worktree remove --force` and
+  `branch -D`. `--dry-run` reads git and prints the plan. The ledger, `reports/`, `messages/`
+  and `attention/` are never touched.
+- Measured: `gitcmd_tests` — fast git keeps exact stdout/stderr/exit code; a hung git alias
+  returns `git timed out after 0.2s` in under five seconds; a timed-out `sh` with a background
+  `sleep` leaves no surviving grandchild; cwd is honoured. Producer routing and status:
+  `stall_tests` (live vs absent director, body wording, no `tell producer` nudge),
+  `notices_tests` (producer `cannot resume` to a live director), `hnotice_tests` (producer
+  down stays Hollywood's `stalled` notice with the producer heading), `stale_tests` (the
+  director's copy drops when the attention clears), `render_tests` (the alert leads the status
+  block). Prune: five tests — safe/force/dry-run planning over a recording fake git, missing
+  worktree pruning, refused remove reported as kept, foreign worktrees/branches ignored, and
+  one real-git CLI run proving live-studio exit 2, dirty-worktree retention, branch deletion
+  only when safe, `--force`, and ledger/reports/messages preservation.
+- Not verified: no real hung git (network file system, credential helper) has been
+  reproduced; the 60-second value is untested against a real slow checkout. Producer notices
+  have run on the fake runner only — no real-agent stall or restart. Prune has not run on a
+  real studio's worktrees; `--all-finished` is covered by the fake/CLI paths but not a
+  multi-studio real tree.
+
 ## U5: a repository picker and agent detection for the wizard (2026-11-18)
 
 - Done: `wizard_picker/` holds a repository picker — state/filter/tree/render/term behind the

@@ -184,19 +184,27 @@ re-raise one `stall_limit_s` later.
   about four minutes; its prompt now names the `integration` node and sends questions through
   `backlot tell`, but nothing detects a role waiting on an answer that never comes — stall
   detection counts an idle producer, director or writer as normal.
-- **The producer's own problems notify nobody.** An actor's stall or `cannot resume` reaches its
-  task's reviewer, the writer's and director's reach the producer — the producer's shows only in
-  the panel and `backlot status`.
+- **The producer's own problems reach a live director and Hollywood, but only the user can
+  fix them.** An actor's stall or `cannot resume` reaches its task's reviewer, the writer's and
+  director's reach the producer. A stalled or unresumable producer now tells a live director
+  once — with a body that says the director cannot restart it and only the user or Hollywood
+  can intervene — and `backlot status` puts a `producer alert:` line above everything else.
+  With `[hollywood]` configured the layer receives a `stalled` notice headed
+  `<studio>: producer stalled / cannot resume — needs attention`. The direct notice is dropped
+  when the producer's attention clears. None of this has run on real agents: the fake runner
+  covers the routing and staleness rules only.
 - **Every cursor-agent run keeps one direct connection.** `api3.cursor.sh:443` is reached outside
   whatever proxy the environment carries — `NODE_USE_ENV_PROXY=1` does not redirect it — while
   the model and API traffic go through the configured proxy. Measured in S11a and accepted.
 
 ## The stage's loop
 
-- **`git` calls have no timeout.** Work-area git steps run inside the stage's loop; a hung git
-  blocks every studio the stage runs until it returns. Runner `--version` (5 s) and the session
-  probes — codex's `~/.codex/sessions` scan and `devin list` (10 s) — do time out, but a slow one
-  still delays that tick for every studio.
+- **Every `git` call in the stage's loop is bounded (60 s).** Work-area, delivery-range,
+  wizard and repo probes spawn `git` in its own process group, drain both pipes on reader
+  threads and time out at 60 s: SIGTERM to the group, a one-second grace, then SIGKILL, and
+  the child is reaped. A hung git raises one `work area failed` line instead of blocking every
+  studio. The bound has only been exercised by unit tests — a real hung git under a network
+  file system has not been reproduced.
 - **One real runner starts per tick.** Casting several actors spreads the launches over several
   ticks; `fake` is exempt. A post-launch runner (`codex`, `devin`, `cursor`) also defers its start while a
   live role in the same runner-and-folder pair still lacks a session id.
@@ -287,9 +295,13 @@ re-raise one `stall_limit_s` later.
 - **A cursor role's `cli-config.json` holds the account's `authInfo`** once the agent has run —
   the agent writes it into the role's isolated `roles/<role>/cursor/config/`. The studio state
   directory is private: do not share or publish it.
-- **Worktrees and branches are not removed** when a studio ends — `work/` trees and `backlot/…`
-  branches accumulate — and state directories are not pruned. Removal is yours; the guide shows
-  the commands.
+- **A finished studio's worktrees and branches are reaped by `backlot studio prune`.** It
+  refuses a live studio, keeps a worktree with uncommitted changes unless `--force`, deletes
+  `backlot/<studio>/*` branches only through `git branch -d` unless `--force`, and never
+  removes `events.jsonl`, `reports/`, `messages/` or `attention/`. `--dry-run` reads git and
+  prints the plan; `--all-finished` walks every finished studio. The rules run in unit tests
+  against an injected git and one real-git scratch repository; nobody has run it on a real
+  studio's tree yet.
 - **Panel rows name the person, not the task.** Several closed rows for one person look alike in
   a narrow panel.
 - **`backlot records` is the factual record** — deliveries, wall time, defects per actor
