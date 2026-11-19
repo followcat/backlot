@@ -45,6 +45,16 @@ impl CastRow<'_> {
             CastRow::Agent(row) => row.rows.len().max(1).min(u16::MAX as usize) as u16,
         }
     }
+
+    /// Whether this entry belongs to the focused pane — the target a
+    /// focus-change reveal scrolls to.
+    pub(crate) fn focused(&self) -> bool {
+        match self {
+            CastRow::Person { focused, .. } | CastRow::Shell { focused, .. } => *focused,
+            CastRow::Agent(row) => row.focused,
+            CastRow::Shells | CastRow::Others { .. } => false,
+        }
+    }
 }
 
 /// The section's rows: cast order first, then the `shells` group,

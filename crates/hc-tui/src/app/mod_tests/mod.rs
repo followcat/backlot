@@ -39,6 +39,7 @@ mod panel;
 mod preferences;
 mod reload;
 mod remote_children;
+mod reveal_focus;
 mod review_regressions;
 mod settings_studio;
 mod shared_rpc;

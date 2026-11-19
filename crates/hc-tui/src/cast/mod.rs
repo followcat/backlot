@@ -6,6 +6,7 @@
 
 mod draw;
 pub(crate) mod rows;
+mod simple;
 
 #[cfg(test)]
 #[path = "tests.rs"]

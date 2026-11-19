@@ -117,7 +117,16 @@ fn draw(view: &CastView<'_>, width: u16, height: u16) -> (Buffer, ShellHitMap, u
     let mut buf = Buffer::empty(area);
     let mut hits = ShellHitMap::default();
     let mut scroll = 0usize;
-    render_cast(&mut buf, area, view, &config(), &mut scroll, &mut hits);
+    let mut reveal = false;
+    render_cast(
+        &mut buf,
+        area,
+        view,
+        &config(),
+        &mut scroll,
+        &mut reveal,
+        &mut hits,
+    );
     (buf, hits, scroll)
 }
 
@@ -308,17 +317,63 @@ fn the_rows_scroll_and_the_track_draws_on_overflow() {
     let mut buf = Buffer::empty(Rect::new(0, 0, 26, 10));
     let mut hits = ShellHitMap::default();
     let mut scroll = 2usize;
+    let mut reveal = false;
     render_cast(
         &mut buf,
         Rect::new(0, 0, 26, 10),
         &view,
         &config(),
         &mut scroll,
+        &mut reveal,
         &mut hits,
     );
     let text = lines(&buf, Rect::new(0, 0, 26, 10)).join("\n");
     assert!(!text.contains("producer"), "{text}");
     assert!(text.contains("alice"), "{text}");
+}
+
+#[test]
+fn a_focus_change_scrolls_the_focused_person_into_view() {
+    // A body of three lines shows one person; alice is second in the
+    // list, so the reveal moves the start down to her.
+    let summary = summary();
+    let view = cast_view(&summary, vec![], false, Some("t4"));
+    let area = Rect::new(0, 0, 26, 6);
+    let mut buf = Buffer::empty(area);
+    let mut hits = ShellHitMap::default();
+    let mut scroll = 0usize;
+    let mut reveal = true;
+    render_cast(
+        &mut buf,
+        area,
+        &view,
+        &config(),
+        &mut scroll,
+        &mut reveal,
+        &mut hits,
+    );
+    assert!(!reveal, "the render consumes the armed reveal");
+    assert_eq!(scroll, 1, "the list moved to alice's row");
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("alice"), "{text}");
+    assert!(!text.contains("producer"), "{text}");
+
+    // Without an armed reveal the manual offset holds.
+    let mut buf = Buffer::empty(area);
+    let mut hits = ShellHitMap::default();
+    let mut scroll = 0usize;
+    let mut reveal = false;
+    render_cast(
+        &mut buf,
+        area,
+        &view,
+        &config(),
+        &mut scroll,
+        &mut reveal,
+        &mut hits,
+    );
+    assert_eq!(scroll, 0, "no focus change, no scroll");
+    assert!(lines(&buf, area).join("\n").contains("producer"));
 }
 
 #[test]

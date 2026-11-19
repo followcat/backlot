@@ -279,15 +279,22 @@ pub(crate) fn render_sidebar(
     // U1: studio mode replaces the agents section with the current
     // studio's cast — everything else keeps herdr's own panel.
     match &state.cast {
-        Some(cast) => {
-            crate::cast::render_cast(buffer, detail_area, cast, config, state.cast_scroll, hits)
-        }
+        Some(cast) => crate::cast::render_cast(
+            buffer,
+            detail_area,
+            cast,
+            config,
+            state.cast_scroll,
+            state.reveal_focused_agent,
+            hits,
+        ),
         None => super::agents::render_agent_panel(
             buffer,
             detail_area,
             snapshot,
             config,
             state.agent_scroll,
+            state.reveal_focused_agent,
             hits,
         ),
     }

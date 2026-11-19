@@ -579,6 +579,19 @@ multi-machine chronology claim.
 These are measured behavioral differences, not bugs waived by annotation.
 Everything else on the compared surfaces still diffs normally.
 
+- **Agent list follows the focus.** The reference scrolls its agents list only
+  on previous/next agent and endpoint-agent navigation; a tab switch, a
+  workspace switch, a sidebar click, a pane-focus key or a core-driven focus
+  change leaves the list where it was, so the focused row can sit out of view.
+  Backlot scrolls the focused row into the visible part of whichever agents
+  list is drawn — the plain agents panel, the aggregate `endpoint_agents` list
+  or the studio cast sidebar — on every focus change, using the reference's own
+  `list_scroll_start_to_reveal` so an already visible row moves nothing. A
+  manual wheel or scrollbar scroll is left alone until the next focus change,
+  and focusing a pane that is not an agent touches no scroll. This is a
+  deliberate, user-requested addition beyond the pinned source; a parity
+  checkpoint whose only difference is the list's position after a focus
+  change is documented here rather than treated as a bug.
 - **Chronology after a server restart.** hc keeps its activity domain across
   an owned restart (the epoch changes, existing markers baseline into the new
   epoch). Herdr's `server live-handoff` replaces the server but resets

@@ -369,9 +369,15 @@ pub(crate) fn render_expanded(
         }
     }
     match &state.cast {
-        Some(cast) => {
-            crate::cast::render_cast(buffer, detail_area, cast, config, state.cast_scroll, hits)
-        }
+        Some(cast) => crate::cast::render_cast(
+            buffer,
+            detail_area,
+            cast,
+            config,
+            state.cast_scroll,
+            state.reveal_focused_agent,
+            hits,
+        ),
         None => super::endpoint_agents::render_expanded(
             buffer,
             detail_area,
@@ -380,6 +386,7 @@ pub(crate) fn render_expanded(
             state.active_endpoint_id,
             config,
             state.agent_scroll,
+            state.reveal_focused_agent,
             hits,
         ),
     }

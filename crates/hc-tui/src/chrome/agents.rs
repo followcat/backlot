@@ -61,6 +61,7 @@ pub(crate) fn render_agent_panel(
     snapshot: &ClientShellSnapshot,
     config: &super::ClientShellConfig,
     agent_scroll: &mut usize,
+    reveal_focused_agent: &mut bool,
     hits: &mut ShellHitMap,
 ) {
     if !render_agent_panel_header(
@@ -74,6 +75,9 @@ pub(crate) fn render_agent_panel(
     }
 
     let rows = agent_rows(snapshot, config, None);
+    let target = std::mem::take(reveal_focused_agent)
+        .then(|| rows.iter().position(|row| row.focused))
+        .flatten();
     render_agent_list(
         buffer,
         area,
@@ -85,6 +89,7 @@ pub(crate) fn render_agent_panel(
         config,
         agent_scroll,
         hits,
+        target,
         |row| row.rows.len(),
         |buffer, rect, row, hits| {
             hits.agents.push((rect, row.pane_id.clone()));
@@ -167,6 +172,7 @@ pub(crate) fn render_agent_list<T>(
     config: &super::ClientShellConfig,
     agent_scroll: &mut usize,
     hits: &mut ShellHitMap,
+    reveal: Option<usize>,
     row_lines: impl Fn(&T) -> usize,
     mut render_row: impl FnMut(&mut Buffer, Rect, &T, &mut ShellHitMap),
 ) {
@@ -209,6 +215,15 @@ pub(crate) fn render_agent_list<T>(
             }
         })
         .collect::<Vec<_>>();
+    if let Some(target) = reveal {
+        *agent_scroll = super::scroll::list_scroll_start_to_reveal(
+            &row_heights,
+            &gaps,
+            body.height,
+            *agent_scroll,
+            target,
+        );
+    }
     let metrics =
         super::scroll::list_scroll_metrics(&row_heights, &gaps, body.height, *agent_scroll);
     hits.agent_max_scroll = metrics.max_offset_from_bottom;
