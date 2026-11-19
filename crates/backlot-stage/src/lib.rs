@@ -22,6 +22,7 @@ mod digest;
 mod discover;
 mod doc;
 mod draft;
+mod gitcmd;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
@@ -97,6 +98,8 @@ mod discover_tests;
 mod docs_tests;
 #[cfg(test)]
 mod draft_tests;
+#[cfg(test)]
+mod gitcmd_tests;
 
 #[cfg(test)]
 mod hcard_tests;

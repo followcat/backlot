@@ -17,38 +17,9 @@ use backlot_model::state::actor_task;
 
 use crate::reconcile::{RoleKind, Start};
 
-/// What one git invocation produced.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GitOut {
-    pub code: i32,
-    pub stdout: String,
-    pub stderr: String,
-}
-
-/// How the plan runs git: argv and cwd in, the process result out.
-/// Injected so tests never spawn git; production uses [`real_git`].
-pub type GitRun<'a> = dyn FnMut(&[&str], &str) -> GitOut + 'a;
-
-/// Production [`GitRun`]: spawn `git`, capture status and both pipes.
-pub fn real_git(argv: &[&str], cwd: &str) -> GitOut {
-    match std::process::Command::new("git")
-        .args(argv)
-        .current_dir(cwd)
-        .stdin(std::process::Stdio::null())
-        .output()
-    {
-        Ok(o) => GitOut {
-            code: o.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&o.stderr).into_owned(),
-        },
-        Err(e) => GitOut {
-            code: -1,
-            stdout: String::new(),
-            stderr: format!("git: {e}"),
-        },
-    }
-}
+/// The git seam and the production runner live in `gitcmd` (bounded);
+/// re-exported here so every work-area caller keeps one path.
+pub use crate::gitcmd::{GitOut, GitRun, real_git};
 
 /// Which work area a role needs.
 #[derive(Debug, Clone, PartialEq)]
@@ -98,14 +69,21 @@ pub fn role_dir(dir: &Path, repo: &str, role: &str) -> PathBuf {
     }
 }
 
-/// stderr's most useful line — the `fatal:`/`error:` when git
-/// prints one (progress noise like `Preparing worktree` comes
-/// first), else the first non-blank line as before.
+/// stderr's most useful line — a timeout first (the actionable
+/// `git timed out after …`), then the `fatal:`/`error:` when git
+/// prints one (progress noise like `Preparing worktree` comes first),
+/// else the first non-blank line as before.
 pub(crate) fn err_line(out: &GitOut) -> String {
     out.stderr
         .lines()
         .map(str::trim)
-        .find(|l| l.starts_with("fatal:") || l.starts_with("error:"))
+        .find(|l| l.starts_with("git timed out after"))
+        .or_else(|| {
+            out.stderr
+                .lines()
+                .map(str::trim)
+                .find(|l| l.starts_with("fatal:") || l.starts_with("error:"))
+        })
         .or_else(|| out.stderr.lines().map(str::trim).find(|l| !l.is_empty()))
         .map(String::from)
         .unwrap_or_else(|| format!("exit {}", out.code))
