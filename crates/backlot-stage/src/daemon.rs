@@ -507,6 +507,9 @@ impl Stage {
             })
             .collect();
         let mut s = summary::summary(&owned, doing, &self.work.borrow(), &failed, &errors, 0);
+        // U6c: the stage's own version rides the document so clients
+        // read each machine's backlot version without probing.
+        s.backlot_version = Some(env!("CARGO_PKG_VERSION").to_string());
         // U2: each role's workarea — the pure `role_dir` answer over
         // the studio dir, so a studio shell opens where the person it
         // was focused on works. Waiting rows get theirs too: the dir

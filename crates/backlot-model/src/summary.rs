@@ -210,10 +210,18 @@ pub struct Summary {
     /// documents without it still parse.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hollywood: Option<HollywoodSummary>,
+    /// The publishing stage's `backlot` version, as `backlot
+    /// --version` prints it (`0.2.4`, no `v`) — clients read a
+    /// machine's backlot version straight from its document without
+    /// probing (U6c). Documents an older stage wrote read as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlot_version: Option<String>,
 }
 
 impl Summary {
     /// Everything but the stamp — the writer compares on this.
+    /// `backlot_version` does compare: an upgraded stage publishes
+    /// its new version exactly once.
     pub fn same_as(&self, other: &Summary) -> bool {
         let mut a = self.clone();
         let mut b = other.clone();
@@ -405,5 +413,6 @@ pub fn summary(
         updated_ms,
         studios: out,
         hollywood: None,
+        backlot_version: None,
     }
 }
