@@ -10,8 +10,7 @@ pub(crate) const U_REPORT: &str = "usage: backlot report --node <n> --file <f>\n
 pub(crate) const U_ASK: &str = "usage: backlot ask --file <f>";
 pub(crate) const U_TELL: &str = "usage: backlot tell <role> (--file <f> | --text <msg> | --stdin)\n       backlot tell hollywood \"<text>\" [--text <msg>]";
 pub(crate) const U_TASK: &str = "usage: backlot task new --title <t> --kind <k> --acceptance-file <f> [--depends-on <id>...]\n       backlot task pause|resume|abandon|takeover --task <id> --reason <r>";
-pub(crate) const U_CAST: &str =
-    "usage: backlot cast --task <id> --actor <name> [--reason <r>] [--priority low|normal|high]";
+pub(crate) const U_CAST: &str = "usage: backlot cast --task <id> --actor <name> [--reason <r>] [--priority low|normal|high]\n       backlot cast --task <id> --suggest [--json]";
 pub(crate) const U_PRIORITY: &str = "usage: backlot priority --task <id> --level low|normal|high";
 pub(crate) const U_REOPEN: &str = "usage: backlot reopen --person <role key>";
 pub(crate) const U_CLOSE: &str = "usage: backlot close --person <role key>";
@@ -28,7 +27,8 @@ pub(crate) const U_FINDING: &str =
 pub(crate) const U_CORRECT: &str =
     "usage: backlot correct --event <seq> --reason <r> --set <key=value> [--set ...]";
 pub(crate) const U_STATUS: &str = "usage: backlot status [--studio <name>] [--all] [--json]";
-pub(crate) const U_RECORDS: &str = "usage: backlot records [--studio <name>] [--all] [--json]";
+pub(crate) const U_RECORDS: &str =
+    "usage: backlot records [--studio <name>] [--all] [--kind <task_kind>] [--json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>] [--restart]\n       backlot stage service [--print | --write] [--session <s>]";
 pub(crate) const U_RUNNERS: &str = "usage: backlot runners [--json]";
 pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>]";

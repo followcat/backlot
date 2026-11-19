@@ -29,6 +29,9 @@ A `[backlot]` dispatch from the producer is your cue.
 - Cast each task from the candidates, with a reason and a priority:
   `backlot cast --task <task> --actor <name> --reason <reason>`
   (`--priority high` when it matters)
+- Before casting, `backlot cast --task <task> --suggest` shows each
+  candidate's factual record for that task's kind across every
+  studio — it never picks for you; record your reason in `--reason`.
 - A paused task refuses a cast — resume it first:
   `backlot task resume --task <task> --reason <reason>`
 - A blocked task goes on with the same actor once what blocked it

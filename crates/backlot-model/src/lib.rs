@@ -7,11 +7,14 @@
 //! - [`validate`]: append-time rules; refused events get a `Refusal`.
 //! - [`correct`]: which fields a `correction` event changes in the view.
 //! - [`records`]: per-actor records across studios (D4, D8).
+//! - [`casting`]: candidates joined against those records for one
+//!   task's kind — factual history only, never a score (L3, D8).
 //! - [`steps`]: the next steps each role owes, derived from state (S9a).
 //! - [`hollywood`]: the overseer's own ledger — cards, headlines,
 //!   messages — its own kinds so no studio list or rule sees it.
 
 pub mod budget;
+pub mod casting;
 pub mod correct;
 pub mod event;
 pub mod hollywood;
@@ -49,6 +52,8 @@ pub mod migrate;
 mod budget_tests;
 #[cfg(test)]
 mod cap_tests;
+#[cfg(test)]
+mod casting_tests;
 #[cfg(test)]
 mod checks_tests;
 #[cfg(test)]

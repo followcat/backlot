@@ -263,6 +263,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         Cmd::Help(_) => unreachable!("help is answered in cli::run"),
         Cmd::Status { .. }
         | Cmd::Records { .. }
+        | Cmd::CastSuggest { .. }
         | Cmd::StageStart
         | Cmd::StageStop
         | Cmd::StageRun

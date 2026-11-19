@@ -92,6 +92,12 @@ pub enum Cmd {
         reason: String,
         priority: Option<Priority>,
     },
+    /// `cast --task <id> --suggest [--json]` (L3): the candidates'
+    /// factual records for that task's kind — read-only, appends
+    /// nothing (D8).
+    CastSuggest {
+        json: bool,
+    },
     Priority {
         level: Priority,
     },
@@ -162,6 +168,8 @@ pub enum Cmd {
         json: bool,
         /// `--all`: every studio's log (the default without a pin).
         all: bool,
+        /// `--kind <task_kind>`: only records of that task kind.
+        kind: Option<String>,
     },
     StageStart,
     StageStop,
@@ -396,9 +404,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "status" => args_task::flags_only(&mut common, &mut it, U_STATUS, |json, all| {
             Cmd::Status { json, all }
         }),
-        "records" => args_task::flags_only(&mut common, &mut it, U_RECORDS, |json, all| {
-            Cmd::Records { json, all }
-        }),
+        "records" => args_task::records(&mut common, &mut it),
         "hollywood" => args_hwood::hollywood(&mut common, &mut it),
         "card" => args_hwood::card(&mut common, &mut it),
         "stage" => {
