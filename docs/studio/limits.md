@@ -354,7 +354,10 @@ re-raise one `stall_limit_s` later.
 - **Panel rows name the person, not the task.** Several closed rows for one person look alike in
   a narrow panel.
 - **`backlot records` is the factual record** — deliveries, wall time, defects per actor
-  identity — with a written conclusion and no score. Casting *from* actor records is not built.
+  identity — with a written conclusion and no score. `backlot cast --task <id> --suggest`
+  reads the same records per candidate for the task's kind — factual counts and honest
+  "not enough data" / "no history" notices, never a score or a pick (D8). Neither has run
+  against a real agent's history yet — every record the tests show is a seeded one.
 - **A studio with no candidates cannot run tasks.** `backlot cast` refuses anyone not in
   `[[candidates]]` — only the fixed roles ever start.
 - **A `stage not running` row starts the stage.** Enter, a click or `r` on the line runs
@@ -380,8 +383,10 @@ re-raise one `stall_limit_s` later.
   document plus `status --all` show both studios with the right state at each step. What
   has not run: real agents in two studios — the fake runner is all the proof carries — and
   a third live studio has never run.
-- **Later, not built:** experimental production (`mode = "experimental"`, R14) is a reserved
-  name only.
+- **Experimental production (`mode = "experimental"`, R14) is wired but unproven.** The
+  CLI flag, the cast key, the wizard/TUI selection, the `[experimental]`/`exp` badges and
+  the per-role research guidance all exist, and an experimental studio may create a task
+  with no recorded requirement; no real agent has run a studio in it yet.
 - **macOS builds and tests pass in CI; nobody has run it on a real Mac.** `docs/troubleshooting.md`
   has the open macOS issue — `Ctrl+B q` does not exit under automation there, cause unknown.
 - **Usage and cost** are only what a runner reports itself; nothing in backlot meters it.
