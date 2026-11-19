@@ -3,28 +3,16 @@
 use super::*;
 use crate::chrome::palette::{ThemeRuntimeConfig, resolve_effective_theme};
 use crate::config::Config;
-
-struct Scratch(PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+use crate::test_support::TestDir;
 
 /// A scratch `backlot/config.toml` with `text` (`None`: no file).
-fn own_file(text: Option<&str>) -> (Scratch, PathBuf) {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "backlot-own-theme-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir(&dir).unwrap();
+fn own_file(text: Option<&str>) -> (TestDir, PathBuf) {
+    let dir = TestDir::new("backlot-own-theme");
     let path = dir.join("config.toml");
     if let Some(text) = text {
         std::fs::write(&path, text).unwrap();
     }
-    (Scratch(dir), path)
+    (dir, path)
 }
 
 /// herdr's config as loaded, with a theme of its own.

@@ -3,6 +3,7 @@
 use super::*;
 use crate::chrome::settings::SettingsSection;
 use crate::input::KeybindAction as A;
+use crate::test_support::TestDir;
 use hc_vt::{Action, Key, Mods};
 
 fn key(app: &mut App, key: Key) {
@@ -16,26 +17,13 @@ fn screen(app: &mut App) -> Vec<String> {
     screen_lines(&draw_to(app, 120, 40))
 }
 
-struct Scratch(std::path::PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 /// A temp backlot `config.toml` bound as `panel_config_path` — the only
 /// file the studio tab may write.
-fn backlot_file(app: &mut App, text: &str) -> Scratch {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "hctui-backlot-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir(&dir).unwrap();
+fn backlot_file(app: &mut App, text: &str) -> TestDir {
+    let dir = TestDir::new("hctui-backlot");
     app.panel_config_path = dir.join("config.toml");
     std::fs::write(&app.panel_config_path, text).unwrap();
-    Scratch(dir)
+    dir
 }
 
 #[tokio::test]

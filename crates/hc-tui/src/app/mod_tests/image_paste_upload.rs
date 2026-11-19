@@ -33,7 +33,6 @@ async fn dropped_image_path_uploads_the_file_not_the_text() {
     settle(&mut app).await;
     server.await.unwrap();
     assert_eq!(app.pane.input_backlog().0, 1);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[tokio::test]
@@ -277,16 +276,16 @@ async fn dropped_oversized_image_consumes_with_a_notice_and_no_rpc() {
         rx.try_recv().is_err(),
         "no connection is even opened for an oversized file"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A scratch dir of PATH stubs for tests that run the real reader —
 /// the same ETXTBSY probe discipline as `clipboard::tests`.
 #[cfg(target_os = "linux")]
 mod stub_tools {
+    use crate::test_support::TestDir;
     use std::path::{Path, PathBuf};
 
-    pub(super) struct StubDir(PathBuf);
+    pub(super) struct StubDir(TestDir);
 
     impl StubDir {
         pub(super) fn new() -> Self {
@@ -317,12 +316,6 @@ mod stub_tools {
                 path: Some(format!("{}:/usr/bin:/bin", self.0.display()).into()),
                 ..Default::default()
             }
-        }
-    }
-
-    impl Drop for StubDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 

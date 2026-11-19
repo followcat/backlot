@@ -1,6 +1,7 @@
 //! The `[panel]` config file: defaults, the width clamp, the toggle
 //! key and the malformed-file notice.
 use crate::panel::{PanelConfig, WIDTH_MAX, WIDTH_MIN, config_path, load};
+use crate::test_support::TestDir;
 use std::ffi::OsString;
 use std::io::Write;
 
@@ -13,7 +14,7 @@ fn env(entries: &[(&str, &str)]) -> hc_proto::endpoint::Env {
 
 #[test]
 fn a_missing_file_is_defaults() {
-    let dir = std::env::temp_dir().join(format!("panel-none-{}", std::process::id()));
+    let dir = TestDir::new("panel-none");
     let (config, notice) = load(&dir.join("config.toml"));
     assert!(notice.is_none());
     assert_eq!(config.width, 36);
@@ -61,7 +62,7 @@ fn write(dir: &std::path::Path, text: &str) -> std::path::PathBuf {
 
 #[test]
 fn width_clamps_into_the_28_48_band() {
-    let dir = std::env::temp_dir().join(format!("panel-w-{}", std::process::id()));
+    let dir = TestDir::new("panel-w");
     for (given, want) in [(12, WIDTH_MIN), (40, 40), (90, WIDTH_MAX)] {
         let (config, notice) = load(&write(&dir, &format!("[panel]\nwidth = {given}\n")));
         assert!(notice.is_none());
@@ -71,7 +72,7 @@ fn width_clamps_into_the_28_48_band() {
 
 #[test]
 fn the_sidebar_width_clamps_into_the_20_60_band() {
-    let dir = std::env::temp_dir().join(format!("panel-sw-{}", std::process::id()));
+    let dir = TestDir::new("panel-sw");
     for (given, want) in [(8, 20), (40, 40), (90, 60)] {
         let (config, notice) = load(&write(&dir, &format!("[sidebar]\nwidth = {given}\n")));
         assert!(notice.is_none());
@@ -81,7 +82,7 @@ fn the_sidebar_width_clamps_into_the_20_60_band() {
 
 #[test]
 fn studio_keys_parse_unbind_and_fall_back() {
-    let dir = std::env::temp_dir().join(format!("panel-sk-{}", std::process::id()));
+    let dir = TestDir::new("panel-sk");
     let path = write(
         &dir,
         "[keys]\nprevious_studio = \"alt+u\"\nnext_studio = \"\"\nprevious_role = \"nope+\"\n",
@@ -105,7 +106,7 @@ fn studio_keys_parse_unbind_and_fall_back() {
 
 #[test]
 fn the_key_overrides_and_an_empty_one_keeps_the_default() {
-    let dir = std::env::temp_dir().join(format!("panel-k-{}", std::process::id()));
+    let dir = TestDir::new("panel-k");
     let (config, _) = load(&write(&dir, "[panel]\nkey = \"u\"\n"));
     assert_eq!(config.key, "u");
     let (config, _) = load(&write(&dir, "[panel]\nkey = \"\"\n"));
@@ -114,7 +115,7 @@ fn the_key_overrides_and_an_empty_one_keeps_the_default() {
 
 #[test]
 fn an_unparseable_key_falls_back_to_y_with_a_notice() {
-    let dir = std::env::temp_dir().join(format!("panel-badkey-{}", std::process::id()));
+    let dir = TestDir::new("panel-badkey");
     let path = write(&dir, "[panel]\nkey = \"nope+\"\n");
     let (config, notice) = load(&path);
     assert_eq!(config.key, "y", "an invalid key keeps the default");
@@ -127,7 +128,7 @@ fn an_unparseable_key_falls_back_to_y_with_a_notice() {
 
 #[test]
 fn a_malformed_file_is_defaults_plus_a_position() {
-    let dir = std::env::temp_dir().join(format!("panel-bad-{}", std::process::id()));
+    let dir = TestDir::new("panel-bad");
     let path = write(&dir, "[panel\nwidth = ");
     let (config, notice) = load(&path);
     assert_eq!(config.width, PanelConfig::default().width);

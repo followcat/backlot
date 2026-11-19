@@ -2,6 +2,7 @@
 //! processes and the studio-name checks before any path is built.
 
 mod studio_kit;
+mod support;
 
 use std::fs;
 use std::process::{Command, Output};
@@ -31,7 +32,7 @@ fn concurrent_appends_across_processes() {
     let mut children = Vec::new();
     for _ in 0..procs {
         children.push(std::thread::spawn({
-            let root = s.root.clone();
+            let root = s.root.to_path_buf();
             let state = s.state.clone();
             move || {
                 for _ in 0..per {

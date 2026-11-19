@@ -104,12 +104,11 @@ pub fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::TestDir;
 
     #[test]
     fn an_old_cache_file_still_loads() {
-        let dir =
-            std::env::temp_dir().join(format!("hctui-updatestate-{}-old", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TestDir::new("hctui-updatestate-old");
         let path = dir.join("update-check.json");
         // Written before the extension fields existed.
         std::fs::write(&path, r#"{"tag":"v0.1.11","checked_ms":1763326800000}"#).unwrap();
@@ -121,23 +120,21 @@ mod tests {
         assert_eq!(state.releases_for_tag, None);
         assert!(state.releases.is_empty());
         assert_eq!(state.show_on_startup_version, None);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_missing_or_poisoned_file_is_empty() {
-        let dir = std::env::temp_dir();
-        let path = dir.join("hctui-updatestate-absent.json");
+        let dir = TestDir::new("hctui-updatestate");
+        let path = dir.join("absent.json");
         assert_eq!(load(&path), UpdateCheckState::default());
-        let path = dir.join(format!("hctui-updatestate-{}-bad", std::process::id()));
+        let path = dir.join("bad");
         std::fs::write(&path, "{not json").unwrap();
         assert_eq!(load(&path), UpdateCheckState::default());
-        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn store_round_trips_every_field() {
-        let dir = std::env::temp_dir().join(format!("hctui-updatestate-{}-rt", std::process::id()));
+        let dir = TestDir::new("hctui-updatestate-rt");
         let path = dir.join("nested/update-check.json");
         let state = UpdateCheckState {
             tag: Some("v0.1.13".into()),
@@ -159,15 +156,12 @@ mod tests {
         next.skipped_version = None;
         store(&path, &next);
         assert_eq!(load(&path), next);
-        let _ = std::fs::remove_dir_all(&dir);
     }
     /// A release written before bodies were cleaned — or a hand-edited
     /// cache — loads without its controls or sequences.
     #[test]
     fn a_poisoned_cached_release_loads_clean() {
-        let dir =
-            std::env::temp_dir().join(format!("hctui-updatestate-{}-clean", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TestDir::new("hctui-updatestate-clean");
         let path = dir.join("update-check.json");
         std::fs::write(
             &path,
@@ -183,6 +177,5 @@ mod tests {
         assert_eq!(release.version, "9.9.9");
         assert_eq!(release.date, "2026-0101");
         assert_eq!(release.body, "ab\ncd");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

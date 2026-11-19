@@ -3,6 +3,7 @@
 //! in the sidebar header on wide layouts and in the mobile header's
 //! right slot when the status keeps a readable width.
 use super::*;
+use crate::test_support::TestDir;
 
 fn version() -> String {
     format!("v{}", env!("CARGO_PKG_VERSION"))
@@ -294,7 +295,7 @@ async fn a_newer_release_re_arms_the_badge_and_the_toast_after_a_skip() {
 
 #[tokio::test]
 async fn the_toast_fires_once_across_two_starts() {
-    let dir = std::env::temp_dir().join(format!("hctui-toast-starts-{}", std::process::id()));
+    let dir = TestDir::new("hctui-toast-starts");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("update-check.json");
     let mut first = app();
@@ -313,5 +314,4 @@ async fn the_toast_fires_once_across_two_starts() {
         path: Some(path),
     }));
     assert!(second.notice.is_none(), "the second start stays quiet");
-    let _ = std::fs::remove_dir_all(&dir);
 }

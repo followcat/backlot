@@ -4,9 +4,12 @@
 
 #[path = "common/loopcore.rs"]
 mod loopcore;
+mod support;
+
+use support::TestDir;
 
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -20,11 +23,8 @@ use ratatui::{Terminal, backend::TestBackend};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
-fn scratch() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("hc-tui-diag-signal-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+fn scratch() -> TestDir {
+    TestDir::new("hc-tui-diag-signal")
 }
 
 fn sources(probe: Arc<Probe>, dir: &Path) -> Sources {
@@ -167,5 +167,4 @@ async fn diagnostics_stay_off_unless_asked_and_sigusr1_writes_when_on() {
     std::fs::remove_file(&path).unwrap();
     on.finish();
     assert_eq!(wait_for_snapshot(&path)["schema"], 1);
-    let _ = std::fs::remove_dir_all(&dir);
 }
