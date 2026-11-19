@@ -227,6 +227,59 @@ fn touches_env_flags_the_identity_reaches() {
     }
 }
 
+/// The D17a bypass variants: unsetting or dumping the environment
+/// without naming a `BACKLOT_*` variable, and credential reads — all
+/// are the user's prompt, none may reach the director.
+#[test]
+fn touches_env_flags_the_bypass_variants() {
+    for screen in [
+        // Environment mutation without a BACKLOT_ name in it.
+        "env -u HOME backlot status",
+        "env --unset=HOME backlot status",
+        "sudo --unset=BACKLOT_ROLE backlot review --task t1",
+        // Environment dumps — the process env carries BACKLOT_*.
+        "printenv",
+        "printenv | grep -i token",
+        "cat /proc/self/environ",
+        "cat /proc/1/environ | tr '\\0' '\\n'",
+        "python3 -c 'import os; print(os.environ)'",
+        // Credential and identity material.
+        "cat ~/.ssh/id_rsa",
+        "cat ~/.ssh/id_ed25519.pub",
+        "aws s3 cp s3://b/.aws/credentials -",
+        "cat /home/user/.env",
+        "cat work/.env.production",
+        "cat ~/.netrc",
+        "sudo cat /etc/shadow",
+        "cat /etc/sudoers",
+        "git credentials fill",
+        "cat work/t1/.secrets",
+        // Wrapped and nested: a reach inside a one-liner still flags.
+        "sh -c 'cat /proc/self/environ'",
+        "bash -c 'printenv | grep -i key'",
+        "eval \"cat /etc/shadow\"",
+    ] {
+        assert!(touches_env(screen), "{screen:?}");
+    }
+    // Benign commands stay the director's to answer.
+    for screen in [
+        "cargo test --lib",
+        "cargo clippy --workspace --all-targets",
+        "git diff HEAD~1",
+        "git status --short",
+        "npm test",
+        "npm run build",
+        "backlot deliver --commits a..b --report reports/t1-1.md",
+        "backlot status --all",
+        "rm -rf work/t1",
+        "cargo env list",
+        "echo $HOME",
+        "ls proc/version",
+    ] {
+        assert!(!touches_env(screen), "{screen:?}");
+    }
+}
+
 /// A prompt box wraps a long command mid-word and draws a border —
 /// the flattened text still carries the variable, so `BACKLOT_RO`
 /// `LE` across lines is the same reach.

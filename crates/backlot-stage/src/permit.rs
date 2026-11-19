@@ -241,17 +241,53 @@ pub fn needs_user(role: &str, runner: &str, screen: &str, command: Option<&str>)
         )
 }
 
+/// Reaches that always make the prompt the user's (S9b, D17a): the
+/// role's own identity variables, the flags that clear or unset the
+/// environment a command runs under, and an environment dump.
+/// Matched on the flattened text, so a prompt box's wrapping cannot
+/// split them.
+const ENV_REACHES: &[&str] = &[
+    "BACKLOT_",
+    "env-i",
+    "env-u",
+    "--ignore-environment",
+    "--unset",
+    "printenv",
+    "os.environ",
+];
+
+/// Reads of identity or credential material — SSH keys, cloud and
+/// dotenv credentials, netrc, the shadow/sudoers files. A prompt
+/// reaching for one is the user's, whoever asked.
+const SECRET_REACHES: &[&str] = &[
+    "/.ssh/",
+    "id_rsa",
+    "id_ed25519",
+    "/.aws/",
+    ".env",
+    "/.netrc",
+    "/etc/shadow",
+    "/etc/sudoers",
+    "credentials",
+    "secret",
+];
+
 /// Whether a saved prompt screen reaches for the role-identity
-/// variables or the environment-clearing env flags — the S9b "the
-/// prompt is the user's" flag. The screen is flattened first
-/// (whitespace and box-drawing characters removed) so a wrapped
-/// `BACKLOT_RO\nLE` inside a prompt box still matches; a command
-/// that asks for `BACKLOT_` anything, runs `env -i` or passes
-/// `--ignore-environment` is trying to change who it runs as, and
-/// only the user may say yes.
+/// variables, an environment-clearing or environment-reading reach,
+/// or identity/credential material — the S9b "the prompt is the
+/// user's" flag (D17a). The screen is flattened first (whitespace
+/// and box-drawing characters removed) so a wrapped `BACKLOT_RO\nLE`
+/// inside a prompt box still matches. Beyond `BACKLOT_` itself,
+/// `env -i`/`env -u`/`--ignore-environment`/`--unset` change who the
+/// command runs as; `printenv`, `os.environ` and `/proc/*/environ`
+/// dump the process environment (which carries `BACKLOT_*`); and
+/// secret paths read credentials directly. Only the user may say
+/// yes to any of them.
 pub fn touches_env(screen: &str) -> bool {
     let flat = flattened(screen);
-    flat.contains("BACKLOT_") || flat.contains("env-i") || flat.contains("--ignore-environment")
+    ENV_REACHES.iter().any(|p| flat.contains(p))
+        || SECRET_REACHES.iter().any(|p| flat.contains(p))
+        || (flat.contains("/proc/") && flat.contains("environ"))
 }
 
 /// The screen with every whitespace and box-drawing character

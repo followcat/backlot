@@ -73,6 +73,70 @@ pub(crate) fn studio_events(scratch: &Scratch) -> Vec<backlot_model::Event> {
     events
 }
 
+/// D17a: a studio identifier carried in a card never builds a path
+/// — `card apply` refuses it, `studio_state` refuses every hostile
+/// spelling, and a relative draft path cannot climb out of
+/// Hollywood's directory.
+#[test]
+fn a_hostile_card_identifier_never_reaches_a_path() {
+    let (scratch, env) = scratch();
+    running(&scratch, &env);
+    // A card planted straight into Hollywood's ledger with a hostile
+    // studio name, proposed so `card apply` reaches for the studio.
+    let hdir = store::hollywood_dir(&scratch.dir);
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<_, std::convert::Infallible>(store::HPending {
+            event: backlot_model::hollywood::NewHollywoodEvent::new(
+                backlot_model::EventBy::role("hollywood"),
+                HollywoodKind::CardProposed {
+                    action: backlot_model::hollywood::CardAction::Pause {
+                        studio: "../escape".into(),
+                        task: "t1".into(),
+                    },
+                    why: "hostile".into(),
+                    base: CardBase::TaskStatus {
+                        was: backlot_model::TaskStatus::Running,
+                    },
+                },
+            ),
+            files: vec![],
+        })
+    })
+    .unwrap();
+    let msg = refused(&env, "card apply c1");
+    assert!(msg.contains("bad studio name"), "{msg}");
+    assert!(!scratch.dir.join("escape").exists());
+    // The same check guards every spelling — traversal, separators,
+    // control bytes, option-lookalikes, case, empty.
+    for name in [
+        "../escape",
+        "..",
+        "a/b",
+        "foo\nbar",
+        "-x",
+        "--force",
+        "UPPER",
+        "",
+    ] {
+        assert!(
+            crate::hwood::studio_state(&scratch.dir, name).is_err(),
+            "{name:?}"
+        );
+    }
+    assert!(
+        crate::hwood::studio_state(&scratch.dir, "acme-shop")
+            .unwrap()
+            .is_some()
+    );
+    // Draft paths on a `studio-new` card: `..` never leaves `hdir`,
+    // a clean relative path resolves inside it.
+    assert!(crate::hcard_new::resolve_draft(&hdir, "../../etc/passwd").starts_with(&hdir));
+    assert_eq!(
+        crate::hcard_new::resolve_draft(&hdir, "drafts/cast.toml"),
+        hdir.join("drafts/cast.toml")
+    );
+}
+
 #[test]
 fn propose_records_a_card_in_hollywoods_own_ledger() {
     let (scratch, env) = scratch();

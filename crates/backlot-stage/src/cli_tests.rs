@@ -730,6 +730,7 @@ fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
         "requirements/readme.md",
         "requirements/vx.md",
         "events.jsonl",
+        "reports/nul\0.md",
     ] {
         let err = refused(
             &env,
@@ -754,6 +755,34 @@ fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
         &env,
         "report show --studio acme-shop --file reports/leak.md",
     );
+    assert!(err.contains("outside studio"), "{err}");
+    // An inside-pointing symlink is served — containment follows the
+    // resolved path, not the spelling.
+    let inside = sdir.join("checks/ok.log");
+    fs::create_dir_all(sdir.join("checks")).unwrap();
+    fs::write(&inside, "inside bytes\n").unwrap();
+    std::os::unix::fs::symlink(&inside, sdir.join("reports/ok.md")).unwrap();
+    let mut buf = Vec::new();
+    crate::hwood_read::report_show(
+        &crate::args::Common {
+            studio: Some("acme-shop".into()),
+            ..Default::default()
+        },
+        &env,
+        &scratch.dir,
+        std::path::Path::new("reports/ok.md"),
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(buf, b"inside bytes\n");
+    // `reports/` itself a symlink out of the studio is refused the
+    // same way — the root it escapes through does not matter.
+    let dir_out = scratch.files.join("outside-reports");
+    fs::create_dir_all(&dir_out).unwrap();
+    fs::write(dir_out.join("d.md"), "dir secret\n").unwrap();
+    fs::remove_dir_all(sdir.join("reports")).unwrap();
+    std::os::unix::fs::symlink(&dir_out, sdir.join("reports")).unwrap();
+    let err = refused(&env, "report show --studio acme-shop --file reports/d.md");
     assert!(err.contains("outside studio"), "{err}");
     // Missing file, missing studio, missing flags.
     assert!(

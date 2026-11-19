@@ -100,6 +100,18 @@ impl Stage {
     /// One applied card: already-done, stale-check, then the action
     /// — and its outcome in Hollywood's ledger.
     fn hcard(&self, hdir: &Path, card: &Card) -> Result<(), Fail> {
+        // A card's identifiers came in over the ledger — refuse a
+        // hostile studio name before it builds a path (D17a).
+        if !crate::cli::valid_studio_name(card.action.studio()) {
+            self.happend(
+                hdir,
+                HollywoodKind::CardFailed {
+                    card: card.seq,
+                    reason: format!("bad studio name '{}'", card.action.studio()),
+                },
+            )?;
+            return Ok(());
+        }
         let sdir = store::studio_dir(&self.base, card.action.studio());
         let sstate = hwood_state(&sdir)?;
         let step = match &card.action {
