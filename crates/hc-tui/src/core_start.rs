@@ -159,43 +159,17 @@ fn first_line(stderr: &[u8]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::TestDir;
     use hc_proto::endpoint::Remote;
     use std::ffi::OsString;
     use std::path::PathBuf;
 
     /// A scratch directory that removes itself.
-    struct Scratch(PathBuf);
+    struct Scratch(TestDir);
 
     impl Scratch {
         fn new() -> Scratch {
-            // Parallel tests share this clock: two can draw the same
-            // nanos and get one directory — one's `hc` rewrite then
-            // races the other's exec (ETXTBSY), and a shared
-            // `missing.sock` answers `dead()`. The per-process counter
-            // keeps names apart; `create_dir` never adopts a stale one.
-            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            loop {
-                let dir = std::env::temp_dir().join(format!(
-                    "hctui-corestart-{}-{}-{:x}",
-                    std::process::id(),
-                    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos()
-                ));
-                match std::fs::create_dir(&dir) {
-                    Ok(()) => return Scratch(dir),
-                    Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-                    Err(e) => panic!("create scratch dir {}: {e}", dir.display()),
-                }
-            }
-        }
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            Scratch(TestDir::new("hctui-corestart"))
         }
     }
 

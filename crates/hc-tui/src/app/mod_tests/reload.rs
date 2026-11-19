@@ -1,23 +1,11 @@
 use super::*;
-use std::sync::atomic::{AtomicU64, Ordering};
+use crate::test_support::TestDir;
 
-struct Scratch(std::path::PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-fn config(app: &mut App, text: &str) -> Scratch {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let path = std::env::temp_dir().join(format!(
-        "hctui-reload-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    std::fs::create_dir(&path).unwrap();
+fn config(app: &mut App, text: &str) -> TestDir {
+    let path = TestDir::new("hctui-reload");
     app.shell.local_config_path = path.join("config.toml");
     std::fs::write(&app.shell.local_config_path, text).unwrap();
-    Scratch(path)
+    path
 }
 fn key(app: &mut App, ch: char, mods: hc_vt::Mods) {
     app.on_input(

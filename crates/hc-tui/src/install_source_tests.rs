@@ -3,15 +3,30 @@
 //! Homebrew, Nix or cargo tree; the Nix path is only a string.
 
 use super::*;
+use crate::test_support::TestDir;
 use crate::update_install::canonical_exe;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-fn base(label: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("hctui-source-{label}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::canonicalize(&dir).unwrap()
+/// A scratch root and the guard that removes it — canonical, so the
+/// install-source prefix checks compare like paths.
+struct Base {
+    _dir: TestDir,
+    path: PathBuf,
+}
+
+impl std::ops::Deref for Base {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.path
+    }
+}
+
+fn base(label: &str) -> Base {
+    let dir = TestDir::new(&format!("hctui-source-{label}"));
+    let path = std::fs::canonicalize(&dir).unwrap();
+    Base { _dir: dir, path }
 }
 
 fn env(pairs: &[(&str, &str)]) -> SourceEnv {

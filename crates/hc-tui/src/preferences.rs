@@ -135,6 +135,7 @@ pub fn store(path: &Path, preferences: &ClientChromePreferences) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::TestDir;
     use std::ffi::OsString;
 
     fn env_with(vars: &[(&str, &str)]) -> Env {
@@ -217,19 +218,16 @@ mod tests {
 
     #[test]
     fn malformed_and_missing_files_load_as_none() {
-        let dir = std::env::temp_dir().join(format!("hctui-prefs-load-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TestDir::new("hctui-prefs-load");
         let path = dir.join("malformed.json");
         std::fs::write(&path, "not json {").unwrap();
         assert!(load(&path).is_none());
         assert!(load(&dir.join("missing.json")).is_none());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn repeated_store_replaces_existing_preferences() {
-        let dir = std::env::temp_dir().join(format!("hctui-prefs-store-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TestDir::new("hctui-prefs-store");
         let path = dir.join("prefs.json");
         store(
             &path,
@@ -248,14 +246,11 @@ mod tests {
         )
         .expect("replacement preference store");
         assert_eq!(load(&path).and_then(|saved| saved.sidebar_width), Some(32));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn concurrent_stores_leave_complete_preferences() {
-        let dir =
-            std::env::temp_dir().join(format!("hctui-prefs-concurrent-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = TestDir::new("hctui-prefs-concurrent");
         let path = dir.join("prefs.json");
         let writers = (20..28)
             .map(|width| {
@@ -279,6 +274,5 @@ mod tests {
                 .and_then(|saved| saved.sidebar_width)
                 .is_some_and(|width| (20..28).contains(&width))
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

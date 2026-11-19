@@ -2,6 +2,7 @@
 //! ever touches a real clipboard.
 use super::*;
 use crate::clipdrop::{image_path_from_paste, read_image_file};
+use crate::test_support::TestDir;
 use std::path::{Path, PathBuf};
 
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR";
@@ -43,31 +44,11 @@ fn signatures_validate_every_supported_format() {
 
 /// A unique scratch dir of fake tools: `name` -> shell body. The PATH
 /// override makes them the only tools the readers can find.
-struct StubDir(PathBuf);
+struct StubDir(TestDir);
 
 impl StubDir {
     fn new() -> Self {
-        // Parallel tests share this clock: two can draw the same nanos
-        // and get one stub dir, racing each other's tool scripts. The
-        // per-process counter keeps names apart; `create_dir` never
-        // adopts a stale one.
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        loop {
-            let path = std::env::temp_dir().join(format!(
-                "hc-tui-clipboard-test-{}-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
-            match std::fs::create_dir(&path) {
-                Ok(()) => return Self(path),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(e) => panic!("create stub dir {}: {e}", path.display()),
-            }
-        }
+        Self(TestDir::new("hc-tui-clipboard-test"))
     }
     fn stub(&self, name: &str, body: &str) {
         let path = self.0.join(name);
@@ -94,12 +75,6 @@ impl StubDir {
             path: Some(path.into()),
             ..ClipboardEnv::default()
         }
-    }
-}
-
-impl Drop for StubDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
     }
 }
 

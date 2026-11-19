@@ -3,6 +3,7 @@ use super::*;
 use crate::app::input::{MouseButton, MouseEventKind};
 use crate::chrome::settings::SettingsSection;
 use crate::input::KeybindAction as A;
+use crate::test_support::TestDir;
 use hc_vt::{Action, Key, Mods};
 
 fn press(key: Key) -> input::TerminalKey {
@@ -17,26 +18,13 @@ fn screen(app: &mut App) -> Vec<String> {
     screen_lines(&draw_to(app, 120, 40))
 }
 
-struct Scratch(std::path::PathBuf);
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 /// A temp config file bound as the app's `local_config_path` — the only
 /// file the Settings save path may ever write.
-fn settings_file(app: &mut App, text: &str) -> Scratch {
-    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let dir = std::env::temp_dir().join(format!(
-        "hctui-settings-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir(&dir).unwrap();
+fn settings_file(app: &mut App, text: &str) -> TestDir {
+    let dir = TestDir::new("hctui-settings");
     app.shell.local_config_path = dir.join("config.toml");
     std::fs::write(&app.shell.local_config_path, text).unwrap();
-    Scratch(dir)
+    dir
 }
 
 fn open_settings(app: &mut App) {

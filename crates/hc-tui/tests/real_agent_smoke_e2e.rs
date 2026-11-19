@@ -6,9 +6,8 @@
 //! the input is cleared with Ctrl+C, and the agent is quit with
 //! Ctrl+C twice, falling back to `terminal.kill` only for the record.
 //!
-//! Screens dump under `/tmp/hctui-agent-smoke-<pid>/shots/` — the
-//! report reads them; the directory and the per-agent project dirs are
-//! left in place for review.
+//! Screens dump under `hctui-agent-smoke-<pid>-<n>/shots/` in the temp
+//! dir; `HC_TUI_KEEP_TEST_DIRS=1` keeps the whole run for the report.
 //!
 //! Ignored by default: needs `HC_TUI_TEST_CORE` and `HC_TUI_REAL_AGENTS=1`.
 //! Agents inherit the proxy variables of the test process; set
@@ -27,6 +26,9 @@ mod fixture;
 mod pty;
 #[path = "../../hc-proto/tests/common/scratch.rs"]
 mod scratch;
+mod support;
+
+use support::TestDir;
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -313,11 +315,16 @@ async fn real_agent_paste_smoke() {
         .await
         .expect("connect");
 
-    let smoke = std::env::temp_dir().join(format!("hctui-agent-smoke-{}", std::process::id()));
+    let smoke = TestDir::new("hctui-agent-smoke");
     let shots = smoke.join("shots");
     let stub = scratch.root.join("stub");
     let clip = scratch.root.join("clip");
-    for dir in [&smoke, &shots, &stub, &clip] {
+    for dir in [
+        smoke.path(),
+        shots.as_path(),
+        stub.as_path(),
+        clip.as_path(),
+    ] {
         fs::create_dir_all(dir).unwrap();
     }
     std::os::unix::fs::symlink(scratch::core_binary(), stub.join("hc")).unwrap();
@@ -325,8 +332,7 @@ async fn real_agent_paste_smoke() {
     write_clipboard_tools(&stub, &clip);
     write_ssh_stub(&stub, &[("host-a", &scratch, &stub)]);
 
-    // Each agent gets a fresh temp project dir under the smoke root;
-    // the dir stays for the leftovers list.
+    // Each agent gets a fresh temp project dir under the smoke root.
     for (tag, bin) in AGENTS {
         let proj = smoke.join(format!("proj-{bin}"));
         fs::create_dir_all(&proj).unwrap();

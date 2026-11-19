@@ -103,25 +103,14 @@ pub(crate) fn manual_command(dir: &Path, default_dir: Option<&Path>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::TestDir;
 
     /// A scratch directory that removes itself.
-    struct Scratch(PathBuf);
+    struct Scratch(TestDir);
 
     impl Scratch {
         fn new(label: &str) -> Scratch {
-            let dir = std::env::temp_dir().join(format!(
-                "hctui-install-{label}-{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            std::fs::create_dir_all(&dir).unwrap();
-            Scratch(dir)
-        }
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
+            Scratch(TestDir::new(&format!("hctui-install-{label}")))
         }
     }
 
