@@ -12,6 +12,37 @@ v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Every machine shows its `backlot` version.** The stage publishes
+  `backlot_version` in its `backlot/1` document, so a machine whose stage runs
+  answers for itself; machines without a stage (or an older stage doc) are
+  probed once — `command -v`, then a login-shell lookup, then `~/.local/bin` —
+  and cached for six hours, on connect, on an offline → online return, and
+  after an install. In studio mode the expanded sidebar's machine rows carry a
+  second line: `hc <v>` (the endpoint's core version, dropped first at narrow
+  widths) plus `backlot <v>`, an accent `↑<latest>` when the machine is behind
+  the known release, `no backlot`, or a dim pending/error word. `--plain`
+  keeps Herdr's one-line rows untouched.
+- **The machine row has its own menu.** Right-click (or the launcher) on a
+  machine offers only what is valid there: `Install backlot` when it is
+  missing, `Upgrade backlot to v<latest>` when it is behind, `Start`/`Restart
+  the stage` on the stage's state, `New studio here` when a `backlot` can
+  answer, and the endpoint ops (`Connect`/`Rename`/`Remove machine`, `Add
+  machine` on the local row). An unreachable machine dims the command rows —
+  the endpoint ops stay live as the repair path — and `Ctrl+B ?` lists the
+  same actions in a `machines` group when any apply.
+- **Install and upgrade run on the machine.** The menu's install/upgrade first
+  probes the target's `backlot` path and environment read-only; a binary
+  managed by mise, Homebrew, Nix, cargo or a dev `target/` build is refused
+  with the channel's own command — never an `install.sh` over a package
+  manager's file. Otherwise a popup terminal opens on that machine
+  (`terminal.run on: <machine>` remotely) running the official installer with
+  `BACKLOT_SKIP_CORE=1` (hc is never touched), a semver-validated
+  `BACKLOT_VERSION=v<latest>` pin and a shell-quoted `BACKLOT_INSTALL_DIR`.
+  Closing the popup invalidates the located-path and version caches and
+  re-probes; an upgraded machine whose stage was running is restarted —
+  `stage stop` then `stage start` through the action tracker, and the ledger
+  replays so no studio state is lost. The `stage not running` dock rows are
+  now clickable too: Enter or a click starts that machine's stage.
 - `backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]` reaps a finished
   studio's worktrees and `backlot/<studio>/*` branches. A live studio is refused (exit 2);
   without `--force` a dirty worktree is kept and branches go only through `git branch -d`, so

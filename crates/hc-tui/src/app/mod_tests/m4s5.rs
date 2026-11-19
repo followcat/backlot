@@ -125,6 +125,7 @@ async fn popup_eats_keys_and_terminal_loss_closes_with_a_kill() {
         persistent: false,
         owner: String::new(),
         command: String::new(),
+        install_machine: None,
     });
     app.on_popup_spawned("t9".into(), 9);
     // Keys route to the popup attach, never the focused pane — even
@@ -162,6 +163,7 @@ async fn paste_to_popup_uses_the_terminals_paste_mode() {
         persistent: false,
         owner: String::new(),
         command: String::new(),
+        install_machine: None,
     });
     app.on_popup_spawned("t9".into(), 9);
     app.on_input(input::UiEvent::Paste(b"line-one\nline-two".to_vec()), 120);

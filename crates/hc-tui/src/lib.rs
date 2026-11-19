@@ -59,6 +59,8 @@ mod keybind_help;
 pub mod layout;
 
 mod hollywood;
+mod machine_install;
+mod machine_versions;
 mod new_studio;
 mod opening;
 pub mod operations;

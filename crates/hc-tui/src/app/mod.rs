@@ -38,6 +38,7 @@ mod key_routing;
 mod layout_actions;
 pub(crate) mod layout_mouse;
 mod lot;
+mod machine_versions;
 mod mouse;
 mod multipane;
 mod navigation;
@@ -267,6 +268,24 @@ pub struct App {
     /// on:` — `None` until cli installs the shared-RPC runner, so a
     /// test's remote action reports the machine as unreachable.
     remote_runner: Option<crate::panel::RemoteRunner>,
+    /// U6c: each remote machine's cached `backlot` fact — probed at
+    /// most once per `PROBE_EVERY`, refreshed on a reconnect and
+    /// after an install popup closed.
+    machine_versions: crate::machine_versions::MachineVersions,
+    /// The machines' probe replies (`--version` and the install
+    /// flow's env probe) land on this channel.
+    mv_tx: mpsc::Sender<machine_versions::MachineProbe>,
+    mv_rx: mpsc::Receiver<machine_versions::MachineProbe>,
+    /// Machines whose env probe is in flight for the install flow.
+    install_env: std::collections::BTreeSet<String>,
+    /// `<machine> → backlot version before its install popup ran` —
+    /// a bumped re-probe on a stage-running machine chains the
+    /// restart. Presence also suppresses the doc-version shortcut so
+    /// the post-install probe still runs.
+    install_upgrade: std::collections::BTreeMap<String, Option<String>>,
+    /// Machines whose `stage stop` is a restart's first half — the
+    /// `Ok` reply chains `stage start`.
+    stage_restart_pending: std::collections::BTreeSet<Option<String>>,
     /// The Task & Delivery Sheet (`v` on the dock) — `Some` while the
     /// modal is open; it owns the keys like the other dialogs.
     sheet: Option<crate::sheet::Sheet>,

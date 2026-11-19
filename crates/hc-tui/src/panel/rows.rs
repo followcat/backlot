@@ -34,6 +34,10 @@ pub(crate) enum Target {
     Task(StudioKey, String),
     /// The `✓ <n> accepted` fold line — Space/Enter opens it.
     Fold(StudioKey),
+    /// A `stage not running` row — the bare machine line or a
+    /// block's owed-step `◌ … — [r] start`; Enter/click is the
+    /// `[r]` (U6c). `None` names this core.
+    Stage(Option<String>),
 }
 
 impl Target {
@@ -47,7 +51,7 @@ impl Target {
             | Target::Person(key, _)
             | Target::Task(key, _)
             | Target::Fold(key) => Some(key),
-            Target::None => Option::None,
+            Target::Stage(..) | Target::None => Option::None,
         }
     }
 }
@@ -157,8 +161,18 @@ impl Row<'_> {
     /// Owed/cue/drawer/border rows are `Target::None` (A2.2).
     pub fn target(&self) -> Target {
         match self {
+            // The stage-down rows are the `[r] start` their text
+            // advertises (U6c); every other informative row stays
+            // `None` — skipped by the cursor keys and clicks (A2.2).
+            Row::StageDown { machine } => {
+                Target::Stage(machine.map(std::borrow::ToOwned::to_owned))
+            }
+            Row::Owed {
+                studio,
+                kind: Owed::StageDown,
+                ..
+            } => Target::Stage(studio.machine.map(std::borrow::ToOwned::to_owned)),
             Row::Title
-            | Row::StageDown { .. }
             | Row::Offline { .. }
             | Row::Empty
             | Row::Owed { .. }
@@ -272,11 +286,6 @@ fn block_rows<'a>(
     out.push(Row::BlockBottom(studio));
 }
 
-/// The whole row list for the current mode. An empty `machines` — no
-/// machine's document parsed — is the "no studios" state, never an
-/// error row. `stage_running` answers per machine (`None` is this
-/// core); `reachable` answers whether the machine itself is
-/// connected.
 /// The whole row list for the current mode. An empty `machines` — no
 /// machine's document parsed — is the "no studios" state, never an
 /// error row. `stage_running` answers per machine (`None` is this

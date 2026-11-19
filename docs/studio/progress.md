@@ -1,5 +1,43 @@
 # Studio progress
 
+## U6c: per-machine backlot versions, install/upgrade and stage restart (2026-11-20)
+
+- Done: `Summary` carries an optional `backlot_version` (`backlot/1` stays — older documents
+  deserialize `None`); the stage publishes its own `CARGO_PKG_VERSION` on every publish, and
+  `same_as` counts a version change as real so an upgraded stage republishes once.
+- Done: `machine_versions.rs` is the per-machine fact — the document's `backlot_version` wins,
+  then a probe verdict, then `Probing`/`Unknown`; probes run `backlot --version` through
+  `terminal.run on: <machine>` (the RemoteRunner's locate script — `command -v`, a login shell,
+  `~/.local/bin`), are cached for six hours, re-fire on connect and on an offline → online
+  return, and never touch an offline machine. The local machine answers `env!()` +
+  `current_exe` directly.
+- Done: the expanded sidebar's endpoint rows grow a second line in studio mode —
+  `hc <endpoint v>` dim ahead of `backlot <v>` / accent `↑<latest>` / `no backlot` / dim
+  unknown — `hc` elides first at narrow widths; `--plain` never builds the lines, so Herdr's
+  one-line tree is byte-identical.
+- Done: `MenuKind::Machine` — right-click or the `Ctrl+B ?` `machines` group — lists only the
+  valid rows: install when `Missing`, `Upgrade backlot to v<latest>` when behind, `Start`/
+  `Restart the stage` on the stage's state, `New studio here` when installed, then the endpoint
+  ops; an unreachable machine dims command rows except the endpoint repair ops.
+- Done: install/upgrade probes the target's `EXE=` + env read-only first, refuses mise/
+  Homebrew/Nix/cargo/dev-build binaries with the channel's own command, and otherwise opens a
+  `terminal.run` popup on that machine with `curl | sh` — `BACKLOT_SKIP_CORE=1`, a
+  semver-validated `BACKLOT_VERSION` pin, a shell-quoted `BACKLOT_INSTALL_DIR`. The popup's
+  close invalidates both caches and re-probes; a bumped version on a stage-running machine
+  chains `stage stop` → `stage start` through the action tracker. `Target::Stage` makes the
+  `stage not running` rows clickable — Enter/click/`r` run `stage start` on the row's machine.
+- Measured: 6 state-machine tests (6 h throttle, offline skip, doc-beats-probe, verdict parse,
+  invalidation, semver compare), an endpoint-row elision test, 15 App tests (the two sidebar
+  lines, the `↑` hint, `no backlot`, 80×24, `--plain` rows, the menu's five shapes, offline
+  dims, right-click, stage-row click, stop→start and no-restart-on-failure, the refusal notice,
+  the armed install popup and the post-close re-probe), plus `machine_install`'s probe/line
+  tests — 1351 lib tests pass.
+- Not verified: the installer popup's live `curl` download and a real remote host's install —
+  the popup is `terminal.run`-launched like the proven studio actions but was driven only
+  against the fake core; the same environmental clipboard flake from U5
+  (`missing_tool_is_unavailable_not_no_image`, real `wl-paste`/`xclip`/`xsel` in `/usr/bin`)
+  still fails here — pre-existing, unrelated.
+
 ## P2a: stage resilience — git timeouts, producer notices, studio prune (2026-11-19)
 
 - Done: `gitcmd.rs` gives every stage git call a 60-second bound. `real_git` spawns git in

@@ -76,6 +76,9 @@ impl App {
         };
         self.sync_pending();
         self.sched.mark_dirty(now);
+        // U6c: a restart's `stage stop` chains `stage start` on `Ok`
+        // before the toast draws.
+        self.machine_stage_restart_chain(&pending.action, result.is_ok());
         match result {
             Ok(stdout) if pending.action.view => {
                 let title = pending

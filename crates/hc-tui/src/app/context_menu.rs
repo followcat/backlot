@@ -40,6 +40,14 @@ impl App {
             .find(|h| contains(h.rect, point))
             .map(|h| h.endpoint_id.clone())
         {
+            // U6c: studio mode gives the machine row its own menu —
+            // install/upgrade, the stage and `New studio here` ahead
+            // of the endpoint ops `--plain` keeps showing alone.
+            if !self.plain {
+                let menu = self.machine_menu(&hit);
+                self.open_studio_menu(menu, point);
+                return;
+            }
             let name = match &hit {
                 crate::chrome::snapshot::ClientEndpointId::Local => None,
                 crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),

@@ -208,11 +208,16 @@ fn a_dead_stage_moves_the_stage_word_inside_the_block() {
         100,
     );
     // No top `stage not running` row — the owed subheader inside the
-    // block carries it now (S2 §2): one extra `None` row under the
-    // block's top border, every other row untouched.
+    // block carries it now (S2 §2): one extra row under the block's
+    // top border — the clickable `Stage` target U6c gave it — every
+    // other row untouched.
     assert_eq!(dead.len(), alive.len() + 1, "{dead:?}");
     assert_eq!(dead[0], Target::None);
     assert_eq!(dead[1], alive[1]);
-    assert_eq!(dead[2], Target::None, "the owed line joins: {dead:?}");
+    assert_eq!(
+        dead[2],
+        Target::Stage(None),
+        "the owed line joins: {dead:?}"
+    );
     assert_eq!(&dead[3..], &alive[2..]);
 }

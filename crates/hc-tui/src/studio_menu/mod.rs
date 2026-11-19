@@ -87,6 +87,21 @@ pub(crate) enum MenuKind {
     /// The lot pill's quick menu (S5 §2.3) — lot-wide surfaces,
     /// not one studio's.
     Lot,
+    /// An endpoint sidebar machine row (U6c) — install/upgrade,
+    /// the stage and `New studio here`, plus the endpoint ops.
+    Machine,
+}
+
+/// What the machine menu knows about `backlot` there — the
+/// installed version, a confirmed absence, or "not yet probed".
+#[derive(Debug, Clone)]
+pub(crate) enum MenuBacklot {
+    /// `backlot --version` (or the machine's document) answered.
+    Installed(String),
+    /// The locate probe says there is no `backlot` on the machine.
+    Missing,
+    /// Probing or not yet asked — the install item dims.
+    Unknown,
 }
 
 /// What one press does — the app maps it to an action, a dialog or a
@@ -145,6 +160,21 @@ pub(crate) enum StudioAct {
     /// The lot menu's `Hollywood settings…` — Settings' Studio
     /// section, where the `[hollywood]` rows live.
     HollywoodSettings,
+    /// `backlot stage stop && stage start` on the machine — the
+    /// upgrade follow-up and the menu's restart item (U6c).
+    StageRestart,
+    /// Install or upgrade `backlot` on the machine through the
+    /// official installer — a popup on remote, the update flow
+    /// locally; managed binaries refuse first (W2).
+    MachineInstall,
+    /// `machine.connect` on an unreachable endpoint.
+    MachineConnect,
+    /// `machine.rename` — the same dialog the herdr menu opens.
+    MachineRename,
+    /// `machine.rm` — the same confirm the herdr menu opens.
+    MachineRemove,
+    /// `machine.add` — the Local row's own op.
+    MachineAdd,
 }
 
 /// One menu line.
@@ -187,6 +217,12 @@ pub(crate) struct StudioMenu {
     /// A Stage row's machine — studio rows derive theirs from
     /// `studio.machine` instead.
     pub machine: Option<String>,
+    /// A Machine row's `backlot` fact (U6c) — `None` on every other
+    /// kind.
+    pub backlot: Option<MenuBacklot>,
+    /// The newest known release (`0.2.4`, no `v`) — the
+    /// `Upgrade backlot to v<latest>` label reads it.
+    pub latest: Option<String>,
 }
 
 impl StudioMenu {
@@ -216,6 +252,8 @@ impl StudioMenu {
             ready: summary.ready_to_finish,
             req_version: summary.requirement_version,
             machine: None,
+            backlot: None,
+            latest: None,
         }
     }
 
@@ -241,6 +279,8 @@ impl StudioMenu {
             ready: false,
             req_version: 0,
             machine: None,
+            backlot: None,
+            latest: None,
         }
     }
 
@@ -257,6 +297,8 @@ impl StudioMenu {
             ready: false,
             req_version: 0,
             machine: None,
+            backlot: None,
+            latest: None,
         }
     }
 
@@ -273,6 +315,8 @@ impl StudioMenu {
             ready: false,
             req_version: 0,
             machine: None,
+            backlot: None,
+            latest: None,
         }
     }
 
@@ -290,6 +334,34 @@ impl StudioMenu {
             ready: false,
             req_version: 0,
             machine: None,
+            backlot: None,
+            latest: None,
+        }
+    }
+
+    /// An endpoint sidebar machine row's menu (U6c) — `None` is the
+    /// Local endpoint. `backlot`, `stage_down` and `latest` decide
+    /// which of install/upgrade/stage items the row offers.
+    pub(crate) fn machine_row(
+        machine: Option<String>,
+        backlot: MenuBacklot,
+        stage_down: bool,
+        offline: bool,
+        latest: Option<String>,
+    ) -> StudioMenu {
+        StudioMenu {
+            kind: MenuKind::Machine,
+            studio: None,
+            role: None,
+            task: None,
+            card: None,
+            stage_down,
+            offline,
+            ready: false,
+            req_version: 0,
+            machine,
+            backlot: Some(backlot),
+            latest,
         }
     }
 
@@ -306,6 +378,8 @@ impl StudioMenu {
             ready: false,
             req_version: 0,
             machine: None,
+            backlot: None,
+            latest: None,
         }
     }
 }

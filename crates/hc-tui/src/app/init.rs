@@ -19,6 +19,7 @@ impl App {
         let (waiting_tx, waiting_req_rx) = mpsc::channel(8);
         let (waiting_res_tx, waiting_rx) = mpsc::channel(64);
         let (image_read_done_tx, image_read_done_rx) = mpsc::channel(8);
+        let (mv_tx, mv_rx) = mpsc::channel(16);
         let (update_tx, update_rx) = mpsc::channel(16);
         let view = View::default();
         let projection = crate::project::project(&view, None);
@@ -141,6 +142,12 @@ impl App {
             panel_hits: crate::panel::PanelRender::default(),
             panel_anim_deadline: None,
             remote_runner: None,
+            machine_versions: Default::default(),
+            mv_tx,
+            mv_rx,
+            install_env: Default::default(),
+            install_upgrade: Default::default(),
+            stage_restart_pending: Default::default(),
             sheet: None,
             sheet_hits: crate::sheet::SheetRender::default(),
             sheet_epoch: 0,

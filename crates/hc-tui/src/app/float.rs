@@ -173,6 +173,7 @@ impl App {
             persistent: true,
             owner: key.owner,
             command: key.command,
+            install_machine: None,
         });
         self.submit_action(Action::RunPopup { params });
     }
@@ -266,6 +267,7 @@ impl App {
             key: Some(key.clone()),
             created_ms: entry.created_ms,
             seen: entry.seen,
+            install_machine: None,
         });
         self.sched.mark_dirty(Instant::now());
     }
@@ -306,6 +308,7 @@ impl App {
             key: Some(key),
             created_ms,
             seen: false,
+            install_machine: None,
         });
         self.sched.mark_dirty(Instant::now());
     }

@@ -206,8 +206,40 @@ impl App {
             // Studio settings tab open directly.
             StudioAct::CallSheet => self.hollywood_open(),
             StudioAct::ToggleDock => self.panel_toggle(),
-            StudioAct::NewStudio => self.new_studio_open(None),
+            // A Machine row preselects its own endpoint (U6c); the
+            // lot menu's `New studio…` keeps the active machine.
+            StudioAct::NewStudio => self.new_studio_open(menu.machine().map(str::to_owned)),
             StudioAct::HollywoodSettings => self.open_studio_settings(),
+            // U6c's machine row actions: install/upgrade runs the
+            // official installer on the target machine (managed
+            // binaries refuse first), restart chains stop → start,
+            // and the endpoint ops map to the existing machine calls.
+            StudioAct::MachineInstall => {
+                self.machine_install(menu.machine().map(str::to_owned));
+            }
+            StudioAct::StageRestart => {
+                self.machine_stage_restart(menu.machine().map(str::to_owned));
+            }
+            StudioAct::MachineConnect => {
+                if let Some(machine) = menu.machine() {
+                    self.submit_action(crate::operations::Action::Machine(
+                        crate::operations::MachineOp::Connect {
+                            machine: machine.to_owned(),
+                        },
+                    ));
+                }
+            }
+            StudioAct::MachineRename => {
+                if let Some(machine) = menu.machine() {
+                    self.machine_rename(machine.to_owned());
+                }
+            }
+            StudioAct::MachineRemove => {
+                if let Some(machine) = menu.machine() {
+                    self.machine_remove(machine.to_owned());
+                }
+            }
+            StudioAct::MachineAdd => self.machine_add(),
         }
     }
 

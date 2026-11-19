@@ -95,6 +95,46 @@ impl RemoteRunner {
             output_on_machine(&client, &located, &machine, &argv, stdin.as_deref()).await
         })
     }
+
+    /// Run `sh -c <script>` on `machine` and return its full output —
+    /// U6c's read-only env/classification probe. No locate: the script
+    /// finds `backlot` itself so a missing binary never errors.
+    pub(crate) fn run_script(
+        &self,
+        machine: String,
+        script: String,
+    ) -> BoxFut<Result<String, String>> {
+        let open = self.open.clone();
+        Box::pin(async move {
+            let client = open().await.map_err(|e| format!("{e}"))?;
+            let out = run_waited(
+                &client,
+                &machine,
+                vec!["sh".into(), "-c".into(), script],
+                &[],
+                LOCATE_WAIT,
+            )
+            .await;
+            finish_output(&client, &machine, &out).await
+        })
+    }
+
+    /// The located absolute `backlot` path for `machine` — the
+    /// install flow's `BACKLOT_INSTALL_DIR` parent. `None` until a
+    /// run located one this session.
+    pub(crate) fn located_path(&self, machine: &str) -> Option<String> {
+        self.located
+            .lock()
+            .expect("locate cache")
+            .get(machine)
+            .cloned()
+    }
+
+    /// Drop the locate cache entry — an install/upgrade replaces the
+    /// binary, so the next run re-locates it.
+    pub(crate) fn forget(&self, machine: &str) {
+        self.located.lock().expect("locate cache").remove(machine);
+    }
 }
 
 /// One action attempt, with one re-locate/retry for a stale path.

@@ -115,6 +115,7 @@ async fn a_focused_panel_eats_a_host_paste_ahead_of_an_open_popup() {
         persistent: false,
         owner: String::new(),
         command: String::new(),
+        install_machine: None,
     });
     app.on_popup_spawned("t10".into(), 10);
     assert!(app.popup.is_some());

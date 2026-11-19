@@ -123,6 +123,7 @@ mod tests {
                 })
                 .collect(),
             hollywood: None,
+            backlot_version: None,
         }
     }
 
@@ -161,5 +162,20 @@ mod tests {
         same.updated_ms = 999;
         t.note(same);
         assert!(t.due(9_000).is_none());
+    }
+
+    /// A `backlot_version` bump counts as a change — an upgraded
+    /// stage publishes its new version once (U6c).
+    #[test]
+    fn a_version_bump_is_a_change() {
+        let mut t = Throttle::default();
+        let mut a = view(1);
+        a.backlot_version = Some("0.2.3".into());
+        t.note(a);
+        t.wrote(1_000);
+        let mut b = view(1);
+        b.backlot_version = Some("0.2.4".into());
+        t.note(b);
+        assert!(t.due(3_001).is_some());
     }
 }
