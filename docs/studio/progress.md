@@ -1,5 +1,53 @@
 # Studio progress
 
+## P4a: ledger schema versioning, boundary hardening, usage & cost (2026-11-21)
+
+- Done: every studio and Hollywood event envelope carries `v: 1`
+  (`backlot_model::LEDGER_VERSION`); a line without `v` deserializes as `v: 1`, and a `v`
+  the binary does not know is refused with "ledger event version … is newer than
+  supported …; upgrade backlot" instead of a serde failure. `migrate.rs` is a pure,
+  I/O-free pipeline — `migrate_event_value` / `migrate_hollywood_value` on
+  `serde_json::Value` — that stamps `v: 1` on unversioned lines and loops `v → v + 1`
+  through a step table built for future versions; the store's `parse_log` passes every
+  line through it, so old logs load transparently. `backlot studio migrate
+  [<studio> | --all] [--dry-run]` rewrites a log under `events.lock` — temp file,
+  fsync, atomic rename, `events.jsonl.v0.bak` kept, the migrated log replay-verified —
+  prints `already at ledger v1` on a no-op, and `--all` includes Hollywood's log.
+  Working-role callers are refused.
+- Done: D17a boundaries hardened. The permission-prompt spoofing check in `permit.rs`
+  now flags a block reaching for `BACKLOT_` reads/`unset`/`export`/`declare`,
+  `env -u`/`--unset`, `/proc/*/environ` reads and `env`/`printenv` dumps coupled with
+  secret or `.env` paths — on top of the existing `env -i`/`--ignore-environment` —
+  while ordinary commands (`cargo test`, `backlot deliver`) still owe the director the
+  prompt. `report show --file` rejects NUL bytes on top of the existing
+  absolute/`..`/symlink containment; studio and card identifiers are validated before
+  any path is built (`studio_state`, `hcard`, `resolve_draft` `..` escapes, leading
+  `-`), and `run_action` refuses argv or machine names carrying control bytes so a
+  hostile `backlot` command line is never spawned.
+- Done: `task.delivered` carries an optional `usage` — `input_tokens`,
+  `output_tokens`, `cache_read_tokens`, `cost_micros_usd` (integer micro-dollars:
+  exact JSON, exact `Eq`) — reported by the runner through `backlot deliver
+  --tokens-in|--tokens-out|--cache-read-tokens|--cost-usd`. The model sums it
+  factually: `StudioState::usage` across deliveries, `ActorRecord::usage` per actor,
+  `StudioSummary::usage` only while non-zero (older `backlot/1` documents stay
+  byte-identical). `status` prints `usage: 12.4k in / 3.1k out / 2.0k cache · $0.08`
+  under the limits, `records` appends `· usage …` to an actor's line, and the dock
+  draws `∑ 12.4k/3.1k tok · $0.08` under the owed line plus a `usage …` row on the
+  sheet — all only while a counter moved; `--plain` is untouched. No score anywhere
+  (D8).
+- Measured: model tests cover serde round-trips, `v` defaults, unsupported `v: 0` and
+  `v: 99`, a synthetic three-step migration, `UsageTotals` accumulation, formatting and
+  summary omission while zero; stage tests cover `studio migrate` (dry-run, real
+  migration with backup and state equality, no-op, future-version and working-role
+  refusals), the spoofing vectors against benign-command non-regressions, NUL/
+  traversal/symlink refusals, hostile identifiers and argvs, and the `deliver` usage
+  flags (exact micros, malformed/negative refused) with `status`/`records` rendering;
+  hc-tui tests cover the argv control-byte refusal and the usage row drawn only when
+  present.
+- Not verified: no real runner has reported usage — every figure in tests is a
+  fixture — and no real log older than `v: 1` has been migrated on a live state dir;
+  the migration path ran on synthetic logs only.
+
 ## P2b: rate-limit and connection-error detection, stage auto-restart (2026-11-20)
 
 - Done: `ratelimit::limited` reads a reporting core's fresh screen tail whenever its status is

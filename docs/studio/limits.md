@@ -329,8 +329,13 @@ re-raise one `stall_limit_s` later.
   sandbox. Processes a check leaves behind are killed by their group or, when their tree is
   swept, by a `/proc/<pid>/cwd` scan of the user's own processes; on a platform without
   `/proc` that sweep is skipped. A permission prompt whose own block reaches for
-  `BACKLOT_*`, `env -i` or `--ignore-environment` is the user's: the director gets no notice and
-  cannot approve it. The limit: every role runs `backlot` as the same user, so this stops a role
+  `BACKLOT_*` — read, `unset`, `export`/`declare` — `env -i`, `--ignore-environment`,
+  `env -u`/`--unset`, a `/proc/` `environ` read, or an `env`/`printenv` dump coupled with a
+  secret or `.env` path is the user's: the director gets no notice and cannot approve it.
+  `report show --file` and the file readers stay inside their directory — absolute paths,
+  `..`, NUL bytes and symlinks that resolve outside are refused — and studio, card and task
+  identifiers are validated before any path or argv is built. The limit: every role runs
+  `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets
   the variable inside shows only `bash x.sh` on the prompt screen.
 - **Hollywood's exact pre-allow list is wired for `claude`, `cursor` and `cmd` only.** On `devin`,
@@ -380,6 +385,11 @@ re-raise one `stall_limit_s` later.
 - **macOS builds and tests pass in CI; nobody has run it on a real Mac.** `docs/troubleshooting.md`
   has the open macOS issue — `Ctrl+B q` does not exit under automation there, cause unknown.
 - **Usage and cost** are only what a runner reports itself; nothing in backlot meters it.
+  `backlot deliver` accepts `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and
+  `--cost-usd`, the ledger stores them on `task.delivered`, and `status`, `records` and the
+  panel show the sums only while a counter is non-zero — strictly factual, no score (D8).
+  Whether a runner can report them at all, and how they reach the `deliver` call, is still
+  runner-dependent: backlot records what it is told, it does not meter.
 
 ## The fake runner
 
