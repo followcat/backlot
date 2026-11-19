@@ -221,6 +221,12 @@ async fn start_async(common: &Common, env: &Env) -> Result<String, Fail> {
         common.remote.as_deref(),
     )
     .await?;
+    start_on(&link, env).await
+}
+
+/// The idempotent start on an already-connected core — `stage start`
+/// and `stage watch --restart` share this one path.
+pub(crate) async fn start_on(link: &link::Link, env: &Env) -> Result<String, Fail> {
     let list = link
         .client
         .terminal_list(ListParams::default())

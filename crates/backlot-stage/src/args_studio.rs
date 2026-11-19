@@ -232,9 +232,11 @@ pub(crate) fn common_only(
     Ok((std::mem::take(common), cmd))
 }
 
-/// `stage watch`: common flags plus an optional `--target`.
+/// `stage watch`: common flags plus an optional `--target` and
+/// `--restart`.
 pub(crate) fn stage_watch(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut target = None;
+    let mut restart = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STAGE)));
@@ -245,10 +247,42 @@ pub(crate) fn stage_watch(common: &mut Common, it: &mut It) -> Result<(Common, C
         match arg.as_str() {
             "--target" => target = Some(it.value("--target", U_STAGE)?),
             _ if eq(&arg, "--target").is_some() => target = eq(&arg, "--target").map(String::from),
+            "--restart" => restart = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STAGE)),
         }
     }
-    Ok((std::mem::take(common), Cmd::StageWatch { target }))
+    Ok((std::mem::take(common), Cmd::StageWatch { target, restart }))
+}
+
+/// `stage service`: `--print` (the default) or `--write`, the common
+/// `--session`, and no `--remote` — a systemd user unit runs on the
+/// local host.
+pub(crate) fn stage_service(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut print = false;
+    let mut write = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STAGE)));
+        }
+        if common_flag(it, common, &arg, U_STAGE)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--print" => print = true,
+            "--write" => write = true,
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STAGE)),
+        }
+    }
+    if print && write {
+        return Err(usage("give --print or --write, not both", U_STAGE));
+    }
+    if common.remote.is_some() {
+        return Err(usage(
+            "--remote does not apply: a systemd --user unit runs on the local host",
+            U_STAGE,
+        ));
+    }
+    Ok((std::mem::take(common), Cmd::StageService { write }))
 }
 
 /// Commands taking just `--file`.

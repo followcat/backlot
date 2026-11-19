@@ -51,9 +51,16 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             check_stage_caller(&common, env)?;
             return crate::stage::stop(&common, env);
         }
-        Cmd::StageWatch { ref target } => {
+        Cmd::StageWatch {
+            ref target,
+            restart,
+        } => {
             check_stage_caller(&common, env)?;
-            return crate::watchdog::watch(&common, env, target.clone());
+            return crate::watchdog::watch(&common, env, target.clone(), restart);
+        }
+        Cmd::StageService { write } => {
+            check_stage_caller(&common, env)?;
+            return crate::service::run(&common, env, write);
         }
         // Hollywood's own ledger needs no studio at all (D13).
         Cmd::Hollywood(..) | Cmd::Card(..) | Cmd::TellHollywood { .. } => {
