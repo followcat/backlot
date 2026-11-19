@@ -426,6 +426,7 @@ fn notices_are_owed_once_per_source_event() {
             name: "build".into(),
             passed: true,
         }],
+        usage: None,
         seq: 9,
         ts_ms: 0,
     });
@@ -529,6 +530,7 @@ fn a_producer_cast_routes_the_delivery_notice() {
         report: "reports/9-t1-d1-report.md".into(),
         requirement_version: 1,
         checks: Vec::new(),
+        usage: None,
         seq: 9,
         ts_ms: 0,
     });

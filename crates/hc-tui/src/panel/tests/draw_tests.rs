@@ -179,6 +179,38 @@ fn the_waiting_count_shows_only_above_zero() {
     assert!(top.contains("!2"), "{top}");
 }
 
+/// P4a: the block's usage line appears only while `usage` is
+/// `Some` — a studio that reported none draws nothing, and the
+/// line truncates at a narrow dock like the owed row.
+#[test]
+fn the_usage_line_shows_only_with_figures() {
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 40, 30);
+    // Absent — the fixture carries no usage.
+    let summary = summary();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(!text.contains("tok"), "no usage line: {text}");
+
+    let mut value = summary_json();
+    value["studios"][0]["usage"] = serde_json::json!({
+        "input_tokens": 12_400,
+        "output_tokens": 3_100,
+        "cost_micros_usd": 80_000
+    });
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("12.4k/3.1k tok · $0.08"), "{text}");
+
+    // Narrow: the line truncates inside the block edge.
+    let area = Rect::new(0, 0, 22, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("12.4k"), "{text}");
+    assert!(!text.contains("$0.08"), "cost elides at w22: {text}");
+}
+
 #[test]
 fn a_person_draws_one_line_with_the_state_word_right() {
     let summary = summary();

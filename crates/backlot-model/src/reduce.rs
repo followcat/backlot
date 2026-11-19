@@ -252,7 +252,11 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             report,
             requirement_version,
             checks,
+            usage,
         } => {
+            if let Some(u) = usage {
+                state.usage.add(u);
+            }
             if let Some(t) = state.tasks.get_mut(task) {
                 t.deliveries.push(DeliveryRecord {
                     n: *delivery,
@@ -261,6 +265,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                     report: report.clone(),
                     requirement_version: *requirement_version,
                     checks: checks.clone(),
+                    usage: usage.clone(),
                     seq,
                     ts_ms: ts,
                 });

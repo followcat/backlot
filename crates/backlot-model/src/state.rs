@@ -116,6 +116,10 @@ pub struct DeliveryRecord {
     pub report: String,
     pub requirement_version: u32,
     pub checks: Vec<Check>,
+    /// Runner-reported token/cost figures (P4a); absent when the
+    /// delivery carried none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<Usage>,
     pub seq: u64,
     pub ts_ms: u64,
 }
@@ -504,6 +508,11 @@ pub struct StudioState {
     /// seq → what the event touched, for corrections and links.
     #[serde(default)]
     pub targets: BTreeMap<u64, SeqTarget>,
+    /// Token/cost totals summed over every delivery's `usage` (P4a)
+    /// — strictly factual, never a score (D8). Absent while zero so
+    /// states with no usage serialize exactly as before.
+    #[serde(default, skip_serializing_if = "UsageTotals::is_empty")]
+    pub usage: UsageTotals,
     pub last_seq: u64,
 }
 

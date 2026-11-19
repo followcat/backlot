@@ -159,6 +159,11 @@ fn studio_overview(
             ),
             Row::Text,
         ));
+        // P4a: runner-reported usage — present only while a
+        // delivery recorded any of the counters.
+        if let Some(usage) = &studio.usage {
+            out.push(line(format!("usage {}", usage.compact()), Row::Text));
+        }
         if let Some(next) = &studio.next {
             out.push(line(
                 format!("→ {}", crate::panel::owed_text(studio, next)),

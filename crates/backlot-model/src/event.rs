@@ -5,6 +5,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// `Usage`/`UsageTotals` live in `crate::usage`; the `event::`
+/// path keeps working for the event payloads that carry them.
+pub use crate::usage::{Usage, UsageTotals};
+
 /// Who recorded the event: the role and, when known, the hc terminal id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventBy {
@@ -398,6 +402,10 @@ pub enum EventKind {
         requirement_version: u32,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         checks: Vec<Check>,
+        /// Runner-reported token/cost figures (P4a) — absent on logs
+        /// that predate the field and on deliveries that report none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<Usage>,
     },
     #[serde(rename = "task.reviewed")]
     TaskReviewed {

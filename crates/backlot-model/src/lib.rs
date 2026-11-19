@@ -28,10 +28,11 @@ pub mod steps;
 pub mod summary;
 mod summary_build;
 pub mod task_reduce;
+pub mod usage;
 pub mod validate;
 pub mod wanted;
 
-pub use event::{ActorIdentity, Event, EventBy, EventKind, NewEvent};
+pub use event::{ActorIdentity, Event, EventBy, EventKind, NewEvent, Usage, UsageTotals};
 pub use records::{ActorRecord, StudioLog, records};
 pub use state::{StudioState, TaskStatus, apply, replay};
 pub use validate::{Refusal, validate};
@@ -80,6 +81,8 @@ mod state_tests;
 mod steps_tests;
 #[cfg(test)]
 mod summary_tests;
+#[cfg(test)]
+mod usage_tests;
 #[cfg(test)]
 mod validate_extra_tests;
 #[cfg(test)]

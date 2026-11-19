@@ -130,6 +130,9 @@ pub enum Cmd {
         commits: String,
         report: PathBuf,
         checks: Vec<Check>,
+        /// Runner-reported token/cost figures (P4a) — `None` when
+        /// no `--tokens-*`/`--cost-usd` flag came in.
+        usage: Option<backlot_model::event::Usage>,
     },
     Block {
         reason: String,

@@ -36,7 +36,8 @@ pub(crate) enum Step {
     /// The base moved — record `card.stale`.
     Stale(String),
     /// Record this kind in the studio `by: user`, then `card.done`.
-    Act(EventKind),
+    /// Boxed: `EventKind` dwarfs the other variants.
+    Act(Box<EventKind>),
     /// `card.failed` with the reason.
     Fail(String),
 }
@@ -122,7 +123,7 @@ impl Stage {
                 Some(s) => match hollywood::stale(&card.action, &card.base, Some(s)) {
                     Some(r) => Step::Stale(r),
                     None => match action_kind(card) {
-                        Ok(kind) => Step::Act(kind),
+                        Ok(kind) => Step::Act(Box::new(kind)),
                         Err(e) => Step::Fail(e),
                     },
                 },
@@ -159,7 +160,7 @@ impl Stage {
                 )?;
                 eprintln!("stage: card c{} failed", card.seq);
             }
-            Step::Act(kind) => match append_studio(&sdir, kind) {
+            Step::Act(kind) => match append_studio(&sdir, *kind) {
                 Ok(()) => {
                     self.happend(
                         hdir,

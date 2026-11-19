@@ -174,10 +174,63 @@ pub(crate) fn priority(common: &mut Common, it: &mut It) -> Result<(Common, Cmd)
     ))
 }
 
+/// `--tokens-in|--tokens-out|--cache-read-tokens <u64>` and
+/// `--cost-usd <decimal>` — the runner's own usage figures on
+/// `deliver` (P4a). Every one is optional; absent flags record
+/// no `usage` key at all.
+fn usage_flag(it: &mut It, arg: &str, name: &str, slot: &mut Option<u64>) -> Result<bool, Fail> {
+    let v = if arg == name {
+        it.value(name, U_DELIVER)?
+    } else if let Some(v) = eq(arg, name) {
+        v.to_string()
+    } else {
+        return Ok(false);
+    };
+    let bad = || usage(format!("bad {name} '{v}'"), U_DELIVER);
+    if name == "--cost-usd" {
+        *slot = Some(parse_usd(&v).map_err(|_| bad())?);
+    } else {
+        *slot = Some(v.parse::<u64>().map_err(|_| bad())?);
+    }
+    Ok(true)
+}
+
+/// A `--cost-usd` decimal → integer micro-dollars. Up to six
+/// fraction digits, no sign, no exponent — float parsing stays
+/// out so `Eq` on the event is exact.
+fn parse_usd(v: &str) -> Result<u64, ()> {
+    let (whole, frac) = match v.split_once('.') {
+        Some((w, f)) => (w, f),
+        None => (v, ""),
+    };
+    if whole.is_empty()
+        || !whole.chars().all(|c| c.is_ascii_digit())
+        || frac.len() > 6
+        || !frac.chars().all(|c| c.is_ascii_digit())
+    {
+        return Err(());
+    }
+    let micros = whole
+        .parse::<u64>()
+        .ok()
+        .and_then(|w| w.checked_mul(1_000_000))
+        .ok_or(())?;
+    let frac_micros = if frac.is_empty() {
+        0
+    } else {
+        frac.parse::<u64>()
+            .map_err(|_| ())?
+            .checked_mul(10u64.pow(6 - frac.len() as u32))
+            .ok_or(())?
+    };
+    micros.checked_add(frac_micros).ok_or(())
+}
+
 pub(crate) fn deliver(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut commits = None;
     let mut report = None;
     let mut checks = Vec::new();
+    let mut use_report = backlot_model::event::Usage::default();
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_DELIVER)));
@@ -196,6 +249,15 @@ pub(crate) fn deliver(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             _ if eq(&arg, "--check").is_some() => {
                 checks.push(parse_check(eq(&arg, "--check").unwrap(), U_DELIVER)?)
             }
+            _ if usage_flag(it, &arg, "--tokens-in", &mut use_report.input_tokens)? => {}
+            _ if usage_flag(it, &arg, "--tokens-out", &mut use_report.output_tokens)? => {}
+            _ if usage_flag(
+                it,
+                &arg,
+                "--cache-read-tokens",
+                &mut use_report.cache_read_tokens,
+            )? => {}
+            _ if usage_flag(it, &arg, "--cost-usd", &mut use_report.cost_micros_usd)? => {}
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_DELIVER)),
         }
     }
@@ -205,6 +267,7 @@ pub(crate) fn deliver(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             commits: commits.ok_or_else(|| usage("missing --commits", U_DELIVER))?,
             report: report.ok_or_else(|| usage("missing --report", U_DELIVER))?,
             checks,
+            usage: (!use_report.is_empty()).then_some(use_report),
         },
     ))
 }

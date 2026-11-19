@@ -120,6 +120,7 @@ pub fn delivered(task: &str, n: u32, tag: &str, req: u32) -> EventKind {
         report: format!("reports/{task}-d{n}.md"),
         requirement_version: req,
         checks: Vec::new(),
+        usage: None,
     }
 }
 
