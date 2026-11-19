@@ -660,3 +660,129 @@ fn every_command_word_is_registered() {
         );
     }
 }
+
+/// `report show` (G3) streams a studio artifact to stdout. The happy
+/// path is captured through `hwood_read::report_show`'s `out`; the
+/// rejections go through `run` so their `Refused`/`Usage` kinds are
+/// proven.
+#[test]
+fn report_show_streams_allowed_roots() {
+    let (scratch, env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    let req = fixture(&scratch, "req.md", "# requirement\n");
+    ok(
+        &env,
+        &format!("req revise --file {req} --summary first --as producer"),
+    );
+    let sdir = crate::store::studio_dir(&scratch.dir, "acme-shop");
+    fs::create_dir_all(sdir.join("checks")).unwrap();
+    fs::write(sdir.join("checks/1-tests.log"), "check log bytes\n").unwrap();
+    fs::create_dir_all(sdir.join("reports")).unwrap();
+    fs::write(sdir.join("reports/9-node-report.md"), "report body\n").unwrap();
+    fs::create_dir_all(sdir.join("attention")).unwrap();
+    fs::write(sdir.join("attention/7.txt"), "saved screen\n").unwrap();
+
+    let show = |relpath: &str| {
+        let mut buf = Vec::new();
+        crate::hwood_read::report_show(
+            &crate::args::Common {
+                studio: Some("acme-shop".into()),
+                ..Default::default()
+            },
+            &env,
+            &scratch.dir,
+            std::path::Path::new(relpath),
+            &mut buf,
+        )
+        .map(|()| String::from_utf8(buf).unwrap())
+    };
+    assert_eq!(show("reports/9-node-report.md").unwrap(), "report body\n");
+    assert_eq!(show("checks/1-tests.log").unwrap(), "check log bytes\n");
+    assert_eq!(show("attention/7.txt").unwrap(), "saved screen\n");
+    // `requirements/` is the G3 name for the on-disk `req/` root.
+    assert_eq!(show("requirements/v1.md").unwrap(), "# requirement\n");
+    assert_eq!(show("req/v1.md").unwrap(), "# requirement\n");
+}
+
+#[test]
+fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
+    let (scratch, env) = scratch();
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    // Traversal and absolute spellings are refused, not usage — the
+    // argv parsed fine, the path is what is refused.
+    for bad in [
+        "../events.jsonl",
+        "reports/../../etc/passwd",
+        "/etc/passwd",
+        "messages/1-x.txt",
+        "plan/1-plan-x.md",
+        "reports",
+        "attention/nope.txt",
+        "attention/7.log",
+        "requirements/readme.md",
+        "requirements/vx.md",
+        "events.jsonl",
+    ] {
+        let err = refused(
+            &env,
+            &format!("report show --studio acme-shop --file {bad}"),
+        );
+        assert!(
+            err.contains("not under")
+                || err.contains("..")
+                || err.contains("studio-relative")
+                || err.contains("no file"),
+            "'{bad}': {err}"
+        );
+    }
+    // A symlink inside an allowed root that leaves the studio is
+    // refused even though its spelling passes the folder check.
+    let sdir = crate::store::studio_dir(&scratch.dir, "acme-shop");
+    let outside = scratch.files.join("outside.txt");
+    fs::write(&outside, "secret\n").unwrap();
+    fs::create_dir_all(sdir.join("reports")).unwrap();
+    std::os::unix::fs::symlink(&outside, sdir.join("reports/leak.md")).unwrap();
+    let err = refused(
+        &env,
+        "report show --studio acme-shop --file reports/leak.md",
+    );
+    assert!(err.contains("outside studio"), "{err}");
+    // Missing file, missing studio, missing flags.
+    assert!(
+        refused(
+            &env,
+            "report show --studio acme-shop --file reports/absent.md"
+        )
+        .contains("no file")
+    );
+    let env_unpinned = crate::cli::Env {
+        vars: {
+            let mut vars = env.vars.clone();
+            vars.remove("BACKLOT_STUDIO");
+            vars
+        },
+    };
+    assert!(
+        refused(
+            &env_unpinned,
+            "report show --studio beta-tools --file reports/x.md"
+        )
+        .contains("no studio")
+    );
+    assert!(usage(&env, "report show --studio acme-shop").contains("missing --file"));
+    assert!(usage(&env_unpinned, "report show --file reports/x.md").contains("missing studio"));
+    // The size bound: anything past 1 MiB is refused.
+    fs::create_dir_all(sdir.join("checks")).unwrap();
+    let big = sdir.join("checks/big.log");
+    fs::write(&big, vec![b'x'; 1024 * 1024 + 1]).unwrap();
+    let err = refused(&env, "report show --studio acme-shop --file checks/big.log");
+    assert!(err.contains("limit"), "{err}");
+}

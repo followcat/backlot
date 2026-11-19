@@ -266,6 +266,17 @@ pub struct App {
     remote_runner: Option<crate::panel::RemoteRunner>,
     panel_action_tx: mpsc::Sender<(String, Result<(), String>)>,
     panel_rx: mpsc::Receiver<(String, Result<(), String>)>,
+    /// The Task & Delivery Sheet (`v` on the dock) — `Some` while the
+    /// modal is open; it owns the keys like the other dialogs.
+    sheet: Option<crate::sheet::Sheet>,
+    /// Last frame's sheet rects (`SheetRender`).
+    sheet_hits: crate::sheet::SheetRender,
+    /// The open generation — each open bumps it so the earlier
+    /// sheet's late replies land dead.
+    sheet_epoch: u64,
+    /// The sheet's async ledger/report answers.
+    sheet_tx: mpsc::Sender<panel::sheet::SheetReply>,
+    sheet_rx: mpsc::Receiver<panel::sheet::SheetReply>,
     /// Endpoint flags (`--session`/`--remote`) for spawned actions.
     panel_endpoint_args: Vec<String>,
     /// `--plain` (U2): the plain multiplexer — studio mode never

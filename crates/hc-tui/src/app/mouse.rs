@@ -140,6 +140,13 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return;
         }
+        // The Task & Delivery Sheet is modal the same way: a click
+        // outside its frame cancels, the wheel scrolls its body.
+        if self.sheet.is_some() {
+            self.sheet_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         // The context menu overlays everything but a dialog; it owns move
         // highlight and press activation until it closes.
         if self.menu.is_some() {

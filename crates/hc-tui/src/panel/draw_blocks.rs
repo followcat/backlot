@@ -1,20 +1,18 @@
 //! The block painters behind `draw::render`: the bordered studio
-//! frame pieces, one-line people and their extra lines, the stacked
-//! single-line block and the collapsed strip's studio line.
+//! frame pieces, one-line people with their badges and cue lines,
+//! task rows, the accepted fold, the `Space` drawer lines, the
+//! stacked single-line block and the collapsed strip's rows.
 use backlot_model::summary::RoleSummary;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 
 use super::data::{StudioLabel, StudioRef};
-use super::draw::PanelRender;
-use super::mark_counts;
-use super::rows::PersonLine;
+use super::rows::{Owed, PersonLine};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
-use crate::studio;
-use crate::studio::glyphs::{Person, PriorityMark};
+use crate::studio::glyphs::{self, Health, Person, PriorityMark};
 
 /// The frame's colour: accent only while the panel owns the keys AND
 /// the block owns the selected row — every block is `surface1`
@@ -35,90 +33,166 @@ pub(super) fn draw_inner(buf: &mut Buffer, rect: Rect, edge: Style) {
     }
 }
 
-/// `╭ <label> ── !<n> ╮`: the studio label sits in the top border, the
-/// attention count at its right end in the blocked colour — `!` only
-/// above zero. The studio whose terminal is currently focused gets a
-/// subtle `▸` before its label in `text` `BOLD` — never an accent
-/// border (A7.2).
+/// `╭─ ▸ <label> ── <health> r<ver>·<done>/<total> !<n> ─╮` — the
+/// studio header in the top border (S2 §2): the `▸` marks the studio
+/// whose terminal is focused, the health glyph names machine/stage/
+/// finish state, the counters the requirement progress, `!` the
+/// waiting count — red when a person waits on the user, peach
+/// otherwise. A narrow dock drops the `r<ver>·d/t` part first, then
+/// squeezes `!` against the health glyph: `●!1`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_top(
     buf: &mut Buffer,
     rect: Rect,
     studio: StudioRef<'_>,
     label: &StudioLabel,
+    health: Health,
     focused_terminal: bool,
     frame: Style,
     palette: &Palette,
 ) {
     let right = rect.x + rect.width;
-    put_text(buf, rect.x, rect.y, rect.width.min(2), "╭ ", frame);
+    put_text(buf, rect.x, rect.y, rect.width.min(1), "╭", frame);
     put_text(buf, right.saturating_sub(1), rect.y, 1, "╮", frame);
-    let attention = studio::attention_count(studio.studio);
-    let tail = if attention > 0 {
-        format!(" !{attention} ")
+    // The right-hand tail: `● r1·1/4 !1` when the whole label fits
+    // beside it, else `●!1` — the progress part drops before the
+    // waiting count does.
+    let waiting = studio.studio.waiting;
+    let progress = format!(
+        "r{}·{}/{}",
+        studio.studio.requirement_version, studio.studio.tasks_done, studio.studio.tasks_total
+    );
+    let full_tail = if waiting > 0 {
+        format!("{} {progress} !{waiting}", health.glyph())
     } else {
-        String::new()
+        format!("{} {progress}", health.glyph())
     };
-    let tail_width = display_width(&tail) as u16;
-    // `╭ <label> ── !<n> ╮`: the label keeps ≥1 dash and one space
-    // before the tail or the corner.
-    let id_end = right.saturating_sub(1 + tail_width + 1);
-    let id_width = id_end.saturating_sub(rect.x + 2);
+    let marker_w = u16::from(focused_terminal) * 2;
+    let interior = rect.width.saturating_sub(3); // `╭─ ` … `╮`
+    let full_fits = display_width(&label.full) as u16 + display_width(&full_tail) as u16
+        <= interior.saturating_sub(marker_w);
+    let tail = if full_fits || waiting == 0 {
+        full_tail
+    } else {
+        format!("{}!{waiting}", health.glyph())
+    };
+    let tail_w = display_width(&tail) as u16;
+    let tail_x = right.saturating_sub(1 + tail_w);
+    if tail_w > 0 {
+        put_text(
+            buf,
+            tail_x,
+            rect.y,
+            tail_w,
+            &tail,
+            Style::default().fg(health.color(palette)),
+        );
+    }
+    // `!<n>` is its own colour — red while a person waits on the
+    // user, peach for director-owned waits (S2 §2).
+    if waiting > 0 {
+        let mark_w = display_width(&format!("!{waiting}")) as u16;
+        let user = studio.studio.roles.iter().any(|r| r.attention_user);
+        put_text(
+            buf,
+            right.saturating_sub(1 + mark_w),
+            rect.y,
+            mark_w,
+            &format!("!{waiting}"),
+            Style::default().fg(if user { palette.red } else { palette.peach }),
+        );
+    }
     // `▸ ` before the label while its terminal is the focused pane.
-    let marker_width = u16::from(focused_terminal) * 2;
-    let id_text = label.fit(id_width.saturating_sub(marker_width) as usize);
-    let drawn_id_width = display_width(&id_text) as u16;
-    if focused_terminal && id_width >= 2 {
+    let id_end = tail_x.saturating_sub(1);
+    let id_width = id_end.saturating_sub(rect.x + 2 + marker_w);
+    if focused_terminal && id_end > rect.x + 2 {
         put_text(
             buf,
             rect.x + 2,
             rect.y,
             1,
-            crate::studio::glyphs::FOCUSED_STUDIO,
+            glyphs::FOCUSED_STUDIO,
             Style::default()
                 .fg(palette.text)
                 .add_modifier(Modifier::BOLD),
         );
     }
-    if id_width > marker_width {
-        let id_style = if focused_terminal {
-            Style::default().fg(palette.text)
-        } else {
-            Style::default().fg(palette.subtext0)
-        };
+    let id_text = label.fit(id_width as usize);
+    let drawn = display_width(&id_text) as u16;
+    if id_width > 0 {
         put_text(
             buf,
-            rect.x + 2 + marker_width,
+            rect.x + 2 + marker_w,
             rect.y,
-            id_width - marker_width,
+            id_width,
             &id_text,
-            id_style,
+            Style::default().fg(if focused_terminal {
+                palette.text
+            } else {
+                palette.subtext0
+            }),
         );
     }
-    let fill_start = rect.x + 2 + marker_width + drawn_id_width + u16::from(drawn_id_width > 0);
-    let fill_end = right.saturating_sub(1 + tail_width);
-    if fill_end > fill_start {
+    let fill_start = rect.x + 2 + marker_w + drawn + u16::from(drawn > 0);
+    if id_end > fill_start {
         put_text(
             buf,
             fill_start,
             rect.y,
-            fill_end - fill_start,
-            &"─".repeat((fill_end - fill_start) as usize),
+            id_end - fill_start,
+            &"─".repeat((id_end - fill_start) as usize),
             frame,
-        );
-    }
-    if tail_width > 0 {
-        put_text(
-            buf,
-            right.saturating_sub(1 + tail_width),
-            rect.y,
-            tail_width,
-            &tail,
-            Style::default().fg(palette.red),
         );
     }
 }
 
-/// One person inside a block: `│ <mark> <name> <task> <flag>   <state> │`
+/// The owed-step subheader: `→ <label> · <name>` and its state
+/// variants — `◌ stage not running`, `× host unreachable`, `! error`.
+/// The owed-step subheader: `→ <label> · <name>` and its state
+/// variants — `◌ stage not running`, `× host unreachable`, `! error`.
+pub(super) fn draw_owed(
+    buf: &mut Buffer,
+    rect: Rect,
+    kind: Owed,
+    text: &str,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    let (mark, style) = match kind {
+        Owed::Step | Owed::Finish => ("→", Style::default().fg(palette.subtext0)),
+        Owed::StageDown => ("◌", Style::default().fg(palette.peach)),
+        Owed::Offline => ("×", Style::default().fg(palette.red)),
+        Owed::Error | Owed::Confirm => ("!", Style::default().fg(palette.peach)),
+    };
+    let width = rect.width.saturating_sub(3);
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        width,
+        &truncate_end(&format!("{mark} {text}"), width as usize),
+        style,
+    );
+}
+
+/// The state word's style: `USER` is a red badge, `dir` a peach tag
+/// on `surface0` (D9) — the rest are the mark's bare colour.
+pub(super) fn word_style(mark: Person, palette: &Palette) -> Style {
+    match mark {
+        Person::UserPrompt => Style::default()
+            .fg(glyphs::contrast_fg(palette))
+            .bg(palette.red)
+            .add_modifier(Modifier::BOLD),
+        Person::DirPrompt => Style::default().fg(palette.peach).bg(palette.surface0),
+        _ => mark.style(palette),
+    }
+}
+
+/// One person inside a block: `│ <mark> <name> · <task> <flag>   <state> │`
+/// — no model, no runner, no `doing` line. The mark, the state word
+/// and the priority flag all read the shared vocabulary.
+/// One person inside a block: `│ <mark> <name> · <task> <flag>   <state> │`
 /// — no model, no runner, no `doing` line. The mark, the state word
 /// and the priority flag all read the shared vocabulary.
 pub(super) fn draw_person(
@@ -140,15 +214,16 @@ pub(super) fn draw_person(
         mark.glyph(spin),
         mark.style(palette),
     );
-    // `name task ↑` left — the state word keeps the right edge.
+    // `name · task ↑` left — the state word keeps the right edge.
     let state = mark.word();
-    let state_width = display_width(state) as u16;
+    let badge = matches!(mark, Person::UserPrompt | Person::DirPrompt);
+    let state_width = display_width(state) as u16 + u16::from(badge) * 2;
     let name_width = rect.width.saturating_sub(4 + state_width + 2);
     let flag = role.priority.and_then(PriorityMark::of);
     let flag_width = flag.map_or(0, |f| display_width(f.glyph()) + 1) as u16;
     let mut name = role.name.clone();
     if let Some(task) = &role.task {
-        name.push(' ');
+        name.push_str(" · ");
         name.push_str(task);
     }
     let name_text = truncate_end(&name, name_width.saturating_sub(flag_width) as usize);
@@ -175,20 +250,39 @@ pub(super) fn draw_person(
             Style::default().fg(flag.color(palette)),
         );
     }
+    let (word, word_x) = if badge {
+        (
+            format!(" {state} "),
+            rect.x + rect.width.saturating_sub(1 + state_width),
+        )
+    } else {
+        (
+            state.to_string(),
+            rect.x + rect.width.saturating_sub(1 + display_width(state) as u16),
+        )
+    };
     put_text(
         buf,
-        rect.x + rect.width.saturating_sub(1 + state_width),
+        word_x,
         rect.y,
         state_width,
-        state,
-        mark.style(palette),
+        &word,
+        word_style(mark, palette),
     );
 }
 
-/// A person's extra line at the name column: `! <attention>` wins
-/// over `! last turn failed: <e>`; the armed reopen hint draws in the
-/// accent. The attention line takes its owner's glyph colour — a
-/// user's prompt red, the director's peach.
+/// A person's extra line at the name column. The cue is the
+/// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
+/// user-owned prompt, `! prompt · director reviewing` for a
+/// director-owned one (D9), `! <attention>` otherwise. `Failed`
+/// shows the last turn's error; `ClosedHint`/`Confirm` are the
+/// reopen affordances.
+/// A person's extra line at the name column. The cue is the
+/// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
+/// user-owned prompt, `! prompt · director reviewing` for a
+/// director-owned one (D9), `! <attention>` otherwise. `Failed`
+/// shows the last turn's error; `ClosedHint`/`Confirm` are the
+/// reopen affordances.
 pub(super) fn draw_person_line(
     buf: &mut Buffer,
     rect: Rect,
@@ -199,13 +293,26 @@ pub(super) fn draw_person_line(
 ) {
     draw_inner(buf, rect, frame);
     let (text, style) = match kind {
-        PersonLine::Attention => (
-            role.attention
+        PersonLine::Cue => {
+            let detail = role
+                .attention_detail
                 .as_deref()
-                .map(|a| format!("! {a}"))
-                .unwrap_or_default(),
-            Person::of(role).style(palette),
-        ),
+                .or(role.attention.as_deref())
+                .unwrap_or_default();
+            if Person::of(role) == Person::DirPrompt {
+                (
+                    "! prompt · director reviewing".to_string(),
+                    Style::default().fg(palette.overlay0),
+                )
+            } else if role.attention_user {
+                (
+                    format!("! {detail} [y/d/p]"),
+                    Person::UserPrompt.style(palette),
+                )
+            } else {
+                (format!("! {detail}"), Person::of(role).style(palette))
+            }
+        }
         PersonLine::Failed => (
             role.failed
                 .as_deref()
@@ -213,9 +320,9 @@ pub(super) fn draw_person_line(
                 .unwrap_or_default(),
             Person::Failed.style(palette),
         ),
-        PersonLine::Confirm => (
-            "enter: reopen".to_string(),
-            Style::default().fg(palette.accent),
+        PersonLine::ClosedHint => (
+            "closed — press o to reopen".to_string(),
+            Style::default().fg(palette.overlay0),
         ),
     };
     put_text(
@@ -226,100 +333,4 @@ pub(super) fn draw_person_line(
         &truncate_end(&text, rect.width.saturating_sub(5) as usize),
         style,
     );
-}
-
-/// Right-aligned `(<text>, <colour>)` parts — `count` marks the
-/// label's right end; returns where the tail started.
-fn put_parts_right(buf: &mut Buffer, rect: Rect, parts: &[(String, Color)]) -> u16 {
-    let glyphs: u16 = parts
-        .iter()
-        .map(|(part, _)| display_width(part) as u16)
-        .sum();
-    let spaces = parts.len().saturating_sub(1) as u16;
-    let mut x = rect.x + rect.width.saturating_sub(glyphs + spaces);
-    for (part, color) in parts {
-        let w = display_width(part) as u16;
-        put_text(buf, x, rect.y, w, part, Style::default().fg(*color));
-        x = x.saturating_add(w + 1);
-    }
-    rect.x + rect.width.saturating_sub(glyphs + spaces)
-}
-
-/// A stacked block's single line: `╶ <label> ⠿2 ○3 ×1 !<n>` — each
-/// mark count in its mark's colour, the attention count in the
-/// blocked colour.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn draw_stacked(
-    buf: &mut Buffer,
-    rect: Rect,
-    studio: StudioRef<'_>,
-    label: &StudioLabel,
-    spin: usize,
-    palette: &Palette,
-    hits: &mut PanelRender,
-) {
-    put_text(
-        buf,
-        rect.x,
-        rect.y,
-        1,
-        "╶",
-        Style::default().fg(palette.overlay0),
-    );
-    let mut parts = Vec::new();
-    for (mark, n) in mark_counts(studio.studio) {
-        hits.working_drawn |= mark == Person::Working;
-        parts.push((format!("{}{}", mark.glyph(spin), n), mark.color(palette)));
-    }
-    let attention = studio::attention_count(studio.studio);
-    if attention > 0 {
-        parts.push((format!("!{attention}"), palette.red));
-    }
-    let tail = put_parts_right(buf, rect, &parts);
-    let gap = u16::from(!parts.is_empty());
-    let id_end = tail.saturating_sub(gap);
-    if id_end > rect.x + 2 {
-        let id_width = id_end - (rect.x + 2);
-        put_text(
-            buf,
-            rect.x + 2,
-            rect.y,
-            id_width,
-            &label.fit(id_width as usize),
-            Style::default().fg(palette.subtext0),
-        );
-    }
-}
-
-/// The collapsed strip's one line per studio: the label cut to fit,
-/// the working count and `!<n>` right-aligned.
-pub(super) fn draw_strip(
-    buf: &mut Buffer,
-    rect: Rect,
-    studio: StudioRef<'_>,
-    label: &StudioLabel,
-    palette: &Palette,
-) {
-    let attention = studio::attention_count(studio.studio);
-    let working = studio::working_count(studio.studio);
-    let mut parts = Vec::new();
-    if working > 0 {
-        parts.push((working.to_string(), palette.yellow));
-    }
-    if attention > 0 {
-        parts.push((format!("!{attention}"), palette.red));
-    }
-    let tail = put_parts_right(buf, rect, &parts);
-    let gap = u16::from(!parts.is_empty());
-    let id_width = tail.saturating_sub(rect.x + 1 + gap);
-    if id_width > 0 {
-        put_text(
-            buf,
-            rect.x + 1,
-            rect.y,
-            id_width,
-            &label.fit(id_width as usize),
-            Style::default().fg(palette.text),
-        );
-    }
 }

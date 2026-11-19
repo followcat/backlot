@@ -12,6 +12,46 @@ v0.1.14), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **The studio dock is the unified inspection surface.** `Ctrl+B y` still opens
+  it, but the panel is now the one place a studio's people, tasks and
+  deliveries are visible and inspectable. Each studio block carries a health
+  glyph (`●` live, `◌` stage stopped, `×` offline or ledger error, `✓`
+  finished), `r<version> · <done>/<total>` progress and a `!<waiting>` count;
+  the owed-step line names the role the step is owed to (`→ deliver t1 ·
+  actor-a`) instead of the raw ledger key. People rows show the `USER` badge
+  and the read-only `dir` tag on director-owned prompts, and a `[y/d/p]` cue
+  line on user-owned ones. Tasks with no live actor get their own rows —
+  uncast, dependency-gated, paused, at rework cap or blocked, and accepted —
+  and accepted tasks fold under `Space` when there are six or more. `Space` on
+  a person or task opens a three-line drawer; on a studio header it folds the
+  block. The dock's width is fixed (38 columns at 160+, 36 at 100+, 28 under),
+  it sits beside the panes while they keep 44 columns and overlays the pane
+  surface below that; `Esc` unfocuses it beside the panes (borders mute,
+  `Ctrl+B y` refocuses, `q`/`Ctrl+B Y`/`×` closes) and steps back over an
+  overlay — to the 16-column strip when it fits, else closed — with the footer
+  reading `esc back`. The collapsed strip shows health, a short studio/machine
+  label and the active or blocked roles.
+- **The `v` Task & Delivery Sheet.** `v` on a dock row opens a centered modal —
+  inside the pane surface, never over a beside dock — with three tabs: Overview
+  & Casts (acceptance, dependency chain, every cast), Deliveries & Reviews
+  (commit range, actor-reported and stage-run check exit codes and durations,
+  verdicts and findings) and Actor Records. The summary paints at once while
+  `status --json` and `records --json` load asynchronously on the studio's own
+  machine; `o` streams a delivery report or check log, locally or through
+  `backlot report show` remotely.
+- `backlot report show --studio <s> --file <relpath>` streams a studio-relative
+  file under `reports/`, `checks/`, `attention/` or `requirements/` to stdout
+  — `..`, absolute paths and symlinks that leave the studio are rejected, and
+  the stream is capped at 1 MiB.
+- **The dock's keys.** `Enter` focuses a live terminal (a closed person shows
+  `closed — press o to reopen`), `o` reopens a resumable person, `p` peeks,
+  `y`/`d` answer a user-owned prompt, `+`/`-` set a task's priority, `r`/`f`
+  run the stage-start and studio-finish actions, `c` collapses, `q` closes,
+  `?` opens help, and `m` is reserved for the S3 context menu.
+- The `Ctrl+B ?` help gains a `studio dock (open)` group; dialogs (the sheet,
+  the New Studio dialog, help) share one geometry and center inside the pane
+  surface, so no dialog ever crosses an open dock's border.
+
 - **The native New Studio dialog.** Every studio-mode new-studio entry —
   `Ctrl+B N` over a studio, `n` on the opening page or in the Call Sheet, the
   `+ new studio` frame (a click now opens it), and the sidebar's

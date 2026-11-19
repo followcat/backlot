@@ -260,21 +260,13 @@ impl App {
         });
     }
 
-    /// The surface rectangle the popup resolves against: the pane surface
-    /// (right of the sidebar, under the tab bar) — the reference's
-    /// `layout.pane_surface` in `composition.rs`.
+    /// The surface rectangle the popup resolves against: the pane
+    /// surface through `chrome_layout` — a beside dock's columns are
+    /// already out of it, so no popup frame ever crosses the dock's
+    /// border (A6.2). With no dock open this is exactly the
+    /// reference's `layout.pane_surface` in `composition.rs`.
     pub(super) fn frame_area(&self) -> Rect {
-        self.shell
-            .layout_config()
-            .layout(
-                self.area.0,
-                self.area.1,
-                self.shell_state.sidebar_collapsed,
-                super::pane_geometry::focused_tab_count(self),
-                self.sidebar_width,
-                self.studio.lot.pill || self.studio.lot.header.is_some(),
-            )
-            .pane_surface
+        self.chrome_layout(self.area.0, self.area.1).pane_surface
     }
 
     /// Close the popup: detach and kill the owned terminal — the

@@ -348,10 +348,12 @@ fn row_text_bg(hot: bool, p: &Palette) -> ratatui::style::Color {
 }
 
 /// The dialog's draw: dimmed backdrop is applied by the caller, the
-/// frame is the overlay's own, then the step's body.
-pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette) -> NsHits {
+/// frame is the overlay's own inside `band` (the modal band — the
+/// whole frame minus a beside dock, so the dialog never crosses it),
+/// then the step's body.
+pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> NsHits {
     let mut hits = NsHits::default();
-    let Some(outer) = frame(b.area) else {
+    let Some(outer) = frame(band) else {
         // Too small to draw the frame — nothing but a one-line cry.
         put_text(
             b,

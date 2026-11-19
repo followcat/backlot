@@ -26,6 +26,7 @@ pub mod roles;
 pub mod state;
 pub mod steps;
 pub mod summary;
+mod summary_build;
 pub mod task_reduce;
 pub mod validate;
 pub mod wanted;

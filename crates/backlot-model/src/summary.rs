@@ -12,7 +12,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::event::{Priority, StudioMode};
-use crate::state::{RoleLifecycle, StudioState, TaskStatus, actor_task};
+use crate::state::{StudioState, TaskStatus};
+use crate::summary_build::*;
+
+pub use crate::summary_build::role_name;
 
 // Hollywood's section types live beside this file; the
 // `summary::` path keeps them all.
@@ -20,6 +23,7 @@ pub use crate::hollywood_summary::{
     CardSummary, HEADLINE_CHARS, HollywoodSummary, MAX_OPEN_CARDS, hollywood_section,
 };
 
+/// The `schema` value this generation writes.
 /// The `schema` value this generation writes.
 pub const SUMMARY_SCHEMA: &str = "backlot/1";
 
@@ -34,9 +38,13 @@ pub enum Work {
 }
 
 /// Most studios shown; older finished ones drop off first.
+/// Most studios shown; older finished ones drop off first.
 pub const MAX_STUDIOS: usize = 12;
 /// Per-string cap so nothing can bloat the document.
+/// Per-string cap so nothing can bloat the document.
 const CAP: usize = 96;
+/// Serialized size the builder aims for (the design target is 64 KiB;
+/// the store's hard limit is 1 MiB).
 /// Serialized size the builder aims for (the design target is 64 KiB;
 /// the store's hard limit is 1 MiB).
 const TARGET_BYTES: usize = 60_000;
@@ -79,8 +87,48 @@ pub struct StudioSummary {
     /// Every task the ledger recorded.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub tasks_total: u32,
+    /// The compact per-task projection the dock's task rows and the
+    /// task sheet read (S2) — enough to draw every task state without
+    /// a records call. Documents an older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<TaskSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
+}
+
+/// One task's dock projection — the row the panel draws even when no
+/// live actor carries it (A4.2). No event payloads, no file text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub id: String,
+    pub title: String,
+    pub status: TaskStatus,
+    pub priority: Priority,
+    /// The requirement version the task was dispatched under (pin).
+    pub requirement_version: u32,
+    /// Unfinished and pinned behind the studio's current version.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub behind: bool,
+    pub rework_rounds: u32,
+    pub rework_cap: u32,
+    /// The current cast's role key (`actor-t1-c1`) and its candidate
+    /// display name — `None` while the task is uncast.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_name: Option<String>,
+    /// Dependencies not yet terminal — what the `dep` row names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waits_for: Vec<String>,
+    /// The latest delivery number and its actor-reported checks as
+    /// `name:pass|fail` — the drawer's `d1 units:pass`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_delivery: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checks: Option<String>,
+    /// The latest review's verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_verdict: Option<crate::event::Verdict>,
 }
 
 /// One recorded role: live, lost or closed. Closed roles stay listed
@@ -187,210 +235,6 @@ fn is_zero(n: &u32) -> bool {
     *n == 0
 }
 
-/// A studio is finished when every task it knows is terminal and no
-/// recorded role is still live.
-fn finished(state: &StudioState) -> bool {
-    !state.tasks.is_empty()
-        && state.tasks.values().all(|t| t.status.is_terminal())
-        && state
-            .roles
-            .values()
-            .all(|r| r.lifecycle() != RoleLifecycle::Live)
-}
-
-/// Role keys in panel order: the fixed roles first, then the actors —
-/// open people (live or lost) before closed, each group sorted by
-/// the task's priority high-first and then by role key. Every
-/// recorded role is listed — a closed person stays while the studio
-/// is live (R19), so there is no count cap.
-fn role_keys(state: &StudioState) -> Vec<&str> {
-    const FIXED: [&str; 3] = ["producer", "director", "writer"];
-    let mut actors: Vec<&str> = state
-        .roles
-        .keys()
-        .map(String::as_str)
-        .filter(|k| !FIXED.contains(k))
-        .collect();
-    actors.sort_by(|a, b| {
-        let closed = |k: &str| state.roles[k].lifecycle() == RoleLifecycle::Closed;
-        closed(a)
-            .cmp(&closed(b))
-            .then(role_priority(state, b).cmp(&role_priority(state, a)))
-            .then(a.cmp(b))
-    });
-    FIXED
-        .into_iter()
-        .filter(|k| state.roles.contains_key(*k))
-        .chain(actors)
-        .collect()
-}
-
-/// An actor's task priority for ordering — `normal` when the key
-/// names no task.
-fn role_priority(state: &StudioState, role: &str) -> Priority {
-    actor_task(role)
-        .and_then(|t| state.tasks.get(t))
-        .map(|t| t.priority)
-        .unwrap_or_default()
-}
-
-/// The candidate name for `actor-<task>-c<n>` keys, else the key.
-/// Public: the stage names a role terminal's `herdr.tab` by it.
-pub fn role_name(state: &StudioState, role: &str) -> String {
-    let base = || cap(role);
-    let Some(rest) = role.strip_prefix("actor-") else {
-        return base();
-    };
-    let Some((task, n)) = rest.rsplit_once("-c") else {
-        return base();
-    };
-    let Ok(n) = n.parse::<usize>() else {
-        return base();
-    };
-    state
-        .tasks
-        .get(task)
-        .and_then(|t| t.casts.get(n.saturating_sub(1)))
-        .map(|c| cap(&c.candidate))
-        .unwrap_or_else(base)
-}
-
-/// The first open attention on this role, if any. A `permission
-/// prompt` the director may not answer — a flagged `BACKLOT_*`
-/// screen, or any prompt on a role that is not an actor — is marked
-/// as the user's (S9b).
-fn role_attention(state: &StudioState, role: &str) -> Option<String> {
-    state.open_attention().find(|a| a.role == role).map(|a| {
-        if a.reason == crate::event::PERMISSION_PROMPT
-            && (a.needs_user || crate::state::actor_task(&a.role).is_none())
-        {
-            cap(&format!("{} — needs the user", a.reason))
-        } else {
-            cap(&a.reason)
-        }
-    })
-}
-
-/// The open attention's display detail (S1): the
-/// `"; [needs the user; ]screen saved to attention/<seq>.txt"` tail
-/// trimmed, then the usual cap. A raise that carried no tool line at
-/// all — a prompt nothing bound to — reads `unbound prompt — peek
-/// screen`.
-fn attention_detail(a: &crate::state::Attention) -> String {
-    let tail = format!("screen saved to attention/{}.txt", a.seq);
-    let body = a
-        .detail
-        .rsplit_once(tail.as_str())
-        .map(|(head, _)| head)
-        .unwrap_or(a.detail.as_str());
-    let body = trim_tail(body);
-    let body = body.strip_suffix("needs the user").map_or(body, trim_tail);
-    if body.is_empty() {
-        "unbound prompt — peek screen".to_string()
-    } else {
-        cap(body)
-    }
-}
-
-/// `"; "`, `" — "` and whitespace off a detail's right edge.
-fn trim_tail(s: &str) -> &str {
-    s.trim_end_matches(|c: char| c == ';' || c.is_whitespace() || c == '—')
-}
-
-/// The role's open attention is the user's to answer — the same rule
-/// the `needs the user` marker follows, as a flag clients can count
-/// without re-reading the text (the lot pill's urgent count).
-fn role_attention_user(state: &StudioState, role: &str) -> bool {
-    state.open_attention().any(|a| {
-        a.role == role
-            && a.reason == crate::event::PERMISSION_PROMPT
-            && (a.needs_user || crate::state::actor_task(&a.role).is_none())
-    })
-}
-
-/// One role's summary. `live` maps a terminal address to what the
-/// program there reports doing; `work` the watch pass's per-role
-/// screen classification and `failed` a role's StopFailure error,
-/// both keyed `(studio, role)`.
-fn role_summary(
-    studio: &str,
-    state: &StudioState,
-    role: &str,
-    live: &BTreeMap<String, String>,
-    work: &BTreeMap<(String, String), Work>,
-    failed: &BTreeMap<(String, String), String>,
-) -> Option<RoleSummary> {
-    let r = state.roles.get(role)?;
-    let lifecycle = r.lifecycle();
-    let terminal = r.terminal.clone();
-    // `doing`: what a live terminal reports; actors fall back to their
-    // task. Lost and closed roles have none.
-    let doing = match lifecycle {
-        RoleLifecycle::Live => terminal
-            .as_ref()
-            .and_then(|t| live.get(t))
-            .map(|d| cap(d))
-            .or_else(|| {
-                actor_task(role).map(|t| {
-                    if state
-                        .tasks
-                        .get(t)
-                        .is_some_and(|task| task.is_behind(state.requirement_version))
-                    {
-                        format!("task {} · behind v{}", cap(t), state.requirement_version)
-                    } else {
-                        format!("task {}", cap(t))
-                    }
-                })
-            }),
-        _ => None,
-    };
-    // Work is a live screen's read — a stale sample for a role that
-    // stopped being live is dropped here, never shown.
-    let work = (lifecycle == RoleLifecycle::Live)
-        .then(|| work.get(&(studio.to_string(), role.to_string())))
-        .flatten()
-        .copied();
-    // Like `work`: a live read only, dropped for a lost or closed role.
-    let failed = (lifecycle == RoleLifecycle::Live)
-        .then(|| failed.get(&(studio.to_string(), role.to_string())))
-        .flatten()
-        .map(|e| cap(e));
-    let task = actor_task(role).map(String::from);
-    let priority = task
-        .as_deref()
-        .and_then(|t| state.tasks.get(t))
-        .map(|t| t.priority);
-    let actor = r.actor.as_ref();
-    let open = state.open_attention().find(|a| a.role == role);
-    Some(RoleSummary {
-        role: cap(role),
-        name: role_name(state, role),
-        terminal: terminal.map(|t| cap(&t)),
-        runner: actor.map(|a| cap(&a.runner)),
-        model: actor.map(|a| cap(&a.model)),
-        effort: actor.and_then(|a| a.effort.clone().filter(|e| !e.is_empty()).map(|e| cap(&e))),
-        state: match lifecycle {
-            RoleLifecycle::Live => "live",
-            RoleLifecycle::Lost => "lost",
-            RoleLifecycle::Closed => "closed",
-        }
-        .into(),
-        doing,
-        work,
-        failed,
-        workdir: None,
-        task: task.map(|t| cap(&t)),
-        priority,
-        resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
-        since_ms: r.since_ms,
-        attention: role_attention(state, role),
-        attention_user: role_attention_user(state, role),
-        attention_seq: open.map(|a| a.seq),
-        attention_detail: open.map(attention_detail),
-    })
-}
-
 /// Build the document body from every studio's reduced state.
 ///
 /// `studios` comes most-recently-changed first (the stage orders by
@@ -433,6 +277,7 @@ pub fn summary(
                     ready_to_finish: false,
                     tasks_done: 0,
                     tasks_total: 0,
+                    tasks: Vec::new(),
                     roles: Vec::new(),
                 });
             }
@@ -524,6 +369,11 @@ pub fn summary(
                 })
                 .count() as u32,
             tasks_total: state.tasks.len() as u32,
+            tasks: state
+                .tasks
+                .values()
+                .map(|t| task_summary(state, t))
+                .collect(),
             roles,
         };
         if done {

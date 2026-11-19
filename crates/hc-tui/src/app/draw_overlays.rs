@@ -98,9 +98,9 @@ pub(super) fn render_overlays_and_cursor(
         0
     };
     app.panel_hits = if app.panel.open() {
-        overlay_painted |= app.panel_fullscreen();
+        overlay_painted |= app.panel_fullscreen_at(area.width);
         let rect = if app.panel_beside(area.width) {
-            let width = app.panel_width();
+            let width = app.panel_width(area.width);
             Rect::new(
                 area.x + area.width - width,
                 area.y + bar_h,
@@ -108,7 +108,9 @@ pub(super) fn render_overlays_and_cursor(
                 area.height.saturating_sub(bar_h),
             )
         } else {
-            area
+            // An overlay dock lives inside the pane surface: the
+            // sidebar stays visible and, on mobile, the header row.
+            app.panel_overlay_rect(layout.pane_surface, area.width)
         };
         let machines = app.panel_summaries();
         let hits = crate::panel::render(
@@ -116,6 +118,7 @@ pub(super) fn render_overlays_and_cursor(
             rect,
             &machines,
             |machine| crate::panel::stage_running(&app.view, machine),
+            |machine| app.machine_reachable(machine),
             &app.panel,
             app.studio.current.as_ref(),
             Some(crate::project::LOCAL_LABEL),
@@ -126,6 +129,7 @@ pub(super) fn render_overlays_and_cursor(
                     key.label(&crate::config::format_prefix_combos(&app.live.prefix))
                 )
             }),
+            !app.panel_beside(area.width),
             &app.shell.palette,
         );
         if hits.working_drawn {
@@ -159,10 +163,11 @@ pub(super) fn render_overlays_and_cursor(
         let hollywood_area = if app.hollywood.expanded() {
             area
         } else {
-            let panel_cols = if app.panel_fullscreen() {
-                area.width
+            let panel_cols = if app.panel_fullscreen_at(area.width) {
+                app.panel_overlay_rect(layout.pane_surface, area.width)
+                    .width
             } else {
-                app.panel_width()
+                app.panel_width(area.width)
             };
             Rect {
                 width: area.width.saturating_sub(panel_cols),
@@ -307,7 +312,7 @@ pub(super) fn render_overlays_and_cursor(
     overlay_painted |= crate::app::notices::render(app, buf, area);
     // The restore would repaint the bar over a full-screen panel —
     // skipped then; beside the panes the bar is never covered anyway.
-    if !app.panel_fullscreen()
+    if !app.panel_fullscreen_at(area.width)
         && let Some(bar) = mode_bar
     {
         for (offset, cell) in mode_bar_cells.into_iter().enumerate() {
@@ -442,7 +447,7 @@ pub(super) fn render_overlays_and_cursor(
             cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
             cell.set_style(cell.style().add_modifier(Modifier::DIM));
         }
-        crate::new_studio::render(buf, d, &app.shell.palette)
+        crate::new_studio::render(buf, d, &app.shell.palette, app.modal_band(area))
     } else {
         crate::new_studio::NsHits::default()
     };
@@ -454,6 +459,30 @@ pub(super) fn render_overlays_and_cursor(
             blinking: true,
         };
     }
+    // The Task & Delivery Sheet dims like the other modals and
+    // centres in `modal_band()` — never crossing a beside dock's
+    // border (A6.2); its keys are the sheet's own while open.
+    app.sheet_hits = if let Some(sheet) = app.sheet.as_ref() {
+        overlay_painted = true;
+        for cell in &mut buf.content {
+            cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
+            cell.set_style(cell.style().add_modifier(Modifier::DIM));
+        }
+        let machines = app.panel_summaries();
+        let summary = machines
+            .iter()
+            .flat_map(|m| m.summary.studios.iter())
+            .find(|s| s.id == sheet.studio.id);
+        crate::sheet::render(
+            buf,
+            app.modal_band(area),
+            sheet,
+            summary,
+            &app.shell.palette,
+        )
+    } else {
+        crate::sheet::SheetRender::default()
+    };
     // The context menu is the topmost shell overlay; the reference
     // suppresses the host cursor while it is open.
     if let Some(menu) = &app.menu {

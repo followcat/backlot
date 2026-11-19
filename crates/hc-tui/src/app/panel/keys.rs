@@ -2,12 +2,11 @@
 //! key ownership, Enter actions (focus, collapse, two-step reopen)
 //! and the injectable `priority`/`reopen` runner.
 
-use backlot_model::event::Priority;
 use backlot_model::summary::RoleSummary;
 
 use crate::app::input::TerminalKey;
+use crate::panel::Target;
 use crate::panel::data::StudioRef;
-use crate::panel::{PanelAction, Target};
 
 use super::App;
 
@@ -16,6 +15,18 @@ impl App {
     pub(crate) fn panel_key_press(&self, key: &TerminalKey) -> bool {
         let matched = crate::input::terminal_key_of(key);
         self.panel_key_combo
+            .is_some_and(|combo| crate::config::terminal_key_matches_combo(&matched, combo))
+    }
+
+    /// Whether this press is the chord's shifted tail — `prefix+Y`
+    /// closes the dock from anywhere while it is open (S2 §4).
+    pub(crate) fn panel_close_press(&self, key: &TerminalKey) -> bool {
+        if !self.panel.open() {
+            return false;
+        }
+        let matched = crate::input::terminal_key_of(key);
+        self.panel_key_combo
+            .map(|(code, mods)| (code, mods | crossterm::event::KeyModifiers::SHIFT))
             .is_some_and(|combo| crate::config::terminal_key_matches_combo(&matched, combo))
     }
 
@@ -71,18 +82,43 @@ impl App {
         use crossterm::event::{KeyCode, KeyModifiers};
         match code {
             KeyCode::Esc => {
-                self.panel.reopen_confirm = None;
-                // Full-screen owns the keyboard: Esc closes, it cannot
-                // leave keys leaking to a pane nobody sees.
+                self.panel.closed_hint = None;
+                self.panel.finish_confirm = None;
                 if self.panel_fullscreen() {
-                    self.panel_close();
+                    // An overlay dock backs out one step (S2 §1): the
+                    // expanded overlay drops to the 16-column strip
+                    // when that fits beside the panes, else closes.
+                    // The collapsed overlay closes outright.
+                    if self.panel.mode == crate::panel::PanelMode::Expanded
+                        && self.area.0 >= super::STRIP_BESIDE_COLS
+                    {
+                        self.panel.mode = crate::panel::PanelMode::Collapsed;
+                    } else {
+                        self.panel_close();
+                    }
                 } else {
+                    // Beside the panes: `esc back` — the dock keeps
+                    // its place and hands the keys to the terminal.
                     self.panel.focused = false;
                 }
             }
+            KeyCode::Char('q') if plain => self.panel_close(),
             KeyCode::Char('c') if plain => self.panel_flip_mode(),
             KeyCode::Char(' ') if plain => self.panel_collapse_selected(),
             KeyCode::Enter => self.panel_activate(),
+            KeyCode::Char('v') if plain => self.panel_sheet_open(),
+            KeyCode::Char('o') if plain => self.panel_reopen_selected(),
+            KeyCode::Char('p') if plain => self.panel_peek_selected(),
+            KeyCode::Char('?') if plain => self.help = true,
+            KeyCode::Char('r') if plain => self.panel_stage_start(),
+            KeyCode::Char('f') if plain => self.panel_finish_selected(),
+            KeyCode::Char(c @ ('y' | 'd')) if plain => self.panel_decide(c == 'y'),
+            KeyCode::Char('n') if plain => {
+                self.panel.finish_confirm = None;
+            }
+            KeyCode::Char('m') if plain => {
+                self.show_notice("Menus", "menus come later");
+            }
             KeyCode::Char('+') | KeyCode::Char('=')
                 if plain || modifiers == KeyModifiers::SHIFT =>
             {
@@ -100,19 +136,28 @@ impl App {
     /// Enter/left-click on the selected row: the title flips the mode,
     /// a block top border or strip line makes that studio current
     /// through the studio-nav path, a stacked block expands, an open
-    /// person focuses their terminal, and a closed person runs the
-    /// two-step reopen.
+    /// person focuses their terminal, a closed person shows the
+    /// `closed — press o to reopen` hint (S2 §4), a task row opens
+    /// its sheet and the `✓ <n> accepted` fold toggles.
     pub(super) fn panel_activate(&mut self) {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        // Activating any row drops an armed reopen — only a second
-        // Enter on the same closed person still finds it armed.
-        let confirm = self.panel.reopen_confirm.take();
+        // Activating any row drops the closed-role hint — only Enter
+        // itself may leave it up on its own row.
+        self.panel.closed_hint = None;
         match targets.get(index).cloned() {
             Some(Target::Studio(id) | Target::Strip(id)) => {
                 self.focus_studio(&id);
                 self.panel_leave();
+            }
+            Some(Target::Task(key, task)) => {
+                self.sheet_open(key, Some(task));
+            }
+            Some(Target::Fold(id)) => {
+                if !self.panel.accepted_folds.remove(&id) {
+                    self.panel.accepted_folds.insert(id);
+                }
             }
             Some(Target::Block(id)) => {
                 // A single-line block expands — the same manual
@@ -135,11 +180,8 @@ impl App {
                         .find(|r| r.role == role_name)
                         .map(|r| (s, r))
                 });
-                let armed = confirm
-                    .as_ref()
-                    .is_some_and(|(s, r)| s == &key && r == &role_name);
                 if let Some((studio, role)) = role.map(|(s, r)| (s, r.clone())) {
-                    self.panel_person_enter(studio, &role, armed);
+                    self.panel_person_enter(studio, &role);
                 }
             }
             _ => {}
@@ -148,9 +190,9 @@ impl App {
 
     /// Enter on a person: a live one focuses its terminal — a remote
     /// one lands through the same machine-qualified address the
-    /// sidebar uses; a closed one arms the row hint first and reopens
-    /// on the second armed press — or explains why it cannot.
-    fn panel_person_enter(&mut self, studio: StudioRef<'_>, role: &RoleSummary, armed: bool) {
+    /// sidebar uses; a closed one shows the `closed — press o to
+    /// reopen` hint — `o` does the reopen itself (S2 §4).
+    fn panel_person_enter(&mut self, studio: StudioRef<'_>, role: &RoleSummary) {
         if role.state == "closed" {
             if !role.resumable {
                 self.show_notice(
@@ -159,19 +201,7 @@ impl App {
                 );
                 return;
             }
-            if armed {
-                let argv = self.panel_argv(
-                    studio,
-                    &["reopen".into(), "--person".into(), role.role.clone()],
-                );
-                self.run_panel_action(PanelAction {
-                    label: format!("reopen {}", role.name),
-                    argv,
-                    machine: studio.machine.map(str::to_owned),
-                });
-            } else {
-                self.panel.reopen_confirm = Some((studio.key(), role.role.clone()));
-            }
+            self.panel.closed_hint = Some((studio.key(), role.role.clone()));
             return;
         }
         if role.state == "live"
@@ -179,104 +209,6 @@ impl App {
         {
             self.focus_pane(terminal);
             self.panel_leave();
-        }
-    }
-
-    /// `+`/`-` on a selected actor: raise/lower its task priority.
-    /// Clamped at the ends — no action is spawned there.
-    fn panel_priority(&mut self, delta: i32) {
-        let machines = self.panel_summaries();
-        let targets = self.panel_targets();
-        let index = self.panel_selected_index(&targets);
-        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
-            return;
-        };
-        let Some((studio, role)) = crate::panel::data::studio(&machines, &key).and_then(|s| {
-            s.studio
-                .roles
-                .iter()
-                .find(|r| r.role == role_name)
-                .map(|r| (s, r))
-        }) else {
-            return;
-        };
-        let (Some(task), Some(priority)) = (role.task.clone(), role.priority) else {
-            return; // only actors carry a task priority
-        };
-        let next = match (delta > 0, priority) {
-            (true, Priority::Low) => Some(Priority::Normal),
-            (true, Priority::Normal) => Some(Priority::High),
-            (false, Priority::High) => Some(Priority::Normal),
-            (false, Priority::Normal) => Some(Priority::Low),
-            _ => None,
-        };
-        let Some(next) = next else { return };
-        let argv = self.panel_argv(
-            studio,
-            &[
-                "priority".into(),
-                "--task".into(),
-                task,
-                "--level".into(),
-                next.to_string(),
-            ],
-        );
-        self.run_panel_action(PanelAction {
-            label: format!("priority {} {}", role.name, next),
-            argv,
-            machine: studio.machine.map(str::to_owned),
-        });
-    }
-
-    /// The argv tail for a panel command — the command word first
-    /// (`backlot` dispatches studio commands on argv[1]), then its
-    /// flags, then the common `--studio`/`--as` and, for a local
-    /// studio, the endpoint flags. A remote studio's tail carries no
-    /// endpoint flags: the terminal it runs in on that machine
-    /// reaches that machine's core through its own `HC_*` variables.
-    fn panel_argv(&self, studio: StudioRef<'_>, command: &[String]) -> Vec<String> {
-        let mut argv = command.to_vec();
-        argv.extend([
-            "--studio".into(),
-            studio.studio.id.clone(),
-            "--as".into(),
-            "user".into(),
-        ]);
-        if studio.machine.is_none() {
-            argv.extend(self.panel_endpoint_args.iter().cloned());
-        }
-        argv
-    }
-
-    /// Spawn the action off the event loop through the injected
-    /// runner; the result comes back on `panel_rx`. The opening
-    /// page's `s` runs `stage start` through the same path.
-    pub(crate) fn run_panel_action(&mut self, action: PanelAction) {
-        let future = match &action.machine {
-            None => (self.panel_runner)(action.argv.clone()),
-            Some(machine) => match &self.remote_runner {
-                Some(runner) => runner.run(machine.clone(), action.argv.clone()),
-                None => {
-                    self.show_notice(
-                        "Studio action failed",
-                        &format!("{}: cannot reach {machine}", action.label),
-                    );
-                    return;
-                }
-            },
-        };
-        let tx = self.panel_action_tx.clone();
-        let label = action.label;
-        tokio::spawn(async move {
-            let _ = tx.send((label, future.await)).await;
-        });
-    }
-
-    /// The action's result — a non-zero exit shows its first stderr
-    /// line (the runner extracted it).
-    pub(crate) fn on_panel_action(&mut self, (label, result): (String, Result<(), String>)) {
-        if let Err(error) = result {
-            self.show_notice("Studio action failed", &format!("{label}: {error}"));
         }
     }
 }

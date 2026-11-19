@@ -167,6 +167,7 @@ pub(crate) fn attention_count(studio: &StudioSummary) -> usize {
 }
 
 /// A studio's working count for the collapsed strip.
+#[cfg(test)]
 pub(crate) fn working_count(studio: &StudioSummary) -> usize {
     studio
         .roles

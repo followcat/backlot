@@ -6,6 +6,7 @@ mod draw;
 mod keys;
 mod merge;
 mod mouse;
+mod sheet;
 
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};
@@ -224,7 +225,7 @@ async fn a_closed_panel_reserves_nothing_at_any_width() {
         );
         let chrome = app.chrome_layout(cols, 24);
         assert_eq!(chrome.pane_surface, direct.pane_surface, "cols {cols}");
-        assert_eq!(app.panel_width(), 0);
+        assert_eq!(app.panel_width(cols), 0);
         assert!(!app.panel_beside(cols));
         assert!(!app.panel_fullscreen());
     }
@@ -234,13 +235,13 @@ async fn a_closed_panel_reserves_nothing_at_any_width() {
 async fn the_beside_panel_shaves_columns_off_the_panes() {
     let mut app = app_with_panel_doc();
     app.panel.mode = PanelMode::Expanded;
-    // 200 and 120 leave ≥60 for the panes past the mobile threshold.
+    // 200 and 120 leave ≥44 for the panes past the sidebar and dock.
     for cols in [200u16, 120] {
         app.area = (cols, 24);
         assert!(app.panel_beside(cols), "cols {cols}");
         let layout = app.chrome_layout(cols, 24);
         let direct = app.shell.layout_config().layout(
-            cols - app.panel_width(),
+            cols - app.panel_width(cols),
             24,
             app.shell_state.sidebar_collapsed,
             crate::app::pane_geometry::focused_tab_count(&app),
@@ -248,23 +249,28 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
             false,
         );
         assert_eq!(layout.pane_surface, direct.pane_surface, "cols {cols}");
-        let region = cols - app.panel_width();
+        let region = cols - app.panel_width(cols);
         assert_eq!(layout.pane_surface.width, region - app.sidebar_width);
         assert!(!app.panel_fullscreen());
     }
+    // The spec's dock-width tiers: 38 at 160+, 36 at 100+, 28 under.
+    assert_eq!(app.panel_width(160), 38);
+    assert_eq!(app.panel_width(120), 36);
+    assert_eq!(app.panel_width(80), 28);
     // A collapsed strip is 16 wide.
     app.panel.mode = PanelMode::Collapsed;
-    assert_eq!(app.panel_width(), 16);
+    assert_eq!(app.panel_width(120), 16);
     assert!(app.panel_beside(120));
 }
 
 #[tokio::test]
 async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
     let mut app = app_with_panel_doc();
-    // 80 − 16 = 64 and 96 − 36 = 60 dip under the 64-column mobile
+    // 80 − 16 = 64 and 76 − 4 − 28 = 44 dip under the 64-column mobile
     // threshold; the window itself is still desktop-width, so the
     // chrome must keep its desktop layout and sidebar.
-    for (cols, width) in [(80u16, PanelMode::Collapsed), (96, PanelMode::Expanded)] {
+    app.shell_state.sidebar_collapsed = true;
+    for (cols, width) in [(80u16, PanelMode::Collapsed), (76, PanelMode::Expanded)] {
         app.panel.mode = width;
         app.area = (cols, 24);
         assert!(app.panel_beside(cols), "cols {cols}");
@@ -273,10 +279,11 @@ async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
         assert!(layout.mobile_header.is_empty(), "cols {cols}: {layout:?}");
         assert_eq!(
             layout.pane_surface.x + layout.pane_surface.width,
-            cols - app.panel_width(),
+            cols - app.panel_width(cols),
             "the pane surface ends where the panel starts"
         );
     }
+    app.shell_state.sidebar_collapsed = false;
     // Closed calls `layout()` exactly as before — at 64 and under the
     // whole window is genuinely mobile.
     app.panel.mode = PanelMode::Closed;

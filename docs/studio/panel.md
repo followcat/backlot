@@ -32,60 +32,95 @@ tail still wins while the panel is closed or unfocused.
 |---|---|
 | `j`/`k`, `↑`/`↓` | Move the selection one row |
 | `PageUp`/`PageDown` | Move one viewport |
-| `Esc` | Leave focus; the panel stays open |
-| `c` | Switch collapsed and expanded |
-| `Space` | Collapse/expand the selected studio's block |
-| `Enter` | Open person: focus their terminal. Studio or a block's title: focus its producer (or remembered person). Closed person: arm `enter: reopen`, a second Enter runs `backlot reopen`. A non-resumable person says why. Collapsed-mode row: expand it. |
-| `+`/`=` | Raise the selected actor's task priority (`backlot priority`) |
+| `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: shows `closed — press o to reopen`. |
+| `Space` | Open or close the three-line drawer under a person or task; on a studio header it folds the whole block |
+| `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
+| `v` | Open the Task & Delivery Sheet for the selected studio or task |
+| `p` | Peek the person's terminal |
+| `y`/`d` | Answer a user-owned prompt; director-owned prompts carry the `dir` tag and no cue |
+| `+`/`=` | Raise the selected actor's or task's priority (`backlot priority … --as user`) |
 | `-`/`_` | Lower it |
+| `r`/`f` | Start the stage / finish the studio — the Call Sheet's own actions |
+| `c` | Switch collapsed and expanded |
+| `q` | Close the dock |
+| `?` | Open `Ctrl+B ?` help |
+| `m` | Reserved for the context menu (S3) — says `menus come later` |
+| `Esc` | Beside the panes: leave focus — the dock stays put and its borders mute. As an overlay: back one step — the expanded dock drops to the strip when it fits, else closes |
 
 All other keys are eaten while the panel owns focus, except the prefix, which still arms the
 toggle chord — and the four studio keys, which still switch studios and roles with the panel
 focused.
 
-## Full screen
+## Geometry and `Esc`
 
-When the window cannot fit a beside panel (under the mobile threshold, or fewer than 60
-columns left for the panes) an open panel covers the whole frame. In that shape:
+The expanded dock's width is fixed by the frame: 38 columns at 160+, 36 at 100+, 28 under.
+It sits **beside the panes** whenever the pane surface keeps at least 44 columns after the
+sidebar and dock; below that it **overlays** the pane surface, and under the mobile
+threshold it covers the pane surface entirely. The collapsed strip is always 16 columns
+and, being narrow, almost always sits beside the panes.
 
-- The panel owns the keyboard for as long as it is drawn — the `focused` latch does not
-  matter, since nobody can see the panes it covers.
-- `Esc` closes the panel. The toggle chord also closes it on the first press, even after a
-  resize from beside to full screen.
-- `Enter` on a live person or a studio focuses that terminal and closes the panel.
-- The panel's rect is reset cell by cell before painting, so nothing from the frame
-  underneath shows through its blank cells.
+- Beside: `Esc` unfocuses — the borders turn `surface1`; `Ctrl+B y` refocuses, `q`,
+  `Ctrl+B Y` or the `×` on the title row closes it.
+- Overlay: `Esc` steps back — the expanded dock drops to the strip when 16 columns fit
+  beside the panes, else closes; the footer reads `esc back`. An overlay dock's rect is
+  reset cell by cell before painting, so nothing underneath shows through.
+- `Enter` on a live person or studio focuses that terminal; over an overlay it also
+  closes the dock.
 
-Beside the panes nothing changes: `Esc` only leaves focus and the panel stays open; `Enter`
-on a live person or studio focuses the terminal and leaves the panel open unfocused.
+Dialogs — the sheet, the New Studio dialog, help — center inside the pane surface left of
+a beside dock (or dim the whole buffer when the dock overlays): no dialog ever crosses the
+dock's border.
 
 ## The blocks
 
-Expanded, the panel is a narrow column (`[dock] width`, default 36, clamped to 28–48) whose top
-line is `lot · <n>` — one **block per studio**, in document order, drawn as a rounded frame
-(`╭╮╰╯`). The selection is `selection_bg` with an accent `▌` in the first column; it lands only
-on actionable rows — titles, dividers, block bottoms and spacers are skipped — and borders are
-honest about focus: unfocused, every block edge is `surface1`.
+Expanded, the dock's top line is `lot · <n>` — one **block per studio**, in document order,
+drawn as a rounded frame (`╭╮╰╯`). The selection is `selection_bg` with an accent `▌` in the
+first column; it lands only on actionable rows — decorative lines and block bottoms are
+skipped — and borders are honest about focus: unfocused, every block edge is `surface1`.
 
-- The studio id sits in the top border; its open-attention count sits at the right end of that
-  border as `!<n>` in the blocked colour, only when above zero. The current studio's frame is the
-  accent colour, the others a muted surface colour.
-- Inside a block: the studio's `error` (blocked colour) and `next` (`→ deliver t1`) lines when
-  present, then one section per role group — producer, director, writer, actors — divided by
-  `├──┤` rules. Empty groups are skipped.
-- A person is one line: mark, name (with an actor's task and the priority flag), and the state
-  word right-aligned (`working`, `idle`, `blocked`, `lost`, `closed`). An open attention adds one
-  line `! <attention>` under the person. No model, no runner, no `doing` line, no group header
-  rows — those live in the sidebar's cast.
-- **Stacking:** when the blocks do not all fit the panel's height, every block but the current
-  one shows as a single line, `╶ <studio id>` followed by its mark counts (`⠿2 ○3 ×1`, each in
-  its mark's colour) and `!<n>`. When even that does not fit, the body scrolls as before. `Space`
-  on any row of a block collapses or expands that block by hand (client-local).
-- **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with their
-  configured labels (`alt ↑↓ studio  ←→ role`). Focused: the panel's own keys (`↑↓ move  ⏎ open
-  +/- priority  esc`). Dropped when the panel is under 8 rows tall.
-- The collapsed 16-column strip: one line per studio, its id cut to fit, the working count and
-  `!<n>`.
+- The studio id sits in the top border. The first row inside is the **header**: a health
+  glyph — `●` live, `◌` stage stopped, `×` offline or a ledger error, `✓` finished — then
+  `r<version> · <done>/<total>` and `!<waiting>` in the blocked colour when above zero.
+  The current studio's frame is the accent colour, the others a muted surface colour.
+- The **owed-step** line under it says where the next step is owed in role names —
+  `→ deliver t1 · actor-a` — never a raw `actor-t1-c1` ledger key; the stage-down and
+  machine-offline forms say so instead.
+- A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
+  a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
+  prompt, and the state word right-aligned. A user-owned prompt adds a cue line
+  `! <attention>  [y/d/p]`; a director-owned one gets no cue.
+- **Task rows** list work no live actor carries — uncast, dependency-gated (`waits t0`),
+  paused (`=`), blocked or at rework cap, and accepted (`✓`) — each as `· <task> <title>`.
+  Six or more accepted tasks fold into `✓ <n> accepted` and unfold with `Space` on the
+  studio header.
+- **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
+  priority, the `o`/`v` actions, and `esc`/`space` to close.
+- **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
+  their configured labels (`alt ↑↓ studio  ←→ role`). Focused: the panel's own keys
+  (`↑↓ move  m menu  ? keys  esc` — `esc back` over an overlay). Dropped under 8 rows.
+- The collapsed **strip** shows each studio as `● <id·machine>` with its `<done>/<total>`
+  or `!<n>` — health first, then attention — and one row per active or blocked role,
+  `<mark> <name> <task>`; it is never blank while work is alive.
+
+## The Task & Delivery Sheet
+
+`v` opens the sheet on the selected studio — the selected task row's task, a person's own
+task, or the studio's overview. It is a centered modal — 92×28 at 160+, 86×28 at 100+,
+76×20 at 80, 58×20 at 60, 38×20 at 40 — with three tabs (`Tab` cycles, `1`–`3` jump):
+
+1. **Overview & Casts** — the task's title, status, acceptance criteria and dependency
+   chain, then every cast entry.
+2. **Deliveries & Reviews** — every delivery with its commit range, the actor-reported and
+   the stage-run checks with exit codes and durations, and every review with verdict,
+   conclusion and findings.
+3. **Actor Records** — the `records --json` read for the studio.
+
+The summary projection paints at once; `status --json` and `records --json` fill in behind
+it, fetched off the event loop on the studio's own machine — locally through
+`std::env::current_exe()`, remotely through `RemoteRunner`. A reply for a sheet already
+closed or reopened is dropped. `o` on a delivery or check line streams its file through
+`backlot report show` — a local file for a local studio, the same command remotely — and
+`Esc` backs out of the report first. A click outside the frame closes the sheet.
 
 ## The cast
 
@@ -155,8 +190,9 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   with a `chrome/status.rs` colour; an unknown `work` reads as waiting.
 - Working marks spin about every 120 ms through a one-shot deadline that arms only while a
   working mark is actually drawn; an idle or closed panel wakes nothing.
-- Beside the panes only when past the mobile threshold with at least 60 columns left for them;
-  otherwise the open panel covers the frame and the pane geometry keeps the closed shape.
+- Beside the panes only while the pane surface keeps at least 44 columns after the sidebar
+  and dock; otherwise the open dock overlays the pane surface and the pane geometry keeps
+  the closed shape.
 - The document is the local `backlot` summary, schema `backlot/1`. A missing, malformed or
   foreign-schema document reads as `no studios`, never an error. Without a live `backlot-stage`
   terminal the panel shows `stage not running` and keeps the last document.
