@@ -182,7 +182,12 @@ the projection; the reference controls which headings are visible.
 
 Selection follows stable identities across inventory reordering. Navigation
 highlight and committed focus are distinct, as in herdr. Lists reveal the
-selected row using the reference scrolling rules.
+selected row using the reference scrolling rules. The agents list additionally
+scrolls to the focused agent's row whenever the focused pane changes — by a
+tab or workspace switch, a click, a key or a core-driven focus — and stays
+where the user scrolled it until the next focus change. The studio cast
+sidebar follows the focus the same way when a person, shell or `others` agent
+takes it.
 
 Sidebar widths, collapse behavior, mobile header, tab bar, pane gutters and
 borders use the reference configuration and geometry. Narrow terminals do

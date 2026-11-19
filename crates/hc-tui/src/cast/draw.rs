@@ -39,6 +39,7 @@ pub(crate) fn render_cast(
     view: &CastView<'_>,
     config: &ClientShellConfig,
     cast_scroll: &mut usize,
+    reveal_focused_agent: &mut bool,
     hits: &mut ShellHitMap,
 ) {
     let palette = &config.palette;
@@ -120,6 +121,18 @@ pub(crate) fn render_cast(
     let heights: Vec<u16> = rows.iter().map(|row| row.lines()).collect();
     // The cast packs its entries: two lines per person, no gap.
     let gaps = vec![0u16; rows.len().saturating_sub(1)];
+    let target = std::mem::take(reveal_focused_agent)
+        .then(|| rows.iter().position(|row| row.focused()))
+        .flatten();
+    if let Some(target) = target {
+        *cast_scroll = crate::chrome::scroll::list_scroll_start_to_reveal(
+            &heights,
+            &gaps,
+            body.height,
+            *cast_scroll,
+            target,
+        );
+    }
     let metrics = list_scroll_metrics(&heights, &gaps, body.height, *cast_scroll);
     hits.agent_max_scroll = metrics.max_offset_from_bottom;
     hits.agent_scroll_metrics = Some(metrics);
@@ -142,14 +155,14 @@ pub(crate) fn render_cast(
                 }
                 draw_person(buffer, rect, role, *focused, view, palette);
             }
-            CastRow::Shells => draw_shells_header(buffer, rect, palette),
+            CastRow::Shells => super::simple::draw_shells_header(buffer, rect, palette),
             CastRow::Shell { shell, focused } => {
                 hits.agents.push((rect, shell.terminal.clone()));
                 draw_shell(buffer, rect, shell, *focused, view, palette);
             }
             CastRow::Others { count, expanded } => {
                 hits.cast_others = rect;
-                draw_others(buffer, rect, *count, *expanded, palette);
+                super::simple::draw_others(buffer, rect, *count, *expanded, palette);
             }
             CastRow::Agent(agent) => {
                 hits.agents.push((rect, agent.pane_id.clone()));
@@ -291,21 +304,6 @@ fn draw_person(
     }
 }
 
-/// The `shells` group header — a dim label line between the people
-/// and their shells.
-fn draw_shells_header(buffer: &mut Buffer, rect: Rect, palette: &Palette) {
-    put_text(
-        buffer,
-        rect.x,
-        rect.y,
-        rect.width,
-        " shells",
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
-}
-
 /// A shell's two rows, laid out like a person's: a dim `$` (or the
 /// agent's status mark) and `shell <n>` over the terminal's title,
 /// the program right-aligned on row one and the working directory's
@@ -389,20 +387,4 @@ fn draw_shell(
             Style::default().fg(palette.overlay0),
         );
     }
-}
-
-/// The `others` row: ` others <n> ▸` collapsed, `▾` expanded — the
-/// in-place expansion of herdr's own agent rows.
-fn draw_others(buffer: &mut Buffer, rect: Rect, count: usize, expanded: bool, palette: &Palette) {
-    let arrow = if expanded { "▾" } else { "▸" };
-    put_text(
-        buffer,
-        rect.x,
-        rect.y,
-        rect.width,
-        &format!(" others {count} {arrow}"),
-        Style::default()
-            .fg(palette.overlay0)
-            .add_modifier(Modifier::BOLD),
-    );
 }

@@ -16,6 +16,9 @@ pub(crate) struct ShellState {
     pub tab_scroll: usize,
     pub reveal_focused_workspace: bool,
     pub reveal_focused_tab: bool,
+    /// A frame should scroll the agents list to the focused agent row —
+    /// armed by a focus change, consumed by whichever agents list draws.
+    pub reveal_focused_agent: bool,
     pub sidebar_collapsed: bool,
     /// Expanded sidebar's spaces:agents split, `0.0..=1.0`.
     pub sidebar_section_split: f32,

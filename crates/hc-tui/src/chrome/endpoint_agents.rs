@@ -64,12 +64,17 @@ pub(crate) fn render_expanded(
     active_endpoint_id: &ClientEndpointId,
     config: &super::ClientShellConfig,
     agent_scroll: &mut usize,
+    reveal_focused_agent: &mut bool,
     hits: &mut ShellHitMap,
 ) {
     if !super::agents::render_agent_panel_header(buffer, area, agent_view_label, config, hits) {
         return;
     }
     let rows = agent_rows(endpoints, active_endpoint_id, config);
+    let reveal = std::mem::take(reveal_focused_agent);
+    let target = reveal
+        .then(|| rows.iter().position(|row| row.agent.focused))
+        .flatten();
     super::agents::render_agent_list(
         buffer,
         area,
@@ -78,6 +83,7 @@ pub(crate) fn render_expanded(
         config,
         agent_scroll,
         hits,
+        target,
         |row| row.agent.rows.len(),
         |buffer, rect, row, hits| {
             super::agents::render_agent_row(buffer, rect, &row.agent, config);

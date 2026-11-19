@@ -6,7 +6,15 @@ All notable changes to backlot are documented here. The format follows
 
 backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
-v0.1.14), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
+v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
+
+## Unreleased
+
+### Changed
+
+- Synced with hc-tui v0.1.16: the agents list follows the focused pane, so a
+  tab, workspace or core-driven focus change scrolls the focused agent row
+  into view (hc-tui #53).
 
 ## 0.2.4 — 2026-11-19
 
