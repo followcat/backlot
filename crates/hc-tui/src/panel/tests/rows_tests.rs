@@ -2,7 +2,8 @@
 //! stacking when the blocks stop fitting, manual overrides and the
 //! collapsed strip.
 use super::*;
-use crate::panel::rows::{Target, mark_counts, rows};
+use crate::panel::rows::{Target, rows};
+use crate::panel::rows_fit::mark_counts;
 use crate::panel::{Panel, PanelMode};
 use crate::studio::StudioKey;
 use crate::studio::glyphs::Person;

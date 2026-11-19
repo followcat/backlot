@@ -8,6 +8,7 @@
 
 mod draw;
 mod lines;
+mod lines_ledger;
 
 pub(crate) use draw::{SheetRender, render};
 pub(crate) use lines::lines_for;

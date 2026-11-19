@@ -4,14 +4,13 @@
 //! stacked block's `╶ id …` line — so the scroll math stays in
 //! one-line steps.
 
-use backlot_model::state::TaskStatus;
-use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
+use backlot_model::summary::{RoleSummary, TaskSummary};
 
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
+use super::rows_fit::*;
 use super::{Panel, PanelMode};
 use crate::studio::StudioKey;
-use crate::studio::glyphs::Person;
 
 /// A selected/clicked row's stable identity. Rows rebuild per frame,
 /// so anything the user can act on is named by machine plus document
@@ -187,229 +186,6 @@ impl Row<'_> {
     }
 }
 
-/// The order a stacked block's mark counts follow — the urgents
-/// first, then the working and quiet states.
-const MARK_ORDER: [Person; 10] = [
-    Person::UserPrompt,
-    Person::DirPrompt,
-    Person::Stalled,
-    Person::Failed,
-    Person::Lost,
-    Person::Working,
-    Person::Slot,
-    Person::Idle,
-    Person::Resumable,
-    Person::Closed,
-];
-
-/// A stacked block's mark counts — `(mark, n)` for each nonzero mark
-/// in `MARK_ORDER`.
-pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Person, usize)> {
-    MARK_ORDER
-        .into_iter()
-        .filter_map(|mark| {
-            let n = studio
-                .roles
-                .iter()
-                .filter(|role| Person::of(role) == mark)
-                .count();
-            (n > 0).then_some((mark, n))
-        })
-        .collect()
-}
-
-/// The health one studio's rows share — the block header's glyph
-/// and the strip line's mark compute it the same way.
-pub(crate) fn health_of(
-    studio: &StudioSummary,
-    stage: bool,
-    reachable: bool,
-) -> crate::studio::glyphs::Health {
-    use crate::studio::glyphs::Health;
-    if !reachable || studio.error.is_some() {
-        Health::Offline
-    } else if !stage {
-        Health::StageDown
-    } else if studio.ready_to_finish || studio.state == "finished" {
-        Health::Ready
-    } else {
-        Health::Live
-    }
-}
-
-/// The studio's non-closed roles in display order: `producer`,
-/// `director`, `writer` first when present, then the actors in the
-/// summary's order. Closed roles come after (S2 §2).
-pub(crate) fn live_roles(studio: &StudioSummary) -> Vec<&RoleSummary> {
-    let mut out: Vec<&RoleSummary> = Vec::new();
-    for fixed in ["producer", "director", "writer"] {
-        out.extend(
-            studio
-                .roles
-                .iter()
-                .filter(|r| r.role == fixed && r.state != "closed"),
-        );
-    }
-    out.extend(studio.roles.iter().filter(|r| {
-        r.state != "closed" && !matches!(r.role.as_str(), "producer" | "director" | "writer")
-    }));
-    out
-}
-
-/// The studio's closed roles — under the task rows (S2 §2).
-fn closed_roles(studio: &StudioSummary) -> impl Iterator<Item = &RoleSummary> {
-    studio.roles.iter().filter(|r| r.state == "closed")
-}
-
-/// Whether a live (non-closed) role's row already represents `task`.
-fn represented(studio: &StudioSummary, task: &TaskSummary) -> bool {
-    studio
-        .roles
-        .iter()
-        .any(|r| r.state != "closed" && (r.task.as_deref() == Some(task.id.as_str())))
-}
-
-/// The dock's task rows: tasks with no live actor row, minus the
-/// terminal states that never draw (`abandoned`, `taken_over`) and,
-/// while the accepted fold is shut, `accepted`/`partially_accepted`.
-/// Ledger order is the summary's order.
-fn task_rows(studio: &StudioSummary, accepted_open: bool) -> impl Iterator<Item = &TaskSummary> {
-    let accepted = studio
-        .tasks
-        .iter()
-        .filter(|t| {
-            matches!(
-                t.status,
-                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
-            )
-        })
-        .count();
-    let fold = accepted >= 6 && !accepted_open;
-    studio.tasks.iter().filter(move |t| {
-        if matches!(t.status, TaskStatus::Abandoned | TaskStatus::TakenOver)
-            || represented(studio, t)
-        {
-            return false;
-        }
-        if fold
-            && matches!(
-                t.status,
-                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
-            )
-        {
-            return false;
-        }
-        true
-    })
-}
-
-/// The number of accepted tasks behind the fold — the `✓ <n>`
-/// line's count; `0` means no fold line at all.
-fn fold_count(studio: &StudioSummary) -> usize {
-    studio
-        .tasks
-        .iter()
-        .filter(|t| {
-            matches!(
-                t.status,
-                TaskStatus::Accepted | TaskStatus::PartiallyAccepted
-            )
-        })
-        .filter(|t| !represented(studio, t))
-        .count()
-}
-
-/// A person's line count: itself plus its cue/failed line, the
-/// closed hint and an open drawer.
-fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
-    let mut height = 1 + usize::from(role.attention.is_some() || role.failed.is_some());
-    height += usize::from(
-        panel
-            .closed_hint
-            .as_ref()
-            .is_some_and(|(s, r)| s == &studio.key() && r == &role.role),
-    );
-    height += usize::from(
-        panel
-            .drawer
-            .as_ref()
-            .is_some_and(|d| *d == Target::Person(studio.key(), role.role.clone())),
-    ) * 3;
-    height
-}
-
-/// The task section's line count: task rows plus the fold line and
-/// any open drawer under a task row.
-fn tasks_height(studio: StudioRef<'_>, panel: &Panel, accepted_open: bool) -> usize {
-    let mut height = task_rows(studio.studio, accepted_open)
-        .map(|t| {
-            1 + usize::from(
-                panel
-                    .drawer
-                    .as_ref()
-                    .is_some_and(|d| *d == Target::Task(studio.key(), t.id.clone())),
-            ) * 3
-        })
-        .sum::<usize>();
-    height += usize::from(fold_count(studio.studio) >= 6);
-    height
-}
-
-/// An expanded block's height: top + bottom borders, the owed-step
-/// line when present, the armed finish confirm, each person's
-/// lines, the task section and the closed section.
-fn block_height(studio: StudioRef<'_>, panel: &Panel, owed: bool, accepted_open: bool) -> usize {
-    let mut height =
-        2 + usize::from(owed) + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
-    for role in live_roles(studio.studio) {
-        height += person_height(studio, role, panel);
-    }
-    height += tasks_height(studio, panel, accepted_open);
-    for role in closed_roles(studio.studio) {
-        height += person_height(studio, role, panel);
-    }
-    height
-}
-
-/// Which studios draw an expanded block: all of them while every
-/// expanded block fits the body; past that, the current studio and any
-/// block `Space` opened by hand — `collapsed_blocks` wins either way.
-fn expanded_set(
-    studios: &[StudioRef<'_>],
-    panel: &Panel,
-    current: Option<&StudioKey>,
-    body_height: u16,
-    ctx: &dyn Fn(StudioRef<'_>) -> bool,
-) -> std::collections::BTreeSet<StudioKey> {
-    let fits = body_height == 0
-        || studios
-            .iter()
-            .map(|studio| {
-                block_height(
-                    *studio,
-                    panel,
-                    ctx(*studio),
-                    panel.accepted_open(&studio.key()),
-                )
-            })
-            .sum::<usize>()
-            <= body_height as usize;
-    studios
-        .iter()
-        .filter_map(|studio| {
-            let key = studio.key();
-            let open = if panel.expanded_blocks.contains(&key) {
-                true
-            } else if panel.collapsed_blocks.contains(&key) {
-                false
-            } else {
-                fits || current == Some(&key)
-            };
-            open.then_some(key)
-        })
-        .collect()
-}
-
 /// One studio's expanded block: header, owed-step subheader, live
 /// roles, task rows, the accepted fold, closed roles, bottom border.
 fn block_rows<'a>(
@@ -514,6 +290,11 @@ fn block_rows<'a>(
 /// error row. `stage_running` answers per machine (`None` is this
 /// core); `reachable` answers whether the machine itself is
 /// connected.
+/// The whole row list for the current mode. An empty `machines` — no
+/// machine's document parsed — is the "no studios" state, never an
+/// error row. `stage_running` answers per machine (`None` is this
+/// core); `reachable` answers whether the machine itself is
+/// connected.
 pub(crate) fn rows<'a>(
     machines: &'a [MachineSummary],
     stage_running: impl Fn(Option<&str>) -> bool,
@@ -596,20 +377,4 @@ pub(crate) fn rows<'a>(
         }
     }
     out
-}
-
-/// The collapsed strip's role lines: live roles that are working or
-/// carry an attention — the strip is never blank while the studio
-/// has something to say (A4.3).
-fn strip_roles(studio: &StudioSummary) -> Vec<&RoleSummary> {
-    studio
-        .roles
-        .iter()
-        .filter(|r| {
-            r.state != "closed"
-                && (r.attention.is_some()
-                    || r.work == Some(backlot_model::summary::Work::Working)
-                    || r.work == Some(backlot_model::summary::Work::Blocked))
-        })
-        .collect()
 }
