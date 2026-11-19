@@ -39,6 +39,7 @@ mod hwood_base;
 mod hwood_read;
 mod limits;
 pub mod link;
+mod migrate;
 mod notices;
 mod nudge;
 mod permission;
@@ -123,6 +124,8 @@ mod hwood_tests;
 mod limits_cmd_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
+#[cfg(test)]
+mod migrate_tests;
 #[cfg(test)]
 mod notices_tests;
 #[cfg(test)]

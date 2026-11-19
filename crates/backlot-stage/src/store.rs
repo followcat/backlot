@@ -159,11 +159,24 @@ pub fn sanitize(name: &str) -> String {
     }
 }
 
+/// The migration a log type needs — studio lines and Hollywood's own
+/// each name theirs (`backlot_model::migrate`).
+pub type MigrateFn = fn(
+    serde_json::Value,
+) -> Result<(serde_json::Value, bool), backlot_model::migrate::MigrateError>;
+
 /// Parse log bytes — the event type is the caller's: `Event` for a
-/// studio ledger, `HollywoodEvent` for Hollywood's. Returns the
-/// events and whether a torn tail was ignored. A newline-terminated
-/// line that does not parse is corrupt.
-pub fn parse_log<T: DeserializeOwned>(bytes: &[u8]) -> Result<(Vec<T>, bool), Corrupt> {
+/// studio ledger, `HollywoodEvent` for Hollywood's. Every line's
+/// JSON value passes through `migrate` before it deserializes, so a
+/// pre-versioning line (no `v`) loads transparently and a line
+/// stamped by a newer backlot fails with the upgrade message instead
+/// of an opaque serde error. Returns the events and whether a torn
+/// tail was ignored. A newline-terminated line that does not parse
+/// or migrate is corrupt.
+pub fn parse_log<T: DeserializeOwned>(
+    bytes: &[u8],
+    migrate: MigrateFn,
+) -> Result<(Vec<T>, bool), Corrupt> {
     let terminated = bytes.ends_with(b"\n");
     let text = String::from_utf8_lossy(bytes);
     let mut events = Vec::new();
@@ -178,24 +191,31 @@ pub fn parse_log<T: DeserializeOwned>(bytes: &[u8]) -> Result<(Vec<T>, bool), Co
             torn = true;
             continue;
         }
-        match serde_json::from_str::<T>(line) {
+        let corrupt = |e: &dyn std::fmt::Display| Corrupt {
+            line: i + 1,
+            message: e.to_string(),
+        };
+        let val = match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(v) => v,
+            Err(err) => return Err(corrupt(&err)),
+        };
+        let (val, _) = migrate(val).map_err(|e| corrupt(&e))?;
+        match serde_json::from_value::<T>(val) {
             Ok(e) => events.push(e),
-            Err(err) => {
-                return Err(Corrupt {
-                    line: i + 1,
-                    message: err.to_string(),
-                });
-            }
+            Err(err) => return Err(corrupt(&err)),
         }
     }
     Ok((events, torn))
 }
 
 /// Read `events.jsonl`; a missing file reads as an empty log.
-fn load<T: DeserializeOwned>(dir: &Path) -> Result<(Vec<T>, bool), StoreError<()>> {
+fn load<T: DeserializeOwned>(
+    dir: &Path,
+    migrate: MigrateFn,
+) -> Result<(Vec<T>, bool), StoreError<()>> {
     let path = dir.join("events.jsonl");
     match fs::read(&path) {
-        Ok(bytes) => parse_log(&bytes).map_err(StoreError::Corrupt),
+        Ok(bytes) => parse_log(&bytes, migrate).map_err(StoreError::Corrupt),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok((Vec::new(), false)),
         Err(e) => Err(StoreError::Io(e)),
     }
@@ -203,12 +223,12 @@ fn load<T: DeserializeOwned>(dir: &Path) -> Result<(Vec<T>, bool), StoreError<()
 
 /// Read a studio's `events.jsonl`.
 pub fn load_events(dir: &Path) -> Result<(Vec<Event>, bool), StoreError<()>> {
-    load(dir)
+    load(dir, backlot_model::migrate::migrate_event_value)
 }
 
 /// Read Hollywood's `events.jsonl`.
 pub fn load_hevents(dir: &Path) -> Result<(Vec<HollywoodEvent>, bool), StoreError<()>> {
-    load(dir)
+    load(dir, backlot_model::migrate::migrate_hollywood_value)
 }
 
 /// Replay a studio directory into its state.
@@ -223,10 +243,10 @@ pub fn load_hstate(dir: &Path) -> Result<HollywoodState, StoreError<()>> {
     Ok(hollywood::replay(&events))
 }
 
-struct LockGuard(File);
+pub(crate) struct LockGuard(File);
 
 /// Take the append lock on `events.lock` (created if missing).
-fn take_lock(dir: &Path) -> io::Result<LockGuard> {
+pub(crate) fn take_lock(dir: &Path) -> io::Result<LockGuard> {
     let f = OpenOptions::new()
         .create(true)
         .write(true)
@@ -287,6 +307,7 @@ fn append_locked<Ev, New, S, E, V>(
     build: impl FnOnce(&S, u64) -> Result<(New, Vec<PendingFile>), E>,
     stamp: impl FnOnce(New, u64, u64) -> Ev,
     check: impl FnOnce(&S, &New) -> Result<(), V>,
+    migrate: MigrateFn,
 ) -> Result<Ev, StoreError<E, V>>
 where
     Ev: DeserializeOwned + Serialize + HasSeq,
@@ -315,7 +336,7 @@ where
             .open(&events_path)?
             .set_len(keep)?;
     }
-    let (events, _) = parse_log(&bytes[..keep as usize]).map_err(StoreError::Corrupt)?;
+    let (events, _) = parse_log(&bytes[..keep as usize], migrate).map_err(StoreError::Corrupt)?;
     let state = reduce(&events);
     let next_seq = events.iter().map(|e| e.seq()).max().unwrap_or(0) + 1;
     let (new, files) = build(&state, next_seq).map_err(StoreError::Build)?;
@@ -366,6 +387,7 @@ where
         |state, seq| build(state, seq).map(|p| (p.event, p.files)),
         |new, seq, ts| new.stamp(seq, ts),
         validate,
+        backlot_model::migrate::migrate_event_value,
     )
 }
 
@@ -384,5 +406,6 @@ where
         |state, seq| build(state, seq).map(|p| (p.event, p.files)),
         |new, seq, ts| new.stamp(seq, ts),
         hollywood::validate,
+        backlot_model::migrate::migrate_hollywood_value,
     )
 }

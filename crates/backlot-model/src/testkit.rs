@@ -12,6 +12,7 @@ pub fn by(role: &str) -> EventBy {
 /// Deterministic: ts is derived from seq.
 pub fn ev(seq: u64, role: &str, kind: EventKind) -> Event {
     Event {
+        v: crate::event::LEDGER_VERSION,
         seq,
         ts_ms: seq * 1000,
         by: by(role),

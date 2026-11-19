@@ -41,6 +41,9 @@ pub use validate::{Refusal, validate};
 #[doc(hidden)]
 pub mod testkit;
 
+/// The ledger schema version and forward-migration pipeline.
+pub mod migrate;
+
 #[cfg(test)]
 mod budget_tests;
 #[cfg(test)]
@@ -59,6 +62,8 @@ mod hollywood_validate_tests;
 mod limits_tests;
 #[cfg(test)]
 mod loop_tests;
+#[cfg(test)]
+mod migrate_tests;
 #[cfg(test)]
 mod priority_tests;
 #[cfg(test)]

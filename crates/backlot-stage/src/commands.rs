@@ -271,6 +271,7 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
         | Cmd::Runners { .. }
         | Cmd::Repos { .. }
         | Cmd::StudioPrune { .. }
+        | Cmd::StudioMigrate { .. }
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }

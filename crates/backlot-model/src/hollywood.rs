@@ -40,6 +40,9 @@ pub const HEADLINE_CAP: usize = 10;
 /// A stamped Hollywood ledger line — same envelope as [`crate::Event`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HollywoodEvent {
+    /// Ledger schema version — always written.
+    #[serde(default = "crate::event::default_ledger_version")]
+    pub v: u32,
     pub seq: u64,
     pub ts_ms: u64,
     pub by: EventBy,
@@ -65,6 +68,7 @@ impl NewHollywoodEvent {
 
     pub fn stamp(self, seq: u64, ts_ms: u64) -> HollywoodEvent {
         HollywoodEvent {
+            v: crate::event::LEDGER_VERSION,
             seq,
             ts_ms,
             by: self.by,
