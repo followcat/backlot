@@ -328,6 +328,44 @@ async fn the_filter_text_echoes_while_editing_and_after() {
     assert!(app.ns_hits.cursor.is_none(), "the cursor leaves with it");
 }
 
+#[tokio::test]
+async fn committed_text_and_paste_land_in_the_filter_not_the_terminal() {
+    let (mut app, _) = dialog_app().await;
+    app.host_reports_all_keys = true;
+    app.host_reports_key_releases = true;
+    key(&mut app, hc_vt::Key::Char('/'));
+    let before = app.pane.input_backlog().0;
+    // A plain-text press under report-all (an IME/dead-key commit)
+    // is the filter's, never the terminal's behind the dialog.
+    let mut commit = term_key(
+        hc_vt::Key::Char('a'),
+        hc_vt::Mods::NONE,
+        hc_vt::Action::Press,
+    )
+    .with_text_commit();
+    commit.vt_bytes = b"a".to_vec();
+    app.on_input(UiEvent::Key(commit), app.area.0);
+    // IME text and a paste land the same way.
+    app.on_input(UiEvent::Text("c".into()), app.area.0);
+    app.on_input(UiEvent::Paste(b"me".to_vec()), app.area.0);
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.filter.as_str(), "acme");
+    assert_eq!(d.repos.visible().len(), 1);
+    assert_eq!(
+        app.pane.input_backlog().0,
+        before,
+        "nothing reached the pane"
+    );
+    // And with no live editor the text is eaten, still not the pane's.
+    key(&mut app, hc_vt::Key::Escape);
+    app.on_input(UiEvent::Text("z".into()), app.area.0);
+    assert_eq!(
+        app.new_studio.as_ref().unwrap().repos.filter.as_str(),
+        "acme"
+    );
+    assert_eq!(app.pane.input_backlog().0, before);
+}
+
 // ---------- step 2 ----------
 
 #[tokio::test]
