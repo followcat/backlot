@@ -25,7 +25,7 @@ pub use super::detect_report::{report, report_json};
 /// The runners `backlot runners` lists and the wizard's detection
 /// walks — `fake` ships in `tools/`, never detected.
 pub(crate) const RUNNERS: &[&str] = &[
-    "claude", "codex", "devin", "cursor", "opencode", "cmd", "cline",
+    "claude", "codex", "devin", "cursor", "opencode", "cmd", "cline", "agy",
 ];
 
 /// Every child gets three seconds: a login shell's start-up files

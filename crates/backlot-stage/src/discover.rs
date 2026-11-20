@@ -176,6 +176,20 @@ pub fn find_session(
                     &runners::cline::parent_pid,
                 )
             }),
+        // agy's id sits in the resumed terminal's argv when there
+        // is one; a fresh launch's lives under the user's
+        // `~/.gemini/antigravity-cli/conversations/` — HOME, not the
+        // role dir, since agy has no per-role state tree.
+        "agy" => runners::session_in_argv(runner, argv)
+            .filter(|id| !taken.contains(id))
+            .or_else(|| {
+                runners::agy::session_at(
+                    &home.join(".gemini/antigravity-cli/conversations"),
+                    cwd,
+                    started_ms,
+                    taken,
+                )
+            }),
         _ => None,
     }
 }

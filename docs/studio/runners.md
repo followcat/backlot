@@ -354,6 +354,32 @@ reports. Directories with no manifest, a manifest for another folder and another
 skipped. `--id <id>` resumes; the positional prompt is ignored on a resume, so the stage sends the
 prompt after the idle composer shows (the devin and cmd rule).
 
+## Per-session file (agy)
+
+Measured on agy 1.5.x — flags and store layout only; the interactive screen rows below are
+unmeasured for agy.
+
+- `agy --help` documents `--mode` (`accept-edits`, `auto`, `plan`), `--effort`
+  (`low`, `medium`, `high`, `xhigh`, `max`), `--model`, `--settings` (a JSON object or file path,
+  session-only and never saved), `-i`/`--prompt-interactive`, `--conversation <id>` to resume, and
+  `-c`/`--continue` as a boolean continue-most-recent. `agy models` prints the model ids —
+  Gemini families plus orchestrator, claude and gpt-oss rows, the thinking depth in each id.
+- The reference launch is `agy --mode accept-edits --effort high --settings <dir>/.agy-settings.json
+  -i "<prompt>"`. The adapter's argv is that shape with `--model` added; both permission profiles
+  take `accept-edits`, the mode that does the work without stopping for plan or prompt review.
+- The session store is `~/.gemini/antigravity-cli/conversations/<uuid>.db` — one sqlite file per
+  conversation whose bytes embed the workspace's `file://` URIs verbatim (percent-encoded when the
+  path needs it). The stage finds the newest `.db` at or after the role's start whose bytes carry
+  the role cwd's URI — a plain byte scan, no sqlite dependency. `--conversation <id>` resumes; `-i`
+  is not passed on a resume (the devin and cmd rule).
+- The workdir's `.agy-settings.json` is the per-session boundary like cmd's project file:
+  `{"toolPermission":"always-proceed"}`, written before every start and resume — agy reads it once
+  at startup, so tools proceed without the prompts a role cannot answer while the user's global
+  `settings.json` stays untouched.
+- Unmeasured: the interactive work-state markers, approval pickers, OSC 7501 and prompt blocks —
+  agy answers nothing and maps no block until a capture names them (the `_` arms in `work.rs` and
+  `permit.rs`); the open attention stays for the user.
+
 ## Screen patterns
 
 Observed on real runs. These are the first entries for each adapter's pattern table and need captured fixtures.
@@ -373,5 +399,5 @@ Fixtures use neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
 
 ## First version
 
-Claude Code, Codex, Devin, OpenCode, cursor-agent, cmd and cline. Kimi and others follow the same
-adapter shape when needed.
+Claude Code, Codex, Devin, OpenCode, cursor-agent, cmd, cline and agy. Kimi and others follow the
+same adapter shape when needed.

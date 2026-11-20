@@ -12,11 +12,12 @@ use crate::wizard::{Io, ask, io_fail};
 
 /// Runners the wizard drafts from, best first, with the model the
 /// draft assigns — the same check `runners::installed` answers.
-/// `cursor`, `devin` and `cmd` carry no effort flag (the cast rule).
-/// `claude` gets the CLI's own `sonnet` alias so the draft tracks
-/// the current sonnet instead of going stale; `gpt-5.3-codex` is the
-/// codex id `docs/studio/` documents, and opencode takes the same
-/// sonnet through its `provider/model` config.
+/// `cursor`, `devin`, `cmd` and `opencode` carry no effort flag
+/// (the cast rule). `claude` gets the CLI's own `sonnet` alias so
+/// the draft tracks the current sonnet instead of going stale;
+/// `gpt-5.3-codex` is the codex id `docs/studio/` documents, and
+/// opencode takes the same sonnet through its `provider/model`
+/// config. `agy`'s is the first `agy models` id.
 const PREFERENCE: &[(&str, &str)] = &[
     ("devin", "swe-2-max"),
     ("claude", "sonnet"),
@@ -25,6 +26,7 @@ const PREFERENCE: &[(&str, &str)] = &[
     ("opencode", "anthropic/claude-sonnet-5-5"),
     ("cmd", "deepseek/deepseek-v4.1-flash"),
     ("cline", "cline-pass/deepseek-v4.1-flash-1017"),
+    ("agy", "gemini-4-neon-high"),
     ("fake", "m"),
 ];
 
@@ -39,9 +41,9 @@ pub(crate) fn draft_model(runner: &str) -> Option<&'static str> {
 
 /// The drafted cast: the first installed runner seats every fixed
 /// role and both candidates, with its draft model — `cursor`,
-/// `devin` and `cmd` take no effort (the cast rule). An experimental
-/// studio's draft shows `mode = "experimental"` up top; a standard
-/// draft writes no mode line at all.
+/// `devin`, `cmd` and `opencode` take no effort (the cast rule).
+/// An experimental studio's draft shows `mode = "experimental"` up
+/// top; a standard draft writes no mode line at all.
 fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String, Fail> {
     let Some((runner, model)) = PREFERENCE.iter().find(|(r, _)| (io.installed)(r)) else {
         return Err(Fail::refused(
@@ -49,7 +51,7 @@ fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String,
         ));
     };
     let effort = |runner: &str| {
-        if matches!(runner, "cursor" | "devin" | "cmd") {
+        if matches!(runner, "cursor" | "devin" | "cmd" | "opencode") {
             String::new()
         } else {
             "effort = \"medium\"\n".to_string()
