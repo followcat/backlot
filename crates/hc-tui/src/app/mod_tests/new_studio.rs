@@ -584,7 +584,7 @@ async fn a_machine_switch_exits_the_filter_editor_too() {
     assert_eq!(d.machine_sel, 1, "host-b selected");
     assert_eq!(d.repos.filter.as_str(), "");
     assert!(!d.repos.filtering, "no empty editor left owning keys");
-    assert_eq!(d.repos.visible().len(), 4, "its listing is unfiltered");
+    assert_eq!(d.repos.visible().len(), 5, "its listing is unfiltered");
 }
 
 // ---------- step 2 ----------
