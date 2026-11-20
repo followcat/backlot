@@ -18,6 +18,7 @@ impl App {
             |m| self.machine_stage_running(m),
             |m| self.machine_reachable(m),
             &self.panel,
+            self.panel_mode_at(self.area.0),
             self.studio.current.as_ref(),
             self.panel_hits.body.height,
         )
@@ -69,6 +70,7 @@ impl App {
             |m| self.machine_stage_running(m),
             |m| self.machine_reachable(m),
             &self.panel,
+            self.panel_mode_at(self.area.0),
             self.studio.current.as_ref(),
             self.panel_hits.body.height,
         );
@@ -192,6 +194,7 @@ impl App {
             |m| self.machine_stage_running(m),
             |m| self.machine_reachable(m),
             &self.panel,
+            self.panel_mode_at(self.area.0),
             self.studio.current.as_ref(),
             self.panel_hits.body.height,
         );

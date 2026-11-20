@@ -85,17 +85,9 @@ impl App {
             KeyCode::Esc => {
                 self.panel.finish_confirm = None;
                 if self.panel_fullscreen() {
-                    // An overlay dock backs out one step (S2 §1): the
-                    // expanded overlay drops to the 16-column strip
-                    // when that fits beside the panes, else closes.
-                    // The collapsed overlay closes outright.
-                    if self.panel.mode == crate::panel::PanelMode::Expanded
-                        && self.area.0 >= super::STRIP_BESIDE_COLS
-                    {
-                        self.panel.mode = crate::panel::PanelMode::Collapsed;
-                    } else {
-                        self.panel_close();
-                    }
+                    // Only the strip ever overlays the panes now —
+                    // an overlay dock closes outright (S2 §1).
+                    self.panel_close();
                 } else {
                     // Beside the panes: `esc back` — the dock keeps
                     // its place and hands the keys to the terminal.

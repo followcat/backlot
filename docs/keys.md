@@ -48,10 +48,12 @@ focused closes it; while it is open but unfocused the chord focuses it. A Herdr 
 still wins whenever the panel does not own the keys. The chord's tail is `panel.key` in
 `~/.config/backlot/config.toml`.
 
-The panel — the studio dock — has three modes: closed (the default — zero width, no keys), a
+The panel — the studio dock — has three modes: closed (zero width, no keys), a
 16-column collapsed strip, and an expanded column (38 columns at 160+, 36 at 100+, 28 under) of
-bordered studio blocks. It sits beside the panes while they keep at least 44 columns; below that
-it overlays the pane surface. The selection is a `▌` cursor that lands only on actionable rows —
+bordered studio blocks — the default. The column sits beside the panes while they keep at least 44
+columns past the sidebar; a window too narrow for that falls back to the strip — beside the panes
+from 60 columns, a 16-column overlay at the pane's right edge under that. The selection is a `▌`
+cursor that lands only on actionable rows —
 titles and spacers are skipped. While it is focused it owns these keys:
 
 | Keys | Action |
@@ -70,7 +72,7 @@ titles and spacers are skipped. While it is focused it owns these keys:
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open this help |
-| `Esc` | Beside the panes: unfocus the dock. As an overlay: back to the strip, or close |
+| `Esc` | Beside the panes: unfocus the dock. As an overlay: close |
 
 Right-click on a dock row selects it and opens the same menu `m` opens on the selection.
 While an action runs its row spins a dim `⠋ <verb>…` marker on the right edge — a second

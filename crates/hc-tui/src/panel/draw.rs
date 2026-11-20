@@ -64,6 +64,7 @@ pub(crate) fn render(
     stage_running: impl Fn(Option<&str>) -> bool,
     reachable: impl Fn(Option<&str>) -> bool,
     panel: &Panel,
+    mode: PanelMode,
     current: Option<&StudioKey>,
     local: Option<&str>,
     keys: &StudioKeys,
@@ -100,7 +101,7 @@ pub(crate) fn render(
         palette.text
     };
     let studios = studio_count(machines);
-    let title_text = match panel.mode {
+    let title_text = match mode {
         PanelMode::Collapsed => format!(" lot {studios}"),
         _ => format!(" lot · {studios}"),
     };
@@ -175,6 +176,7 @@ pub(crate) fn render(
         &stage_running,
         &reachable,
         panel,
+        mode,
         current,
         body.height,
     );

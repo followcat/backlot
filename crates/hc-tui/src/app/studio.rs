@@ -45,6 +45,11 @@ impl App {
     pub(crate) fn set_plain(&mut self, plain: bool) {
         self.plain = plain;
         self.studio.active = !plain;
+        if plain {
+            // The plain multiplexer's frame is herdr's exactly —
+            // the dock stays closed.
+            self.panel_close();
+        }
         if !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
         }

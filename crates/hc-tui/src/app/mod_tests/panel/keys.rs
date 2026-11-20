@@ -176,10 +176,9 @@ async fn a_full_screen_panel_owns_the_keyboard() {
     app.panel.focused = false;
     assert!(app.panel_focused());
     key(&mut app, hc_vt::Key::Char('j'));
-    assert_eq!(
-        app.panel.selected,
-        Some(Target::Person("acme-shop".into(), "producer".into()))
-    );
+    // The dock resolves to the strip at 40 columns — its rows are
+    // strip targets; the pane still sees no keys.
+    assert_eq!(app.panel.selected, Some(Target::Strip("acme-shop".into())));
     assert_eq!(app.pane.input_backlog().0, 0, "keys leaked to the pane");
 }
 
@@ -213,13 +212,14 @@ async fn the_chord_closes_full_screen_on_the_first_press() {
 }
 
 #[tokio::test]
-async fn enter_on_a_person_closes_a_full_screen_panel() {
+async fn enter_on_the_strip_row_closes_a_full_screen_dock() {
     let mut app = app_with_panel_doc();
     app.area = (40, 20);
     open_panel(&mut app);
-    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    // The strip's studio row: Enter is the studio's focus + leave —
+    // the overlay closes for the pane it covered.
     key(&mut app, hc_vt::Key::Enter);
-    assert_eq!(app.focused.as_deref(), Some("t4"));
+    assert_eq!(app.focused.as_deref(), Some("t1"));
     assert_eq!(app.panel.mode, PanelMode::Closed);
 }
 

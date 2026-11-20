@@ -362,12 +362,15 @@ the stage from the panel is not implemented — the stage runs as its own proces
 
 ## Studio panel
 
-- **Geometry:** a right column, default 30 columns. The panel sits beside the panes only when they keep at least 60
-  columns. Otherwise, including at or below the mobile threshold of 64, it is a full-screen view.
-- **States (R17, D6, D12):** closed, collapsed or expanded. Closed draws nothing and is the state the parity harness
-  checks. Collapsed is a narrow column of about 16 columns listing only the working roles, each with its status mark and
-  the number of people working, such as `director` and `actors 2`. Expanded shows the people, and each role group can
-  collapse on its own. The 60-column rule above applies to whichever width the panel has.
+- **Geometry:** a right column, tiered by window width (38 at 160+, 36 at 100+, 28 under). The panel sits beside the
+  panes only while the sidebar plus the column still leave at least 44 columns for the panes. Otherwise the expanded
+  column resolves to the collapsed strip: beside the panes from 60 columns, a 16-column overlay at the pane surface's
+  right edge under that — the dock never takes the whole surface.
+- **States (R17, D6, D12):** closed, collapsed or expanded; the default is expanded. Closed draws nothing and is the
+  state the parity harness checks (`--plain`). Collapsed is a narrow column of about 16 columns listing only the working
+  roles, each with its status mark and the number of people working, such as `director` and `actors 2`. Expanded shows
+  the people, and each role group can collapse on its own. The strip fallback above applies to whichever width the
+  panel has.
 - **Content (R19):** studios, each with its roles and the people in each role: runner and model, state, a one-line
   "doing", and what needs attention.
 - **Work states (R17):** working, waiting for input, blocked, lost and closed each have their own colour and mark, from

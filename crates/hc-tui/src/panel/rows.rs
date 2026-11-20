@@ -297,16 +297,19 @@ fn block_rows<'a>(
     out.push(Row::BlockBottom(studio));
 }
 
-/// The whole row list for the current mode. An empty `machines` — no
-/// machine's document parsed — is the "no studios" state, never an
-/// error row. `stage_running` answers per machine (`None` is this
-/// core); `reachable` answers whether the machine itself is
-/// connected.
+/// The whole row list for `mode` — the drawn mode, which may differ
+/// from `panel.mode`: an expanded dock that cannot fit beside the
+/// panes resolves to the strip (`App::panel_mode_at`). An empty
+/// `machines` — no machine's document parsed — is the "no studios"
+/// state, never an error row. `stage_running` answers per machine
+/// (`None` is this core); `reachable` answers whether the machine
+/// itself is connected.
 pub(crate) fn rows<'a>(
     machines: &'a [MachineSummary],
     stage_running: impl Fn(Option<&str>) -> bool,
     reachable: impl Fn(Option<&str>) -> bool,
     panel: &Panel,
+    mode: PanelMode,
     current: Option<&StudioKey>,
     body_height: u16,
 ) -> Vec<Row<'a>> {
@@ -338,7 +341,7 @@ pub(crate) fn rows<'a>(
         }
     }
     let studios = super::data::studios(machines);
-    match panel.mode {
+    match mode {
         PanelMode::Closed | PanelMode::Collapsed => {
             for studio in &studios {
                 let health = health_of(

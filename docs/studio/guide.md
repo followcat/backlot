@@ -390,7 +390,7 @@ tracker; `o` does the same), `Space` opens a drawer or folds a studio, `v` opens
 Delivery Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
 `+`/`-` raise and lower a task's priority, `r`/`f` start the stage and finish the studio,
 `c` switches collapsed and expanded, `q` closes, `?` opens help, `Esc` unfocuses the dock
-beside the panes and steps back over an overlay — to the strip when it fits, else closed.
+beside the panes and closes it outright over an overlay.
 While the panel is focused it owns the keys — `Ctrl+B y` again closes it — except the four
 `Alt+arrow` studio keys, which still switch studios and roles.
 

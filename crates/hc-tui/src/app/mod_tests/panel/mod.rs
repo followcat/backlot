@@ -209,6 +209,24 @@ fn doc_key() -> DocKey {
     }
 }
 
+// ---------- default ----------
+
+#[tokio::test]
+async fn the_dock_opens_expanded_on_launch() {
+    // `app()` runs --plain; `app_with_plain(false)` is the launch
+    // shape a real run gets.
+    let mut app = app_with_plain(false);
+    app.area = (120, 24);
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+    assert!(app.panel.open());
+    assert!(app.panel_beside(120));
+    assert_eq!(app.panel_width(120), 36);
+    // --plain still buys the plain multiplexer's frame outright.
+    app.set_plain(true);
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+    assert!(!app.panel.open());
+}
+
 // ---------- geometry ----------
 
 #[tokio::test]
@@ -254,10 +272,14 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
         assert_eq!(layout.pane_surface.width, region - app.sidebar_width);
         assert!(!app.panel_fullscreen());
     }
-    // The spec's dock-width tiers: 38 at 160+, 36 at 100+, 28 under.
+    // The spec's dock-width tiers: 38 at 160+, 36 at 100+, 28 under —
+    // where the column still leaves 44 pane columns past the sidebar.
     assert_eq!(app.panel_width(160), 38);
     assert_eq!(app.panel_width(120), 36);
-    assert_eq!(app.panel_width(80), 28);
+    assert_eq!(app.panel_width(99), 28);
+    // At 80 the column cannot fit — it resolves to the 16-column
+    // strip for that width.
+    assert_eq!(app.panel_width(80), 16);
     // A collapsed strip is 16 wide.
     app.panel.mode = PanelMode::Collapsed;
     assert_eq!(app.panel_width(120), 16);
@@ -301,29 +323,33 @@ async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
     }
 }
 
+/// Too narrow for panes+dock: the expanded dock resolves to the
+/// collapsed strip — beside from `STRIP_BESIDE_COLS`, a 16-column
+/// overlay under that — instead of covering the pane surface. The
+/// choice itself is remembered: widen the window and it is expanded
+/// again.
 #[tokio::test]
-async fn a_panel_that_cannot_fit_draws_full_screen() {
+async fn a_too_narrow_terminal_falls_back_to_the_strip() {
     let mut app = app_with_panel_doc();
     app.panel.mode = PanelMode::Expanded;
-    // 80 − 26 = 54 < 60: full-screen. 40 is under the mobile threshold.
-    for cols in [80u16, 40] {
-        app.area = (cols, 24);
-        assert!(!app.panel_beside(cols), "cols {cols}");
-        assert!(app.panel_fullscreen(), "cols {cols}");
-        // Pane geometry is the panel-closed shape: nothing resizes.
-        let direct = app.shell.layout_config().layout(
-            cols,
-            24,
-            app.shell_state.sidebar_collapsed,
-            crate::app::pane_geometry::focused_tab_count(&app),
-            app.sidebar_width,
-            false,
-        );
-        assert_eq!(
-            app.chrome_layout(cols, 24).pane_surface,
-            direct.pane_surface
-        );
-    }
+    // 80 cannot hold sidebar + 28 + 44 but holds the strip beside.
+    app.area = (80, 24);
+    assert!(app.panel_beside(80));
+    assert_eq!(app.panel_width(80), 16);
+    assert!(!app.panel_fullscreen());
+    // Under 60 the strip overlays the pane's right edge — 16
+    // columns, never the whole surface the dock used to take.
+    app.area = (50, 24);
+    assert!(!app.panel_beside(50));
+    assert_eq!(
+        app.panel_overlay_rect(ratatui::layout::Rect::new(0, 0, 50, 24), 50)
+            .width,
+        16
+    );
+    // The logical mode is untouched — widening restores the column.
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+    assert!(app.panel_beside(120));
+    assert_eq!(app.panel_width(120), 36);
 }
 
 // ---------- toggle ----------

@@ -254,8 +254,9 @@ pub struct App {
     command_overlay: Option<popup::CommandOverlay>,
     /// The worker-peek overlay — herdr-app's `terminal-peek`.
     peek: Option<popup::PeekState>,
-    /// The studio panel's client-local state — `Closed` by default, so
-    /// a stock frame is cell-identical to herdr (no width, no keys).
+    /// The studio panel's client-local state — `Expanded` by default
+    /// (the dock is visible on launch); `--plain` starts it `Closed`
+    /// so a stock frame stays cell-identical to herdr.
     panel: crate::panel::Panel,
     /// The `[panel]` config and the resolved toggle chord tail.
     panel_config: crate::panel::PanelConfig,

@@ -72,7 +72,7 @@ async fn a_queued_document_does_not_decide_the_entry() {
         Box::pin(serve_studios_later(core, framed, asked, hold, body))
     });
 
-    let mut app = app_over(watcher);
+    let mut app = app_over(watcher, true);
     app.set_plain(false);
     // The first publish: the slot exists and its read is on the wire.
     let first =
@@ -200,7 +200,7 @@ async fn remote_studios_close_the_card_without_opening_the_bar() {
         })
     });
 
-    let mut app = app_over(watcher);
+    let mut app = app_over(watcher, true);
     app.set_plain(false);
     // The local document settles studio-less: the card is up and the
     // bar collapsed while host-b's read is still on the wire.

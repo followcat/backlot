@@ -157,6 +157,12 @@ impl crate::ansi::FrameCursor for QuietBackend {
 }
 
 fn app() -> App {
+    app_with_plain(true)
+}
+
+/// `app()`'s shape with the `--plain` flag chosen: `true` is the
+/// fixtures' baseline, `false` the launch default a real run gets.
+fn app_with_plain(plain: bool) -> App {
     let (accepted, _rx) = mpsc::channel(1);
     let (rpc, sub) = crate::testcore::openers(accepted);
     let watcher = Watcher::with_openers(
@@ -167,12 +173,12 @@ fn app() -> App {
             ..hc_proto::watch::WatchParams::default()
         },
     );
-    app_over(watcher)
+    app_over(watcher, plain)
 }
 
 /// An app over `watcher` — the shape `app()` builds, for tests that
 /// drive a real actor against a fake core.
-fn app_over(watcher: Watcher) -> App {
+fn app_over(watcher: Watcher, plain: bool) -> App {
     let open: OpenAttach = Arc::new(|_| unreachable!("no attach in this test"));
     let config = crate::config::Config::default();
     let live = config.live_keybinds();
@@ -186,7 +192,9 @@ fn app_over(watcher: Watcher) -> App {
     // U2: unadorned `backlot` is studio-first — the mechanics most
     // tests exercise are the plain multiplexer's, so the fixture
     // runs `--plain`; studio fixtures clear the flag themselves.
-    app.set_plain(true);
+    if plain {
+        app.set_plain(true);
+    }
     app
 }
 
