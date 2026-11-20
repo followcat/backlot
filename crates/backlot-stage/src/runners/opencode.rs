@@ -26,6 +26,34 @@ pub fn session_in_argv(argv: &[String]) -> Option<String> {
     argv.get(flag + 1).cloned()
 }
 
+/// The `provider/model` ids `opencode models` printed for the
+/// measured account's configured providers — the whole pair is
+/// what `OPENCODE_CONFIG_CONTENT`'s `model` takes. Another
+/// provider's id still goes in as free text.
+pub const MODELS: &[&str] = &[
+    "cline-pass/cline-pass/deepseek-v4.1-flash-1017",
+    "cline-pass/cline-pass/deepseek-v4.1-flash",
+    "cline-pass/cline-pass/deepseek-v4-pro",
+    "cline-pass/cline-pass/glm-5.3",
+    "cline-pass/cline-pass/kimi-k3.1-pro",
+    "cline-pass/cline-pass/qwen3.8-max",
+    "cline-pass/cline-pass/mimo-v2.6-pro",
+    "cline-pass/cline-pass/minimax-m3",
+    "opencode-go/claude-haiku-5-5",
+    "opencode-go/deepseek-v4.1-flash",
+    "opencode-go/gemini-4-argon",
+    "opencode-go/glm-5.3",
+    "opencode-go/grok-4.7",
+    "opencode-go/hy4",
+    "opencode-go/kimi-k3.1-pro",
+    "opencode-go/qwen4-max",
+    "opencode-go/mimo-v2.6-pro",
+    "opencode/big-pickle",
+    "opencode/deepseek-v4.1-flash-free",
+    "longcat/LongCat-2.5-Preview",
+    "ollama/qwen2.5:0.5b",
+];
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         // Neither profile adds flags; only an unknown one refuses.

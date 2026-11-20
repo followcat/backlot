@@ -35,6 +35,19 @@ fn is_marker(name: &str) -> bool {
     MARKERS.contains(&name)
 }
 
+/// The models `claude --model` is documented to take: the aliases
+/// its `--help` names (`fable`, `opus`, `sonnet` — `haiku` is the
+/// same family) plus the full ids `docs/studio/guide.md` casts.
+/// A newer id still goes in as free text.
+pub const MODELS: &[&str] = &[
+    "sonnet",
+    "opus",
+    "haiku",
+    "fable",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
+];
+
 /// `--permission-mode`'s value for the profile.
 fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     match profile {

@@ -348,17 +348,40 @@ fn the_runners_json_lists_models_and_efforts() {
         bin.join("claude").to_string_lossy().as_ref()
     );
     assert_eq!(claude["needs_path"], false);
-    assert_eq!(claude["models"], serde_json::json!(["sonnet"]));
+    // The catalog, not the draft alone: the aliases `--model`
+    // documents plus the full ids the guide casts.
+    assert_eq!(
+        claude["models"],
+        serde_json::json!([
+            "sonnet",
+            "opus",
+            "haiku",
+            "fable",
+            "claude-sonnet-5-5",
+            "claude-haiku-5-5"
+        ])
+    );
     assert_eq!(
         claude["efforts"],
         serde_json::json!(["low", "medium", "high"])
     );
-    // A missing runner reports `missing`, no path — and still lists
-    // its draft model so the dialog's free-text hint has a start.
+    // A missing runner reports `missing`, no path — and still
+    // lists its catalog so the dialog's picker has options; the
+    // draft `gpt-5.3-codex` is not in codex's own `/model` list,
+    // so the merge keeps it on top.
     let codex = row("codex");
     assert_eq!(codex["status"], "missing");
     assert!(codex["path"].is_null());
-    assert_eq!(codex["models"], serde_json::json!(["gpt-5.3-codex"]));
+    assert_eq!(codex["models"].as_array().unwrap()[0], "gpt-5.3-codex");
+    assert!(
+        codex["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m == "gpt-6.1-sol"),
+        "codex's catalog names the CLI's own list: {:?}",
+        codex["models"]
+    );
     // `cursor`, `devin`, `cmd` carry no effort flag (the cast rule).
     for runner in ["cursor", "devin", "cmd"] {
         assert_eq!(row(runner)["efforts"], serde_json::json!([]), "{runner}");
@@ -380,5 +403,66 @@ fn the_runners_json_lists_models_and_efforts() {
     assert_eq!(
         fake["efforts"],
         serde_json::json!(["low", "medium", "high"])
+    );
+}
+
+/// Every runner's `models` is its real catalog: non-empty, no id
+/// twice, the wizard's draft always present. Cursor's catalog goes
+/// beyond `auto` — `grok` ids are among what `--list-models`
+/// documented. Cline's are all `cline-pass/` ids — the only ones
+/// `provider()` accepts.
+#[test]
+fn the_runners_json_lists_each_runners_catalog() {
+    let root = dir("catalogs");
+    let env = env(&[
+        ("PATH", "/nonexistent-dir"),
+        ("HOME", &root.join("home").to_string_lossy()),
+    ]);
+    let out = detect::report_json(&env).unwrap();
+    let rows: serde_json::Value =
+        serde_json::from_str(&out).unwrap_or_else(|e| panic!("bad json '{out}': {e}"));
+    let rows = rows.as_array().unwrap();
+    let row = |runner: &str| {
+        rows.iter()
+            .find(|r| r["runner"] == runner)
+            .unwrap_or_else(|| panic!("no row for {runner}:\n{out}"))
+    };
+    for runner in [
+        "claude", "codex", "cursor", "devin", "cline", "cmd", "opencode", "fake",
+    ] {
+        let models = row(runner)["models"].as_array().unwrap();
+        assert!(!models.is_empty(), "{runner} lists no catalog");
+        let mut seen = std::collections::BTreeSet::new();
+        for m in models {
+            let id = m.as_str().unwrap();
+            assert!(seen.insert(id), "{runner} lists {id} twice");
+        }
+        let draft = match runner {
+            "claude" => "sonnet",
+            "codex" => "gpt-5.3-codex",
+            "cursor" => "auto",
+            "devin" => "swe-2-max",
+            "cline" => "cline-pass/deepseek-v4.1-flash-1017",
+            "cmd" => "deepseek/deepseek-v4.1-flash",
+            "opencode" => "anthropic/claude-sonnet-5-5",
+            _ => "m",
+        };
+        assert!(
+            models.iter().any(|m| m == draft),
+            "{runner}'s catalog dropped its draft {draft}: {models:?}"
+        );
+    }
+    let cursor = row("cursor")["models"].as_array().unwrap();
+    assert_eq!(cursor[0], "auto");
+    assert!(
+        cursor.len() > 2 && cursor.iter().any(|m| m.as_str().unwrap().contains("grok")),
+        "cursor offers more than auto — grok among them: {cursor:?}"
+    );
+    let cline = row("cline")["models"].as_array().unwrap();
+    assert!(
+        cline
+            .iter()
+            .all(|m| m.as_str().unwrap().starts_with("cline-pass/")),
+        "cline takes only cline-pass ids: {cline:?}"
     );
 }
