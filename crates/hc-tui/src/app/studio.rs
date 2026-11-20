@@ -57,6 +57,13 @@ impl App {
         self.sync_hollywood_plain();
     }
 
+    /// Whether the sidebar draws the machine-first view: always in
+    /// studio mode — a lone `Local` machine still leads the tree —
+    /// and in `--plain` only with several endpoints, herdr's own gate.
+    pub(super) fn federated_sidebar(&self) -> bool {
+        self.studio.active || self.projection.endpoints.len() > 1
+    }
+
     /// A direct studio key: `alt+up/down` move between studios in
     /// the aggregate's order — this core's first, then machine-list
     /// order — `alt+left/right` between the current studio's live

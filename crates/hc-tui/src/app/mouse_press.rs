@@ -178,13 +178,13 @@ impl App {
             return;
         }
         // The sidebar's `new` row. The classic one-machine footer keeps
-        // `new_workspace` (herdr in `--plain`, the opening page or the
-        // dialog outside it); the endpoint sidebar's `new · <machine>`
-        // is the New Studio dialog's click path, with that machine
+        // `new_workspace` (herdr in `--plain`, where the spaces sidebar
+        // still draws); the machine-first `new · <machine>` footer is
+        // the New Studio dialog's click path, with that machine
         // preselected (U6b) — the same condition `render_shell` routes
         // its footer on.
         if contains(hits.new_workspace, point) {
-            if !self.plain && self.projection.endpoints.len() > 1 {
+            if self.federated_sidebar() {
                 let machine = match &self.projection.active_endpoint_id {
                     crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
                     _ => None,

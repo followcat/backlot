@@ -159,6 +159,9 @@ impl MachineDiagnostics {
 
 pub(crate) struct ShellRenderState<'a> {
     pub machine_diagnostics: &'a MachineDiagnostics,
+    /// Whether the sidebar is the machine-first (federated) view:
+    /// studio mode always, `--plain` only with several endpoints.
+    pub federated: bool,
     pub endpoints: &'a [ClientShellEndpoint],
     pub active_endpoint_id: &'a ClientEndpointId,
     pub collapsed_endpoints: &'a HashSet<ClientEndpointId>,
@@ -233,7 +236,7 @@ pub(crate) fn render_shell(
         );
     }
     if layout.sidebar.width > 0 {
-        if state.endpoints.len() > 1 {
+        if state.federated {
             if state.sidebar_collapsed {
                 super::endpoint_sidebar::render_collapsed(
                     buffer,

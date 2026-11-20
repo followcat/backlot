@@ -137,10 +137,11 @@ impl App {
         {
             groups.remove(&target.workspace_id);
         }
-        // The reference scrolls directly only on the single-endpoint
-        // desktop path; multi-endpoint/mobile reveal through the flag.
+        // The reference scrolls directly only on the classic
+        // single-endpoint desktop path; the machine-first sidebar and
+        // mobile reveal through the flag.
         let mobile = self.area.0 <= self.shell.mobile_width_threshold;
-        if self.projection.endpoints.len() != 1 || mobile {
+        if self.federated_sidebar() || mobile {
             return;
         }
         // Already on-screen: the hit map covers it, no scroll change.

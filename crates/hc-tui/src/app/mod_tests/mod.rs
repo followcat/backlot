@@ -46,6 +46,7 @@ mod review_regressions;
 mod settings_studio;
 mod shared_rpc;
 mod sidebar_edge;
+mod single_machine_sidebar;
 mod studio;
 mod studio_cache;
 mod studio_machines;

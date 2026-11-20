@@ -60,6 +60,7 @@ pub(crate) fn navigator_rows(
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
     navigator: &NavigatorState,
+    federated: bool,
 ) -> Vec<NavigatorRow> {
     let query = navigator.query.trim().to_lowercase();
     let filter = |status| match navigator.filter {
@@ -78,7 +79,6 @@ pub(crate) fn navigator_rows(
         words.iter().all(|word| value.contains(word))
     };
     let filtering = navigator.filter.is_some() || !query.is_empty();
-    let federated = endpoints.len() > 1;
     let depth_offset = u8::from(federated);
     let mut rows = Vec::new();
 

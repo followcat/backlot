@@ -205,6 +205,7 @@ pub(super) fn render_overlays_and_cursor(
         for cell in &mut buf.content {
             cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
         }
+        let federated = app.federated_sidebar();
         crate::chrome::mobile_switcher::render_mobile_switcher(
             buf,
             area,
@@ -216,6 +217,7 @@ pub(super) fn render_overlays_and_cursor(
             &mut app.shell_state.mobile_switcher_scroll,
             &mut app.shell_state.reveal_mobile_workspace,
             &mut app.hit_map,
+            federated,
         );
     }
     app.help_hits = if app.help {
@@ -380,6 +382,7 @@ pub(super) fn render_overlays_and_cursor(
             navigator,
             &app.projection.endpoints,
             &app.projection.active_endpoint_id,
+            app.federated_sidebar(),
             &app.shell.palette,
         )
         .unwrap_or_default()

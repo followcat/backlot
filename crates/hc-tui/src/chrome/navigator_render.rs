@@ -43,6 +43,7 @@ pub(crate) fn render_navigator_overlay(
     n: &NavigatorState,
     endpoints: &[ClientShellEndpoint],
     active_endpoint_id: &ClientEndpointId,
+    federated: bool,
     p: &Palette,
 ) -> Option<NavigatorRender> {
     let a = b.area;
@@ -67,7 +68,7 @@ pub(crate) fn render_navigator_overlay(
         " Go to ",
         Style::default().fg(p.accent).bg(p.panel_bg),
     );
-    let rows = navigator_rows(endpoints, active_endpoint_id, n);
+    let rows = navigator_rows(endpoints, active_endpoint_id, n, federated);
     let search = if n.search_focused {
         " / ".to_owned()
     } else if let Some(f) = n.filter {

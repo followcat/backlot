@@ -233,12 +233,11 @@ async fn the_new_dot_row_opens_the_dialog_with_the_active_machine() {
 
 #[tokio::test]
 async fn the_classic_new_row_keeps_the_workspace_flow() {
-    // One endpoint — the classic ` new` footer — still routes through
-    // `new_workspace`: studioless lands on the opening page rather
-    // than on the dialog directly.
+    // `--plain` — one endpoint, the classic ` new` footer — still
+    // routes through `new_workspace`: no machine-first `new ·` row, no
+    // studio dialog.
     let mut app = app_multi(vec![term("t1")], vec![]);
-    app.set_plain(false);
-    app.opening.settled = true;
+    app.set_plain(true);
     app.area = (120, 24);
     draw_to(&mut app, 120, 24);
     let rect = app.hit_map.new_workspace;
@@ -248,8 +247,7 @@ async fn the_classic_new_row_keeps_the_workspace_flow() {
         rect.x + 1,
         rect.y,
     ));
-    assert!(app.new_studio.is_none(), "no direct dialog");
-    assert!(app.opening_visible(), "the opening page came up");
+    assert!(app.new_studio.is_none(), "no dialog in --plain");
 }
 
 #[tokio::test]
