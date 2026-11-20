@@ -19,7 +19,7 @@ pub fn real() -> Seams<'static> {
         lister: Box::new(list_dirs),
         repo: Box::new(probe),
         is_dir: Box::new(|p| p.is_dir()),
-        is_repo: Box::new(|p| p.join(".git").exists()),
+        is_repo: Box::new(crate::paths::is_git),
     }
 }
 
@@ -58,20 +58,21 @@ pub(crate) fn branch(path: &Path) -> Option<String> {
         .filter(|branch| !branch.is_empty())
 }
 
-/// The directory's shape as a [`Repo`]: `.git` itself is the gate —
-/// children inside a repository's work tree are not repositories —
-/// then one `log` for the commit age and one `symbolic-ref` for the
+/// The directory's shape as a [`Repo`]: a `.git` git itself accepts
+/// is the gate — children inside a repository's work tree are not
+/// repositories, and a broken mark counts as no repository — then
+/// one `log` for the commit age and one `symbolic-ref` for the
 /// branch (`detached` when there is none). A repository with no
-/// commit yet is [`Repo::Empty`]. Without `.git` the children answer
-/// the shape: direct-child repositories make a [`Repo::Workspace`],
-/// a readable rest a [`Repo::Dir`], an unreadable or missing path
-/// [`Repo::Missing`].
+/// commit yet is [`Repo::Empty`]. Without an accepted `.git` the
+/// children answer the shape: direct-child repositories make a
+/// [`Repo::Workspace`], a readable rest a [`Repo::Dir`], an
+/// unreadable or missing path [`Repo::Missing`].
 pub(crate) fn probe(path: &Path) -> Repo {
-    if !path.join(".git").exists() {
+    if !crate::paths::is_git(path) {
         let Some(kids) = list_dirs(path) else {
             return Repo::Missing;
         };
-        let repos = kids.iter().filter(|k| k.join(".git").exists()).count();
+        let repos = kids.iter().filter(|k| crate::paths::is_git(k)).count();
         return match repos {
             0 => Repo::Dir,
             n => Repo::Workspace { repos: n },

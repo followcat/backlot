@@ -1154,8 +1154,12 @@ async fn the_dry_run_argv_and_a_verbatim_error() {
 async fn the_dry_run_carries_the_plain_dirs_flag() {
     let (mut app, recorded) = dialog_app().await;
     key(&mut app, hc_vt::Key::Tab);
-    // `notes` — the plain directory — is index 3.
+    // `notes` — the plain directory — is index 3. Its row already
+    // promises the init the launch will run.
     app.new_studio.as_mut().unwrap().repos.sel = 3;
+    let backend = draw_to(&mut app, 100, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("will git init"), "the pick row: {text}");
     key(&mut app, hc_vt::Key::Enter);
     key(&mut app, hc_vt::Key::Enter);
     drain_ns(&mut app).await;

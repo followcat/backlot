@@ -193,3 +193,21 @@ fn dir_entries_carry_their_member_repositories() {
     assert_eq!(entry(&doc, "web")["in_use_studio"], "acme-shop");
     assert!(entry(&doc, "docs")["in_use_studio"].is_null());
 }
+
+/// A `.git` mark git refuses — an empty directory — lists as a
+/// plain `dir`, the same answer `paths::classify` gives the launch,
+/// so the dialog's shape can never disagree with the dry-run's
+/// check. A broken child stops counting a parent as a workspace.
+#[test]
+fn a_broken_git_mark_lists_as_a_plain_directory() {
+    let (_scratch, env, home) = home_env();
+    fs::create_dir_all(home.join("aiflows").join(".git")).unwrap();
+    repo(&home.join("acme-shop"), true);
+    fs::create_dir_all(home.join("mono").join("rotten").join(".git")).unwrap();
+
+    let doc = json(&env, &format!("repos --json --from {}", home.display()));
+    assert_eq!(entry(&doc, "aiflows")["kind"], "dir");
+    assert_eq!(entry(&doc, "acme-shop")["kind"], "git_ready");
+    assert_eq!(entry(&doc, "mono")["kind"], "dir");
+    assert!(entry(&doc, "mono")["members"].is_null());
+}

@@ -58,3 +58,20 @@ fn list_dirs_lists_only_directories() {
         fs::set_permissions(&closed, fs::Permissions::from_mode(0o755)).unwrap();
     }
 }
+
+/// The same weak-mark rule as `paths::is_git`: a `.git` directory
+/// git refuses is not a repository — the shape answers as if the
+/// mark were absent, and a broken child does not count toward a
+/// parent's workspace.
+#[test]
+fn a_broken_git_mark_is_no_repository() {
+    let (scratch, _env) = scratch();
+    let broken = scratch.files.join("aiflows");
+    fs::create_dir_all(broken.join(".git")).unwrap();
+    assert_eq!(probe(&broken), Repo::Dir);
+    assert_eq!(probe(&scratch.files), Repo::Dir);
+    let repo = scratch.files.join("acme-shop");
+    fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    assert_eq!(probe(&scratch.files), Repo::Workspace { repos: 1 });
+}

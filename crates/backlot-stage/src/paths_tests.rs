@@ -142,3 +142,49 @@ fn initialize_makes_the_repo_the_plan_promised() {
     paths::initialize(&bare.to_string_lossy(), &[], true, false).unwrap();
     assert!(!bare.join(".git").exists());
 }
+
+/// A `.git` mark git itself refuses — an empty directory, a dead
+/// gitfile pointer — is no repository: the path classifies plain,
+/// `check` asks for the plain-directory flag, a broken child stops
+/// counting its parent as a workspace, and the launch's `git init`
+/// repairs the mark in place.
+#[test]
+fn a_broken_git_mark_counts_as_no_repository() {
+    let (scratch, _env) = scratch();
+    let files = &scratch.files;
+
+    // The reported case: a `.git` directory that is empty.
+    let broken = files.join("aiflows");
+    fs::create_dir_all(broken.join(".git")).unwrap();
+    assert_eq!(paths::classify(&broken), PathShape::Plain);
+
+    // A dead gitfile pointer counts the same.
+    let dead = files.join("dead-link");
+    fs::create_dir_all(&dead).unwrap();
+    fs::write(dead.join(".git"), "gitdir: /no/such/gitdir\n").unwrap();
+    assert_eq!(paths::classify(&dead), PathShape::Plain);
+
+    // `check` routes it through the plain-directory arms — the bare
+    // argv refuses and each flag is taken.
+    let broken_s = broken.to_string_lossy().into_owned();
+    let msg = paths::check(&broken_s, false, false).unwrap_err();
+    assert!(format!("{msg:?}").contains("--init"), "{msg:?}");
+    assert!(paths::check(&broken_s, true, false).is_ok());
+    assert!(paths::check(&broken_s, false, true).unwrap().no_git);
+
+    // A broken `.git` child does not make its parent a workspace;
+    // a real child repository still does.
+    let ws = files.join("mono");
+    fs::create_dir_all(ws.join("rotten").join(".git")).unwrap();
+    assert_eq!(paths::classify(&ws), PathShape::Plain);
+    repo(&ws.join("web"), false);
+    assert!(matches!(paths::classify(&ws), PathShape::Workspace { .. }));
+
+    // The plan's promise holds: `git init` repairs the broken mark —
+    // the repository exists where the plain directory stood.
+    paths::initialize(&broken_s, &[], false, true).unwrap();
+    assert_eq!(
+        git(&broken, &["log", "-1", "--format=%s"]),
+        "chore: initial commit"
+    );
+}

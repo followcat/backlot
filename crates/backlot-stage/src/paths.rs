@@ -28,8 +28,15 @@ pub enum PathShape {
 /// `.git` — a directory or a worktree's `.git` file — marks the
 /// directory itself as a repository, the same probe `repos` and the
 /// pickers use.
+///
+/// The mark alone is not enough — a `.git` directory that is empty
+/// or broken, or a gitfile whose pointer is dead, is no repository:
+/// `is_git` is the mark AND the same `rev-parse --git-dir` the
+/// launch's [`prove_git`] runs, so a pick that classified a path can
+/// never meet a check that disagrees. A broken mark counts as no
+/// repository — the path classifies plain and `git init` repairs it.
 pub fn is_git(path: &Path) -> bool {
-    path.join(".git").exists()
+    path.join(".git").exists() && prove_git(&path.to_string_lossy()).is_ok()
 }
 
 /// Does the repository at `path` hold at least one commit — one
