@@ -182,6 +182,24 @@ fn answers_with_auto_runner() -> Vec<(&'static str, Result<String, String>)> {
     answers
 }
 
+/// A runner with no effort flag whose model ids carry the depth —
+/// cursor/devin's shape.
+fn runners_json_depth() -> String {
+    serde_json::json!([
+        { "runner": "deep", "status": "found", "version": "1",
+          "models": ["x-1-high", "x-2"], "efforts": [] }
+    ])
+    .to_string()
+}
+
+/// `base_answers` with the depth-in-model runner probed instead.
+fn answers_with_depth_runner() -> Vec<(&'static str, Result<String, String>)> {
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "runners --json");
+    answers.push(("runners --json", Ok(runners_json_depth())));
+    answers
+}
+
 /// An app in studio mode with the dialog open, the Local machine's
 /// version+repos already answered.
 async fn dialog_app() -> (App, Recorded) {
@@ -869,6 +887,31 @@ async fn a_catalog_auto_is_not_doubled_in_the_list() {
         vec!["auto".to_string(), "x-1".to_string(), "x-2".to_string()],
         "auto stays first and appears once"
     );
+}
+
+/// A runner with no effort flag shows the depth its model id
+/// carries in the EFFORT column — the flag-less runners'
+/// `--effort` replacement, not a fake list.
+#[tokio::test]
+async fn a_flagless_runner_shows_the_depth_in_its_model_id() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_depth_runner());
+    to_cast(&mut app).await;
+    let backend = draw_to(&mut app, 120, 36);
+    let text = screen_lines(&backend).join("\n");
+    assert!(
+        text.contains("high"),
+        "the model's depth shows where the effort flag would:\n{text}"
+    );
+    // Switching the model to a depth-less id falls back to `-`.
+    {
+        let d = app.new_studio.as_mut().unwrap();
+        d.cast.rows[0].model = 1;
+    }
+    let backend = draw_to(&mut app, 120, 36);
+    let text = screen_lines(&backend).join("\n");
+    let row = text.lines().find(|l| l.contains("producer")).unwrap();
+    assert!(row.contains(" -"), "no depth to show:\n{row}");
 }
 
 #[tokio::test]

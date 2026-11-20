@@ -263,6 +263,17 @@ pub(crate) fn parse_runners(text: &str) -> Result<Vec<RunnerRow>, String> {
         .collect())
 }
 
+/// The thinking depth a model id carries — the rightmost
+/// `-<depth>` word (`…-high`, `swe-2-max`). What the EFFORT column
+/// shows for a runner that has no effort flag: cursor and devin
+/// bake it into the id instead.
+pub(crate) fn depth_in(model: &str) -> Option<&'static str> {
+    const DEPTHS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+    model
+        .rsplit('-')
+        .find_map(|seg| DEPTHS.iter().find(|d| **d == seg).copied())
+}
+
 /// A repo name → a studio id: lowercase, the `[a-z0-9_-]` alphabet,
 /// a leading non-alnum run collapsed to nothing, length-capped —
 /// the same derivation the wizard's repo-answer default applies.

@@ -101,7 +101,7 @@ timeout_s = 120
 | `[limits]` | Live-role cap per runner in this studio — `claude = 3` starts no fourth live role on `claude` until a slot frees. Fixed roles and actors count alike, a role being started counts, and a runner with no entry is unlimited. Held starts go producer, director, writer, then actors by task priority and seq, and the waiting role shows `waiting for a <runner> slot`. Per studio: two studios on one account each count only their own roles. A `0` is refused — a runner is limited by a real number or absent. The cap must seat its fixed roles first — the producer and the director stay live for the studio's whole run — so `studio new` refuses a cap under their count on the runner, or at their count while the writer or a candidate shares it: nobody else could ever sit. |
 | `runner` | The agent CLI that fills the role: `claude`, `codex`, `devin`, `opencode`, `cursor`, `cmd` or `cline`. (`fake` is the test runner shipped for the suite — never put it in a real cast file.) |
 | `model` | The model name, passed to the runner's own flag. A `cline` model must be a `cline-pass/<model>` id: the provider is taken from it, and any other id is refused. |
-| `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort`; Codex `model_reasoning_effort`; cline `--thinking` — `none`, `low`, `medium`, `high` or `xhigh`; OpenCode has no flag). `cursor` and `devin` carry the depth in the model id and `cmd`'s flag writes global config, so all three omit it — a set `effort` on any of them is refused. |
+| `effort` | Optional. Thinking depth, passed to the runner's own flag where it has one (Claude `--effort` — `low`, `medium`, `high`, `xhigh` or `max`; Codex `model_reasoning_effort` — the same plus `ultra`; cline `--thinking` — `none`, `low`, `medium`, `high` or `xhigh`). `cursor` and `devin` carry the depth in the model id, `cmd`'s flag writes global config and `opencode`'s launch carries none, so all four omit it — a set `effort` on `cursor` or `cmd` is refused, on `devin` or `opencode` ignored. |
 | `permission_profile` | `standard` or `worktree`. On Claude these map to `--permission-mode manual` and `acceptEdits`; the other runners accept the same two values. `worktree` is the right choice for actors working inside their own worktree. |
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
 | `mode` | Optional. `standard` is the default. `experimental` (R14) marks the studio an experimental production — `backlot studio new --mode` overrides it, the wizard and the New Studio dialog offer both, each role's prompt gains research-level guidance (hypotheses, competing variants, honest negatives), a task may be created with no recorded requirement for direct-to-task exploration, and `status` plus the dock/sheet flag it `[experimental]`/`exp`. |
@@ -557,7 +557,7 @@ stage can raise:
 | `permission profile not supported` | The cast's `permission_profile` is not `standard` or `worktree`. | Same: the role never starts; fix the cast for the next studio. |
 | `model not supported` | A cline role's model names no provider the adapter knows — only `cline-pass/<model>` ids were measured, and there is no per-role config for a provider. | The role never starts; give the cast a `cline-pass/…` model. |
 | `effort not supported` | A cline role's `effort` is not one `--thinking` takes (`none`, `low`, `medium`, `high`, `xhigh`). | Same: the role never starts; fix the cast's effort. |
-| `config malformed` | `<state base>/config.toml` did not parse, or a `[runner_env.<runner>]` table held a non-string — the role gets no runner env and does not start. | Fix the file's TOML; the stage retries each tick. Only the error's line and column are reported, never the file's contents. |
+| `config malformed` | `<state base>/config.toml` did not parse, a `[runner_env.<runner>]` table held a non-string, or an env file `[env_file]` names could not be read or parsed — the role gets no runner env and does not start. | Fix the file's TOML or the env file; the stage retries each tick. Only the error's line and column or the file's path are reported, never the contents. |
 | `cursor prep failed` | A cursor role's per-session setup failed — its directories, `cli-config.json` or the `mcp-disabled.json` list could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
 | `cursor dir was open` | A cursor role's `roles/<role>/cursor/` — the boundary that keeps the agent's `authInfo`-holding files unreachable — carried a group or other permission bit. The stage found it at launch prep or at session discovery and set it back to 700. | Informational only — the detail names the path suffix. Check what set the mode (a loose umask, an outside chmod); a repeat drift raises it again. |
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
@@ -680,6 +680,7 @@ default — one per core, overridable with `BACKLOT_STATE_DIR`:
 
 ```
 config.toml                  optional [runner_env.<runner>] env for role terminals
+agent.env                  optional dotenv file merged under it, every runner
 studios/acme-shop/
   events.jsonl               the ledger: append-only, the source of truth
   events.lock                the flock every append takes
@@ -722,6 +723,22 @@ the summary or logs. A malformed file raises `config malformed`. The new-studio 
 runner's `PATH` here when the cast's binary lives outside the inherited `PATH` (shown before it is
 written, an existing `PATH` never touched); `studio new`'s installed check counts it the way a
 launch would.
+
+Larger env sets — a company proxy's whole bundle, say — live in dotenv files rather than inline.
+An `agent.env` beside the `config.toml` applies to every runner the moment it exists, and
+`[env_file]` tables name more: `default` for every runner, a runner's own key for that one only.
+Paths are absolute or `~/`-relative, a missing file is skipped, and each layer sits under the one
+after it — `agent.env`, then `default`, then the runner's file, then `[runner_env]` strings, which
+always win.
+
+```toml
+[env_file]
+default = "~/.config/secrets/http-proxy.env"   # KEY=VALUE lines, `export` and `#` comments ok
+claude = "~/.config/backlot/claude.env"        # this runner only
+```
+
+A file that exists but does not parse or read is `config malformed` — the message names the path
+and the line's position only, never the value beside it.
 
 `backlot records` reads every studio's ledger and summarizes each actor identity's deliveries —
 the factual record, with no score. `--kind <task_kind>` keeps only one task kind's rows (and

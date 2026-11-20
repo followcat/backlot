@@ -1,6 +1,7 @@
 //! CLI tests driving `cli::run` in-process with a scratch state dir.
 
 use std::fs;
+use std::path::Path;
 
 use crate::cli::{Fail, run};
 use crate::cli_testkit::*;
@@ -601,6 +602,23 @@ permission_profile = "worktree"
         &format!("studio new --title e3 --repo /home/user/acme-shop --cast {set}"),
     );
     assert!(err.contains("cmd"), "{err}");
+    // `opencode` omits it too — its launch carries none — while a
+    // set one still parses (the launch ignores it, like devin's).
+    // The cast read is the rule's home; `studio new` checks it
+    // there before anything runs.
+    let no_effort = fixture(
+        &scratch,
+        "cast-opencode-no-effort.toml",
+        &CAST.replacen(
+            "runner = \"runner-p\"\nmodel = \"model-p\"\neffort = \"high\"",
+            "runner = \"opencode\"\nmodel = \"opencode/m\"",
+            1,
+        ),
+    );
+    assert!(
+        crate::commands::read_cast(Path::new(&no_effort)).is_ok(),
+        "an opencode role may omit effort"
+    );
     // The accepted cast lands: cursor, devin and cmd roles hold no
     // `effort` key at all.
     let cast = fixture(

@@ -214,7 +214,20 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 .and_then(|r| r.models.get(row.model).cloned())
                 .unwrap_or_else(|| "-".into()),
             runner
-                .and_then(|r| r.efforts.get(row.effort).cloned())
+                .and_then(|r| {
+                    r.efforts.get(row.effort).cloned().or_else(|| {
+                        // A runner with no effort flag shows the
+                        // depth its model id carries.
+                        if r.efforts.is_empty() {
+                            r.models
+                                .get(row.model)
+                                .and_then(|m| super::model::depth_in(m))
+                                .map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                })
                 .unwrap_or_else(|| "-".into()),
         ];
         for (col, (w, x)) in cols.iter().enumerate() {

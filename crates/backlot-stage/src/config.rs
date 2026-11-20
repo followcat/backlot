@@ -1,7 +1,10 @@
 //! `<state base>/config.toml` parsing: `[runner_env.<runner>]` string
 //! maps hold per-runner settings a role terminal gets through
-//! `terminal.run`'s env — a proxy for Devin, say. Values never reach
-//! labels, the ledger, the summary or logs.
+//! `terminal.run`'s env — a proxy for Devin, say. `[env_file]` names
+//! dotenv files read beneath them — `default` for every runner, a
+//! runner's own key for one — and `<state base>/agent.env` applies
+//! when it exists. Values never reach labels, the ledger, the
+//! summary or logs.
 //!
 //! Also the `[hollywood]` section of the user config
 //! (`$XDG_CONFIG_HOME/backlot/config.toml`, default
@@ -9,7 +12,7 @@
 //! (D14). Nothing launches from it in H1 — `status --all` shows it.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// `line L column C` for a byte offset — the only part of a parse
 /// error that may be reported: the parser's message quotes the
@@ -54,6 +57,129 @@ pub fn runner_env_in(text: &str, runner: &str) -> Result<BTreeMap<String, String
         }
     }
     Ok(env)
+}
+
+/// The `[env_file]` table inside `text`: `default` names a file
+/// read for every runner, a runner's own key one read for that
+/// runner only — the values are dotenv file paths, never env
+/// values themselves. Absent is an empty map.
+pub fn env_files_in(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let parsed: toml::Value = toml::from_str(text).map_err(|e| match e.span() {
+        Some(span) => format!("config.toml: malformed at {}", line_col(text, span.start)),
+        None => "config.toml: malformed".to_string(),
+    })?;
+    let Some(section) = parsed.get("env_file") else {
+        return Ok(BTreeMap::new());
+    };
+    let table = section
+        .as_table()
+        .ok_or_else(|| "config.toml: env_file is not a table".to_string())?;
+    let mut files = BTreeMap::new();
+    for (k, v) in table {
+        match v.as_str() {
+            Some(s) => {
+                files.insert(k.clone(), s.to_string());
+            }
+            None => {
+                return Err(format!("config.toml: env_file.{k} is not a string"));
+            }
+        }
+    }
+    Ok(files)
+}
+
+/// A dotenv file's entries: `KEY=VALUE` lines — `KEY` trimmed, an
+/// `export ` lead tolerated, `#` comments and blanks skipped, one
+/// pair of matching surrounding quotes stripped. A line that does
+/// not parse is the error, its number only — the file may hold
+/// secrets that must never reach a log or the ledger.
+pub fn env_file_map(text: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut env = BTreeMap::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let line = line.strip_prefix("export ").unwrap_or(line).trim_start();
+        let Some((k, v)) = line.split_once('=') else {
+            return Err(format!("env file line {} is not KEY=VALUE", n + 1));
+        };
+        let k = k.trim();
+        if k.is_empty() {
+            return Err(format!("env file line {} is not KEY=VALUE", n + 1));
+        }
+        let v = v.trim();
+        let v = if v.len() >= 2
+            && ((v.starts_with('"') && v.ends_with('"'))
+                || (v.starts_with('\'') && v.ends_with('\'')))
+        {
+            &v[1..v.len() - 1]
+        } else {
+            v
+        };
+        env.insert(k.to_string(), v.to_string());
+    }
+    Ok(env)
+}
+
+/// `~/` and `$HOME/` in a configured env-file path expand under
+/// `home`; anything else is used as given.
+fn env_file_path(p: &str, home: Option<&Path>) -> PathBuf {
+    for prefix in ["~/", "$HOME/"] {
+        if let Some(rest) = p.strip_prefix(prefix)
+            && let Some(home) = home
+        {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(p)
+}
+
+/// The env a `runner`'s launch gets, lowest layer first so a later
+/// source wins: `<state_dir>/agent.env` when present — the
+/// zero-config seam, beside the `config.toml` it complements —
+/// then the `[env_file]` `default` and `runner` files, then the
+/// `[runner_env.<runner>]` strings. A file that does not exist is
+/// skipped; one that cannot be read or parsed is the error —
+/// its path only, never its contents.
+pub fn runner_env_for_home(
+    state_dir: &Path,
+    text: &str,
+    runner: &str,
+    home: &Path,
+) -> Result<BTreeMap<String, String>, String> {
+    let files = env_files_in(text)?;
+    let mut paths = vec![state_dir.join("agent.env")];
+    if let Some(d) = files.get("default") {
+        paths.push(env_file_path(d, Some(home)));
+    }
+    if let Some(r) = files.get(runner) {
+        paths.push(env_file_path(r, Some(home)));
+    }
+    let mut env = BTreeMap::new();
+    for path in paths {
+        match std::fs::read_to_string(&path) {
+            Ok(t) => env.extend(env_file_map(&t).map_err(|e| format!("{}: {e}", path.display()))?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("{}: {e}", path.display())),
+        }
+    }
+    env.extend(runner_env_in(text, runner)?);
+    Ok(env)
+}
+
+/// [`runner_env_for_home`] with the process's own `HOME` — the
+/// launch-time path.
+pub fn runner_env_for(
+    state_dir: &Path,
+    text: &str,
+    runner: &str,
+) -> Result<BTreeMap<String, String>, String> {
+    let home = std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/"));
+    runner_env_for_home(state_dir, text, runner, &home)
 }
 
 /// Hollywood's `[hollywood]` section: its runner identity, like a
@@ -131,14 +257,14 @@ fn hollywood_in(text: &str) -> Result<Option<HollywoodCfg>, String> {
 }
 
 /// The cast file's effort rule applied to Hollywood's own runner:
-/// `cursor`, `devin` and `cmd` carry no effort flag; every other
-/// runner needs one declared. `hollywood setup` refuses on the same
-/// rule `hollywood_in` rejects with.
+/// `cursor`, `devin`, `cmd` and `opencode` carry no effort flag;
+/// every other runner needs one declared. `hollywood setup`
+/// refuses on the same rule `hollywood_in` rejects with.
 pub(crate) fn effort_rule(runner: &str, effort: Option<&str>) -> Result<(), String> {
     if matches!(runner, "cursor" | "cmd") && effort.is_some() {
         return Err(format!("hollywood.runner '{runner}' takes no effort"));
     }
-    if !matches!(runner, "cursor" | "devin" | "cmd") && effort.is_none() {
+    if !matches!(runner, "cursor" | "devin" | "cmd" | "opencode") && effort.is_none() {
         return Err(format!("hollywood.runner '{runner}' needs an effort"));
     }
     Ok(())
@@ -276,5 +402,125 @@ mod tests {
         let err = hollywood_in("[hollywood]\nrunner = 3\nmodel = \"m\"\n").unwrap_err();
         assert!(err.contains("nonempty string"), "{err}");
         assert!(!err.contains('3'), "{err}");
+    }
+
+    /// `KEY=VALUE` lines parse; `export `, comments, blanks and
+    /// quotes are tolerated, and a malformed line's error carries
+    /// its number only — the value stays out of it.
+    #[test]
+    fn an_env_file_parses_dotenv_lines() {
+        let text = concat!(
+            "# a comment\n",
+            "\n",
+            "HTTPS_PROXY = \"http://proxy:8080\"\n",
+            "export http_proxy=http://proxy:8080\n",
+            "NAME = 'single quoted'\n",
+            "UNQUOTED = v1\n",
+        );
+        let env = env_file_map(text).unwrap();
+        assert_eq!(env["HTTPS_PROXY"], "http://proxy:8080");
+        assert_eq!(env["http_proxy"], "http://proxy:8080");
+        assert_eq!(env["NAME"], "single quoted");
+        assert_eq!(env["UNQUOTED"], "v1");
+        // A line with no `=` errors with its number only.
+        let err = env_file_map("A = 1\nbroken line here\n").unwrap_err();
+        assert!(err.contains("line 2"), "{err}");
+        assert!(!err.contains("broken"), "{err}");
+        // An empty key refuses too.
+        assert!(env_file_map(" = 1\n").is_err());
+    }
+
+    /// The `[env_file]` table: `default` and per-runner paths as
+    /// strings; absent is empty, a non-string value is the error.
+    #[test]
+    fn the_env_file_table_lists_paths() {
+        for text in ["", "# nothing\n", "[other]\nx = \"1\"\n"] {
+            assert_eq!(env_files_in(text).unwrap(), BTreeMap::new());
+        }
+        let text = concat!(
+            "[env_file]\n",
+            "default = \"~/.config/secrets/http-proxy.env\"\n",
+            "agy = \"/home/user/agy.env\"\n",
+        );
+        let files = env_files_in(text).unwrap();
+        assert_eq!(files["default"], "~/.config/secrets/http-proxy.env");
+        assert_eq!(files["agy"], "/home/user/agy.env");
+        assert!(env_files_in("[env_file]\ndefault = 3\n").is_err());
+        assert!(env_files_in("[env_file\n").is_err());
+    }
+
+    /// The merge a launch sees: `<state>/agent.env` first, then
+    /// the `default` file, then the runner's file, then the
+    /// `[runner_env]` strings — each source overriding the last.
+    /// A missing file is skipped; one that cannot be read is the
+    /// error.
+    #[test]
+    fn runner_env_for_merges_files_then_strings() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-env");
+        std::fs::write(dir.join("agent.env"), "A = builtin\nSHARED = file\n").unwrap();
+        let proxy = dir.join("proxy.env");
+        std::fs::write(
+            &proxy,
+            "HTTPS_PROXY = http://proxy:8080\nSHARED = default\n",
+        )
+        .unwrap();
+        let mine = dir.join("mine.env");
+        std::fs::write(&mine, "MINE_ONLY = 1\nSHARED = runner\n").unwrap();
+        let text = format!(
+            "[env_file]\ndefault = \"{}\"\nclaude = \"{}\"\n\
+             [runner_env.claude]\nSHARED = \"config\"\n",
+            proxy.display(),
+            mine.display()
+        );
+        let env = runner_env_for(dir.path(), &text, "claude").unwrap();
+        assert_eq!(env["A"], "builtin");
+        assert_eq!(env["HTTPS_PROXY"], "http://proxy:8080");
+        assert_eq!(env["MINE_ONLY"], "1");
+        assert_eq!(env["SHARED"], "config", "strings beat file entries");
+        // A runner with no per-runner file gets the two lower layers.
+        let env = runner_env_for(dir.path(), &text, "codex").unwrap();
+        assert_eq!(env["SHARED"], "default");
+        assert!(!env.contains_key("MINE_ONLY"));
+    }
+
+    /// No `agent.env` and a configured file that does not exist:
+    /// both skip quietly — a file is applied only when present.
+    #[test]
+    fn absent_env_files_are_skipped() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-env-miss");
+        let env = runner_env_for(
+            dir.path(),
+            "[env_file]\ndefault = \"/no/such.env\"\n",
+            "claude",
+        )
+        .unwrap();
+        assert!(env.is_empty());
+    }
+
+    /// An env file that exists but will not read is the error —
+    /// the path only, never the contents.
+    #[test]
+    fn an_unreadable_env_file_is_an_error() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-env-bad");
+        std::fs::write(dir.join("agent.env"), "not a kv line\n").unwrap();
+        let err = runner_env_for(dir.path(), "", "claude").unwrap_err();
+        assert!(err.contains("agent.env"), "{err}");
+        assert!(!err.contains("kv line"), "{err}");
+    }
+
+    /// `~/` in a configured path expands under HOME.
+    #[test]
+    fn env_file_path_tilde_expands() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-tilde");
+        let home = dir.join("home");
+        std::fs::create_dir_all(home.join(".config/secrets")).unwrap();
+        std::fs::write(
+            home.join(".config/secrets/http-proxy.env"),
+            "P = from-home\n",
+        )
+        .unwrap();
+        let text = "[env_file]\ndefault = \"~/.config/secrets/http-proxy.env\"\n";
+        let env = runner_env_for_home(dir.path(), text, "claude", &home).unwrap();
+        assert_eq!(env["P"], "from-home");
     }
 }

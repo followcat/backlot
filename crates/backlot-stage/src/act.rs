@@ -308,18 +308,21 @@ impl Stage {
         Ok(true)
     }
 
-    /// The `[runner_env.<runner>]` map from `<base>/config.toml` —
-    /// secrets the terminal gets through `terminal.run` env only. A
-    /// missing file is no extra env; a malformed one is the caller's
-    /// `attention.raised` detail, so the role starts nothing.
+    /// The launch env a role gets for `runner`: `<state>/agent.env`
+    /// and the `[env_file]`/`[runner_env]` layers of
+    /// `<base>/config.toml` — secrets the terminal gets through
+    /// `terminal.run` env only. Missing pieces are no extra env; a
+    /// malformed one is the caller's `attention.raised` detail, so
+    /// the role starts nothing.
     pub(crate) fn runner_env(&self, runner: &str) -> Result<BTreeMap<String, String>, String> {
-        let path = Path::new(&self.state_dir).join("config.toml");
+        let state_dir = Path::new(&self.state_dir);
+        let path = state_dir.join("config.toml");
         let text = match std::fs::read_to_string(&path) {
             Ok(t) => t,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
             Err(e) => return Err(format!("{}: {e}", path.display())),
         };
-        config::runner_env_in(&text, runner)
+        config::runner_env_for(state_dir, &text, runner)
     }
 
     /// `<program> --version`'s first line, asked once per launch
