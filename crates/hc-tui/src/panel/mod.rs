@@ -28,16 +28,19 @@ pub(crate) use row_lines::owed_text;
 pub(crate) use rows::{Row, Target, rows};
 pub(crate) use rows_fit::mark_counts;
 
-/// How the panel sits on screen. The default is `Closed`: no state,
-/// no width, no keys.
+/// How the panel sits on screen. The default is `Expanded`: the
+/// dock opens on its column beside the panes. A window too narrow
+/// for panes+dock resolves the column to the collapsed strip for
+/// that width — `panel.mode` keeps the chosen mode; the drawn mode
+/// is `App::panel_mode_at(cols)`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum PanelMode {
     /// Not drawn; zero width; the frame is herdr's.
-    #[default]
     Closed,
     /// A 16-column strip with one line per studio.
     Collapsed,
     /// The full panel at the configured width.
+    #[default]
     Expanded,
 }
 
@@ -92,7 +95,10 @@ mod tests;
 impl Panel {
     pub fn new() -> Panel {
         Panel {
-            mode: PanelMode::Closed,
+            // The dock is visible by default: expanded beside the
+            // panes, the collapsed strip when they cannot fit —
+            // `--plain` closes it for the plain multiplexer's frame.
+            mode: PanelMode::Expanded,
             focused: false,
             collapsed_blocks: Default::default(),
             expanded_blocks: Default::default(),

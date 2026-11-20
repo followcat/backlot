@@ -29,7 +29,7 @@ impl App {
                 // The expanded dock's left border is a drag handle
                 // (S5 §2) — beside the panes it resizes within
                 // `28..=48`. An overlay dock's edge is not a handle.
-                if self.panel.mode == crate::panel::PanelMode::Expanded
+                if self.panel_mode_at(self.area.0) == crate::panel::PanelMode::Expanded
                     && self.panel_beside(self.area.0)
                     && point.0 == self.panel_hits.area.x
                 {

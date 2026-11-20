@@ -28,6 +28,7 @@ fn targets(
         |_| stage,
         |_| true,
         panel,
+        panel.mode,
         current.as_ref(),
         body_height,
     )

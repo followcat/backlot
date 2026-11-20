@@ -22,7 +22,8 @@ document order. The client remembers, per studio, the person it last focused the
 
 ## Toggle
 
-`prefix+y` cycles: closed → expanded and focused → (unfocused) focused → closed. `y` is unbound
+`prefix+y` cycles: closed → expanded and focused → (unfocused) focused → closed. The dock opens
+expanded by default; `--plain` starts it closed for the parity harness's frame. `y` is unbound
 in herdr's defaults and the parity scripts never send it. A configured herdr binding on the same
 tail still wins while the panel is closed or unfocused.
 
@@ -45,7 +46,7 @@ tail still wins while the panel is closed or unfocused.
 | `q` | Close the dock |
 | `?` | Open `Ctrl+B ?` help |
 | `m` | The selected row's context menu — the same list a right-click opens |
-| `Esc` | Beside the panes: leave focus — the dock stays put and its borders mute. As an overlay: back one step — the expanded dock drops to the strip when it fits, else closes |
+| `Esc` | Beside the panes: leave focus — the dock stays put and its borders mute. As an overlay: close |
 
 All other keys are eaten while the panel owns focus, except the prefix, which still arms the
 toggle chord — and the four studio keys, which still switch studios and roles with the panel
@@ -55,14 +56,14 @@ focused.
 
 The expanded dock's width is fixed by the frame: 38 columns at 160+, 36 at 100+, 28 under.
 It sits **beside the panes** whenever the pane surface keeps at least 44 columns after the
-sidebar and dock; below that it **overlays** the pane surface, and under the mobile
-threshold it covers the pane surface entirely. The collapsed strip is always 16 columns
-and, being narrow, almost always sits beside the panes.
+sidebar and dock; below that it resolves to the **collapsed strip** — the choice stays
+expanded, so widening the window brings the column back. The collapsed strip is always 16
+columns: beside the panes from 60 columns up, and a 16-column **overlay** at the pane
+surface's right edge under that — the dock never takes the whole surface.
 
 - Beside: `Esc` unfocuses — the borders turn `surface1`; `Ctrl+B y` refocuses, `q`,
   `Ctrl+B Y` or the `×` on the title row closes it.
-- Overlay: `Esc` steps back — the expanded dock drops to the strip when 16 columns fit
-  beside the panes, else closes; the footer reads `esc back`. An overlay dock's rect is
+- Overlay: `Esc` closes; the footer reads `esc back`. An overlay dock's rect is
   reset cell by cell before painting, so nothing underneath shows through.
 - `Enter` on a live person or studio focuses that terminal; over an overlay it also
   closes the dock.
@@ -194,8 +195,8 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
 - Working marks spin about every 120 ms through a one-shot deadline that arms only while a
   working mark is actually drawn; an idle or closed panel wakes nothing.
 - Beside the panes only while the pane surface keeps at least 44 columns after the sidebar
-  and dock; otherwise the open dock overlays the pane surface and the pane geometry keeps
-  the closed shape.
+  and dock; otherwise the dock resolves to the collapsed strip — beside from 60 columns,
+  a 16-column overlay under that — and the pane geometry keeps the closed shape beneath it.
 - The document is the local `backlot` summary, schema `backlot/1`. A missing, malformed or
   foreign-schema document reads as `no studios`, never an error. Without a live `backlot-stage`
   terminal the panel shows `stage not running` and keeps the last document.

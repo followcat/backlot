@@ -431,15 +431,15 @@ async fn the_sheet_draws_inside_the_modal_band_at_every_width() {
         let text = screen_lines(&buf).join("\n");
         assert!(text.contains("1 Overview & Casts"), "cols {cols}: {text}");
     }
-    // The frame is the spec's 76×20 at 80×24 — inside the pane
-    // surface, never over the dock's border. At 80 with the sidebar
-    // open the dock overlays, so the band is the whole frame.
+    // At 80 the dock resolves to the 16-column strip beside the
+    // panes, so the modal band is the frame minus those columns and
+    // the sheet fits inside it.
     app.area = (80, 24);
     draw_to(&mut app, 80, 24);
     let band = app.modal_band(ratatui::layout::Rect::new(0, 0, 80, 24));
     assert_eq!(
         (app.sheet_hits.frame.width, app.sheet_hits.frame.height),
-        (76, 20)
+        (64, 20)
     );
     assert!(app.sheet_hits.frame.x >= band.x);
     assert!(app.sheet_hits.frame.x + app.sheet_hits.frame.width <= band.x + band.width);

@@ -120,6 +120,7 @@ pub(super) fn render_overlays_and_cursor(
             |machine| crate::panel::stage_running(&app.view, machine),
             |machine| app.machine_reachable(machine),
             &app.panel,
+            app.panel_mode_at(area.width),
             app.studio.current.as_ref(),
             Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,

@@ -113,10 +113,10 @@ async fn an_overlay_docks_edge_is_not_a_handle() {
     // Narrow screens draw the dock over the panes — its edge is a
     // border, not a handle (S5 §2).
     let mut app = app_with_panel_doc();
-    app.area = (60, 24);
+    app.area = (50, 24);
     open_panel(&mut app);
-    draw_to(&mut app, 60, 24);
-    assert!(!app.panel_beside(60), "the dock overlays at 60");
+    draw_to(&mut app, 50, 24);
+    assert!(!app.panel_beside(50), "the dock overlays at 50");
     let edge = app.panel_hits.area.x;
     app.on_mouse(mouse(MouseEventKind::Down(MouseButton::Left), edge, 10));
     assert!(

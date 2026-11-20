@@ -389,15 +389,17 @@ async fn esc_on_a_pane_menu_returns_the_keys_to_the_pane() {
 
 #[tokio::test]
 async fn the_menu_clamps_inside_a_narrow_screen() {
-    // §1: `max_width = min(34, cols - 4)` — at 40 columns the menu is
-    // at most 36 wide and never crosses the right edge.
+    // §1: `max_width = min(34, cols - 4)` — at 99 columns the dock
+    // sits beside at the right edge, so the menu must clamp inside
+    // the frame even anchored at the dock's own row.
     let mut app = app_with_panel_doc();
-    app.area = (40, 24);
+    app.area = (99, 24);
     open_panel(&mut app);
+    draw_to(&mut app, 99, 24);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
     key(&mut app, hc_vt::Key::Char('m'));
     assert!(studio_menu_open(&app));
-    let backend = draw_to(&mut app, 40, 24);
+    let backend = draw_to(&mut app, 99, 24);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("Tell"), "the menu rendered: {text}");
 }

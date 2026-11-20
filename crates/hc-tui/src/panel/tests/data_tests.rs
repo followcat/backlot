@@ -45,6 +45,7 @@ fn an_empty_machines_answer_reads_as_no_added_machines() {
         |_| true,
         |_| true,
         &crate::panel::Panel::new(),
+        crate::panel::PanelMode::Collapsed,
         None,
         24,
     );
