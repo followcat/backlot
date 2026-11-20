@@ -24,10 +24,12 @@ fn the_probe_marks_repositories_only() {
         Repo::Commit { branch, .. } => assert_eq!(branch, "main"),
         other => panic!("expected Commit, got {other:?}"),
     }
-    // A child inside the work tree is no repository.
-    assert_eq!(probe(&repo.join("src")), Repo::None);
-    // A plain directory is no repository either.
-    assert_eq!(probe(&scratch.files), Repo::None);
+    // A child inside the work tree is a plain directory.
+    assert_eq!(probe(&repo.join("src")), Repo::Dir);
+    // The scratch dir holds the repository — a workspace.
+    assert_eq!(probe(&scratch.files), Repo::Workspace { repos: 1 });
+    // A path that is no directory is missing.
+    assert_eq!(probe(&scratch.files.join("gone")), Repo::Missing);
 }
 
 #[test]

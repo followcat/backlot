@@ -23,7 +23,7 @@ fn big_fs(n: usize) -> impl Fn(&Path) -> Option<Vec<PathBuf>> {
 fn seams<'a>(lister: Lister<'a>) -> Seams<'a> {
     Seams {
         lister,
-        repo: Box::new(|_| Repo::None),
+        repo: Box::new(|_| Repo::Dir),
         is_dir: Box::new(|p| p == Path::new("/big") || p.starts_with("/big")),
         is_repo: Box::new(|_| false),
     }
@@ -68,7 +68,7 @@ fn expansion_and_age_helpers() {
     let lister = move |p: &Path| kids.get(p).cloned().or(Some(vec![]));
     let s = Seams {
         lister: Box::new(lister),
-        repo: Box::new(|_| Repo::None),
+        repo: Box::new(|_| Repo::Dir),
         is_dir: Box::new(|p| p == Path::new("/p") || p.starts_with("/p")),
         is_repo: Box::new(|_| false),
     };
@@ -100,7 +100,7 @@ fn connector_ancestry_is_kept() {
     let kids2 = kids.clone();
     let s = Seams {
         lister: Box::new(lister),
-        repo: Box::new(|_| Repo::None),
+        repo: Box::new(|_| Repo::Dir),
         is_dir: Box::new(move |p| listed.contains(p) || kids2.contains_key(p)),
         is_repo: Box::new(|_| false),
     };

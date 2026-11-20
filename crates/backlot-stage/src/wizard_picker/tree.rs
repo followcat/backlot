@@ -9,23 +9,30 @@ use std::path::{Path, PathBuf};
 /// "left out" line — a huge folder never stalls the picker.
 pub const CAP: usize = 500;
 
-/// What `git log -1` says about a directory — the picker's cache
-/// fills it once per asked path.
+/// What a directory is for the studio's path binding (D4) — the
+/// picker's cache fills it once per asked path.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Repo {
     /// A git repository with a commit: its branch and the last
     /// commit's age in seconds.
     Commit { branch: String, age_s: u64 },
-    /// A git repository with no commit yet — it cannot be picked.
+    /// A git repository with no commit yet — the launch writes the
+    /// initial commit.
     Empty,
-    /// Not a git repository.
-    None,
+    /// Not itself a repository, but this many direct children are —
+    /// the workspace shape.
+    Workspace { repos: usize },
+    /// A plain directory — the launch runs `git init` (or binds it
+    /// no-git from the final step's toggle).
+    Dir,
+    /// Not a readable directory — it cannot be picked.
+    Missing,
 }
 
 impl Repo {
-    /// A commit behind it — Enter may pick this row.
+    /// Every readable directory binds a path — Enter may pick it.
     pub fn pickable(&self) -> bool {
-        matches!(self, Repo::Commit { .. })
+        !matches!(self, Repo::Missing)
     }
 }
 

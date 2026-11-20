@@ -58,14 +58,24 @@ impl FakeFs {
             }),
             repo: Box::new(|p| {
                 if let Some((branch, age_s)) = self.repos.get(p) {
-                    Repo::Commit {
+                    return Repo::Commit {
                         branch: branch.clone(),
                         age_s: *age_s,
-                    }
-                } else if self.empty.contains(p) {
-                    Repo::Empty
-                } else {
-                    Repo::None
+                    };
+                }
+                if self.empty.contains(p) {
+                    return Repo::Empty;
+                }
+                let Some(kids) = self.kids.get(p).filter(|_| !self.no_access.contains(p)) else {
+                    return Repo::Missing;
+                };
+                let repos = kids
+                    .iter()
+                    .filter(|k| self.repos.contains_key(*k) || self.empty.contains(*k))
+                    .count();
+                match repos {
+                    0 => Repo::Dir,
+                    n => Repo::Workspace { repos: n },
                 }
             }),
             is_dir: Box::new(|p| self.kids.contains_key(p)),
@@ -387,10 +397,11 @@ fn right_enters_a_leaf_directory() {
     assert_eq!(p.focus(), Focus::Input);
 }
 
-/// Enter on a repository row picks it; on a plain directory it
-/// expands and the status says it is not a repository with a commit.
+/// Enter on a directory row picks it — every readable directory
+/// binds a path (D4): a repository, an empty one, a workspace or a
+/// plain directory all come back `Picked`.
 #[test]
-fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
+fn enter_picks_every_readable_directory() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
     typ(&mut p, "code/ba");
@@ -401,7 +412,7 @@ fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
         }
         other => panic!("expected Picked, got {other:?}"),
     }
-    // A plain directory: Enter expands it and explains.
+    // A plain directory: Enter picks it like a repository.
     let mut p = picker(&fs, &home(), vec![]);
     typ(&mut p, "code/");
     let sc = row_paths(&p)
@@ -411,29 +422,54 @@ fn enter_picks_a_repository_and_warns_on_a_plain_dir() {
     while p.sel() < sc {
         p.key(Key::Down);
     }
-    p.key(Key::Enter);
-    assert_eq!(p.status(), Some("not a git repository with a commit"));
-    let paths = row_paths(&p);
-    assert!(paths.contains(&"/home/user/code/scratch/service-a".to_string()));
+    match p.key(Key::Enter) {
+        Some(Outcome::Picked(path)) => {
+            assert_eq!(path, home().join("code/scratch"))
+        }
+        other => panic!("expected Picked, got {other:?}"),
+    }
+    // A workspace: `clients` holds two member repositories.
+    let mut p = picker(&fs, &home(), vec![]);
+    typ(&mut p, "code/");
+    let cl = row_paths(&p)
+        .iter()
+        .position(|s| s == "/home/user/code/clients")
+        .unwrap();
+    while p.sel() < cl {
+        p.key(Key::Down);
+    }
+    match p.key(Key::Enter) {
+        Some(Outcome::Picked(path)) => {
+            assert_eq!(path, home().join("code/clients"))
+        }
+        other => panic!("expected Picked, got {other:?}"),
+    }
+    // A typed plain directory without a trailing slash picks too;
+    // the trailing slash keeps Enter on navigation.
+    let mut p = picker(&fs, &home(), vec![]);
+    typ(&mut p, "code/scratch");
+    match p.key(Key::Enter) {
+        Some(Outcome::Picked(path)) => {
+            assert_eq!(path, home().join("code/scratch"))
+        }
+        other => panic!("expected Picked, got {other:?}"),
+    }
+    let mut p = picker(&fs, &home(), vec![]);
+    typ(&mut p, "code/scratch/");
+    assert!(p.key(Key::Enter).is_none());
+    assert_eq!(
+        p.status(),
+        Some("drop the trailing / to pick this directory")
+    );
 }
 
-/// A repository without commits cannot be picked; an unreadable
-/// directory shows its status and never aborts.
+/// An unreadable directory reports and never aborts — it is the one
+/// shape Enter cannot pick.
 #[test]
-fn an_empty_repository_and_no_access_directory_report() {
+fn a_no_access_directory_reports() {
     let fs = demo_fs();
     let mut p = picker(&fs, &home(), vec![]);
     typ(&mut p, "code/");
-    let er = row_paths(&p)
-        .iter()
-        .position(|s| s == "/home/user/code/empty-repo")
-        .unwrap();
-    while p.sel() < er {
-        p.key(Key::Down);
-    }
-    assert!(p.key(Key::Enter).is_none(), "no commits cannot pick");
-    assert_eq!(p.status(), Some("not a git repository with a commit"));
-    // noaccess: Enter expands nothing, the row marker says no access.
     let na = row_paths(&p)
         .iter()
         .position(|s| s == "/home/user/code/noaccess")
@@ -442,7 +478,7 @@ fn an_empty_repository_and_no_access_directory_report() {
         p.key(Key::Down);
     }
     assert!(p.key(Key::Enter).is_none());
-    assert_eq!(p.status(), Some("not a git repository with a commit"));
+    assert_eq!(p.status(), Some("cannot read this path"));
     assert!(row_paths(&p).iter().all(|s| !s.contains("secret")));
 }
 
