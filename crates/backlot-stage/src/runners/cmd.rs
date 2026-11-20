@@ -42,6 +42,10 @@ pub const CMD_PREP_FAILED: &str = "cmd prep failed";
 /// name; another provider's id still goes in as free text.
 pub const MODELS: &[&str] = &["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-pro"];
 
+/// No effort: cmd's `--effort` writes the global config rather
+/// than setting the run's (measured), so the argv carries none.
+pub const EFFORTS: &[&str] = &[];
+
 /// The per-launch filesystem work: the workdir's settings file and
 /// where the user's MCP servers are listed.
 #[derive(Debug, Clone, PartialEq)]

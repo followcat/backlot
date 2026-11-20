@@ -54,6 +54,11 @@ pub const MODELS: &[&str] = &[
     "ollama/qwen2.5:0.5b",
 ];
 
+/// No effort: the argv carries none — `OPENCODE_CONFIG_CONTENT`
+/// gets only `model`, and a provider's own effort knob differs
+/// per provider, so the runner declares none.
+pub const EFFORTS: &[&str] = &[];
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         // Neither profile adds flags; only an unknown one refuses.

@@ -134,9 +134,10 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     }
     // `cursor` and `devin` carry the thinking depth in the model id
     // — no effort flag exists. `cmd`'s `--effort` writes the global
-    // config (measured), so it takes none either. A set effort on a
-    // runner that carries none would lie in the ledger; every other
-    // runner that consumes it still needs it declared.
+    // config (measured), and `opencode`'s argv ignores the value,
+    // so they take none either. A set effort on a runner that
+    // carries none would lie in the ledger; every other runner that
+    // consumes it still needs it declared.
     let roles = [
         ("producer", &cast.producer.runner, &cast.producer.effort),
         ("director", &cast.director.runner, &cast.director.effort),
@@ -160,10 +161,11 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
                  `--effort` writes the global config"
             )));
         }
-        if !matches!(runner.as_str(), "cursor" | "devin" | "cmd") && effort.is_empty() {
+        if !matches!(runner.as_str(), "cursor" | "devin" | "cmd" | "opencode") && effort.is_empty()
+        {
             return Err(Fail::usage(format!(
-                "{who}: runner '{runner}' needs an effort — only 'cursor', 'devin' and 'cmd' \
-                 carry none"
+                "{who}: runner '{runner}' needs an effort — 'cursor', 'devin', 'cmd' and \
+                 'opencode' carry none"
             )));
         }
     }

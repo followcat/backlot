@@ -361,9 +361,10 @@ fn the_runners_json_lists_models_and_efforts() {
             "claude-haiku-5-5"
         ])
     );
+    // `--effort`'s real list: low through max.
     assert_eq!(
         claude["efforts"],
-        serde_json::json!(["low", "medium", "high"])
+        serde_json::json!(["low", "medium", "high", "xhigh", "max"])
     );
     // A missing runner reports `missing`, no path — and still
     // lists its catalog so the dialog's picker has options; the
@@ -381,6 +382,12 @@ fn the_runners_json_lists_models_and_efforts() {
             .any(|m| m == "gpt-6.1-sol"),
         "codex's catalog names the CLI's own list: {:?}",
         codex["models"]
+    );
+    // `model_reasoning_effort`'s union across the CLI's own model
+    // list — `ultra` is on most, per-model refusal is codex's own.
+    assert_eq!(
+        codex["efforts"],
+        serde_json::json!(["low", "medium", "high", "xhigh", "max", "ultra"])
     );
     // `cursor`, `devin`, `cmd` carry no effort flag (the cast rule).
     for runner in ["cursor", "devin", "cmd"] {

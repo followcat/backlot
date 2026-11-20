@@ -51,6 +51,11 @@ pub const MODELS: &[&str] = &[
     "glm-5-3-high",
 ];
 
+/// No effort flag: the depth is baked into the model id —
+/// `swe-2-max`, `...-high` — so `--effort` does not exist on the
+/// argv at all.
+pub const EFFORTS: &[&str] = &[];
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         "standard" | "worktree" => {}

@@ -48,6 +48,10 @@ pub const MODELS: &[&str] = &[
     "claude-haiku-5-5",
 ];
 
+/// `--effort`'s accepted values, `claude --help` — the whole list,
+/// which an older binary may shorten at launch.
+pub const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+
 /// `--permission-mode`'s value for the profile.
 fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     match profile {

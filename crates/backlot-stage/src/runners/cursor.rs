@@ -77,6 +77,11 @@ pub const MODELS: &[&str] = &[
     "muse-spark-1.3-high",
 ];
 
+/// No effort flag: the depth is baked into the model id — the
+/// `-high`/`-medium` suffixes above — so `--effort` does not
+/// exist on the argv at all.
+pub const EFFORTS: &[&str] = &[];
+
 /// The role's own cursor tree: `<studio>/roles/<role>/cursor`.
 pub fn role_root(studio_dir: &str, role: &str) -> PathBuf {
     Path::new(studio_dir)

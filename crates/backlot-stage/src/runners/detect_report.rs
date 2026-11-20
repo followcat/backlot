@@ -89,18 +89,24 @@ struct Row {
     efforts: Vec<String>,
 }
 
-/// The runner's effort values — `cline`'s declared list, the shared
-/// `low|medium|high` where an effort flag exists, empty where the
-/// cast rule carries none (`cursor`, `devin`, `cmd`).
+/// The runner's effort values — its `EFFORTS` const, empty where
+/// the argv carries none: `cursor`, `devin` and `opencode` bake
+/// the depth into the model or drop it, `cmd`'s flag writes the
+/// global config. The dialog shows the model id's depth where a
+/// list is empty.
 fn efforts(runner: &str) -> Vec<String> {
-    match runner {
-        "cline" => cline::EFFORTS.iter().map(|e| (*e).to_string()).collect(),
-        "cursor" | "devin" | "cmd" => Vec::new(),
-        _ => ["low", "medium", "high"]
-            .iter()
-            .map(|e| (*e).to_string())
-            .collect(),
-    }
+    let list: &[&str] = match runner {
+        "claude" => claude::EFFORTS,
+        "codex" => codex::EFFORTS,
+        "cursor" => cursor::EFFORTS,
+        "devin" => devin::EFFORTS,
+        "opencode" => opencode::EFFORTS,
+        "cmd" => cmd::EFFORTS,
+        "cline" => cline::EFFORTS,
+        "fake" => fake::EFFORTS,
+        _ => &[],
+    };
+    list.iter().map(|e| (*e).to_string()).collect()
 }
 
 /// The runner's model catalog — its `MODELS` const — with the
