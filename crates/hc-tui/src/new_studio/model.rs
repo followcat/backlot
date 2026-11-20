@@ -313,6 +313,54 @@ pub(crate) fn id_error(id: &str, existing: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `⏎`/`space` on a MODEL cell opens it: the row's runner catalog
+/// as a scrollable list — `auto` (the runner's own default) is the
+/// first, explicit entry — narrowed live by an always-live filter,
+/// the step-1 repository picker's own idiom.
+#[derive(Debug)]
+pub(crate) struct ModelPick {
+    /// The offer rows: `"auto"` first, then the catalog deduped —
+    /// a pick commits the entry's name verbatim, like `e` typed it.
+    pub options: Vec<String>,
+    /// Selection and window — the repository picker's own fields.
+    pub sel: usize,
+    pub scroll: usize,
+    /// Always live — every printable char narrows the list.
+    pub filter: TextEditor,
+}
+
+impl ModelPick {
+    /// The list for `models` with `current` preselected: `auto`
+    /// always leads, its own catalog seat deduped.
+    pub(crate) fn open(models: &[String], current: &str) -> Self {
+        let mut options = vec!["auto".to_string()];
+        options.extend(models.iter().filter(|m| m.as_str() != "auto").cloned());
+        let sel = options.iter().position(|m| m == current).unwrap_or(0);
+        ModelPick {
+            options,
+            sel,
+            scroll: 0,
+            filter: TextEditor::new("", false),
+        }
+    }
+
+    /// Entries surviving the filter — the repo picker's own
+    /// case-insensitive substring rule.
+    pub(crate) fn visible(&self) -> Vec<&str> {
+        let needle = self.filter.as_str().trim().to_lowercase();
+        self.options
+            .iter()
+            .map(String::as_str)
+            .filter(|m| needle.is_empty() || m.to_lowercase().contains(&needle))
+            .collect()
+    }
+
+    /// The selected entry's model name.
+    pub(crate) fn chosen(&self) -> Option<&str> {
+        self.visible().get(self.sel).copied()
+    }
+}
+
 /// One cast-table row: a fixed role or an actor candidate.
 #[derive(Debug, Clone)]
 pub(crate) struct CastRow {

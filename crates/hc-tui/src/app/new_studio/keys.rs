@@ -23,6 +23,41 @@ impl App {
             self.new_studio = None;
             return;
         }
+        // The model list owns keys while open: `↑↓` move, typing
+        // narrows it live, `⏎` seats the row's model, `esc` drops
+        // the list and keeps the old value — the repo picker's
+        // own rules.
+        if d.model_pick.is_some() {
+            match key.input.key {
+                Key::Escape => d.model_pick = None,
+                Key::Enter => {
+                    let model = d
+                        .model_pick
+                        .as_ref()
+                        .and_then(|pick| pick.chosen().map(str::to_string));
+                    d.model_pick = None;
+                    if let Some(model) = model {
+                        d.seat_model(&model);
+                    }
+                }
+                Key::ArrowUp | Key::ArrowDown => {
+                    let pick = d.model_pick.as_mut().unwrap();
+                    let n = pick.visible().len();
+                    if n > 0 {
+                        let delta = if key.input.key == Key::ArrowUp { -1 } else { 1 };
+                        pick.sel = (pick.sel as isize + delta).rem_euclid(n as isize) as usize;
+                    }
+                }
+                _ => {
+                    let pick = d.model_pick.as_mut().unwrap();
+                    if pick.filter.handle_key(key) == Some(true) {
+                        pick.sel = 0;
+                        pick.scroll = 0;
+                    }
+                }
+            }
+            return;
+        }
         // A free-text model cell owns keys until Enter/Esc.
         if d.model_edit.is_some() {
             match key.input.key {
@@ -31,13 +66,8 @@ impl App {
                         return;
                     };
                     let text = edit.as_str().trim().to_string();
-                    if !text.is_empty()
-                        && let Probe::Done(runners) = &mut d.runners
-                        && let Some(row) = d.cast.rows.get_mut(d.cast.sel)
-                        && let Some(runner) = runners.get_mut(row.runner)
-                    {
-                        runner.models.push(text);
-                        row.model = runner.models.len() - 1;
+                    if !text.is_empty() {
+                        d.seat_model(&text);
                     }
                 }
                 Key::Escape => {
@@ -283,6 +313,13 @@ impl App {
             return;
         }
         if key.input.key == Key::Enter {
+            // `⏎` on the MODEL cell opens its runner's catalog
+            // list — the dry-run's Enter lives on the other cells.
+            let on_model = self.new_studio.as_ref().is_some_and(|d| d.cast.col == 1);
+            if on_model {
+                self.new_studio.as_mut().unwrap().open_model_pick();
+                return;
+            }
             let ready = self
                 .new_studio
                 .as_ref()
@@ -330,6 +367,9 @@ impl App {
             }
             Key::Char('x') if key.input.mods == Mods::NONE => {
                 d.cast.remove();
+            }
+            Key::Char(' ') if key.input.mods == Mods::NONE && d.cast.col == 1 => {
+                d.open_model_pick();
             }
             Key::Char('e') if key.input.mods == Mods::NONE && d.cast.col == 1 => {
                 let current = match &d.runners {
@@ -443,12 +483,18 @@ impl App {
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
         ) {
             let d = self.new_studio.as_mut().unwrap();
-            if d.step == Step::MachineRepo && d.pane == Step1Pane::Repos {
-                let delta = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
-                    -1
-                } else {
-                    1
-                };
+            let delta = if matches!(mouse.kind, MouseEventKind::ScrollUp) {
+                -1
+            } else {
+                1
+            };
+            if let Some(pick) = &mut d.model_pick {
+                // The wheel walks the open list's selection.
+                let n = pick.visible().len();
+                if n > 0 {
+                    pick.sel = (pick.sel as isize + delta).rem_euclid(n as isize) as usize;
+                }
+            } else if d.step == Step::MachineRepo && d.pane == Step1Pane::Repos {
                 self.ns_step1_move(delta);
             }
             return;
@@ -465,6 +511,16 @@ impl App {
         for (rect, hit) in hits.iter().rev() {
             if !contains(*rect, point) {
                 continue;
+            }
+            // The open model list owns the mouse like the keys: its
+            // rows pick, every other hit stays put.
+            if self
+                .new_studio
+                .as_ref()
+                .is_some_and(|d| d.model_pick.is_some())
+                && !matches!(hit, NsHit::ModelPick(_))
+            {
+                return;
             }
             match hit {
                 NsHit::Machine(i) => {
@@ -526,8 +582,29 @@ impl App {
                 }
                 NsHit::CastCell { row, col } => {
                     if let Some(d) = &mut self.new_studio {
-                        d.cast.sel = (*row).min(d.cast.rows.len().saturating_sub(1));
+                        let seat = (*row).min(d.cast.rows.len().saturating_sub(1));
+                        // The repo rows' own rule: the second click
+                        // acts — an already-active MODEL cell opens
+                        // its list.
+                        let open = d.cast.sel == seat && d.cast.col == *col && *col == 1;
+                        d.cast.sel = seat;
                         d.cast.col = *col;
+                        if open {
+                            d.open_model_pick();
+                        }
+                    }
+                }
+                NsHit::ModelPick(i) => {
+                    if let Some(d) = &mut self.new_studio
+                        && let Some(pick) = &mut d.model_pick
+                    {
+                        pick.sel = *i;
+                        // A click picks outright — the menu rows' rule.
+                        let model = pick.chosen().map(str::to_string);
+                        d.model_pick = None;
+                        if let Some(model) = model {
+                            d.seat_model(&model);
+                        }
                     }
                 }
                 NsHit::StartToggle => {

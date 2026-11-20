@@ -471,13 +471,21 @@ impl App {
     }
 
     /// IME/commit text and pastes while the dialog is open land in
-    /// the live editor — a model cell's `e`, step 1's filter, or
-    /// step 2's focused field — never in the terminal behind it
-    /// (the dialog owns input, like `insert_dialog_text`'s rename).
+    /// the live editor — a model cell's `e` or open list, step 1's
+    /// filter, or step 2's focused field — never in the terminal
+    /// behind it (the dialog owns input, like `insert_dialog_text`'s
+    /// rename).
     pub(super) fn insert_ns_text(&mut self, text: &str) -> bool {
         let Some(d) = &mut self.new_studio else {
             return false;
         };
+        if let Some(pick) = &mut d.model_pick {
+            if pick.filter.insert(text) {
+                pick.sel = 0;
+                pick.scroll = 0;
+            }
+            return true;
+        }
         if let Some(edit) = &mut d.model_edit {
             edit.insert(text);
             return true;
