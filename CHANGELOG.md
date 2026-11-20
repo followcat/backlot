@@ -8,7 +8,14 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.16), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
-## Unreleased
+## 0.3.0 — 2026-11-20
+
+This release gives every machine its own `backlot` version, a machine menu that
+installs and upgrades it, and a stage that survives failure — bounded git
+calls, studio `prune`, producer alerts, rate-limit and connection-error
+recovery, `stage watch --restart` and `stage service`. The ledger moves to
+schema v1 with `studio migrate`, D17a hardening and factual usage and cost, and
+casting gains a factual `cast --suggest` advisor and an experimental mode.
 
 ### Added
 
