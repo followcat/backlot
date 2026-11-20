@@ -243,7 +243,7 @@ impl Stage {
                     },
                 )
                 .await?;
-                eprintln!("stage: {role} reports error");
+                crate::stagelog::stage_log!("{role} reports error");
             }
             _ => {}
         }

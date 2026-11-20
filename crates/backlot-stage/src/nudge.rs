@@ -201,7 +201,7 @@ impl Stage {
                             needs_user: false,
                         },
                     )?;
-                    eprintln!("stage: {role} still owes a step — escalated");
+                    crate::stagelog::stage_log!("{role} still owes a step — escalated");
                 }
                 Move::Clear { seq } => {
                     record(

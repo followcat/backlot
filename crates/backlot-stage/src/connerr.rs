@@ -129,7 +129,7 @@ impl Stage {
                         due_ms: now_ms + CONN_WAIT_MS,
                     },
                 );
-                eprintln!("stage: {role} connection error");
+                crate::stagelog::stage_log!("{role} connection error");
             }
             (true, Some(attn)) => {
                 if attn.needs_user {

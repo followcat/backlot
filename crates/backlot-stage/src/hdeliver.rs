@@ -129,7 +129,7 @@ impl Stage {
                 store::StoreError::Refused(r) => Fail::refused(format!("{r}")),
                 store::StoreError::Build(_) => unreachable!("the build closure cannot fail"),
             })?;
-            eprintln!("stage: hollywood notice {} ({})", event.seq, label);
+            crate::stagelog::stage_log!("hollywood notice {} ({})", event.seq, label);
         }
 
         // A queued notice whose source no longer stands is dropped
@@ -173,7 +173,7 @@ impl Stage {
                             let _ = self
                                 .happend(hdir, HollywoodKind::MessageDelivered { target: *seq });
                         }
-                        eprintln!("stage: delivered {:?} to hollywood", f.seqs);
+                        crate::stagelog::stage_log!("delivered {:?} to hollywood", f.seqs);
                     }
                     Err(reason) => eprintln!(
                         "stage: send to hollywood not sent{}, still queued",
@@ -188,7 +188,7 @@ impl Stage {
                     );
                 }
                 Ok(Err(e)) => return Err(Fail::call(e)),
-                Err(e) => eprintln!("stage: send to hollywood lost: {e}"),
+                Err(e) => crate::stagelog::stage_log!("send to hollywood lost: {e}"),
             }
         }
 

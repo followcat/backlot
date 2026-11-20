@@ -220,7 +220,7 @@ impl Stage {
             .await;
         match sent {
             Ok(_) => {
-                eprintln!("stage: sent {key} for {}'s permission prompt", role);
+                crate::stagelog::stage_log!("sent {key} for {}'s permission prompt", role);
                 record(
                     dir,
                     EventKind::AttentionCleared {
@@ -304,7 +304,7 @@ impl Stage {
             },
         )
         .await?;
-        eprintln!("stage: {role} at a permission prompt");
+        crate::stagelog::stage_log!("{role} at a permission prompt");
         Ok(())
     }
 }

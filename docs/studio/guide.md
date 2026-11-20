@@ -235,7 +235,10 @@ scheduling loop. It is idempotent — a second `stage start` says it is already 
 then reads the ledger and starts the producer and the director as `bl-acme-shop-producer` and
 `bl-acme-shop-director`; the writer joins when a plan is wanted, and an actor's terminal is named
 for its task (`bl-acme-shop-t1`). Role terminals are ordinary `hc` terminals: each studio is its
-own space in the client with its people as tabs, and `hc ls` lists them all.
+own space in the client with its people as tabs, and `hc ls` lists them all. The stage narrates
+what it does as `stage: …` lines on its own stderr — a terminal starts, a card lands, a summary
+publishes. A run of identical lines collapses into one with a `×N` count (`stage: summary
+written ×42`), so the timeline stays readable instead of flooding.
 
 On a remote core (`--remote <target>`) the stage terminal runs on **that host**, so `backlot` must
 be installed there. `stage start` uses the host's own `backlot` from its `PATH`, with `--session`

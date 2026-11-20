@@ -87,7 +87,7 @@ pub async fn publish(client: &Client, throttle: &mut Throttle, now_ms: u64) -> R
         }
         // A conflict defers; a dead wire ends the stage.
         Err(e @ CallError::Rpc(_)) => {
-            eprintln!("stage: doc.set conflict: {e}");
+            crate::stagelog::stage_log!("doc.set conflict: {e}");
             Ok(false)
         }
         Err(e) => Err(Fail::call(e)),

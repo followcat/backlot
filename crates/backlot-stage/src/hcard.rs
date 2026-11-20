@@ -138,7 +138,7 @@ impl Stage {
                         note: String::new(),
                     },
                 )?;
-                eprintln!("stage: card c{} done", card.seq);
+                crate::stagelog::stage_log!("card c{} done", card.seq);
             }
             Step::Stale(reason) => {
                 self.happend(
@@ -148,7 +148,7 @@ impl Stage {
                         reason,
                     },
                 )?;
-                eprintln!("stage: card c{} stale", card.seq);
+                crate::stagelog::stage_log!("card c{} stale", card.seq);
             }
             Step::Fail(reason) => {
                 self.happend(
@@ -158,7 +158,7 @@ impl Stage {
                         reason,
                     },
                 )?;
-                eprintln!("stage: card c{} failed", card.seq);
+                crate::stagelog::stage_log!("card c{} failed", card.seq);
             }
             Step::Act(kind) => match append_studio(&sdir, *kind) {
                 Ok(()) => {
@@ -169,7 +169,7 @@ impl Stage {
                             note: String::new(),
                         },
                     )?;
-                    eprintln!("stage: card c{} done", card.seq);
+                    crate::stagelog::stage_log!("card c{} done", card.seq);
                 }
                 Err(e) => {
                     self.happend(
@@ -179,7 +179,7 @@ impl Stage {
                             reason: e.clone(),
                         },
                     )?;
-                    eprintln!("stage: card c{} failed: {e}", card.seq);
+                    crate::stagelog::stage_log!("card c{} failed: {e}", card.seq);
                 }
             },
         }

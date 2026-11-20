@@ -216,7 +216,7 @@ impl crate::daemon::Stage {
                 },
             )
             .await?;
-            eprintln!("stage: {role} stalled");
+            crate::stagelog::stage_log!("{role} stalled");
         } else if rev_since.is_some_and(|s| now_ms.saturating_sub(s) >= limit_ms) {
             // The terminal still says `working` but its activity
             // revision has not moved for the limit — the
@@ -238,7 +238,7 @@ impl crate::daemon::Stage {
                 },
             )
             .await?;
-            eprintln!("stage: {role} stalled");
+            crate::stagelog::stage_log!("{role} stalled");
         } else if stalled(role, task, work, &screen, limit_ms) {
             let held_s = screen.at_ms.saturating_sub(screen.same_since_ms) / 1000;
             self.raise_attention(
@@ -255,7 +255,7 @@ impl crate::daemon::Stage {
                 },
             )
             .await?;
-            eprintln!("stage: {role} stalled");
+            crate::stagelog::stage_log!("{role} stalled");
         }
         Ok(())
     }
