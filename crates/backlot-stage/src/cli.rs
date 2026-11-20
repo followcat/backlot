@@ -278,6 +278,51 @@ pub(crate) fn base(env: &Env, common: &Common) -> Result<PathBuf, Fail> {
     )
 }
 
+/// The base the named studio actually lives under: `base` itself when
+/// its log sits there, else the one sibling core directory that has
+/// it — a studio made under another hc session resolves without the
+/// user knowing which core id it was. `BACKLOT_STATE_DIR`, `--session`
+/// and `--remote` pin the base and skip the scan; several sibling hits
+/// refuse with the core ids so `--session` can disambiguate. `name`
+/// must already be a checked studio name.
+pub(crate) fn resolve_base(
+    env: &Env,
+    common: &Common,
+    base: &Path,
+    name: &str,
+) -> Result<PathBuf, Fail> {
+    if store::studio_dir(base, name).join("events.jsonl").is_file() {
+        return Ok(base.to_path_buf());
+    }
+    if env.get("BACKLOT_STATE_DIR").is_some() || common.session.is_some() || common.remote.is_some()
+    {
+        return Err(Fail::refused(format!("no studio '{name}'")));
+    }
+    let root = store::root_dir(&env.vars);
+    let mut cores: Vec<String> = std::fs::read_dir(&root)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|core| {
+                    store::studio_dir(&root.join(core), name)
+                        .join("events.jsonl")
+                        .is_file()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    cores.sort();
+    match cores.as_slice() {
+        [] => Err(Fail::refused(format!("no studio '{name}'"))),
+        [core] => Ok(root.join(core)),
+        _ => Err(Fail::refused(format!(
+            "studio '{name}' exists under several cores ({}) — pick one with --session",
+            cores.join(", ")
+        ))),
+    }
+}
+
 /// Run the command; the string is printed on stdout on success.
 pub fn run(args: &[String], env: &Env) -> Result<String, Fail> {
     run_stdin(args, env, None)
@@ -325,12 +370,17 @@ pub(crate) fn exec_event(
             "role 'hollywood' cannot do this; in a studio it may only 'tell <studio> producer'",
         ));
     }
-    let dir = store::studio_dir(base, &caller.studio);
     // Only `studio new` may create a studio directory; anything else
-    // against a studio with no log is refused without touching disk.
-    if !matches!(cmd, Cmd::StudioNew { .. }) && !dir.join("events.jsonl").is_file() {
-        return Err(Fail::refused(format!("no studio '{}'", caller.studio)));
-    }
+    // resolves the studio's real base — this core's, or the one
+    // sibling core that holds it — and refuses without touching disk.
+    let resolved;
+    let base = if matches!(cmd, Cmd::StudioNew { .. }) {
+        base
+    } else {
+        resolved = resolve_base(env, &common, base, &caller.studio)?;
+        &resolved
+    };
+    let dir = store::studio_dir(base, &caller.studio);
     // `deliver` checks the caller's right to record before git runs
     // — a refused role hears "cannot do this", not a git error — then
     // the task and cast, then resolves the range in the task's work

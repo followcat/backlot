@@ -98,6 +98,15 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
                 None => Some(crate::cli::studio_name(&common, env)?),
             };
             let base = base(env, &common)?;
+            let base = match &named {
+                Some(name) => crate::cli::resolve_base(
+                    env,
+                    &common,
+                    &base,
+                    &crate::cli::check_studio_name(name)?,
+                )?,
+                None => base,
+            };
             return crate::prune::run(&base, named, all_finished, dry_run, force);
         }
         // `studio migrate` rewrites logs at the current schema
@@ -114,6 +123,15 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
                 None => Some(crate::cli::studio_name(&common, env)?),
             };
             let base = base(env, &common)?;
+            let base = match &named {
+                Some(name) => crate::cli::resolve_base(
+                    env,
+                    &common,
+                    &base,
+                    &crate::cli::check_studio_name(name)?,
+                )?,
+                None => base,
+            };
             return crate::migrate::run(&base, named, all, dry_run);
         }
         _ => {}

@@ -287,6 +287,11 @@ the panel draws it as one line under the studio like the `error` line.
 `$XDG_STATE_HOME/backlot/<core id>/`, overridable with `BACKLOT_STATE_DIR`. Keying by core ID keeps scratch sessions
 apart from real ones. See `ledger.md` for the contents.
 
+A `--studio`/`BACKLOT_STUDIO` name resolves across the per-core directories: not found under the resolved base, a
+command scans the sibling `<core id>` directories — one match is used, none keeps `no studio`, several refuse with
+the core ids (`--session` disambiguates). `BACKLOT_STATE_DIR`, `--session` and `--remote` pin the base and skip the
+scan, so role terminals and directed commands never drift.
+
 ## Summary document
 
 The stage writes one core document named `backlot`, holding all studios. One fixed name is needed because the watcher's
