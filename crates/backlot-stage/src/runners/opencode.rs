@@ -31,14 +31,14 @@ pub fn session_in_argv(argv: &[String]) -> Option<String> {
 /// what `OPENCODE_CONFIG_CONTENT`'s `model` takes. Another
 /// provider's id still goes in as free text.
 pub const MODELS: &[&str] = &[
-    "cline-pass/cline-pass/deepseek-v4.1-flash-1017",
-    "cline-pass/cline-pass/deepseek-v4.1-flash",
-    "cline-pass/cline-pass/deepseek-v4-pro",
-    "cline-pass/cline-pass/glm-5.3",
-    "cline-pass/cline-pass/kimi-k3.1-pro",
-    "cline-pass/cline-pass/qwen3.8-max",
-    "cline-pass/cline-pass/mimo-v2.6-pro",
-    "cline-pass/cline-pass/minimax-m3",
+    "cline-pass/deepseek-v4.1-flash-1017",
+    "cline-pass/deepseek-v4.1-flash",
+    "cline-pass/deepseek-v4-pro",
+    "cline-pass/glm-5.3",
+    "cline-pass/kimi-k3.1-pro",
+    "cline-pass/qwen3.8-max",
+    "cline-pass/mimo-v2.6-pro",
+    "cline-pass/minimax-m3",
     "opencode-go/claude-haiku-5-5",
     "opencode-go/deepseek-v4.1-flash",
     "opencode-go/gemini-4-argon",
