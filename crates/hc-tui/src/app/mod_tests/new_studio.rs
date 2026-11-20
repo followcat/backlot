@@ -265,6 +265,69 @@ async fn an_in_use_repo_warns_but_passes() {
     );
 }
 
+// ---------- the `/` filter ----------
+
+#[tokio::test]
+async fn the_slash_filter_narrows_the_list_incrementally() {
+    let (mut app, _) = dialog_app().await;
+    key(&mut app, hc_vt::Key::Char('/'));
+    let d = app.new_studio.as_mut().unwrap();
+    assert!(d.repos.filtering, "/ owns the keys now");
+    d.repos.sel = 3;
+    for c in ['a', 'c'] {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.filter.as_str(), "ac");
+    assert_eq!(d.repos.sel, 0, "an edit re-seats the selection");
+    let names: Vec<&str> = d.repos.visible().iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["acme-shop"], "the list narrows, never empties");
+    // Backspace widens it again.
+    key(&mut app, hc_vt::Key::Backspace);
+    let names: Vec<&str> = {
+        let d = app.new_studio.as_ref().unwrap();
+        d.repos.visible().iter().map(|e| e.name.as_str()).collect()
+    };
+    assert_eq!(names, ["acme-shop", "beta-tools", "taken"]);
+    // Enter leaves the filter applied; the row stays pickable.
+    key(&mut app, hc_vt::Key::Enter);
+    let d = app.new_studio.as_ref().unwrap();
+    assert!(!d.repos.filtering);
+    assert_eq!(d.repos.visible().len(), 3);
+    assert_eq!(d.repo().map(|r| r.name.as_str()), Some("acme-shop"));
+}
+
+#[tokio::test]
+async fn esc_leaves_the_filter_applied_too() {
+    let (mut app, _) = dialog_app().await;
+    key(&mut app, hc_vt::Key::Char('/'));
+    key(&mut app, hc_vt::Key::Char('t'));
+    key(&mut app, hc_vt::Key::Escape);
+    let d = app.new_studio.as_ref().unwrap();
+    assert!(!d.repos.filtering, "Esc leaves the editor, not the step");
+    assert_eq!(d.repos.filter.as_str(), "t");
+    assert_eq!(d.repos.visible().len(), 3);
+    assert_eq!(d.step, Step::MachineRepo, "Esc stayed on step 1");
+}
+
+#[tokio::test]
+async fn the_filter_text_echoes_while_editing_and_after() {
+    let (mut app, _) = dialog_app().await;
+    key(&mut app, hc_vt::Key::Char('/'));
+    for c in ['a', 'c'] {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    let backend = draw_to(&mut app, 120, 36);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("/ac"), "the live filter echoes:\n{text}");
+    assert!(app.ns_hits.cursor.is_some(), "the filter owns the cursor");
+    key(&mut app, hc_vt::Key::Enter);
+    let backend = draw_to(&mut app, 120, 36);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("(/ac)"), "the applied filter stays:\n{text}");
+    assert!(app.ns_hits.cursor.is_none(), "the cursor leaves with it");
+}
+
 // ---------- step 2 ----------
 
 #[tokio::test]
