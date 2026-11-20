@@ -54,8 +54,12 @@ impl App {
                     // clears on the same event.
                     self.clear_popup_selection();
                     let lossy = String::from_utf8_lossy(&text);
-                    if self.insert_copy_search_text(&lossy) || self.insert_dialog_text(&lossy) {
-                        // The copy search prompt or dialog consumed it.
+                    if self.insert_copy_search_text(&lossy)
+                        || self.insert_dialog_text(&lossy)
+                        || self.insert_ns_text(&lossy)
+                    {
+                        // The copy search prompt, dialog or New
+                        // Studio editor consumed it.
                     } else if self.help {
                         if self.help_state.search_focused && self.help_state.query.insert(&lossy) {
                             self.help_state.scroll = 0;
@@ -84,8 +88,12 @@ impl App {
             UiEvent::Key(key) => self.on_key(key, width),
             UiEvent::Text(text) => {
                 // IME/commit text: bytes only, never a UI binding.
-                if self.insert_copy_search_text(&text) || self.insert_dialog_text(&text) {
-                    // The copy search prompt or dialog consumed it.
+                if self.insert_copy_search_text(&text)
+                    || self.insert_dialog_text(&text)
+                    || self.insert_ns_text(&text)
+                {
+                    // The copy search prompt, dialog or New Studio
+                    // editor consumed it.
                 } else if self.help {
                     if self.help_state.search_focused && self.help_state.query.insert(&text) {
                         self.help_state.scroll = 0;
@@ -130,6 +138,7 @@ impl App {
             || self.mode != Mode::Normal
             || self.help
             || self.dialog.is_some()
+            || self.new_studio.is_some()
             || self.navigator.is_some()
             || self.settings.is_some()
             || self.panel_focused()

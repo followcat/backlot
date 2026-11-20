@@ -460,6 +460,39 @@ impl App {
         }
     }
 
+    /// IME/commit text and pastes while the dialog is open land in
+    /// the live editor — a model cell's `e`, the `/` filter, or step
+    /// 2's focused field — never in the terminal behind it (the
+    /// dialog owns input, like `insert_dialog_text`'s rename).
+    pub(super) fn insert_ns_text(&mut self, text: &str) -> bool {
+        let Some(d) = &mut self.new_studio else {
+            return false;
+        };
+        if let Some(edit) = &mut d.model_edit {
+            edit.insert(text);
+            return true;
+        }
+        if d.repos.filtering {
+            if d.repos.filter.insert(text) {
+                d.repos.sel = 0;
+                d.repos.scroll = 0;
+            }
+            return true;
+        }
+        if d.step == new_studio::Step::IdTitle {
+            match d.field {
+                new_studio::Step2Field::Id => {
+                    d.id.insert(text);
+                }
+                new_studio::Step2Field::Title => {
+                    d.title.insert(text);
+                }
+                new_studio::Step2Field::Mode => {}
+            }
+        }
+        true
+    }
+
     /// `^E`'s editor popup: `$VISUAL`/`$EDITOR <file>` in a floating
     /// terminal on this host — the cast file is always client-local
     /// (it travels to the target machine over stdin later), so `on`
