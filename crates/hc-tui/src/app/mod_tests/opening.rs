@@ -140,8 +140,20 @@ async fn the_layer_waits_for_the_read_too() {
 async fn the_two_second_cap_shows_the_card() {
     use std::time::Duration;
     let mut app = blank_app();
+    // The constructor's first sync armed the cap at the real now —
+    // `get_or_insert` keeps that first arm, so a t0 taken a
+    // millisecond late would sit inside the cap's last stretch and
+    // the 1 ms-below-boundary pass would already settle. Re-arm at
+    // the test's own t0: the exercise is the arithmetic, not the
+    // constructor's clock.
+    app.opening.cap = None;
     let t0 = std::time::Instant::now();
     app.settle_opening(t0);
+    assert_eq!(
+        app.opening.cap,
+        Some(t0 + crate::opening::SETTLE_CAP),
+        "the first pass arms the cap at its own now"
+    );
     assert!(!app.opening_visible(), "the cap has not passed");
     app.settle_opening(t0 + Duration::from_millis(1_999));
     assert!(!app.opening_visible());
