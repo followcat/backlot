@@ -117,6 +117,8 @@ mod docs_tests;
 #[cfg(test)]
 mod draft_tests;
 #[cfg(test)]
+mod finish_sweep_tests;
+#[cfg(test)]
 mod gitcmd_tests;
 
 #[cfg(test)]

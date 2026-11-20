@@ -11,7 +11,10 @@ use backlot_model::state::{RoleLifecycle, StudioState};
 
 mod budget;
 mod desired;
+mod finish;
 mod recover;
+
+pub use finish::finish_sweep;
 
 /// Which fixed role a terminal plays (actors key on the task).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +100,12 @@ pub enum Action {
     /// `terminal.kill` + `terminal.rm` for a `bl-` terminal no role
     /// entry explains — nothing to record.
     DropTerminal { terminal: String, address: String },
+    /// `terminal.rm` for a `finished` record of a finished studio's
+    /// own: the kill landed but the core refused the removal then (a
+    /// live terminal races it), and every client keeps drawing the
+    /// dead pane. Nothing to record — the studio's history is the
+    /// ledger's, not the terminal's.
+    RemoveFinished { terminal: String, address: String },
     /// Record `role.started` for a terminal that already exists
     /// (the stage died between `terminal.run` and the append). The
     /// runner's session id is filled in when the action executes.
@@ -138,6 +147,24 @@ pub struct LiveTerminal {
     /// The program's pid while it runs — cline's manifest names the
     /// engine process, whose parent is this one (S14b).
     pub pid: Option<u32>,
+}
+
+impl From<hc_proto::terminal::Terminal> for LiveTerminal {
+    /// The label view of one core record — the name is the caller's
+    /// (a record without one lands in no view).
+    fn from(t: hc_proto::terminal::Terminal) -> Self {
+        LiveTerminal {
+            name: t.name.unwrap_or_default(),
+            address: t.address,
+            argv: t.argv,
+            cwd: t.cwd,
+            labels: t.labels,
+            status: t.status,
+            waiting_for_person: t.waiting_for_person,
+            activity_revision: t.activity.map(|a| a.revision),
+            pid: t.pid,
+        }
+    }
 }
 
 /// This studio's live terminals by name: only the ones labelled
@@ -365,6 +392,8 @@ pub fn reconcile(
 
 #[cfg(test)]
 mod budget_tests;
+#[cfg(test)]
+mod finish_tests;
 #[cfg(test)]
 mod limits_tests;
 #[cfg(test)]

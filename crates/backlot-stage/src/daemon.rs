@@ -48,44 +48,48 @@ const TICK: Duration = Duration::from_secs(1);
 pub(crate) struct Inventory {
     /// Every live named terminal; per-studio views come from labels.
     pub(crate) terms: Vec<reconcile::LiveTerminal>,
+    /// Named records whose program has ended — the finish sweep's
+    /// input, so a finished studio's dead panes leave every client.
+    pub(crate) finished: Vec<reconcile::LiveTerminal>,
     /// Address → what the program reports doing, for the summary.
     pub(crate) doing: BTreeMap<String, String>,
 }
 
-/// Every live terminal the core knows, kept for the per-studio
-/// label views and with its reported status for the summary.
-async fn live_terminals(client: &Client) -> Result<Inventory, Fail> {
+/// Every live terminal the core knows — and, once a studio has
+/// finished, every finished named record beside it, the finish
+/// sweep's input — kept for the per-studio label views and with its
+/// reported status for the summary. A core with no finished studio is
+/// asked for live terminals only, so its older tombstones cost
+/// nothing; one that does not report finished records simply reports
+/// none, and the sweep then leaves the panes as they were.
+async fn live_terminals(client: &Client, finished: bool) -> Result<Inventory, Fail> {
     let list = client
-        .terminal_list(ListParams::default())
+        .terminal_list(ListParams {
+            all: finished,
+            ..ListParams::default()
+        })
         .await
         .map_err(Fail::call)?;
     let mut inv = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
-    for t in list.terminals.into_iter().filter(|t| t.state == "live") {
-        if let Some(status) = &t.status {
-            let doing = if status.msg.is_empty() {
-                status.state.clone()
-            } else {
-                status.msg.clone()
-            };
-            if !doing.is_empty() {
-                inv.doing.insert(t.address.clone(), doing);
+    for t in list.terminals {
+        if t.state == "finished" && t.name.is_some() {
+            inv.finished.push(t.into());
+        } else if t.state == "live" && t.name.is_some() {
+            if let Some(status) = &t.status {
+                let doing = if status.msg.is_empty() {
+                    status.state.clone()
+                } else {
+                    status.msg.clone()
+                };
+                if !doing.is_empty() {
+                    inv.doing.insert(t.address.clone(), doing);
+                }
             }
-        }
-        if let Some(name) = t.name {
-            inv.terms.push(reconcile::LiveTerminal {
-                name,
-                address: t.address,
-                argv: t.argv,
-                cwd: t.cwd,
-                labels: t.labels,
-                status: t.status,
-                waiting_for_person: t.waiting_for_person,
-                activity_revision: t.activity.map(|a| a.revision),
-                pid: t.pid,
-            });
+            inv.terms.push(t.into());
         }
     }
     Ok(inv)
@@ -110,7 +114,7 @@ async fn refresh_inventory(
     stage: &mut Stage,
     last: Inventory,
 ) -> Result<Inventory, Fail> {
-    let r = live_terminals(client).await;
+    let r = live_terminals(client, stage.sweeps_finished()).await;
     if let Err(e) = &r
         && !matches!(e, Fail::Core(_))
     {
@@ -356,6 +360,13 @@ impl Stage {
             self.act(name, &dir, state, &action, real_slot_free, blocked)
                 .await?;
         }
+        // A finished studio's dead panes: the kill landed, the record
+        // did not. Ownership is the `backlot.studio` label, so another
+        // studio's record and the user's own shells stay.
+        for action in reconcile::finish_sweep(name, state, &live.finished) {
+            self.act(name, &dir, state, &action, real_slot_free, blocked)
+                .await?;
+        }
         self.relabel(name, state, &live.terms).await?;
         self.watch(name, &dir, state, &live.terms, now_ms).await?;
         self.deliver(name, &dir, state, &live.terms, now_ms).await?;
@@ -473,6 +484,13 @@ impl Stage {
             }
         }
         Ok(())
+    }
+
+    /// Whether any cached studio has finished — the only state the
+    /// finish sweep has work in, so finished records are listed for
+    /// no other reason.
+    pub(crate) fn sweeps_finished(&self) -> bool {
+        self.cached.values().any(|state| state.finished.is_some())
     }
 
     /// The `backlot` document's view: cached states, most recently
@@ -701,7 +719,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         .await
         .ok();
     let mut throttle = doc::Throttle::default();
-    let mut live = live_terminals(&link.client).await?;
+    let mut live = live_terminals(&link.client, true).await?;
     crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
         stage.tick(&live).await?;

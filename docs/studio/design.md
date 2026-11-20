@@ -352,6 +352,19 @@ same pass, with reason `role closed`, and an attention left open on an already-c
 the prompt it named lived on that terminal and there is nothing left to answer, so it cannot dangle — a user-owned
 one included.
 
+**Finishing also clears the screen.** Stopping a role kills its program and removes its terminal, but the core can
+refuse the removal while the kill is still landing, and the record outlives it as `finished` — a dead
+`new`/`cast · <id>`/`producer` pane with "Terminal unavailable" in every client, closed by hand one at a time. So a
+finished studio's `finished` records get their own `terminal.rm` from the stage. The stage owns role terminal
+lifecycle already, so it is the layer that can see which records linger — `studio finish` records the decision and
+stops there; it could not know what the core later refused. Ownership is the `backlot.studio`
+label the launch set, never the name: another studio's record, a hand-named `bl-…` and the user's own shell are
+untouched, and a record already gone is a clean `not_found`. Nothing is recorded — a terminal record is not history,
+the ledger is. The studio stays in the document as `finished` and a person reopened from it resumes the recorded
+session into whatever terminal that needs, so cleanup costs the reopen path nothing. Finished records are listed only
+while some studio has finished, and a core that cannot list them just leaves the panes as they were. A removal the
+core refuses is retried next tick and is not the studio's `error`.
+
 A crash loop is bounded: the reducer keeps every `role.lost` time, so the guard survives the restart, and a third loss
 inside ten minutes — or a lost role with no recorded session — raises a `cannot resume` attention instead of starting,
 routed to the role's reviewer like a stalled one. A live terminal already carrying the role's name is re-joined by

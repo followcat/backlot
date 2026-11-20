@@ -653,6 +653,13 @@ explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --a
 twice on a closed row — brings the person back into its recorded runner session; a person whose
 session id was never found has nothing to resume into, and the panel says so.
 
+Finishing also clears the studio's windows. A closed role's program is killed, and if the core
+kept its finished terminal record — the leftover `new`, `cast · <id>` and `producer` panes reading
+"Terminal unavailable" — the stage removes it on the next tick. Only terminals carrying that
+studio's own `backlot.studio` label go: another studio's, a hand-named one and your own shells
+stay. The studio itself stays listed as finished, and reopening still works — the stage starts a
+fresh terminal under the same name.
+
 What is left: the accepted work sits on the `backlot/acme-shop/integration` branch, checked out
 in the `work/integration` worktree — the director integrated there, not into your own branches.
 Merging it into your branches is yours:
