@@ -157,6 +157,7 @@ impl App {
                     d.repos.dir = None;
                     d.repos.home = None;
                     d.repos.filter = crate::chrome::text_editor::TextEditor::new("", false);
+                    d.repos.filtering = false;
                     self.ns_refresh_studios();
                     self.ns_probe_repos(None);
                 }
@@ -478,6 +479,7 @@ impl App {
                             d.repos.dir = None;
                             d.repos.home = None;
                             d.repos.filter = crate::chrome::text_editor::TextEditor::new("", false);
+                            d.repos.filtering = false;
                         }
                     }
                     if switch {

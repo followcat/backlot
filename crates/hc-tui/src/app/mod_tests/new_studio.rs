@@ -487,6 +487,41 @@ async fn climbing_to_the_parent_clears_the_filter_too() {
     assert_eq!(d.repos.visible().len(), 4, "the home listing is whole");
 }
 
+#[tokio::test]
+async fn a_machine_switch_exits_the_filter_editor_too() {
+    let (mut app, _) = dialog_app().await;
+    // `/no` still editing — clicking the other machine is the only
+    // switch reachable while `/` owns the keys.
+    key(&mut app, hc_vt::Key::Char('/'));
+    for c in ['n', 'o'] {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    assert!(app.new_studio.as_ref().unwrap().repos.filtering);
+    draw_to(&mut app, 120, 36);
+    let hit = app
+        .ns_hits
+        .cells
+        .iter()
+        .find_map(|(rect, hit)| match hit {
+            crate::new_studio::NsHit::Machine(1) => Some((rect.x + 1, rect.y)),
+            _ => None,
+        })
+        .expect("a host-b machine hit");
+    app.on_mouse(MouseInput {
+        col: hit.0,
+        row: hit.1,
+        kind: MouseEventKind::Down(MouseButton::Left),
+        mods: hc_vt::Mods::NONE,
+        sgr_position: None,
+    });
+    drain_ns(&mut app).await;
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.machine_sel, 1, "host-b selected");
+    assert_eq!(d.repos.filter.as_str(), "");
+    assert!(!d.repos.filtering, "no empty editor left owning keys");
+    assert_eq!(d.repos.visible().len(), 4, "its listing is unfiltered");
+}
+
 // ---------- step 2 ----------
 
 #[tokio::test]
