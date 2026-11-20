@@ -8,13 +8,13 @@ use crate::chrome::navigate::WorkspaceNavigationTarget;
 use crate::input::KeybindAction as A;
 
 impl App {
-    /// `handle_endpoint_navigation`: with more than one sidebar
-    /// endpoint, workspace and agent actions cycle every Online
-    /// machine in sidebar order. Returns true when the action was
-    /// consumed (including an empty-targets no-op); the caller keeps
-    /// the local single-endpoint path otherwise.
+    /// `handle_endpoint_navigation`: with the machine-first sidebar,
+    /// workspace and agent actions cycle every Online machine in
+    /// sidebar order. Returns true when the action was consumed
+    /// (including an empty-targets no-op); the caller keeps the local
+    /// `--plain` single-endpoint path otherwise.
     pub(super) fn endpoint_navigation(&mut self, action: A) -> bool {
-        if self.projection.endpoints.len() <= 1 {
+        if !self.federated_sidebar() {
             return false;
         }
         match action {

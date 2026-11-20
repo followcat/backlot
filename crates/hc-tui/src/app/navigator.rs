@@ -33,6 +33,7 @@ impl App {
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
             navigator,
+            self.federated_sidebar(),
         )
     }
 
@@ -40,10 +41,12 @@ impl App {
     /// the row marked `current` — the focused pane.
     pub(super) fn open_navigator_overlay(&mut self) {
         let mut navigator = NavigatorState::default();
+        let federated = self.federated_sidebar();
         navigator.selected = navigator_rows(
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
             &navigator,
+            federated,
         )
         .iter()
         .find(|row| row.current)
@@ -54,6 +57,7 @@ impl App {
     /// `move_navigator_selection`: arrows, j/k, ctrl-d/u and the wheel
     /// all step the selection through the flat row list.
     pub(super) fn move_navigator_selection(&mut self, delta: isize) {
+        let federated = self.federated_sidebar();
         let Some(navigator) = self.navigator.as_mut() else {
             return;
         };
@@ -61,6 +65,7 @@ impl App {
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
             navigator,
+            federated,
         );
         if rows.is_empty() {
             navigator.selected = None;
@@ -76,6 +81,7 @@ impl App {
     /// directly, then clamp the selection into the dragged viewport so
     /// rendering does not snap back to it.
     pub(super) fn scroll_navigator_to(&mut self, scroll: usize, viewport_rows: usize) {
+        let federated = self.federated_sidebar();
         let Some(navigator) = self.navigator.as_mut() else {
             return;
         };
@@ -83,6 +89,7 @@ impl App {
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
             navigator,
+            federated,
         );
         let viewport_rows = viewport_rows.max(1);
         navigator.scroll = scroll.min(rows.len().saturating_sub(viewport_rows));
@@ -94,6 +101,7 @@ impl App {
     /// `move_navigator_workspace`: ←/→ hop to the previous/next
     /// workspace section's first pane row.
     fn move_navigator_workspace(&mut self, forward: bool) {
+        let federated = self.federated_sidebar();
         let Some(navigator) = self.navigator.as_mut() else {
             return;
         };
@@ -101,6 +109,7 @@ impl App {
             &self.projection.endpoints,
             &self.projection.active_endpoint_id,
             navigator,
+            federated,
         );
         let Some(selected) = navigator_selected_index(&rows, navigator) else {
             return;
@@ -141,6 +150,7 @@ impl App {
                 &self.projection.endpoints,
                 &self.projection.active_endpoint_id,
                 navigator,
+                self.federated_sidebar(),
             ),
             navigator,
         );

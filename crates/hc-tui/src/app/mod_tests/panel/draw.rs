@@ -43,12 +43,13 @@ async fn open_close_open_repaints_both_regions() {
     let closed = draw_to(&mut app, 120, 24);
     let text = screen_lines(&closed).join("\n");
     assert!(text.contains("PANE-ALPHA"), "{text}");
-    assert!(!text.contains("lot"), "{text}");
+    // ` lot` (not bare `lot`: the sidebar's machine line names `backlot`).
+    assert!(!text.contains(" lot"), "{text}");
 
     open_panel(&mut app);
     let open = draw_to(&mut app, 120, 24);
     let text = screen_lines(&open).join("\n");
-    assert!(text.contains("lot"), "{text}");
+    assert!(text.contains(" lot"), "{text}");
     assert!(text.contains("alice · task-1"), "{text}");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     // The right 26 columns are all panel: no pane paint remains there.
@@ -151,7 +152,7 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
     assert!(strip.contains("lot"), "{strip}");
     assert!(!strip.contains("PANE-ALPHA"), "{strip}");
     let panes = columns_text(&collapsed, 0, 104);
-    assert!(!panes.contains("lot"), "{panes}");
+    assert!(!panes.contains(" lot"), "{panes}");
     // Expanding again puts the full column back.
     app.panel.mode = PanelMode::Expanded;
     let expanded = draw_to(&mut app, 120, 24);

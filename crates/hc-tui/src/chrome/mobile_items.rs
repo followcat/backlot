@@ -23,10 +23,11 @@ pub(crate) fn mobile_items(
     config: &super::ClientShellConfig,
     selected_workspace_id: Option<&WorkspaceNavigationTarget>,
     content_width: u16,
+    federated: bool,
 ) -> Vec<MobileItem> {
     let palette = &config.palette;
     let mut items = Vec::new();
-    if endpoints.len() > 1 {
+    if federated {
         items.push(MobileItem::section("machines", palette));
         for endpoint in endpoints {
             let background = palette.panel_bg;

@@ -25,6 +25,7 @@ pub(crate) fn render_mobile_switcher(
     scroll: &mut usize,
     reveal_workspace: &mut bool,
     hits: &mut ShellHitMap,
+    federated: bool,
 ) {
     if area.is_empty() {
         return;
@@ -97,6 +98,7 @@ pub(crate) fn render_mobile_switcher(
         config,
         selected_workspace_id,
         viewport.width.saturating_sub(1),
+        federated,
     );
     let total_rows = items.iter().map(|item| item.lines.len()).sum::<usize>();
     let max_scroll = total_rows.saturating_sub(usize::from(viewport.height));

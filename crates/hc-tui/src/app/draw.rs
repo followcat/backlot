@@ -111,8 +111,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // cell-identical to Herdr; resolved before `shell_state`'s
     // mutable borrows below.
     let machine_lines = (!app.plain).then(|| app.machine_lines());
+    // Resolved before the `shell_state` borrows below.
+    let federated = app.federated_sidebar();
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
+        federated,
         endpoints: &app.projection.endpoints,
         active_endpoint_id: &app.projection.active_endpoint_id,
         collapsed_endpoints: &app.shell_state.collapsed_endpoints,
