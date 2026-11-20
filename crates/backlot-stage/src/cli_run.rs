@@ -134,6 +134,11 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             };
             return crate::migrate::run(&base, named, all, dry_run);
         }
+        // `studio list` reads every core directory (or the pinned
+        // one) — no studio name, no event appended.
+        Cmd::StudioList { json } => {
+            return crate::studio_list::run(env, &common, json);
+        }
         _ => {}
     }
     let base = base(env, &common)?;

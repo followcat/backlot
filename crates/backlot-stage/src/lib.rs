@@ -66,6 +66,7 @@ mod stagelog;
 mod stale;
 mod stall;
 pub mod store;
+mod studio_list;
 mod supervise;
 mod watch;
 mod watchdog;
@@ -85,6 +86,8 @@ mod checkrun_tests;
 mod checks_tests;
 #[cfg(test)]
 mod checkwork_tests;
+#[cfg(test)]
+mod cli_list_tests;
 #[cfg(test)]
 mod cli_mode_tests;
 #[cfg(test)]

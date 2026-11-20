@@ -334,6 +334,18 @@ In the ledger you are the role `user`, so person-facing commands take `--as user
 backlot status --studio acme-shop
 ```
 
+`backlot studio list` answers the question before that one — what studios exist at all. It reads
+every core's state directory and prints one row per studio with its core id, ledger state
+(`live`, `finished`, or `failed` when the log will not load), title and bound path, newest
+activity first; `--json` prints the same rows structured. A pinned `BACKLOT_STATE_DIR`,
+`--session` or `--remote` lists that one directory only, so a role terminal never sees other
+cores.
+
+```sh
+backlot studio list
+backlot studio list --json
+```
+
 The `next:` lines are what the ledger still owes — one per outstanding step, naming the step, the
 role that owes it and how long it has been owed (`next: dispatch — producer, owed 4m`). `user` as
 the owner means the step is yours (for example `finish` once every task is terminal and reported).

@@ -205,6 +205,25 @@ pub(crate) fn studio_migrate(common: &mut Common, it: &mut It) -> Result<(Common
     ))
 }
 
+/// `studio list [--json]` — every studio under every core's state
+/// directory; read-only, so no studio name is required.
+pub(crate) fn studio_list(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--json" => json = true,
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    Ok((std::mem::take(common), Cmd::StudioList { json }))
+}
+
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut src = Source::default();
     let mut summary = None;

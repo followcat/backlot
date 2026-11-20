@@ -157,6 +157,7 @@ The commands you will use most:
 | Command | What it does |
 |---|---|
 | `backlot status --studio acme-shop` | The studio's recorded state and the steps still owed, with their owners. |
+| `backlot studio list` | Every studio on every core, with its state, title and path — `--json` for the same rows. |
 | `backlot tell director --file note.md --studio acme-shop --as user` | A recorded message to a role. |
 | `backlot approve --person actor-t1-c1 --decision allow --studio acme-shop --as user` | Answer a permission prompt that is yours. |
 | `backlot records --studio acme-shop` | What each actor delivered and how the reviews went. |
