@@ -13,6 +13,32 @@ use crate::studio_menu::{MenuKind, StudioAct};
 use hc_proto::watch::DocKey;
 use tokio::sync::mpsc;
 
+/// The running binary's version — Local's own line is built from it.
+fn running() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// The running version one step lower — its patch when that can drop,
+/// otherwise its minor, otherwise its major. A machine at this version
+/// is genuinely behind `running()`, so the upgrade paths hold for any
+/// release the workspace ships, with no version spelled out here.
+fn older() -> String {
+    let current = env!("CARGO_PKG_VERSION");
+    let (head, patch) = current.rsplit_once('.').expect("x.y.z");
+    let patch: u32 = patch.parse().expect("numeric patch");
+    if patch > 0 {
+        return format!("{head}.{}", patch - 1);
+    }
+    let (major, minor) = head.split_once('.').expect("x.y");
+    let minor: u32 = minor.parse().expect("numeric minor");
+    if minor > 0 {
+        return format!("{major}.{}", minor - 1);
+    }
+    let major: u32 = major.parse().expect("numeric major");
+    assert!(major > 0, "no version below 0.0.0");
+    format!("{}.0.0", major - 1)
+}
+
 /// `two_machine_studio_app` whose `host-b` document publishes
 /// `backlot_version` — the field an upgraded stage writes.
 fn versioned_app(remote_version: &str) -> App {
@@ -84,15 +110,15 @@ fn dead_remote_runner() -> crate::panel::RemoteRunner {
 
 #[tokio::test]
 async fn each_machine_shows_its_backlot_version() {
-    let mut app = versioned_app("0.2.4");
+    let mut app = versioned_app(&older());
     app.area = (120, 36);
     let backend = draw_to(&mut app, 120, 36);
     let sidebar = sidebar_text(&backend);
     // Local's line reads the running binary's version; host-b's doc
     // answered its own — plus `hc <v>` from `machine.list`.
-    let running = env!("CARGO_PKG_VERSION");
+    let current = running();
     assert!(
-        sidebar.contains(&format!("backlot {running}")),
+        sidebar.contains(&format!("backlot {current}")),
         "Local's version line — {sidebar}"
     );
     assert!(
@@ -100,20 +126,22 @@ async fn each_machine_shows_its_backlot_version() {
         "host-b's hc version — {sidebar}"
     );
     assert!(
-        sidebar.contains("backlot 0.2.4"),
+        sidebar.contains(&format!("backlot {}", older())),
         "host-b's doc version — {sidebar}"
     );
 }
 
 #[tokio::test]
 async fn a_behind_machine_marks_the_upgrade_hint() {
-    let mut app = versioned_app("0.2.4");
-    app.update_latest = Some("0.2.5".into());
+    let mut app = versioned_app(&older());
+    app.update_latest = Some(running());
     app.area = (120, 36);
     let backend = draw_to(&mut app, 120, 36);
     let sidebar = sidebar_text(&backend);
     let host = sidebar.find("host-b").expect("host-b row");
-    let hint = sidebar[host..].find("↑0.2.5").expect("the hint row");
+    let hint = sidebar[host..]
+        .find(&format!("↑{}", running()))
+        .expect("the hint row");
     assert!(hint < 120, "the hint sits under host-b — {sidebar}");
 }
 
@@ -141,12 +169,15 @@ async fn a_machine_without_backlot_says_so() {
 async fn the_sidebar_line_survives_at_80x24() {
     // The 26-cell sidebar keeps `hc` + the backlot fact; the row
     // elision itself is covered in `endpoint_sidebar_row::tests`.
-    let mut app = versioned_app("0.2.4");
+    // At 80x24 the cast takes the machines tree's spare height, so
+    // host-b's sub-line is elided and Local's is the fact on screen.
+    let mut app = versioned_app(&older());
     app.area = (80, 24);
     let backend = draw_to(&mut app, 80, 24);
     let rows = screen_lines(&backend);
     assert!(
-        rows.iter().any(|r| r.contains("backlot 0.2.4")),
+        rows.iter()
+            .any(|r| r.contains(&format!("backlot {}", running()))),
         "the backlot fact survives — {rows:?}"
     );
 }
@@ -156,12 +187,19 @@ async fn plain_mode_has_no_version_lines() {
     // `--plain` never builds the lines — the machine rows stay one
     // line tall and the tree is herdr's, cell for cell (the
     // `EXPECTED_PLAIN` draw in studio_machines covers the rows).
-    let mut app = versioned_app("0.2.4");
+    let mut app = versioned_app(&older());
     app.set_plain(true);
     app.area = (120, 24);
     let backend = draw_to(&mut app, 120, 24);
     let sidebar = sidebar_text(&backend);
-    assert!(!sidebar.contains("backlot 0.2.4"), "{sidebar}");
+    assert!(
+        !sidebar.contains(&format!("backlot {}", running())),
+        "{sidebar}"
+    );
+    assert!(
+        !sidebar.contains(&format!("backlot {}", older())),
+        "{sidebar}"
+    );
     assert!(!sidebar.contains("hc 0.1.0"), "{sidebar}");
     for hit in &app.hit_map.machines {
         assert_eq!(hit.rect.height, 1, "{sidebar}");
@@ -170,18 +208,19 @@ async fn plain_mode_has_no_version_lines() {
 
 #[tokio::test]
 async fn the_machine_menu_offers_its_valid_actions() {
-    let mut app = versioned_app("0.2.4");
+    let mut app = versioned_app(&older());
     // Installed + behind latest + stage running → upgrade, restart,
     // new studio, then the endpoint ops.
-    app.update_latest = Some("0.2.5".into());
+    app.update_latest = Some(running());
     let menu = app.machine_menu(&remote("host-b"));
     assert_eq!(menu.kind, MenuKind::Machine);
     let items = menu.items();
     let labels: Vec<&str> = items.iter().map(|it| it.label.as_str()).collect();
+    let upgrade = format!("Upgrade backlot to v{}", running());
     assert_eq!(
         labels,
         vec![
-            "Upgrade backlot to v0.2.5",
+            upgrade.as_str(),
             "Restart the stage",
             "New studio here",
             "Connect machine",
@@ -220,7 +259,7 @@ async fn the_machine_menu_offers_install_and_start() {
     // Stage down + installed → `Start the stage`, not restart.
     app.on_mv_reply(crate::app::machine_versions::MachineProbe::Version {
         machine: "host-b".into(),
-        out: Ok("backlot 0.2.4\n".into()),
+        out: Ok(format!("backlot {}\n", older())),
     });
     let terms: Vec<_> = app
         .view
@@ -245,7 +284,7 @@ async fn an_offline_machine_dims_its_command_rows() {
     // A probed-installed machine still lists its command rows — all
     // dimmed `unreachable` except the endpoint repair ops.
     app.machine_versions
-        .note_reply("host-b", Ok("backlot 0.2.4".into()));
+        .note_reply("host-b", Ok(format!("backlot {}", older())));
     let menu = app.machine_menu(&remote("host-b"));
     assert!(menu.offline);
     let items = menu.items();
@@ -265,7 +304,7 @@ async fn an_offline_machine_dims_its_command_rows() {
 
 #[tokio::test]
 async fn right_click_on_a_machine_opens_its_menu() {
-    let mut app = versioned_app("0.2.4");
+    let mut app = versioned_app(&older());
     app.area = (120, 36);
     draw_to(&mut app, 120, 36);
     let hit = app
@@ -399,12 +438,12 @@ async fn a_managed_remote_backlot_refuses_the_install() {
     assert!(app.install_env.contains("host-b"), "the env probe spawned");
     app.on_mv_reply(crate::app::machine_versions::MachineProbe::InstallEnv {
         machine: "host-b".into(),
-        out: Ok(
-            "EXE=/home/user/.local/share/mise/installs/backlot/0.2.4/bin/backlot\n\
+        out: Ok(format!(
+            "EXE=/home/user/.local/share/mise/installs/backlot/{}/bin/backlot\n\
              ENV HOME=/home/user\n\
-             ENV MISE_DATA_DIR=/home/user/.local/share/mise\n"
-                .into(),
-        ),
+             ENV MISE_DATA_DIR=/home/user/.local/share/mise\n",
+            older()
+        )),
     });
     // The refusal names the channel's own command — no popup, no
     // installer line over a mise-managed binary.
@@ -422,9 +461,9 @@ async fn a_managed_remote_backlot_refuses_the_install() {
 
 #[tokio::test]
 async fn a_direct_remote_install_builds_the_pinned_popup() {
-    let mut app = versioned_app("0.2.4");
+    let mut app = versioned_app(&older());
     app.set_remote_runner(dead_remote_runner());
-    app.update_latest = Some("0.2.5".into());
+    app.update_latest = Some(running());
     app.machine_install(Some("host-b".into()));
     app.on_mv_reply(crate::app::machine_versions::MachineProbe::InstallEnv {
         machine: "host-b".into(),
@@ -442,7 +481,7 @@ async fn a_direct_remote_install_builds_the_pinned_popup() {
     // comparison armed on the pre-install version.
     assert_eq!(
         app.install_upgrade.get("host-b"),
-        Some(&Some("0.2.4".into())),
+        Some(&Some(older())),
         "armed with the doc's version"
     );
 }
@@ -451,11 +490,10 @@ async fn a_direct_remote_install_builds_the_pinned_popup() {
 async fn the_install_popup_close_reprobes_the_machine() {
     let mut app = two_machine_studio_app();
     app.machine_versions
-        .note_reply("host-b", Ok("backlot 0.2.3".into()));
-    // The doc still says 0.2.3 — the post-install probe must run
-    // anyway (the doc is the old stage's word).
-    app.install_upgrade
-        .insert("host-b".into(), Some("0.2.3".into()));
+        .note_reply("host-b", Ok(format!("backlot {}", older())));
+    // The doc still says the old version — the post-install probe must
+    // run anyway (the doc is the old stage's word).
+    app.install_upgrade.insert("host-b".into(), Some(older()));
     app.machine_install_closed("host-b");
     assert_eq!(
         app.machine_versions.state("host-b", None),
@@ -466,13 +504,13 @@ async fn the_install_popup_close_reprobes_the_machine() {
 
 #[tokio::test]
 async fn a_bumped_version_after_install_restarts_the_stage() {
-    let mut app = versioned_app("0.2.4");
-    app.install_upgrade
-        .insert("host-b".into(), Some("0.2.4".into()));
-    // The install popup's close re-probed; the machine answers 0.2.5.
+    let mut app = versioned_app(&older());
+    app.install_upgrade.insert("host-b".into(), Some(older()));
+    // The install popup's close re-probed; the machine answers the
+    // running release.
     app.on_mv_reply(crate::app::machine_versions::MachineProbe::Version {
         machine: "host-b".into(),
-        out: Ok("backlot 0.2.5\n".into()),
+        out: Ok(format!("backlot {}\n", running())),
     });
     // host-b's stage runs — the bumped version chains the restart.
     assert!(
@@ -490,12 +528,11 @@ async fn a_bumped_version_after_install_restarts_the_stage() {
     );
     assert!(!app.install_upgrade.contains_key("host-b"));
     // An unchanged version never restarts.
-    let mut app = versioned_app("0.2.4");
-    app.install_upgrade
-        .insert("host-b".into(), Some("0.2.4".into()));
+    let mut app = versioned_app(&running());
+    app.install_upgrade.insert("host-b".into(), Some(running()));
     app.on_mv_reply(crate::app::machine_versions::MachineProbe::Version {
         machine: "host-b".into(),
-        out: Ok("backlot 0.2.4\n".into()),
+        out: Ok(format!("backlot {}\n", running())),
     });
     assert!(
         !app.actions
