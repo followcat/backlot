@@ -427,10 +427,44 @@ the integration tip, so an unmerged dependency would leave it working without th
 the open dependencies, or `merge t1 into integration first` for an accepted-but-unmerged one. While a task waits,
 `next_steps` owes nobody its cast and `backlot status` shows `waits for t1` on the task's line.
 
-A studio repo that is not a git work tree raises `not a git repository` and starts no actor or director. Every step is
+A studio repo that is not a git work tree raises `not a git repository` and starts no actor or director — unless the
+studio was bound with no git, in which case every role's cwd is the bound path itself. Every step is
 idempotent: an existing branch or worktree is reused, a failure raises `work area failed` once with git's first stderr
 line and is retried on a later tick, and a recast or a reopen reuses the task's tree — work continues on top. Worktrees
 stay after a task closes; removing them is a later step.
+
+### The bound path's shapes (D4)
+
+The bound path is classified from the filesystem — the path itself first, then its direct children, never deeper — and
+the classification is checked again at launch on the machine the studio runs on:
+
+| Shape | What it is | Launch does |
+|---|---|---|
+| repository | the path is a git repository | nothing — or one empty initial commit when the repository has none |
+| workspace | not a repository; one or more direct children are | records the member repositories; work areas hold one worktree per member |
+| plain directory | no repository in it | `git init` plus `git commit --allow-empty -m "chore: initial commit"`, or binds with no git when the user says so |
+
+In a workspace studio the work-area layout is per member: `<studio dir>/work/integration/<member>` on the member's
+`backlot/<studio>/integration` (branched from the member's HEAD) and `<studio dir>/work/<task>/<member>` on the
+member's `backlot/<studio>/<task>` (cut from that member's integration tip). The role's terminal cwd is the
+`work/<task>` or `work/integration` directory itself, so every member sits side by side and a commit lands in the
+member checkout it was made in. `deliver --commits` takes one or more comma-separated ranges: a bare `a..b` resolves
+to the one member whose `backlot/<studio>/<task>` branch holds the tip, `member:a..b` pins a member explicitly, and
+the ledger stores every range as `member:sha..sha`. A range that resolves in no member, or in several, refuses and
+says why. The `cast` dependency check runs per member against that member's `backlot/<studio>/integration`. Declared
+`[[checks]]` are refused on a workspace or no-git studio in this version — the director still runs the project's
+checks in each member's integration worktree.
+
+A no-git studio shares the bound path between all roles: no worktree isolation, no integration branch, `deliver
+--commits` recorded verbatim, and the `depends-on` merge check skipped.
+
+The picker's row label is the only affordance — no dialog follows a pick. A repository with commits shows its branch;
+a repository with none shows `0 commits · will create initial commit`; a workspace shows `workspace · N repos`; a
+plain directory shows `directory · will git init`. Step 4 restates the launch plan — `workspace over 3 repos: a, b,
+c`, or `will run: git init && git commit --allow-empty -m "chore: initial commit" in <path>` (with the machine name
+when remote) — and only there does a plain directory offer the explicit `no git (reduced isolation)` toggle.
+`studio new` takes `--init` / `--no-git` for the non-interactive form; a plain directory without either is refused
+with both options named, and the flags are refused on repositories and workspaces.
 
 ## Permission prompts (D9)
 
