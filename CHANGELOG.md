@@ -4,6 +4,17 @@ All notable changes to hc-tui are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.17 — 2026-11-20
+
+### Changed
+
+- The test suites now create their temporary directories through a `TestDir`
+  guard that removes the directory when the test ends, including while a
+  panicking test unwinds; 30 sites in hc-tui and 4 in hc-proto use it. CI runs
+  the workspace tests through `scripts/check-test-tmp.sh`, which points
+  `TMPDIR` at a fresh directory and fails the run when the tests leave files
+  behind. There is no behaviour change for users.
+
 ## 0.1.16 — 2026-11-19
 
 ### Fixed
