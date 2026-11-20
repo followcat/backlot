@@ -240,6 +240,89 @@ pub(crate) fn cap(s: &str) -> String {
     s.chars().take(CAP).collect()
 }
 
+/// The status text without its ticking parts: a trailing run of
+/// elapsed-time, percent or count tokens, plus any spinner-frame
+/// token. A live runner appends these every tick while the meaning
+/// stays the same — the document carries the words, not the clock,
+/// so the publish throttle's `same_as` stays true between them. A
+/// message reduced to nothing reads as no report.
+pub(crate) fn steady(msg: &str) -> String {
+    let mut toks: Vec<&str> = msg.split_whitespace().collect();
+    while toks.last().is_some_and(|t| volatile_token(t)) {
+        toks.pop();
+    }
+    toks.into_iter()
+        .map(|t| t.trim_matches(|c| SPIN.contains(&c)))
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Characters that only ever wrap or separate tokens.
+const EDGE: &[char] = &[
+    '(', ')', '[', ']', '{', '}', '<', '>', '·', '•', '—', '–', '~', '|',
+];
+
+/// Spinner glyphs — braille frames, the star frames the claude family
+/// uses, and the ASCII `| / \` trio.
+const SPIN: &[char] = &[
+    '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏', '⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷', '◐',
+    '◓', '◑', '◒', '✶', '✻', '✽', '✼', '✳', '✱', '✲', '❋', '❊', '❉', '✢', '✣', '✤', '✥', '|', '/',
+    '\\',
+];
+
+/// A whole token of spinner frames.
+fn is_spin(t: &str) -> bool {
+    !t.is_empty() && t.chars().all(|c| SPIN.contains(&c))
+}
+
+/// A token the tail strip drops: a bare separator, a spinner frame,
+/// or a ticking value (duration, clock, percent, count).
+fn volatile_token(t: &str) -> bool {
+    let t = t.trim_matches(|c| EDGE.contains(&c));
+    t.is_empty() || is_spin(t) || is_tick(t)
+}
+
+/// A ticking token: `47%`, `×7`/`7×`, a duration (`500ms`, `12s`,
+/// `3m`, `1.5h`, `2d`, `2m30s`) or a clock (`12:34`, `1:23:45`).
+fn is_tick(t: &str) -> bool {
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit() || b == b'.');
+    if let Some(n) = t.strip_suffix('%') {
+        return digits(n);
+    }
+    if let Some(n) = t.strip_prefix('×').or_else(|| t.strip_suffix('×')) {
+        return digits(n);
+    }
+    is_duration(t)
+}
+
+fn is_duration(t: &str) -> bool {
+    if t.contains(':') {
+        let parts: Vec<&str> = t.split(':').collect();
+        return (2..=3).contains(&parts.len())
+            && parts
+                .iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()));
+    }
+    let mut rest = t;
+    let mut pairs = 0;
+    'outer: while !rest.is_empty() {
+        for unit in ["ms", "s", "m", "h", "d"] {
+            if let Some(head) = rest.strip_suffix(unit) {
+                // The unit must sit behind at least one digit or dot.
+                let trimmed = head.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
+                if trimmed.len() < head.len() {
+                    rest = trimmed;
+                    pairs += 1;
+                    continue 'outer;
+                }
+            }
+        }
+        return false;
+    }
+    pairs > 0
+}
+
 fn is_false(b: &bool) -> bool {
     !*b
 }

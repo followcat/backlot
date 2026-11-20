@@ -419,7 +419,7 @@ impl Stage {
             for kind in session_event(key, &actor.runner, found, state, role.since_ms, age_ms) {
                 if let EventKind::RoleSession { session_id, .. } = &kind {
                     self.found_sessions.borrow_mut().insert(session_id.clone());
-                    eprintln!("stage: {key} session is {session_id}");
+                    crate::stagelog::stage_log!("{key} session is {session_id}");
                 }
                 record(dir, kind)?;
             }
@@ -491,7 +491,7 @@ impl Stage {
             )
             .await;
         match sent {
-            Ok(_) => eprintln!("stage: answered folder trust for {role} ({key})"),
+            Ok(_) => crate::stagelog::stage_log!("answered folder trust for {role} ({key})"),
             Err(CallError::Rpc(_)) => {}
             Err(e) => return Err(Fail::call(e)),
         }

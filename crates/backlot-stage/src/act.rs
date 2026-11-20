@@ -287,7 +287,7 @@ impl Stage {
         let address = match run {
             Ok(r) => r.terminal.address,
             Err(CallError::Rpc(e)) => {
-                eprintln!("stage: terminal.run {} refused: {e}", start.terminal);
+                crate::stagelog::stage_log!("terminal.run {} refused: {e}", start.terminal);
                 if !attention_open(state, &start.role, reasons::LAUNCH_REFUSED) {
                     record(
                         dir,
@@ -304,7 +304,7 @@ impl Stage {
             Err(e) => return Err(fatal(e)),
         };
         record(dir, start_event(start, launch, &address))?;
-        eprintln!("stage: started {} as {}", start.role, start.terminal);
+        crate::stagelog::stage_log!("started {} as {}", start.role, start.terminal);
         Ok(true)
     }
 
@@ -361,7 +361,7 @@ impl Stage {
                         reason: Some(reason.clone()),
                     },
                 )?;
-                eprintln!("stage: lost {role}: {reason}");
+                crate::stagelog::stage_log!("lost {role}: {reason}");
             }
             Action::Attention {
                 role,
@@ -405,11 +405,11 @@ impl Stage {
                         },
                     )?;
                 }
-                eprintln!("stage: stopping {role}");
+                crate::stagelog::stage_log!("stopping {role}");
                 self.remove(address).await?;
             }
             Action::DropTerminal { terminal, address } => {
-                eprintln!("stage: dropping stray terminal {terminal} ({address})");
+                crate::stagelog::stage_log!("dropping stray terminal {terminal} ({address})");
                 self.remove(address).await?;
             }
             Action::Adopt {
@@ -430,7 +430,7 @@ impl Stage {
                         reason: Some("adopted after restart".into()),
                     },
                 )?;
-                eprintln!("stage: adopted {terminal} for {role}");
+                crate::stagelog::stage_log!("adopted {terminal} for {role}");
             }
             Action::Resumed {
                 role,
@@ -447,7 +447,7 @@ impl Stage {
                         reason: Some(RECOVERED.into()),
                     },
                 )?;
-                eprintln!("stage: resumed {role} on live terminal {address}");
+                crate::stagelog::stage_log!("resumed {role} on live terminal {address}");
             }
             Action::Start(start) => {
                 // The role's work area (D10): a pure plan over the

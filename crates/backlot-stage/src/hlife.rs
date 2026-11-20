@@ -28,7 +28,7 @@ impl Stage {
     /// `hlogged` set is `&self`-safe so every sub-pass can use it.
     pub(crate) fn hlog(&self, msg: &str) {
         if self.hlogged.borrow_mut().insert(msg.to_string()) {
-            eprintln!("stage: hollywood: {msg}");
+            crate::stagelog::stage_log!("hollywood: {msg}");
         }
     }
 
@@ -129,7 +129,9 @@ impl Stage {
                                 session,
                                 None,
                             )?;
-                            eprintln!("stage: started hollywood as {HOLLYWOOD_TERMINAL}");
+                            crate::stagelog::stage_log!(
+                                "started hollywood as {HOLLYWOOD_TERMINAL}"
+                            );
                         }
                         HRun::Defer => {}
                         HRun::Refused(d) => self.hlog(&format!("launch refused: {d}")),
@@ -146,7 +148,7 @@ impl Stage {
                         runners::session_id(&actor, HOLLYWOOD_TERMINAL),
                         Some("adopted after restart"),
                     )?;
-                    eprintln!("stage: adopted {HOLLYWOOD_TERMINAL}");
+                    crate::stagelog::stage_log!("adopted {HOLLYWOOD_TERMINAL}");
                 }
                 HMove::Rejoin => {
                     let t = term.expect("rejoin needs the live terminal");
@@ -158,7 +160,7 @@ impl Stage {
                         role.session_id.clone(),
                         Some("recovered"),
                     )?;
-                    eprintln!("stage: {HOLLYWOOD_TERMINAL} rejoined");
+                    crate::stagelog::stage_log!("{HOLLYWOOD_TERMINAL} rejoined");
                 }
                 HMove::Lost => {
                     hstage::record_role(
@@ -169,7 +171,7 @@ impl Stage {
                         None,
                         Some("terminal gone"),
                     )?;
-                    eprintln!("stage: lost {HOLLYWOOD_TERMINAL}");
+                    crate::stagelog::stage_log!("lost {HOLLYWOOD_TERMINAL}");
                 }
                 HMove::ResumeRun => {
                     let mut actor = role.actor.clone().unwrap_or_else(|| {
@@ -188,7 +190,7 @@ impl Stage {
                                 session.or_else(|| role.session_id.clone()),
                                 Some("recovered"),
                             )?;
-                            eprintln!("stage: resumed {HOLLYWOOD_TERMINAL}");
+                            crate::stagelog::stage_log!("resumed {HOLLYWOOD_TERMINAL}");
                         }
                         HRun::Defer => {}
                         HRun::Refused(d) => {
@@ -213,14 +215,16 @@ impl Stage {
                         None,
                         Some("cannot resume"),
                     )?;
-                    eprintln!("stage: {HOLLYWOOD_TERMINAL} cannot resume — staying down");
+                    crate::stagelog::stage_log!(
+                        "{HOLLYWOOD_TERMINAL} cannot resume — staying down"
+                    );
                 }
                 HMove::Close(reason) => {
                     hstage::record_role(hdir, RoleMotion::Closed, None, None, None, Some(reason))?;
                     if let Some(t) = term {
                         self.remove(&t.address).await?;
                     }
-                    eprintln!("stage: closed {HOLLYWOOD_TERMINAL}: {reason}");
+                    crate::stagelog::stage_log!("closed {HOLLYWOOD_TERMINAL}: {reason}");
                 }
                 HMove::Drop => {
                     if let Some(t) = term {

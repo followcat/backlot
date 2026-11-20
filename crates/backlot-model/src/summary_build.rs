@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::event::Priority;
 use crate::state::{RoleLifecycle, StudioState, Task, actor_task};
-use crate::summary::{RoleSummary, TaskSummary, Work, cap};
+use crate::summary::{RoleSummary, TaskSummary, Work, cap, steady};
 
 /// A studio is finished when every task it knows is terminal and no
 /// recorded role is still live.
@@ -224,7 +224,9 @@ pub(crate) fn role_summary(
         RoleLifecycle::Live => terminal
             .as_ref()
             .and_then(|t| live.get(t))
-            .map(|d| cap(d))
+            .map(|d| steady(d))
+            .filter(|d| !d.is_empty())
+            .map(|d| cap(&d))
             .or_else(|| {
                 actor_task(role).map(|t| {
                     if state

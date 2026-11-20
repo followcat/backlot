@@ -258,7 +258,7 @@ impl Stage {
     /// failing pass reports its error without spamming every tick.
     fn log_once(&mut self, studio: &str, msg: &str) {
         if self.logged.insert(format!("{studio}: {msg}")) {
-            eprintln!("stage: {studio}: {msg}");
+            crate::stagelog::stage_log!("{studio}: {msg}");
         }
     }
 
@@ -403,7 +403,7 @@ impl Stage {
                     self.labels_ok.set(false);
                     let msg = format!("relabel off: {e}");
                     if self.hlogged.borrow_mut().insert(msg.clone()) {
-                        eprintln!("stage: {msg}");
+                        crate::stagelog::stage_log!("{msg}");
                     }
                 }
             }
@@ -702,7 +702,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         .ok();
     let mut throttle = doc::Throttle::default();
     let mut live = live_terminals(&link.client).await?;
-    println!("stage: live on core {}", link.core_id);
+    crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
         stage.tick(&live).await?;
         // The summary regenerates each tick; the throttle writes it
@@ -715,7 +715,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         // A non-core publish failure leaves the summary to the next
         // tick, logged once; a dead wire exits.
         match doc::publish(&link.client, &mut throttle, now_ms).await {
-            Ok(true) => eprintln!("stage: summary written"),
+            Ok(true) => crate::stagelog::stage_log!("summary written"),
             Ok(false) => {}
             Err(e @ Fail::Core(_)) => return Err(e),
             Err(e) => stage.log_once("core", e.message()),

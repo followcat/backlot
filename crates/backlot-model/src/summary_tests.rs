@@ -1175,3 +1175,59 @@ fn s1_fields_parse_old_and_new() {
     assert!(studio["roles"][0].get("attention_seq").is_none());
     assert!(studio["roles"][0].get("attention_detail").is_none());
 }
+
+/// `steady` drops a status line's ticking parts — the elapsed times,
+/// percents, counts and spinner frames a live runner appends — so the
+/// document carries the words, not the clock.
+#[test]
+fn steady_drops_ticking_tails() {
+    // Elapsed tails go; the words stay.
+    assert_eq!(steady("writing the plan · 3m12s"), "writing the plan");
+    assert_eq!(steady("editing src/x.rs (1:23)"), "editing src/x.rs");
+    assert_eq!(steady("Cogitating… (2m 12s)"), "Cogitating…");
+    assert_eq!(steady("compacting · 47%"), "compacting");
+    assert_eq!(steady("retry ×7"), "retry");
+    // Spinner frames go wherever they sit.
+    assert_eq!(steady("✻ Cogitating…"), "Cogitating…");
+    assert_eq!(steady("working⠹"), "working");
+    // A message of nothing but ticking reads as nothing.
+    assert_eq!(steady("3m12s"), "");
+    assert_eq!(steady("✻"), "");
+    // Everything else is verbatim — semantic digits keep.
+    assert_eq!(steady("writing the plan"), "writing the plan");
+    assert_eq!(steady("esc to interrupt"), "esc to interrupt");
+    assert_eq!(steady("task t1 · review v2"), "task t1 · review v2");
+    assert_eq!(
+        steady("waiting for a claude slot"),
+        "waiting for a claude slot"
+    );
+}
+
+/// Two views whose only difference is a ticking status line are the
+/// same view — the throttle sees no change to publish.
+#[test]
+fn an_elapsed_only_diff_is_not_a_change() {
+    let state = state_with(
+        &base_events(),
+        vec![("stage", started("producer", "t1", "prod"))],
+    );
+    let build = |msg: &str| {
+        summary(
+            &[("acme-shop".into(), state.clone())],
+            &BTreeMap::from([("t1".into(), msg.to_string())]),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            0,
+        )
+    };
+    let a = build("writing the plan · 3m12s");
+    let b = build("writing the plan · 3m19s");
+    assert!(a.same_as(&b), "elapsed seconds are not a change");
+    // The published text is the stable line either way.
+    let role = &a.studios[0].roles[0];
+    assert_eq!(role.doing.as_deref(), Some("writing the plan"));
+    // A semantic change still counts.
+    let c = build("waiting for the user");
+    assert!(!a.same_as(&c));
+}

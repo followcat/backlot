@@ -347,7 +347,7 @@ impl Stage {
                     reason: (*reason).into(),
                 },
             )?;
-            eprintln!("stage: message {seq} dropped: {reason}");
+            crate::stagelog::stage_log!("message {seq} dropped: {reason}");
         }
 
         // Owed steps the idle owner has not run: nudge once, then
@@ -372,11 +372,11 @@ impl Stage {
             self.sent_ms.borrow_mut().insert(pair.clone(), now_ms);
             match f.handle.await {
                 Ok(answer) => match settle(dir, &f.seqs, answer) {
-                    Ok(line) => eprintln!("stage: {line} to {}", pair.1),
+                    Ok(line) => crate::stagelog::stage_log!("{line} to {}", pair.1),
                     Err(e) => return Err(Fail::call(e)),
                 },
                 Err(e) => {
-                    eprintln!("stage: send to {} lost: {e}", pair.1);
+                    crate::stagelog::stage_log!("send to {} lost: {e}", pair.1);
                 }
             }
         }

@@ -62,6 +62,7 @@ mod sendfail;
 mod service;
 pub mod signals;
 mod stage;
+mod stagelog;
 mod stale;
 mod stall;
 pub mod store;
@@ -168,6 +169,8 @@ mod sample_tests;
 
 #[cfg(test)]
 mod signals_tests;
+#[cfg(test)]
+mod stagelog_tests;
 #[cfg(test)]
 mod stale_tests;
 #[cfg(test)]
