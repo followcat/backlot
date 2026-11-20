@@ -341,8 +341,12 @@ fn area_and_role_dir_follow_the_role() {
     );
 }
 
+/// Run git in `repo`; answers stdout, panics on failure. The
+/// `cli_testkit::git` convention — a per-command identity so a
+/// commit never asks the host's global config for one.
 fn git(repo: &Path, args: &[&str]) -> String {
     let out = std::process::Command::new("git")
+        .args(["-c", "user.name=alice", "-c", "user.email=alice@host-a"])
         .args(args)
         .current_dir(repo)
         .output()
