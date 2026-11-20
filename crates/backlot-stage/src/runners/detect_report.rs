@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 use super::detect::{self, RUNNERS};
-use super::{claude, cline, cmd, codex, cursor, devin, fake, opencode, probe};
+use super::{agy, claude, cline, cmd, codex, cursor, devin, fake, opencode, probe};
 use crate::cli::{Env, Fail};
 
 /// Every runner's row: status, version, path, "needs PATH".
@@ -103,6 +103,7 @@ fn efforts(runner: &str) -> Vec<String> {
         "opencode" => opencode::EFFORTS,
         "cmd" => cmd::EFFORTS,
         "cline" => cline::EFFORTS,
+        "agy" => agy::EFFORTS,
         "fake" => fake::EFFORTS,
         _ => &[],
     };
@@ -122,6 +123,7 @@ fn models(runner: &str) -> Vec<String> {
         "opencode" => opencode::MODELS,
         "cmd" => cmd::MODELS,
         "cline" => cline::MODELS,
+        "agy" => agy::MODELS,
         "fake" => fake::MODELS,
         _ => &[],
     };

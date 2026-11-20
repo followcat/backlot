@@ -71,6 +71,15 @@ pub(crate) fn value_end(text: &str, at: usize) -> Option<usize> {
 /// `permissions` key the member is appended; a text that is not a
 /// JSON object at all yields `None` and the caller writes fresh.
 pub(crate) fn splice_permissions(text: &str, value: &str) -> Option<String> {
+    splice_member(text, "permissions", value)
+}
+
+/// [`splice_permissions`] generalized to any top-level key —
+/// `toolPermission` for agy, `permissions` for cursor and cmd.
+/// `value` is the member's serialized JSON; `key` its bare name.
+/// `None` means `text` is not a flat-keyed object the splicer can
+/// keep byte-exact, and the caller writes fresh.
+pub(crate) fn splice_member(text: &str, key: &str, value: &str) -> Option<String> {
     let bytes = text.as_bytes();
     if bytes.first() != Some(&b'{') {
         return None;
@@ -111,16 +120,17 @@ pub(crate) fn splice_permissions(text: &str, value: &str) -> Option<String> {
         }
     }
     let close = close?;
+    let wanted = format!("\"{key}\"");
     for (ks, vs, ve) in &members {
-        if text[*ks..string_end(text, *ks)?] == *"\"permissions\"" {
+        if text[*ks..string_end(text, *ks)?] == wanted {
             return Some(format!("{}{}{}", &text[..*vs], value, &text[*ve..]));
         }
     }
-    // No permissions key: append before the closing brace.
+    // No such key: append before the closing brace.
     let insertion = if members.is_empty() {
-        format!("\n  \"permissions\": {value}\n")
+        format!("\n  {wanted}: {value}\n")
     } else {
-        format!(",\n  \"permissions\": {value}\n")
+        format!(",\n  {wanted}: {value}\n")
     };
     Some(format!("{}{}{}", &text[..close], insertion, &text[close..]))
 }

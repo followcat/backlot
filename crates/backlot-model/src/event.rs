@@ -35,7 +35,8 @@ pub struct ActorIdentity {
     pub runner_version: Option<String>,
     pub model: String,
     /// Thinking depth — absent for a runner that carries it in the
-    /// model id (`cursor`, `devin`, `cmd`); never written when unset.
+    /// model id or takes no flag (`cursor`, `devin`, `cmd`,
+    /// `opencode`); never written when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
     pub permission_profile: String,
@@ -51,7 +52,8 @@ pub struct Candidate {
     pub runner_version: Option<String>,
     pub model: String,
     /// Thinking depth — absent for a runner that carries it in the
-    /// model id (`cursor`, `devin`, `cmd`); never written when unset.
+    /// model id or takes no flag (`cursor`, `devin`, `cmd`,
+    /// `opencode`); never written when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
     pub permission_profile: String,

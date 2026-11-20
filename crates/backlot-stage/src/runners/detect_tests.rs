@@ -297,7 +297,7 @@ fn the_runners_table_shows_each_verdict() {
         cline.display()
     );
     // Everyone else is missing — path and version are dashes.
-    for runner in ["devin", "cursor", "opencode", "cmd"] {
+    for runner in ["devin", "cursor", "opencode", "cmd", "agy"] {
         let r = row(runner);
         assert!(r.contains("missing"), "{r}");
         assert!(r.contains(" - "), "{r}");
@@ -389,10 +389,15 @@ fn the_runners_json_lists_models_and_efforts() {
         codex["efforts"],
         serde_json::json!(["low", "medium", "high", "xhigh", "max", "ultra"])
     );
-    // `cursor`, `devin`, `cmd` carry no effort flag (the cast rule).
-    for runner in ["cursor", "devin", "cmd"] {
+    // `cursor`, `devin`, `cmd` and `opencode` carry no effort flag
+    // (the cast rule); `agy` takes the whole documented list.
+    for runner in ["cursor", "devin", "cmd", "opencode"] {
         assert_eq!(row(runner)["efforts"], serde_json::json!([]), "{runner}");
     }
+    assert_eq!(
+        row("agy")["efforts"],
+        serde_json::json!(["low", "medium", "high", "xhigh", "max"])
+    );
     assert_eq!(
         row("cline")["efforts"],
         serde_json::json!(["none", "low", "medium", "high", "xhigh"])
@@ -435,7 +440,7 @@ fn the_runners_json_lists_each_runners_catalog() {
             .unwrap_or_else(|| panic!("no row for {runner}:\n{out}"))
     };
     for runner in [
-        "claude", "codex", "cursor", "devin", "cline", "cmd", "opencode", "fake",
+        "claude", "codex", "cursor", "devin", "cline", "cmd", "opencode", "agy", "fake",
     ] {
         let models = row(runner)["models"].as_array().unwrap();
         assert!(!models.is_empty(), "{runner} lists no catalog");
@@ -452,6 +457,7 @@ fn the_runners_json_lists_each_runners_catalog() {
             "cline" => "cline-pass/deepseek-v4.1-flash-1017",
             "cmd" => "deepseek/deepseek-v4.1-flash",
             "opencode" => "anthropic/claude-sonnet-5-5",
+            "agy" => "gemini-4-neon-high",
             _ => "m",
         };
         assert!(

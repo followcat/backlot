@@ -16,7 +16,7 @@ use crate::chrome::text_editor;
 
 /// The runner names `backlot runners` checks — the no-runners
 /// banner lists what was looked for.
-const RUNNER_NAMES: &str = "claude, codex, devin, cursor, opencode, cmd, cline";
+const RUNNER_NAMES: &str = "claude, codex, devin, cursor, opencode, cmd, cline, agy";
 
 /// The three value columns' (width, x-offset from body.x) — narrow
 /// frames give the model column what is left.

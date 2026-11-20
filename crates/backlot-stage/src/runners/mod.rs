@@ -5,6 +5,7 @@
 //! config that does not parse. At most one real runner launches per
 //! tick ([`decide_start`]); `fake` is exempt.
 
+pub mod agy;
 pub mod claude;
 pub mod cline;
 mod cline_hook;
@@ -60,6 +61,9 @@ pub enum Prep {
     Cmd(cmd::CmdPrep),
     /// cline's work-area hook, its MCP mask file and signals file.
     Cline(cline::ClinePrep),
+    /// agy's workdir `.agy-settings.json` — the session-scoped
+    /// `toolPermission` the role runs under.
+    Agy(agy::AgyPrep),
 }
 
 /// Run the launch's prep; the error string is the attention's
@@ -71,6 +75,7 @@ pub(crate) fn prepare(prep: &Prep) -> Result<bool, String> {
         Prep::Cursor(p) => cursor::prepare(p),
         Prep::Cmd(p) => cmd::prepare(p),
         Prep::Cline(p) => cline::prepare(p),
+        Prep::Agy(p) => agy::prepare(p),
     }
 }
 
@@ -81,6 +86,7 @@ pub(crate) fn prep_failed_reason(prep: &Prep) -> &'static str {
         Prep::Cursor(_) => cursor::CURSOR_PREP_FAILED,
         Prep::Cmd(_) => cmd::CMD_PREP_FAILED,
         Prep::Cline(_) => cline::CLINE_PREP_FAILED,
+        Prep::Agy(_) => agy::AGY_PREP_FAILED,
     }
 }
 
@@ -214,7 +220,10 @@ pub enum StartDecision {
 /// (`Session::PostLaunch` on a `Launch`; this answers the same
 /// question for a live role that only has its actor identity).
 pub fn post_launch_session(runner: &str) -> bool {
-    matches!(runner, "codex" | "devin" | "cursor" | "cmd" | "cline")
+    matches!(
+        runner,
+        "codex" | "devin" | "cursor" | "cmd" | "cline" | "agy"
+    )
 }
 
 /// The tick's decision for one pending start. Plan and config errors
@@ -268,6 +277,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "cursor" => cursor::plan(identity, ctx),
         "cmd" => cmd::plan(identity, ctx),
         "cline" => cline::plan(identity, ctx),
+        "agy" => agy::plan(identity, ctx),
         other => Err(PlanError::runner(other, ctx)),
     }
 }
@@ -295,6 +305,8 @@ pub fn session_in_argv(runner: &str, argv: &[String]) -> Option<String> {
         // `--id` names a resumed session; a fresh launch's id is the
         // manifest's.
         "cline" => cline::session_in_argv(argv),
+        // `--conversation <id>` resumes; `-c`/`--continue` carry none.
+        "agy" => agy::session_in_argv(argv),
         _ => None,
     }
 }
@@ -377,6 +389,8 @@ fn uuid_v4() -> String {
     )
 }
 
+#[cfg(test)]
+mod agy_tests;
 #[cfg(test)]
 mod argv_tests;
 #[cfg(test)]
