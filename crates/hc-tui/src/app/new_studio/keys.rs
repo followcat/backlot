@@ -12,8 +12,8 @@ use crate::new_studio::{self, NsHit, Probe, RepoKind, Step, Step1Pane, Step2Fiel
 
 impl App {
     /// A key while the dialog is open. Editors take keys first
-    /// (the `/` filter, the step-2 fields, a model cell's `e`);
-    /// navigation and the Esc rule wrap them.
+    /// (the step-2 fields, a model cell's `e`); navigation and
+    /// the Esc rule wrap them — step 1's filter is always live.
     pub(crate) fn new_studio_key(&mut self, key: &TerminalKey) {
         let Some(d) = &mut self.new_studio else {
             return;
@@ -51,27 +51,18 @@ impl App {
             }
             return;
         }
-        // The `/` filter owns keys until Enter/Esc — Esc here leaves
-        // the filter, never the dialog.
-        if d.repos.filtering {
-            match key.input.key {
-                Key::Enter | Key::Escape => {
-                    d.repos.filtering = false;
-                }
-                _ => {
-                    if d.repos.filter.handle_key(key).is_some() {
-                        d.repos.sel = 0;
-                        d.repos.scroll = 0;
-                    }
-                }
-            }
-            return;
-        }
         match key.input.key {
             Key::Escape => {
                 // 4 → 3 → 2 → 1 → closed, values kept (the spec's
-                // Esc rule — `^[` never reaches a program).
+                // Esc rule — `^[` never reaches a program). On step
+                // 1 a non-empty filter eats the first Esc — it
+                // clears, the next one cancels.
                 match d.step {
+                    Step::MachineRepo if !d.repos.filter.as_str().is_empty() => {
+                        d.repos.filter.clear();
+                        d.repos.sel = 0;
+                        d.repos.scroll = 0;
+                    }
                     Step::MachineRepo => self.new_studio = None,
                     Step::IdTitle => d.step = Step::MachineRepo,
                     Step::Cast => d.step = Step::IdTitle,
@@ -88,7 +79,9 @@ impl App {
     }
 
     /// Step 1: the machines column and the repository list, with
-    /// `tab` between them, `/` the filter and `^R` a re-check.
+    /// `tab` between them and `^R` a re-check. Every other
+    /// text-shaped key is the always-live filter's — typing
+    /// narrows the repository list, no mode to enter first.
     fn ns_key_step1(&mut self, key: &TerminalKey) {
         let ctrl_r = key.input.key == Key::Char('r') && key.input.mods == Mods::CTRL;
         if ctrl_r {
@@ -107,33 +100,22 @@ impl App {
                     Step1Pane::Repos => Step1Pane::Machines,
                 };
             }
-            Key::Char('/') if key.input.mods == Mods::NONE => {
+            Key::ArrowUp if key.input.mods == Mods::NONE => self.ns_step1_move(-1),
+            Key::ArrowDown if key.input.mods == Mods::NONE => self.ns_step1_move(1),
+            Key::ArrowRight if key.input.mods == Mods::NONE => self.ns_repo_descend(),
+            Key::ArrowLeft if key.input.mods == Mods::NONE => self.ns_repo_ascend(),
+            Key::Enter => self.ns_step1_enter(),
+            _ => {
+                // An actual edit re-seats the selection and claims
+                // the pane it narrows — `hjkl`, `/` and Backspace
+                // are just text here.
                 let d = self.new_studio.as_mut().unwrap();
-                d.repos.filtering = true;
-            }
-            Key::ArrowUp | Key::Char('k') if key.input.mods == Mods::NONE => self.ns_step1_move(-1),
-            Key::ArrowDown | Key::Char('j') if key.input.mods == Mods::NONE => {
-                self.ns_step1_move(1)
-            }
-            Key::ArrowRight | Key::Char('l') if key.input.mods == Mods::NONE => {
-                self.ns_repo_descend()
-            }
-            Key::ArrowLeft | Key::Char('h') if key.input.mods == Mods::NONE => {
-                self.ns_repo_ascend()
-            }
-            Key::ArrowUp | Key::ArrowDown | Key::ArrowRight | Key::ArrowLeft
-                if key.input.mods == Mods::NONE =>
-            {
-                match key.input.key {
-                    Key::ArrowUp => self.ns_step1_move(-1),
-                    Key::ArrowDown => self.ns_step1_move(1),
-                    Key::ArrowRight => self.ns_repo_descend(),
-                    Key::ArrowLeft => self.ns_repo_ascend(),
-                    _ => {}
+                if d.repos.filter.handle_key(key) == Some(true) {
+                    d.pane = Step1Pane::Repos;
+                    d.repos.sel = 0;
+                    d.repos.scroll = 0;
                 }
             }
-            Key::Enter => self.ns_step1_enter(),
-            _ => {}
         }
     }
 
@@ -157,7 +139,6 @@ impl App {
                     d.repos.dir = None;
                     d.repos.home = None;
                     d.repos.filter = crate::chrome::text_editor::TextEditor::new("", false);
-                    d.repos.filtering = false;
                     self.ns_refresh_studios();
                     self.ns_probe_repos(None);
                 }
@@ -495,7 +476,6 @@ impl App {
                             d.repos.dir = None;
                             d.repos.home = None;
                             d.repos.filter = crate::chrome::text_editor::TextEditor::new("", false);
-                            d.repos.filtering = false;
                         }
                     }
                     if switch {

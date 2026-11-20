@@ -378,9 +378,9 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
     };
     let tiers: &[&str] = match d.step {
         Step::MachineRepo => &[
-            "tab pane  ↑↓ move  →/← dir  / filter  ⏎ pick  ^R re-check  esc cancel",
-            "tab pane  ↑↓  / filter  ⏎ pick  esc",
-            "↑↓  /  ⏎  esc",
+            "tab pane  ↑↓ move  →/← dir  type to filter  ⏎ pick  ^R re-check  esc cancel",
+            "tab pane  ↑↓  →/←  type to filter  ⏎ pick  esc",
+            "↑↓  ⏎  esc",
             "esc",
         ],
         Step::IdTitle => &[
