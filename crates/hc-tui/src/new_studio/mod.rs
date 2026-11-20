@@ -17,8 +17,8 @@ mod step3;
 mod step4;
 
 pub(crate) use model::{
-    CastTable, MachineRow, MachineState, Probe, RepoEntry, RepoKind, Repos, RunnerRow, Step,
-    Step1Pane, id_error, parse_repos, parse_runners, studio_id, title_prefill,
+    CastTable, MachineRow, MachineState, PathShape, Probe, RepoEntry, RepoKind, Repos, RunnerRow,
+    Step, Step1Pane, id_error, parse_repos, parse_runners, studio_id, title_prefill,
 };
 
 use ratatui::buffer::Buffer;
@@ -77,6 +77,9 @@ pub(crate) struct NewStudio {
     pub dry_gen: u64,
     /// `[x] start stage` — checked by default like the mockup.
     pub start_stage: bool,
+    /// `[ ] no git` — a plain-directory pick's degraded mode (D4),
+    /// only offered on step 4's launch check.
+    pub no_git: bool,
     pub creating: bool,
     /// The create call's own generation — one in flight at most.
     pub create_gen: u64,
@@ -96,6 +99,7 @@ pub(crate) enum NsHit {
     ModeField,
     CastCell { row: usize, col: usize },
     StartToggle,
+    NoGitToggle,
     Create,
 }
 
@@ -150,6 +154,7 @@ impl NewStudio {
             dry: Probe::Pending,
             dry_gen: 0,
             start_stage: true,
+            no_git: false,
             creating: false,
             create_gen: 0,
             create_error: None,
@@ -178,9 +183,12 @@ impl NewStudio {
         self.repos.visible().get(self.repos.sel).copied()
     }
 
-    /// `Enter`'s gate on step 1: the machine is usable and the
-    /// selected repo accepts it (`git_empty` cannot — its hint
-    /// says why; a studio-bound repo still warns but passes).
+    /// `Enter`'s gate on step 1: the machine is usable and a row is
+    /// selected — every listed path binds (D4): an empty repository
+    /// gets its initial commit at launch, a directory with member
+    /// repositories is a workspace, a plain one gets `git init` or
+    /// the step-4 no-git toggle; a studio-bound repo still warns in
+    /// its note but passes.
     pub(crate) fn step1_enter_error(&self) -> Option<String> {
         let machine = self.machine()?;
         if !machine.usable() {
@@ -197,11 +205,8 @@ impl NewStudio {
             return Some("listing repositories…".into());
         }
         match self.repo() {
-            Some(entry) if entry.kind == RepoKind::GitEmpty => {
-                Some("git repo has no commits — commit first".into())
-            }
             Some(_) => None,
-            None => Some("no repository selected".into()),
+            None => Some("no path selected".into()),
         }
     }
 }

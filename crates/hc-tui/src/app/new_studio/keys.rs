@@ -222,6 +222,9 @@ impl App {
         let Some((path, name)) = picked else { return };
         let d = self.new_studio.as_mut().unwrap();
         if d.prefilled_for.as_deref() != Some(path.as_str()) {
+            // A different bound path re-opens the no-git question —
+            // step 4's toggle starts unchecked again.
+            d.no_git = false;
             d.id = crate::chrome::text_editor::TextEditor::new(&new_studio::studio_id(&name), true);
             d.title = crate::chrome::text_editor::TextEditor::new(
                 &new_studio::title_prefill(&name),
@@ -410,13 +413,26 @@ impl App {
         let _ = std::fs::remove_file(&file);
     }
 
-    /// Step 4: `space` the checkbox, `Enter` runs the create — a
-    /// failed dry run retries it first.
+    /// Step 4: `space` the start-stage checkbox, `g` the no-git
+    /// toggle a plain-directory pick offers, `Enter` runs the
+    /// create — a failed dry run retries it first.
     fn ns_key_step4(&mut self, key: &TerminalKey) {
         match key.input.key {
             Key::Char(' ') if key.input.mods == Mods::NONE => {
                 let d = self.new_studio.as_mut().unwrap();
                 d.start_stage = !d.start_stage;
+            }
+            Key::Char('g') if key.input.mods == Mods::NONE => {
+                let plain = self
+                    .new_studio
+                    .as_ref()
+                    .and_then(|d| d.repo().map(|r| r.shape()))
+                    == Some(new_studio::PathShape::Plain);
+                if plain {
+                    let d = self.new_studio.as_mut().unwrap();
+                    d.no_git = !d.no_git;
+                    self.ns_dry_run();
+                }
             }
             Key::Enter => self.ns_step4_enter(),
             _ => {}
@@ -537,6 +553,17 @@ impl App {
                 NsHit::StartToggle => {
                     if let Some(d) = &mut self.new_studio {
                         d.start_stage = !d.start_stage;
+                    }
+                }
+                NsHit::NoGitToggle => {
+                    let plain = self
+                        .new_studio
+                        .as_ref()
+                        .and_then(|d| d.repo().map(|r| r.shape()))
+                        == Some(new_studio::PathShape::Plain);
+                    if plain {
+                        self.new_studio.as_mut().unwrap().no_git ^= true;
+                        self.ns_dry_run();
                     }
                 }
                 NsHit::Create => self.ns_step4_enter(),

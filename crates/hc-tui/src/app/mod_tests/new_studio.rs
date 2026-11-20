@@ -86,7 +86,10 @@ fn repos_json() -> String {
             { "name": "taken", "path": "/home/user/taken",
               "kind": "git_ready", "in_use_studio": "taken-stud-tool", "branch": null },
             { "name": "notes", "path": "/home/user/notes",
-              "kind": "dir", "in_use_studio": null, "branch": null }
+              "kind": "dir", "in_use_studio": null, "branch": null },
+            { "name": "mono", "path": "/home/user/mono",
+              "kind": "dir", "in_use_studio": null, "branch": null,
+              "members": ["beta-api", "web"] }
         ]
     })
     .to_string()
@@ -274,21 +277,83 @@ async fn a_machine_without_backlot_disables_enter() {
 }
 
 #[tokio::test]
-async fn a_git_empty_repo_is_disabled_with_its_hint() {
+async fn an_empty_repo_picks_like_any_path() {
     let (mut app, _) = dialog_app().await;
     {
         let d = app.new_studio.as_mut().unwrap();
         d.pane = Step1Pane::Repos;
-        d.repos.sel = 1; // beta-tools is git_empty.
+        d.repos.sel = 1; // beta-tools is git_empty — pickable (D4).
         assert_eq!(d.repo().unwrap().kind, RepoKind::GitEmpty);
     }
     key(&mut app, hc_vt::Key::Enter);
-    let d = app.new_studio.as_ref().unwrap();
-    assert_eq!(d.step, Step::MachineRepo, "a git_empty repo stays");
     assert_eq!(
-        d.step1_enter_error().as_deref(),
-        Some("git repo has no commits — commit first")
+        app.new_studio.as_ref().unwrap().step,
+        Step::IdTitle,
+        "an empty repository picks — the launch writes the initial commit"
     );
+}
+
+/// Pick `repos.sel`'s row and walk to step 4 — the pick's own
+/// `studio new` argv then sits in the dry run's record.
+async fn pick_to_step4(app: &mut App, sel: usize) {
+    {
+        let d = app.new_studio.as_mut().unwrap();
+        d.pane = Step1Pane::Repos;
+        d.repos.sel = sel;
+    }
+    key(app, hc_vt::Key::Enter);
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::IdTitle);
+    key(app, hc_vt::Key::Enter);
+    drain_ns(app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::Cast);
+    key(app, hc_vt::Key::Enter);
+    drain_ns(app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::CheckStart);
+}
+
+#[tokio::test]
+async fn a_plain_dir_rides_init_and_g_flips_to_no_git() {
+    let (mut app, recorded) = dialog_app().await;
+    pick_to_step4(&mut app, 3).await; // notes — a plain directory.
+    let argv_of = |recorded: &Recorded| {
+        recorded
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .find(|(_, a, _)| a.starts_with(&["studio".into(), "new".into()]))
+            .map(|(_, a, _)| a.clone())
+            .expect("a studio new call")
+    };
+    let argv = argv_of(&recorded);
+    assert!(argv.contains(&"--init".into()), "{argv:?}");
+    assert!(!argv.contains(&"--no-git".into()), "{argv:?}");
+    // `g` toggles the no-git mode and re-runs the dry run with it.
+    key(&mut app, hc_vt::Key::Char('g'));
+    drain_ns(&mut app).await;
+    let argv = argv_of(&recorded);
+    assert!(argv.contains(&"--no-git".into()), "{argv:?}");
+    assert!(!argv.contains(&"--init".into()), "{argv:?}");
+    key(&mut app, hc_vt::Key::Char('g'));
+    drain_ns(&mut app).await;
+    let argv = argv_of(&recorded);
+    assert!(argv.contains(&"--init".into()), "{argv:?}");
+}
+
+#[tokio::test]
+async fn a_workspace_picks_with_no_git_flags() {
+    let (mut app, recorded) = dialog_app().await;
+    pick_to_step4(&mut app, 4).await; // mono — two member repos.
+    let calls = recorded.lock().unwrap();
+    let argv = calls
+        .iter()
+        .rev()
+        .find(|(_, a, _)| a.starts_with(&["studio".into(), "new".into()]))
+        .map(|(_, a, _)| a.clone())
+        .expect("a studio new call");
+    assert!(argv.contains(&"/home/user/mono".to_string()), "{argv:?}");
+    assert!(!argv.contains(&"--init".into()), "{argv:?}");
+    assert!(!argv.contains(&"--no-git".into()), "{argv:?}");
 }
 
 #[tokio::test]
@@ -484,7 +549,7 @@ async fn climbing_to_the_parent_clears_the_filter_too() {
     assert_eq!(d.repos.dir.as_deref(), Some("/home/user"));
     assert_eq!(d.repos.filter.as_str(), "", "the ascend dropped it");
     assert!(!d.repos.filtering);
-    assert_eq!(d.repos.visible().len(), 4, "the home listing is whole");
+    assert_eq!(d.repos.visible().len(), 5, "the home listing is whole");
 }
 
 #[tokio::test]

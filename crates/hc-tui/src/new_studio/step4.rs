@@ -164,13 +164,66 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         body,
         y,
         p,
-        "Workspace",
+        "Launch",
         &format!(
-            "creates workspace {} on {machine} & opens producer",
+            "creates studio {} on {machine} & opens producer",
             d.id.as_str()
         ),
     );
-    y += 2;
+    y += 1;
+    // D4/D19: the launch plan restates the bound path's shape and
+    // its implications — the same text the picker's labels promise.
+    if let Some(repo) = repo {
+        let plan = match repo.shape() {
+            super::PathShape::Workspace => {
+                format!(
+                    "workspace over {} repos: {}",
+                    repo.members.len(),
+                    repo.members.join(", ")
+                )
+            }
+            super::PathShape::Plain if d.no_git => {
+                "no git (reduced isolation) — shared path, no worktrees".to_string()
+            }
+            super::PathShape::Plain => {
+                let on = match d.machine_name() {
+                    Some(name) => format!(" on {name}"),
+                    None => String::new(),
+                };
+                format!(
+                    "will run: git init && git commit --allow-empty -m \"chore: initial commit\" in {}{on}",
+                    repo.path
+                )
+            }
+            super::PathShape::Repo if repo.kind == super::RepoKind::GitEmpty => {
+                format!("will create initial commit in {}", repo.path)
+            }
+            super::PathShape::Repo => String::new(),
+        };
+        if !plan.is_empty() {
+            card_line(b, body, y, p, "Plan", &plan);
+            y += 1;
+        }
+    }
+    y += 1;
+
+    // A plain-directory pick offers the explicit no-git toggle —
+    // the degraded mode lives only here on the launch check (D4).
+    if repo.is_some_and(|r| r.shape() == super::PathShape::Plain) && y < body.bottom() {
+        let row = Rect::new(body.x, y, body.width, 1);
+        let check = if d.no_git { "[x]" } else { "[ ]" };
+        put_text(
+            b,
+            body.x + 1,
+            y,
+            body.width.saturating_sub(1),
+            &format!(" {check} no git (reduced isolation)"),
+            Style::default().fg(p.text).bg(p.panel_bg),
+        );
+        hits.push(row, NsHit::NoGitToggle);
+        y += 1;
+    }
+    y += 1;
 
     // The start-stage checkbox row + the Create button.
     if y >= body.bottom() {

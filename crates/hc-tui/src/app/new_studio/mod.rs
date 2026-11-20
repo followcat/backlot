@@ -266,10 +266,12 @@ impl App {
     }
 
     /// The `studio new` argv — shared by the dry run and the
-    /// create; `--cast -` takes the table's toml on stdin.
+    /// create; `--cast -` takes the table's toml on stdin. A plain
+    /// directory rides `--init` or the step-4 toggle's `--no-git`
+    /// (D4); repositories and workspaces take neither.
     fn ns_studio_argv(&self, dry_run: bool) -> Option<(Option<String>, Vec<String>, String)> {
         let d = self.new_studio.as_ref()?;
-        let repo = d.repo()?.path.clone();
+        let entry = d.repo()?;
         let mut argv = vec![
             "studio".into(),
             "new".into(),
@@ -278,10 +280,13 @@ impl App {
             "--title".into(),
             d.title.as_str().to_string(),
             "--repo".into(),
-            repo,
+            entry.path.clone(),
             "--cast".into(),
             "-".into(),
         ];
+        if entry.shape() == new_studio::PathShape::Plain {
+            argv.push(if d.no_git { "--no-git" } else { "--init" }.into());
+        }
         if dry_run {
             argv.push("--dry-run".into());
         }
