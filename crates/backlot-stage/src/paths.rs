@@ -61,14 +61,19 @@ pub fn has_commits(path: &Path) -> bool {
 /// --git-common-dir` resolved canonically: every linked worktree of
 /// one repository answers the same directory, so members dedup by it
 /// and a per-member worktree can never collide on the one checkout a
-/// branch allows (D4, D10). A path git cannot answer keeps itself as
-/// its identity — it is reported by the checks that probe it.
+/// branch allows (D4, D10). `--path-format=absolute` makes the main
+/// checkout answer an absolute path like a linked worktree does, and
+/// canonicalizing then lands both on one spelling — a symlinked
+/// parent (`/var` → `/private/var` on macOS) cannot split them. A
+/// path git cannot answer keeps itself as its identity — it is
+/// reported by the checks that probe it.
 fn common_dir(path: &Path) -> PathBuf {
     let out = workareas::real_git(
         &[
             "-C",
             &path.to_string_lossy(),
             "rev-parse",
+            "--path-format=absolute",
             "--git-common-dir",
             "--end-of-options",
         ],
