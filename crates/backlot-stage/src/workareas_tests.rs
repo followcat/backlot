@@ -633,6 +633,83 @@ fn a_workspace_lays_one_worktree_per_member() {
     );
 }
 
+/// The reported collision: a workspace whose children are linked
+/// worktrees of one repository plus a second repository — member
+/// discovery dedups by `--git-common-dir` (D4), so `backlot/<s>/<area>`
+/// is checked out once per distinct repository and the launch does
+/// not fail on "already checked out" (D10).
+#[test]
+fn linked_worktrees_lay_one_worktree_per_distinct_repository() {
+    let root = tmp();
+    let ws = root.join("mono");
+    let core = ws.join("zcore");
+    fs::create_dir_all(&core).unwrap();
+    git(&core, &["init", "-b", "main"]);
+    fs::write(core.join("f"), "base\n").unwrap();
+    git(&core, &["add", "."]);
+    git(&core, &["commit", "-m", "base"]);
+    // Two linked worktrees of `zcore` — like the reported AIFlows
+    // children — plus one real second repository.
+    for name in ["aa-linked", "ab-linked"] {
+        git(
+            &core,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                name,
+                &ws.join(name).to_string_lossy(),
+            ],
+        );
+    }
+    let beta = ws.join("beta");
+    fs::create_dir_all(&beta).unwrap();
+    git(&beta, &["init", "-b", "main"]);
+    fs::write(beta.join("f"), "base\n").unwrap();
+    git(&beta, &["add", "."]);
+    git(&beta, &["commit", "-m", "base"]);
+
+    let members = crate::paths::member_repos(&ws);
+    assert_eq!(members.len(), 2, "{members:?}");
+    let dir = root.join("state");
+    fs::create_dir_all(&dir).unwrap();
+    let ws_s = ws.to_string_lossy().into_owned();
+    let mut git_run = real_git;
+    let integ = ensure(
+        &mut git_run,
+        "acme-shop",
+        &ws_s,
+        &members,
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
+    let t1 = ensure(
+        &mut git_run,
+        "acme-shop",
+        &ws_s,
+        &members,
+        false,
+        &dir,
+        &Area::Task("t1".into()),
+    )
+    .unwrap();
+    for member in &members {
+        let leaf = Path::new(member).file_name().unwrap();
+        for branch in ["integration", "t1"] {
+            let area = match branch {
+                "integration" => &integ,
+                _ => &t1,
+            };
+            assert_eq!(
+                git(&area.join(leaf), &["branch", "--show-current"]).trim(),
+                format!("backlot/acme-shop/{branch}")
+            );
+        }
+    }
+}
+
 /// A no-git studio: every role's area is the bound path itself —
 /// git never runs (D10).
 #[test]

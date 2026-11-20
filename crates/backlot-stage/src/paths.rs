@@ -57,20 +57,78 @@ pub fn has_commits(path: &Path) -> bool {
     out.code == 0
 }
 
+/// The repository a member path stands for — `rev-parse
+/// --git-common-dir` resolved canonically: every linked worktree of
+/// one repository answers the same directory, so members dedup by it
+/// and a per-member worktree can never collide on the one checkout a
+/// branch allows (D4, D10). `--path-format=absolute` makes the main
+/// checkout answer an absolute path like a linked worktree does, and
+/// canonicalizing then lands both on one spelling — a symlinked
+/// parent (`/var` → `/private/var` on macOS) cannot split them. A
+/// path git cannot answer keeps itself as its identity — it is
+/// reported by the checks that probe it.
+fn common_dir(path: &Path) -> PathBuf {
+    let out = workareas::real_git(
+        &[
+            "-C",
+            &path.to_string_lossy(),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+            "--end-of-options",
+        ],
+        ".",
+    );
+    if out.code != 0 {
+        return path.to_path_buf();
+    }
+    let raw = PathBuf::from(out.stdout.trim());
+    let abs = match raw.is_absolute() {
+        true => raw,
+        false => path.join(raw),
+    };
+    abs.canonicalize().unwrap_or(abs)
+}
+
+/// One path per repository — `common_dir` is the identity, so linked
+/// worktrees collapse to a single member; the main checkout (`.git` a
+/// directory, not a worktree's gitfile) wins the slot (D4, D10).
+fn distinct(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let mut members: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for p in paths {
+        let id = common_dir(&p);
+        match members.iter_mut().find(|(mid, _)| *mid == id) {
+            None => members.push((id, p)),
+            Some((_, stored)) if p.join(".git").is_dir() && !stored.join(".git").is_dir() => {
+                *stored = p;
+            }
+            Some(_) => {}
+        }
+    }
+    members.into_iter().map(|(_, p)| p).collect()
+}
+
 /// The direct-child repositories of `path` — member candidates for a
-/// workspace, absolute and sorted; never a deeper scan.
+/// workspace, absolute and sorted; never a deeper scan. Members are
+/// distinct repositories: linked worktrees of one repository count
+/// once (D4).
 pub fn member_repos(path: &Path) -> Vec<String> {
-    let mut members = Vec::new();
+    let mut candidates = Vec::new();
     if let Ok(rd) = std::fs::read_dir(path) {
         for e in rd.flatten() {
             let p = e.path();
             if p.is_dir() && is_git(&p) {
-                members.push(p.to_string_lossy().into_owned());
+                candidates.push(p);
             }
         }
     }
+    candidates.sort();
+    let mut members = distinct(candidates);
     members.sort();
     members
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 /// Classify `path`: a repository, a workspace over member
@@ -262,8 +320,8 @@ pub fn initialize(repo: &str, members: &[String], no_git: bool, init: bool) -> R
         }
         return Ok(());
     }
-    for member in members {
-        ensure_initial_commit(Path::new(member))?;
+    for member in distinct(members.iter().map(PathBuf::from)) {
+        ensure_initial_commit(&member)?;
     }
     Ok(())
 }

@@ -188,3 +188,56 @@ fn a_broken_git_mark_counts_as_no_repository() {
         "chore: initial commit"
     );
 }
+
+/// Linked worktrees share one repository — `rev-parse
+/// --git-common-dir` answers the same directory for all of them — so
+/// the workspace's members are distinct repositories only and the
+/// main checkout (`.git` a directory) names the member. Without the
+/// dedup a per-member worktree would collide on the one checkout a
+/// branch allows (D4, D10).
+#[test]
+fn linked_worktrees_of_one_repository_count_once() {
+    let (scratch, _env) = scratch();
+    let ws = scratch.files.join("mono");
+    // The linked worktree `aa-linked` sorts before the main checkout
+    // `zcore` — the main checkout wins the slot anyway.
+    repo(&ws.join("zcore"), true);
+    git(
+        &ws.join("zcore"),
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wt-link",
+            &ws.join("aa-linked").to_string_lossy(),
+        ],
+    );
+    repo(&ws.join("beta"), true);
+
+    let PathShape::Workspace { members } = paths::classify(&ws) else {
+        panic!("expected a workspace");
+    };
+    let names: Vec<String> = members
+        .iter()
+        .map(|m| {
+            Path::new(m)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(names, ["beta", "zcore"], "{members:?}");
+    // `check` carries the same deduplicated list into the spec.
+    let binding = paths::check(&ws.to_string_lossy(), false, false).unwrap();
+    assert_eq!(binding.members.len(), 2);
+
+    // A stale member list — recorded before the dedup — initializes
+    // each distinct repository once and does not trip over the
+    // worktree twins.
+    let stale: Vec<String> = ["aa-linked", "beta", "zcore"]
+        .iter()
+        .map(|n| ws.join(n).to_string_lossy().into_owned())
+        .collect();
+    paths::initialize(&ws.to_string_lossy(), &stale, false, false).unwrap();
+}
