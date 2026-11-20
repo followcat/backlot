@@ -218,7 +218,12 @@ backlot stage start
 
 `backlot studio new` records `studio.created` in the studio's ledger and prints it back.
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
-`--studio` flag or reads `BACKLOT_STUDIO`. `--repo` must be an absolute path — it names the
+`--studio` flag or reads `BACKLOT_STUDIO`. The name resolves across sessions: when it is not
+under the current session's state directory the command scans the sibling core directories, so
+`backlot studio finish --studio aiflows` in a plain shell finds `aiflows` wherever it was made —
+exactly one match wins, none keeps `no studio`, and several matches refuse with the core ids so
+`--session` can pick one. `BACKLOT_STATE_DIR`, `--session` and `--remote` pin the directory and
+skip the scan. `--repo` must be an absolute path — it names the
 bound path, whatever its shape: a repository, a workspace directory holding member
 repositories, or a plain directory. A plain directory needs the choice spelled out: `--init`
 runs `git init` plus an empty initial commit in it at launch, `--no-git` binds it degraded —
@@ -682,7 +687,10 @@ with an "upgrade backlot" error rather than a cryptic one.
 ## Where the files live
 
 The state root is `$XDG_STATE_HOME/backlot/<core id>/` — `~/.local/state/backlot/<core id>/` by
-default — one per core, overridable with `BACKLOT_STATE_DIR`:
+default — one per core, overridable with `BACKLOT_STATE_DIR`. A studio named by `--studio` or
+`BACKLOT_STUDIO` is looked up under the current core's directory first, then across the sibling
+`<core id>` directories — the CLI finds the studio for you, and pins (`BACKLOT_STATE_DIR`,
+`--session`, `--remote`) keep the lookup on one core:
 
 ```
 config.toml                  optional [runner_env.<runner>] env for role terminals

@@ -53,10 +53,7 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
 /// `status [--studio <name>]` for one studio.
 fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
     let name = crate::cli::studio_name(common, env)?;
-    let dir = store::studio_dir(base, &name);
-    if !dir.join("events.jsonl").exists() {
-        return Err(Fail::refused(format!("no studio '{name}'")));
-    }
+    let dir = store::studio_dir(&crate::cli::resolve_base(env, common, base, &name)?, &name);
     let state = store::load_state(&dir).map_err(store_fail)?;
     Ok(if json {
         serde_json::to_string_pretty(&state).map_err(|e| Fail::refused(e.to_string()))?
@@ -85,21 +82,18 @@ fn records(
     all: bool,
     kind: Option<&str>,
 ) -> Result<String, Fail> {
-    let _ = env;
-    let names = match (all, &common.studio) {
+    let (names, base) = match (all, &common.studio) {
         (false, Some(name)) => {
             let name = crate::cli::check_studio_name(name)?;
-            if !store::studio_dir(base, &name)
-                .join("events.jsonl")
-                .is_file()
-            {
-                return Err(Fail::refused(format!("no studio '{name}'")));
-            }
-            vec![name]
+            let base = crate::cli::resolve_base(env, common, base, &name)?;
+            (vec![name], base)
         }
-        _ => store::studios(base).map_err(|e| Fail::refused(e.to_string()))?,
+        _ => (
+            store::studios(base).map_err(|e| Fail::refused(e.to_string()))?,
+            base.to_path_buf(),
+        ),
     };
-    let logs = studio_logs(base, &names)?;
+    let logs = studio_logs(&base, &names)?;
     let mut recs = backlot_model::records(&logs);
     // `--kind <task_kind>` keeps only that kind's rows (L3).
     if let Some(kind) = kind {
@@ -147,10 +141,8 @@ fn cast_suggest(common: &Common, env: &Env, base: &Path, json: bool) -> Result<S
         .clone()
         .or_else(|| env.get("BACKLOT_TASK").map(String::from))
         .ok_or_else(|| Fail::usage("missing task: set BACKLOT_TASK or pass --task"))?;
-    let dir = store::studio_dir(base, &name);
-    if !dir.join("events.jsonl").is_file() {
-        return Err(Fail::refused(format!("no studio '{name}'")));
-    }
+    let base = crate::cli::resolve_base(env, common, base, &name)?;
+    let dir = store::studio_dir(&base, &name);
     let state = store::load_state(&dir).map_err(store_fail)?;
     let t = state
         .tasks
@@ -166,8 +158,8 @@ fn cast_suggest(common: &Common, env: &Env, base: &Path, json: bool) -> Result<S
             "studio '{name}' declares no candidates"
         )));
     }
-    let names = store::studios(base).map_err(|e| Fail::refused(e.to_string()))?;
-    let logs = studio_logs(base, &names)?;
+    let names = store::studios(&base).map_err(|e| Fail::refused(e.to_string()))?;
+    let logs = studio_logs(&base, &names)?;
     let recs = backlot_model::records(&logs);
     let history = backlot_model::casting::candidate_history(candidates, &t.task_kind, &recs);
     Ok(if json {
@@ -194,10 +186,7 @@ pub(crate) fn report_show(
 ) -> Result<(), Fail> {
     const MAX_BYTES: u64 = 1024 * 1024;
     let name = crate::cli::studio_name(common, env)?;
-    let dir = store::studio_dir(base, &name);
-    if !dir.join("events.jsonl").is_file() {
-        return Err(Fail::refused(format!("no studio '{name}'")));
-    }
+    let dir = store::studio_dir(&crate::cli::resolve_base(env, common, base, &name)?, &name);
     let rel = report_relpath(file)?;
     let root = dir
         .canonicalize()
