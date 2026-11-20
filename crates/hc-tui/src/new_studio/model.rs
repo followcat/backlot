@@ -430,6 +430,67 @@ impl CastTable {
         }
     }
 
+    /// The last cast a successful `studio new` used on this machine,
+    /// re-seated on the runners it reports now: each saved word maps
+    /// back to an index, a name that is gone falls back to the
+    /// draft's own seat — a missing role row rebuilds from the draft
+    /// so the table always carries the three fixed roles.
+    pub(crate) fn from_saved(
+        runners: &[RunnerRow],
+        saved: &crate::preferences::SavedStudioCast,
+    ) -> CastTable {
+        let mut table = CastTable::draft(runners);
+        // The runner whose name the row saved; a name that vanished
+        // from this machine seats the draft's runner.
+        let seat = |name: &str| {
+            runners
+                .iter()
+                .position(|r| r.runner == name)
+                .unwrap_or_else(|| runners.iter().position(|r| r.found()).unwrap_or(0))
+        };
+        // A saved word back to its index — a name that is gone
+        // cycles back to the column's first option.
+        let index = |list: &[String], name: &Option<String>| {
+            name.as_ref()
+                .and_then(|n| list.iter().position(|v| v == n))
+                .unwrap_or(0)
+        };
+        let row_at = |saved_row: &crate::preferences::SavedCastRow| {
+            let runner = seat(&saved_row.runner);
+            let r = runners.get(runner);
+            CastRow {
+                key: saved_row.key.clone(),
+                candidate: saved_row.candidate,
+                runner,
+                model: index(
+                    r.map(|r| r.models.as_slice()).unwrap_or(&[]),
+                    &saved_row.model,
+                ),
+                effort: index(
+                    r.map(|r| r.efforts.as_slice()).unwrap_or(&[]),
+                    &saved_row.effort,
+                ),
+            }
+        };
+        for (i, key) in ["producer", "director", "writer"].iter().enumerate() {
+            if let Some(saved_row) = saved.rows.iter().find(|r| r.key == *key && !r.candidate) {
+                table.rows[i] = row_at(saved_row);
+            }
+        }
+        let candidates: Vec<CastRow> = saved
+            .rows
+            .iter()
+            .filter(|r| r.candidate)
+            .map(row_at)
+            .collect();
+        if !candidates.is_empty() {
+            table.rows.truncate(3);
+            table.rows.extend(candidates);
+        }
+        table.custom = saved.custom.clone();
+        table
+    }
+
     /// Cycle the selected cell's value among the runner's options;
     /// `delta` is ±1. The runner cell's change reseats model and
     /// effort to that runner's defaults.

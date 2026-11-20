@@ -1197,6 +1197,81 @@ async fn the_dry_run_carries_the_plain_dirs_flag() {
     assert!(text.contains("--no-git"), "the shown command: {text}");
 }
 
+/// The cast a successful `studio new` used is remembered per
+/// machine: the next dialog on that machine seeds its rows from it
+/// — roles, added candidates, a `^E` file too — while another
+/// machine still gets the draft.
+#[tokio::test]
+async fn the_last_created_cast_prefills_that_machines_next_dialog() {
+    let (mut app, _) = dialog_app().await;
+    key(&mut app, hc_vt::Key::Tab);
+    key(&mut app, hc_vt::Key::Enter); // acme-shop → step 2
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await; // → Cast, the draft seeded
+    // Producer's effort to `high`, an extra candidate, a custom file.
+    key(&mut app, hc_vt::Key::Tab);
+    key(&mut app, hc_vt::Key::Tab); // EFFORT column
+    key(&mut app, hc_vt::Key::ArrowRight);
+    key(&mut app, hc_vt::Key::Char('a')); // actor-c
+    let custom_text = {
+        let d = app.new_studio.as_ref().unwrap();
+        let runners = match &d.runners {
+            Probe::Done(rows) => rows.clone(),
+            _ => Vec::new(),
+        };
+        d.cast.toml(&runners, d.mode)
+    };
+    let file = std::env::temp_dir().join(format!("ns-cast-{}", std::process::id()));
+    std::fs::write(&file, &custom_text).unwrap();
+    app.ns_editor = Some(file);
+    app.ns_editor_check();
+    assert!(app.new_studio.as_ref().unwrap().cast.custom.is_some());
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await; // → CheckStart, the dry run saves nothing
+    assert!(app.ns_saved_casts.is_empty(), "a dry run does not save");
+
+    key(&mut app, hc_vt::Key::Enter); // create
+    drain_ns(&mut app).await;
+    let saved = &app.ns_saved_casts[0];
+    assert_eq!(saved.machine, None, "the Local machine's cast");
+    assert_eq!(saved.rows.len(), 6, "3 roles + 3 candidates");
+    assert_eq!(saved.rows[0].effort.as_deref(), Some("high"));
+    assert_eq!(saved.rows[5].key, "actor-c");
+    assert!(saved.rows[5].candidate);
+    assert_eq!(saved.custom.as_deref(), Some(custom_text.as_str()));
+
+    // The same machine's next dialog seeds from the saved cast.
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    key(&mut app, hc_vt::Key::Tab);
+    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    let cast = &app.new_studio.as_ref().unwrap().cast;
+    assert_eq!(cast.rows.len(), 6, "the saved rows came back");
+    assert_eq!(cast.rows[0].effort, 1, "high is index 1 in fake's efforts");
+    assert_eq!(cast.rows[5].key, "actor-c");
+    assert!(cast.rows[5].candidate);
+    assert_eq!(
+        cast.custom.as_deref(),
+        Some(custom_text.as_str()),
+        "the hand-edited file came back too"
+    );
+    app.new_studio = None;
+
+    // Another machine has no saved cast — the draft stands. A
+    // preselected machine opens on the Repos pane directly.
+    app.new_studio_open(Some("host-b".into()));
+    drain_ns(&mut app).await;
+    key(&mut app, hc_vt::Key::Enter); // repo → step 2
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await; // → Cast
+    let cast = &app.new_studio.as_ref().unwrap().cast;
+    assert_eq!(cast.rows.len(), 5, "the draft's own rows");
+    assert_eq!(cast.rows[0].effort, 0);
+    assert!(cast.custom.is_none());
+}
+
 #[tokio::test]
 async fn focus_moves_to_the_producer_after_create() {
     let (mut app, _) = dialog_app().await;

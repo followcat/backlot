@@ -1,7 +1,8 @@
 // Derived from herdr src/client/shell/preferences.rs (Apache-2.0).
 //! Per-endpoint client chrome preferences: choices the user changed by
-//! hand — sidebar width, the spaces/agents split, collapse state and the
-//! agent-panel sort — remembered across restarts. One small JSON file
+//! hand — sidebar width, the spaces/agents split, collapse state, the
+//! agent-panel sort and each machine's last created studio cast —
+//! remembered across restarts. One small JSON file
 //! per endpoint under the client state root (`backlot/client-shell`); a
 //! missing or malformed file is ignored and a write failure is a
 //! notice, never a panic.
@@ -24,6 +25,37 @@ pub struct ClientRemoteCollapsedGroups {
     pub profile_id: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collapsed_groups: Vec<String>,
+}
+
+/// One cast row, resolved to names — runner/model/effort indexes in
+/// the live `runners --json` list would go stale the moment a
+/// machine gains or loses a runner, so the file keeps the words the
+/// row cycled to.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SavedCastRow {
+    /// The role (`producer`, `director`, `writer`) or candidate name.
+    pub key: String,
+    #[serde(default)]
+    pub candidate: bool,
+    pub runner: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+}
+
+/// The cast one machine's last successful `studio new` used — the
+/// New Studio step-3 prefill on that machine's next dialog.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SavedStudioCast {
+    /// The machine's `on:` name — `null` for Local.
+    #[serde(default)]
+    pub machine: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<SavedCastRow>,
+    /// The `^E` hand-edited cast.toml, when the create used one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom: Option<String>,
 }
 
 /// One endpoint's remembered chrome choices. The `Option` fields are
@@ -50,6 +82,10 @@ pub struct ClientChromePreferences {
     /// Collapsed groups per remote machine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub remote_collapsed_groups: Vec<ClientRemoteCollapsedGroups>,
+    /// The last cast `studio new` created with, per machine — the
+    /// New Studio cast table's prefill.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub new_studio_casts: Vec<SavedStudioCast>,
 }
 
 /// The resolved state root: `$XDG_STATE_HOME`, else `~/.local/state` —
@@ -214,6 +250,42 @@ mod tests {
 
         assert_eq!(preferences.collapsed_groups, ["/repo"]);
         assert!(preferences.remote_collapsed_groups.is_empty());
+        assert!(preferences.new_studio_casts.is_empty());
+    }
+
+    /// A saved cast survives the round trip: the machine key, each
+    /// row's runner/model/effort words, the candidate flag and a
+    /// `^E` file — a future dialog can rebuild the table from it.
+    #[test]
+    fn saved_studio_casts_round_trip() {
+        let mut preferences = ClientChromePreferences::default();
+        preferences.new_studio_casts.push(SavedStudioCast {
+            machine: Some("host-b".into()),
+            rows: vec![
+                SavedCastRow {
+                    key: "producer".into(),
+                    candidate: false,
+                    runner: "fake".into(),
+                    model: Some("m".into()),
+                    effort: Some("high".into()),
+                },
+                SavedCastRow {
+                    key: "actor-c".into(),
+                    candidate: true,
+                    runner: "claude".into(),
+                    model: None,
+                    effort: None,
+                },
+            ],
+            custom: Some("rework_cap = 3\n".into()),
+        });
+        let text = serde_json::to_string(&preferences).unwrap();
+        let loaded: ClientChromePreferences = serde_json::from_str(&text).unwrap();
+        let cast = &loaded.new_studio_casts[0];
+        assert_eq!(cast.machine.as_deref(), Some("host-b"));
+        assert_eq!(cast.rows[0].effort.as_deref(), Some("high"));
+        assert!(cast.rows[1].candidate);
+        assert_eq!(cast.custom.as_deref(), Some("rework_cap = 3\n"));
     }
 
     #[test]

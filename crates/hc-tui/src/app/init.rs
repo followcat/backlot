@@ -120,6 +120,7 @@ impl App {
             ns_pending_focus: None,
             ns_editor: None,
             ns_run: None,
+            ns_saved_casts: preferences.new_studio_casts.clone(),
             menu: None,
             right_click_panes: Default::default(),
             help: false,

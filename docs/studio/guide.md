@@ -126,7 +126,8 @@ actions. Press `n` — the **New Studio dialog** opens, a four-step overlay that
 client itself: **1 Machine & Repo** (Local plus every attached machine, each checked for
 reachability and `backlot --version`; a machine without backlot or offline says why and cannot
 be picked), **2 ID & Title** (the repository's name, validated live), **3 Cast** (the runners
-the target machine's `backlot runners --json` found, cycled per role; `Ctrl+E` edits the
+the target machine's `backlot runners --json` found, cycled per role; the table opens on the
+cast the machine's last successful `studio new` used when one was saved, `Ctrl+E` edits the
 generated cast.toml in `$EDITOR`), **4 Check & Start** (`studio new --dry-run` on the target
 machine, then `Enter` creates — over hc's `terminal.run` when the machine is remote — and
 optionally starts the stage before the new producer's terminal takes focus). `Esc` steps back

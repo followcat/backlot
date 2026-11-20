@@ -216,6 +216,10 @@ pub struct App {
     /// `None` uses `current_exe` locally and `remote_runner` on a
     /// machine; tests record argv and feed canned JSON.
     ns_run: Option<new_studio::NsRun>,
+    /// The cast each machine's last successful `studio new` used —
+    /// step 3's prefill; persisted in the endpoint's preferences
+    /// file. The live copy `persist_chrome_preferences` reads.
+    ns_saved_casts: Vec<crate::preferences::SavedStudioCast>,
     /// Open right-click context menu (`ClientShellOverlay::ContextMenu`).
     menu: Option<crate::chrome::menu::ContextMenu>,
     /// Panes whose bare right-click goes to the program instead of the
