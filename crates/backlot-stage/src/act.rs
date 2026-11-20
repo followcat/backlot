@@ -412,6 +412,33 @@ impl Stage {
                 crate::stagelog::stage_log!("dropping stray terminal {terminal} ({address})");
                 self.remove(address).await?;
             }
+            // The program is already gone — only the record is left.
+            // A refusal (`live`: the kill landed late, `not_found`: it
+            // is already gone) is a tolerated `Rpc` answer retried next
+            // tick, so only a real removal prints and a dead wire stays
+            // fatal. A core without `terminal.rm` keeps the record.
+            Action::RemoveFinished { terminal, address } => {
+                if self
+                    .client
+                    .explain_unavailable(hc_proto::method::TERMINAL_RM)
+                    .is_none()
+                {
+                    match self
+                        .client
+                        .call(
+                            "terminal.rm",
+                            Some(serde_json::json!({ "terminal": address })),
+                        )
+                        .await
+                    {
+                        Ok(_) => crate::stagelog::stage_log!(
+                            "cleared finished terminal {terminal} ({address})"
+                        ),
+                        Err(CallError::Rpc(_)) => {}
+                        Err(e) => return Err(fatal(e)),
+                    }
+                }
+            }
             Action::Adopt {
                 role,
                 terminal,

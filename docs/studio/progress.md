@@ -1,5 +1,41 @@
 # Studio progress
 
+## Ux: finishing a studio clears its windows
+
+- Done: `studio.finished` releases every role and the stop path kills the
+  terminal, but the core can refuse the `terminal.rm` that follows while the
+  kill is still landing — the record outlives its program as `finished`, and
+  every client keeps drawing the dead pane (`new`, `cast · <id>`, `producer`
+  with "Terminal unavailable") until each is closed by hand. The stage now
+  sweeps them: `reconcile::finish_sweep` returns one
+  `Action::RemoveFinished` per record carrying the finished studio's own
+  `backlot.studio` label, and `act` issues a bare `terminal.rm` — no kill,
+  no ledger event. A `live` or `not_found` answer is the tolerated refusal
+  the next tick retries; a dead wire stays fatal and a core without the
+  method keeps the record. A `backlot.shell` is the user's own and a
+  finished studio keeps its shells, so shells stay; another studio's record
+  and a hand-named `bl-…` never match the label and are untouched. The
+  studio stays in the document as `finished` and a reopened person still
+  resumes its session, so cleanup costs the reopen path nothing.
+  `terminal.list` includes finished records only while some studio has
+  finished, so an idle core is not listing its tombstones every second.
+- Measured: 4 pure `finish_tests` cover the sweep's selection — a finished
+  studio's own records removed, an unfinished studio sweeping nothing,
+  another studio's record, a stranger's and a shell left alone, and the
+  studio still listed and still reopening into its recorded session; 4
+  tick-level `finish_sweep_tests` on a duplex fake core cover the removal
+  reaching `terminal.rm`, a refused (`live`) removal retried without a
+  studio error, an already-gone (`not_found`) record, and a core without
+  the method dialing nothing. `cargo fmt --check`, `cargo clippy
+  --all-targets -- -D warnings` and `cargo test` pass; the one failing
+  hc-tui clipboard test fails identically on the unmodified base commit
+  (this machine has `wl-paste`/`xclip` installed where the test's stub PATH
+  also reaches `/usr/bin`) and is unrelated to this change.
+- Not verified: no real-core run — the mechanism (`terminal.rm` on a
+  finished record) is covered by the fake core only, and the exact race
+  that leaves the record was reproduced from the core's documented
+  `live`/`not_found` answers rather than measured on a live session.
+
 ## P5: a studio binds a path — repository, workspace or plain directory (D4, D10, D19)
 
 - Done: `studio new --repo` names a filesystem path, not necessarily a

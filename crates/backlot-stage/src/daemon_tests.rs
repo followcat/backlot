@@ -256,6 +256,7 @@ async fn a_corrupt_ledger_is_skipped_until_it_loads() {
     stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
 
@@ -304,6 +305,7 @@ async fn a_repaired_ledger_recovers_at_the_same_length() {
     stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
 
@@ -348,6 +350,7 @@ async fn a_failing_pass_does_not_end_the_tick() {
     stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
 
@@ -404,6 +407,7 @@ fn a_failed_refresh_keeps_the_last_inventory() {
                 ..Default::default()
             })
             .collect(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
     assert!(matches!(
@@ -429,6 +433,7 @@ async fn a_timed_out_call_does_not_end_the_tick() {
     stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
     // `Stage` is !Sync, so the tick stays on this task while a
@@ -456,6 +461,7 @@ async fn a_dead_wire_ends_the_tick() {
     stage.base = base.to_path_buf();
     let live = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
     let err = stage.tick(&live).await.unwrap_err();
@@ -470,6 +476,7 @@ async fn a_failing_pass_shows_then_clears() {
     studio(&base, "acme");
     let live = Inventory {
         terms: Vec::new(),
+        finished: Vec::new(),
         doing: BTreeMap::new(),
     };
     let mut stage = stage_on(serve_no_run).await;
