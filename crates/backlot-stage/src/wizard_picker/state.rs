@@ -44,9 +44,8 @@ pub enum Outcome {
     Cancelled,
 }
 
-/// Enter's answer for every directory it cannot take — a plain
-/// directory, a repository without commits, an unreadable one.
-const NOT_PICKABLE: &str = "not a git repository with a commit";
+/// Enter's answer on a path that cannot be read — it binds nothing.
+const NOT_PICKABLE: &str = "cannot read this path";
 
 /// The "repositories in use" group shows at most this many.
 const IN_USE_CAP: usize = 8;
@@ -115,7 +114,9 @@ impl<'a> Picker<'a> {
             page: 8,
         };
         p.text = match p.repo(start) {
-            Repo::Commit { .. } => filter::shorten(start, &p.home),
+            Repo::Commit { .. } | Repo::Empty | Repo::Workspace { .. } => {
+                filter::shorten(start, &p.home)
+            }
             _ => "~/".to_string(),
         };
         p.cursor = p.text.len();
@@ -515,16 +516,18 @@ impl<'a> Picker<'a> {
         self.edited();
     }
 
-    /// Enter: the input answers a repository-with-commit pick; the
+    /// Enter: the input answers a path pick — every readable
+    /// directory binds (D4) — as long as the text does not end in
+    /// `/`, which keeps navigation on the keys it always had; the
     /// highlighted row answers a pick next — the in-use group while
-    /// the input is untouched, the filter's best match otherwise;
-    /// an existing directory descends with the status; a tree row
-    /// picks or expands.
+    /// the input is untouched, the filter's best match otherwise; a
+    /// trailing-slash or unreadable input keeps the old answers; a
+    /// tree row picks or says why it cannot.
     fn enter(&mut self) -> Option<Outcome> {
         match self.focus {
             Focus::Input => {
                 let abs = filter::expand(&self.text, &self.home);
-                if self.repo(&abs).pickable() {
+                if !self.text.ends_with('/') && self.repo(&abs).pickable() {
                     return Some(Outcome::Picked(abs));
                 }
                 let sel_repo = self
@@ -533,12 +536,23 @@ impl<'a> Picker<'a> {
                     .and_then(Row::path)
                     .map(|p| p.to_path_buf());
                 let sel_pickable = sel_repo.clone().is_some_and(|p| self.repo(&p).pickable());
-                if sel_pickable && (!self.dirty || !(self.seams.is_dir)(&abs)) {
+                // An untouched input's Enter answers the highlighted
+                // in-use row only — a plain tree row waits for the
+                // tree focus, so `~/` + Enter never binds a home
+                // child by accident.
+                let untouched =
+                    !self.dirty && matches!(self.rows.get(self.sel), Some(Row::Used { .. }));
+                if sel_pickable && (untouched || !(self.seams.is_dir)(&abs)) {
                     return Some(Outcome::Picked(sel_repo.expect("pickable above")));
                 }
                 if (self.seams.is_dir)(&abs) {
                     self.descend(&abs);
-                    self.status = Some(NOT_PICKABLE.to_string());
+                    if self.dirty {
+                        self.status = Some(match self.repo(&abs).pickable() {
+                            true => "drop the trailing / to pick this directory".to_string(),
+                            false => NOT_PICKABLE.to_string(),
+                        });
+                    }
                 } else {
                     self.status = Some("no such directory".to_string());
                 }
@@ -551,14 +565,6 @@ impl<'a> Picker<'a> {
                 };
                 if self.repo(&path).pickable() {
                     return Some(Outcome::Picked(path));
-                }
-                // Expand what it has, then say why it cannot go.
-                if !self.expanded.contains(&path)
-                    && let Some(kids) = self.kids(&path)
-                    && !filter::rank(kids, "", &*self.seams.is_repo).is_empty()
-                {
-                    self.expanded.insert(path);
-                    self.rebuild_rows();
                 }
                 self.status = Some(NOT_PICKABLE.to_string());
                 None

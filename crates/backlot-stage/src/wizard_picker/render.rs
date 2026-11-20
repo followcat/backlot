@@ -32,13 +32,14 @@ const HEAD: u16 = 4;
 const TAIL: u16 = 2;
 
 /// The meta column drops below this width.
-const META_MIN_W: u16 = 50;
-/// The meta column starts this far from the right edge.
-const META_OFF: u16 = 26;
+const META_MIN_W: u16 = 60;
+/// The meta column starts this far from the right edge — long
+/// enough for `0 commits · will create initial commit`.
+const META_OFF: u16 = 42;
 
 const HINTS: &str =
     " ↑↓ move   → open   ← close/up   Tab complete   Enter pick   Esc back to typing";
-const LEGEND: &str = "git repository with a commit — Enter picks it";
+const LEGEND: &str = "every directory binds a path — Enter picks it";
 
 /// The scroll area's height at `area` — the driver hands it to
 /// [`Picker::set_page`] so PgUp/PgDn move by a page.
@@ -197,15 +198,19 @@ fn tree_rows(
     sel_line
 }
 
-/// A directory row's name plus its repository meta — `●`/`○` then
-/// `branch · age`/`no commits` — in a fixed column while the width
-/// allows: the column drops first, the name truncates second.
+/// A directory row's name plus its shape meta — `●`/`○` then
+/// `branch · age`, `0 commits · will create initial commit`,
+/// `workspace · N repos` or `directory · will git init` (D4) — in a
+/// fixed column while the width allows: the column drops first, the
+/// name truncates second.
 fn row_line(picker: &mut Picker, buf: &mut Buffer, at: Rect, name: &str, path: &Path, name_x: u16) {
     let (x, ly, w) = (at.x, at.y, at.width);
     let meta = match picker.repo(path) {
         Repo::Commit { branch, age_s } => Some(format!("{branch} · {}", age_text(age_s))),
-        Repo::Empty => Some("no commits".to_string()),
-        Repo::None => None,
+        Repo::Empty => Some("0 commits · will create initial commit".to_string()),
+        Repo::Workspace { repos } => Some(format!("workspace · {repos} repos")),
+        Repo::Dir => Some("directory · will git init".to_string()),
+        Repo::Missing => None,
     };
     let meta_x = x + w.saturating_sub(META_OFF);
     let show_meta = w >= META_MIN_W && meta.is_some() && name_x + 4 < meta_x - x;
@@ -220,6 +225,7 @@ fn row_line(picker: &mut Picker, buf: &mut Buffer, at: Rect, name: &str, path: &
             Repo::Commit { .. } => ("●", ACCENT),
             _ => ("○", SUBTEXT),
         };
+
         put(buf, meta_x, ly, 1, mark, mark_fg);
         put(
             buf,

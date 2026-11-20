@@ -15,8 +15,14 @@ been verified; read it before trusting a studio with real work.
   nothing answers on the session socket; `hc server start` does it without the UI. The studio
   commands (`backlot studio`, `backlot stage`, `backlot status`) do not start a core — they fail
   with "cannot reach the hc core" until one is up.
-- **A git repository with at least one commit.** Actors and the director work in git worktrees
-  created off it. It does not have to be clean.
+- **A filesystem path.** Usually a git repository — one with zero commits is fine, the studio
+  writes an empty initial commit at launch. A directory whose direct children are git
+  repositories binds as a **workspace**: work areas hold one worktree per member and commits
+  land in the member they were made in — no synthetic parent repository is ever created. A
+  plain directory binds too: `studio new --init` runs `git init` plus an empty initial commit
+  in it (the interactive flows offer that by default), or `studio new --no-git` binds it
+  degraded — every role shares the path with no worktrees, no integration branch and no merge
+  checks.
 - **At least one agent CLI installed and logged in:** Claude Code (`claude`), Codex (`codex`),
   Devin (`devin`), OpenCode (`opencode`) or cursor-agent (`cursor`). The stage launches it with
   flags; nothing interactive runs. Each role in the cast file names its runner, so different roles
@@ -100,7 +106,7 @@ timeout_s = 120
 | `runner_version` | Optional. Recorded on the role's identity as the configuration that did the work; the stage fills it from the launch program's own `--version` (cursor's is `cursor-agent`, not the `cursor` IDE launcher) when you leave it out. |
 | `mode` | Optional. `standard` is the default. `experimental` (R14) marks the studio an experimental production — `backlot studio new --mode` overrides it, the wizard and the New Studio dialog offer both, each role's prompt gains research-level guidance (hypotheses, competing variants, honest negatives), a task may be created with no recorded requirement for direct-to-task exploration, and `status` plus the dock/sheet flag it `[experimental]`/`exp`. |
 | `check_env` | Optional list of stage environment names a check may see, valued from the stage's own environment. Names that could carry identity or credentials — `BACKLOT_*`, `HC_*`, proxies — are refused at `studio new`. |
-| `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. |
+| `[[checks]]` | One table per check the stage runs itself on every delivery: `name`, the `run` command (`sh -c` in a detached worktree at the delivery's tip, under a stripped environment), and `timeout_s` — past it the run is TERM'd, then KILL'd five seconds later. Results land as `task.checked`; an accepting review waits for them and names each failure in its conclusion. A single-repository feature — refused on a workspace or no-git studio at `studio new`. |
 
 The three fixed roles and every `[[candidates]]` entry each need `runner`, `model` and
 `permission_profile`; `effort` is required only on a runner that takes one. The candidates are the
@@ -128,9 +134,14 @@ and then closes; `Ctrl+C` cancels from any step. When a studio exists, the page 
 studio is current.
 
 The repository list comes from `backlot repos --json` on the target machine — a breadcrumb, a
-`/` filter, `→` to descend and `←` to ascend. A git repository without commits is disabled with
-its hint, a repository another studio uses warns, and a remote path is never checked against the
-local disk.
+`/` filter, `→` to descend and `←` to ascend. Every listed path can be picked: a git repository
+shows its branch, one without commits says `0 commits · will create initial commit`, a
+directory holding member repositories says `workspace · N repos · <names>` and a plain
+directory says `directory · will git init`. A path another studio uses warns, and a remote
+path is never checked against the local disk. Step 4's launch plan restates the shape —
+`workspace over N repos: a, b`, `will run: git init && git commit --allow-empty -m "chore:
+initial commit" in <path>`, or `will create initial commit in <path>` — and only there does a
+plain-directory pick offer the `[ ] no git (reduced isolation)` toggle (`g`).
 
 In a terminal, `backlot studio new --interactive` asks the same questions. Its repository
 question is a full-screen picker when stdin and stdout are terminals (the plain
@@ -141,12 +152,12 @@ question is a full-screen picker when stdin and stdout are terminals (the plain
  path › ~/code/▏                               Tab completes
 
    ~/code
- ▶ ├   acme-shop                  ● main · 2 h ago
-   ├   backlot                    ● main · 5 min ago
-   ├   clients
-   └ ▸ scratch
+ ▶ ├   acme-shop  ● main · 2 h ago
+   ├   backlot    ● main · 5 min ago
+   ├ ▸ clients    ○ workspace · 2 repos
+   └ ▸ scratch    ○ directory · will git init
 
- ● git repository with a commit — Enter picks it
+ ● every directory binds a path — Enter picks it
  ↑↓ move   → open   ← close/up   Tab complete   Enter pick
 ```
 
@@ -157,11 +168,15 @@ question is a full-screen picker when stdin and stdout are terminals (the plain
   and the rest of the last component filters its children, repositories first. `Tab` completes
   the longest common prefix and descends when one match is left.
 - `↑`/`↓` (and `PgUp`/`PgDn`, `Home`/`End`) move, `→` expands a directory or enters it, `←`
-  collapses or climbs to the parent, `Enter` on a `●` row picks it. `Esc` returns to the input; a
-  second `Esc` cancels. `Ctrl+C` cancels at once — nothing is written.
-- `●` is a repository with a commit — its branch and last-commit age sit at the right; `○` has no
-  commits and cannot be picked. Hidden directories stay hidden unless the filter starts with `.`;
-  `node_modules`, `target` and `.git` are always skipped.
+  collapses or climbs to the parent, `Enter` picks the highlighted row — every readable
+  directory binds a path. `Esc` returns to the input; a second `Esc` cancels. `Ctrl+C` cancels
+  at once — nothing is written.
+- `●` is a repository with a commit — its branch and last-commit age sit at the right. `○`
+  marks the other bindable shapes: `0 commits · will create initial commit` on an empty
+  repository, `workspace · N repos` on a directory holding member repositories, `directory ·
+  will git init` on a plain one. Hidden directories stay hidden unless the filter starts with
+  `.`; `node_modules`, `target` and `.git` are always skipped. Typing a path without a
+  trailing `/` and pressing `Enter` picks it; the trailing slash keeps `Enter` on navigation.
 
 The draft's runner block comes from a detector that looks past the inherited `PATH`: the login
 shell's `PATH`, then well-known install dirs (`~/.local/bin`, every `~/.nvm/versions/node/*/bin`
@@ -176,8 +191,9 @@ yourself is never rewritten (a warning instead when it still cannot reach the bi
 version, path, needs PATH — read-only, with no core needed. `backlot runners --json` prints the
 detection as JSON, with the models and efforts backlot knows per runner — it is what the New
 Studio dialog's cast table cycles. `backlot repos --json [--from <dir>]` lists a directory's
-entries the same way — each classified `git_ready`, `git_empty` or `dir`, with the studio that
-uses it — and is how the dialog browses a remote machine's repositories.
+entries the same way — each classified `git_ready`, `git_empty` or `dir`, a `dir` carrying its
+direct-child repository names as `members`, each entry naming the studio that uses it — and is
+how the dialog browses a remote machine's repositories.
 
 The page only ever appears when there is no studio. `backlot` waits for its first `backlot`
 read before drawing it (two seconds at most), so a client with studios never flashes the page
@@ -200,12 +216,17 @@ backlot stage start
 
 `backlot studio new` records `studio.created` in the studio's ledger and prints it back.
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
-`--studio` flag or reads `BACKLOT_STUDIO`. `--repo` must be an absolute path. `--title` is a
-display name. With `--interactive` instead, whatever the flags leave out is asked for on the
-terminal with the same defaults as the native dialog. `--cast -` reads the cast file from
-stdin — how the client's dialog hands a generated cast to a remote `studio new` without leaving
-a file on that machine. `--mode standard|experimental` overrides the cast file's `mode` — an
-invalid value is a usage error.
+`--studio` flag or reads `BACKLOT_STUDIO`. `--repo` must be an absolute path — it names the
+bound path, whatever its shape: a repository, a workspace directory holding member
+repositories, or a plain directory. A plain directory needs the choice spelled out: `--init`
+runs `git init` plus an empty initial commit in it at launch, `--no-git` binds it degraded —
+shared path, no worktrees, no integration branch — and `--init`/`--no-git` are refused on
+repositories and workspaces. `--title` is a display name. With `--interactive` instead,
+whatever the flags leave out is asked for on the terminal with the same defaults as the native
+dialog — its picker binds any directory and defaults a plain one to `git init`. `--cast -`
+reads the cast file from stdin — how the client's dialog hands a generated cast to a remote
+`studio new` without leaving a file on that machine. `--mode standard|experimental` overrides
+the cast file's `mode` — an invalid value is a usage error.
 
 `backlot stage start` starts `backlot-stage`, a terminal on the same core that runs the
 scheduling loop. It is idempotent — a second `stage start` says it is already running. The stage
@@ -321,7 +342,7 @@ In the normal path the steps run in this order:
 | plan | producer + writer | The producer records requirement v1 (`backlot req revise`), asks for a plan (`backlot plan request`); the writer joins, they agree, the writer publishes it (`backlot plan publish`). |
 | dispatch | producer | `backlot dispatch` hands the agreed plan to the director; the writer leaves. |
 | cast | director | `backlot task new` splits the plan into tasks — `--depends-on t1` makes a task wait for another; `backlot cast` puts a candidate on each — an actor terminal starts in its own worktree. A cast on a task with an open dependency is refused, and an accepted dependency that is not merged yet refuses with `merge t1 into integration first`; `backlot status` shows `waits for t1` on the task's line. `backlot cast --task <id> --suggest` first shows every candidate's factual record for the task's kind across all studios — counts and honest notices only, never a pick; `--json` prints the same view structured. |
-| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). A runner that knows its own figures can also report `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and `--cost-usd`. The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
+| deliver | actor | The actor works in `work/<task>` on branch `backlot/<studio>/<task>`, commits, and records the delivery (`backlot deliver` with a commit range resolved against that branch — empty ranges and off-branch tips refuse — a report file and the checks it reports). On a workspace the actor works inside `work/<task>/<member>`; `deliver --commits` takes comma-separated ranges — a bare `a..b` resolves to the one member whose task branch holds the tip, `member:a..b` pins it, and the ledger stores `member:sha..sha`. | A runner that knows its own figures can also report `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and `--cost-usd`. The stage then runs the cast's declared `[[checks]]` on the delivery itself, each recorded `task.checked` with its log. |
 | review | director | The director reviews the delivery against the acceptance list and records a verdict (`backlot review`): `accepted`, `partially-accepted`, `changes-requested` or `blocked`. An accepting verdict waits for every declared check's stage record — only you may accept over pending ones — and names each failing check in the conclusion. |
 | rework | actor | A `changes-requested` review goes back to the actor as a `[backlot]` message; it fixes and delivers again. The rework cap counts the rounds. |
 | report | director → producer → you | `backlot report` at agreed nodes; the producer reports to you in its own terminal. |
@@ -675,6 +696,12 @@ studios/acme-shop/
   work/integration           the director's worktree, branch backlot/acme-shop/integration
   work/<task>                each task's actor worktree, branch backlot/acme-shop/<task>
 ```
+
+A workspace studio holds one worktree per member instead — `work/integration/<member>` and
+`work/<task>/<member>` on that member's own `backlot/<studio>/…` branch, the role's terminal
+in the container directory so the members sit side by side. A no-git studio has no `work/`
+tree at all — every role shares the bound path.
+
 
 A Claude role starts with `--settings roles/<role>/claude-settings.json`: one extra settings
 layer for that session only, holding `hooks` and nothing else — no permissions, no env. The

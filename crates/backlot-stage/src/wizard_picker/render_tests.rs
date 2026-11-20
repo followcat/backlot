@@ -36,13 +36,27 @@ impl FakeFs {
     fn seams(&self) -> Seams<'_> {
         Seams {
             lister: Box::new(|p| Some(self.kids.get(p).cloned().unwrap_or_default())),
-            repo: Box::new(|p| match self.repos.get(p) {
-                Some((branch, age_s)) => Repo::Commit {
-                    branch: branch.clone(),
-                    age_s: *age_s,
-                },
-                None if self.empty.contains(p) => Repo::Empty,
-                None => Repo::None,
+            repo: Box::new(|p| {
+                if let Some((branch, age_s)) = self.repos.get(p) {
+                    return Repo::Commit {
+                        branch: branch.clone(),
+                        age_s: *age_s,
+                    };
+                }
+                if self.empty.contains(p) {
+                    return Repo::Empty;
+                }
+                let Some(kids) = self.kids.get(p) else {
+                    return Repo::Missing;
+                };
+                let repos = kids
+                    .iter()
+                    .filter(|k| self.repos.contains_key(*k) || self.empty.contains(*k))
+                    .count();
+                match repos {
+                    0 => Repo::Dir,
+                    n => Repo::Workspace { repos: n },
+                }
             }),
             is_dir: Box::new(|p| self.kids.contains_key(p)),
             is_repo: Box::new(|p| self.repos.contains_key(p) || self.empty.contains(p)),
@@ -135,16 +149,16 @@ fn the_100x30_screen() {
  path › ~/▏                                                                            Tab completes
 
    ~
-     ● ~/code/backlot                                                     ● main · 5 min ago
-     ● ~/code/acme-shop                                                   ● main · 2 h ago
-   ├ ▾ code
-   │   ├   acme-shop                                                      ● main · 2 h ago
-   │   ├   backlot                                                        ● main · 5 min ago
- ▶ │   ├ ▾ clients
-   │   │   ├   web-app                                                    ● develop · 1 d ago
-   │   │   └   web-app-v2                                                 ○ no commits
-   │   └ ▸ scratch
-   └   Documents
+     ● ~/code/backlot                                     ● main · 5 min ago
+     ● ~/code/acme-shop                                   ● main · 2 h ago
+   ├ ▾ code                                               ○ workspace · 2 repos
+   │   ├   acme-shop                                      ● main · 2 h ago
+   │   ├   backlot                                        ● main · 5 min ago
+ ▶ │   ├ ▾ clients                                        ○ workspace · 2 repos
+   │   │   ├   web-app                                    ● develop · 1 d ago
+   │   │   └   web-app-v2                                 ○ 0 commits · will create initial commit
+   │   └ ▸ scratch                                        ○ directory · will git init
+   └   Documents                                          ○ directory · will git init
 
 
 
@@ -159,7 +173,7 @@ fn the_100x30_screen() {
 
 
 
- ● git repository with a commit — Enter picks it
+ ● every directory binds a path — Enter picks it
  ↑↓ move   → open   ← close/up   Tab complete   Enter pick   Esc back to typing
 "
     );
@@ -178,10 +192,10 @@ fn the_60x20_screen() {
  path › ~/code/▏                               Tab completes
 
    ~/code
- ▶ ├   acme-shop                  ● main · 2 h ago
-   ├   backlot                    ● main · 5 min ago
-   ├ ▸ clients
-   └ ▸ scratch
+ ▶ ├   acme-shop  ● main · 2 h ago
+   ├   backlot    ● main · 5 min ago
+   ├ ▸ clients    ○ workspace · 2 repos
+   └ ▸ scratch    ○ directory · will git init
 
 
 
@@ -192,7 +206,7 @@ fn the_60x20_screen() {
 
 
 
- ● git repository with a commit — Enter picks it
+ ● every directory binds a path — Enter picks it
  ↑↓ move   → open   ← close/up   Tab complete   Enter pick
 "
     );

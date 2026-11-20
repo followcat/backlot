@@ -58,14 +58,24 @@ pub(crate) fn branch(path: &Path) -> Option<String> {
         .filter(|branch| !branch.is_empty())
 }
 
-/// `git log -1` as a [`Repo`]: `.git` itself is the gate — children
-/// inside a repository's work tree are not repositories — then one
-/// `log` for the commit age and one `symbolic-ref` for the branch
-/// (`detached` when there is none). A repository with no commit yet
-/// is [`Repo::Empty`].
+/// The directory's shape as a [`Repo`]: `.git` itself is the gate —
+/// children inside a repository's work tree are not repositories —
+/// then one `log` for the commit age and one `symbolic-ref` for the
+/// branch (`detached` when there is none). A repository with no
+/// commit yet is [`Repo::Empty`]. Without `.git` the children answer
+/// the shape: direct-child repositories make a [`Repo::Workspace`],
+/// a readable rest a [`Repo::Dir`], an unreadable or missing path
+/// [`Repo::Missing`].
 pub(crate) fn probe(path: &Path) -> Repo {
     if !path.join(".git").exists() {
-        return Repo::None;
+        let Some(kids) = list_dirs(path) else {
+            return Repo::Missing;
+        };
+        let repos = kids.iter().filter(|k| k.join(".git").exists()).count();
+        return match repos {
+            0 => Repo::Dir,
+            n => Repo::Workspace { repos: n },
+        };
     }
     let dir = path.to_string_lossy();
     let log = workareas::real_git(&["-C", &dir, "log", "-1", "--format=%ct"], ".");

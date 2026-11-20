@@ -1,5 +1,55 @@
 # Studio progress
 
+## P5: a studio binds a path — repository, workspace or plain directory (D4, D10, D19)
+
+- Done: `studio new --repo` names a filesystem path, not necessarily a
+  repository. The bound path classifies at pick time and again at launch —
+  a git repository (zero commits is fine, an empty initial commit lands at
+  launch), a workspace (not itself a repository; its direct-child git
+  repositories are recorded as `members` on `studio.created` and
+  `StudioConfig`), or a plain directory. A plain directory needs the choice
+  spelled out — `--init` runs `git init` plus an empty initial commit in it,
+  `--no-git` binds it degraded — and the flags are refused on repositories
+  and workspaces. No synthetic parent repository is ever created.
+- Done (workspace work areas, D10): `work/integration/<member>` and
+  `work/<task>/<member>` hold one worktree per member on that member's own
+  `backlot/<studio>/…` branch; the role's cwd is the container directory, so
+  members sit side by side and a commit lands in the member it was made in.
+  A no-git studio shares the bound path between all roles — no `work/` tree,
+  no integration branch, the dependency merge check skipped. `deliver
+  --commits` takes comma-separated ranges: a bare `a..b` resolves to the one
+  member whose task branch holds the tip, `member:a..b` pins it, the ledger
+  stores `member:sha..sha`, and an unresolvable or ambiguous part refuses
+  with the pin named. Declared `[[checks]]` stay a single-repository feature
+  and are refused on workspace/no-git studios at `studio new`.
+- Done (pickers): `repos --json` `dir` entries carry their member repository
+  names and a workspace studio marks each member `in_use_studio`. The
+  wizard's terminal picker binds every readable directory — Enter picks the
+  highlighted row, a trailing `/` keeps Enter on navigation — with the
+  row-label vocabulary the design names (`0 commits · will create initial
+  commit`, `workspace · N repos`, `directory · will git init`); a plain
+  answer defaults to `--init`. The New Studio dialog lists and picks every
+  shape, step 4's launch plan restates it (`workspace over N repos: a, b`,
+  `will run: git init && git commit --allow-empty -m "chore: initial commit"
+  in <path>`) and only there does a plain-directory pick offer the
+  `no git (reduced isolation)` toggle (`g`), whose flip re-runs the dry run
+  with `--no-git`/`--init`. The same argv rides `RemoteRunner` on attached
+  machines — local and remote identical.
+- Done (Hollywood): the studio-new card carries `no_git` through proposal
+  parsing, validation and application; `draft::check` is the single shape
+  gate every entry point shares.
+- Measured: stage tests cover path classification and flag rules, plain-dir
+  init and empty-member initialization, workspace per-member worktrees with
+  commits landing in the member repository, no-git shared cwd, shape-aware
+  dry runs, declared-checks refusal, member `in_use` marking and member
+  ranges; picker tests cover pickable shapes, the trailing-slash rule and
+  the label vocabulary; hc-tui tests cover empty-repo pickability, plain-dir
+  `--init`/`--no-git` argv on `g`, and flag-free workspace argv. The full
+  suite stays green.
+- Not verified: `deliver --commits` member resolution is covered by unit
+  tests, not by an end-to-end workspace run; no real studio has worked a
+  multi-repository task yet.
+
 ## P4b: factual casting advisor and experimental production mode (L3, R14)
 
 - Done (L3): `backlot cast --task <id> --suggest [--json]` joins the studio's
