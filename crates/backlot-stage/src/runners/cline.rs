@@ -38,6 +38,28 @@ pub const EFFORT_NOT_SUPPORTED: &str = "effort not supported";
 /// the top — cline has no `max`.
 pub const EFFORTS: &[&str] = &["none", "low", "medium", "high", "xhigh"];
 
+/// The `cline-pass/<model>` ids the ClinePass provider listed for
+/// the measured account — the only ones [`provider`] accepts; any
+/// other provider's id is a plan refusal, not a catalog entry.
+/// New ClinePass models still go in as free text.
+pub const MODELS: &[&str] = &[
+    "cline-pass/deepseek-v4.1-flash-1017",
+    "cline-pass/deepseek-v4.1-flash",
+    "cline-pass/deepseek-v4-pro",
+    "cline-pass/glm-5.3",
+    "cline-pass/glm-5.3-flash",
+    "cline-pass/kimi-k3",
+    "cline-pass/kimi-k3.1-pro",
+    "cline-pass/mimo-v2.6-flash",
+    "cline-pass/mimo-v2.6-pro",
+    "cline-pass/minimax-m3",
+    "cline-pass/minimax-m3.1-flash",
+    "cline-pass/muse-spark-1.3-contributor",
+    "cline-pass/qwen3.7-max",
+    "cline-pass/qwen3.7-plus",
+    "cline-pass/qwen3.8-max",
+];
+
 /// The provider a model id names, when the adapter knows one: cline
 /// takes `-P <provider>` beside `-m <model>`, and only the
 /// `cline-pass/<model>` ids were measured. Any other model would

@@ -10,6 +10,23 @@ use backlot_model::ActorIdentity;
 
 use super::{Launch, LaunchCtx, PlanError, Session};
 
+/// The models `codex -m` is offered: the slugs the CLI's own
+/// `models_cache.json` — what the `/model` picker shows — carried
+/// on the measured account, minus `codex-auto-review`, which
+/// serves the review feature rather than a session. A slug the
+/// list does not name still goes in as free text.
+pub const MODELS: &[&str] = &[
+    "gpt-6.1-sol",
+    "gpt-6-astra",
+    "gpt-6.1-terra",
+    "gpt-6-sol",
+    "gpt-reserve",
+    "gpt-6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+];
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         "standard" | "worktree" => {}

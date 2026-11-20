@@ -43,6 +43,40 @@ pub const CURSOR_PREP_FAILED: &str = "cursor prep failed";
 /// stage set it back to 700 — informational only.
 pub const CURSOR_DIR_OPEN: &str = "cursor dir was open";
 
+/// The models `cursor-agent --model` is offered: the headliners
+/// `cursor-agent --list-models` printed for the measured account —
+/// the depth is baked into the id (`-low`…`-max`, `-fast` twins),
+/// so one variant per family stands in here. `auto` is a real id —
+/// the runner's own default, first in its list. An id outside the
+/// catalog still goes in as free text.
+pub const MODELS: &[&str] = &[
+    "auto",
+    "composer-2.5",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-high",
+    "gpt-5.6-sol-high",
+    "gpt-5.5-medium",
+    "gpt-5.2",
+    "claude-opus-5-5-medium",
+    "claude-opus-5-thinking-high",
+    "claude-sonnet-5-thinking-high",
+    "claude-sonnet-5-5-high",
+    "claude-opus-4-8-high",
+    "claude-4.6-sonnet-medium",
+    "claude-fable-5-high",
+    "claude-haiku-5-5-high",
+    "grok-4.7-high",
+    "cursor-grok-4.6-high",
+    "cursor-grok-4.5-high",
+    "gemini-4-neon-high",
+    "gemini-4-carbon-high",
+    "gemini-3.1-pro",
+    "kimi-k3-high",
+    "glm-5.2-high",
+    "deepseek-v41-flash-1017-medium",
+    "muse-spark-1.3-high",
+];
+
 /// The role's own cursor tree: `<studio>/roles/<role>/cursor`.
 pub fn role_root(studio_dir: &str, role: &str) -> PathBuf {
     Path::new(studio_dir)

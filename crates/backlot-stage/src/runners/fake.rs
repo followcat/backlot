@@ -11,6 +11,10 @@ use backlot_model::ActorIdentity;
 
 use super::{Launch, LaunchCtx, PlanError, Session, tools_dir};
 
+/// The script's model-driven modes: `trust` plays the folder-trust
+/// dialog, anything else a plain run — `m` is the draft's.
+pub const MODELS: &[&str] = &["m", "trust"];
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     let _ = ctx.resume; // the script stays the same; the id re-derives.
     let mut env = std::collections::BTreeMap::new();

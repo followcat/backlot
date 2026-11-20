@@ -9,6 +9,48 @@ use backlot_model::ActorIdentity;
 
 use super::{Launch, LaunchCtx, PlanError, Session};
 
+/// The models `devin --model` is offered: `adaptive`, the SWE-2
+/// families (the runner's own) and one `-high` variant per
+/// third-party family — `devin models` prints over a thousand
+/// ids on the measured account, the depth baked into each one, so
+/// the catalog names the headliners and free text covers the rest.
+pub const MODELS: &[&str] = &[
+    "adaptive",
+    "swe-2-max",
+    "swe-2-high",
+    "swe-2-medium",
+    "swe-2-max-lightning",
+    "swe-2-high-lightning",
+    "swe-2-medium-lightning",
+    "swe-2-flash-max",
+    "swe-2-flash-high",
+    "swe-2-flash-medium",
+    "claude-opus-5-5-high",
+    "claude-sonnet-5-5-high",
+    "claude-opus-5-high",
+    "claude-opus-4-8-high",
+    "claude-opus-4-7-high",
+    "claude-fable-5-2-high",
+    "claude-fable-5-1-high",
+    "claude-5-fable-high",
+    "claude-sonnet-5-high",
+    "claude-haiku-5-5-high",
+    "gpt-6-2-astra-high",
+    "gpt-6-astra-high",
+    "gpt-6-sol-high",
+    "gpt-6-luna-high",
+    "gpt-5-6-sol-high",
+    "gpt-5-6-terra-high",
+    "gemini-4-carbon-high",
+    "gemini-4-neon-high",
+    "gemini-4-hydrogen-high",
+    "gemini-4-argon-high",
+    "gemini-3-8-flash-high",
+    "gemini-3-7-flash-high",
+    "kimi-k3-1-pro-high",
+    "glm-5-3-high",
+];
+
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         "standard" | "worktree" => {}

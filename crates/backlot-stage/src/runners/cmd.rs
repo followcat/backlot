@@ -37,6 +37,11 @@ use super::{Launch, LaunchCtx, PlanError, Prep, Session};
 /// The attention reason a failed `prepare` raises.
 pub const CMD_PREP_FAILED: &str = "cmd prep failed";
 
+/// The `provider/model` ids `cmd -m` was measured with — the
+/// `deepseek/` family is the provider the docs and the draft
+/// name; another provider's id still goes in as free text.
+pub const MODELS: &[&str] = &["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-pro"];
+
 /// The per-launch filesystem work: the workdir's settings file and
 /// where the user's MCP servers are listed.
 #[derive(Debug, Clone, PartialEq)]

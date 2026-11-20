@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 use super::detect::{self, RUNNERS};
-use super::{cline, probe};
+use super::{claude, cline, cmd, codex, cursor, devin, fake, opencode, probe};
 use crate::cli::{Env, Fail};
 
 /// Every runner's row: status, version, path, "needs PATH".
@@ -75,9 +75,9 @@ pub fn report(env: &Env) -> Result<String, Fail> {
 }
 
 /// One JSON row — the table's fields plus what the dialog's cast
-/// table cycles: `models` (the known list, or just the default the
-/// draft would assign — free text stays possible) and `efforts`
-/// (empty where the runner carries none).
+/// table cycles: `models` (the runner's catalog — free text stays
+/// possible for an id it does not know) and `efforts` (empty
+/// where the runner carries none).
 #[derive(Serialize)]
 struct Row {
     runner: String,
@@ -103,12 +103,34 @@ fn efforts(runner: &str) -> Vec<String> {
     }
 }
 
-/// The runner's draft model — the one `wizard_cast::PREFERENCE`
-/// seats — as a one-element list; the dialog also accepts free text.
+/// The runner's model catalog — its `MODELS` const — with the
+/// `wizard_cast::PREFERENCE` draft on top when the catalog does
+/// not name it: a stale or extra draft id is never silently
+/// dropped, and never listed twice.
 fn models(runner: &str) -> Vec<String> {
-    crate::wizard_cast::draft_model(runner)
-        .map(|m| vec![m.to_string()])
-        .unwrap_or_default()
+    let catalog: &[&str] = match runner {
+        "claude" => claude::MODELS,
+        "codex" => codex::MODELS,
+        "cursor" => cursor::MODELS,
+        "devin" => devin::MODELS,
+        "opencode" => opencode::MODELS,
+        "cmd" => cmd::MODELS,
+        "cline" => cline::MODELS,
+        "fake" => fake::MODELS,
+        _ => &[],
+    };
+    let draft = crate::wizard_cast::draft_model(runner);
+    let mut out = Vec::with_capacity(catalog.len() + 1);
+    if let Some(d) = draft {
+        out.push(d.to_string());
+    }
+    out.extend(
+        catalog
+            .iter()
+            .filter(|m| Some(**m) != draft)
+            .map(|m| (*m).to_string()),
+    );
+    out
 }
 
 fn row(scope: &detect::Scope, runner: &str) -> Row {

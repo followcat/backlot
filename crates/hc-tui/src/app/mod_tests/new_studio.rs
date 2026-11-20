@@ -165,6 +165,23 @@ fn answers_with_wide_runner() -> Vec<(&'static str, Result<String, String>)> {
     answers
 }
 
+/// A cursor-shaped catalog: `auto` is already a real model id.
+fn runners_json_auto() -> String {
+    serde_json::json!([
+        { "runner": "cur", "status": "found", "version": "1",
+          "models": ["auto", "x-1", "x-2"], "efforts": [] }
+    ])
+    .to_string()
+}
+
+/// `base_answers` with the auto-catalog runner probed instead.
+fn answers_with_auto_runner() -> Vec<(&'static str, Result<String, String>)> {
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "runners --json");
+    answers.push(("runners --json", Ok(runners_json_auto())));
+    answers
+}
+
 /// An app in studio mode with the dialog open, the Local machine's
 /// version+repos already answered.
 async fn dialog_app() -> (App, Recorded) {
@@ -834,6 +851,24 @@ async fn auto_is_an_explicit_first_entry() {
             "auto joined the catalog exactly once"
         );
     }
+}
+
+/// A catalog that already names `auto` — cursor's shape — opens
+/// with it still first and still once.
+#[tokio::test]
+async fn a_catalog_auto_is_not_doubled_in_the_list() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_auto_runner());
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    let d = app.new_studio.as_ref().unwrap();
+    let pick = d.model_pick.as_ref().expect("the list is open");
+    assert_eq!(
+        pick.options,
+        vec!["auto".to_string(), "x-1".to_string(), "x-2".to_string()],
+        "auto stays first and appears once"
+    );
 }
 
 #[tokio::test]
