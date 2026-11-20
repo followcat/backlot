@@ -37,6 +37,8 @@ impl App {
             })
             .collect::<Vec<_>>();
         remote_collapsed_groups.sort_by(|left, right| left.profile_id.cmp(&right.profile_id));
+        let mut new_studio_casts = self.ns_saved_casts.clone();
+        new_studio_casts.sort_by(|left, right| left.machine.cmp(&right.machine));
         let preferences = ClientChromePreferences {
             sidebar_width: self.sidebar_width_manual.then_some(self.sidebar_width),
             sidebar_section_split: self
@@ -50,6 +52,7 @@ impl App {
                 .then_some(self.shell.agent_panel_sort),
             collapsed_groups,
             remote_collapsed_groups,
+            new_studio_casts,
         };
         if let Err(error) = crate::preferences::store(&path, &preferences) {
             self.show_notice("Client shell state", &error);

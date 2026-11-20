@@ -41,6 +41,11 @@ pub(crate) enum NsReply {
         epoch: u64,
         machine: Option<String>,
         id: String,
+        /// `studio new` itself answered Ok — the studio exists even
+        /// when a following `stage start` failed the pair, so the
+        /// cast it used is the machine's new last-used cast either
+        /// way.
+        created: bool,
         out: Result<String, String>,
     },
 }
@@ -316,6 +321,42 @@ impl App {
         });
     }
 
+    /// `studio new` created on `machine` — the cast it used becomes
+    /// that machine's step-3 prefill, persisted in the endpoint's
+    /// preferences file. The rows store names, not indexes, so a
+    /// runner list that shifted by the next open still resolves.
+    fn ns_save_cast(&mut self, machine: &Option<String>) {
+        let Some(d) = &self.new_studio else {
+            return;
+        };
+        let Probe::Done(runners) = &d.runners else {
+            return;
+        };
+        let rows = d
+            .cast
+            .rows
+            .iter()
+            .filter_map(|row| {
+                let runner = runners.get(row.runner)?;
+                Some(crate::preferences::SavedCastRow {
+                    key: row.key.clone(),
+                    candidate: row.candidate,
+                    runner: runner.runner.clone(),
+                    model: runner.models.get(row.model).cloned(),
+                    effort: runner.efforts.get(row.effort).cloned(),
+                })
+            })
+            .collect();
+        let saved = crate::preferences::SavedStudioCast {
+            machine: machine.clone(),
+            rows,
+            custom: d.cast.custom.clone(),
+        };
+        self.ns_saved_casts.retain(|c| &c.machine != machine);
+        self.ns_saved_casts.push(saved);
+        self.persist_chrome_preferences();
+    }
+
     /// `Enter` on step 4: `studio new` on the target machine, then
     /// `stage start` there when the box is checked. The studio's
     /// publish lands the focus through `ns_pending_focus`.
@@ -339,7 +380,9 @@ impl App {
         d.create_error = None;
         let stage_machine = machine.clone();
         tokio::spawn(async move {
-            let out = match run(machine.clone(), argv, Some(cast)).await {
+            let first = run(machine.clone(), argv, Some(cast)).await;
+            let created = first.is_ok();
+            let out = match first {
                 Ok(text) => {
                     if start_stage {
                         run(stage_machine, vec!["stage".into(), "start".into()], None)
@@ -356,6 +399,7 @@ impl App {
                     epoch,
                     machine,
                     id,
+                    created,
                     out,
                 })
                 .await;
@@ -420,9 +464,16 @@ impl App {
                     Ok(text) => match new_studio::parse_runners(&text) {
                         Ok(rows) => {
                             // Draft the table once — a `^R` refresh
-                            // reseats nothing the user arranged.
+                            // reseats nothing the user arranged. The
+                            // machine's last created cast prefills
+                            // the rows when one was saved.
                             if d.cast.rows.is_empty() {
-                                d.cast = CastTable::draft(&rows);
+                                d.cast = self
+                                    .ns_saved_casts
+                                    .iter()
+                                    .find(|c| c.machine == d.machine_name())
+                                    .map(|saved| CastTable::from_saved(&rows, saved))
+                                    .unwrap_or_else(|| CastTable::draft(&rows));
                             }
                             Probe::Done(rows)
                         }
@@ -447,8 +498,8 @@ impl App {
                 epoch,
                 machine,
                 id,
+                created,
                 out,
-                ..
             } => {
                 let Some(d) = &mut self.new_studio else {
                     return;
@@ -457,6 +508,15 @@ impl App {
                     return;
                 }
                 d.creating = false;
+                // The studio exists — the cast it used is this
+                // machine's step-3 prefill from now on. Recorded
+                // before the dialog can drop, never on a dry run.
+                if created {
+                    self.ns_save_cast(&machine);
+                }
+                let Some(d) = &mut self.new_studio else {
+                    return;
+                };
                 match out {
                     Ok(_) => {
                         // The publish's studio row lands the focus;
