@@ -92,6 +92,48 @@ fn repos_json() -> String {
     .to_string()
 }
 
+fn notes_json() -> String {
+    serde_json::json!({
+        "cwd": "/home/user/notes",
+        "entries": [
+            { "name": "drafts", "path": "/home/user/notes/drafts",
+              "kind": "dir", "in_use_studio": null, "branch": null },
+            { "name": "notepad", "path": "/home/user/notes/notepad",
+              "kind": "dir", "in_use_studio": null, "branch": null },
+            { "name": "raw", "path": "/home/user/notes/raw",
+              "kind": "dir", "in_use_studio": null, "branch": null }
+        ]
+    })
+    .to_string()
+}
+
+fn drafts_json() -> String {
+    serde_json::json!({
+        "cwd": "/home/user/notes/drafts",
+        "entries": [
+            { "name": "ideas", "path": "/home/user/notes/drafts/ideas",
+              "kind": "dir", "in_use_studio": null, "branch": null },
+            { "name": "scratch", "path": "/home/user/notes/drafts/scratch",
+              "kind": "dir", "in_use_studio": null, "branch": null }
+        ]
+    })
+    .to_string()
+}
+
+/// `base_answers` plus the subdirectory listings — the longest key
+/// first, the prefix matcher takes the first hit.
+fn answers_with_dirs() -> Vec<(&'static str, Result<String, String>)> {
+    let mut answers = vec![
+        (
+            "repos --json --from /home/user/notes/drafts",
+            Ok(drafts_json()),
+        ),
+        ("repos --json --from /home/user/notes", Ok(notes_json())),
+    ];
+    answers.extend(base_answers());
+    answers
+}
+
 fn runners_json() -> String {
     serde_json::json!([
         { "runner": "fake", "status": "found", "version": "1",
@@ -364,6 +406,85 @@ async fn committed_text_and_paste_land_in_the_filter_not_the_terminal() {
         "acme"
     );
     assert_eq!(app.pane.input_backlog().0, before);
+}
+
+#[tokio::test]
+async fn descending_into_a_dir_clears_the_filter() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_dirs());
+    // `/no` applied leaves only the `notes` dir — `l` descends.
+    key(&mut app, hc_vt::Key::Char('/'));
+    for c in ['n', 'o'] {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.filter.as_str(), "no");
+    assert_eq!(d.repo().map(|r| r.name.as_str()), Some("notes"));
+    key(&mut app, hc_vt::Key::Char('l'));
+    drain_ns(&mut app).await;
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.dir.as_deref(), Some("/home/user/notes"));
+    assert_eq!(d.repos.filter.as_str(), "", "the descend dropped it");
+    assert!(!d.repos.filtering);
+    let names: Vec<&str> = d.repos.visible().iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["drafts", "notepad", "raw"], "nothing hidden");
+    // An editor still open leaves too: filter, then click a dir —
+    // the only navigation reachable while `/` owns the keys.
+    key(&mut app, hc_vt::Key::Char('/'));
+    for c in ['d', 'r'] {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    assert!(app.new_studio.as_ref().unwrap().repos.filtering);
+    draw_to(&mut app, 120, 36);
+    let hit = app
+        .ns_hits
+        .cells
+        .iter()
+        .find_map(|(rect, hit)| match hit {
+            crate::new_studio::NsHit::Repo(_) => Some((rect.x + 1, rect.y)),
+            _ => None,
+        })
+        .expect("the filtered row is clickable");
+    app.on_mouse(MouseInput {
+        col: hit.0,
+        row: hit.1,
+        kind: MouseEventKind::Down(MouseButton::Left),
+        mods: hc_vt::Mods::NONE,
+        sgr_position: None,
+    });
+    drain_ns(&mut app).await;
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.dir.as_deref(), Some("/home/user/notes/drafts"));
+    assert_eq!(d.repos.filter.as_str(), "");
+    assert!(!d.repos.filtering, "the click exited the editor too");
+    assert_eq!(d.repos.visible().len(), 2);
+}
+
+#[tokio::test]
+async fn climbing_to_the_parent_clears_the_filter_too() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_dirs());
+    // Descend into `notes` first so `dir` sits under `home`.
+    app.new_studio.as_mut().unwrap().repos.sel = 3;
+    key(&mut app, hc_vt::Key::Char('l'));
+    drain_ns(&mut app).await;
+    assert_eq!(
+        app.new_studio.as_ref().unwrap().repos.dir.as_deref(),
+        Some("/home/user/notes")
+    );
+    // A filter hiding everything is the stale-filter worst case.
+    key(&mut app, hc_vt::Key::Char('/'));
+    key(&mut app, hc_vt::Key::Char('x'));
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.new_studio.as_ref().unwrap().repos.visible().is_empty());
+    key(&mut app, hc_vt::Key::Char('h'));
+    drain_ns(&mut app).await;
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.dir.as_deref(), Some("/home/user"));
+    assert_eq!(d.repos.filter.as_str(), "", "the ascend dropped it");
+    assert!(!d.repos.filtering);
+    assert_eq!(d.repos.visible().len(), 4, "the home listing is whole");
 }
 
 // ---------- step 2 ----------
