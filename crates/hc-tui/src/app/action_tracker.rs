@@ -9,7 +9,9 @@
 
 use std::time::Instant;
 
-use crate::action::{Action, DONE_HOLD, FAIL_HOLD, copy_line, done_title, fail_body, fail_title};
+use crate::action::{
+    Action, DONE_HOLD, FAIL_HOLD, copy_line, done_title, fail_body, fail_title, mark,
+};
 
 use super::App;
 
@@ -94,6 +96,11 @@ impl App {
         // U6c: a restart's `stage stop` chains `stage start` on `Ok`
         // before the toast draws.
         self.machine_stage_restart_chain(&pending.action, result.is_ok());
+        // The setup dialog's write: `Ok` flips the bar to its agent
+        // form; either way the remembered cfg retires.
+        if pending.action.mark == mark::hollywood_setup() {
+            self.hw_setup_reply(result.is_ok());
+        }
         match result {
             Ok(stdout) if pending.action.view => {
                 let title = pending

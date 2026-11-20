@@ -38,8 +38,9 @@ The defaults you'll use most:
 Settings changed with `Ctrl+B s` (status indicators, sound, toast delivery) are saved to your Herdr config, and
 nothing else in that file changes. A theme picked there is saved to backlot's own config ([Theme](theme.md)). In
 studio mode the overlay gains a `studio` tab — call-sheet start policy, the direct `Alt+Y` toggle, the dock width
-and the read-only Hollywood overseer (Enter opens `backlot hollywood setup` while it is unset) — which writes to
-backlot's own `config.toml`. [Runtime](runtime.md) covers the prefix, lock and navigation in more detail.
+and the Hollywood overseer (Enter opens the setup dialog — a first setup while it is unset, a prefilled
+reconfigure with one) — which writes to backlot's own `config.toml`. [Runtime](runtime.md) covers the prefix,
+lock and navigation in more detail.
 
 ## The studio panel
 
@@ -117,7 +118,7 @@ or `expanded`. While the band is expanded it owns these keys:
 | `←`/`→`, `h`/`l` | Move between the studio frames, the new-studio frame included |
 | `↓`/`↑`, `j`/`k` | Move between the waiting rows, and back to the frames |
 | `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
-| `Enter` | Activate the selection — a frame opens it, a prompt opens the role, a card shows it, an offline machine reports its last read |
+| `Enter` | Activate the selection — a frame opens it, a prompt opens the role, a card shows it, an offline machine reports its last read, the setup line opens the Hollywood setup dialog |
 | `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine |
 | `p` | On a prompt row: peek at the role's live screen, read-only |
 | `r` | On a stage row: `backlot stage start` on that machine |
@@ -125,6 +126,7 @@ or `expanded`. While the band is expanded it owns these keys:
 | `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
 | `n` | New studio — the dialog, with the bar collapsed first |
 | `i` | Edit the `tell hollywood` line, with an agent |
+| `c` | Reconfigure the agent — the setup dialog prefilled from `[hollywood]` |
 | `m` | The selected row's context menu |
 | `?` | The key list, in `Ctrl+B ?` |
 | `PageUp`/`PageDown` | Scroll the waiting list |
@@ -136,6 +138,15 @@ for editing, and the wheel scrolls the frames sideways or the waiting rows under
 A click outside the expanded bar collapses it to the pill and hands the keys to what is under
 it. The `+ new studio` frame is the exception: it is a button, and a click opens the
 new-studio dialog directly.
+
+The setup line — or `c` on a configured bar, the dock's `⏎ hollywood setup` row, or the settings
+overseer row — opens the Hollywood setup dialog: a runner picked from `backlot runners --json`
+(installed only), that runner's model catalog with `auto` first (`e` types a free model name),
+and its effort list where the runner has one. `↑`/`↓`/`Tab` move between the rows, `←`/`→` cycle
+a value, `Enter` opens the model list or applies, `Esc` or a click outside closes it — apply runs
+`backlot hollywood setup` for you, so the write and its rules stay the CLI's own. A reconfigure
+prefills the existing table and keeps its `key`/`default_cast` verbatim; a runner change starts a
+new conversation and `memory.md` stays.
 
 ## Studio menus and dialogs
 

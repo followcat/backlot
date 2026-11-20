@@ -402,10 +402,10 @@ everything: a collapsed strip at the top right, the film-strip band dropped from
 `Alt+Y`, and hidden. It floats — nothing resizes when it moves.
 
 **The bar exists with or without an agent.** In studio mode it always draws: without a
-`[hollywood]` section it shows the studios, the new-studio frame and one line naming
-`backlot hollywood setup`, and the agent's parts — the title's role state, the headline, the
-cards and the `tell hollywood` line — need the section. Under `backlot --plain` there is no bar
-at all, and `Alt+Y` reaches the focused program.
+`[hollywood]` section it shows the studios, the new-studio frame and the `⏎ hollywood setup`
+line — Enter or a click opens the in-TUI setup dialog — and the agent's parts — the title's
+role state, the headline, the cards and the `tell hollywood` line — need the section. Under
+`backlot --plain` there is no bar at all, and `Alt+Y` reaches the focused program.
 
 **It starts expanded** on a client that opens with at least one studio, so the studios are the
 first thing you see. A client that opens on the opening page keeps it collapsed, and the first
@@ -422,21 +422,25 @@ The expanded strip, top to bottom:
   `<n> cast · r<version>` on the right;
 - the dashed **new-studio frame** last: `+  new studio`, repository and cast, and the `n` key;
 - below them, with an agent: the newest headline, one row per open card with `apply`,
-  `cancel` and `show`, and the `tell hollywood` line. Without one: the setup line.
+  `cancel` and `show`, and the `tell hollywood` line. Without one: the `⏎ hollywood setup`
+  line — the setup dialog's button.
 
 Keys in the expanded bar: `←`/`→` (or `h`/`l`) move between the frames, the new-studio frame
 included; `↓`/`↑` (or `j`/`k`) leave the frames for the cards and the input line and come back;
 `Enter` opens the selected frame (a studio → its producer, the new-studio frame → the dialog,
 the title → `bl-hollywood`); `n` opens the new-studio dialog from anywhere in the bar, which
-collapses first so the overlay is never under it. `a` applies and `c` cancels the selected card,
-`s` is Show me, `i` edits the `tell hollywood` line, `x` hides, `Esc` collapses. The frames
+collapses first so the overlay is never under it. `a` applies and `x` cancels the selected card,
+`s` is Show me, `i` edits the `tell hollywood` line, `c` reopens the setup dialog prefilled,
+`x` hides, `Esc` collapses. The frames
 scroll sideways when there are more than fit (a `‹` or `›` at the band edge says so) and the
 wheel does the same under the pointer; the card chips and the input line take the mouse, and a
 click on the new-studio frame opens the dialog while other rows only select. On a narrow screen
 the frames sit two per row — one under 40 columns — and the band
 scrolls vertically.
 
-Set the section up by hand or let the command write it:
+Set the section up in the TUI — the setup line's `⏎ hollywood setup`, the dock's last row, or
+the settings overseer row open the dialog; `c` on a configured bar reopens it prefilled — or
+let the command write it:
 
 ```sh
 backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
@@ -445,7 +449,7 @@ backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
 `setup` refuses a runner that is not supported or not installed before it touches the file, and
 keeps every other line as it was. A running stage starts `bl-hollywood` on its next tick; a
 running client picks the table up at its next start. Until a section exists, the expanded studio
-panel's last row names this command too.
+panel's last row opens the same setup dialog.
 
 `Alt+Y` cycles hidden → strip → band → strip (rebind with `[hollywood] key = "prefix+h"`). Show
 me on a `studio-new` card opens the draft's cast and brief read-only (`backlot card show <id>`

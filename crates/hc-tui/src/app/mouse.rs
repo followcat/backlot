@@ -150,6 +150,14 @@ impl App {
             self.sched.mark_dirty(Instant::now());
             return;
         }
+        // The Hollywood setup dialog is a modal the same way — its
+        // cells and list activate on press, outside cancels, the
+        // wheel walks the open model list.
+        if self.hw_setup.is_some() {
+            self.hw_setup_mouse(mouse);
+            self.sched.mark_dirty(Instant::now());
+            return;
+        }
         // The Task & Delivery Sheet is modal the same way: a click
         // outside its frame cancels, the wheel scrolls its body.
         if self.sheet.is_some() {

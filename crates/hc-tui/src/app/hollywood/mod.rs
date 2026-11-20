@@ -39,6 +39,9 @@ impl App {
         self.has_hollywood_cfg = cfg.is_some();
         // The settings tab's read-only overseer row.
         self.hollywood_overseer = cfg.as_ref().map(|c| format!("{} · {}", c.runner, c.model));
+        // The reconfigure dialog's prefill — `key`/`default_cast`
+        // carry over verbatim on its write.
+        self.hollywood_cfg = cfg.clone();
         // R22: the expanded studio panel names `hollywood setup` only
         // while no table exists.
         self.panel.hollywood_hint = !self.has_hollywood_cfg;

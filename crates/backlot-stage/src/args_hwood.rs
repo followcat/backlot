@@ -48,7 +48,7 @@ pub(crate) const U_HOLLYWOOD: &str = "usage:
 [--level low|normal|high] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] --why <line>
        actions: studio-new | close | reopen | priority | pause | resume | abandon
   backlot hollywood report \"<headline>\" [--body <f>]
-  backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>]";
+  backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>]";
 pub(crate) const U_CARD: &str = "usage:
   backlot card list
   backlot card show <id>
@@ -234,12 +234,15 @@ pub(crate) fn hreport(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
 }
 
 /// `hollywood setup --runner <r> --model <m> [--effort <e>] [--key
-/// <k>]` — the write is `hsetup`'s; here the flags only.
+/// <k>] [--default-cast <f>]` — the write is `hsetup`'s; here the
+/// flags only. `--default-cast` lets a reconfigure keep the table's
+/// cast template (the TUI forwards it verbatim).
 fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut runner = None;
     let mut model = None;
     let mut effort = None;
     let mut key = None;
+    let mut default_cast = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD)));
@@ -256,6 +259,10 @@ fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
             _ if eq(&arg, "--effort").is_some() => effort = eq(&arg, "--effort").map(String::from),
             "--key" => key = Some(it.value("--key", U_HOLLYWOOD)?),
             _ if eq(&arg, "--key").is_some() => key = eq(&arg, "--key").map(String::from),
+            "--default-cast" => default_cast = Some(it.value("--default-cast", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--default-cast").is_some() => {
+                default_cast = eq(&arg, "--default-cast").map(String::from)
+            }
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_HOLLYWOOD)),
         }
     }
@@ -267,7 +274,7 @@ fn hsetup_args(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> 
                 model: model.ok_or_else(|| usage("missing --model", U_HOLLYWOOD))?,
                 effort,
                 key,
-                default_cast: None,
+                default_cast,
             },
         }),
     ))

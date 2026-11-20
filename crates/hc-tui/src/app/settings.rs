@@ -253,7 +253,9 @@ impl App {
     /// until the S3/S4 dialogs bring a native setup. Every write
     /// lands in backlot's own `config.toml`.
     fn apply_studio_row(&mut self, row: usize) {
-        use crate::chrome::settings::{STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_START};
+        use crate::chrome::settings::{
+            STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_OVERSEER, STUDIO_START,
+        };
         use crate::panel::CallSheetStart;
         match row {
             STUDIO_START => {
@@ -297,8 +299,9 @@ impl App {
                 self.panel_config.width = next;
                 self.save_settings_edit(crate::config::write::ConfigEdit::DockWidth(next));
             }
-            // The overseer row is read-only — a native setup dialog is
-            // S3/S4's; Enter does nothing.
+            // The overseer row opens the setup dialog — prefilled
+            // when `[hollywood]` exists, a first setup without one.
+            STUDIO_OVERSEER => self.hw_setup_open(),
             _ => {}
         }
         let view = self.studio_view();

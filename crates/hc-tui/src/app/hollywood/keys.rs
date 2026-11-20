@@ -97,6 +97,9 @@ impl App {
             KeyCode::Char('i') if plain && self.has_hollywood_cfg => {
                 self.hollywood.editing = true;
             }
+            // `c` reconfigures — the setup dialog prefilled from the
+            // live `[hollywood]` table.
+            KeyCode::Char('c') if plain && self.has_hollywood_cfg => self.hw_setup_open(),
             KeyCode::Char('n') if plain => self.hollywood_new_studio(),
             KeyCode::Char('m') if plain => self.hollywood_menu_selected(),
             KeyCode::Char('?') if plain => {

@@ -349,7 +349,7 @@ pub(crate) fn render(
                     rect.x,
                     rect.y,
                     rect.width,
-                    &truncate_end("'backlot hollywood setup'", rect.width as usize),
+                    &truncate_end("⏎ hollywood setup", rect.width as usize),
                     dim,
                 );
             }

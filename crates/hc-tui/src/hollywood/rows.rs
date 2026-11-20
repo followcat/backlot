@@ -134,11 +134,12 @@ pub(crate) fn band_rows<'a>(
 }
 
 /// The setup line a bar without an agent shows: what an agent would
-/// do for you, and the command that writes its table.
+/// do for you, and the offer that opens its dialog (R22).
 pub(crate) const SETUP_LEAD: &str =
     "✦ an agent can watch every studio and tell you what needs you:";
-/// The command the setup line names — `backlot hollywood setup`.
-pub(crate) const SETUP_COMMAND: &str = "backlot hollywood setup --runner <runner> --model <model>";
+/// The offer the setup line names — Enter/click opens the in-TUI
+/// dialog; `backlot hollywood setup` stays the CLI's own path.
+pub(crate) const SETUP_COMMAND: &str = "⏎ hollywood setup";
 
 /// This core's parsed document inside the aggregate — the headline,
 /// the cards and the agent's state stay this core's.

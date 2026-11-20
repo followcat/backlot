@@ -33,6 +33,12 @@ pub(crate) enum NsReply {
         epoch: u64,
         out: Result<String, String>,
     },
+    /// The Hollywood setup dialog's own `runners --json` — the same
+    /// probe with its own generation tag.
+    HwRunners {
+        epoch: u64,
+        out: Result<String, String>,
+    },
     Dry {
         epoch: u64,
         out: Result<String, String>,
@@ -482,6 +488,7 @@ impl App {
                     Err(e) => Probe::Failed(e),
                 };
             }
+            NsReply::HwRunners { epoch, out } => self.hw_runners_reply(epoch, out),
             NsReply::Dry { epoch, out } => {
                 let Some(d) = &mut self.new_studio else {
                     return;

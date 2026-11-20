@@ -195,7 +195,8 @@ impl App {
                 menu.machine = machine.clone();
                 Some(menu)
             }
-            Target::None => None,
+            // The setup hint is a button, not a menu row.
+            Target::Setup | Target::None => None,
         }
     }
 

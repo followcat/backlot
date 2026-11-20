@@ -205,6 +205,11 @@ pub(crate) mod mark {
     pub(crate) fn hollywood() -> String {
         "hollywood".to_owned()
     }
+    /// The setup dialog's write — `hollywood setup` marks apart from
+    /// `tell`'s `hollywood` so the two never dedup each other.
+    pub(crate) fn hollywood_setup() -> String {
+        "hollywood:setup".to_owned()
+    }
 
     /// A dock `Target`'s mark — `None` targets mark nothing.
     pub(crate) fn of(target: &Target) -> Option<String> {
@@ -215,7 +220,7 @@ pub(crate) mod mark {
             Target::Person(key, r) => Some(role(key, r)),
             Target::Task(key, t) => Some(task(key, t)),
             Target::Stage(m) => Some(stage(m.as_deref())),
-            Target::None => None,
+            Target::Setup | Target::None => None,
         }
     }
 }

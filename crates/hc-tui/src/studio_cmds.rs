@@ -294,6 +294,40 @@ pub(crate) fn priority(key: &StudioKey, task: &str, level: &str) -> Action {
     a
 }
 
+/// `hollywood setup --runner <r> --model <m> [--effort <e>]`
+/// ` [--key <k>] [--default-cast <d>]` — this core's own call; the
+/// in-TUI dialog's apply builds the cfg, `key`/`default_cast` ride
+/// along verbatim so a reconfigure loses nothing.
+pub(crate) fn hw_setup(cfg: &backlot_stage::config::HollywoodCfg) -> Action {
+    let mut command = vec![
+        "hollywood".into(),
+        "setup".into(),
+        "--runner".into(),
+        cfg.runner.clone(),
+        "--model".into(),
+        cfg.model.clone(),
+    ];
+    if let Some(e) = &cfg.effort {
+        command.extend(["--effort".into(), e.clone()]);
+    }
+    if let Some(k) = &cfg.key {
+        command.extend(["--key".into(), k.clone()]);
+    }
+    if let Some(d) = &cfg.default_cast {
+        command.extend(["--default-cast".into(), d.clone()]);
+    }
+    Action {
+        label: "configuring hollywood".into(),
+        done: "configured hollywood".into(),
+        name: "hollywood setup".into(),
+        mark: mark::hollywood_setup(),
+        argv: plain_argv(&command),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
 /// `tell hollywood "<text>"` — the headline's own line (D20).
 pub(crate) fn tell_hollywood(text: &str) -> Action {
     Action {

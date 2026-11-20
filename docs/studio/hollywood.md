@@ -38,8 +38,8 @@ layout, so toggling it resizes nothing.
   director-owned prompt never lists), then stopped stages and offline machines that have live
   studios, then the local core's open cards, then studios ready to finish. Each row carries
   its action chips and a detail line; when nothing waits, a calm `✓` row says so. The
-  `tell hollywood` line ends the band — or, without a `[hollywood]` table, the line that names
-  `backlot hollywood setup`. Waiting items and the `tell` line are never dropped: the height
+  `tell hollywood` line ends the band — or, without a `[hollywood]` table, the `⏎ hollywood setup`
+  line that opens the setup dialog. Waiting items and the `tell` line are never dropped: the height
   ladder drops the blanks first, then the unselected details, then the 7-row frames fold into
   a one-row chip strip, then the headline, then the hints and sprockets — and when the items
   still outgrow the room the window scrolls and a `i/N` marker says how much is showing.
@@ -102,9 +102,10 @@ watcher's machine and stage state — never scraped terminal output — so the f
 while Hollywood's own agent is down (a `closed` or `lost` role state colours the title's
 square, a broken studio's ledger error shows in its frame, and a stopped stage gets its own
 band line). Without a table the frames still draw and the band shows the setup line instead
-of the waiting rows. Everything it changes goes through `backlot` commands run as the
+of the waiting rows — `⏎ hollywood setup` opens the in-TUI setup dialog. Everything it changes
+goes through `backlot` commands run as the
 user — `approve`, `stage start`, `card apply`, `card cancel`, `card show`,
-`studio finish`, `tell hollywood` — off the event loop, failures surfacing as notices where
+`studio finish`, `tell hollywood`, `hollywood setup` — off the event loop, failures surfacing as notices where
 you are looking. The only client-local state is the mode, the selection, the scroll offsets
 and the input line's text.
 
@@ -133,7 +134,17 @@ backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
 line of the file as it was; it refuses — before touching the file — a runner that is not
 supported or not installed (with the dry run's message), a bad model, an effort the runner's
 rule does not take, a key value the layer could not bind, and a config file that does not
-parse. While no section exists, the expanded studio panel's last row names this command.
+parse.
+
+The TUI runs the same command for you: while no section exists, the expanded Call Sheet's last
+band line (`⏎ hollywood setup`), the expanded studio panel's last row and the settings overseer
+row all open the **setup dialog** — a runner picked from `backlot runners --json` (installed
+only), that runner's model catalog with `auto` first and free input kept (`e`), and its effort
+list where the runner has one. With a table already written, `c` on the Call Sheet (or the same
+settings row) opens the dialog prefilled — its `key`/`default_cast` ride along verbatim — and
+changing the runner warns that the agent starts a new conversation while `memory.md` stays.
+The write and every refusal stay `hsetup`'s own; a success flips the bar to its agent form on
+the next tick.
 
 Pickup: a running **stage** re-reads the table on its next tick and starts `bl-hollywood`; a
 running **client** reads the config once, at start — a layer appears or its key changes at the

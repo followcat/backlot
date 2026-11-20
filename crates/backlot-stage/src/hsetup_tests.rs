@@ -202,6 +202,35 @@ fn setup_refuses_every_bad_input_without_touching_the_file() {
     assert!(!path.exists(), "a refusal still wrote the file");
 }
 
+/// `--default-cast` keeps the table's cast template through a
+/// reconfigure — the TUI's dialog forwards it verbatim so a
+/// runner/model change loses nothing.
+#[test]
+fn setup_carries_the_default_cast_flag() {
+    let (_scratch, env) = scratch();
+    let env = cfg_env(&env);
+    argv_ok(
+        &env,
+        &[
+            "hollywood",
+            "setup",
+            "--runner",
+            "fake",
+            "--model",
+            "model-h",
+            "--effort",
+            "high",
+            "--default-cast",
+            "/home/user/casts/main.toml",
+        ],
+    );
+    let cfg = crate::config::hollywood(&env.vars).unwrap().unwrap();
+    assert_eq!(
+        cfg.default_cast.as_deref(),
+        Some("/home/user/casts/main.toml")
+    );
+}
+
 #[test]
 fn setup_is_the_users_never_a_role_terminals() {
     let (_scratch, env) = scratch();

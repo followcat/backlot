@@ -8,6 +8,7 @@ mod cursor;
 mod entry;
 mod keys;
 mod mouse;
+mod setup;
 
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};
@@ -189,7 +190,7 @@ async fn without_the_table_the_bar_still_exists_without_an_agent() {
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(text.contains("no agent"), "{text}");
-    assert!(text.contains("backlot hollywood setup"), "{text}");
+    assert!(text.contains("hollywood setup"), "{text}");
     assert!(!text.contains("tell hollywood"), "no input line: {text}");
     assert!(
         !text.contains("acme-shop needs a look"),
