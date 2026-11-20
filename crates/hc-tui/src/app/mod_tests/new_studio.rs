@@ -1134,11 +1134,67 @@ async fn the_dry_run_argv_and_a_verbatim_error() {
         other => panic!("expected the verbatim error, got {other:?}"),
     }
     let calls = recorded.lock().unwrap();
+    let dry = calls
+        .iter()
+        .find(|(_, argv, _)| argv.last().is_some_and(|a| a == "--dry-run"))
+        .expect("a dry-run call");
+    // A repository pick takes no shape flag.
     assert!(
-        calls
-            .iter()
-            .any(|(_, argv, _)| argv.last().is_some_and(|a| a == "--dry-run"))
+        !dry.1.iter().any(|a| a == "--init" || a == "--no-git"),
+        "dry argv: {:?}",
+        dry.1
     );
+}
+
+/// A plain-directory pick plans `git init` — the dry-run argv and
+/// the command the step shows must carry the flag it plans on
+/// (`--init`, or `--no-git` once the toggle lands), or the stage's
+/// own shape check refuses what the plan promised.
+#[tokio::test]
+async fn the_dry_run_carries_the_plain_dirs_flag() {
+    let (mut app, recorded) = dialog_app().await;
+    key(&mut app, hc_vt::Key::Tab);
+    // `notes` — the plain directory — is index 3. Its row already
+    // promises the init the launch will run.
+    app.new_studio.as_mut().unwrap().repos.sel = 3;
+    let backend = draw_to(&mut app, 100, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("will git init"), "the pick row: {text}");
+    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::CheckStart);
+
+    let dry_argv = |recorded: &Recorded| {
+        recorded
+            .lock()
+            .unwrap()
+            .iter()
+            .rfind(|(_, argv, _)| argv.last().is_some_and(|a| a == "--dry-run"))
+            .map(|(_, argv, _)| argv.clone())
+            .expect("a dry-run call")
+    };
+    let argv = dry_argv(&recorded);
+    assert!(argv.iter().any(|a| a == "--init"), "dry argv: {argv:?}");
+    assert!(!argv.iter().any(|a| a == "--no-git"), "dry argv: {argv:?}");
+
+    // The plan row and the command the step displays both say so.
+    let backend = draw_to(&mut app, 100, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("git init"), "the plan: {text}");
+    assert!(text.contains("--init"), "the shown command: {text}");
+
+    // The no-git toggle re-runs it — argv and display follow.
+    key(&mut app, hc_vt::Key::Char('g'));
+    drain_ns(&mut app).await;
+    let argv = dry_argv(&recorded);
+    assert!(argv.iter().any(|a| a == "--no-git"), "dry argv: {argv:?}");
+    assert!(!argv.iter().any(|a| a == "--init"), "dry argv: {argv:?}");
+    let backend = draw_to(&mut app, 100, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("--no-git"), "the shown command: {text}");
 }
 
 #[tokio::test]

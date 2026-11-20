@@ -104,7 +104,7 @@ pub(crate) fn in_use(env: &Env, common: &Common) -> Vec<PathBuf> {
             .map(|t| PathBuf::from(t.cwd))
             .collect(),
         &state_dir,
-        &|p| p.join(".git").exists(),
+        &crate::paths::is_git,
         &crate::wizard_picker::fs::branch,
     )
 }

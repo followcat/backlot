@@ -91,12 +91,14 @@ fn resolve_from(env: &Env, from: Option<&str>) -> Result<(PathBuf, PathBuf), Fai
     Ok((dir, anchor))
 }
 
-/// `path`'s git mark: `.git` present (a linked worktree counts), then
-/// one `log -1` for the commit age — a repository with no commits yet
-/// is `git_empty`. The branch is `symbolic-ref`'s answer, `None` on a
+/// `path`'s git mark: a `.git` git itself accepts (a linked worktree
+/// counts; a broken mark does not — the path is a plain `dir`, the
+/// same answer `paths::classify` gives the launch), then one `log -1`
+/// for the commit age — a repository with no commits yet is
+/// `git_empty`. The branch is `symbolic-ref`'s answer, `None` on a
 /// detached HEAD.
 fn probe(path: &Path) -> (&'static str, Option<String>) {
-    if !path.join(".git").exists() {
+    if !crate::paths::is_git(path) {
         return ("dir", None);
     }
     let dir = path.to_string_lossy();

@@ -66,14 +66,22 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         &crate::chrome::text::truncate_end(&text, body.right().saturating_sub(x + 1) as usize),
         style,
     );
-    let cmd = "backlot studio new --dry-run";
-    if display_fits(body.width, &text, cmd) {
+    // The command line carries the flag the argv will carry — a
+    // plain directory's `--init`/`--no-git` — so the check the user
+    // reads is the check the stage runs.
+    let flag = match d.repo().map(|r| r.shape()) {
+        Some(super::PathShape::Plain) if d.no_git => " --no-git",
+        Some(super::PathShape::Plain) => " --init",
+        _ => "",
+    };
+    let cmd = format!("backlot studio new{flag} --dry-run");
+    if display_fits(body.width, &text, &cmd) {
         put_text(
             b,
             body.right().saturating_sub(cmd.len() as u16),
             y,
             cmd.len() as u16,
-            cmd,
+            &cmd,
             Style::default().fg(p.overlay0).bg(p.panel_bg),
         );
     }
