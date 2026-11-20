@@ -271,7 +271,9 @@ async fn rejected_notice_expires_during_idle_without_periodic_redraws() {
 
 /// A `%H:%M` clock re-arms a one-second tick, but the formatted text
 /// only changes on a wall-clock minute boundary. Unchanged ticks must
-/// not redraw: over ~2.2 idle seconds at most one boundary can pass.
+/// not redraw: the measured window opens only after the draws settle —
+/// a straggling startup frame must not count — and over ~2.2 idle
+/// seconds at most one boundary can pass.
 #[tokio::test]
 async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
     let mut config = hc_tui::config::Config::default();
@@ -284,10 +286,8 @@ async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
     let (_reply_tx, mut replies) = mpsc::channel(1);
     let counters = probe.clone();
     let producer = tokio::spawn(async move {
-        while counters.draws.load(Ordering::Relaxed) == 0 {
-            tokio::task::yield_now().await;
-        }
-        let settled = counters.draws.load(Ordering::Relaxed);
+        let settled = loopcore::settled_draws(&counters).await;
+        assert!(settled > 0, "the initial frame never drew");
         tokio::time::sleep(Duration::from_millis(2200)).await;
         let later = counters.draws.load(Ordering::Relaxed);
         drop(ui_tx);

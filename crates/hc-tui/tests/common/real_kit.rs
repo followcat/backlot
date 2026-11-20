@@ -362,14 +362,20 @@ pub fn studio_dir(state: &Path, studio: &str) -> PathBuf {
     state.join("studios").join(studio)
 }
 
-/// Every ledger line for `studio`, parsed.
+/// Every ledger line for `studio`, parsed. A missing file reads as
+/// an empty log — the store's own rule — so the waits poll the
+/// ledger appearing instead of racing its first append.
 pub fn ledger(state: &Path, studio: &str) -> Vec<Value> {
-    fs::read_to_string(studio_dir(state, studio).join("events.jsonl"))
-        .expect("events.jsonl")
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| serde_json::from_str(l).expect("ledger line"))
-        .collect()
+    let path = studio_dir(state, studio).join("events.jsonl");
+    match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(e) => panic!("{}: {e}", path.display()),
+    }
+    .lines()
+    .filter(|l| !l.is_empty())
+    .map(|l| serde_json::from_str(l).expect("ledger line"))
+    .collect()
 }
 
 /// The studio's ledger gains an event of `kind` on `role` within the
