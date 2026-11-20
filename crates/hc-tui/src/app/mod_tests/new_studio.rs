@@ -372,23 +372,20 @@ async fn an_in_use_repo_warns_but_passes() {
     );
 }
 
-// ---------- the `/` filter ----------
+// ---------- the live filter ----------
 
 #[tokio::test]
-async fn the_slash_filter_narrows_the_list_incrementally() {
+async fn typing_narrows_the_list_without_a_slash_mode() {
     let (mut app, _) = dialog_app().await;
-    key(&mut app, hc_vt::Key::Char('/'));
-    let d = app.new_studio.as_mut().unwrap();
-    assert!(d.repos.filtering, "/ owns the keys now");
-    d.repos.sel = 3;
-    for c in ['a', 'c'] {
-        key(&mut app, hc_vt::Key::Char(c));
-    }
+    // No `/` press — the first printable char already filters.
+    key(&mut app, hc_vt::Key::Char('a'));
+    key(&mut app, hc_vt::Key::Char('c'));
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.repos.filter.as_str(), "ac");
     assert_eq!(d.repos.sel, 0, "an edit re-seats the selection");
+    assert_eq!(d.pane, Step1Pane::Repos, "typing addresses the list");
     let names: Vec<&str> = d.repos.visible().iter().map(|e| e.name.as_str()).collect();
-    assert_eq!(names, ["acme-shop"], "the list narrows, never empties");
+    assert_eq!(names, ["acme-shop"], "the list narrows live");
     // Backspace widens it again.
     key(&mut app, hc_vt::Key::Backspace);
     let names: Vec<&str> = {
@@ -396,31 +393,69 @@ async fn the_slash_filter_narrows_the_list_incrementally() {
         d.repos.visible().iter().map(|e| e.name.as_str()).collect()
     };
     assert_eq!(names, ["acme-shop", "beta-tools", "taken"]);
-    // Enter leaves the filter applied; the row stays pickable.
+    // Enter picks the filtered row and steps forward.
     key(&mut app, hc_vt::Key::Enter);
     let d = app.new_studio.as_ref().unwrap();
-    assert!(!d.repos.filtering);
-    assert_eq!(d.repos.visible().len(), 3);
-    assert_eq!(d.repo().map(|r| r.name.as_str()), Some("acme-shop"));
+    assert_eq!(d.step, Step::IdTitle);
+    assert_eq!(d.id.as_str(), "acme-shop");
 }
 
 #[tokio::test]
-async fn esc_leaves_the_filter_applied_too() {
+async fn slash_is_an_ordinary_filter_character_now() {
     let (mut app, _) = dialog_app().await;
     key(&mut app, hc_vt::Key::Char('/'));
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.filter.as_str(), "/", "no mode — a literal char");
+    assert!(d.repos.visible().is_empty(), "no name contains '/'");
+}
+
+#[tokio::test]
+async fn the_vim_keys_are_filter_text_arrows_navigate() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_dirs());
+    // `l` and `h` used to descend/ascend — now they type.
+    key(&mut app, hc_vt::Key::Char('l'));
+    key(&mut app, hc_vt::Key::Char('h'));
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.filter.as_str(), "lh");
+    assert_eq!(
+        d.repos.dir.as_deref(),
+        Some("/home/user"),
+        "nothing navigated"
+    );
+    // Arrows still do: clear, sit on `notes`, `→` descends.
+    key(&mut app, hc_vt::Key::Backspace);
+    key(&mut app, hc_vt::Key::Backspace);
+    app.new_studio.as_mut().unwrap().repos.sel = 3;
+    key(&mut app, hc_vt::Key::ArrowRight);
+    drain_ns(&mut app).await;
+    assert_eq!(
+        app.new_studio.as_ref().unwrap().repos.dir.as_deref(),
+        Some("/home/user/notes")
+    );
+}
+
+#[tokio::test]
+async fn esc_clears_the_filter_then_cancels_the_step() {
+    let (mut app, _) = dialog_app().await;
     key(&mut app, hc_vt::Key::Char('t'));
+    assert_eq!(app.new_studio.as_ref().unwrap().repos.visible().len(), 3);
     key(&mut app, hc_vt::Key::Escape);
     let d = app.new_studio.as_ref().unwrap();
-    assert!(!d.repos.filtering, "Esc leaves the editor, not the step");
-    assert_eq!(d.repos.filter.as_str(), "t");
-    assert_eq!(d.repos.visible().len(), 3);
-    assert_eq!(d.step, Step::MachineRepo, "Esc stayed on step 1");
+    assert_eq!(d.repos.filter.as_str(), "", "the first Esc clears");
+    assert_eq!(d.step, Step::MachineRepo, "it never left step 1");
+    assert_eq!(d.repos.visible().len(), 5, "the list is whole again");
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.new_studio.is_none(), "the second Esc cancels");
 }
 
 #[tokio::test]
-async fn the_filter_text_echoes_while_editing_and_after() {
+async fn the_filter_echoes_live_and_the_hint_names_it() {
     let (mut app, _) = dialog_app().await;
-    key(&mut app, hc_vt::Key::Char('/'));
+    // Untouched the heading's tail carries the hint.
+    let backend = draw_to(&mut app, 120, 36);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("type to filter"), "the hint:\n{text}");
     for c in ['a', 'c'] {
         key(&mut app, hc_vt::Key::Char(c));
     }
@@ -428,11 +463,6 @@ async fn the_filter_text_echoes_while_editing_and_after() {
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("/ac"), "the live filter echoes:\n{text}");
     assert!(app.ns_hits.cursor.is_some(), "the filter owns the cursor");
-    key(&mut app, hc_vt::Key::Enter);
-    let backend = draw_to(&mut app, 120, 36);
-    let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("(/ac)"), "the applied filter stays:\n{text}");
-    assert!(app.ns_hits.cursor.is_none(), "the cursor leaves with it");
 }
 
 #[tokio::test]
@@ -440,7 +470,6 @@ async fn committed_text_and_paste_land_in_the_filter_not_the_terminal() {
     let (mut app, _) = dialog_app().await;
     app.host_reports_all_keys = true;
     app.host_reports_key_releases = true;
-    key(&mut app, hc_vt::Key::Char('/'));
     let before = app.pane.input_backlog().0;
     // A plain-text press under report-all (an IME/dead-key commit)
     // is the filter's, never the terminal's behind the dialog.
@@ -463,8 +492,8 @@ async fn committed_text_and_paste_land_in_the_filter_not_the_terminal() {
         before,
         "nothing reached the pane"
     );
-    // And with no live editor the text is eaten, still not the pane's.
-    key(&mut app, hc_vt::Key::Escape);
+    // Steps without a text field still eat it, still not the pane's.
+    app.new_studio.as_mut().unwrap().step = Step::Cast;
     app.on_input(UiEvent::Text("z".into()), app.area.0);
     assert_eq!(
         app.new_studio.as_ref().unwrap().repos.filter.as_str(),
@@ -477,30 +506,24 @@ async fn committed_text_and_paste_land_in_the_filter_not_the_terminal() {
 async fn descending_into_a_dir_clears_the_filter() {
     let (mut app, _) = dialog_app().await;
     install_run(&mut app, &answers_with_dirs());
-    // `/no` applied leaves only the `notes` dir — `l` descends.
-    key(&mut app, hc_vt::Key::Char('/'));
+    // `no` narrows to the `notes` dir — `→` descends.
     for c in ['n', 'o'] {
         key(&mut app, hc_vt::Key::Char(c));
     }
-    key(&mut app, hc_vt::Key::Enter);
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.repos.filter.as_str(), "no");
     assert_eq!(d.repo().map(|r| r.name.as_str()), Some("notes"));
-    key(&mut app, hc_vt::Key::Char('l'));
+    key(&mut app, hc_vt::Key::ArrowRight);
     drain_ns(&mut app).await;
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.repos.dir.as_deref(), Some("/home/user/notes"));
     assert_eq!(d.repos.filter.as_str(), "", "the descend dropped it");
-    assert!(!d.repos.filtering);
     let names: Vec<&str> = d.repos.visible().iter().map(|e| e.name.as_str()).collect();
     assert_eq!(names, ["drafts", "notepad", "raw"], "nothing hidden");
-    // An editor still open leaves too: filter, then click a dir —
-    // the only navigation reachable while `/` owns the keys.
-    key(&mut app, hc_vt::Key::Char('/'));
+    // A click while filtered navigates the same way.
     for c in ['d', 'r'] {
         key(&mut app, hc_vt::Key::Char(c));
     }
-    assert!(app.new_studio.as_ref().unwrap().repos.filtering);
     draw_to(&mut app, 120, 36);
     let hit = app
         .ns_hits
@@ -522,7 +545,6 @@ async fn descending_into_a_dir_clears_the_filter() {
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.repos.dir.as_deref(), Some("/home/user/notes/drafts"));
     assert_eq!(d.repos.filter.as_str(), "");
-    assert!(!d.repos.filtering, "the click exited the editor too");
     assert_eq!(d.repos.visible().len(), 2);
 }
 
@@ -532,36 +554,29 @@ async fn climbing_to_the_parent_clears_the_filter_too() {
     install_run(&mut app, &answers_with_dirs());
     // Descend into `notes` first so `dir` sits under `home`.
     app.new_studio.as_mut().unwrap().repos.sel = 3;
-    key(&mut app, hc_vt::Key::Char('l'));
+    key(&mut app, hc_vt::Key::ArrowRight);
     drain_ns(&mut app).await;
     assert_eq!(
         app.new_studio.as_ref().unwrap().repos.dir.as_deref(),
         Some("/home/user/notes")
     );
     // A filter hiding everything is the stale-filter worst case.
-    key(&mut app, hc_vt::Key::Char('/'));
     key(&mut app, hc_vt::Key::Char('x'));
-    key(&mut app, hc_vt::Key::Escape);
     assert!(app.new_studio.as_ref().unwrap().repos.visible().is_empty());
-    key(&mut app, hc_vt::Key::Char('h'));
+    key(&mut app, hc_vt::Key::ArrowLeft);
     drain_ns(&mut app).await;
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.repos.dir.as_deref(), Some("/home/user"));
     assert_eq!(d.repos.filter.as_str(), "", "the ascend dropped it");
-    assert!(!d.repos.filtering);
     assert_eq!(d.repos.visible().len(), 5, "the home listing is whole");
 }
 
 #[tokio::test]
-async fn a_machine_switch_exits_the_filter_editor_too() {
+async fn a_machine_switch_clears_the_filter_too() {
     let (mut app, _) = dialog_app().await;
-    // `/no` still editing — clicking the other machine is the only
-    // switch reachable while `/` owns the keys.
-    key(&mut app, hc_vt::Key::Char('/'));
     for c in ['n', 'o'] {
         key(&mut app, hc_vt::Key::Char(c));
     }
-    assert!(app.new_studio.as_ref().unwrap().repos.filtering);
     draw_to(&mut app, 120, 36);
     let hit = app
         .ns_hits
@@ -583,7 +598,6 @@ async fn a_machine_switch_exits_the_filter_editor_too() {
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.machine_sel, 1, "host-b selected");
     assert_eq!(d.repos.filter.as_str(), "");
-    assert!(!d.repos.filtering, "no empty editor left owning keys");
     assert_eq!(d.repos.visible().len(), 5, "its listing is unfiltered");
 }
 

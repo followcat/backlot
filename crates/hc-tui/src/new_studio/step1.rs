@@ -182,11 +182,21 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     );
     let head_w = crate::chrome::text::display_width(&head) as u16;
     put_text(b, body.x, y, body.width, &head, head_style);
-    // The `/` filter rides the heading's tail: while it owns keys it
-    // is the live editor (`/fin` plus the cursor); applied and not
-    // editing it stays as `(/fin)`; untouched it is the hint.
+    // The filter is always live — no `/` to press first. Untouched
+    // the heading's tail is the hint; the first printable char turns
+    // it into the `/…` editor holding the cursor.
     let tail_x = body.x + head_w;
-    if d.repos.filtering {
+    if d.repos.filter.as_str().is_empty() {
+        let tail_w = body.right().saturating_sub(tail_x);
+        put_text(
+            b,
+            tail_x,
+            y,
+            tail_w,
+            &truncate("  (type to filter)", tail_w as usize),
+            head_style,
+        );
+    } else {
         let x = put_segment(b, tail_x, y, body.right(), "  /", head_style);
         let w = body.right().saturating_sub(x);
         if w > 0
@@ -199,21 +209,6 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         {
             hits.cursor = Some(cursor);
         }
-    } else {
-        let tail = if d.repos.filter.as_str().is_empty() {
-            "  (/ filter)".to_string()
-        } else {
-            format!("  (/{})", d.repos.filter.as_str())
-        };
-        let tail_w = body.right().saturating_sub(tail_x);
-        put_text(
-            b,
-            tail_x,
-            y,
-            tail_w,
-            &truncate(&tail, tail_w as usize),
-            head_style,
-        );
     }
     y += 1;
     let list_h = body.bottom().saturating_sub(y);

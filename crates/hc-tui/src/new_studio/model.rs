@@ -139,9 +139,9 @@ pub(crate) struct Repos {
     pub listing: Probe<Vec<RepoEntry>>,
     /// Bumped on every request; a stale answer never lands.
     pub epoch: u64,
-    /// `/`'s text and whether the field owns keys.
+    /// The always-live filter — every printable char edits it,
+    /// there is no mode to enter first.
     pub filter: TextEditor,
-    pub filtering: bool,
     pub sel: usize,
     pub scroll: usize,
 }
@@ -154,7 +154,6 @@ impl Default for Repos {
             listing: Probe::Pending,
             epoch: 0,
             filter: TextEditor::new("", false),
-            filtering: false,
             sel: 0,
             scroll: 0,
         }
