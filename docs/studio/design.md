@@ -441,8 +441,12 @@ the classification is checked again at launch on the machine the studio runs on:
 | Shape | What it is | Launch does |
 |---|---|---|
 | repository | the path is a git repository | nothing — or one empty initial commit when the repository has none |
-| workspace | not a repository; one or more direct children are | records the member repositories; work areas hold one worktree per member |
+| workspace | not a repository; one or more direct children are distinct repositories | records the member repositories; work areas hold one worktree per member |
 | plain directory | no repository in it | `git init` plus `git commit --allow-empty -m "chore: initial commit"`, or binds with no git when the user says so |
+
+Members are distinct repositories — `rev-parse --git-common-dir` is a member's identity, so linked
+worktrees of one repository count once (the main checkout names the member) and per-member worktrees
+cannot collide on the single checkout a branch allows.
 
 In a workspace studio the work-area layout is per member: `<studio dir>/work/integration/<member>` on the member's
 `backlot/<studio>/integration` (branched from the member's HEAD) and `<studio dir>/work/<task>/<member>` on the
@@ -459,7 +463,7 @@ A no-git studio shares the bound path between all roles: no worktree isolation, 
 --commits` recorded verbatim, and the `depends-on` merge check skipped.
 
 The picker's row label is the only affordance — no dialog follows a pick. A repository with commits shows its branch;
-a repository with none shows `0 commits · will create initial commit`; a workspace shows `workspace · N repos`; a
+a repository with none shows `0 commits · will create initial commit`; a workspace shows `workspace · N repos` (distinct repositories — linked worktrees count once); a
 plain directory shows `directory · will git init`. Step 4 restates the launch plan — `workspace over 3 repos: a, b,
 c`, or `will run: git init && git commit --allow-empty -m "chore: initial commit" in <path>` (with the machine name
 when remote) — and only there does a plain directory offer the explicit `no git (reduced isolation)` toggle.

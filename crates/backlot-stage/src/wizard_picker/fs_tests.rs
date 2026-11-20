@@ -75,3 +75,32 @@ fn a_broken_git_mark_is_no_repository() {
     git(&repo, &["init", "-b", "main"]);
     assert_eq!(probe(&scratch.files), Repo::Workspace { repos: 1 });
 }
+
+/// The picker's workspace count is distinct repositories, the same
+/// list `paths::member_repos` hands the launch: linked worktrees of
+/// one repository collapse to a single member (D4).
+#[test]
+fn linked_worktrees_count_as_one_workspace_member() {
+    let (scratch, _env) = scratch();
+    let ws = scratch.files.join("mono");
+    let core = ws.join("core");
+    fs::create_dir_all(&core).unwrap();
+    git(&core, &["init", "-b", "main"]);
+    fs::write(core.join("f"), "x").unwrap();
+    git(&core, &["add", "."]);
+    git(&core, &["commit", "-m", "base"]);
+    git(
+        &core,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wt",
+            &ws.join("core-verify").to_string_lossy(),
+        ],
+    );
+    let web = ws.join("web");
+    fs::create_dir_all(&web).unwrap();
+    git(&web, &["init", "-b", "main"]);
+    assert_eq!(probe(&ws), Repo::Workspace { repos: 2 });
+}

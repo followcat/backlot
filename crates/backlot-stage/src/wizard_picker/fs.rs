@@ -69,11 +69,10 @@ pub(crate) fn branch(path: &Path) -> Option<String> {
 /// unreadable or missing path [`Repo::Missing`].
 pub(crate) fn probe(path: &Path) -> Repo {
     if !crate::paths::is_git(path) {
-        let Some(kids) = list_dirs(path) else {
+        if list_dirs(path).is_none() {
             return Repo::Missing;
-        };
-        let repos = kids.iter().filter(|k| crate::paths::is_git(k)).count();
-        return match repos {
+        }
+        return match crate::paths::member_repos(path).len() {
             0 => Repo::Dir,
             n => Repo::Workspace { repos: n },
         };

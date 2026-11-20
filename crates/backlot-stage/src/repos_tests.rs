@@ -211,3 +211,34 @@ fn a_broken_git_mark_lists_as_a_plain_directory() {
     assert_eq!(entry(&doc, "mono")["kind"], "dir");
     assert!(entry(&doc, "mono")["members"].is_null());
 }
+
+/// A `dir` entry's `members` names distinct repositories only:
+/// linked worktrees of one repository collapse to a single member
+/// — the same list `paths::member_repos` hands the launch (D4).
+#[test]
+fn linked_worktrees_count_once_in_members() {
+    let (_scratch, env, home) = home_env();
+    let mono = home.join("mono");
+    let core = mono.join("core");
+    repo(&core, true);
+    git(
+        &core,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wt",
+            &mono.join("core-verify").to_string_lossy(),
+        ],
+    );
+    repo(&mono.join("web"), true);
+
+    let doc = json(&env, &format!("repos --json --from {}", home.display()));
+    let members: Vec<&str> = entry(&doc, "mono")["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m.as_str().unwrap())
+        .collect();
+    assert_eq!(members, ["core", "web"]);
+}

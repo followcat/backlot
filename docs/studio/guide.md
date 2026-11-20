@@ -17,7 +17,8 @@ been verified; read it before trusting a studio with real work.
   with "cannot reach the hc core" until one is up.
 - **A filesystem path.** Usually a git repository — one with zero commits is fine, the studio
   writes an empty initial commit at launch. A directory whose direct children are git
-  repositories binds as a **workspace**: work areas hold one worktree per member and commits
+  repositories binds as a **workspace** — distinct repositories: linked worktrees of one
+  repository count once. Work areas hold one worktree per member and commits
   land in the member they were made in — no synthetic parent repository is ever created. A
   plain directory binds too: `studio new --init` runs `git init` plus an empty initial commit
   in it (the interactive flows offer that by default), or `studio new --no-git` binds it
