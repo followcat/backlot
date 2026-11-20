@@ -15,6 +15,8 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
     let mut mode = None;
     let mut dry_run = false;
     let mut interactive = false;
+    let mut init = false;
+    let mut no_git = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -35,6 +37,8 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             }
             "--dry-run" => dry_run = true,
             "--interactive" => interactive = true,
+            "--init" => init = true,
+            "--no-git" => no_git = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
         }
     }
@@ -48,6 +52,8 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             dry_run,
             interactive: true,
             mode,
+            init,
+            no_git,
         },
         false => Cmd::StudioNew {
             title: Some(title.ok_or_else(|| usage("missing --title", U_STUDIO))?),
@@ -58,6 +64,8 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             dry_run,
             interactive: false,
             mode,
+            init,
+            no_git,
         },
     };
     Ok((std::mem::take(common), cmd))

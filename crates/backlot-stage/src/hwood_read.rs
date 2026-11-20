@@ -34,6 +34,8 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             title,
             repo,
             cast_file,
+            init,
+            no_git,
             ..
         } => Some(dry_run(
             common,
@@ -42,6 +44,7 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             &title.clone().unwrap_or_default(),
             &repo.clone().unwrap_or_default(),
             &cast_file.clone().unwrap_or_default(),
+            (*init, *no_git),
         )),
         _ => None,
     }
@@ -294,9 +297,10 @@ fn dry_run(
     title: &str,
     repo: &str,
     cast_file: &Path,
+    flags: (bool, bool),
 ) -> Result<String, Fail> {
     let name = crate::cli::studio_name(common, env)?;
-    crate::draft::check(base, &name, repo, cast_file, env)?;
+    crate::draft::check(base, &name, repo, cast_file, env, flags.0, flags.1)?;
     Ok(format!(
         "dry run: studio '{name}' ('{title}', repo {repo}) is valid — nothing recorded"
     ))
@@ -340,6 +344,7 @@ pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
         repo,
         cast,
         brief,
+        ..
     } = &card.action
     {
         let cast_path = crate::hcard_new::resolve_draft(&hdir, cast);

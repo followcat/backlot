@@ -104,6 +104,7 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     let mut cast = None;
     let mut brief = None;
     let mut why = None;
+    let mut no_git = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD)));
@@ -134,6 +135,7 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             _ if eq(&arg, "--cast").is_some() => cast = eq(&arg, "--cast").map(PathBuf::from),
             "--brief" => brief = Some(PathBuf::from(it.value("--brief", U_HOLLYWOOD)?)),
             _ if eq(&arg, "--brief").is_some() => brief = eq(&arg, "--brief").map(PathBuf::from),
+            "--no-git" => no_git = true,
             "--why" => why = Some(it.value("--why", U_HOLLYWOOD)?),
             _ if eq(&arg, "--why").is_some() => why = eq(&arg, "--why").map(String::from),
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_HOLLYWOOD)),
@@ -158,6 +160,7 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
                 .ok_or_else(|| usage("missing --brief", U_HOLLYWOOD))?
                 .to_string_lossy()
                 .into_owned(),
+            no_git,
         },
         "close" | "reopen" => {
             let person = person.ok_or_else(|| usage("missing --person", U_HOLLYWOOD))?;

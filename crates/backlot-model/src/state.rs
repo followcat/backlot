@@ -16,7 +16,17 @@ pub use crate::task_reduce::reduce_task;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StudioConfig {
     pub title: String,
+    /// The bound path (D4): the repository itself, the workspace
+    /// directory, or the plain directory.
     pub repo: String,
+    /// Workspace member repositories, as absolute paths — empty unless
+    /// the bound path is a workspace (D4, D10).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<String>,
+    /// Bound with no git at all: every role shares `repo`, no
+    /// worktree isolation (D4, D10).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_git: bool,
     pub mode: StudioMode,
     pub roles: RoleConfigs,
     pub candidates: Vec<Candidate>,

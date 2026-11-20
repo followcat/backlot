@@ -51,6 +51,8 @@ pub fn desired(studio: &str, state: &StudioState) -> Vec<Start> {
                 terminal,
                 actor: w.actor,
                 repo: cfg.repo.clone(),
+                members: cfg.members.clone(),
+                no_git: cfg.no_git,
                 resume,
             })
         })

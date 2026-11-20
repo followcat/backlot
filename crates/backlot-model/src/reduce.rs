@@ -18,6 +18,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
         EventKind::StudioCreated {
             title,
             repo,
+            members,
+            no_git,
             mode,
             roles,
             candidates,
@@ -33,6 +35,8 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             state.studio = Some(StudioConfig {
                 title: title.clone(),
                 repo: repo.clone(),
+                members: members.clone(),
+                no_git: *no_git,
                 mode: *mode,
                 roles: roles.as_ref().clone(),
                 candidates: candidates.clone(),

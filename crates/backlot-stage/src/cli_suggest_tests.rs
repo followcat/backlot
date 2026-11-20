@@ -29,6 +29,8 @@ fn studio_created(repo: &str) -> EventKind {
     EventKind::StudioCreated {
         title: repo.into(),
         repo: format!("/home/user/{repo}"),
+        members: Vec::new(),
+        no_git: false,
         mode: StudioMode::Standard,
         roles: Box::new(RoleConfigs {
             producer: actor_a(),

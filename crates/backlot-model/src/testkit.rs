@@ -50,6 +50,8 @@ pub fn studio_kind() -> EventKind {
     EventKind::StudioCreated {
         title: "acme-shop".into(),
         repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
         mode: StudioMode::Standard,
         roles: Box::new(RoleConfigs {
             producer: actor("prod"),

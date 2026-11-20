@@ -28,6 +28,8 @@ fn studio(repo: &str) -> StudioState {
         studio: Some(StudioConfig {
             title: "t".into(),
             repo: repo.into(),
+            members: Vec::new(),
+            no_git: false,
             mode: StudioMode::Standard,
             roles: RoleConfigs {
                 producer: actor("codex"),

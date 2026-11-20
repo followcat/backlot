@@ -270,8 +270,28 @@ pub(crate) fn run_io(
     if drafted {
         crate::wizard_paths::runner_paths(io, &base, &cast_file, env)?;
     }
+    // D4: a plain directory defaults to `git init` in the
+    // interactive flow — ask before the launch writes it; the
+    // explicit no-git mode only exists on the launch plan's final
+    // check (the TUI's step 4), so a no names the flags instead.
+    let init = matches!(
+        crate::paths::classify(std::path::Path::new(&repo)),
+        crate::paths::PathShape::Plain
+    ) && {
+        let yes = ask(io, &format!("git init in {repo}? [Y/n]"), Some("y"))?;
+        if !yes.eq_ignore_ascii_case("y") {
+            if drafted {
+                let _ = std::fs::remove_file(&cast_file);
+            }
+            return Err(Fail::refused(
+                "a plain directory needs --init or --no-git — \
+                 rerun `studio new` with one",
+            ));
+        }
+        true
+    };
     let written = (|| -> Result<String, Fail> {
-        crate::draft::check(&base, &id, &repo, &cast_file, env)?;
+        crate::draft::check(&base, &id, &repo, &cast_file, env, init, false)?;
         crate::cli::exec_event(
             common.clone(),
             crate::args::Cmd::StudioNew {
@@ -281,6 +301,8 @@ pub(crate) fn run_io(
                 dry_run: false,
                 interactive: false,
                 mode: Some(mode),
+                init,
+                no_git: false,
             },
             env,
             &base,

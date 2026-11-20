@@ -113,6 +113,8 @@ fn start(kind: RoleKind, task: Option<&str>) -> Start {
             permission_profile: "standard".into(),
         },
         repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
         resume: None,
     }
 }
@@ -132,6 +134,8 @@ fn a_fresh_actor_area_branches_off_integration() {
         &mut git,
         "acme-shop",
         "/home/user/acme-shop",
+        &[],
+        false,
         &dir,
         &Area::Task("t1".into()),
     )
@@ -195,6 +199,8 @@ fn an_existing_area_is_reused() {
         &mut git,
         "acme-shop",
         "/repo",
+        &[],
+        false,
         &dir,
         &Area::Task("t1".into()),
     )
@@ -218,7 +224,16 @@ fn an_existing_branch_is_reattached() {
         ..FakeGit::default()
     };
     let mut git = |argv: &[&str], cwd: &str| fake.run(argv, cwd);
-    ensure(&mut git, "acme-shop", "/repo", &dir, &Area::Integration).unwrap();
+    ensure(
+        &mut git,
+        "acme-shop",
+        "/repo",
+        &[],
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
     assert!(
         fake.calls.iter().any(|c| {
             c == &format!(
@@ -268,9 +283,9 @@ fn a_git_failure_reports_stderr_and_retries() {
         ..FakeGit::default()
     };
     let mut git = |argv: &[&str], cwd: &str| fake.run(argv, cwd);
-    let first = ensure(&mut git, "s", "/repo", &dir, &Area::Integration);
+    let first = ensure(&mut git, "s", "/repo", &[], false, &dir, &Area::Integration);
     assert_eq!(first, Err(AreaFail::Git("fatal: scripted failure".into())));
-    let second = ensure(&mut git, "s", "/repo", &dir, &Area::Integration);
+    let second = ensure(&mut git, "s", "/repo", &[], false, &dir, &Area::Integration);
     assert_eq!(second, Err(AreaFail::Git("fatal: scripted failure".into())));
 }
 
@@ -282,11 +297,11 @@ fn a_non_git_repo_starts_no_work_area() {
     let mut fake = FakeGit::default();
     let mut git = |argv: &[&str], cwd: &str| fake.run(argv, cwd);
     assert_eq!(
-        ensure(&mut git, "s", "/repo", &dir, &Area::Integration),
+        ensure(&mut git, "s", "/repo", &[], false, &dir, &Area::Integration),
         Err(AreaFail::NotGit)
     );
     assert_eq!(
-        ensure(&mut git, "s", "/repo", &dir, &Area::Repo),
+        ensure(&mut git, "s", "/repo", &[], false, &dir, &Area::Repo),
         Ok(PathBuf::from("/repo"))
     );
     assert_eq!(
@@ -313,14 +328,17 @@ fn area_and_role_dir_follow_the_role() {
 
     let dir = Path::new("/state/studios/acme-shop");
     assert_eq!(
-        role_dir(dir, "/repo", "director"),
+        role_dir(dir, "/repo", "director", false),
         PathBuf::from("/state/studios/acme-shop/work/integration")
     );
     assert_eq!(
-        role_dir(dir, "/repo", "actor-t2-c1"),
+        role_dir(dir, "/repo", "actor-t2-c1", false),
         PathBuf::from("/state/studios/acme-shop/work/t2")
     );
-    assert_eq!(role_dir(dir, "/repo", "producer"), PathBuf::from("/repo"));
+    assert_eq!(
+        role_dir(dir, "/repo", "producer", false),
+        PathBuf::from("/repo")
+    );
 }
 
 fn git(repo: &Path, args: &[&str]) -> String {
@@ -370,7 +388,16 @@ fn real_git_creates_real_worktrees() {
     fs::create_dir_all(&dir).unwrap();
     let repo_s = repo.to_string_lossy().into_owned();
     let mut git_run = real_git;
-    let integ = ensure(&mut git_run, "acme-shop", &repo_s, &dir, &Area::Integration).unwrap();
+    let integ = ensure(
+        &mut git_run,
+        "acme-shop",
+        &repo_s,
+        &[],
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
     assert_eq!(integ, dir.join("work").join("integration"));
     assert_eq!(
         git(&integ, &["branch", "--show-current"]).trim(),
@@ -380,6 +407,8 @@ fn real_git_creates_real_worktrees() {
         &mut git_run,
         "acme-shop",
         &repo_s,
+        &[],
+        false,
         &dir,
         &Area::Task("t1".into()),
     )
@@ -395,13 +424,23 @@ fn real_git_creates_real_worktrees() {
             &mut git_run,
             "acme-shop",
             &repo_s,
+            &[],
+            false,
             &dir,
             &Area::Task("t1".into())
         ),
         Ok(t1.clone())
     );
     assert_eq!(
-        ensure(&mut git_run, "acme-shop", &repo_s, &dir, &Area::Integration),
+        ensure(
+            &mut git_run,
+            "acme-shop",
+            &repo_s,
+            &[],
+            false,
+            &dir,
+            &Area::Integration
+        ),
         Ok(integ)
     );
     // A plain directory is not a git work tree.
@@ -412,6 +451,8 @@ fn real_git_creates_real_worktrees() {
             &mut git_run,
             "acme-shop",
             &plain.to_string_lossy(),
+            &[],
+            false,
             &dir,
             &Area::Integration
         ),
@@ -456,12 +497,23 @@ fn real_git_through_a_symlinked_state_dir() {
     let dir = root.join("state");
     let repo_s = repo.to_string_lossy().into_owned();
     let mut git_run = real_git;
-    let integ = ensure(&mut git_run, "acme-shop", &repo_s, &dir, &Area::Integration).unwrap();
+    let integ = ensure(
+        &mut git_run,
+        "acme-shop",
+        &repo_s,
+        &[],
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
     assert_eq!(integ, dir.join("work").join("integration"));
     let t1 = ensure(
         &mut git_run,
         "acme-shop",
         &repo_s,
+        &[],
+        false,
         &dir,
         &Area::Task("t1".into()),
     )
@@ -475,13 +527,128 @@ fn real_git_through_a_symlinked_state_dir() {
             &mut git_run,
             "acme-shop",
             &repo_s,
+            &[],
+            false,
             &dir,
             &Area::Task("t1".into())
         ),
         Ok(t1)
     );
     assert_eq!(
-        ensure(&mut git_run, "acme-shop", &repo_s, &dir, &Area::Integration),
+        ensure(
+            &mut git_run,
+            "acme-shop",
+            &repo_s,
+            &[],
+            false,
+            &dir,
+            &Area::Integration
+        ),
         Ok(integ)
+    );
+}
+
+/// A workspace (D10): one worktree per member under
+/// `work/<area>/<member>`, each on the shared `backlot/<s>/<name>`
+/// branch in its own repository — the role's cwd is the container.
+#[test]
+fn a_workspace_lays_one_worktree_per_member() {
+    let root = tmp();
+    let ws = root.join("mono");
+    let mut members = Vec::new();
+    for name in ["beta-api", "web"] {
+        let m = ws.join(name);
+        fs::create_dir_all(&m).unwrap();
+        git(&m, &["init", "-b", "main"]);
+        fs::write(m.join("f"), "base\n").unwrap();
+        git(&m, &["add", "."]);
+        git(&m, &["commit", "-m", "base"]);
+        members.push(m.to_string_lossy().into_owned());
+    }
+    members.sort();
+    let dir = root.join("state");
+    fs::create_dir_all(&dir).unwrap();
+    let ws_s = ws.to_string_lossy().into_owned();
+    let mut git_run = real_git;
+    let integ = ensure(
+        &mut git_run,
+        "acme-shop",
+        &ws_s,
+        &members,
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
+    assert_eq!(integ, dir.join("work").join("integration"));
+    let t1 = ensure(
+        &mut git_run,
+        "acme-shop",
+        &ws_s,
+        &members,
+        false,
+        &dir,
+        &Area::Task("t1".into()),
+    )
+    .unwrap();
+    assert_eq!(t1, dir.join("work").join("t1"));
+    // Each member holds its own worktree on the shared branch name —
+    // and a commit inside it lands in that member's object store.
+    for name in ["beta-api", "web"] {
+        let integ_m = integ.join(name);
+        let t1_m = t1.join(name);
+        assert!(integ_m.is_dir(), "{integ_m:?}");
+        assert!(t1_m.is_dir(), "{t1_m:?}");
+        assert_eq!(
+            git(&integ_m, &["branch", "--show-current"]).trim(),
+            "backlot/acme-shop/integration"
+        );
+        assert_eq!(
+            git(&t1_m, &["branch", "--show-current"]).trim(),
+            "backlot/acme-shop/t1"
+        );
+    }
+    fs::write(t1.join("beta-api").join("g"), "new\n").unwrap();
+    git(&t1.join("beta-api"), &["add", "."]);
+    git(&t1.join("beta-api"), &["commit", "-m", "work"]);
+    assert_eq!(
+        git(
+            &ws.join("beta-api"),
+            &["log", "-1", "--format=%s", "backlot/acme-shop/t1"]
+        )
+        .trim(),
+        "work"
+    );
+    assert_ne!(
+        git(
+            &ws.join("web"),
+            &["log", "-1", "--format=%s", "backlot/acme-shop/t1"]
+        )
+        .trim(),
+        "work"
+    );
+}
+
+/// A no-git studio: every role's area is the bound path itself —
+/// git never runs (D10).
+#[test]
+fn a_no_git_studio_shares_the_bound_path() {
+    let dir = tmp();
+    let mut fake = FakeGit::default();
+    let mut git = |argv: &[&str], cwd: &str| fake.run(argv, cwd);
+    for area in [Area::Repo, Area::Integration, Area::Task("t1".into())] {
+        assert_eq!(
+            ensure(&mut git, "s", "/plain", &[], true, &dir, &area),
+            Ok(PathBuf::from("/plain"))
+        );
+    }
+    assert!(fake.calls.is_empty(), "{:?}", fake.calls);
+    assert_eq!(
+        role_dir(&dir, "/plain", "director", true),
+        PathBuf::from("/plain")
+    );
+    assert_eq!(
+        role_dir(&dir, "/plain", "actor-t1-c1", true),
+        PathBuf::from("/plain")
     );
 }

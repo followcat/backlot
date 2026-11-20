@@ -261,7 +261,16 @@ pub enum EventKind {
     #[serde(rename = "studio.created")]
     StudioCreated {
         title: String,
+        /// The bound path (D4): repository, workspace directory or
+        /// plain directory.
         repo: String,
+        /// Workspace member repositories, as absolute paths — empty
+        /// unless the bound path is a workspace.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        members: Vec<String>,
+        /// Bound with no git at all: every role shares `repo`.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        no_git: bool,
         #[serde(default)]
         mode: StudioMode,
         roles: Box<RoleConfigs>,

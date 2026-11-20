@@ -40,6 +40,7 @@ impl Stage {
             repo,
             cast,
             brief,
+            no_git,
         } = &card.action
         else {
             return Step::Fail("not a studio-new card".into());
@@ -76,14 +77,21 @@ impl Stage {
         let env = crate::cli::Env {
             vars: self.env_vars.clone(),
         };
-        if let Err(e) = crate::draft::check(&self.base, studio, repo, &cast_path, &env) {
+        let binding =
+            match crate::draft::check(&self.base, studio, repo, &cast_path, &env, false, *no_git) {
+                Ok(b) => b,
+                Err(e) => return Step::Fail(e.message().to_string()),
+            };
+        // The launch-time init the draft check promised: the card's
+        // repo or member repositories may still hold no commit (D4).
+        if let Err(e) = crate::paths::initialize(repo, &binding.members, binding.no_git, false) {
             return Step::Fail(e.message().to_string());
         }
         let cast_data = match commands::read_cast(&cast_path) {
             Ok(c) => c,
             Err(e) => return Step::Fail(e.message().to_string()),
         };
-        let kind = match studio_created_kind(&cast_data, title, repo) {
+        let kind = match studio_created_kind(&cast_data, title, repo, &binding) {
             Ok(k) => k,
             Err(e) => return Step::Fail(e),
         };
@@ -180,12 +188,15 @@ fn studio_created_kind(
     cast: &commands::CastFile,
     title: &str,
     repo: &str,
+    binding: &crate::draft::Binding,
 ) -> Result<EventKind, String> {
     let (check_env, checks) = crate::checks::declarations(&cast.check_env, &cast.checks)
         .map_err(|e| e.message().to_string())?;
     Ok(EventKind::StudioCreated {
         title: title.to_string(),
         repo: repo.to_string(),
+        members: binding.members.clone(),
+        no_git: binding.no_git,
         mode: cast.mode.unwrap_or_default(),
         roles: Box::new(backlot_model::event::RoleConfigs {
             producer: cast.producer.clone(),

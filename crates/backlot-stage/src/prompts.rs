@@ -74,9 +74,29 @@ fn fields(
         None => (String::new(), String::new(), String::new()),
     };
     let branch = match start.kind {
+        _ if start.no_git => "(no git — the studio was bound without a repository)".into(),
         RoleKind::Director => format!("backlot/{studio}/integration"),
         RoleKind::Actor => format!("backlot/{studio}/{task}"),
         _ => String::new(),
+    };
+    // A workspace's `work/<task>` holds one worktree per member
+    // repository — the prompt names them so the actor commits in the
+    // member its change belongs to (D10).
+    let work = match start.members.is_empty() {
+        true => work.to_string_lossy().into_owned(),
+        false => {
+            let names: Vec<String> = start
+                .members
+                .iter()
+                .filter_map(|m| std::path::Path::new(m).file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .collect();
+            format!(
+                "{} — one worktree per member repository inside: {}",
+                work.display(),
+                names.join(", ")
+            )
+        }
     };
     let declared = state
         .studio
@@ -111,7 +131,7 @@ fn fields(
         ("acceptance".into(), acceptance),
         ("req_file".into(), req),
         ("req_version".into(), state.requirement_version.to_string()),
-        ("work".into(), work.to_string_lossy().into_owned()),
+        ("work".into(), work),
         ("branch".into(), branch),
         ("checks".into(), checks),
     ])
@@ -189,7 +209,7 @@ pub fn prepare(
 ) -> io::Result<PathBuf> {
     let prompts = dir.join("prompts");
     fs::create_dir_all(&prompts)?;
-    let work = workareas::role_dir(dir, &start.repo, &start.role);
+    let work = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
     let mut text = render(
         template(start.kind),
         &fields(studio, dir, start, state, &work),

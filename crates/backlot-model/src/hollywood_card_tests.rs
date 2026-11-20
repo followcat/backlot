@@ -255,6 +255,7 @@ fn studio_new_goes_stale_when_the_name_is_taken() {
         repo: "/home/user/acme-shop".into(),
         cast: "drafts/acme-shop/cast.toml".into(),
         brief: "drafts/acme-shop/brief.md".into(),
+        no_git: false,
     };
     assert_eq!(stale(&action, &CardBase::StudioAbsent, None), None);
     assert_eq!(

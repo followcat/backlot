@@ -286,6 +286,8 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
             dry_run,
             interactive,
             mode,
+            init,
+            no_git,
         } => {
             debug_assert!(!dry_run, "dry-run is answered in cli::run");
             debug_assert!(!interactive, "--interactive is answered by the wizard");
@@ -298,11 +300,28 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
             }
             let cast = read_cast(&cast_file.expect("non-interactive parses require --cast"))?;
             let (check_env, checks) = crate::checks::declarations(&cast.check_env, &cast.checks)?;
+            // The shape check runs again at launch on this machine
+            // (D4) — the ledger records what is, not what the pick
+            // saw. Member repositories are the event's `members`;
+            // `--init`'s `git init` and every empty repository's
+            // initial commit run before the record lands. A path
+            // that does not exist yet binds nothing today, as
+            // before: the stage's `not a git repository` attention
+            // names it at the first role start.
+            let repo = repo.expect("non-interactive parses require --repo");
+            let binding = match std::path::Path::new(&repo).is_dir() {
+                true => crate::paths::check(&repo, init, no_git)?,
+                false => crate::paths::Binding::default(),
+            };
+            crate::paths::initialize(&repo, &binding.members, binding.no_git, init)?;
+            let members = binding.members.clone();
             Ok(Box::new(move |_, _| {
                 Ok(pending(
                     EventKind::StudioCreated {
                         title: title.expect("non-interactive parses require --title"),
-                        repo: repo.expect("non-interactive parses require --repo"),
+                        repo,
+                        members,
+                        no_git: binding.no_git,
                         // `--mode` on the command line wins over the
                         // cast file's `mode`; both default to standard.
                         mode: mode.or(cast.mode).unwrap_or_default(),

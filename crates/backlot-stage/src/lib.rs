@@ -42,6 +42,9 @@ pub mod link;
 mod migrate;
 mod notices;
 mod nudge;
+mod paths;
+#[cfg(test)]
+mod paths_tests;
 mod permission;
 mod permit;
 mod prompts;

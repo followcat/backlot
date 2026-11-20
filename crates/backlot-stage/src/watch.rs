@@ -172,9 +172,10 @@ pub(crate) fn discovery_blocked(
 ) -> BTreeSet<(String, String)> {
     let mut blocked = BTreeSet::new();
     for (name, s) in states {
-        let Some(repo) = s.studio.as_ref().map(|c| c.repo.as_str()) else {
+        let Some(cfg) = s.studio.as_ref() else {
             continue;
         };
+        let (repo, no_git) = (cfg.repo.as_str(), cfg.no_git);
         let dir = dir_of(name);
         for (key, r) in &s.roles {
             let pending = r.live
@@ -191,7 +192,7 @@ pub(crate) fn discovery_blocked(
                     .unwrap_or_default();
                 blocked.insert((
                     runner,
-                    workareas::role_dir(&dir, repo, key)
+                    workareas::role_dir(&dir, repo, key, no_git)
                         .to_string_lossy()
                         .into_owned(),
                 ));
@@ -316,9 +317,10 @@ impl Stage {
             .get("HOME")
             .map(PathBuf::from)
             .unwrap_or_default();
-        let Some(repo) = state.studio.as_ref().map(|s| s.repo.clone()) else {
+        let Some(cfg) = state.studio.as_ref() else {
             return Ok(());
         };
+        let (repo, no_git) = (cfg.repo.clone(), cfg.no_git);
         for (key, role) in &state.roles {
             if !role.live {
                 continue;
@@ -332,7 +334,7 @@ impl Stage {
             };
             let age_ms = now_ms.saturating_sub(role.since_ms);
             // The folder the role launched in: its work area.
-            let cwd = workareas::role_dir(dir, &repo, key)
+            let cwd = workareas::role_dir(dir, &repo, key, no_git)
                 .to_string_lossy()
                 .into_owned();
 

@@ -529,7 +529,7 @@ impl Stage {
             let dir = store::studio_dir(&self.base, &studio.id);
             for role in &mut studio.roles {
                 role.workdir = Some(
-                    workareas::role_dir(&dir, &cfg.repo, &role.role)
+                    workareas::role_dir(&dir, &cfg.repo, &role.role, cfg.no_git)
                         .to_string_lossy()
                         .into_owned(),
                 );

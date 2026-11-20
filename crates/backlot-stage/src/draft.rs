@@ -1,21 +1,31 @@
 //! The `studio new --dry-run` check (D19): everything `studio new`
 //! itself would refuse — the cast file's own rules — plus what only
-//! a dry run can ask: the name is free, the repo is a git repository,
-//! every named runner is supported and installed, and the caps can
-//! seat the fixed roles. Nothing is recorded; nothing is created.
-//! `hollywood propose studio-new` accepts only a draft that passes.
+//! a dry run can ask: the name is free, the bound path's shape is
+//! bindable, every named runner is supported and installed, and the
+//! caps can seat the fixed roles. Nothing is recorded; nothing is
+//! created. `hollywood propose studio-new` accepts only a draft that
+//! passes.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::cli::{Env, Fail, check_studio_name};
 use crate::commands::read_cast;
+pub use crate::paths::Binding;
 use crate::store;
-use crate::workareas;
 
 /// The draft, checked end to end. `base` is the state directory the
-/// studio would live under.
-pub fn check(base: &Path, name: &str, repo: &str, cast_path: &Path, env: &Env) -> Result<(), Fail> {
+/// studio would live under; `init`/`no_git` are the `--init`/`--no-git`
+/// flags, which only a plain directory may use.
+pub fn check(
+    base: &Path,
+    name: &str,
+    repo: &str,
+    cast_path: &Path,
+    env: &Env,
+    init: bool,
+    no_git: bool,
+) -> Result<Binding, Fail> {
     check_studio_name(name)
         .map_err(|_| Fail::usage(format!("bad studio name '{name}': want [a-z0-9_-]{{1,16}}")))?;
     // `hollywood` names the overseer's ledger beside `studios/` —
@@ -30,19 +40,18 @@ pub fn check(base: &Path, name: &str, repo: &str, cast_path: &Path, env: &Env) -
             "a studio named '{name}' already exists"
         )));
     }
-    // The repo is a git repository the user owns — ask git itself so
-    // linked worktrees and bare checkouts count alike.
-    let out = workareas::real_git(&["rev-parse", "--git-dir", "--end-of-options"], repo);
-    if out.code != 0 {
-        return Err(Fail::refused(format!(
-            "--repo '{repo}' is not a git repository ({})",
-            workareas::err_line(&out)
-        )));
-    }
+    let binding = crate::paths::check(repo, init, no_git)?;
     let cast = read_cast(cast_path)?;
     // The check declarations compile here too — a broken `run` would
-    // be the stage's first attention otherwise.
+    // be the stage's first attention otherwise. Declared checks need
+    // one repository (D10) — a workspace or a no-git studio has none
+    // to detach a check worktree from.
     crate::checks::declarations(&cast.check_env, &cast.checks)?;
+    if !cast.checks.is_empty() && (binding.no_git || !binding.members.is_empty()) {
+        return Err(Fail::refused(
+            "[[checks]] need a single git repository — a workspace or no-git studio cannot run them",
+        ));
+    }
     // Every runner the draft names must have an adapter and a program
     // this shell can launch.
     let mut named = BTreeSet::new();
@@ -77,5 +86,5 @@ pub fn check(base: &Path, name: &str, repo: &str, cast_path: &Path, env: &Env) -
             )));
         }
     }
-    Ok(())
+    Ok(binding)
 }

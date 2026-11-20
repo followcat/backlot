@@ -24,6 +24,8 @@ fn start() -> Start {
             permission_profile: "standard".into(),
         },
         repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
         resume: None,
     }
 }

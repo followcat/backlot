@@ -95,6 +95,7 @@ fn studio_new_repo_must_be_absolute_and_canonical() {
             spelled,
             "--cast".into(),
             cast,
+            "--init".into(),
         ],
         &env,
     )

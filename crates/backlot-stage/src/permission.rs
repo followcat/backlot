@@ -50,6 +50,7 @@ impl Stage {
                 .map(|s| s.repo.as_str())
                 .unwrap_or_default(),
             role,
+            state.studio.as_ref().is_some_and(|s| s.no_git),
         );
         // The trust dialog is the trust pass's concern, not a
         // permission episode — it resets the blocked clock.
