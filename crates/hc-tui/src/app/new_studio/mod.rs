@@ -215,6 +215,12 @@ impl App {
         d.repos.listing = Probe::Pending;
         d.repos.sel = 0;
         d.repos.scroll = 0;
+        // A descend/ascend replaces the listing — a filter written
+        // for the old one would hide rows in the new.
+        if dir.is_some() {
+            d.repos.filter.clear();
+            d.repos.filtering = false;
+        }
         let machine = d.machine_name();
         let mut argv = vec!["repos".into(), "--json".into()];
         if let Some(dir) = dir {
