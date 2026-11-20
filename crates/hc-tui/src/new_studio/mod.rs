@@ -17,8 +17,8 @@ mod step3;
 mod step4;
 
 pub(crate) use model::{
-    CastTable, MachineRow, MachineState, PathShape, Probe, RepoEntry, RepoKind, Repos, RunnerRow,
-    Step, Step1Pane, id_error, parse_repos, parse_runners, studio_id, title_prefill,
+    CastTable, MachineRow, MachineState, ModelPick, PathShape, Probe, RepoEntry, RepoKind, Repos,
+    RunnerRow, Step, Step1Pane, id_error, parse_repos, parse_runners, studio_id, title_prefill,
 };
 
 use ratatui::buffer::Buffer;
@@ -72,6 +72,8 @@ pub(crate) struct NewStudio {
     pub cast: CastTable,
     /// `e` on a model cell turns it into a free-text field.
     pub model_edit: Option<TextEditor>,
+    /// `⏎`/`space` on a model cell opens the runner's catalog list.
+    pub model_pick: Option<ModelPick>,
     /// Step 4: the dry run and the create call.
     pub dry: Probe<String>,
     pub dry_gen: u64,
@@ -97,7 +99,13 @@ pub(crate) enum NsHit {
     IdField,
     TitleField,
     ModeField,
-    CastCell { row: usize, col: usize },
+    CastCell {
+        row: usize,
+        col: usize,
+    },
+    /// A row in the open model list — the index into its filtered
+    /// rows, like `Repo`'s.
+    ModelPick(usize),
     StartToggle,
     NoGitToggle,
     Create,
@@ -151,6 +159,7 @@ impl NewStudio {
                 custom_error: None,
             },
             model_edit: None,
+            model_pick: None,
             dry: Probe::Pending,
             dry_gen: 0,
             start_stage: true,
@@ -181,6 +190,39 @@ impl NewStudio {
     /// The chosen repository — the visible entry at the selection.
     pub(crate) fn repo(&self) -> Option<&RepoEntry> {
         self.repos.visible().get(self.repos.sel).copied()
+    }
+
+    /// `⏎`/`space` on a MODEL cell: the row's runner catalog as a
+    /// list — `auto` first, the current value selected.
+    pub(crate) fn open_model_pick(&mut self) {
+        if let Probe::Done(runners) = &self.runners
+            && let Some(row) = self.cast.rows.get(self.cast.sel)
+            && let Some(runner) = runners.get(row.runner)
+        {
+            let current = runner.models.get(row.model).cloned().unwrap_or_default();
+            self.model_pick = Some(ModelPick::open(&runner.models, &current));
+        }
+    }
+
+    /// Seat `model` on the selected row — the `e` free-text rule:
+    /// a name the catalog lacks joins it, the row points at it.
+    pub(crate) fn seat_model(&mut self, model: &str) {
+        if let Probe::Done(runners) = &mut self.runners
+            && let Some(runner_index) = self.cast.rows.get(self.cast.sel).map(|r| r.runner)
+            && let Some(runner) = runners.get_mut(runner_index)
+        {
+            let index = runner
+                .models
+                .iter()
+                .position(|m| m == model)
+                .unwrap_or_else(|| {
+                    runner.models.push(model.to_string());
+                    runner.models.len() - 1
+                });
+            if let Some(row) = self.cast.rows.get_mut(self.cast.sel) {
+                row.model = index;
+            }
+        }
     }
 
     /// `Enter`'s gate on step 1: the machine is usable and a row is
@@ -388,9 +430,12 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
             "tab field  ←→ mode  ⏎ continue  esc back",
             "⏎  esc",
         ],
+        Step::Cast if d.model_pick.is_some() => {
+            &["↑↓ move  type to filter  ⏎ pick  esc cancel", "↑↓  ⏎  esc"]
+        }
         Step::Cast => &[
-            "↑↓ role  ←→ value  a add  x remove  ^E editor  ⏎ dry-run  esc back",
-            "↑↓  ←→  a/x  ^E  ⏎ dry-run  esc",
+            "↑↓ role  ←→ value  ⏎ model list or dry-run  a add  x remove  ^E editor  esc back",
+            "↑↓  ←→  ⏎ list or dry-run  a/x  ^E  esc",
             "↑↓  ⏎  esc",
         ],
         Step::CheckStart => &[

@@ -147,6 +147,24 @@ fn runners_json() -> String {
     .to_string()
 }
 
+/// A runner whose catalog is long enough to scroll — `w-00`…`w-14`.
+fn runners_json_wide() -> String {
+    let models: Vec<String> = (0..15).map(|i| format!("w-{i:02}")).collect();
+    serde_json::json!([
+        { "runner": "wide", "status": "found", "version": "1",
+          "models": models, "efforts": ["low", "high"] }
+    ])
+    .to_string()
+}
+
+/// `base_answers` with the wide-catalog runner probed instead.
+fn answers_with_wide_runner() -> Vec<(&'static str, Result<String, String>)> {
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "runners --json");
+    answers.push(("runners --json", Ok(runners_json_wide())));
+    answers
+}
+
 /// An app in studio mode with the dialog open, the Local machine's
 /// version+repos already answered.
 async fn dialog_app() -> (App, Recorded) {
@@ -672,6 +690,252 @@ async fn the_cast_table_cycles_and_edits() {
     }
     key(&mut app, hc_vt::Key::Char('x'));
     assert_eq!(app.new_studio.as_ref().unwrap().cast.rows.len(), before);
+}
+
+/// Walk an open dialog to the cast step — the picker's home.
+async fn to_cast(app: &mut App) {
+    key(app, hc_vt::Key::Tab);
+    key(app, hc_vt::Key::Enter);
+    key(app, hc_vt::Key::Enter);
+    drain_ns(app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::Cast);
+}
+
+/// The generated cast.toml the table currently stands for.
+fn cast_toml(app: &App) -> String {
+    let d = app.new_studio.as_ref().unwrap();
+    let runners = match &d.runners {
+        Probe::Done(r) => r.clone(),
+        _ => Vec::new(),
+    };
+    d.cast.toml(&runners, d.mode)
+}
+
+#[tokio::test]
+async fn enter_or_space_on_the_model_cell_opens_its_runners_list() {
+    let (mut app, _) = dialog_app().await;
+    to_cast(&mut app).await;
+    // `space` on another column opens nothing; `tab` onto MODEL,
+    // then `⏎` opens the row's own runner catalog.
+    key(&mut app, hc_vt::Key::Char(' '));
+    assert!(app.new_studio.as_ref().unwrap().model_pick.is_none());
+    key(&mut app, hc_vt::Key::Tab); // col → MODEL
+    key(&mut app, hc_vt::Key::Enter);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let pick = d.model_pick.as_ref().expect("the list is open");
+        let options: Vec<&str> = pick.options.iter().map(String::as_str).collect();
+        assert_eq!(options, ["auto", "m"], "auto first, fake's catalog after");
+        assert_eq!(pick.chosen(), Some("m"), "the current value seats");
+        assert_eq!(d.step, Step::Cast, "still on the cast step");
+    }
+    // The list is the row's runner's: cycling to claude offers its
+    // catalog instead — `auto` still first.
+    key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::BackTab); // col → RUNNER
+    key(&mut app, hc_vt::Key::ArrowRight); // fake → claude
+    key(&mut app, hc_vt::Key::Tab); // col → MODEL
+    key(&mut app, hc_vt::Key::Enter);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let pick = d.model_pick.as_ref().unwrap();
+        let options: Vec<&str> = pick.options.iter().map(String::as_str).collect();
+        assert_eq!(options, ["auto", "sonnet"], "claude's catalog");
+        assert_eq!(pick.chosen(), Some("sonnet"));
+    }
+    // `space` on the cell opens it too.
+    key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::Char(' '));
+    assert!(app.new_studio.as_ref().unwrap().model_pick.is_some());
+}
+
+#[tokio::test]
+async fn picking_a_model_seats_it_into_the_cast() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_wide_runner());
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    // The current `w-00` seats at index 1 — two downs land `w-02`.
+    key(&mut app, hc_vt::Key::ArrowDown);
+    key(&mut app, hc_vt::Key::ArrowDown);
+    key(&mut app, hc_vt::Key::Enter);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert!(d.model_pick.is_none(), "the pick closed the list");
+        assert_eq!(d.cast.rows[0].model, 2);
+    }
+    assert!(
+        cast_toml(&app).contains("model = \"w-02\""),
+        "the pick flows into the cast:\n{}",
+        cast_toml(&app)
+    );
+}
+
+#[tokio::test]
+async fn esc_cancel_keeps_the_old_model() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_wide_runner());
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    // Move away from the current value, then bail.
+    for _ in 0..3 {
+        key(&mut app, hc_vt::Key::ArrowDown);
+    }
+    key(&mut app, hc_vt::Key::Escape);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert!(d.model_pick.is_none(), "esc dropped the list");
+        assert_eq!(d.cast.rows[0].model, 0, "the old value stayed");
+        assert_eq!(d.step, Step::Cast, "esc did not leave the step");
+    }
+    assert!(
+        cast_toml(&app).contains("model = \"w-00\""),
+        "the cast still names the old model:\n{}",
+        cast_toml(&app)
+    );
+}
+
+#[tokio::test]
+async fn auto_is_an_explicit_first_entry() {
+    let (mut app, _) = dialog_app().await;
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    // `auto` sits first — the runner's own default, meaning it is
+    // not a catalog position.
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let pick = d.model_pick.as_ref().unwrap();
+        assert_eq!(pick.options[0], "auto");
+    }
+    key(&mut app, hc_vt::Key::ArrowUp); // w-… current → auto
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(
+        cast_toml(&app).contains("model = \"auto\""),
+        "auto lands in the cast like a typed model:\n{}",
+        cast_toml(&app)
+    );
+    // And the catalog carries it now — the list does not offer it twice.
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let runners = match &d.runners {
+            Probe::Done(r) => r,
+            _ => panic!("runners answered"),
+        };
+        assert_eq!(
+            runners[0]
+                .models
+                .iter()
+                .filter(|m| m.as_str() == "auto")
+                .count(),
+            1,
+            "auto joined the catalog exactly once"
+        );
+    }
+}
+
+#[tokio::test]
+async fn typing_filters_the_model_list() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_wide_runner());
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    // Implicit like the repo picker — `w`,`-`,`1` narrows to w-1*.
+    for c in ['w', '-', '1'] {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let pick = d.model_pick.as_ref().unwrap();
+        assert_eq!(
+            pick.visible(),
+            ["w-10", "w-11", "w-12", "w-13", "w-14"],
+            "the list narrows live"
+        );
+        assert_eq!(pick.sel, 0, "an edit re-seats the selection");
+    }
+    // Enter picks the filtered row — `w-11`, one down from `w-10`.
+    key(&mut app, hc_vt::Key::ArrowDown);
+    key(&mut app, hc_vt::Key::Enter);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert_eq!(d.cast.rows[0].model, 11);
+    }
+    assert!(cast_toml(&app).contains("model = \"w-11\""));
+}
+
+#[tokio::test]
+async fn the_model_list_scrolls_through_a_big_catalog() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_wide_runner());
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    // 15 models + auto — the bottom row needs the window to follow.
+    for _ in 0..14 {
+        key(&mut app, hc_vt::Key::ArrowDown);
+    }
+    let backend = draw_to(&mut app, 80, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("w-14"), "the tail scrolled in:\n{text}");
+    assert!(!text.contains("w-00"), "the top scrolled out:\n{text}");
+}
+
+#[tokio::test]
+async fn a_click_on_the_list_picks_and_committed_text_filters() {
+    let (mut app, _) = dialog_app().await;
+    install_run(&mut app, &answers_with_wide_runner());
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    key(&mut app, hc_vt::Key::Enter);
+    // IME/committed text narrows the list like the repo picker's.
+    app.on_input(UiEvent::Text("w-1".into()), app.area.0);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let pick = d.model_pick.as_ref().unwrap();
+        assert_eq!(pick.filter.as_str(), "w-1");
+        assert_eq!(pick.visible().len(), 5);
+    }
+    // A click on a visible row picks it outright.
+    draw_to(&mut app, 120, 36);
+    let hit = app
+        .ns_hits
+        .cells
+        .iter()
+        .find_map(|(rect, hit)| match hit {
+            crate::new_studio::NsHit::ModelPick(i) => Some((rect.x + 1, rect.y, *i)),
+            _ => None,
+        })
+        .expect("a model row is clickable");
+    assert_eq!(hit.2, 0, "first filtered row is w-10");
+    app.on_mouse(MouseInput {
+        col: hit.0,
+        row: hit.1,
+        kind: MouseEventKind::Down(MouseButton::Left),
+        mods: hc_vt::Mods::NONE,
+        sgr_position: None,
+    });
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert!(d.model_pick.is_none(), "the click committed");
+        assert_eq!(d.cast.rows[0].model, 10);
+    }
+    assert!(cast_toml(&app).contains("model = \"w-10\""));
+}
+
+#[tokio::test]
+async fn enter_elsewhere_still_dry_runs() {
+    let (mut app, _) = dialog_app().await;
+    to_cast(&mut app).await;
+    // `⏎` only opens the list on the MODEL cell — on RUNNER it
+    // keeps meaning `dry-run`.
+    assert_eq!(app.new_studio.as_ref().unwrap().cast.col, 0);
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::CheckStart);
 }
 
 #[tokio::test]

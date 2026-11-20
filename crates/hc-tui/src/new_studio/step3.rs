@@ -132,6 +132,13 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         return;
     }
 
+    // An open MODEL list owns the body until `⏎` seats or `esc`
+    // drops it — the table is behind it.
+    if let Some(pick) = &d.model_pick {
+        draw_model_pick(b, body, y, d, pick, p, hits);
+        return;
+    }
+
     // The role table header.
     let header = Style::default()
         .fg(p.overlay0)
@@ -285,6 +292,138 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 &crate::chrome::text::truncate_end(error, body.width as usize - 3),
                 Style::default().fg(p.red).bg(p.panel_bg),
             );
+        }
+    }
+}
+
+/// The open MODEL list: `auto` first, then the row's runner
+/// catalog — the heading carries the live filter like the step-1
+/// repository list, the current value wears the table's `‹ ›`
+/// marks, and the window follows the selection.
+fn draw_model_pick(
+    b: &mut Buffer,
+    body: Rect,
+    mut y: u16,
+    d: &NewStudio,
+    pick: &super::ModelPick,
+    p: &Palette,
+    hits: &mut NsHits,
+) {
+    let runners = match &d.runners {
+        Probe::Done(r) => r.as_slice(),
+        _ => &[],
+    };
+    let Some(row) = d.cast.rows.get(d.cast.sel) else {
+        return;
+    };
+    let runner = runners.get(row.runner);
+    let runner_name = runner.map(|r| r.runner.as_str()).unwrap_or("-");
+    let current = runner
+        .and_then(|r| r.models.get(row.model))
+        .map(String::as_str)
+        .unwrap_or_default();
+    let head_style = Style::default()
+        .fg(p.accent)
+        .bg(p.panel_bg)
+        .add_modifier(Modifier::BOLD);
+    let head = crate::chrome::text::truncate_end(
+        &format!(" Model for {} · {runner_name}:", row.key),
+        body.width as usize,
+    );
+    let head_w = crate::chrome::text::display_width(&head) as u16;
+    put_text(b, body.x, y, body.width, &head, head_style);
+    // The filter is always live — untouched the tail is the hint,
+    // the first printable char turns it into the `/…` editor.
+    let tail_x = body.x + head_w;
+    if pick.filter.as_str().is_empty() {
+        let tail_w = body.right().saturating_sub(tail_x);
+        put_text(
+            b,
+            tail_x,
+            y,
+            tail_w,
+            &crate::chrome::text::truncate_end("  (type to filter)", tail_w as usize),
+            head_style,
+        );
+    } else {
+        let x = put_segment(b, tail_x, y, body.right(), "  /", head_style);
+        let w = body.right().saturating_sub(x);
+        if w > 0
+            && let Some(cursor) = text_editor::render(
+                b,
+                Rect::new(x, y, w, 1),
+                &pick.filter,
+                Style::default().fg(p.text).bg(p.panel_bg),
+            )
+        {
+            hits.cursor = Some(cursor);
+        }
+    }
+    y += 1;
+    let visible = pick.visible();
+    if visible.is_empty() {
+        put_text(
+            b,
+            body.x + 1,
+            y,
+            body.width,
+            "nothing matches the filter",
+            Style::default().fg(p.overlay0).bg(p.panel_bg),
+        );
+        return;
+    }
+    // Keep the selection inside the window — the repo picker's own
+    // scroll rule.
+    let window = body.bottom().saturating_sub(y) as usize;
+    if window == 0 {
+        return;
+    }
+    let scroll = pick
+        .scroll
+        .min(visible.len().saturating_sub(window))
+        .min(pick.sel)
+        .max(pick.sel.saturating_sub(window.saturating_sub(1)));
+    for (vi, option) in visible.iter().skip(scroll).take(window).enumerate() {
+        let i = scroll + vi;
+        let line = Rect::new(body.x, y, body.width, 1);
+        let selected = i == pick.sel;
+        let rbg = super::row_text_bg(selected, p);
+        if selected {
+            super::selected_row(b, line, p);
+            put_text(b, body.x, y, 1, "▸", Style::default().fg(p.accent).bg(rbg));
+        }
+        let text = if *option == current {
+            format!("‹ {option} ›")
+        } else {
+            (*option).to_string()
+        };
+        let x = put_segment(
+            b,
+            body.x + 2,
+            y,
+            body.right(),
+            &format!(
+                " {}",
+                crate::chrome::text::truncate_end(&text, body.width as usize - 3)
+            ),
+            Style::default().fg(p.text).bg(rbg),
+        );
+        // `auto`'s meaning — the runner's own default — in a dim
+        // note at the line's end.
+        if *option == "auto" {
+            put_segment(
+                b,
+                x,
+                y,
+                body.right(),
+                " · runner default",
+                Style::default().fg(p.overlay0).bg(rbg),
+            );
+        }
+        hits.push(line, NsHit::ModelPick(i));
+        y += 1;
+        if y >= body.bottom() {
+            break;
         }
     }
 }
