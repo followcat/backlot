@@ -188,6 +188,9 @@ impl App {
                 self.hollywood_leave();
             }
             Some(Target::Input) => self.hollywood.editing = true,
+            // U7's setup line: the in-TUI dialog — runner/model/
+            // effort pickers, the write through `hollywood setup`.
+            Some(Target::Setup) => self.hw_setup_open(),
             _ => {}
         }
     }

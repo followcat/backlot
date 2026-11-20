@@ -369,8 +369,9 @@ fn draw_input(
 }
 
 /// `✦ an agent can watch every studio and tell you what needs you:`
-/// then `backlot hollywood setup …` — the lead in `overlay0`, the
-/// command in `subtext0` (U7).
+/// then `⏎ hollywood setup` — the lead in `overlay0`, the
+/// actionable command in `subtext0`; Enter/click opens the in-TUI
+/// dialog (U7, R22).
 fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
     let x = rect.x + MARGIN;
     let base = Style::default().bg(palette.surface_dim);

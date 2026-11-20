@@ -156,6 +156,9 @@ impl App {
                     self.run_action(studio_cmds::stage_start(machine));
                 }
             }
+            // R22: the `hollywood setup` hint is the in-TUI dialog's
+            // button — same dialog the Call Sheet's row opens.
+            Some(Target::Setup) => self.hw_setup_open(),
             Some(Target::Block(id)) => {
                 // A single-line block expands — the same manual
                 // override Space writes; the selection follows the

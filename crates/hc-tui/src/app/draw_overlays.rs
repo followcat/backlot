@@ -443,6 +443,24 @@ pub(super) fn render_overlays_and_cursor(
             blinking: true,
         };
     }
+    // The Hollywood setup dialog dims like the other modals and
+    // centres in `modal_band()`; its hit map and cursor feed the
+    // next press and the host cursor like the fields do.
+    app.hw_hits = if let Some(d) = app.hw_setup.as_ref() {
+        overlay_painted = true;
+        super::draw_overlays_s3::dim_cells(buf);
+        crate::hw_setup::render(buf, d, &app.shell.palette, app.modal_band(area))
+    } else {
+        crate::hw_setup::HwHits::default()
+    };
+    if let Some(cursor) = app.hw_hits.cursor.as_ref() {
+        app.want_cursor = CursorWish {
+            pos: cursor.visible.then_some((cursor.x, cursor.y)),
+            anchor: Some((cursor.x, cursor.y)),
+            shape: CursorShape::Default,
+            blinking: true,
+        };
+    }
     // The Task & Delivery Sheet dims like the other modals and
     // centres in `modal_band()` — never crossing a beside dock's
     // border (A6.2); its keys are the sheet's own while open.

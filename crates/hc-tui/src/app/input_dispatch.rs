@@ -57,6 +57,7 @@ impl App {
                     if self.insert_copy_search_text(&lossy)
                         || self.insert_dialog_text(&lossy)
                         || self.insert_ns_text(&lossy)
+                        || self.insert_hw_text(&lossy)
                     {
                         // The copy search prompt, dialog or New
                         // Studio editor consumed it.
@@ -91,6 +92,7 @@ impl App {
                 if self.insert_copy_search_text(&text)
                     || self.insert_dialog_text(&text)
                     || self.insert_ns_text(&text)
+                    || self.insert_hw_text(&text)
                 {
                     // The copy search prompt, dialog or New Studio
                     // editor consumed it.
@@ -139,6 +141,7 @@ impl App {
             || self.help
             || self.dialog.is_some()
             || self.new_studio.is_some()
+            || self.hw_setup.is_some()
             || self.navigator.is_some()
             || self.settings.is_some()
             || self.panel_focused()

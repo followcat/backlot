@@ -27,6 +27,12 @@ impl App {
             self.new_studio_key(key);
             return true;
         }
+        // The Hollywood setup dialog owns every key while it is
+        // open — even while the Call Sheet stays expanded under it.
+        if self.hw_setup.is_some() {
+            self.hw_setup_key(key);
+            return true;
+        }
         // The Task & Delivery Sheet owns every key while it is open
         // — tabs, movement, `o` and `Esc` all run inside it (S2 §3).
         if self.sheet.is_some() {

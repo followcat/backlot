@@ -38,6 +38,9 @@ pub(crate) enum Target {
     /// block's owed-step `◌ … — [r] start`; Enter/click is the
     /// `[r]` (U6c). `None` names this core.
     Stage(Option<String>),
+    /// The `hollywood setup` hint row (R22) — Enter/click opens the
+    /// in-TUI setup dialog.
+    Setup,
 }
 
 impl Target {
@@ -51,7 +54,7 @@ impl Target {
             | Target::Person(key, _)
             | Target::Task(key, _)
             | Target::Fold(key) => Some(key),
-            Target::Stage(..) | Target::None => Option::None,
+            Target::Stage(..) | Target::Setup | Target::None => Option::None,
         }
     }
 }
@@ -183,8 +186,10 @@ impl Row<'_> {
             | Row::Owed { .. }
             | Row::Usage { .. }
             | Row::BlockBottom(_)
-            | Row::Drawer { .. }
-            | Row::SetupHint => Target::None,
+            | Row::Drawer { .. } => Target::None,
+            // R22: the hint is the dialog's button — actionable like
+            // the Call Sheet's own setup line.
+            Row::SetupHint => Target::Setup,
             Row::BlockTop { studio, .. } => Target::Studio(studio.key()),
             Row::Person { studio, role } => Target::Person(studio.key(), role.role.clone()),
             Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),

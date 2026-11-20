@@ -377,7 +377,8 @@ fn without_an_agent_the_band_is_the_setup_line() {
     assert!(text.contains("✦  H O L L Y W O O D"), "{text}");
     assert!(text.contains("no agent"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
-    assert!(text.contains("backlot hollywood setup"), "{text}");
+    // R22: the line is the dialog's button — `⏎ hollywood setup`.
+    assert!(text.contains("hollywood setup"), "{text}");
     assert!(!text.contains("tell hollywood what"), "{text}");
     assert!(!text.contains("acme-shop needs a look"), "{text}");
     assert!(hits.input.is_empty(), "no input line without an agent");
