@@ -208,6 +208,11 @@ pub enum Cmd {
         json: bool,
         from: Option<String>,
     },
+    /// `backlot studio list [--json]` — every studio under every
+    /// core's state directory, read-only.
+    StudioList {
+        json: bool,
+    },
     /// `backlot hollywood propose|report` — Hollywood's own ledger.
     Hollywood(HollywoodCmd),
     /// `backlot card list|apply|cancel` — the card gate (D17a).
@@ -322,6 +327,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "finish" => args_studio::studio_finish(&mut common, &mut it),
                 "prune" => args_studio::studio_prune(&mut common, &mut it),
                 "migrate" => args_studio::studio_migrate(&mut common, &mut it),
+                "list" => args_studio::studio_list(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STUDIO))),
                 _ => Err(usage(
                     format!("unknown studio subcommand '{sub}'"),

@@ -292,6 +292,9 @@ command scans the sibling `<core id>` directories — one match is used, none ke
 the core ids (`--session` disambiguates). `BACKLOT_STATE_DIR`, `--session` and `--remote` pin the base and skip the
 scan, so role terminals and directed commands never drift.
 
+`backlot studio list [--json]` is the discovery half: it reads every core directory (or the pinned one) and prints
+each studio's core id, ledger state (`live`/`finished`/`failed`), title and bound path, newest activity first.
+
 ## Summary document
 
 The stage writes one core document named `backlot`, holding all studios. One fixed name is needed because the watcher's
