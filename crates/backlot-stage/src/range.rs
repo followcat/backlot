@@ -94,22 +94,116 @@ pub fn resolve(
 }
 
 /// The CLI's check: the task's work area, its `backlot/<studio>/<task>`
-/// branch, real git. Returns the `sha..sha` the event records.
-pub fn check_range(dir: &Path, studio: &str, task: &str, range: &str) -> Result<String, Fail> {
-    let work = work_area(dir, task)?;
+/// branch, real git. Returns the `sha..sha` the event records — in a
+/// workspace, `member:sha..sha` per comma-separated part (D10). A
+/// no-git studio records the text verbatim.
+pub fn check_range(
+    dir: &Path,
+    studio: &str,
+    task: &str,
+    state: &StudioState,
+    range: &str,
+) -> Result<String, Fail> {
+    let Some(cfg) = state.studio.as_ref() else {
+        return Err(Fail::refused("the studio has no configuration"));
+    };
+    if cfg.no_git {
+        return Ok(range.to_string());
+    }
     let branch = format!("backlot/{studio}/{task}");
-    resolve(&mut workareas::real_git, &work, &branch, range)
+    if cfg.members.is_empty() {
+        let work = work_area(dir, task)?;
+        return resolve(&mut workareas::real_git, &work, &branch, range);
+    }
+    let mut resolved = Vec::new();
+    for part in range.split(',') {
+        let part = part.trim();
+        let (member, bare) = match part.split_once(':') {
+            Some((m, r)) if !r.contains(':') => (Some(m.to_string()), r.to_string()),
+            _ => (None, part.to_string()),
+        };
+        let members: Vec<String> = match &member {
+            Some(m) => vec![m.clone()],
+            None => cfg
+                .members
+                .iter()
+                .filter(|m| tip_on_branch(dir, task, m, &bare, &branch))
+                .cloned()
+                .collect(),
+        };
+        match members.as_slice() {
+            [] => {
+                return Err(Fail::refused(format!(
+                    "--commits '{part}' resolves in no member repository — \
+                     '<member>:{bare}' pins it explicitly"
+                )));
+            }
+            [m] => {
+                let work = work_area(dir, &format!("{task}/{}", leaf(m)))?;
+                let sha = resolve(&mut workareas::real_git, &work, &branch, &bare)?;
+                resolved.push(format!("{}:{sha}", leaf(m)));
+            }
+            many => {
+                let names: Vec<String> = many.iter().map(|m| leaf(m)).collect();
+                return Err(Fail::refused(format!(
+                    "--commits '{part}' resolves in several member repositories \
+                     ({}) — pin it as '<member>:{bare}'",
+                    names.join(", ")
+                )));
+            }
+        }
+    }
+    Ok(resolved.join(","))
 }
 
-/// The sha `A..B` records as `B` — the delivery's tip.
-fn range_end(commits: &str) -> &str {
-    commits.rsplit("..").next().unwrap_or(commits)
+/// A member repository's leaf name — the `work/<task>/<member>`
+/// subdir and the `member:` prefix's spelling (D10).
+fn leaf(member: &str) -> String {
+    Path::new(member)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| member.to_string())
 }
 
-/// The tip of the delivery a terminal task was accepted on: the
-/// delivery its last accepting review named, else the latest — the
-/// strictest read of what must already sit on integration.
-fn accepted_end(t: &Task) -> Option<&str> {
+/// Does `bare`'s `B` resolve and sit on `backlot/<studio>/<task>`
+/// inside `work/<task>/<member>` — the bare-range member probe.
+fn tip_on_branch(dir: &Path, task: &str, member: &str, bare: &str, branch: &str) -> bool {
+    let Some(b) = bare.rsplit("..").next().filter(|b| !b.is_empty()) else {
+        return false;
+    };
+    let work = dir.join("work").join(task).join(leaf(member));
+    if !work.is_dir() {
+        return false;
+    }
+    let cwd = work.to_string_lossy().into_owned();
+    let git = |args: &[&str]| workareas::real_git(args, &cwd);
+    let tip = git(&[
+        "rev-parse",
+        "--verify",
+        "--end-of-options",
+        &format!("{b}^{{commit}}"),
+    ]);
+    if tip.code != 0 {
+        return false;
+    }
+    git(&["merge-base", "--is-ancestor", tip.stdout.trim(), branch]).code == 0
+}
+
+/// One recorded range part: `member:a..b` or a bare `a..b` —
+/// `(member leaf, end sha)`.
+fn range_part(part: &str) -> (Option<&str>, &str) {
+    let (member, rest) = match part.split_once(':') {
+        Some((m, r)) if !r.contains(':') => (Some(m), r),
+        _ => (None, part),
+    };
+    (member, rest.rsplit("..").next().unwrap_or(rest))
+}
+
+/// The `commits` string of the delivery a terminal task was
+/// accepted on: the delivery its last accepting review named, else
+/// the latest — the strictest read of what must already sit on
+/// integration.
+fn accepted_commits(t: &Task) -> Option<&str> {
     let d = t
         .reviews
         .iter()
@@ -117,7 +211,7 @@ fn accepted_end(t: &Task) -> Option<&str> {
         .find(|r| matches!(r.verdict, Verdict::Accepted | Verdict::PartiallyAccepted))
         .and_then(|r| t.deliveries.iter().find(|d| d.n == r.delivery))
         .or_else(|| t.deliveries.last())?;
-    Some(range_end(&d.commits))
+    Some(&d.commits)
 }
 
 /// The `task.cast` git gate (S9e): every accepted dependency's
@@ -125,24 +219,22 @@ fn accepted_end(t: &Task) -> Option<&str> {
 /// `backlot/<studio>/integration` — the task's work area is cut from
 /// the integration tip, so an unmerged dependency would start the
 /// actor without its code. Dependencies still open are the model's
-/// refusal, not this one's. Runs in `work/integration`, falling back
-/// to the studio repo — the same object store.
+/// refusal, not this one's. A member-qualified range part checks in
+/// `work/integration/<member>` (or the member repository itself), a
+/// bare part in `work/integration` (or the studio repo) — the same
+/// object store. A no-git studio merges nothing and skips the gate.
 pub fn check_dependencies(
     dir: &Path,
     studio: &str,
     state: &StudioState,
     task: &str,
 ) -> Result<(), Fail> {
-    let (Some(t), Some(repo)) = (state.tasks.get(task), state.studio.as_ref()) else {
+    let (Some(t), Some(cfg)) = (state.tasks.get(task), state.studio.as_ref()) else {
         return Ok(()); // the model's own refusal names what is missing
     };
-    let work = dir.join("work").join("integration");
-    let area = if work.is_dir() {
-        work
-    } else {
-        PathBuf::from(&repo.repo)
-    };
-    let cwd = area.to_string_lossy().into_owned();
+    if cfg.no_git {
+        return Ok(());
+    }
     let branch = format!("backlot/{studio}/integration");
     let mut unmerged: Vec<&str> = Vec::new();
     for dep in &t.dependencies {
@@ -155,38 +247,61 @@ pub fn check_dependencies(
         ) {
             continue; // still open — the model's refusal names it
         }
-        let Some(end) = accepted_end(d) else {
+        let Some(commits) = accepted_commits(d) else {
             continue;
         };
-        let tip = workareas::real_git(
-            &[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                "--end-of-options",
-                &format!("{branch}^{{commit}}"),
-            ],
-            &cwd,
-        );
-        let merged = match tip.code {
-            // No integration branch yet: nothing is merged into it.
-            0 => {
-                let out = workareas::real_git(&["merge-base", "--is-ancestor", end, &branch], &cwd);
-                match out.code {
-                    0 => true,
-                    1 => false,
-                    _ => {
-                        return Err(Fail::refused(format!(
-                            "cast: merge check for '{dep}' failed ({})",
-                            workareas::err_line(&out)
-                        )));
+        for part in commits.split(',') {
+            let (member, end) = range_part(part);
+            let work = match member {
+                Some(m) => dir.join("work").join("integration").join(m),
+                None => dir.join("work").join("integration"),
+            };
+            let area = if work.is_dir() {
+                work
+            } else {
+                match member {
+                    Some(m) => cfg
+                        .members
+                        .iter()
+                        .find(|p| leaf(p) == m)
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| PathBuf::from(&cfg.repo)),
+                    None => PathBuf::from(&cfg.repo),
+                }
+            };
+            let cwd = area.to_string_lossy().into_owned();
+            let tip = workareas::real_git(
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    "--end-of-options",
+                    &format!("{branch}^{{commit}}"),
+                ],
+                &cwd,
+            );
+            let merged = match tip.code {
+                // No integration branch yet: nothing is merged into it.
+                0 => {
+                    let out =
+                        workareas::real_git(&["merge-base", "--is-ancestor", end, &branch], &cwd);
+                    match out.code {
+                        0 => true,
+                        1 => false,
+                        _ => {
+                            return Err(Fail::refused(format!(
+                                "cast: merge check for '{dep}' failed ({})",
+                                workareas::err_line(&out)
+                            )));
+                        }
                     }
                 }
+                _ => false,
+            };
+            if !merged {
+                unmerged.push(dep);
+                break;
             }
-            _ => false,
-        };
-        if !merged {
-            unmerged.push(dep);
         }
     }
     if unmerged.is_empty() {

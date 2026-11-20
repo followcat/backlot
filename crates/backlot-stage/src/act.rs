@@ -262,7 +262,7 @@ impl Stage {
         if let Some(hooks) = &launch.hooks {
             prepare_hooks(hooks).map_err(|e| Fail::refused(format!("hook files: {e}")))?;
         }
-        let cwd = workareas::role_dir(dir, &start.repo, &start.role);
+        let cwd = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
         let run = self
             .client
             .terminal_run(RunParams {
@@ -456,6 +456,8 @@ impl Stage {
                     &mut *self.git.borrow_mut(),
                     studio,
                     &start.repo,
+                    &start.members,
+                    start.no_git,
                     dir,
                     &area,
                 ) {

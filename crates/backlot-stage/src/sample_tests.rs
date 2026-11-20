@@ -188,6 +188,8 @@ fn studio_with_limit(dir: &Path, stall_limit_s: u32) {
                 EventKind::StudioCreated {
                     title: "acme-shop".into(),
                     repo: "/home/user/acme-shop".into(),
+                    members: Vec::new(),
+                    no_git: false,
                     mode: backlot_model::event::StudioMode::Standard,
                     roles: Box::new(backlot_model::event::RoleConfigs {
                         producer: actor(),

@@ -91,13 +91,23 @@ fn run(
 
 #[test]
 fn every_prompt_defaults_and_accepts() {
+    // The temp-file sweep below must observe no other run's
+    // half-finished draft — the lock stays held past `run_io`, so
+    // `run`'s own guard cannot be used here.
+    let _lock = DRAFT_LOCK.lock().unwrap();
     let (scratch, env) = scratch();
     // A repo named `acme-shop`: the id default is its directory
     // name, the title default the id, the cast the drafted `fake`
     // runner — every prompt answered with a bare newline.
     let repo = repo(&scratch, "acme-shop");
     let answers = format!("{repo}\n\n\n\n\nn\n");
-    let (res, out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
+    let mut input = answers.as_bytes();
+    let mut out_buf = Vec::new();
+    let res = {
+        let mut io = io(&mut input, &mut out_buf, None);
+        run_io(Common::default(), args(), &env, &mut io)
+    };
+    let out = String::from_utf8(out_buf).unwrap();
     let out_str = res.unwrap();
     assert!(out_str.contains("studio.created"), "{out_str}");
     assert!(out.contains("repository"), "{out}");
@@ -240,17 +250,44 @@ fn an_edited_cast_is_what_gets_written() {
     assert!(scratch.dir.join("studios/acme-shop/events.jsonl").is_file());
 }
 
+/// A plain-directory answer binds too (D4): the wizard asks its
+/// `git init` question, a yes initializes and creates, a no refuses
+/// with the two flags named.
 #[test]
-fn a_repo_that_is_not_git_is_refused_like_the_dry_run() {
+fn a_plain_dir_initializes_or_names_the_flags() {
+    // repo, studio, title, mode and cast take their defaults; the
+    // `git init` question gets a y, the stage offer a n.
     let (scratch, env) = scratch();
-    let plain = fixture(&scratch, "plain-dir", "x");
-    let answers = format!("{plain}\n\n\n\na\n");
+    let plain = scratch.files.join("plain-dir");
+    fs::create_dir(&plain).unwrap();
+    let plain = plain.to_string_lossy().into_owned();
+    let answers = format!("{plain}\n\n\n\n\ny\nn\n");
+    let (res, out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
+    assert!(res.is_ok(), "plain dir initialized: {res:?} {out}");
+    assert!(out.contains("git init"), "{out}");
+    assert!(
+        std::path::Path::new(&plain).join(".git").is_dir(),
+        "the launch ran git init"
+    );
+
+    // A no at the same question refuses and names both flags.
+    let (scratch2, env) = crate::cli_testkit::scratch();
+    let plain = scratch2.files.join("plain-dir");
+    fs::create_dir(&plain).unwrap();
+    let plain = plain.to_string_lossy().into_owned();
+    let answers = format!("{plain}\n\n\n\n\nn\n");
     let (res, _out) = run(Common::default(), args(), &env, answers.as_bytes(), None);
     match res {
-        Err(Fail::Refused(m)) => assert!(m.contains("not a git repository"), "{m}"),
+        Err(Fail::Refused(m)) => {
+            assert!(m.contains("--init") && m.contains("--no-git"), "{m}")
+        }
         other => panic!("expected refusal, got {other:?}"),
     }
-    assert!(!scratch.dir.join("studios").exists());
+    assert!(!scratch2.dir.join("studios").exists());
+    assert!(
+        !std::path::Path::new(&plain).join(".git").exists(),
+        "a no initializes nothing"
+    );
 }
 
 #[test]

@@ -40,8 +40,8 @@ fn machine_detail(m: &super::MachineRow) -> (String, bool) {
     }
 }
 
-/// A repo row's right-side note — kind, branch, and the in-use
-/// warning or the reason it cannot be picked.
+/// A repo row's right-side note — its path shape (D4), branch, and
+/// the in-use warning; every listed shape can be picked.
 fn repo_note(e: &super::RepoEntry) -> (String, bool) {
     let mut note = match e.kind {
         RepoKind::GitReady => {
@@ -51,13 +51,20 @@ fn repo_note(e: &super::RepoEntry) -> (String, bool) {
             }
             s
         }
-        RepoKind::GitEmpty => "git repo · 0 commits (commit first)".into(),
-        RepoKind::Dir => "directory".into(),
+        RepoKind::GitEmpty => "git repo · 0 commits · will create initial commit".into(),
+        RepoKind::Dir if !e.members.is_empty() => {
+            format!(
+                "workspace · {} repos · {}",
+                e.members.len(),
+                e.members.join(", ")
+            )
+        }
+        RepoKind::Dir => "directory · will git init".into(),
     };
     if let Some(studio) = &e.in_use_studio {
         note.push_str(&format!(" · in use by studio {studio}"));
     }
-    (note, e.kind != RepoKind::GitEmpty)
+    (note, true)
 }
 
 fn repo_glyph(e: &super::RepoEntry, p: &Palette) -> (&'static str, Style) {
@@ -270,11 +277,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 }
                 let (glyph, glyph_style) = repo_glyph(e, p);
                 let mut x = put_segment(b, row.x + 1, y, row.right(), glyph, glyph_style.bg(rbg));
-                let name_style = if e.kind == RepoKind::GitEmpty {
-                    Style::default().fg(p.overlay0).bg(rbg)
-                } else {
-                    Style::default().fg(p.text).bg(rbg)
-                };
+                let name_style = Style::default().fg(p.text).bg(rbg);
                 let name = if e.kind == RepoKind::Dir {
                     format!(" {}/", e.name)
                 } else {

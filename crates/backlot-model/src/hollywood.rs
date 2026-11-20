@@ -218,9 +218,16 @@ pub enum CardAction {
     StudioNew {
         studio: String,
         title: String,
+        /// The bound path (D4): repository, workspace directory or
+        /// plain directory; member repositories are classified again
+        /// at apply.
         repo: String,
         cast: String,
         brief: String,
+        /// A plain directory bound with no git (D4); absent on logs
+        /// that predate the field and on every other shape.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        no_git: bool,
     },
     /// Stop a finished person (`role.closed`) — frees the terminal.
     Close { studio: String, person: String },

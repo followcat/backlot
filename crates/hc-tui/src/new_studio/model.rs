@@ -102,6 +102,29 @@ pub(crate) struct RepoEntry {
     pub kind: RepoKind,
     pub in_use_studio: Option<String>,
     pub branch: Option<String>,
+    /// A `dir` entry's direct-child repository names (D4) — empty
+    /// on repositories and on plain directories.
+    pub members: Vec<String>,
+}
+
+impl RepoEntry {
+    /// The path's shape for the launch plan (D4): a repository, a
+    /// workspace over member repositories, or a plain directory.
+    pub(crate) fn shape(&self) -> PathShape {
+        match self.kind {
+            RepoKind::GitReady | RepoKind::GitEmpty => PathShape::Repo,
+            RepoKind::Dir if !self.members.is_empty() => PathShape::Workspace,
+            RepoKind::Dir => PathShape::Plain,
+        }
+    }
+}
+
+/// The bound path's classification — what `studio new` sees (D4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PathShape {
+    Repo,
+    Workspace,
+    Plain,
 }
 
 /// The repository browser's listing state for the selected machine.
@@ -172,6 +195,8 @@ pub(crate) fn parse_repos(text: &str) -> Result<(String, Vec<RepoEntry>), String
         in_use_studio: Option<String>,
         #[serde(default)]
         branch: Option<String>,
+        #[serde(default)]
+        members: Vec<String>,
     }
     let doc: Doc = serde_json::from_str(text).map_err(|e| format!("repos: bad document: {e}"))?;
     let entries = doc
@@ -187,6 +212,7 @@ pub(crate) fn parse_repos(text: &str) -> Result<(String, Vec<RepoEntry>), String
             },
             in_use_studio: e.in_use_studio,
             branch: e.branch,
+            members: e.members,
         })
         .collect();
     Ok((doc.cwd, entries))

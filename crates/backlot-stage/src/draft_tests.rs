@@ -4,6 +4,7 @@
 //! `studio-new` card's own draft gate.
 
 use std::fs;
+use std::path::Path;
 
 use crate::cli::Env;
 use crate::cli_testkit::*;
@@ -98,13 +99,13 @@ fn each_refusal_kind_says_what_to_fix() {
     let msg = refused(&env, &dry("--studio taken"));
     assert!(msg.contains("already exists"), "{msg}");
 
-    // The repo is not a git repository.
+    // The path holds no git repository.
     let plain = fixture(&scratch, "notrepo", "x");
     let msg = refused(
         &env,
         &format!("studio new --title S --repo {plain} --cast {cast} --dry-run --studio fresh-a"),
     );
-    assert!(msg.contains("not a git repository"), "{msg}");
+    assert!(msg.contains("no git repository"), "{msg}");
 
     // The cast file does not exist — a usage error, not a refusal.
     let msg = usage(
@@ -265,7 +266,7 @@ fn a_studio_new_card_only_takes_a_passing_draft() {
              --repo {plain} --cast {cast} --brief {brief} --why w --as hollywood"
         ),
     );
-    assert!(msg.contains("not a git repository"), "{msg}");
+    assert!(msg.contains("no git repository"), "{msg}");
     assert!(!scratch.dir.join("hollywood/events.jsonl").exists());
 
     // A draft that passes every check opens the card with the
@@ -296,4 +297,123 @@ fn a_studio_new_card_only_takes_a_passing_draft() {
     );
     let out = ok(&env, "card apply c1");
     assert!(out.contains("card.stale c1"), "{out}");
+}
+
+/// D4: every path shape passes `--dry-run` — a workspace records its
+/// members, a plain directory takes `--init` or `--no-git`, and a
+/// plain directory without a choice is refused.
+#[test]
+fn each_path_shape_passes_or_names_its_choice() {
+    let (scratch, env) = scratch();
+    let env = free(&env);
+    let cast = fixture(&scratch, "cast.toml", FAKE_CAST);
+
+    // A workspace: two sibling repositories under one directory.
+    let ws = scratch.files.join("mono");
+    for name in ["beta-api", "web"] {
+        let m = ws.join(name);
+        fs::create_dir_all(&m).unwrap();
+        git(&m, &["init", "-b", "main"]);
+        fs::write(m.join("f"), "base\n").unwrap();
+        git(&m, &["add", "."]);
+        git(&m, &["commit", "-m", "base"]);
+    }
+    let ws = ws.to_string_lossy().into_owned();
+    let out = ok(
+        &env,
+        &format!("studio new --title M --repo {ws} --cast {cast} --dry-run --studio mono-ws"),
+    );
+    assert!(out.contains("dry run"), "{out}");
+    // And the real create records the members — none of them is
+    // a synthetic parent repository.
+    ok(
+        &env,
+        &format!("studio new --title M --repo {ws} --cast {cast} --studio mono-ws"),
+    );
+    let (events, _) = store::load_events(&store::studio_dir(&scratch.dir, "mono-ws")).unwrap();
+    match &events[0].kind {
+        backlot_model::EventKind::StudioCreated {
+            members, no_git, ..
+        } => {
+            assert_eq!(members.len(), 2, "{members:?}");
+            assert!(!no_git);
+        }
+        k => panic!("expected studio.created, got {k:?}"),
+    }
+    assert!(!Path::new(&ws).join(".git").exists());
+
+    // A plain directory: refused without a choice, valid with either.
+    let plain = scratch.files.join("notes");
+    fs::create_dir_all(&plain).unwrap();
+    let plain = plain.to_string_lossy().into_owned();
+    let msg = refused(
+        &env,
+        &format!("studio new --title N --repo {plain} --cast {cast} --dry-run --studio plain-a"),
+    );
+    assert!(msg.contains("--init") && msg.contains("--no-git"), "{msg}");
+    let out = ok(
+        &env,
+        &format!(
+            "studio new --title N --repo {plain} --cast {cast} --init --dry-run --studio plain-b"
+        ),
+    );
+    assert!(out.contains("dry run"), "{out}");
+    let out = ok(
+        &env,
+        &format!(
+            "studio new --title N --repo {plain} --cast {cast} --no-git --dry-run --studio plain-c"
+        ),
+    );
+    assert!(out.contains("dry run"), "{out}");
+
+    // An empty repository needs no flag at all — the initial commit
+    // comes at launch.
+    let empty = scratch.files.join("fresh");
+    fs::create_dir_all(&empty).unwrap();
+    git(&empty, &["init", "-b", "main"]);
+    let empty = empty.to_string_lossy().into_owned();
+    let out = ok(
+        &env,
+        &format!("studio new --title E --repo {empty} --cast {cast} --dry-run --studio empty-a"),
+    );
+    assert!(out.contains("dry run"), "{out}");
+}
+
+/// A declared `[[checks]]` cast refuses on a workspace or a no-git
+/// binding — the stage's check worktree needs one repository (D10).
+#[test]
+fn declared_checks_need_a_single_repository() {
+    let (scratch, env) = scratch();
+    let env = free(&env);
+    let cast = fixture(
+        &scratch,
+        "checks.toml",
+        &format!(
+            "{FAKE_CAST}\n[[checks]]\nname = \"unit\"\nrun = \"cargo test\"\ntimeout_s = 60\n"
+        ),
+    );
+    let ws = scratch.files.join("mono");
+    let m = ws.join("beta-api");
+    fs::create_dir_all(&m).unwrap();
+    git(&m, &["init", "-b", "main"]);
+    fs::write(m.join("f"), "base\n").unwrap();
+    git(&m, &["add", "."]);
+    git(&m, &["commit", "-m", "base"]);
+    let ws = ws.to_string_lossy().into_owned();
+    let msg = refused(
+        &env,
+        &format!("studio new --title M --repo {ws} --cast {cast} --dry-run --studio ws-checks"),
+    );
+    assert!(msg.contains("checks"), "{msg}");
+
+    let plain = scratch.files.join("notes");
+    fs::create_dir_all(&plain).unwrap();
+    let plain = plain.to_string_lossy().into_owned();
+    let msg = refused(
+        &env,
+        &format!(
+            "studio new --title N --repo {plain} --cast {cast} --no-git --dry-run --studio ng-checks"
+        ),
+    );
+    assert!(msg.contains("checks"), "{msg}");
 }

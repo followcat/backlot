@@ -58,8 +58,12 @@ pub fn area_of(start: &Start) -> Area {
 
 /// The folder a role's terminal is expected to run in — the same
 /// path `ensure` produces, without the git calls. The delivery gate
-/// and the trust-dialog check compare against it.
-pub fn role_dir(dir: &Path, repo: &str, role: &str) -> PathBuf {
+/// and the trust-dialog check compare against it. A studio bound
+/// with no git shares the bound path between every role (D10).
+pub fn role_dir(dir: &Path, repo: &str, role: &str, no_git: bool) -> PathBuf {
+    if no_git {
+        return PathBuf::from(repo);
+    }
     match role {
         "director" => dir.join("work").join("integration"),
         _ => match actor_task(role) {
@@ -119,18 +123,31 @@ pub fn worktree_listed(list: &str, dir: &Path, branch: &str) -> bool {
     false
 }
 
-/// One worktree, creating its branch when needed. `base` is the
-/// branch point for a new branch (`HEAD` for the integration one).
+/// A member repository's leaf name under `work/<area>/` — the
+/// directory a workspace lays one worktree per member into (D10).
+fn member_leaf(member: &str) -> String {
+    Path::new(member)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| member.to_string())
+}
+
+/// One worktree, creating its branch when needed. `path_name` is the
+/// directory under `work/`; `branch_name` is the `backlot/<studio>/`
+/// suffix — for a workspace member the two differ, since every member
+/// shares one branch naming scheme. `base` is the branch point for a
+/// new branch (`HEAD` for the integration one).
 fn ensure_worktree(
     git: &mut GitRun<'_>,
     studio: &str,
     repo: &str,
     dir: &Path,
-    name: &str,
+    path_name: &str,
+    branch_name: &str,
     base: Option<&str>,
 ) -> Result<PathBuf, AreaFail> {
-    let work = dir.join("work").join(name);
-    let branch = format!("backlot/{studio}/{name}");
+    let work = dir.join("work").join(path_name);
+    let branch = format!("backlot/{studio}/{branch_name}");
     let list = git(&["-C", repo, "worktree", "list", "--porcelain"], repo);
     fail_on(&list)?;
     if worktree_listed(&list.stdout, &work, &branch) {
@@ -166,35 +183,68 @@ fn ensure_worktree(
 }
 
 /// Make sure the area exists and answer the cwd the terminal gets.
-/// `Repo` needs nothing; the others first prove the studio repo is a
-/// git work tree — `NotGit` starts no actor or director.
+/// `Repo` needs nothing; the others first prove every repository in
+/// play is a git work tree — `NotGit` starts no actor or director.
+/// `members` is empty for a single-repository studio; a workspace
+/// lays one worktree per member under `work/<area>/<member>` and the
+/// role's cwd is the `work/<area>` directory itself (D10). A studio
+/// bound with no git shares the bound path between every role.
 pub fn ensure(
     git: &mut GitRun<'_>,
     studio: &str,
     repo: &str,
+    members: &[String],
+    no_git: bool,
     dir: &Path,
     area: &Area,
 ) -> Result<PathBuf, AreaFail> {
-    if matches!(area, Area::Repo) {
+    if matches!(area, Area::Repo) || no_git {
         return Ok(PathBuf::from(repo));
     }
-    let probe = git(&["-C", repo, "rev-parse", "--is-inside-work-tree"], repo);
-    if probe.code != 0 || probe.stdout.trim() != "true" {
-        return Err(AreaFail::NotGit);
+    let repos: Vec<&str> = match members.is_empty() {
+        true => vec![repo],
+        false => members.iter().map(String::as_str).collect(),
+    };
+    for member in &repos {
+        let probe = git(
+            &["-C", member, "rev-parse", "--is-inside-work-tree"],
+            member,
+        );
+        if probe.code != 0 || probe.stdout.trim() != "true" {
+            return Err(AreaFail::NotGit);
+        }
     }
     // Task areas branch off the integration tip, so it exists first —
-    // even when the director has not started yet.
-    let integration = ensure_worktree(git, studio, repo, dir, "integration", None)?;
+    // even when the director has not started yet. Per member in a
+    // workspace; the single-repository layout keeps `work/<name>`.
+    let workspace = !members.is_empty();
+    for member in &repos {
+        let path = match workspace {
+            true => format!("integration/{}", member_leaf(member)),
+            false => "integration".to_string(),
+        };
+        ensure_worktree(git, studio, member, dir, &path, "integration", None)?;
+    }
     match area {
-        Area::Integration => Ok(integration),
-        Area::Task(task) => ensure_worktree(
-            git,
-            studio,
-            repo,
-            dir,
-            task,
-            Some(&format!("backlot/{studio}/integration")),
-        ),
+        Area::Integration => Ok(dir.join("work").join("integration")),
+        Area::Task(task) => {
+            for member in &repos {
+                let path = match workspace {
+                    true => format!("{task}/{}", member_leaf(member)),
+                    false => task.clone(),
+                };
+                ensure_worktree(
+                    git,
+                    studio,
+                    member,
+                    dir,
+                    &path,
+                    task,
+                    Some(&format!("backlot/{studio}/integration")),
+                )?;
+            }
+            Ok(dir.join("work").join(task))
+        }
         Area::Repo => unreachable!(),
     }
 }

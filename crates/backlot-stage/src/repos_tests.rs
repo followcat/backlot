@@ -153,3 +153,43 @@ fn repos_marks_a_repo_in_use() {
     assert_eq!(entry(&doc, "beta-api")["in_use_studio"], "acme-shop");
     assert!(entry(&doc, "free")["in_use_studio"].is_null());
 }
+
+/// A `dir` entry's `members` names its direct-child repositories —
+/// the workspace member list the dialog reads (D4); a studio on a
+/// workspace marks each member `in_use_studio`.
+#[test]
+fn dir_entries_carry_their_member_repositories() {
+    let (scratch, env, home) = home_env();
+    let mono = home.join("mono");
+    repo(&mono.join("beta-api"), true);
+    repo(&mono.join("web"), true);
+    fs::create_dir_all(mono.join("docs")).unwrap();
+
+    let doc = json(&env, &format!("repos --json --from {}", home.display()));
+    let members: Vec<&str> = entry(&doc, "mono")["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m.as_str().unwrap())
+        .collect();
+    assert_eq!(members, ["beta-api", "web"]);
+    // Repository entries carry no `members` key at all.
+    let inner = json(&env, &format!("repos --json --from {}", mono.display()));
+    assert!(entry(&inner, "beta-api")["members"].is_null());
+    assert!(entry(&inner, "docs")["members"].is_null());
+
+    // A workspace studio marks each member in use — never the
+    // workspace directory's own (nonexistent) repository.
+    let cast = fixture(&scratch, "cast.toml", CAST_TOML);
+    ok(
+        &env,
+        &format!(
+            "studio new --title t --repo {} --cast {cast}",
+            mono.display()
+        ),
+    );
+    let doc = json(&env, &format!("repos --json --from {}", mono.display()));
+    assert_eq!(entry(&doc, "beta-api")["in_use_studio"], "acme-shop");
+    assert_eq!(entry(&doc, "web")["in_use_studio"], "acme-shop");
+    assert!(entry(&doc, "docs")["in_use_studio"].is_null());
+}

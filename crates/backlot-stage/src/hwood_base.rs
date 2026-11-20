@@ -36,10 +36,11 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
             repo,
             cast,
             brief,
+            no_git,
             ..
         } => {
             // The same validation `studio new --dry-run` runs (D19).
-            crate::draft::check(base, studio, repo, Path::new(cast), env)?;
+            crate::draft::check(base, studio, repo, Path::new(cast), env, false, *no_git)?;
             commands::must_exist(Path::new(brief), "--brief")?;
             Ok(CardBase::StudioAbsent)
         }

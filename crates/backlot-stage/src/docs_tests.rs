@@ -212,6 +212,8 @@ fn guide_cast_file_parses_through_studio_new() {
             dry_run: false,
             interactive: false,
             mode: None,
+            init: false,
+            no_git: false,
         },
     )
     .expect("the guide's cast file fails the `studio new` build");

@@ -57,8 +57,13 @@ pub struct Start {
     pub terminal: String,
     /// Who runs in it: the studio role identity or the cast.
     pub actor: ActorIdentity,
-    /// The studio repo — the terminal's working directory.
+    /// The studio's bound path — the terminal's working directory
+    /// or the workspace's parent (D4).
     pub repo: String,
+    /// Workspace member repositories; empty for a single repo (D4).
+    pub members: Vec<String>,
+    /// Bound with no git: every role shares `repo` (D4).
+    pub no_git: bool,
     /// The session to resume and why; `None` for a fresh start.
     pub resume: Option<Resume>,
 }

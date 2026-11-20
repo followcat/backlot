@@ -48,6 +48,12 @@ pub enum Cmd {
         /// `--mode standard|experimental` — overrides the cast
         /// file's `mode`; `None` leaves the TOML or the default.
         mode: Option<StudioMode>,
+        /// `--init`: a plain directory becomes a repository with an
+        /// empty initial commit (D4).
+        init: bool,
+        /// `--no-git`: a plain directory binds with no git at all —
+        /// reduced isolation, every role shares it (D4).
+        no_git: bool,
     },
     ReqRevise {
         source: TextSource,

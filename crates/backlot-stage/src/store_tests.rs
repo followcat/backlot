@@ -31,6 +31,8 @@ fn seed_studio(dir: &Path) {
     let kind = EventKind::StudioCreated {
         title: "acme-shop".into(),
         repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
         mode: StudioMode::Standard,
         roles: Box::new(RoleConfigs {
             producer: actor(),

@@ -347,7 +347,7 @@ pub(crate) fn exec_event(
         if t.cast.is_none() {
             return Err(Fail::refused(format!("task '{task}' has no cast")));
         }
-        *commits = crate::range::check_range(&dir, &caller.studio, &task, commits)?;
+        *commits = crate::range::check_range(&dir, &caller.studio, &task, &state, commits)?;
     }
     // `cast` checks each accepted dependency's delivery already sits
     // on the integration branch — a cast before the merge would cut

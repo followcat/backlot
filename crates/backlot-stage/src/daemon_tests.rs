@@ -196,6 +196,8 @@ fn studio(base: &Path, name: &str) -> PathBuf {
                 EventKind::StudioCreated {
                     title: name.into(),
                     repo: repo.to_string_lossy().into_owned(),
+                    members: Vec::new(),
+                    no_git: false,
                     mode: backlot_model::event::StudioMode::Standard,
                     roles: Box::new(backlot_model::event::RoleConfigs {
                         producer: actor(),

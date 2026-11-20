@@ -37,6 +37,8 @@ fn start(kind: RoleKind, role: &str, task: Option<&str>) -> Start {
         terminal: format!("bl-shop-{role}"),
         actor: actor(),
         repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
         resume: None,
     }
 }
@@ -86,6 +88,8 @@ fn studio_config(checks: Vec<CheckDecl>) -> StudioConfig {
     StudioConfig {
         title: "acme-shop".into(),
         repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
         mode: StudioMode::Standard,
         roles: RoleConfigs {
             producer: actor(),

@@ -27,6 +27,11 @@ struct Entry {
     /// The checked-out branch — `null` on a plain directory or a
     /// detached/unknown HEAD.
     branch: Option<String>,
+    /// A `dir` entry's direct-child repositories, by name — the
+    /// dialog reads it as the workspace's member list (D4); absent
+    /// on repository entries and on plain directories.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    members: Vec<String>,
 }
 
 /// The `--json` document.
@@ -133,9 +138,10 @@ fn in_use(env: &Env, common: &Common) -> std::collections::BTreeMap<PathBuf, Str
         let Some(config) = &state.studio else {
             continue;
         };
-        let repo = PathBuf::from(&config.repo);
-        if let Ok(canonical) = repo.canonicalize() {
-            map.insert(canonical, name);
+        for repo in std::iter::once(&config.repo).chain(config.members.iter()) {
+            if let Ok(canonical) = PathBuf::from(repo).canonicalize() {
+                map.insert(canonical, name.clone());
+            }
         }
     }
     map
@@ -157,6 +163,17 @@ fn list(env: &Env, common: &Common, from: Option<&str>) -> Result<Listing, Fail>
         }
         let canonical = path.canonicalize().unwrap_or(path.clone());
         let (kind, branch) = probe(&path);
+        let members = match kind {
+            "dir" => crate::paths::member_repos(&path)
+                .iter()
+                .filter_map(|m| {
+                    Path::new(m)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
         let name = e.file_name().to_string_lossy().into_owned();
         entries.push((
             match kind {
@@ -170,6 +187,7 @@ fn list(env: &Env, common: &Common, from: Option<&str>) -> Result<Listing, Fail>
                 kind,
                 in_use_studio: in_use.get(&canonical).cloned(),
                 branch,
+                members,
             },
         ));
     }
