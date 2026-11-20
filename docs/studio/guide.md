@@ -135,6 +135,11 @@ optionally starts the stage before the new producer's terminal takes focus). `Es
 and then closes; `Ctrl+C` cancels from any step. When a studio exists, the page is gone and the
 studio is current.
 
+A create that succeeds ends the dialog: the studio replaces its wizard and the focus moves to the
+new producer. That holds when the `stage start` after it fails too — the studio exists, so the
+failure is a notice and the dialog does not come back. Only a refused `studio new` keeps the
+dialog on step 4 with its error and the draft intact, and a dry run never closes anything.
+
 The repository list comes from `backlot repos --json` on the target machine — a breadcrumb, a
 `/` filter, `→` to descend and `←` to ascend. Every listed path can be picked: a git repository
 shows its branch, one without commits says `0 commits · will create initial commit`, a

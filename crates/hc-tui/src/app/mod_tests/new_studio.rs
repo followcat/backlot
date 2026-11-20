@@ -1298,6 +1298,107 @@ async fn focus_moves_to_the_producer_after_create() {
     assert!(app.ns_pending_focus.is_none());
 }
 
+// ---------- what a create leaves behind ----------
+
+/// A created studio replaces its wizard: the dialog closes, the
+/// draft is gone and the focus is owed to the new studio's producer —
+/// even when the `stage start` that followed failed. The failure is
+/// then a notice, not a reopened dialog the user must Esc out of.
+#[tokio::test]
+async fn a_created_studio_closes_the_wizard_even_if_the_stage_failed() {
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "stage start");
+    answers.push(("stage start", Err("stage start: refused".into())));
+    let mut app = app_multi(vec![term("t1")], vec![machine("host-b", "connected")]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    install_run(&mut app, &answers);
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    to_step4(&mut app).await;
+
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+
+    assert!(
+        app.new_studio.is_none(),
+        "the created studio kept its wizard open"
+    );
+    assert_eq!(
+        app.ns_pending_focus.as_ref().map(|key| key.id.as_str()),
+        Some("acme-shop"),
+        "the new studio is not owed the focus"
+    );
+    assert!(app.notice.is_some(), "the stage failure went unmentioned");
+}
+
+/// A failed `studio new` keeps everything: the wizard stays on its
+/// review step with the error, the draft intact — the user is still
+/// editing and must be able to fix and retry.
+#[tokio::test]
+async fn a_failed_create_keeps_the_wizard_and_its_draft() {
+    // The prefix matcher takes the first hit, so the dry run's own
+    // argv is answered first and the real create fails.
+    let dry = "studio new --studio acme-shop --title acme shop \
+               --repo /home/user/acme-shop --cast - --dry-run";
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "studio new");
+    answers.insert(0, (dry, Ok("dry run ok\n".into())));
+    answers.push((
+        "studio new",
+        Err("studio 'acme-shop' already exists".into()),
+    ));
+    let mut app = app_multi(vec![term("t1")], vec![machine("host-b", "connected")]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    install_run(&mut app, &answers);
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    to_step4(&mut app).await;
+
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+
+    let d = app
+        .new_studio
+        .as_ref()
+        .expect("a failed create closed the wizard");
+    assert_eq!(d.step, Step::CheckStart, "the user is still on review");
+    assert_eq!(
+        d.create_error.as_deref(),
+        Some("studio 'acme-shop' already exists")
+    );
+    assert_eq!(d.id.as_str(), "acme-shop", "the draft survived");
+    assert!(!d.creating, "creating cleared");
+    assert!(app.ns_pending_focus.is_none());
+    assert!(app.notice.is_none(), "a failed create is the dialog's news");
+}
+
+/// A dry run never closes anything: it is a check, and the create
+/// still has to be asked for.
+#[tokio::test]
+async fn a_dry_run_keeps_the_wizard_and_creates_nothing() {
+    let (mut app, recorded) = dialog_app().await;
+    to_step4(&mut app).await;
+    let d = app.new_studio.as_ref().expect("the wizard is open");
+    assert_eq!(d.step, Step::CheckStart);
+    assert!(
+        matches!(d.dry, Probe::Done(_)),
+        "the dry run answered: {:?}",
+        d.dry
+    );
+    assert!(
+        !recorded.lock().unwrap().iter().any(|(_, argv, _)| {
+            argv.starts_with(&["studio".into(), "new".into()])
+                && !argv.iter().any(|a| a == "--dry-run")
+        }),
+        "the dry run issued a real create"
+    );
+    assert!(app.ns_pending_focus.is_none());
+    assert!(app.notice.is_none());
+    assert!(app.new_studio.is_some(), "a dry run closed the wizard");
+}
+
 // ---------- the Esc rule ----------
 
 #[tokio::test]

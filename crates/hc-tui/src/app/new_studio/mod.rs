@@ -412,6 +412,14 @@ impl App {
         });
     }
 
+    /// The studio exists: the wizard has done its job and goes, with
+    /// the focus owed to the studio's producer until its publish
+    /// seats one (`ns_focus_pending`).
+    fn ns_created(&mut self, machine: Option<String>, id: String) {
+        self.new_studio = None;
+        self.ns_pending_focus = Some(StudioKey { machine, id });
+    }
+
     /// A reply off `ns_rx` — land it only when its generation and
     /// dialog still match the request.
     pub(crate) fn on_ns_reply(&mut self, reply: NsReply) {
@@ -521,17 +529,26 @@ impl App {
                 if created {
                     self.ns_save_cast(&machine);
                 }
-                let Some(d) = &mut self.new_studio else {
-                    return;
-                };
                 match out {
-                    Ok(_) => {
-                        // The publish's studio row lands the focus;
-                        // it usually arrives within a tick.
-                        self.ns_pending_focus = Some(StudioKey { machine, id });
-                        self.new_studio = None;
+                    // A created studio replaces its wizard.
+                    Ok(_) => self.ns_created(machine, id),
+                    // The studio exists even when a later call in
+                    // the pair failed — `created` is `studio new`'s
+                    // own verdict. The create asked for a studio, and
+                    // it got one: close the wizard and let the
+                    // failure be a notice, never a dialog the person
+                    // has to Esc out of a studio they already have.
+                    Err(e) if created => {
+                        self.show_notice("Studio created", &e);
+                        self.ns_created(machine, id);
                     }
-                    Err(e) => d.create_error = Some(e),
+                    // A refused `studio new` keeps the draft: the
+                    // person is still editing and will retry.
+                    Err(e) => {
+                        if let Some(d) = &mut self.new_studio {
+                            d.create_error = Some(e);
+                        }
+                    }
                 }
             }
         }
