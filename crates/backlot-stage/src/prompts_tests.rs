@@ -227,7 +227,12 @@ fn pre_requirement_prompt_names_the_req_folder() {
         let file = prepare(&dir, "acme-shop", &st, &state).unwrap();
         let text = fs::read_to_string(&file).unwrap();
         assert!(!text.contains("``"), "{kind:?} has empty backticks: {text}");
-        assert!(!text.contains("v0"), "{kind:?} shows v0: {text}");
+        // `v0` as a rendered version — the check reads the text with
+        // the temp dir's own name scrubbed: a CI TMPDIR suffix is
+        // letters and digits and can itself carry `v0`, and every
+        // rendered path sits under it.
+        let outside_paths = text.replace(&dir.to_string_lossy().into_owned(), "");
+        assert!(!outside_paths.contains("v0"), "{kind:?} shows v0: {text}");
         assert!(
             text.contains(&req_dir),
             "{kind:?} misses the req folder: {text}"
