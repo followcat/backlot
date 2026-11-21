@@ -8,6 +8,7 @@ mod cursor;
 mod entry;
 mod keys;
 mod mouse;
+mod opening;
 mod setup;
 
 use super::*;

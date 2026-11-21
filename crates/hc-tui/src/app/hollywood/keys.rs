@@ -54,6 +54,11 @@ impl App {
         }
         let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
         let plain = modifiers.is_empty();
+        // `?` needs Shift on most layouts, and a kitty-reporting host
+        // (REPORT_ALTERNATE_KEYS) reports that Shift beside the key —
+        // still the bare `?` here, never a dead key.
+        let question = code == KeyCode::Char('?')
+            && (plain || modifiers == crossterm::event::KeyModifiers::SHIFT);
         // An armed `y/n` confirm takes the next key before anything.
         if self.hollywood_confirm_key(code) && matches!(key.input.action, hc_vt::Action::Press) {
             return;
@@ -102,7 +107,7 @@ impl App {
             KeyCode::Char('c') if plain && self.has_hollywood_cfg => self.hw_setup_open(),
             KeyCode::Char('n') if plain => self.hollywood_new_studio(),
             KeyCode::Char('m') if plain => self.hollywood_menu_selected(),
-            KeyCode::Char('?') if plain => {
+            KeyCode::Char('?') if question => {
                 self.help = true;
                 self.help_state = crate::chrome::help::HelpState::default();
             }

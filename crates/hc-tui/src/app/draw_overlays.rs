@@ -82,7 +82,14 @@ pub(super) fn render_overlays_and_cursor(
     // The beside-dock seam (A5.2): while the Call Sheet is expanded
     // the dock draws from `y = bar_h` — under the band, never under
     // the panes' own layout and never a PTY resize.
-    let bar_h = if app.hollywood.expanded() && app.opening.ready() && !app.opening_visible() {
+    // The expanded band floats over everything the frame owns —
+    // including the opening card (U8): a studio-less start with the
+    // sheet open draws it over the one-time page, so the advertised
+    // `alt+y` gets visible feedback and its keys are never swallowed
+    // behind an invisible layer. The collapsed strip still waits for
+    // the card to leave (U7: with no studio the card is the surface).
+    let band_over_page = app.hollywood.expanded();
+    let bar_h = if band_over_page && app.opening.ready() {
         let machines = app.panel_summaries();
         crate::hollywood::expanded_height(
             area,
@@ -151,9 +158,12 @@ pub(super) fn render_overlays_and_cursor(
     // panes, the cast sidebar and the studio panel — but under the
     // popup/notice/overlay stack. It reserves nothing: the pane
     // layout is identical whether it is hidden, a strip or expanded.
-    // U7: it waits for the same first read the card does, and never
-    // covers the card: with no studio the card is the surface.
-    app.hollywood_hits = if app.hollywood.visible() && app.opening.ready() && !app.opening_visible()
+    // U7: it waits for the same first read the card does, and the
+    // collapsed strip never covers the card; the expanded band does
+    // (U8) — the user pressed its key, so it must be visible.
+    app.hollywood_hits = if app.hollywood.visible()
+        && app.opening.ready()
+        && (band_over_page || !app.opening_visible())
     {
         overlay_painted = true;
         let machines = app.panel_summaries();
