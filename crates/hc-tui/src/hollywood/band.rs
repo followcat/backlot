@@ -88,7 +88,7 @@ pub(crate) fn draw_row(
                 );
             }
         }
-        Row::Calm(studios) => {
+        Row::Calm { studios, flags } => {
             let base = Style::default().bg(palette.surface_dim);
             put_text(buf, rect.x + MARGIN, rect.y, 1, "✓", base.fg(palette.teal));
             let text = format!(" nothing waiting on you across {studios} studios");
@@ -100,6 +100,17 @@ pub(crate) fn draw_row(
                 &truncate_end(&text, rect.width as usize),
                 base.fg(palette.overlay1),
             );
+            if *flags > 0 {
+                put_text(
+                    buf,
+                    rect.x + MARGIN + 1 + text.chars().count() as u16,
+                    rect.y,
+                    rect.width
+                        .saturating_sub(MARGIN + 1 + text.chars().count() as u16),
+                    &format!(" · !{flags} flagged"),
+                    base.fg(palette.peach),
+                );
+            }
         }
         Row::Input => draw_input(buf, rect, hollywood, selected, palette, hits),
         Row::Setup => draw_setup(buf, rect, palette),

@@ -93,7 +93,47 @@ fn a_calm_band_still_ends_in_the_input_line() {
     let (waits, rows) = band_rows(&list, &all_live, true);
     assert!(waits.is_empty());
     assert_eq!(rows.len(), 3); // headline, calm, input
-    assert!(matches!(rows[1], Row::Calm(3)));
+    // acme-shop's two open flags are not `attention_user`, so the
+    // sheet lists nothing yet the calm row still names them.
+    assert!(matches!(
+        rows[1],
+        Row::Calm {
+            studios: 3,
+            flags: 2
+        }
+    ));
+}
+
+#[test]
+fn the_calm_row_reports_the_attention_it_does_not_list() {
+    // A `waiting` record that is not `attention_user` never gets a
+    // sheet row, but the studio chip still shows `!N` — the calm row
+    // names it instead of pretending nothing is open.
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["waiting"] = serde_json::json!(2);
+    value["studios"][1]["waiting"] = serde_json::json!(1);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(matches!(
+        rows[1],
+        Row::Calm {
+            studios: 3,
+            flags: 3
+        }
+    ));
+    // An `attention_user` role already lists its record as a prompt
+    // row — it must not count toward the flags.
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["waiting"] = serde_json::json!(1);
+    value["studios"][0]["roles"][0]["attention_user"] = serde_json::json!(true);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    assert_eq!(waits.len(), 1); // the prompt, so no calm row
+    assert!(matches!(rows[1], Row::Wait(0)));
 }
 
 #[test]
