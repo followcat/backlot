@@ -273,7 +273,7 @@ fn render_band(
                 );
                 y += h;
             }
-            Row::Calm(_) | Row::Input | Row::Setup => {
+            Row::Calm { .. } | Row::Input | Row::Setup => {
                 // The scroll marker lives on this row's right edge
                 // when items hid — `2/6` of the sheet showing.
                 let rect = Rect::new(area.x, y, area.width, 1);

@@ -84,8 +84,10 @@ pub(crate) enum Row<'a> {
     Headline(&'a str),
     /// A waiting item — an index into the sheet's `waits`.
     Wait(usize),
-    /// `✓ nothing waiting on you across <S> studios` — the calm row.
-    Calm(usize),
+    /// `✓ nothing waiting on you across <S> studios` — the calm row;
+    /// `flags` is the open attention the sheet does not list (it is
+    /// not the user's), so a `!N` chip never contradicts the row.
+    Calm { studios: usize, flags: usize },
     /// `› <input>` — the `tell hollywood` line.
     Input,
     /// `✦ an agent can watch every studio …` — the bar without an
@@ -98,7 +100,7 @@ impl Row<'_> {
         match self {
             Row::Headline(_) => Target::Headline,
             Row::Wait(i) => waits[*i].target(),
-            Row::Calm(_) => Target::Calm,
+            Row::Calm { .. } => Target::Calm,
             Row::Input => Target::Input,
             Row::Setup => Target::Setup,
         }
@@ -125,7 +127,22 @@ pub(crate) fn band_rows<'a>(
     }
     let waits = waiting_items(machines, status);
     if waits.is_empty() {
-        out.push(Row::Calm(crate::panel::data::studio_count(machines)));
+        // Open attention no sheet row lists (each `attention_user`
+        // role accounts for one record — the rest is the stage's or
+        // a role's own flag): the chips still show it, so the calm
+        // row does too.
+        let flags: usize = machines
+            .iter()
+            .flat_map(|m| m.summary.studios.iter())
+            .map(|s| {
+                let mine = s.roles.iter().filter(|r| r.attention_user).count();
+                (s.waiting as usize).saturating_sub(mine)
+            })
+            .sum();
+        out.push(Row::Calm {
+            studios: crate::panel::data::studio_count(machines),
+            flags,
+        });
     } else {
         out.extend((0..waits.len()).map(Row::Wait));
     }
