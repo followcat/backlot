@@ -43,6 +43,31 @@ effort = "high"
 permission_profile = "worktree"
 "#;
 
+/// The `FAKE_CAST` shape for `cmd` — `effort` is a flag `cmd`
+/// does not carry; the roles keep the required `model` field.
+const CMD_CAST: &str = r#"
+[producer]
+runner = "cmd"
+model = "model-p"
+permission_profile = "standard"
+
+[director]
+runner = "cmd"
+model = "model-d"
+permission_profile = "standard"
+
+[writer]
+runner = "cmd"
+model = "model-w"
+permission_profile = "standard"
+
+[[candidates]]
+name = "actor-a"
+runner = "cmd"
+model = "model-a"
+permission_profile = "worktree"
+"#;
+
 /// A shell where no `BACKLOT_STUDIO` pins the name — `studio new`
 /// and `studio-new` cards name their target with `--studio`.
 fn free(env: &Env) -> Env {
@@ -246,6 +271,100 @@ fn a_configured_runner_path_counts_as_installed() {
         &format!("studio new --title S --repo {repo} --cast {cast} --dry-run --studio other"),
     );
     assert!(msg.contains("not installed"), "{msg}");
+}
+
+/// The picker's offer is launchable (Ux): `cmd` reachable only
+/// through a well-known dir — `runners --json` calls it detected,
+/// the picker offers it — so a cast naming it passes `--dry-run`,
+/// and the real `studio new` writes the `[runner_env]` PATH the
+/// launch needs, exactly like the wizard's own write. The reported
+/// defect: the picker offered `cmd`, the dry-run said "not
+/// installed".
+#[test]
+fn a_known_dir_runner_passes_dry_run_and_gets_written() {
+    let (scratch, env) = scratch();
+    let env = free(&env);
+    let repo = repo(&scratch);
+    // `cmd` under a fake nvm dir: the well-known-dirs probe reaches
+    // it, the inherited PATH does not.
+    let home = scratch.files.join("home");
+    let bin = home.join(".nvm/versions/node/v24.11.1/bin");
+    fs::create_dir_all(&bin).unwrap();
+    let cmd = bin.join("cmd");
+    fs::write(&cmd, "#!/bin/sh\necho 1.2.3\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&cmd, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let mut vars = env.vars.clone();
+    vars.insert("HOME".into(), home.to_string_lossy().into_owned());
+    vars.insert("PATH".into(), "/nonexistent-dir".into());
+    let env = Env { vars };
+    let cast = fixture(&scratch, "cmd.toml", CMD_CAST);
+    // The dry run agrees with the picker's offer — and preps the
+    // machine like the real `new` does: the `[runner_env]` PATH the
+    // launch needs is already written, never studio state.
+    let out = ok(
+        &env,
+        &format!("studio new --title S --repo {repo} --cast {cast} --dry-run --studio cmd-a"),
+    );
+    assert!(out.contains("dry run"), "{out}");
+    let text = fs::read_to_string(scratch.dir.join("config.toml")).unwrap();
+    assert!(text.contains("[runner_env.cmd]"), "{text}");
+    assert!(text.contains(&bin.display().to_string()), "{text}");
+    assert!(!scratch.dir.join("studios").exists());
+    // The real `new` records the studio — the user's own PATH line
+    // is never rewritten.
+    ok(
+        &env,
+        &format!("studio new --title S --repo {repo} --cast {cast} --studio cmd-b"),
+    );
+    let text2 = fs::read_to_string(scratch.dir.join("config.toml")).unwrap();
+    assert_eq!(text, text2, "the write is idempotent");
+}
+
+/// The launch env wins, both directions: a `[runner_env]` PATH
+/// that does not reach the binary refuses — even when the binary
+/// sits on the inherited PATH, because the configured PATH is the
+/// whole launch PATH — and the refusal names the PATH searched.
+#[test]
+fn a_configured_path_that_misses_is_the_refusal() {
+    let (scratch, env) = scratch();
+    let env = free(&env);
+    let repo = repo(&scratch);
+    // `cmd` on the inherited PATH, but the config pins a PATH that
+    // does not reach it — the pin is authoritative.
+    let bin = scratch.files.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let cmd = bin.join("cmd");
+    fs::write(&cmd, "#!/bin/sh\necho 1.2.3\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&cmd, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let pinned = scratch.files.join("pinned");
+    fs::create_dir_all(&pinned).unwrap();
+    fs::write(
+        scratch.dir.join("config.toml"),
+        format!("[runner_env.cmd]\nPATH = \"{}\"\n", pinned.display()),
+    )
+    .unwrap();
+    let mut vars = env.vars.clone();
+    vars.insert("PATH".into(), bin.to_string_lossy().into_owned());
+    let env = Env { vars };
+    let cast = fixture(&scratch, "cmd.toml", CMD_CAST);
+    let msg = refused(
+        &env,
+        &format!("studio new --title S --repo {repo} --cast {cast} --dry-run --studio cmd-c"),
+    );
+    assert!(msg.contains("runner 'cmd' is not installed"), "{msg}");
+    assert!(msg.contains("searched PATH="), "{msg}");
+    assert!(
+        msg.contains(&pinned.display().to_string()),
+        "the refusal names the configured PATH: {msg}"
+    );
 }
 
 #[test]

@@ -2,11 +2,12 @@
 //! itself would refuse — the cast file's own rules — plus what only
 //! a dry run can ask: the name is free, the bound path's shape is
 //! bindable, every named runner is supported and installed, and the
-//! caps can seat the fixed roles. Nothing is recorded; nothing is
-//! created. `hollywood propose studio-new` accepts only a draft that
-//! passes.
+//! caps can seat the fixed roles. Nothing studio-side is recorded;
+//! the `[runner_env]` PATH write a seated runner's launch needs is
+//! machine config — a dry run applies it exactly like `studio new`
+//! does, never overwriting an existing PATH. `hollywood propose
+//! studio-new` accepts only a draft that passes.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::cli::{Env, Fail, check_studio_name};
@@ -52,39 +53,37 @@ pub fn check(
             "[[checks]] need a single git repository — a workspace or no-git studio cannot run them",
         ));
     }
-    // Every runner the draft names must have an adapter and a program
-    // this shell can launch.
-    let mut named = BTreeSet::new();
-    for a in [&cast.producer, &cast.director, &cast.writer] {
-        named.insert(a.runner.as_str());
-    }
-    for c in &cast.candidates {
-        named.insert(c.runner.as_str());
-    }
-    // The PATH a launch would get: a configured
-    // `[runner_env.<runner>]` PATH replaces the inherited one — the
-    // wizard's own write counts as installed (U5).
-    let config_text = std::fs::read_to_string(base.join("config.toml")).unwrap_or_default();
-    for runner in named {
+    // Every runner the draft names must have an adapter — an
+    // unsupported name refuses before any probing or writing.
+    let named = crate::commands::cast_runners(&cast);
+    for runner in &named {
         if !crate::runners::supported(runner) {
             return Err(Fail::refused(format!(
                 "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline)"
             )));
         }
-        let path = crate::config::runner_env_in(&config_text, runner)
-            .ok()
-            .and_then(|env| env.get("PATH").cloned())
-            .or_else(|| env.get("PATH").map(str::to_string));
-        if !crate::runners::installed(runner, path.as_deref()) {
-            let what = if runner == "fake" {
-                "tools/fake-runner.sh"
-            } else {
-                runner
-            };
-            return Err(Fail::refused(format!(
-                "runner '{runner}' is not installed: {what} not found on PATH"
-            )));
-        }
+    }
+    // Seated runners detection reached only outside the inherited
+    // PATH get their `[runner_env]` write here too — a dry run preps
+    // the launch env like the real `new` does; an existing PATH is
+    // never rewritten.
+    let scope = crate::runners::detect::scope(env);
+    let mut stderr = std::io::stderr();
+    crate::wizard_paths::ensure_runner_paths(
+        base,
+        &named,
+        env,
+        &mut |runner| crate::runners::detect::find(runner, &scope),
+        &mut stderr,
+    )?;
+    // The PATH a launch would get resolves every runner the draft
+    // names: a configured `[runner_env.<runner>]` PATH is the whole
+    // launch PATH, and without one detection's order stands — the
+    // picker's "detected" list and this check answer the same way.
+    let config_text = std::fs::read_to_string(base.join("config.toml")).unwrap_or_default();
+    for runner in named {
+        crate::runners::resolve::launch_binary(&runner, &config_text, &scope)
+            .map_err(Fail::refused)?;
     }
     Ok(binding)
 }

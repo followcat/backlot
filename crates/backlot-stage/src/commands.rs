@@ -11,7 +11,7 @@ use backlot_model::state::StudioState;
 use serde::Deserialize;
 
 use crate::args::Cmd;
-use crate::cli::{Caller, Fail};
+use crate::cli::{Caller, Env, Fail};
 use crate::store::{Pending, PendingFile, sanitize};
 
 /// The closure `store::append` calls inside the lock.
@@ -197,6 +197,20 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     Ok(cast)
 }
 
+/// Every runner the cast names — the three fixed roles and each
+/// candidate — deduped for the launch-PATH check and write.
+pub(crate) fn cast_runners(cast: &CastFile) -> std::collections::BTreeSet<String> {
+    [
+        &cast.producer.runner,
+        &cast.director.runner,
+        &cast.writer.runner,
+    ]
+    .into_iter()
+    .chain(cast.candidates.iter().map(|c| &c.runner))
+    .cloned()
+    .collect()
+}
+
 /// Validate a `--cast` file for the client's New Studio dialog —
 /// the same checks `studio new` runs, with the failure's text.
 pub fn validate_cast_file(path: &Path) -> Result<(), String> {
@@ -259,7 +273,8 @@ fn message_cmd(
 
 /// Parse and pre-check the command; the returned closure runs under
 /// the append lock with the replayed state and the seq it will get.
-pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
+/// `env` and `base` serve `studio new`'s `[runner_env]` PATH write.
+pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<PendingBuilder, Fail> {
     let by = caller.by();
     match cmd {
         Cmd::Help(_) => unreachable!("help is answered in cli::run"),
@@ -316,6 +331,23 @@ pub fn build(caller: &Caller, cmd: Cmd) -> Result<PendingBuilder, Fail> {
                 true => crate::paths::check(&repo, init, no_git)?,
                 false => crate::paths::Binding::default(),
             };
+            // The picker's offer must launch: a cast that did not
+            // come through the wizard gets the same `[runner_env]`
+            // PATH write — a runner only the login shell or a
+            // well-known dir reaches launches on its own directory.
+            // Before the repo's own writes, so a failed write leaves
+            // nothing behind.
+            {
+                let scope = crate::runners::detect::scope(env);
+                let mut stderr = std::io::stderr();
+                crate::wizard_paths::ensure_runner_paths(
+                    base,
+                    &cast_runners(&cast),
+                    env,
+                    &mut |runner| crate::runners::detect::find(runner, &scope),
+                    &mut stderr,
+                )?;
+            }
             crate::paths::initialize(&repo, &binding.members, binding.no_git, init)?;
             let members = binding.members.clone();
             Ok(Box::new(move |_, _| {

@@ -19,6 +19,7 @@ mod devin;
 mod fake;
 pub mod opencode;
 mod probe;
+pub(crate) mod resolve;
 pub(crate) mod splice;
 pub(crate) mod work;
 
@@ -411,5 +412,7 @@ mod cursor_tests;
 mod decision_tests;
 #[cfg(test)]
 mod detect_tests;
+#[cfg(test)]
+mod resolve_tests;
 #[cfg(test)]
 mod work_tests;

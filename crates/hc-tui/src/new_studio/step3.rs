@@ -76,9 +76,15 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             let found: Vec<String> = runners
                 .iter()
                 .filter(|r| r.found())
-                .map(|r| match &r.version {
-                    Some(v) => format!("{} {v}", r.runner),
-                    None => r.runner.clone(),
+                .map(|r| {
+                    let base = match &r.version {
+                        Some(v) => format!("{} {v}", r.runner),
+                        None => r.runner.clone(),
+                    };
+                    match r.bin_hint() {
+                        Some(dir) => format!("{base} · {dir}"),
+                        None => base,
+                    }
                 })
                 .collect();
             if found.is_empty() {

@@ -203,6 +203,9 @@ fn guide_cast_file_parses_through_studio_new() {
         task: None,
         session: None,
     };
+    let env = crate::cli::Env {
+        vars: Default::default(),
+    };
     let build = commands::build(
         &caller,
         Cmd::StudioNew {
@@ -215,6 +218,8 @@ fn guide_cast_file_parses_through_studio_new() {
             init: false,
             no_git: false,
         },
+        &env,
+        dir.as_ref(),
     )
     .expect("the guide's cast file fails the `studio new` build");
     let pending = build(&StudioState::default(), 1).unwrap();

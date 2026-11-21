@@ -189,7 +189,7 @@ The draft's runner block comes from a detector that looks past the inherited `PA
 shell's `PATH`, then well-known install dirs (`~/.local/bin`, every `~/.nvm/versions/node/*/bin`
 newest first, Volta, bun, cargo, npm-global, deno, mise and asdf shims, Homebrew and
 `/usr/local/bin`). Each runner is listed with its version and where it was found; a binary only
-the fallback reached is marked `needs PATH`, and accepting the cast writes
+the fallback reached is marked `needs PATH`, and the dry run or the create writes
 `[runner_env.<runner>] PATH = "<binary dir>:<inherited PATH>"` in the state root's `config.toml`
 — the lines are shown before they are written, a missing file is born `0600`, and a PATH you set
 yourself is never rewritten (a warning instead when it still cannot reach the binary).
@@ -471,7 +471,8 @@ let the command write it:
 backlot hollywood setup --runner claude --model claude-sonnet-5-5 --effort high
 ```
 
-`setup` refuses a runner that is not supported or not installed before it touches the file, and
+`setup` refuses a runner that is not supported or not installed — a binary found only past the
+inherited `PATH` earns its `[runner_env]` write here first — before it touches the file, and
 keeps every other line as it was. A running stage starts `bl-hollywood` on its next tick; a
 running client picks the table up at its next start. Until a section exists, the expanded studio
 panel's last row opens the same setup dialog.
@@ -760,10 +761,11 @@ state directory is private, so do not share or publish it.
 
 `config.toml` holds per-runner environment — profiles, proxy settings — as `[runner_env.<runner>]`
 tables. Values reach the role terminal's environment only; they are never written to the ledger,
-the summary or logs. A malformed file raises `config malformed`. The new-studio wizard writes a
-runner's `PATH` here when the cast's binary lives outside the inherited `PATH` (shown before it is
-written, an existing `PATH` never touched); `studio new`'s installed check counts it the way a
-launch would.
+the summary or logs. A malformed file raises `config malformed`. `studio new` — dry run and real,
+cast file or wizard — writes a runner's `PATH` here when the cast's binary lives outside the
+inherited `PATH` (shown before it is written, an existing `PATH` never touched), and the same
+resolver answers the installed check the way a launch would: a runner the picker offers is a
+runner that can seat.
 
 Larger env sets — a company proxy's whole bundle, say — live in dotenv files rather than inline.
 An `agent.env` beside the `config.toml` applies to every runner the moment it exists, and
