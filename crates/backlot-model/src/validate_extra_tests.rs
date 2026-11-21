@@ -351,6 +351,33 @@ fn role_session_needs_a_recorded_role() {
     );
 }
 
+/// `stage.answered` is the stage's own word, on a role the log knows —
+/// an actor key may not record it.
+#[test]
+fn stage_answered_is_the_stages_and_needs_a_role() {
+    let mut base = base_events();
+    base.push(ev(4, "stage", role_started("producer")));
+    let state = replay(&base);
+    let kind = |role: &str| EventKind::StageAnswered {
+        role: role.into(),
+        dialog: FOLDER_TRUST.into(),
+        key: "enter".into(),
+        cwd: "/home/user/acme-shop".into(),
+    };
+    assert_eq!(validate(&state, &new_ev("stage", kind("producer"))), Ok(()));
+    assert_eq!(
+        validate(&state, &new_ev("stage", kind("actor-t9-c1"))),
+        Err(Refusal::NoRole("actor-t9-c1".into()))
+    );
+    assert_eq!(
+        validate(&state, &new_ev("actor-t1-c1", kind("producer"))),
+        Err(Refusal::RoleBound {
+            role: "actor-t1-c1".into(),
+            who: "the stage",
+        })
+    );
+}
+
 #[test]
 fn correction_needs_a_known_target_and_field() {
     let state = running_state();

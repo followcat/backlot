@@ -129,6 +129,7 @@ fn person_of_reads_a_role() {
         attention_user: false,
         attention_seq: None,
         attention_detail: None,
+        stage_answer_ms: None,
     };
     assert_eq!(Person::of(&role("closed")), Person::Closed);
     let mut resumable = role("closed");

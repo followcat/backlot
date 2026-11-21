@@ -126,6 +126,10 @@ pub const REOPENED: &str = "reopened";
 /// restart — and the notice label that tells it so.
 pub const RECOVERED: &str = "recovered";
 
+/// The `dialog` a `stage.answered` names today: Claude Code's
+/// first-use folder-trust dialog.
+pub const FOLDER_TRUST: &str = "folder-trust";
+
 /// A task's display priority (R20, D11): it orders people in the
 /// panel — and, since S9e, the actors a runner cap picks first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -516,6 +520,20 @@ pub enum EventKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// `stage.answered`: the stage answered a dialog on a role's
+    /// screen itself — keys the user never saw, so the ledger names
+    /// who pressed them. Bookkeeping, not an attention: it feeds no
+    /// `!N` count, no digest and no notice, and it needs no clearing.
+    #[serde(rename = "stage.answered")]
+    StageAnswered {
+        role: String,
+        /// Which dialog was answered — [`FOLDER_TRUST`] today.
+        dialog: String,
+        /// The key the answer went out as (`enter` accepts).
+        key: String,
+        /// The working directory the dialog was answered in.
+        cwd: String,
+    },
     /// `role.approval`: a permission-prompt decision (D9). Refused
     /// unless `role` has an open `permission prompt` attention.
     #[serde(rename = "role.approval")]
@@ -597,6 +615,7 @@ impl EventKind {
             EventKind::ReportSent { .. } => "report.sent",
             EventKind::AttentionRaised { .. } => "attention.raised",
             EventKind::AttentionCleared { .. } => "attention.cleared",
+            EventKind::StageAnswered { .. } => "stage.answered",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
             EventKind::Correction { .. } => "correction",

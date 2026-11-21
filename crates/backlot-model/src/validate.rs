@@ -76,6 +76,16 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::NoRole(role.clone()))
             }
         }
+        // `stage.answered` is the same: the stage only answers the
+        // dialogs of roles it started, so the role must exist.
+        EventKind::StageAnswered { role, .. } => {
+            require_studio(state)?;
+            if state.roles.contains_key(role) {
+                Ok(())
+            } else {
+                Err(Refusal::NoRole(role.clone()))
+            }
+        }
         // Reopening takes a closed person with a session to resume —
         // and a free terminal name: a recast reuses `bl-<studio>-<task>`,
         // so a live sibling actor on the same task blocks it.
