@@ -88,6 +88,7 @@ impl App {
                 }
                 if target.is_some() && !self.pane.key(&key) {
                     target = None;
+                    self.dead_pane_handoff();
                 }
                 let resulting = self.key_context();
                 let plan = self.pane_leases.complete_press(

@@ -134,10 +134,17 @@ pub(crate) fn render(
 
     // The last row is the dim shortcuts line — dropped under 8
     // rows. An overlay dock's `Esc` steps back, so its footer says
-    // `esc back` rather than plain `esc` (S2 §1).
+    // `esc back` rather than plain `esc` (S2 §1). A dock holding a
+    // dead pane's hand-off closes outright — its footer says so.
     let shortcuts = area.height >= 8;
     if shortcuts {
-        let esc = if overlay { "esc back" } else { "esc" };
+        let esc = if panel.esc_close {
+            "esc close"
+        } else if overlay {
+            "esc back"
+        } else {
+            "esc"
+        };
         let focused_tiers = [
             format!("↑↓ move  m menu  ? keys  {esc}"),
             format!("↑↓ move  ? keys  {esc}"),
