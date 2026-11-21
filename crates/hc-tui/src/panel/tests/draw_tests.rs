@@ -58,6 +58,7 @@ fn draw(
         &keys(),
         None,
         false,
+        false,
         &Default::default(),
         &palette(),
     );
@@ -399,6 +400,7 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         &keys(),
         None,
         false,
+        false,
         &Default::default(),
         &palette(),
     );
@@ -431,6 +433,7 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
         None,
         &keys(),
         None,
+        false,
         false,
         &Default::default(),
         &palette(),
@@ -519,6 +522,7 @@ fn studios_spanning_machines_name_their_machine() {
         &keys(),
         None,
         false,
+        false,
         &Default::default(),
         &palette(),
     );
@@ -553,6 +557,7 @@ fn one_machine_keeps_the_bare_id_headers() {
         Some(crate::project::LOCAL_LABEL),
         &keys(),
         None,
+        false,
         false,
         &Default::default(),
         &palette(),

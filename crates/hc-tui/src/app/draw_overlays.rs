@@ -138,6 +138,7 @@ pub(super) fn render_overlays_and_cursor(
                 )
             }),
             !app.panel_beside(area.width),
+            app.pane.input_refused(),
             &app.actions,
             &app.shell.palette,
         );

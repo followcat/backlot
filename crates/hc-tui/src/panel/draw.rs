@@ -55,7 +55,11 @@ pub(crate) struct PanelRender {
 /// this core's display name — it labels local studios and local
 /// stage lines when studios span machines. `pending` is the S3
 /// ActionTracker: a row whose target mark is in flight shows the
-/// dim `⠋ <label>` at its right edge (§3.1).
+/// dim `⠋ <label>` at its right edge (§3.1). `overlay` is whether
+/// the dock draws over the pane surface at this width; the footer's
+/// `esc`/`esc back`/`esc close` label reads it together with
+/// `pane_refuses` — the same two facts the Esc key reads
+/// (`App::panel_esc_closes`), so label and key cannot disagree.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render(
     buf: &mut Buffer,
@@ -70,6 +74,7 @@ pub(crate) fn render(
     keys: &StudioKeys,
     sheet: Option<String>,
     overlay: bool,
+    pane_refuses: bool,
     pending: &crate::action::ActionTracker,
     palette: &Palette,
 ) -> PanelRender {
@@ -134,11 +139,14 @@ pub(crate) fn render(
 
     // The last row is the dim shortcuts line — dropped under 8
     // rows. An overlay dock's `Esc` steps back, so its footer says
-    // `esc back` rather than plain `esc` (S2 §1). A dock holding a
-    // dead pane's hand-off closes outright — its footer says so.
+    // `esc back` rather than plain `esc` (S2 §1). Over a pane that
+    // refuses input the keys have nowhere to step back to: the
+    // footer says `esc close` — the same two facts the Esc key
+    // reads (`App::panel_esc_closes`), so label and key cannot
+    // disagree.
     let shortcuts = area.height >= 8;
     if shortcuts {
-        let esc = if panel.esc_close {
+        let esc = if pane_refuses {
             "esc close"
         } else if overlay {
             "esc back"
