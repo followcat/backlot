@@ -75,6 +75,7 @@ prints `already at ledger v1`.
 | `message.dropped` | target seq, reason — `stage` only |
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail, `needs_user` flag on `permission prompt` |
+| `stage.answered` | role, dialog (`folder-trust`), key, working directory — `stage` only |
 | `correction` | target event, changed fields, reason |
 
 `role.lost` means a role recorded as live vanished unexpectedly (its terminal is gone with no
@@ -172,6 +173,14 @@ shows as the user's. The stage sends the runner's approval key while the prompt 
 prompt without a recorded decision, and a decision recorded before the attention does not answer a
 later prompt. A `deny` also owes the denied role a notice naming who denied it — the esc
 interruption alone leaves the role waiting for input.
+
+`stage.answered` is the stage's own bookkeeping for a dialog it answered on a role's screen —
+Claude Code's first-use folder-trust dialog today, with the key that accepted and the working
+directory it was answered in. It is not an attention: it feeds no `!N` count, no digest, no notice
+and nothing clears it; the role's drawer and `backlot status` show when it happened. A dialog that
+shows up outside the role's work area is never answered — it raises a `needs_user` attention
+(`folder trust refused`) instead, and the switch `[stage] answer_trust` in the user config opts
+the whole pass out.
 
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director

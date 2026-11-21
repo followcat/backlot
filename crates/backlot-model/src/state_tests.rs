@@ -388,6 +388,39 @@ fn role_session_sets_the_session_id() {
     );
 }
 
+/// `stage.answered` stamps the role's answer time — bookkeeping,
+/// never an attention record — and an unknown role's line is skipped
+/// on replay the way every total fold skips what it cannot land on.
+#[test]
+fn stage_answered_stamps_the_role_only() {
+    let mut log = base_events();
+    log.push(ev(4, "stage", role_started("producer")));
+    log.push(ev(
+        5,
+        "stage",
+        EventKind::StageAnswered {
+            role: "producer".into(),
+            dialog: FOLDER_TRUST.into(),
+            key: "enter".into(),
+            cwd: "/home/user/acme-shop".into(),
+        },
+    ));
+    log.push(ev(
+        6,
+        "stage",
+        EventKind::StageAnswered {
+            role: "ghost".into(),
+            dialog: FOLDER_TRUST.into(),
+            key: "enter".into(),
+            cwd: "/home/user/acme-shop".into(),
+        },
+    ));
+    let state = replay(&log);
+    assert_eq!(state.roles["producer"].stage_answer_ms, Some(5000));
+    assert!(!state.roles.contains_key("ghost"));
+    assert!(state.attention.is_empty(), "{:?}", state.attention);
+}
+
 /// A later `role.started` (or `role.resumed`) clears the closed state.
 #[test]
 fn a_later_start_clears_the_closed_state() {

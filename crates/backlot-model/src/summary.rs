@@ -202,6 +202,11 @@ pub struct RoleSummary {
     /// tail — the prompt row's second line (S1).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention_detail: Option<String>,
+    /// When the stage last answered a dialog on this role's screen
+    /// (`stage.answered`) — the drawer's `trust answered by stage`
+    /// line. Not an attention: nothing here feeds `!N` or digests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_answer_ms: Option<u64>,
 }
 
 /// The whole document body.
@@ -433,6 +438,7 @@ pub fn summary(
                 attention_user: false,
                 attention_seq: None,
                 attention_detail: None,
+                stage_answer_ms: None,
             });
         }
         let entry = StudioSummary {

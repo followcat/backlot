@@ -126,6 +126,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::RoleResumed { .. }
         | EventKind::RoleClosed { .. }
         | EventKind::RoleSession { .. }
+        | EventKind::StageAnswered { .. }
         | EventKind::MessageDelivered { .. }
         | EventKind::MessageDropped { .. }
         | EventKind::AttentionRaised { .. }

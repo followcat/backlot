@@ -7,9 +7,30 @@ use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
 use super::data::StudioRef;
 
-/// The three drawer lines under a person row: task title and
-/// requirement, the latest delivery/check/rework line, and the
-/// action hints.
+/// `14:02` — a ledger millisecond stamp as the local wall clock's
+/// hour and minute, the tab clock's own format. `None` when the
+/// clock cannot be read; the line then just loses its time.
+fn hh_mm(ms: u64) -> Option<String> {
+    let timestamp: libc::time_t = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
+        return None;
+    }
+    Some(format!("{:02}:{:02}", local.tm_hour, local.tm_min))
+}
+
+/// The dim line a role's drawer carries when the stage answered a
+/// dialog on its screen — `trust answered by stage · 14:02`. Not an
+/// attention: it never sits in a cue line or a `!` count.
+fn stage_answer_line(role: &RoleSummary) -> Option<String> {
+    let ms = role.stage_answer_ms?;
+    let at = hh_mm(ms).map(|t| format!(" · {t}")).unwrap_or_default();
+    Some(format!("trust answered by stage{at}"))
+}
+
+/// The drawer lines under a person row: task title and
+/// requirement, the latest delivery/check/rework line, the stage's
+/// own answer line when it has one, and the action hints.
 pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<String> {
     let task = role
         .task
@@ -50,6 +71,9 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
                 l2 = format!("{l2} · {word}");
             }
             lines.push(l2);
+            if let Some(line) = stage_answer_line(role) {
+                lines.push(line);
+            }
             lines.push("[v] sheet  [m] menu  [+/-]".into());
         }
         None => {
@@ -75,6 +99,9 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
                 .or_else(|| role.doing.clone())
                 .unwrap_or_else(|| role.state.clone());
             lines.push(l2);
+            if let Some(line) = stage_answer_line(role) {
+                lines.push(line);
+            }
             lines.push("[⏎] focus  [p] peek  [m] menu".into());
         }
     }

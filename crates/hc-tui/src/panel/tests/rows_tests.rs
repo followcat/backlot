@@ -2,11 +2,49 @@
 //! stacking when the blocks stop fitting, manual overrides and the
 //! collapsed strip.
 use super::*;
+use crate::panel::data::StudioRef;
+use crate::panel::row_lines::person_drawer;
 use crate::panel::rows::{Target, rows};
 use crate::panel::rows_fit::mark_counts;
 use crate::panel::{Panel, PanelMode};
 use crate::studio::StudioKey;
 use crate::studio::glyphs::Person;
+
+/// The studio ref the drawer-line tests read the fixture through.
+fn studio_ref(summary: &Summary) -> StudioRef<'_> {
+    StudioRef {
+        machine: None,
+        studio: &summary.studios[0],
+    }
+}
+
+/// The stage's own answer rides the role's drawer as one dim line —
+/// `trust answered by stage · 14:02` — and only when one happened.
+/// It is never part of the attention line above it.
+#[test]
+fn a_stage_answered_role_draws_one_extra_dim_drawer_line() {
+    let summary = summary();
+    let s = studio_ref(&summary);
+    let producer = &s.studio.roles[0];
+    let lines = person_drawer(s, producer);
+    assert_eq!(lines.len(), 3, "{lines:?}");
+
+    let mut value = summary_json();
+    value["studios"][0]["roles"][0]["stage_answer_ms"] = serde_json::json!(43_200_000);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let s = studio_ref(&summary);
+    let lines = person_drawer(s, &s.studio.roles[0]);
+    assert_eq!(lines.len(), 4, "{lines:?}");
+    let answer = &lines[2];
+    assert!(answer.starts_with("trust answered by stage · "), "{answer}");
+    let clock = answer.trim_start_matches("trust answered by stage · ");
+    assert_eq!(clock.len(), 5, "HH:MM only: {clock}");
+    assert!(clock[..2].chars().all(|c| c.is_ascii_digit()), "{clock}");
+    assert_eq!(&clock[2..3], ":", "{clock}");
+    assert!(clock[3..].chars().all(|c| c.is_ascii_digit()), "{clock}");
+    // The attention line is untouched — the answer is not a cue.
+    assert!(!lines[1].starts_with('!'), "{:?}", lines);
+}
 
 fn panel(mode: PanelMode) -> Panel {
     Panel {

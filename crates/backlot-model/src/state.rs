@@ -368,6 +368,11 @@ pub struct RoleState {
     /// clears it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovered_seq: Option<u64>,
+    /// When the stage last answered a dialog on this role's screen
+    /// (`stage.answered`) — the drawer's `trust answered by stage`
+    /// line. Bookkeeping only: no attention, nothing to clear.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_answer_ms: Option<u64>,
 }
 
 impl RoleState {

@@ -287,5 +287,6 @@ pub(crate) fn role_summary(
         attention_user: role_attention_user(state, role),
         attention_seq: open.map(|a| a.seq),
         attention_detail: open.map(attention_detail),
+        stage_answer_ms: r.stage_answer_ms,
     })
 }

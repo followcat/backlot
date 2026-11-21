@@ -162,15 +162,17 @@ pub(super) fn fold_count(studio: &StudioSummary) -> usize {
 /// A person's line count: itself plus its cue/failed line, the
 /// closed hint and an open drawer.
 /// A person's line count: itself plus its cue/failed line and an
-/// open drawer.
+/// open drawer — as tall as the drawer's own lines, one more when
+/// the stage's answer line rides along.
 pub(super) fn person_height(studio: StudioRef<'_>, role: &RoleSummary, panel: &Panel) -> usize {
     let mut height = 1 + usize::from(role.attention.is_some() || role.failed.is_some());
-    height += usize::from(
-        panel
-            .drawer
-            .as_ref()
-            .is_some_and(|d| *d == Target::Person(studio.key(), role.role.clone())),
-    ) * 3;
+    if panel
+        .drawer
+        .as_ref()
+        .is_some_and(|d| *d == Target::Person(studio.key(), role.role.clone()))
+    {
+        height += super::row_lines::person_drawer(studio, role).len();
+    }
     height
 }
 

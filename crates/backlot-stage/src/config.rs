@@ -195,6 +195,20 @@ pub struct HollywoodCfg {
     pub default_cast: Option<String>,
 }
 
+/// The `[stage]` section: the stage daemon's own switches. Today only
+/// `answer_trust` — whether the stage answers Claude Code's first-use
+/// folder-trust dialog itself (the default).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StageCfg {
+    pub answer_trust: bool,
+}
+
+impl Default for StageCfg {
+    fn default() -> Self {
+        StageCfg { answer_trust: true }
+    }
+}
+
 /// The user config's path: `$XDG_CONFIG_HOME/backlot/config.toml`,
 /// `~/.config/backlot/config.toml` without it — the file the panel
 /// already reads; `[hollywood]` sits beside its sections.
@@ -281,6 +295,42 @@ pub fn hollywood(env: &BTreeMap<String, String>) -> Result<Option<HollywoodCfg>,
     }
 }
 
+/// The `[stage]` section inside `text`: `answer_trust` is a bool,
+/// absent meaning on — the default keeps the stage's own behavior.
+fn stage_in(text: &str) -> Result<StageCfg, String> {
+    let parsed: toml::Value = toml::from_str(text).map_err(|e| match e.span() {
+        Some(span) => format!("config.toml: malformed at {}", line_col(text, span.start)),
+        None => "config.toml: malformed".to_string(),
+    })?;
+    let Some(section) = parsed.get("stage") else {
+        return Ok(StageCfg::default());
+    };
+    let table = section
+        .as_table()
+        .ok_or_else(|| "config.toml: stage is not a table".to_string())?;
+    let mut cfg = StageCfg::default();
+    match table.get("answer_trust") {
+        None => {}
+        Some(v) => {
+            cfg.answer_trust = v
+                .as_bool()
+                .ok_or_else(|| "config.toml: stage.answer_trust is not a boolean".to_string())?;
+        }
+    }
+    Ok(cfg)
+}
+
+/// Read `[stage]` from the user config; a missing file or section is
+/// the default.
+pub fn stage(env: &BTreeMap<String, String>) -> Result<StageCfg, String> {
+    let path = config_path(env);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => stage_in(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(StageCfg::default()),
+        Err(e) => Err(format!("config.toml: {e}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,6 +386,37 @@ mod tests {
         for text in ["", "# nothing\n", "[other]\nx = \"1\"\n"] {
             assert_eq!(hollywood_in(text).unwrap(), None);
         }
+    }
+
+    /// No `[stage]` section is the default — answering stays on, the
+    /// switch only ever turns the behavior off.
+    #[test]
+    fn absent_stage_section_is_the_default() {
+        for text in ["", "# nothing\n", "[other]\nx = \"1\"\n"] {
+            assert_eq!(stage_in(text).unwrap(), StageCfg::default());
+        }
+    }
+
+    /// `answer_trust` parses as a bool; a non-boolean or a non-table
+    /// `[stage]` is the error, position only.
+    #[test]
+    fn the_stage_section_parses_answer_trust() {
+        assert!(
+            !stage_in("[stage]\nanswer_trust = false\n")
+                .unwrap()
+                .answer_trust
+        );
+        assert!(
+            stage_in("[stage]\nanswer_trust = true\n")
+                .unwrap()
+                .answer_trust
+        );
+        let err = stage_in("[stage]\nanswer_trust = \"no\"\n").unwrap_err();
+        assert!(err.contains("answer_trust"), "{err}");
+        let err = stage_in("[stage\n").unwrap_err();
+        assert!(err.contains("line 1"), "{err}");
+        assert!(stage_in("[stage]\nx = 1\nanswer_trust = 3\n").is_err());
+        assert_eq!(stage_in("[stage]\nx = 1\n").unwrap(), StageCfg::default());
     }
 
     /// A full section parses — runner, model, effort and the two

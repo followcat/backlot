@@ -31,6 +31,17 @@ fn fmt_ms(ms: u64) -> String {
     }
 }
 
+/// `14:02` — a ledger millisecond stamp as the local wall clock's
+/// hour and minute, the same shape the panel's clock keeps.
+fn hh_mm(ms: u64) -> String {
+    let timestamp: libc::time_t = (ms / 1000).min(i64::MAX as u64) as libc::time_t;
+    let mut local: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&timestamp, &mut local) }.is_null() {
+        return "?".into();
+    }
+    format!("{:02}:{:02}", local.tm_hour, local.tm_min)
+}
+
 fn task_line(t: &Task, state: &StudioState, declared: &[CheckDecl], cap: u32) -> String {
     let mut s = format!(
         "  {:<4} {:<10} {:<18}",
@@ -238,6 +249,20 @@ pub fn status(
         let _ = writeln!(out, "  candidates:");
         for c in &studio.candidates {
             let _ = writeln!(out, "    {:<9} {}", c.name, actor_short(&c.actor()));
+        }
+    }
+    // `stage.answered`: the dialogs the stage answered itself —
+    // bookkeeping beside the roles, never in the attention list
+    // below: nothing waits on the user here.
+    let answered: Vec<_> = state
+        .roles
+        .iter()
+        .filter_map(|(role, r)| r.stage_answer_ms.map(|ms| (role, ms)))
+        .collect();
+    if !answered.is_empty() {
+        let _ = writeln!(out, "  trust answered by stage:");
+        for (role, ms) in answered {
+            let _ = writeln!(out, "    {role} at {}", hh_mm(ms));
         }
     }
     if !state.plans.is_empty() {

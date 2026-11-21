@@ -2,7 +2,8 @@
 //! the two things only the live view can show — the session id a
 //! post-launch runner assigned (recorded as `role.session`, or once
 //! after 60 seconds as `attention.raised`), and Claude Code's
-//! first-use folder-trust dialog, answered once per role.
+//! first-use folder-trust dialog, answered as a `stage.answered`
+//! ledger event.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -56,6 +57,10 @@ pub(crate) const TRUST_KEY_GAP_MS: u64 = 1_500;
 pub(crate) const WORK_SAMPLE_EVERY_MS: u64 = 1_000;
 /// The attention reason a missing session id raises.
 pub(crate) const SESSION_NOT_FOUND: &str = "session id not found";
+/// The attention reason when the trust dialog shows but the stage
+/// will not answer it: the dialog is up outside the role's own work
+/// area, and a trust answer outside the repo is the user's call.
+pub(crate) const TRUST_REFUSED: &str = "folder trust refused";
 
 /// Claude Code's first-use folder-trust dialog on a terminal's
 /// screen: the safety-check banner plus the trust option. Anything
@@ -342,7 +347,8 @@ impl Stage {
             // role's first minute only — the window bounds the
             // exchange.
             if can_show_trust(actor) && age_ms < TRUST_WINDOW_MS {
-                self.answer_trust(studio, key, term, &cwd, now_ms).await?;
+                self.answer_trust(dir, studio, key, term, &cwd, state, now_ms)
+                    .await?;
             }
 
             // The work sample: one screen read a second per role,
@@ -444,16 +450,25 @@ impl Stage {
     /// Read the role's screen and, when the trust dialog shows in
     /// the role's own working directory, send the key [`trust_step`]
     /// paces — never before the dialog has settled, never inside
-    /// the gap after the previous key.
-    async fn answer_trust(
+    /// the gap after the previous key. The completed answer is a
+    /// `stage.answered` ledger event, not an attention. A dialog
+    /// that shows up outside the role's own work area is refused:
+    /// that raises one `needs_user` attention instead, so the keys
+    /// the stage will not press stay attributable. `[stage]
+    /// answer_trust` opts the whole pass out — a user who switched
+    /// it off is not read, answered or flagged again.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn answer_trust(
         &self,
+        dir: &Path,
         studio: &str,
         role: &str,
         term: &LiveTerminal,
-        repo: &str,
+        cwd: &str,
+        state: &StudioState,
         now_ms: u64,
     ) -> Result<(), Fail> {
-        if term.cwd != repo {
+        if !self.stage_cfg.get().answer_trust {
             return Ok(());
         }
         let text = match self
@@ -470,6 +485,25 @@ impl Stage {
             Err(CallError::Rpc(_)) => return Ok(()),
             Err(e) => return Err(Fail::call(e)),
         };
+        // The refusal: the stage answers only inside the role's own
+        // work area — the repo or its worktree — so a dialog anywhere
+        // else stays on the user's desk, flagged `needs_user`.
+        if term.cwd != cwd {
+            if trust_dialog(&text) && !crate::act::attention_open(state, role, TRUST_REFUSED) {
+                record(
+                    dir,
+                    EventKind::AttentionRaised {
+                        role: role.into(),
+                        reason: TRUST_REFUSED.into(),
+                        detail: "the trust dialog is up outside the role's work area; \
+                                 the stage does not answer there"
+                            .into(),
+                        needs_user: true,
+                    },
+                )?;
+            }
+            return Ok(());
+        }
         let pair = (studio.to_string(), role.to_string());
         let prev = self.trust_pace.borrow().get(&pair).copied();
         let (pace, key) = trust_step(prev, trust_key(&text), now_ms);
@@ -491,7 +525,23 @@ impl Stage {
             )
             .await;
         match sent {
-            Ok(_) => crate::stagelog::stage_log!("answered folder trust for {role} ({key})"),
+            Ok(_) => {
+                crate::stagelog::stage_log!("answered folder trust for {role} ({key})");
+                // `enter` is the answer — a `stage.answered` event:
+                // bookkeeping that names the keys the user never saw,
+                // feeding no attention channel.
+                if key == "enter" {
+                    record(
+                        dir,
+                        EventKind::StageAnswered {
+                            role: role.into(),
+                            dialog: backlot_model::event::FOLDER_TRUST.into(),
+                            key: key.into(),
+                            cwd: cwd.into(),
+                        },
+                    )?;
+                }
+            }
             Err(CallError::Rpc(_)) => {}
             Err(e) => return Err(Fail::call(e)),
         }

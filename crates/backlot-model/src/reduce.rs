@@ -466,6 +466,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 a.cleared_reason = reason.clone();
             }
         }
+        // A stage answer lands on a role the log already knows —
+        // the stage only answers dialogs of roles it started — and
+        // stamps the role's bookkeeping only: no attention record,
+        // nothing to clear.
+        EventKind::StageAnswered { role, .. } => {
+            if let Some(entry) = state.roles.get_mut(role) {
+                entry.stage_answer_ms = Some(ts);
+            }
+        }
         EventKind::RoleApproval { role, decision } => {
             state.approvals.push(ApprovalRecord {
                 seq,
