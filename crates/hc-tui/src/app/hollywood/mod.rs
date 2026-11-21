@@ -157,13 +157,20 @@ impl App {
     }
 
     /// The selected target's index in `targets` — a vanished target
-    /// reverts to the first frame.
+    /// reverts to the first frame, not the title: the title is only
+    /// the lot's face, and actions meant for the row the user last
+    /// saw highlighted must not land on it silently.
     pub(super) fn hollywood_selected_index(&self, targets: &[Target]) -> usize {
         self.hollywood
             .selected
             .as_ref()
             .and_then(|t| targets.iter().position(|r| r == t))
-            .unwrap_or(0)
+            .unwrap_or_else(|| {
+                targets
+                    .iter()
+                    .position(|t| matches!(t, Target::Studio(_) | Target::NewStudio))
+                    .unwrap_or(0)
+            })
     }
 
     /// How many frames the last draw showed, and how many per row.
