@@ -9,6 +9,24 @@ use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
 use crate::studio::StudioKey;
 
+/// The producer's `MenuRole` for a finished studio's reopen row —
+/// derived from the fixed seat, not a role row, so it holds even when
+/// the document lists no producer (a finished studio lists people as
+/// closed). `resumable` is on: a fixed seat reopens without a saved
+/// session, the same rule a closed-person row uses.
+fn producer_role() -> Option<MenuRole> {
+    Some(MenuRole {
+        role: "producer".into(),
+        name: "producer".into(),
+        state: "closed".into(),
+        resumable: true,
+        task: None,
+        terminal: None,
+        attention_seq: None,
+        attention_user: false,
+    })
+}
+
 /// A role the menu addresses, copied from the summary — the model
 /// owns its facts so a menu outlives the publish it was opened from.
 #[derive(Debug, Clone)]
@@ -209,6 +227,11 @@ pub(crate) struct StudioMenu {
     pub stage_down: bool,
     /// The machine is unreachable — every action dims.
     pub offline: bool,
+    /// `studio.finished` landed: the studio ended and every role was
+    /// released. `ready_to_finish` reads `state: "finished"` too, so
+    /// this is `finished && !ready_to_finish` — the studio menu swaps
+    /// its dead Finish and Focus rows for the producer's reopen.
+    pub finished: bool,
     /// `ready_to_finish` — the Finish item draws teal.
     pub ready: bool,
     /// The requirement version — the Revise title counts `v<n> →
@@ -235,20 +258,28 @@ impl StudioMenu {
     }
 
     /// A studio row's menu (header, block, strip, Call Sheet frame).
+    /// A finished studio carries its producer's `MenuRole`, so the
+    /// reopen row runs the same people-reopen path a closed-person
+    /// row does — the sidebar and the band have no person rows of
+    /// their own, so this menu is that person's only entry.
     pub(crate) fn studio(
         key: &StudioKey,
         summary: &StudioSummary,
         stage_down: bool,
         offline: bool,
     ) -> StudioMenu {
+        // `ready_to_finish` also reads `state: "finished"`; only a
+        // studio past it has really ended.
+        let finished = summary.state == "finished" && !summary.ready_to_finish;
         StudioMenu {
             kind: MenuKind::Studio,
             studio: Some(key.clone()),
-            role: None,
+            role: if finished { producer_role() } else { None },
             task: None,
             card: None,
             stage_down,
             offline,
+            finished,
             ready: summary.ready_to_finish,
             req_version: summary.requirement_version,
             machine: None,
@@ -276,6 +307,7 @@ impl StudioMenu {
             card: None,
             stage_down: false,
             offline,
+            finished: false,
             ready: false,
             req_version: 0,
             machine: None,
@@ -294,6 +326,7 @@ impl StudioMenu {
             card: None,
             stage_down: false,
             offline,
+            finished: false,
             ready: false,
             req_version: 0,
             machine: None,
@@ -312,6 +345,7 @@ impl StudioMenu {
             card: Some(id.to_owned()),
             stage_down: false,
             offline: false,
+            finished: false,
             ready: false,
             req_version: 0,
             machine: None,
@@ -331,6 +365,7 @@ impl StudioMenu {
             card: None,
             stage_down: false,
             offline: false,
+            finished: false,
             ready: false,
             req_version: 0,
             machine: None,
@@ -357,6 +392,7 @@ impl StudioMenu {
             card: None,
             stage_down,
             offline,
+            finished: false,
             ready: false,
             req_version: 0,
             machine,
@@ -375,6 +411,7 @@ impl StudioMenu {
             card: None,
             stage_down: true,
             offline,
+            finished: false,
             ready: false,
             req_version: 0,
             machine: None,
@@ -386,6 +423,9 @@ impl StudioMenu {
 
 mod items;
 
+#[cfg(test)]
+#[path = "finished_tests.rs"]
+mod finished_tests;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;

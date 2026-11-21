@@ -52,6 +52,27 @@ All other keys are eaten while the panel owns focus, except the prefix, which st
 toggle chord — and the four studio keys, which still switch studios and roles with the panel
 focused.
 
+### The studio row's menu
+
+The list follows the studio's own state. A live studio offers `Focus producer`, the sheet, the
+requirement, `Tell producer…`, the stage start/stop, `Finish studio…` and `Actor records` —
+`Finish` enters the confirm even while tasks are open, because the command's own refusal names
+them, and it draws teal when the studio is ready to finish.
+
+A finished studio has no live producer and no second finish, so its list swaps those rows: it
+offers `Reopen producer (o)` in `Finish`'s place and drops `Focus producer` (there is no terminal
+to land on). `Reopen producer` runs the same people-reopen path a closed person's own row uses —
+a fixed seat reopens without a saved session — and it is the one reopen entry a finished studio
+has, since the sidebar and the band show no person rows for it. The rest of the list stands: the
+sheet, the requirement and `Actor records` read the ledger, the stage still starts and stops, and
+`Tell producer…` queues mail for a person reopened later. Individual people's reopens stay on
+their own closed rows, never in this menu.
+
+A ready-but-unfinished studio reads `state: "finished"` in the document too, so the menu keys on
+`ready_to_finish` to keep `Finish` for it. In the band, `f` on a studio's frame arms that finish
+only when the frame's studio is `ready_to_finish`; a finished chip, an open-task studio and the
+new-studio frame leave `f` a no-op.
+
 ## Geometry and `Esc`
 
 The expanded dock's width is fixed by the frame: 38 columns at 160+, 36 at 100+, 28 under.

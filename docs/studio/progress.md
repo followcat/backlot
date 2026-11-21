@@ -1,5 +1,43 @@
 # Studio progress
 
+## Ux: the studio menu follows the studio's state
+
+- Done: the menu the band chip, the dock row and the studio header share
+  (`studio_menu`) had one state-blind list, so a finished studio still
+  offered a dead `Finish studio…` and a `Focus producer` with no terminal,
+  and nothing at studio level reopened it. It now swaps those two rows for
+  `Reopen producer (o)` when `studio.finished` has landed, and keeps the
+  rest — the sheet, the requirement, `Tell producer…`, the stage
+  start/stop and `Actor records`. The reopen runs the existing
+  people-reopen path (`backlot reopen --person producer`), which a fixed
+  seat may take with no saved session, the same rule a closed-person row
+  uses; it is the one reopen entry a finished studio has, since the
+  sidebar and the band carry no person rows for it. Individual reopens
+  stay on their own closed rows and never join this menu. `state` reads
+  `finished` for a `ready_to_finish` studio too, so the model keys on
+  `ready_to_finish` to keep `Finish` (still teal) there; a live studio
+  keeps its list unchanged and `Finish` is never pre-dimmed while tasks
+  are open — the command's own refusal names them. In the band, `f` on a
+  studio frame arms that same finish confirm only when the frame's studio
+  is `ready_to_finish`; a finished chip, an open-task studio and the
+  new-studio frame leave `f` a no-op, so no dead Finish is armed and no
+  `Forget` row exists anywhere.
+- Measured: `studio_menu/finished_tests.rs` covers the finished list
+  (Reopen present, Finish and Focus absent, nothing dimmed, live rows
+  kept), the reopen item being the producer's people-reopen with the `o`
+  hint and surviving a document with no producer row, the offline dim, a
+  ready studio keeping teal Finish and no reopen, a live studio keeping
+  its set with Finish undimmed, unique hints and the absence of `Forget`;
+  `app/mod_tests/hollywood/finish_key.rs` covers `f` arming on a ready
+  frame and staying inert on a finished frame, a live frame and the
+  new-studio frame (a follow-up `y` runs nothing); one app test drives the
+  dock's `m` on a finished studio's row and checks the exact `backlot
+  reopen --person producer --studio acme-shop --as user` argv. `cargo
+  fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo
+  test` pass.
+- Not verified: no real-core or live-session run — the menu, the reopen
+  press and the band key are exercised through the App fixtures only.
+
 ## Ux: finishing a studio clears its windows
 
 - Done: `studio.finished` releases every role and the stop path kills the
