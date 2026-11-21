@@ -193,6 +193,8 @@ mod usage_tests;
 #[cfg(test)]
 mod watch_tests;
 #[cfg(test)]
+mod wizard_paths_tests;
+#[cfg(test)]
 mod wizard_tests;
 #[cfg(test)]
 mod workareas_tests;

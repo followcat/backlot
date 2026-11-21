@@ -182,11 +182,18 @@ fn table_header(text: &str, runner: &str) -> Option<usize> {
 }
 
 /// `config.toml`'s write: a missing file is born `0600`; an
-/// existing one keeps its inode and mode.
+/// existing one keeps its inode and mode. A fresh core has no state
+/// directory yet — `paths::initialize` runs later — so the create
+/// branch makes the parent itself; the update branch must not, an
+/// existing file's directory is there by definition (A10).
 fn write_config(config: &Path, text: &str) -> Result<(), Fail> {
     if config.exists() {
         std::fs::write(config, text).map_err(|e| Fail::refused(format!("config.toml: {e}")))
     } else {
+        if let Some(parent) = config.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Fail::refused(format!("config.toml: {e}")))?;
+        }
         let mut opts = std::fs::OpenOptions::new();
         opts.write(true).create_new(true);
         #[cfg(unix)]
