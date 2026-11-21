@@ -295,12 +295,14 @@ async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
             .as_secs()
             / 60;
         tokio::time::sleep(Duration::from_millis(2200)).await;
+        // Read the counter before the clock: a boundary between the two
+        // then counts in the allowance, never the other way round.
+        let later = counters.draws.load(Ordering::Relaxed);
         let end_minute = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             / 60;
-        let later = counters.draws.load(Ordering::Relaxed);
         drop(ui_tx);
         (settled, later, end_minute - start_minute)
     });
