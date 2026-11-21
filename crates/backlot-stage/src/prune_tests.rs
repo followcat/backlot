@@ -132,7 +132,7 @@ fn safe_and_dry_run_plans() {
     // Dry run: the plan, with no mutating git call.
     let steps = {
         let mut git = git_closure(&mut fake);
-        prune_studio(&mut git, "s", &dir, &repo_s, true, false).unwrap()
+        prune_studio(&mut git, "s", &dir, &repo_s, None, true, false).unwrap()
     };
     assert_eq!(
         steps,
@@ -160,7 +160,7 @@ fn safe_and_dry_run_plans() {
     fake.calls.clear();
     let steps = {
         let mut git = git_closure(&mut fake);
-        prune_studio(&mut git, "s", &dir, &repo_s, false, false).unwrap()
+        prune_studio(&mut git, "s", &dir, &repo_s, None, false, false).unwrap()
     };
     assert_eq!(
         steps,
@@ -200,7 +200,7 @@ fn safe_and_dry_run_plans() {
     fake.calls.clear();
     let steps = {
         let mut git = git_closure(&mut fake);
-        prune_studio(&mut git, "s", &dir, &repo_s, false, true).unwrap()
+        prune_studio(&mut git, "s", &dir, &repo_s, None, false, true).unwrap()
     };
     assert_eq!(
         steps,
@@ -255,7 +255,7 @@ fn missing_trees_are_pruned_and_foreign_refs_left_alone() {
     let repo_s = tree(&repo);
     let steps = {
         let mut git = git_closure(&mut fake);
-        prune_studio(&mut git, "s", &dir, &repo_s, false, false).unwrap()
+        prune_studio(&mut git, "s", &dir, &repo_s, None, false, false).unwrap()
     };
     assert_eq!(
         steps,
@@ -330,7 +330,7 @@ fn a_symlinked_state_dir_still_matches_existing_and_missing_trees() {
             fail_remove: false,
         };
         let mut git = git_closure(&mut fake);
-        prune_studio(&mut git, "s", &dir, &tree(&repo), true, false).unwrap()
+        prune_studio(&mut git, "s", &dir, &tree(&repo), None, true, false).unwrap()
     };
 
     // What CI's macOS run saw: git prints the fully resolved paths.
@@ -376,7 +376,7 @@ fn a_refused_remove_is_kept_with_gits_line() {
     };
     let steps = {
         let mut git = git_closure(&mut fake);
-        prune_studio(&mut git, "s", &dir, &tree(&repo), false, false).unwrap()
+        prune_studio(&mut git, "s", &dir, &tree(&repo), None, false, false).unwrap()
     };
     assert_eq!(
         steps,
@@ -385,4 +385,127 @@ fn a_refused_remove_is_kept_with_gits_line() {
             "fatal: could not remove".into()
         )]
     );
+}
+
+// ---------- which repositories the binding names ----------
+
+use crate::prune::{Plan, plan};
+use backlot_model::state::StudioConfig;
+
+/// A binding over `repo` with `members`, no git, nothing else set.
+fn binding(repo: &str, members: &[&str], no_git: bool) -> StudioConfig {
+    StudioConfig {
+        title: "s".into(),
+        repo: repo.into(),
+        members: members.iter().map(|m| m.to_string()).collect(),
+        no_git,
+        mode: Default::default(),
+        roles: backlot_model::event::RoleConfigs {
+            producer: actor(),
+            director: actor(),
+            writer: actor(),
+        },
+        candidates: Vec::new(),
+        rework_cap: 2,
+        stall_limit_s: 600,
+        nudge_after_s: 180,
+        escalate_after_s: 600,
+        check_env: Vec::new(),
+        checks: Vec::new(),
+        task_budget_s: None,
+        limits: Default::default(),
+    }
+}
+
+fn actor() -> backlot_model::event::ActorIdentity {
+    backlot_model::event::ActorIdentity {
+        runner: "fake".into(),
+        runner_version: None,
+        model: "plain".into(),
+        effort: None,
+        permission_profile: "standard".into(),
+    }
+}
+
+/// A workspace works its recorded members and nothing else: a
+/// repository the parent holds but the ledger never recorded stays
+/// untouched, even when its probe would succeed.
+#[test]
+fn a_workspace_works_exactly_its_recorded_members() {
+    let mut probed = Vec::new();
+    let mut git = |argv: &[&str], _cwd: &str| {
+        let repo = argv[1].to_string();
+        probed.push(repo.clone());
+        Fake::out(0, "true\n", "")
+    };
+    let cfg = binding(
+        "/home/user/ws",
+        &["/home/user/ws/svc-api", "/home/user/ws/svc-web"],
+        false,
+    );
+    let (plan, steps) = plan(&mut git, &cfg);
+    assert_eq!(
+        plan_repos(plan),
+        vec!["/home/user/ws/svc-api", "/home/user/ws/svc-web"]
+    );
+    assert!(steps.is_empty(), "{steps:?}");
+    assert_eq!(
+        probed,
+        vec!["/home/user/ws/svc-api", "/home/user/ws/svc-web"],
+        "the parent was probed or scanned"
+    );
+}
+
+fn plan_repos(plan: Plan) -> Vec<String> {
+    match plan {
+        Plan::Repos(repos) => repos,
+        Plan::NotWorkTree => panic!("expected repos"),
+    }
+}
+
+/// One recorded member that is not a work tree today is kept with its
+/// reason and the others still run — a broken member never strands
+/// the studio's other trees, nor aborts the pass.
+#[test]
+fn a_broken_member_is_kept_while_the_others_run() {
+    let mut git = |argv: &[&str], _cwd: &str| match argv[1] {
+        "/home/user/ws/gone" => Fake::out(128, "", "fatal: not a git repository\n"),
+        _ => Fake::out(0, "true\n", ""),
+    };
+    let cfg = binding(
+        "/home/user/ws",
+        &["/home/user/ws/svc-api", "/home/user/ws/gone"],
+        false,
+    );
+    let (plan, steps) = plan(&mut git, &cfg);
+    assert_eq!(plan_repos(plan), vec!["/home/user/ws/svc-api"]);
+    assert_eq!(
+        steps,
+        vec![Step::KeptRepo("gone".into(), "not a git work tree".into())]
+    );
+}
+
+/// A no-git studio probes nothing: its state prunes and no git runs.
+#[test]
+fn a_no_git_studio_plans_no_repositories() {
+    let mut probes = 0;
+    let mut git = |_: &[&str], _: &str| {
+        probes += 1;
+        Fake::out(1, "", "fatal: not a git repository\n")
+    };
+    let cfg = binding("/home/user/plain", &[], true);
+    let (plan, steps) = plan(&mut git, &cfg);
+    assert!(plan_repos(plan).is_empty());
+    assert!(steps.is_empty(), "{steps:?}");
+    assert_eq!(probes, 0, "a no-git studio probed git");
+}
+
+/// A single repository keeps the one hard refusal when it is not a
+/// work tree — the studio's whole layout lived there.
+#[test]
+fn a_single_repo_that_is_no_work_tree_refuses() {
+    let mut git = |_: &[&str], _: &str| Fake::out(128, "", "fatal: not a git repository\n");
+    let (plan, steps) = plan(&mut git, &binding("/home/user/repo", &[], false));
+    assert!(matches!(plan, Plan::NotWorkTree));
+    assert!(steps.is_empty(), "{steps:?}");
 }

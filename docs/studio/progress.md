@@ -38,6 +38,31 @@
 - Not verified: no real-core or live-session run — the menu, the reopen
   press and the band key are exercised through the App fixtures only.
 
+## Ux: prune follows the studio's binding (2026-11-21)
+
+- Done: `studio prune` no longer refuses a workspace-bound or no-git studio. `prune::plan`
+  reads the recorded `StudioConfig` — the member list `workareas::ensure` lays the trees out
+  from — and never scans the parent directory, so a repository added or moved after
+  `studio new` is left alone. A workspace runs the existing per-repository pass against each
+  recorded member, its worktree under `work/integration/<member>` and its
+  `backlot/<studio>/integration` branch; branch lines name the member
+  (`svc-api: backlot/acme-shop/integration`) since every member shares the branch name. A
+  member that is no longer a work tree is kept with `not a git work tree` and the loop
+  continues — one broken member never aborts the studio or makes `--all-finished` return an
+  error. A no-git studio plans no repositories and reports `nothing to prune`, probing no
+  git. The one hard refusal left is a single-repository binding whose path is no work tree.
+  `prune_render` now holds the output block.
+- Measured: 17 prune tests — the four planning tests over an injected git (recorded members
+  only, broken member kept while others run, no-git probes nothing, single-repo refusal) plus
+  real-git CLI runs: a two-member workspace whose worktrees and branches are all drained, a
+  repository added after the binding left untouched, a broken member kept while the other
+  member prunes, a member failing a git step midway kept while the good one prunes, a no-git
+  studio pruned with no git step, and the original single-repo path unchanged. The workspace
+  dry run was checked read-only against the live repro studio `uxsim-ws`: it now plans both
+  member worktrees and both branches instead of refusing.
+- Open: the real studio's trees were only planned, not pruned — the live repro stays for a
+  later check.
+
 ## Ux: finishing a studio clears its windows
 
 - Done: `studio.finished` releases every role and the stop path kills the
@@ -329,9 +354,9 @@
   only when safe, `--force`, and ledger/reports/messages preservation.
 - Not verified: no real hung git (network file system, credential helper) has been
   reproduced; the 60-second value is untested against a real slow checkout. Producer notices
-  have run on the fake runner only — no real-agent stall or restart. Prune has not run on a
-  real studio's worktrees; `--all-finished` is covered by the fake/CLI paths but not a
-  multi-studio real tree.
+  have run on the fake runner only — no real-agent stall or restart. Prune's workspace and
+  no-git bindings arrived later (see "prune follows the studio's binding"); `--all-finished`
+  is covered by the fake/CLI paths but not a multi-studio real tree.
 
 ## U5: a repository picker and agent detection for the wizard (2026-11-18)
 

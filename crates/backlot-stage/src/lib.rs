@@ -49,6 +49,8 @@ mod permission;
 mod permit;
 mod prompts;
 mod prune;
+mod prune_paths;
+mod prune_render;
 mod range;
 mod ratelimit;
 mod reasons;

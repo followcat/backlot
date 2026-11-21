@@ -347,10 +347,13 @@ re-raise one `stall_limit_s` later.
 - **A finished studio's worktrees and branches are reaped by `backlot studio prune`.** It
   refuses a live studio, keeps a worktree with uncommitted changes unless `--force`, deletes
   `backlot/<studio>/*` branches only through `git branch -d` unless `--force`, and never
-  removes `events.jsonl`, `reports/`, `messages/` or `attention/`. `--dry-run` reads git and
-  prints the plan; `--all-finished` walks every finished studio. The rules run in unit tests
-  against an injected git and one real-git scratch repository; nobody has run it on a real
-  studio's tree yet.
+  removes `events.jsonl`, `reports/`, `messages/` or `attention/`. It follows the binding: a
+  workspace-bound studio prunes each member the ledger recorded (a member gone or broken is
+  kept with its reason while the others run), and a no-git studio prunes its state with no
+  git step at all. `--dry-run` reads git and prints the plan; `--all-finished` walks every
+  finished studio. The rules run in unit tests against an injected git and real-git scratch
+  repositories — single repository, workspace and no-git — and the workspace dry run was
+  checked against a real finished workspace studio.
 - **Panel rows name the person, not the task.** Several closed rows for one person look alike in
   a narrow panel.
 - **`backlot records` is the factual record** — deliveries, wall time, defects per actor
