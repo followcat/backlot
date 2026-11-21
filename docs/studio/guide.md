@@ -695,6 +695,15 @@ removed, pruned, deleted or kept. The ledger, `reports/`, `messages/` and `atten
 `backlot records` and `backlot status` keep the full history. To remove that history too,
 delete the studio's directory under `studios/` yourself.
 
+Which repositories prune works follows the binding (D4, D10). A workspace-bound studio is
+pruned member by member, over the member list the ledger recorded at `studio new` — never a
+scan of the parent directory, so a repository added later is left alone. A member's lines name
+it (`svc-api: backlot/acme-shop/integration`); a member that is no longer a work tree is kept
+with that reason and the other members still prune, so one broken member never strands the
+rest. A no-git studio has no worktrees or studio branches: it reports `nothing to prune` and
+touches no git. Only a single-repository studio bound to a path that is no work tree is
+refused.
+
 The ledger itself is versioned — every event line carries `v: 1`. Logs written before
 versioning read fine unversioned, but you can stamp them explicitly:
 

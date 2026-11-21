@@ -3,6 +3,12 @@
 //! and `attention/` are never touched — `backlot records` and
 //! `backlot status` keep the full history.
 //!
+//! Which repositories hold those trees follows the binding (D4, D10):
+//! a single-repository studio binds a work tree, a workspace binds a
+//! parent directory whose member repositories hold the per-member
+//! `work/integration/<member>` trees, and a no-git studio has neither
+//! — it prunes with no git step at all rather than refusing.
+//!
 //! Safety first: a live studio is refused, a clean worktree goes with
 //! `git worktree remove`, a dirty one is kept unless `--force`, and a
 //! branch is deleted with `git branch -d` (never `-D` without
@@ -10,10 +16,12 @@
 //! reads git and prints the plan without changing anything.
 
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use backlot_model::state::StudioConfig;
+
 use crate::cli::Fail;
+use crate::prune_paths::{shown, under};
 use crate::store;
 use crate::workareas::{GitRun, err_line, real_git};
 
@@ -25,6 +33,9 @@ pub(crate) enum Step {
     KeptWorktree(String, String),
     DeletedBranch(String),
     KeptBranch(String, String),
+    /// A recorded member repository git could not look at — kept
+    /// while the other members still run.
+    KeptRepo(String, String),
 }
 
 /// The parsed `worktree list --porcelain` rows: path and branch.
@@ -54,81 +65,87 @@ fn parse_worktrees(list: &str) -> Vec<(String, Option<String>)> {
     out
 }
 
-/// Canonicalize `path`, resolving a symlinked parent even when the leaf
-/// itself is gone. `Path::canonicalize` refuses a missing leaf, so a
-/// pruned worktree folder falls back to its parent plus file name.
-fn canonicalize_with_missing_leaf(path: &Path) -> Option<PathBuf> {
-    if let Ok(p) = path.canonicalize() {
-        return Some(p);
-    }
-    let parent = path.parent()?;
-    let name = path.file_name()?;
-    Some(parent.canonicalize().ok()?.join(name))
-}
-
-/// `true` when `path` sits strictly under `root`, with symlinked state
-/// directories resolved on both sides.
-fn under(path: &Path, root: &Path) -> bool {
-    let strictly_under = |p: &Path, r: &Path| p != r && p.starts_with(r);
-    if strictly_under(path, root) {
-        return true;
-    }
-    // macOS resolves `/var` to `/private/var`: git prints the real
-    // path while the state dir (and a worktree whose folder is gone)
-    // still carries the symlink. Compare the raw path against the
-    // canonical root first, so a deleted tree still matches.
-    if let Some(canon_root) = canonicalize_with_missing_leaf(root) {
-        if strictly_under(path, &canon_root) {
-            return true;
-        }
-        if let Some(canon_path) = canonicalize_with_missing_leaf(path) {
-            return strictly_under(&canon_path, &canon_root);
-        }
-    }
-    false
-}
-
-/// A path as it reads inside the studio directory when it can —
-/// trying the spelled directory, its canonical form (macOS
-/// `/var` → `/private/var`), and the canonical path as a last resort.
-fn shown(path: &Path, dir: &Path) -> String {
-    if let Ok(rel) = path.strip_prefix(dir) {
-        return rel.display().to_string();
-    }
-    if let Some(canon_dir) = canonicalize_with_missing_leaf(dir) {
-        if let Ok(rel) = path.strip_prefix(&canon_dir) {
-            return rel.display().to_string();
-        }
-        if let Some(canon_path) = canonicalize_with_missing_leaf(path)
-            && let Ok(rel) = canon_path.strip_prefix(&canon_dir)
-        {
-            return rel.display().to_string();
-        }
-    }
-    path.display().to_string()
-}
-
 /// The `backlot/<studio>/` branch prefix — the only branches prune may
 /// ever touch.
 fn branch_prefix(studio: &str) -> String {
     format!("backlot/{studio}/")
 }
 
+/// What the binding says prune may work, and what it must report
+/// instead. Members come from the ledger's recorded list — the same
+/// list `workareas::ensure` lays the trees out from — never a scan of
+/// the parent directory, so a repository added or moved after the
+/// binding is not mistaken for one of this studio's.
+///
+/// - no-git: no repositories at all; the pass prunes its state only.
+/// - workspace: every recorded member is probed on its own. One that
+///   is not a work tree today is reported kept and the others still
+///   run — one broken member never strands the studio's other trees.
+/// - single repository, not a work tree: the one hard refusal, since
+///   the studio's whole layout lived there.
+pub(crate) enum Plan {
+    /// The repositories to work, in recorded order.
+    Repos(Vec<String>),
+    /// A single-repository binding whose repo is not a work tree.
+    NotWorkTree,
+}
+
+pub(crate) fn plan(git: &mut GitRun<'_>, cfg: &StudioConfig) -> (Plan, Vec<Step>) {
+    if cfg.no_git {
+        return (Plan::Repos(Vec::new()), Vec::new());
+    }
+    let is_work_tree = |git: &mut GitRun<'_>, repo: &str| {
+        let probe = git(&["-C", repo, "rev-parse", "--is-inside-work-tree"], repo);
+        probe.code == 0 && probe.stdout.trim() == "true"
+    };
+    if cfg.members.is_empty() {
+        return match is_work_tree(git, &cfg.repo) {
+            true => (Plan::Repos(vec![cfg.repo.clone()]), Vec::new()),
+            false => (Plan::NotWorkTree, Vec::new()),
+        };
+    }
+    let mut repos = Vec::new();
+    let mut steps = Vec::new();
+    for member in &cfg.members {
+        if is_work_tree(git, member) {
+            repos.push(member.clone());
+        } else {
+            steps.push(Step::KeptRepo(
+                member_leaf(member),
+                "not a git work tree".into(),
+            ));
+        }
+    }
+    (Plan::Repos(repos), steps)
+}
+
+/// A member repository's leaf name — how the output names it, the
+/// same leaf the per-member worktree directory carries.
+fn member_leaf(member: &str) -> String {
+    Path::new(member)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| member.to_string())
+}
+
 /// Work the finished studio's `work/` trees first, then its branches.
 /// `git` is injected so the planning tests stay fast and pure; the
-/// caller passes [`real_git`] in production.
+/// caller passes [`real_git`] in production. `branch_label` names the
+/// repository in branch lines when a workspace has several — the
+/// branch name alone cannot say which member lost it.
 pub(crate) fn prune_studio(
     git: &mut GitRun<'_>,
     studio: &str,
     dir: &Path,
     repo: &str,
+    branch_label: Option<&str>,
     dry_run: bool,
     force: bool,
 ) -> Result<Vec<Step>, Fail> {
     let list = git(&["-C", repo, "worktree", "list", "--porcelain"], repo);
     if list.code != 0 {
         return Err(Fail::refused(format!(
-            "studio '{studio}': git worktree list: {}",
+            "studio '{studio}': {repo}: git worktree list: {}",
             err_line(&list)
         )));
     }
@@ -227,6 +244,13 @@ pub(crate) fn prune_studio(
         )));
     }
     let prefix = branch_prefix(studio);
+    // A workspace's members all share one branch name, so each
+    // member's lines carry it, `<member>: backlot/<studio>/…`; a
+    // single repository keeps the bare name.
+    let name = |b: &str| match branch_label {
+        Some(leaf) => format!("{leaf}: {b}"),
+        None => b.to_string(),
+    };
     for branch in branches
         .stdout
         .lines()
@@ -235,7 +259,7 @@ pub(crate) fn prune_studio(
     {
         if dry_run {
             if kept_branches.contains(branch) {
-                steps.push(Step::KeptBranch(branch.to_string(), "worktree kept".into()));
+                steps.push(Step::KeptBranch(name(branch), "worktree kept".into()));
                 continue;
             }
             let merged = git(
@@ -245,59 +269,21 @@ pub(crate) fn prune_studio(
             .code
                 == 0;
             if merged || force {
-                steps.push(Step::DeletedBranch(branch.to_string()));
+                steps.push(Step::DeletedBranch(name(branch)));
             } else {
-                steps.push(Step::KeptBranch(branch.to_string(), "not merged".into()));
+                steps.push(Step::KeptBranch(name(branch), "not merged".into()));
             }
             continue;
         }
         let flag = if force { "-D" } else { "-d" };
         let out = git(&["-C", repo, "branch", flag, branch], repo);
         if out.code == 0 {
-            steps.push(Step::DeletedBranch(branch.to_string()));
+            steps.push(Step::DeletedBranch(name(branch)));
         } else {
-            steps.push(Step::KeptBranch(branch.to_string(), err_line(&out)));
+            steps.push(Step::KeptBranch(name(branch), err_line(&out)));
         }
     }
     Ok(steps)
-}
-
-/// The human-readable plan/outcome for one studio.
-fn render(studio: &str, finished: bool, steps: &[Step], dry_run: bool) -> String {
-    let mut out = String::new();
-    let state = if finished { "finished" } else { "live" };
-    if dry_run {
-        let _ = writeln!(out, "dry run: studio {studio} ({state}): prune");
-    } else {
-        let _ = writeln!(out, "studio {studio} ({state}): prune");
-    }
-    if steps.is_empty() {
-        let _ = writeln!(out, "  nothing to prune");
-        return out;
-    }
-    for step in steps {
-        match step {
-            Step::RemovedWorktree(p) => {
-                let verb = if dry_run { "would remove" } else { "removed" };
-                let _ = writeln!(out, "  {verb} worktree {p}");
-            }
-            Step::PrunedWorktree(p) => {
-                let verb = if dry_run { "would prune" } else { "pruned" };
-                let _ = writeln!(out, "  {verb} missing worktree {p}");
-            }
-            Step::KeptWorktree(p, why) => {
-                let _ = writeln!(out, "  kept worktree {p} — {why}");
-            }
-            Step::DeletedBranch(b) => {
-                let verb = if dry_run { "would delete" } else { "deleted" };
-                let _ = writeln!(out, "  {verb} branch {b}");
-            }
-            Step::KeptBranch(b, why) => {
-                let _ = writeln!(out, "  kept branch {b} — {why}");
-            }
-        }
-    }
-    out
 }
 
 /// `backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]`.
@@ -339,15 +325,43 @@ pub(crate) fn run(
         let Some(cfg) = &state.studio else {
             return Err(Fail::refused(format!("studio '{name}' has no events")));
         };
-        let repo = cfg.repo.clone();
-        let probe = git(&["-C", &repo, "rev-parse", "--is-inside-work-tree"], &repo);
-        if probe.code != 0 || probe.stdout.trim() != "true" {
-            return Err(Fail::refused(format!(
-                "studio '{name}': {repo} is not a git work tree"
-            )));
+        // Which repositories hold this studio's trees. A no-git
+        // binding has none and a broken member is reported kept, so
+        // either way the pass still reaches the state records; only
+        // a single-repository binding with no work tree refuses.
+        let (plan, mut steps) = plan(&mut git, cfg);
+        let repos = match plan {
+            Plan::NotWorkTree => {
+                return Err(Fail::refused(format!(
+                    "studio '{name}': {} is not a git work tree",
+                    cfg.repo
+                )));
+            }
+            Plan::Repos(repos) => repos,
+        };
+        for repo in repos {
+            // A workspace names the member in its branch lines; a
+            // single repository needs no such qualifier.
+            let label = (!cfg.members.is_empty()).then(|| member_leaf(&repo));
+            match prune_studio(
+                &mut git,
+                &name,
+                &dir,
+                &repo,
+                label.as_deref(),
+                dry_run,
+                force,
+            ) {
+                Ok(more) => steps.extend(more),
+                // A member that passes its probe but then refuses a
+                // git step is kept as a whole and the others still
+                // run: one member's trouble never strands the studio.
+                // A single repository keeps its failure, as before.
+                Err(e) if cfg.members.is_empty() => return Err(e),
+                Err(e) => steps.push(Step::KeptRepo(member_leaf(&repo), e.message().to_string())),
+            }
         }
-        let steps = prune_studio(&mut git, &name, &dir, &repo, dry_run, force)?;
-        blocks.push(render(&name, true, &steps, dry_run));
+        blocks.push(crate::prune_render::render(&name, true, &steps, dry_run));
     }
     if blocks.is_empty() {
         return Ok("no finished studios to prune\n".into());
