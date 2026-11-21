@@ -89,7 +89,9 @@ impl App {
         let previous_workspace = self.projection.snapshot.focused_workspace_id.clone();
         // If the focused terminal fell out of the projected panes,
         // prefer a sibling in the same tab, then the same workspace —
-        // never a global first pane that could ack another space's work.
+        // never a global first pane that could ack another space's work
+        // and never the client's own host, whose attach the core
+        // refuses.
         // Resolve it before the single finalizing refresh below; the
         // provisional `project` runs through the incremental cache so an
         // unchanged endpoint never re-reads its structure.
@@ -107,13 +109,14 @@ impl App {
             };
             let fallback = panes
                 .iter()
-                .find(|p| previous_tab.as_ref() == Some(&p.tab_id))
+                .find(|p| previous_tab.as_ref() == Some(&p.tab_id) && !self.is_own_pane(&p.pane_id))
                 .or_else(|| {
-                    panes
-                        .iter()
-                        .find(|p| previous_workspace.as_ref() == Some(&p.workspace_id))
+                    panes.iter().find(|p| {
+                        previous_workspace.as_ref() == Some(&p.workspace_id)
+                            && !self.is_own_pane(&p.pane_id)
+                    })
                 })
-                .or_else(|| panes.first())
+                .or_else(|| panes.iter().find(|p| !self.is_own_pane(&p.pane_id)))
                 .map(|p| p.pane_id.clone());
             if fallback != self.focused {
                 self.focused = fallback;

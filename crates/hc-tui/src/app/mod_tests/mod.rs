@@ -3,6 +3,7 @@ mod argv_hygiene;
 mod cases_1;
 mod cases_2;
 mod chrome_marks;
+mod closing;
 mod endpoint_nav;
 mod endpoint_nav_b;
 mod float_draw;

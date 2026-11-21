@@ -15,6 +15,20 @@ fn inferred_appearance(color: hc_vt::Rgb) -> HostAppearance {
 }
 
 impl App {
+    /// `cli::run` reports the hc terminal hosting this client
+    /// (`self_caller`, verified against the endpoint socket). `None`
+    /// on a remote endpoint or a foreign session.
+    pub(crate) fn set_own_pane_id(&mut self, own: Option<String>) {
+        self.own_pane_id = own;
+    }
+
+    /// `true` when `id` is the pane this client runs inside: the core
+    /// refuses a terminal attaching to itself, so "which pane next"
+    /// picks skip it — it stays reachable as an explicit target.
+    pub(super) fn is_own_pane(&self, id: &str) -> bool {
+        self.own_pane_id.as_deref() == Some(id)
+    }
+
     fn apply_appearance(&mut self, appearance: HostAppearance) {
         self.host_appearance = Some(appearance);
         if self.shell.theme_runtime.auto_switch {

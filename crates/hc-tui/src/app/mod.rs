@@ -195,6 +195,11 @@ pub struct App {
     prefix: input::Prefix,
     mode: Mode,
     keyboard_locked: bool,
+    /// The hc terminal this client runs inside, verified by cli — never
+    /// an automatic "which pane next" candidate: the core refuses a
+    /// terminal attaching to itself, so landing on it only paints the
+    /// refused card. `None` on a remote endpoint or a foreign session.
+    own_pane_id: Option<String>,
     previous_pane: Option<String>,
     last_focus: Option<String>,
     dialog: Option<dialogs::Dialog>,
