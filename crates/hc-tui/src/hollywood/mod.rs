@@ -24,6 +24,9 @@ mod title;
 mod view;
 
 pub(crate) use draw::{HollywoodRender, render};
+// The footer's own tests compare the mask against the dispatch.
+#[cfg(test)]
+pub(crate) use hints::for_row;
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_height;
 pub(crate) use rows::{Target, band_rows, frames, on_set};

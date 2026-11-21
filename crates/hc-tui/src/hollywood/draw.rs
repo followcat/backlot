@@ -320,7 +320,7 @@ fn render_band(
     ));
     if plan.hints {
         let usable = (area.width as usize).saturating_sub((MARGIN * 2) as usize);
-        let tier = hints::for_row(hollywood.selected.as_ref(), &waits, usable);
+        let tier = hints::for_row(hollywood.selected.as_ref(), &waits, opts.agent, usable);
         let w = tier.chars().count() as u16;
         let x = (area.x + area.width.saturating_sub(MARGIN))
             .saturating_sub(w)
