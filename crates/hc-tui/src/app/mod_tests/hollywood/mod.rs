@@ -8,6 +8,7 @@ mod cursor;
 mod entry;
 mod finish_key;
 mod keys;
+mod menu;
 mod mouse;
 mod opening;
 mod setup;
