@@ -243,6 +243,11 @@ pub(crate) struct Stage {
     /// The `[hollywood]` config the tick last read — the summary's
     /// runner/model/effort line, and absent means no Hollywood at all.
     pub(crate) hcfg: std::cell::RefCell<Option<config::HollywoodCfg>>,
+    /// The `[stage]` config the tick last read — the stage daemon's
+    /// own switches. A malformed file logs once and keeps the default
+    /// (`answer_trust` on): a config typo never silently disables the
+    /// disclosure the wizard promised.
+    pub(crate) stage_cfg: std::cell::Cell<config::StageCfg>,
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
@@ -266,12 +271,28 @@ impl Stage {
         }
     }
 
+    /// Re-read the user config's `[stage]` section for this tick —
+    /// the same file the launch env and `[hollywood]` come from. An
+    /// error logs once and the last read stands, so a broken edit
+    /// never flips the stage's own switches silently.
+    fn read_stage_config(&self) {
+        match config::stage(&self.env_vars) {
+            Ok(cfg) => self.stage_cfg.set(cfg),
+            Err(e) => {
+                if self.hlogged.borrow_mut().insert(e.clone()) {
+                    crate::stagelog::stage_log!("{e}");
+                }
+            }
+        }
+    }
+
     /// Reload changed ledgers, reconcile each studio and act. Each
     /// studio sees only the terminals its label owns — the name is
     /// never enough to stop, adopt or drop. One studio's bad ledger
     /// or failing pass logs and skips it; the others carry on, and
     /// only a lost core (`Fail::Core`) ends the stage.
     pub(crate) async fn tick(&mut self, live: &Inventory) -> Result<(), Fail> {
+        self.read_stage_config();
         for name in store::studios(&self.base)
             .map_err(|e| Fail::refused(format!("cannot read {}: {e}", self.base.display())))?
         {
@@ -618,6 +639,7 @@ impl Stage {
             hstate: std::cell::RefCell::new(Default::default()),
             hseen: std::cell::RefCell::new((0, 0)),
             hcfg: std::cell::RefCell::new(None),
+            stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
             labels_ok: std::cell::Cell::new(true),
             // A test stage is conservative: born at 0, it never reads
@@ -707,6 +729,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hstate: std::cell::RefCell::new(Default::default()),
         hseen: std::cell::RefCell::new((0, 0)),
         hcfg: std::cell::RefCell::new(None),
+        stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
         labels_ok: std::cell::Cell::new(true),
         started_ms: SystemTime::now()

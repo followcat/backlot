@@ -240,11 +240,11 @@ async fn real_hollywood_oversees_two_studios() {
     assert!(!env_text.contains("BACKLOT_STUDIO="), "{env_text}");
 
     // Both studios come up; each producer's prompt is one notice to
-    // Hollywood naming its studio. The trust-model producers also
-    // earn the stage's informational `folder trusted` attention, so
-    // hollywood's notices go out in digest batches — the prompt
-    // file is real (`wait_hmessage`), and the send that carried it,
-    // solo or inside a digest, is the `message.delivered` record.
+    // Hollywood naming its studio. The stage's trust answer is no
+    // attention — it feeds no notice and no digest — so a prompt
+    // send is solo unless another notice happens to share its pass.
+    // Either way the `message.delivered` record targeting the send's
+    // seq is the delivery (D20), which `wait_hdelivered` waits on.
     for s in ["acme-shop", "acme"] {
         let p = wait_terminal(&client, &format!("bl-{s}-producer")).await;
         wait_read(&client, &p.address, &format!("of {s}")).await;

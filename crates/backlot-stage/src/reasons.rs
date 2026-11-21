@@ -14,7 +14,7 @@ pub use crate::runners::cursor::{CURSOR_DIR_OPEN, CURSOR_PREP_FAILED};
 #[cfg(test)]
 pub use crate::runners::{CONFIG_MALFORMED, PROFILE_NOT_SUPPORTED, RUNNER_NOT_SUPPORTED};
 #[cfg(test)]
-pub(crate) use crate::watch::{FOLDER_TRUSTED, SESSION_NOT_FOUND};
+pub(crate) use crate::watch::{SESSION_NOT_FOUND, TRUST_REFUSED};
 #[cfg(test)]
 pub use backlot_model::event::{CANNOT_RESUME, PERMISSION_PROMPT, STALLED};
 
@@ -39,7 +39,7 @@ pub const ALL: &[&str] = &[
     STALLED,
     CANNOT_RESUME,
     SESSION_NOT_FOUND,
-    FOLDER_TRUSTED,
+    TRUST_REFUSED,
     LAUNCH_REFUSED,
     NOT_A_GIT_REPO,
     WORK_AREA_FAILED,

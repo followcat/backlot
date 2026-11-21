@@ -137,8 +137,9 @@ async fn real_stage_loop() {
     // inside that window: `❯ No` sits past the settle, `❯ Yes` past
     // the key gap, and only then does the runner announce itself.
     // The keys are a terminal interaction, but the answer itself is
-    // attributable: one informational `folder trusted` attention,
-    // never raised twice for the same role.
+    // attributable: one `stage.answered` ledger event — bookkeeping,
+    // not an attention, so no `!N` count and no digest item ever
+    // carries it.
     let screen = wait_read(&client, "bl-acme-shop-producer", "❯ No, exit").await;
     assert!(screen.contains("Quick safety check"), "{screen}");
     wait_read(
@@ -160,20 +161,43 @@ async fn real_stage_loop() {
         "a key reached the dialog inside its unsafe first second: {}",
         fs::read_to_string(state.join("fake-early-keys")).unwrap_or_default()
     );
-    let raised = wait_event(&state, "attention.raised", "producer");
-    assert_eq!(raised["reason"], "folder trusted", "{raised}");
-    // `needs_user` serializes only when set — informational.
-    assert!(raised.get("needs_user").is_none(), "{raised}");
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    let answered = wait_event(&state, "stage.answered", "producer");
+    assert_eq!(answered["dialog"], "folder-trust", "{answered}");
+    assert_eq!(answered["key"], "enter", "{answered}");
     assert_eq!(
-        ledger(&state)
-            .iter()
-            .filter(|e| e["kind"] == "attention.raised" && e["reason"] == "folder trusted")
+        answered["cwd"].as_str(),
+        Some(scratch.work.to_str().unwrap()),
+        "{answered}"
+    );
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    // Exactly one answer event, and no trust attention anywhere —
+    // the answer feeds no `!N` chip, no digest and no notice.
+    let log = ledger(&state);
+    assert_eq!(
+        log.iter()
+            .filter(|e| e["kind"] == "stage.answered" && e["role"] == "producer")
             .count(),
         1,
-        "the trust answer raised its attention twice: {:?}",
-        ledger(&state)
+        "the trust answer recorded twice: {log:?}"
     );
+    assert!(
+        !log.iter().any(|e| e["kind"] == "attention.raised"
+            && e["reason"]
+                .as_str()
+                .is_some_and(|r| r.contains("trust") || r.contains("folder"))),
+        "the trust answer raised an attention: {log:?}"
+    );
+    // `backlot status` shows it where the roles live, outside the
+    // attention list.
+    let out = bl(&scratch, &state, "status");
+    assert!(out.contains("trust answered by stage"), "{out}");
+    assert!(out.contains("producer at "), "{out}");
+    if let Some(section) = out.split("  attention:").nth(1) {
+        assert!(
+            !section.contains("trust answered"),
+            "the answer leaked into the attention list: {out}"
+        );
+    }
 
     // The writer is wanted between plan request and dispatch.
     bl(
