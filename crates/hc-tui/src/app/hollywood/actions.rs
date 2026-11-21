@@ -62,6 +62,14 @@ impl App {
         self.run_action(studio_cmds::stage_start(machine));
     }
 
+    /// Whether the studio `key` names is `ready_to_finish` — the one
+    /// state a frame's `f` arms the finish confirm on. A document that
+    /// no longer lists it (a publish raced the press) reads not ready.
+    fn hollywood_studio_ready(&self, key: &StudioKey) -> bool {
+        let machines = self.panel_summaries();
+        crate::panel::data::studio(&machines, key).is_some_and(|s| s.studio.ready_to_finish)
+    }
+
     /// `f` on a ready row: `backlot studio finish`, on the studio's
     /// own machine, after the inline confirm answers `y`.
     fn hollywood_finish(&mut self, key: &StudioKey) {
@@ -113,6 +121,16 @@ impl App {
             (Some(Target::Card(id)), KeyCode::Char('s')) => self.hollywood_card_show(&id),
             (Some(Target::Ready(key)), KeyCode::Char('f')) => {
                 self.hollywood.confirm = Some(Confirm::Finish(key));
+            }
+            // A studio frame's `f`: arm the same finish the READY row
+            // arms, but only on the studio that is `ready_to_finish`.
+            // A frame and its READY row are one studio, so the chips
+            // and the frame answer alike; a finished chip, an
+            // open-task studio and the new-studio frame stay no-ops.
+            (Some(Target::Studio(key)), KeyCode::Char('f')) => {
+                if self.hollywood_studio_ready(&key) {
+                    self.hollywood.confirm = Some(Confirm::Finish(key));
+                }
             }
             _ => return false,
         }

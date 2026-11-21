@@ -61,6 +61,9 @@ impl StudioMenu {
         &self,
         item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
     ) -> Vec<StudioItem> {
+        if self.finished {
+            return self.finished_studio_items(item);
+        }
         let mut out = vec![
             item(
                 "Focus producer".to_owned(),
@@ -92,9 +95,65 @@ impl StudioMenu {
                 StudioAct::StageStop,
             ));
         }
+        // A live studio keeps Finish even with tasks open: the command
+        // supplies the refusal reason, so the row is never pre-dimmed.
         let mut finish = item("Finish studio…".to_owned(), Some('f'), StudioAct::Finish);
         finish.teal = self.ready;
         out.push(finish);
+        out.push(item(
+            "Actor records".to_owned(),
+            Some('a'),
+            StudioAct::Records,
+        ));
+        out
+    }
+
+    /// A finished studio's rows: the studio ended and every role was
+    /// released, so a dead `Finish studio…` is gone (a dimmed row
+    /// looks pressable but rejects "already finished") and
+    /// `Focus producer` has no terminal to land on. `Reopen producer`
+    /// takes Finish's place — the fixed seat reopens the same way a
+    /// closed person's own row does. The rest of the set stands: the
+    /// sheet, the records and the requirement read the ledger, the
+    /// stage still starts and stops, and `tell` still queues mail for
+    /// a person reopened later.
+    fn finished_studio_items(
+        &self,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        let mut out = vec![item(
+            "Reopen producer (o)".to_owned(),
+            Some('o'),
+            StudioAct::Reopen,
+        )];
+        out.push(item(
+            "Inspect studio sheet (v)".to_owned(),
+            Some('v'),
+            StudioAct::Sheet,
+        ));
+        out.push(item(
+            "Revise requirement…".to_owned(),
+            Some('r'),
+            StudioAct::Revise,
+        ));
+        out.push(item(
+            "Tell producer…".to_owned(),
+            Some('t'),
+            StudioAct::Tell,
+        ));
+        if self.stage_down {
+            out.push(item(
+                "Start stage".to_owned(),
+                Some('s'),
+                StudioAct::StageStart,
+            ));
+        } else {
+            out.push(item(
+                "Stop stage…".to_owned(),
+                Some('s'),
+                StudioAct::StageStop,
+            ));
+        }
         out.push(item(
             "Actor records".to_owned(),
             Some('a'),

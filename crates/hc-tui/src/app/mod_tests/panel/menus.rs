@@ -403,3 +403,74 @@ async fn the_menu_clamps_inside_a_narrow_screen() {
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("Tell"), "the menu rendered: {text}");
 }
+
+// ---------- a finished studio's menu (UX review) ----------
+
+/// A finished studio's dock row: `m` offers `Reopen producer` and no
+/// `Finish studio…`, and the reopen press runs the people-reopen
+/// command for the producer — the one reopen entry a finished
+/// studio's own rows never offered.
+#[tokio::test]
+async fn a_finished_studios_dock_menu_reopens_the_producer() {
+    let mut app = app_with_panel_doc();
+    let recorded = recording_runner(&mut app);
+    app.area = (120, 24);
+    app.view.documents_mut().insert(
+        DocKey {
+            machine: None,
+            name: "backlot".into(),
+        },
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 3,
+                "studios": [{
+                    "id": "acme-shop", "title": "Acme shop", "state": "finished",
+                    "requirement_version": 1, "mode": "standard",
+                    "open_reviews": 0, "waiting": 0, "tasks_total": 1,
+                    "roles": [
+                        { "role": "producer", "name": "producer",
+                          "state": "closed", "resumable": true }
+                    ]
+                }]
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    draw_to(&mut app, 120, 24);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Studio("acme-shop".into()));
+    key(&mut app, hc_vt::Key::Char('m'));
+    let Some(menu) = app.menu.take() else {
+        panic!("the menu stayed shut")
+    };
+    let ContextMenuTarget::Studio(sm) = &menu.target else {
+        panic!("a studio menu")
+    };
+    let labels: Vec<_> = sm.items().iter().map(|i| i.label.clone()).collect();
+    assert!(
+        labels.iter().any(|l| l.starts_with("Reopen producer")),
+        "{labels:?}"
+    );
+    assert!(
+        !labels.iter().any(|l| l.starts_with("Finish studio")),
+        "{labels:?}"
+    );
+    // `o` runs the reopen for the producer on the studio.
+    app.menu = Some(menu);
+    key(&mut app, hc_vt::Key::Char('o'));
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec![
+            "reopen",
+            "--person",
+            "producer",
+            "--studio",
+            "acme-shop",
+            "--as",
+            "user"
+        ]]
+    );
+}
