@@ -7,6 +7,7 @@ mod actions;
 mod cursor;
 mod entry;
 mod finish_key;
+mod hints;
 mod keys;
 mod menu;
 mod mouse;

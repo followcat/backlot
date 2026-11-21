@@ -115,8 +115,9 @@ impl App {
     }
 
     /// A plain key on the selected row — the Call Sheet's own
-    /// dispatch (S1 §5). Returns true when the key was the row's.
-    pub(super) fn hollywood_row_key(&mut self, code: crossterm::event::KeyCode) -> bool {
+    /// dispatch (S1 §5). Returns true when the key was the row's;
+    /// the footer's slot mask is tested against this answer.
+    pub(crate) fn hollywood_row_key(&mut self, code: crossterm::event::KeyCode) -> bool {
         use crossterm::event::KeyCode;
         let targets = self.hollywood_targets();
         let index = self.hollywood_selected_index(&targets);
@@ -150,11 +151,13 @@ impl App {
             // arms, but only on the studio that is `ready_to_finish`.
             // A frame and its READY row are one studio, so the chips
             // and the frame answer alike; a finished chip, an
-            // open-task studio and the new-studio frame stay no-ops.
-            (Some(Target::Studio(key)), KeyCode::Char('f')) => {
-                if self.hollywood_studio_ready(&key) {
-                    self.hollywood.confirm = Some(Confirm::Finish(key));
-                }
+            // open-task studio and the new-studio frame stay no-ops —
+            // the guard keeps them reading false, the way the footer
+            // never names a press it would leave inert.
+            (Some(Target::Studio(key)), KeyCode::Char('f'))
+                if self.hollywood_studio_ready(&key) =>
+            {
+                self.hollywood.confirm = Some(Confirm::Finish(key));
             }
             _ => return false,
         }
