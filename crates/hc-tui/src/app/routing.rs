@@ -19,13 +19,15 @@ impl App {
     /// selection aligned in Normal mode.
     pub(super) fn sync_target(&mut self) {
         // Normal mode: the pane follows `focused`; if it vanished,
-        // fall back to the projection's first pane (navigation order).
+        // fall back to the projection's first pane (navigation order) —
+        // never the client's own host, whose attach the core refuses.
         if self.mode == Mode::Normal && self.focused.is_none() {
             self.focused = self
                 .projection
                 .snapshot
                 .panes
-                .first()
+                .iter()
+                .find(|p| !self.is_own_pane(&p.pane_id))
                 .map(|p| p.pane_id.clone());
         }
         // Retargeting keeps held presses bound to their original wire:

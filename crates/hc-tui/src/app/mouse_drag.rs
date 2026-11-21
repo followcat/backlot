@@ -200,19 +200,21 @@ impl App {
         }
     }
 
-    /// Tab row click: its first pane.
+    /// Tab row click: its first pane — never the client's own host,
+    /// whose attach the core refuses.
     pub(in crate::app) fn focus_tab(&mut self, tab_id: &str) {
         let target = self
             .projection
             .layouts
             .get(tab_id)
             .and_then(|tab| tab.focused.clone())
+            .filter(|id| !self.is_own_pane(id))
             .or_else(|| {
                 self.projection
                     .snapshot
                     .panes
                     .iter()
-                    .find(|p| p.tab_id == tab_id)
+                    .find(|p| p.tab_id == tab_id && !self.is_own_pane(&p.pane_id))
                     .map(|p| p.pane_id.clone())
             });
         if let Some(pane_id) = target {

@@ -288,6 +288,10 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
         hc_proto::watch::subscription_opener(endpoint, ssh.as_deref(), Arc::clone(&sub_stats));
     let watcher = Watcher::with_openers(rpc.clone(), sub, params);
     let caller = self_caller(env, endpoint);
+    // The verified host pane id also goes to the app: every "which
+    // pane next" fallback skips it — attaching to it is the refused
+    // self-attach the core answers with an error card.
+    let own = caller.clone();
     let attach_conn = shared_attach(endpoint, &ssh);
     let attach_for_diag = attach_conn.clone();
     let open: OpenAttach = Arc::new(move |params| {
@@ -311,6 +315,7 @@ pub async fn run(endpoint: &Endpoint, env: &Env, plain: bool) -> Result<Option<P
     });
     let mut app = App::new(watcher, open, live, shell, Arc::clone(&probe));
     app.set_plain(plain);
+    app.set_own_pane_id(own);
 
     app.set_operations(rpc.clone());
     // A studio on an added machine runs its `backlot` there — one

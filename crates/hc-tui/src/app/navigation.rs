@@ -100,21 +100,29 @@ impl App {
                     .and_then(|t| t.focused.clone())
             });
         if let Some(id) = preferred.filter(|id| {
-            snap.panes.iter().any(|p| {
-                &p.pane_id == id
-                    && p.tab_id == ws.active_tab_id
-                    && p.workspace_id == ws.workspace_id
-            })
+            !self.is_own_pane(id)
+                && snap.panes.iter().any(|p| {
+                    &p.pane_id == id
+                        && p.tab_id == ws.active_tab_id
+                        && p.workspace_id == ws.workspace_id
+                })
         }) {
             return Some(id);
         }
+        // The scans never pick the client's own host — the core refuses
+        // the self-attach, so a switch landing on it only paints the
+        // refused card.
         snap.panes
             .iter()
-            .find(|p| p.workspace_id == ws.workspace_id && p.tab_id == ws.active_tab_id)
+            .find(|p| {
+                p.workspace_id == ws.workspace_id
+                    && p.tab_id == ws.active_tab_id
+                    && !self.is_own_pane(&p.pane_id)
+            })
             .or_else(|| {
                 snap.panes
                     .iter()
-                    .find(|p| p.workspace_id == ws.workspace_id)
+                    .find(|p| p.workspace_id == ws.workspace_id && !self.is_own_pane(&p.pane_id))
             })
             .map(|p| p.pane_id.clone())
     }
@@ -288,7 +296,7 @@ impl App {
                 .iter()
                 .find(|e| &e.endpoint_id == endpoint_id)
                 .and_then(|e| e.snapshot.as_deref())
-                .and_then(|s| s.panes.first())
+                .and_then(|s| s.panes.iter().find(|p| !self.is_own_pane(&p.pane_id)))
                 .map(|p| p.pane_id.clone()),
             T::Workspace {
                 endpoint_id,
@@ -311,7 +319,11 @@ impl App {
                 .iter()
                 .find(|e| &e.endpoint_id == endpoint_id)
                 .and_then(|e| e.snapshot.as_deref())
-                .and_then(|s| s.panes.iter().find(|p| &p.tab_id == tab_id))
+                .and_then(|s| {
+                    s.panes
+                        .iter()
+                        .find(|p| &p.tab_id == tab_id && !self.is_own_pane(&p.pane_id))
+                })
                 .map(|p| p.pane_id.clone()),
             T::Agent { pane_id, .. } => Some(pane_id.clone()),
             T::NewTab => {

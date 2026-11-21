@@ -58,12 +58,16 @@ impl App {
                 )
             })
             .collect();
+        // The client's own host is never a `next` candidate — the core
+        // refuses the self-attach, so picking it only paints the
+        // `attach failed: refused` card.
         let survivors = snapshot
             .panes
             .iter()
             .filter(|p| p.workspace_id == workspace_id)
             .filter(|p| tab.is_none_or(|t| p.tab_id == t))
             .filter(|p| !ids.contains(&p.pane_id))
+            .filter(|p| !self.is_own_pane(&p.pane_id))
             .map(|p| p.pane_id.clone())
             .collect::<Vec<_>>();
         let next = if !survivors.is_empty() {
@@ -86,11 +90,12 @@ impl App {
                         .layouts
                         .get(&t.tab_id)
                         .and_then(|layout| layout.focused.clone())
+                        .filter(|id| !self.is_own_pane(id))
                         .or_else(|| {
                             snapshot
                                 .panes
                                 .iter()
-                                .find(|p| p.tab_id == t.tab_id)
+                                .find(|p| p.tab_id == t.tab_id && !self.is_own_pane(&p.pane_id))
                                 .map(|p| p.pane_id.clone())
                         })
                 })
@@ -98,14 +103,14 @@ impl App {
                     snapshot
                         .panes
                         .iter()
-                        .find(|p| !ids.contains(&p.pane_id))
+                        .find(|p| !ids.contains(&p.pane_id) && !self.is_own_pane(&p.pane_id))
                         .map(|p| p.pane_id.clone())
                 })
         } else {
             snapshot
                 .panes
                 .iter()
-                .find(|p| !ids.contains(&p.pane_id))
+                .find(|p| !ids.contains(&p.pane_id) && !self.is_own_pane(&p.pane_id))
                 .map(|p| p.pane_id.clone())
         };
         Some(Action::Close {

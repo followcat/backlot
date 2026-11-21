@@ -180,7 +180,7 @@ impl App {
                         .iter()
                         .find(|e| e.endpoint_id == endpoint_id)
                         .and_then(|e| e.snapshot.as_deref())
-                        .and_then(|s| s.panes.first())
+                        .and_then(|s| s.panes.iter().find(|p| !self.is_own_pane(&p.pane_id)))
                         .map(|p| p.pane_id.clone())
                 {
                     self.focus_pane(pane_id);

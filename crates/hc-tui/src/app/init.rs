@@ -109,6 +109,7 @@ impl App {
             prefix: input::Prefix::default(),
             mode: Mode::Normal,
             keyboard_locked: false,
+            own_pane_id: None,
             previous_pane: None,
             last_focus: None,
             dialog: None,
