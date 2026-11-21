@@ -279,6 +279,26 @@ async fn a_prompt_peek_answers_y_and_d() {
 }
 
 #[tokio::test]
+async fn a_frame_peek_opens_the_on_set_role_without_a_phantom_prompt() {
+    // The footer's `p peek` is live on studio frames too: it opens the
+    // role the frame calls on set (the producer here — actor-alice is
+    // blocked, not working), and since that seat owns no user prompt
+    // the peek carries none — `y` is just eaten, never an answer into
+    // thin air.
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    app.hollywood.selected = Some(Target::Studio("acme-shop".into()));
+    key(&mut app, hc_vt::Key::Char('p'));
+    let Some(peek) = app.peek.as_ref() else {
+        panic!("p on a studio frame peeks the on-set role");
+    };
+    assert!(peek.prompt.is_none(), "no prompt on an unprompted seat");
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert!(app.peek.is_some(), "`y` stays eaten in a plain peek");
+}
+
+#[tokio::test]
 async fn a_plain_peek_keeps_its_parity_keys() {
     // A peek that did not come from the Call Sheet knows no prompt:
     // `y` is eaten like every other key, Enter keeps, Esc closes.

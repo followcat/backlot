@@ -32,27 +32,44 @@ impl App {
         }
     }
 
-    /// `p` on a prompt row: the role's live screen, read-only —
-    /// machine-qualified for a remote studio.
+    /// `p` on a prompt row or a frame's on-set role: the role's live
+    /// screen, read-only — machine-qualified for a remote studio. The
+    /// peek carries the prompt only while the role actually owns one:
+    /// an unprompted seat would otherwise answer `y`/`d` into thin
+    /// air.
     fn hollywood_peek(&mut self, studio: &StudioKey, role: &str) {
         let machines = self.panel_summaries();
-        let terminal = crate::panel::data::studio(&machines, studio).and_then(|s| {
+        let found = crate::panel::data::studio(&machines, studio).and_then(|s| {
             s.studio
                 .roles
                 .iter()
                 .find(|r| r.role == role)
-                .and_then(|r| r.terminal.clone())
+                .map(|r| (r.terminal.clone(), r.attention_user))
         });
-        match terminal {
-            Some(terminal) => {
+        match found {
+            Some((Some(terminal), attention_user)) => {
                 self.open_peek(terminal);
-                // The peek Hollywood opened carries the prompt:
-                // `y`/`d` answer it from inside (D5).
                 if let Some(peek) = self.peek.as_mut() {
-                    peek.prompt = Some((studio.clone(), role.to_string()));
+                    peek.prompt = attention_user.then(|| (studio.clone(), role.to_string()));
                 }
             }
-            None => self.show_notice("Hollywood", "the role has no screen to peek"),
+            Some((None, _)) | None => {
+                self.show_notice("Hollywood", "the role has no screen to peek")
+            }
+        }
+    }
+
+    /// `p` on a studio frame or its READY row: the role the frame
+    /// already calls "on set" — the live worker, else the producer.
+    /// When that seat owns a user prompt the peek carries it like the
+    /// prompt row's does.
+    fn hollywood_peek_on_set(&mut self, studio: &StudioKey) {
+        let machines = self.panel_summaries();
+        let role = crate::panel::data::studio(&machines, studio)
+            .and_then(|s| crate::hollywood::on_set(s.studio).map(|r| r.role.clone()));
+        match role {
+            Some(role) => self.hollywood_peek(studio, &role),
+            None => self.show_notice("Hollywood", "the studio has no one on set to peek"),
         }
     }
 
@@ -112,6 +129,13 @@ impl App {
             }
             (Some(Target::Prompt(studio, role)), KeyCode::Char('p')) => {
                 self.hollywood_peek(&studio, &role);
+            }
+            // A studio frame's `p`: peek the role on set — the live
+            // worker the frame already names, else the producer. The
+            // footer's `p peek` is no longer dead weight off prompt
+            // rows.
+            (Some(Target::Studio(key)) | Some(Target::Ready(key)), KeyCode::Char('p')) => {
+                self.hollywood_peek_on_set(&key);
             }
             (Some(Target::Stage(machine, false)), KeyCode::Char('r')) => {
                 self.hollywood_stage_start(machine);
