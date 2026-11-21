@@ -231,3 +231,30 @@ async fn esc_on_a_sheet_menu_keeps_the_bar_owning_keys() {
         "no byte reached the pane"
     );
 }
+
+#[tokio::test]
+async fn question_mark_opens_the_help_launcher_over_the_band() {
+    let mut app = app_with_doc();
+    app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
+    app.area = (140, 40);
+    alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Char('?'));
+    assert!(app.help, "`?` reached the help");
+    let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
+    assert!(text.contains("Actions & Keybinds"), "{text}");
+}
+
+#[tokio::test]
+async fn a_kitty_shifted_question_mark_opens_the_help_too() {
+    // A kitty-reporting host (REPORT_ALTERNATE_KEYS) sends `?` as the
+    // shifted key: the band must read it as the bare `?`, not drop it.
+    let mut app = app_with_doc();
+    app.set_hollywood(Ok(Some(cfg(None))), std::path::Path::new("config.toml"));
+    app.area = (140, 40);
+    app.host_reports_all_keys = true;
+    alt_y(&mut app);
+    key_mods(&mut app, hc_vt::Key::Char('?'), hc_vt::Mods::SHIFT);
+    assert!(app.help, "Shift+? is `?` on a kitty host");
+    let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
+    assert!(text.contains("Actions & Keybinds"), "{text}");
+}
