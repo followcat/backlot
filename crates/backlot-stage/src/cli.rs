@@ -415,7 +415,7 @@ pub(crate) fn exec_event(
     // studio's producer (R26) — the `message.queued` just recorded is
     // the delivery record. Captured before `build` consumes the cmd.
     let h_mirror = crate::hwood::mirror_for(&caller, &cmd);
-    let built = commands::build(&caller, cmd)?;
+    let built = commands::build(&caller, cmd, env, base)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;
     let mut out = render::confirm(&event);
     if let Some(file) = h_mirror {

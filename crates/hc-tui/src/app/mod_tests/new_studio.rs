@@ -157,6 +157,30 @@ fn runners_json_wide() -> String {
     .to_string()
 }
 
+/// A `needs_path` row — `cmd` found only off the launch PATH, like
+/// an nvm install — seatable like any `found` runner.
+fn runners_json_needs_path() -> String {
+    serde_json::json!([
+        { "runner": "fake", "status": "found", "version": "1",
+          "models": ["m"], "efforts": ["low", "high"] },
+        { "runner": "claude", "status": "missing", "version": null,
+          "models": ["sonnet"], "efforts": ["low", "medium", "high"] },
+        { "runner": "cmd", "status": "found", "version": "2",
+          "path": "/home/user/.nvm/versions/node/v24.11.1/bin/cmd",
+          "needs_path": true,
+          "models": ["cmd-x"], "efforts": ["low"] }
+    ])
+    .to_string()
+}
+
+/// `base_answers` with the needs_path runner probed instead.
+fn answers_with_needs_path_runner() -> Vec<(&'static str, Result<String, String>)> {
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "runners --json");
+    answers.push(("runners --json", Ok(runners_json_needs_path())));
+    answers
+}
+
 /// `base_answers` with the wide-catalog runner probed instead.
 fn answers_with_wide_runner() -> Vec<(&'static str, Result<String, String>)> {
     let mut answers = base_answers();
@@ -702,16 +726,12 @@ async fn the_cast_table_cycles_and_edits() {
     assert_eq!(d.step, Step::Cast);
     assert_eq!(d.cast.rows.len(), 5, "three roles + two actors");
     assert_eq!(d.cast.rows[0].key, "producer");
-    // Cycle the runner cell: fake → claude → fake.
+    // Cycle the runner cell: `claude` answers `missing` — only
+    // seatable runners cycle in, so the seat stays on `fake`.
     key(&mut app, hc_vt::Key::ArrowRight);
     {
         let d = app.new_studio.as_ref().unwrap();
-        assert_eq!(d.cast.rows[0].runner, 1);
-    }
-    key(&mut app, hc_vt::Key::ArrowRight);
-    {
-        let d = app.new_studio.as_ref().unwrap();
-        assert_eq!(d.cast.rows[0].runner, 0);
+        assert_eq!(d.cast.rows[0].runner, 0, "a missing runner is skipped");
     }
     // `a` adds actor-c, `x` removes it; a fixed role cannot go.
     let before = app.new_studio.as_ref().unwrap().cast.rows.len();
@@ -725,6 +745,40 @@ async fn the_cast_table_cycles_and_edits() {
     }
     key(&mut app, hc_vt::Key::Char('x'));
     assert_eq!(app.new_studio.as_ref().unwrap().cast.rows.len(), before);
+}
+
+/// A `needs_path` runner — `cmd` living only under an nvm dir —
+/// is a `found` seat like any other: the auto-seat lands on the
+/// first found runner, and `→` cycling skips `claude` (`missing`)
+/// to reach `cmd`, then wraps back.
+#[tokio::test]
+async fn a_needs_path_runner_cycles_in() {
+    let mut app = app_multi(vec![term("t1")], vec![machine("host-b", "connected")]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    install_run(&mut app, &answers_with_needs_path_runner());
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    to_cast(&mut app).await;
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert_eq!(d.cast.rows[0].runner, 0, "the first found runner seats");
+    }
+    // fake → (claude: missing, skipped) → cmd.
+    key(&mut app, hc_vt::Key::ArrowRight);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert_eq!(
+            d.cast.rows[0].runner, 2,
+            "cmd cycles in past the missing row"
+        );
+    }
+    // cmd → wrap → fake.
+    key(&mut app, hc_vt::Key::ArrowRight);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert_eq!(d.cast.rows[0].runner, 0);
+    }
 }
 
 /// Walk an open dialog to the cast step — the picker's home.
@@ -748,7 +802,12 @@ fn cast_toml(app: &App) -> String {
 
 #[tokio::test]
 async fn enter_or_space_on_the_model_cell_opens_its_runners_list() {
-    let (mut app, _) = dialog_app().await;
+    let mut app = app_multi(vec![term("t1")], vec![machine("host-b", "connected")]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    install_run(&mut app, &answers_with_needs_path_runner());
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
     to_cast(&mut app).await;
     // `space` on another column opens nothing; `tab` onto MODEL,
     // then `⏎` opens the row's own runner catalog.
@@ -764,19 +823,19 @@ async fn enter_or_space_on_the_model_cell_opens_its_runners_list() {
         assert_eq!(pick.chosen(), Some("m"), "the current value seats");
         assert_eq!(d.step, Step::Cast, "still on the cast step");
     }
-    // The list is the row's runner's: cycling to claude offers its
-    // catalog instead — `auto` still first.
+    // The list is the row's runner's: cycling to `cmd` — past the
+    // `missing` claude row — offers its catalog instead.
     key(&mut app, hc_vt::Key::Escape);
     key(&mut app, hc_vt::Key::BackTab); // col → RUNNER
-    key(&mut app, hc_vt::Key::ArrowRight); // fake → claude
+    key(&mut app, hc_vt::Key::ArrowRight); // fake → cmd
     key(&mut app, hc_vt::Key::Tab); // col → MODEL
     key(&mut app, hc_vt::Key::Enter);
     {
         let d = app.new_studio.as_ref().unwrap();
         let pick = d.model_pick.as_ref().unwrap();
         let options: Vec<&str> = pick.options.iter().map(String::as_str).collect();
-        assert_eq!(options, ["auto", "sonnet"], "claude's catalog");
-        assert_eq!(pick.chosen(), Some("sonnet"));
+        assert_eq!(options, ["auto", "cmd-x"], "cmd's catalog");
+        assert_eq!(pick.chosen(), Some("cmd-x"));
     }
     // `space` on the cell opens it too.
     key(&mut app, hc_vt::Key::Escape);

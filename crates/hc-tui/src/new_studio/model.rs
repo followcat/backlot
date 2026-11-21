@@ -218,21 +218,45 @@ pub(crate) fn parse_repos(text: &str) -> Result<(String, Vec<RepoEntry>), String
 }
 
 /// A `runners --json` row — the detection verdict plus the models
-/// and efforts the cast table cycles.
+/// and efforts the cast table cycles. `path`/`needs_path` ride
+/// along so a hit that only the login shell or a known dir reaches
+/// shows where it lives — the `[runner_env]` write `studio new`
+/// records makes it launchable like any other seat.
 #[derive(Debug, Clone)]
 pub(crate) struct RunnerRow {
     pub runner: String,
     /// `found` | `not working` | `missing`.
     pub status: String,
     pub version: Option<String>,
+    /// The binary's absolute path when found.
+    pub path: Option<String>,
+    /// The hit needs a `[runner_env]` PATH write to launch.
+    pub needs_path: bool,
     pub models: Vec<String>,
     pub efforts: Vec<String>,
 }
 
 impl RunnerRow {
-    /// The runner can seat a role — detection answered.
+    /// The runner can seat a role — detection answered, wherever
+    /// the binary lives; the fixup carries the off-PATH ones.
     pub(crate) fn found(&self) -> bool {
         self.status == "found"
+    }
+
+    /// A `needs_path` row's `bin/cmd` tail — the head's compact
+    /// "lives off the launch PATH" marker.
+    pub(crate) fn bin_hint(&self) -> Option<String> {
+        if !self.needs_path {
+            return None;
+        }
+        let p = std::path::Path::new(self.path.as_deref()?);
+        let name = p.file_name()?;
+        let parent = p.parent()?.file_name()?;
+        Some(format!(
+            "{}/{}",
+            parent.to_string_lossy(),
+            name.to_string_lossy()
+        ))
     }
 }
 
@@ -244,6 +268,10 @@ pub(crate) fn parse_runners(text: &str) -> Result<Vec<RunnerRow>, String> {
         status: String,
         #[serde(default)]
         version: Option<String>,
+        #[serde(default)]
+        path: Option<String>,
+        #[serde(default)]
+        needs_path: bool,
         #[serde(default)]
         models: Vec<String>,
         #[serde(default)]
@@ -257,6 +285,8 @@ pub(crate) fn parse_runners(text: &str) -> Result<Vec<RunnerRow>, String> {
             runner: r.runner,
             status: r.status,
             version: r.version,
+            path: r.path,
+            needs_path: r.needs_path,
             models: r.models,
             efforts: r.efforts,
         })
@@ -445,7 +475,7 @@ impl CastTable {
         let seat = |name: &str| {
             runners
                 .iter()
-                .position(|r| r.runner == name)
+                .position(|r| r.runner == name && r.found())
                 .unwrap_or_else(|| runners.iter().position(|r| r.found()).unwrap_or(0))
         };
         // A saved word back to its index — a name that is gone
@@ -503,7 +533,16 @@ impl CastTable {
         }
         match self.col {
             0 => {
-                row.runner = cycle(row.runner, runners.len(), delta);
+                // Only seatable runners cycle in — a `missing` or
+                // `not working` verdict can never launch; a
+                // `needs_path` one can, through the fixup's write.
+                let start = row.runner;
+                loop {
+                    row.runner = cycle(row.runner, runners.len(), delta);
+                    if runners[row.runner].found() || row.runner == start {
+                        break;
+                    }
+                }
                 row.model = 0;
                 row.effort = 0;
             }

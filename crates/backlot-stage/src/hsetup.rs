@@ -122,17 +122,6 @@ pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<
             cfg.runner
         )));
     }
-    if !crate::runners::installed(&cfg.runner, env.get("PATH")) {
-        let what = if cfg.runner == "fake" {
-            "tools/fake-runner.sh"
-        } else {
-            cfg.runner.as_str()
-        };
-        return Err(Fail::refused(format!(
-            "runner '{}' is not installed: {what} not found on PATH",
-            cfg.runner
-        )));
-    }
     if cfg.model.trim().is_empty() {
         return Err(Fail::usage("--model is empty"));
     }
@@ -141,9 +130,9 @@ pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<
         check_key(k)?;
     }
     let path = config::config_path(&env.vars);
+    // A malformed file refuses before anything writes — the refusal
+    // names the parse position only, never the file's text.
     let old = std::fs::read_to_string(&path).unwrap_or_default();
-    // A malformed file is left exactly as it is — the refusal names
-    // the parse position only, never the file's text.
     let _: toml::Value = toml::from_str(&old).map_err(|e| match e.span() {
         Some(span) => Fail::refused(format!(
             "config.toml: malformed at {}",
@@ -151,6 +140,26 @@ pub(crate) fn hsetup(_common: &Common, env: &Env, cfg: &HollywoodCfg) -> Result<
         )),
         None => Fail::refused("config.toml: malformed".to_string()),
     })?;
+    // The runner must launch — under the launch PATH, like the
+    // dry-run contract. One detection's login-shell or known-dir
+    // hit earns the `[runner_env]` write first, then the shared
+    // resolver answers under the PATH the launch actually gets.
+    let base = path.parent().unwrap_or_else(|| Path::new("."));
+    let scope = crate::runners::detect::scope(env);
+    let named = std::collections::BTreeSet::from([cfg.runner.clone()]);
+    crate::wizard_paths::ensure_runner_paths(
+        base,
+        &named,
+        env,
+        &mut |runner| crate::runners::detect::find(runner, &scope),
+        &mut std::io::stderr(),
+    )?;
+    let config_text = std::fs::read_to_string(&path).unwrap_or_default();
+    crate::runners::resolve::launch_binary(&cfg.runner, &config_text, &scope)
+        .map_err(Fail::refused)?;
+    // The `[runner_env]` write may have appended — the span
+    // replacement works on the file as it stands now.
+    let old = std::fs::read_to_string(&path).unwrap_or_default();
     let section = table(cfg);
     let new = match hollywood_span(&old) {
         Some((a, b)) => format!("{}{section}{}", &old[..a], &old[b..]),

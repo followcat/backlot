@@ -17,8 +17,7 @@ use crate::wizard::{Io, io_fail};
 
 /// The accepted draft's runners: each one detection reached only
 /// through the login shell or a well-known dir gets its
-/// `[runner_env.<runner>]` PATH — shown before it is written. A
-/// `--cast` file never reaches here.
+/// `[runner_env.<runner>]` PATH — shown before it is written.
 pub(crate) fn runner_paths(
     io: &mut Io,
     base: &Path,
@@ -26,20 +25,34 @@ pub(crate) fn runner_paths(
     env: &Env,
 ) -> Result<(), Fail> {
     let cast = commands::read_cast(cast_file)?;
-    let mut named = BTreeSet::new();
-    for a in [&cast.producer, &cast.director, &cast.writer] {
-        named.insert(a.runner.as_str());
-    }
-    for c in &cast.candidates {
-        named.insert(c.runner.as_str());
-    }
+    let detect = &io.detect;
+    ensure_runner_paths(
+        base,
+        &commands::cast_runners(&cast),
+        env,
+        &mut |runner| detect(runner),
+        &mut io.out,
+    )
+}
+
+/// The `[runner_env]` PATH write without the wizard's `Io` — the
+/// non-interactive `studio new` runs it too, so a cast from the
+/// New Studio dialog or a script gets the launch PATH its picked
+/// runners need, exactly like the interactive draft's.
+pub(crate) fn ensure_runner_paths(
+    base: &Path,
+    named: &BTreeSet<String>,
+    env: &Env,
+    detect: &mut dyn FnMut(&str) -> Option<Found>,
+    out: &mut dyn Write,
+) -> Result<(), Fail> {
     let config = base.join("config.toml");
     for runner in named {
-        let Some(found) = (io.detect)(runner) else {
+        let Some(found) = detect(runner) else {
             continue;
         };
         if found.needs_path() {
-            write_runner_path(io, &config, runner, &found, env)?;
+            write_runner_path(out, &config, runner, &found, env)?;
         }
     }
     Ok(())
@@ -50,7 +63,7 @@ pub(crate) fn runner_paths(
 /// binary; otherwise add `PATH = "<bin dir>:<inherited PATH>"`,
 /// inside the runner's existing table or as a new one at the end.
 fn write_runner_path(
-    io: &mut Io,
+    out: &mut dyn Write,
     config: &Path,
     runner: &str,
     found: &Found,
@@ -66,7 +79,7 @@ fn write_runner_path(
         Ok(map) => map,
         Err(_) => {
             writeln!(
-                io.out,
+                out,
                 "warning: {} does not parse — add this by hand:\n  [runner_env.{runner}]\n  {}",
                 config.display(),
                 path_line(found, env),
@@ -80,7 +93,7 @@ fn write_runner_path(
         // still cannot reach the binary.
         if crate::runners::find_on_path(&bin, Some(path)).is_none() {
             writeln!(
-                io.out,
+                out,
                 "warning: {} already sets runner_env.{runner} PATH, but '{bin}' is still not on it — the role may fail 'not found'",
                 config.display(),
             )
@@ -94,7 +107,7 @@ fn write_runner_path(
         // A table the runner already has: the line goes under it.
         Some(at) => {
             writeln!(
-                io.out,
+                out,
                 "{runner} lives at {} — adding to {header} in {}:\n  {line}",
                 found.bin_dir().display(),
                 config.display(),
@@ -110,7 +123,7 @@ fn write_runner_path(
         }
         None => {
             writeln!(
-                io.out,
+                out,
                 "{runner} lives at {} — adding to {}:\n  {header}\n  {line}",
                 found.bin_dir().display(),
                 config.display(),
@@ -134,11 +147,7 @@ fn write_runner_path(
 /// own directory first, because a node-based CLI needs the `node`
 /// next to it.
 fn path_line(found: &Found, env: &Env) -> String {
-    let dir = found.bin_dir().to_string_lossy().into_owned();
-    let value = match env.get("PATH") {
-        Some(inherited) if !inherited.is_empty() => format!("{dir}:{inherited}"),
-        _ => dir,
-    };
+    let value = crate::runners::resolve::launch_path(found, env);
     format!("PATH = {}", toml_string(&value))
 }
 
