@@ -136,8 +136,9 @@ async fn real_stage_loop() {
     // the runner outright. The stage's pacing means nothing goes out
     // inside that window: `❯ No` sits past the settle, `❯ Yes` past
     // the key gap, and only then does the runner announce itself.
-    // The answer is a terminal interaction only: no ledger event
-    // comes of it.
+    // The keys are a terminal interaction, but the answer itself is
+    // attributable: one informational `folder trusted` attention,
+    // never raised twice for the same role.
     let screen = wait_read(&client, "bl-acme-shop-producer", "❯ No, exit").await;
     assert!(screen.contains("Quick safety check"), "{screen}");
     wait_read(
@@ -159,12 +160,18 @@ async fn real_stage_loop() {
         "a key reached the dialog inside its unsafe first second: {}",
         fs::read_to_string(state.join("fake-early-keys")).unwrap_or_default()
     );
-    let events_then = ledger(&state).len();
+    let raised = wait_event(&state, "attention.raised", "producer");
+    assert_eq!(raised["reason"], "folder trusted", "{raised}");
+    // `needs_user` serializes only when set — informational.
+    assert!(raised.get("needs_user").is_none(), "{raised}");
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert_eq!(
-        ledger(&state).len(),
-        events_then,
-        "the trust answer changed the ledger: {:?}",
+        ledger(&state)
+            .iter()
+            .filter(|e| e["kind"] == "attention.raised" && e["reason"] == "folder trusted")
+            .count(),
+        1,
+        "the trust answer raised its attention twice: {:?}",
         ledger(&state)
     );
 

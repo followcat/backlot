@@ -56,6 +56,9 @@ pub(crate) const TRUST_KEY_GAP_MS: u64 = 1_500;
 pub(crate) const WORK_SAMPLE_EVERY_MS: u64 = 1_000;
 /// The attention reason a missing session id raises.
 pub(crate) const SESSION_NOT_FOUND: &str = "session id not found";
+/// A stage-answered folder-trust dialog — the user never saw it, so
+/// the ledger names who pressed the keys.
+pub(crate) const FOLDER_TRUSTED: &str = "folder trusted";
 
 /// Claude Code's first-use folder-trust dialog on a terminal's
 /// screen: the safety-check banner plus the trust option. Anything
@@ -342,7 +345,8 @@ impl Stage {
             // role's first minute only — the window bounds the
             // exchange.
             if can_show_trust(actor) && age_ms < TRUST_WINDOW_MS {
-                self.answer_trust(studio, key, term, &cwd, now_ms).await?;
+                self.answer_trust(dir, studio, key, term, &cwd, state, now_ms)
+                    .await?;
             }
 
             // The work sample: one screen read a second per role,
@@ -445,12 +449,15 @@ impl Stage {
     /// the role's own working directory, send the key [`trust_step`]
     /// paces — never before the dialog has settled, never inside
     /// the gap after the previous key.
+    #[allow(clippy::too_many_arguments)]
     async fn answer_trust(
         &self,
+        dir: &Path,
         studio: &str,
         role: &str,
         term: &LiveTerminal,
         repo: &str,
+        state: &StudioState,
         now_ms: u64,
     ) -> Result<(), Fail> {
         if term.cwd != repo {
@@ -491,7 +498,22 @@ impl Stage {
             )
             .await;
         match sent {
-            Ok(_) => crate::stagelog::stage_log!("answered folder trust for {role} ({key})"),
+            Ok(_) => {
+                crate::stagelog::stage_log!("answered folder trust for {role} ({key})");
+                // `enter` is the answer — one informational attention
+                // so the keys the user never saw stay attributable.
+                if key == "enter" && !crate::act::attention_open(state, role, FOLDER_TRUSTED) {
+                    record(
+                        dir,
+                        EventKind::AttentionRaised {
+                            role: role.into(),
+                            reason: FOLDER_TRUSTED.into(),
+                            detail: "the stage answered the first-use folder-trust dialog".into(),
+                            needs_user: false,
+                        },
+                    )?;
+                }
+            }
             Err(CallError::Rpc(_)) => {}
             Err(e) => return Err(Fail::call(e)),
         }
