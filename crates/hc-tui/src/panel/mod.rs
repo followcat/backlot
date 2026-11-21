@@ -50,12 +50,6 @@ pub(crate) struct Panel {
     /// Whether panel keys/mouse are owned by the panel — a separate
     /// latch from `Mode`, so no new terminal mode exists.
     pub focused: bool,
-    /// A dead pane's refused keys handed the dock its focus: its
-    /// `Esc` closes outright and the footer says `esc close` until
-    /// the keys move on purpose (a leave, a click or a close resets
-    /// it). One-way — a recovered pane never takes the keys back by
-    /// itself.
-    pub esc_close: bool,
     /// Studios `Space` collapsed by hand — overrides both the
     /// everything-fits expansion and the current studio.
     pub collapsed_blocks: std::collections::BTreeSet<crate::studio::StudioKey>,
@@ -106,7 +100,6 @@ impl Panel {
             // `--plain` closes it for the plain multiplexer's frame.
             mode: PanelMode::Expanded,
             focused: false,
-            esc_close: false,
             collapsed_blocks: Default::default(),
             expanded_blocks: Default::default(),
             scroll: 0,

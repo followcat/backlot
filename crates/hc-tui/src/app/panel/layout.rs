@@ -116,6 +116,17 @@ impl App {
         self.panel_fullscreen_at(self.area.0)
     }
 
+    /// `Esc` on the focused dock closes it outright — an overlay dock
+    /// has no panes beside it to hand the keys back to, and a dock
+    /// over a pane that refuses input has nowhere to return them
+    /// either. Beside a live pane `Esc` only steps back: the pane
+    /// takes the keys again. The footer's label in `panel/draw.rs`
+    /// reads the same two facts, so it cannot promise a step-back
+    /// the key does not do.
+    pub(crate) fn panel_esc_closes(&self) -> bool {
+        self.panel_fullscreen() || self.pane.input_refused()
+    }
+
     /// The rect an open-not-beside panel owns inside `pane` at
     /// `cols`: the surface's right `panel_width` columns — the
     /// sidebar is never covered. Only the strip ever overlays a

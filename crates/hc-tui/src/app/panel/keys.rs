@@ -84,11 +84,7 @@ impl App {
         match code {
             KeyCode::Esc => {
                 self.panel.finish_confirm = None;
-                if self.panel_fullscreen() || self.panel.esc_close {
-                    // Only the strip ever overlays the panes now —
-                    // an overlay dock closes outright (S2 §1). A dock
-                    // holding a dead pane's hand-off closes too: the
-                    // keys it took have nowhere to go back to.
+                if self.panel_esc_closes() {
                     self.panel_close();
                 } else {
                     // Beside the panes: `esc back` — the dock keeps

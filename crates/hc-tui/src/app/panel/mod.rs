@@ -104,7 +104,6 @@ impl App {
     pub(super) fn panel_close(&mut self) {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
-        self.panel.esc_close = false;
         self.panel.selected = None;
         self.panel.selected_row = None;
         self.panel.drawer = None;
@@ -118,16 +117,18 @@ impl App {
             self.panel_close();
         } else {
             self.panel.focused = false;
-            self.panel.esc_close = false;
         }
     }
 
     /// A press the focused pane refused while the dock sits drawn
     /// beside the panes, unfocused: the press stays refused — it is
     /// never re-read as a dock action — but the dock takes the keys
-    /// from here on. Its `Esc` then closes outright (the footer says
-    /// `esc close`) and the notice says where the keys went. One-way:
-    /// a pane that comes back never takes the keys back by itself.
+    /// from here on. One-way: a pane that comes back never takes the
+    /// keys back by itself; the dock keeps them until `Esc`, whose
+    /// fate `panel_esc_closes` computes from the pane's state right
+    /// then. The hand-off also selects the first actionable row, so
+    /// the footer's `m`/`⏎` promise holds on a dock never toggled,
+    /// and the notice says where the keys went.
     pub(super) fn dead_pane_handoff(&mut self) {
         if !self.panel.open()
             || self.panel_fullscreen()
@@ -137,11 +138,16 @@ impl App {
             return;
         }
         self.panel.focused = true;
-        self.panel.esc_close = true;
+        // A dock never toggled has no row cursor — the same
+        // first-row selection `panel_toggle` does when it first
+        // shows the dock.
+        if self.panel.selected.is_none() {
+            self.panel_select_first();
+        }
         // The dock hand-off says it better than the pane's generic
         // text — take the rejection so the wake does not re-show it.
         self.pane.take_input_rejection();
-        self.reject_input("Pane exited · keys go to the dock");
+        self.show_notice("Pane exited", "keys go to the dock");
     }
 
     /// Collapsed ↔ expanded (the `c` key and the title click).

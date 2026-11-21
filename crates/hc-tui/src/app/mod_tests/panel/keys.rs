@@ -95,6 +95,35 @@ fn serve_runs(
     }
 }
 
+/// The focused terminal leaves the inventory: the pane goes dead
+/// (input refused) while the dock stays as it is.
+fn kill_focused_terminal(app: &mut App) {
+    let terms: Vec<_> = app
+        .view
+        .inventory
+        .terminals()
+        .values()
+        .filter(|&t| t.address != "t1")
+        .cloned()
+        .collect();
+    app.view.inventory_mut().replace(2, terms);
+    let view = app.view.clone();
+    app.pane.on_view(&view);
+}
+
+/// The focused terminal returns with its original incarnation: the
+/// pane takes input again, no respawn in between.
+fn revive_focused_terminal(app: &mut App) {
+    let mut terms: Vec<_> = app.view.inventory.terminals().values().cloned().collect();
+    let mut t1 = crate::sidebar::fixture::term("t1");
+    t1.pid = Some(1);
+    t1.created_ms = 0;
+    terms.push(t1);
+    app.view.inventory_mut().replace(2, terms);
+    let view = app.view.clone();
+    app.pane.on_view(&view);
+}
+
 #[tokio::test]
 async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
     let mut app = app_with_panel_doc();
@@ -294,17 +323,7 @@ async fn a_dead_panes_refused_keys_hand_off_to_the_drawn_dock() {
     assert!(app.panel_beside(120));
     // The focused terminal leaves the inventory: the pane goes dead
     // while the dock still sits beside it.
-    let terms: Vec<_> = app
-        .view
-        .inventory
-        .terminals()
-        .values()
-        .filter(|&t| t.address != "t1")
-        .cloned()
-        .collect();
-    app.view.inventory_mut().replace(2, terms);
-    let view = app.view.clone();
-    app.pane.on_view(&view);
+    kill_focused_terminal(&mut app);
     // A plain key is refused — and the drawn dock takes the keys.
     let backlog = app.pane.input_backlog();
     key(&mut app, hc_vt::Key::Char('m'));
@@ -315,11 +334,99 @@ async fn a_dead_panes_refused_keys_hand_off_to_the_drawn_dock() {
     );
     assert!(app.panel.focused, "the dock took the keys");
     // The notice says where the keys went; the dock's footer reads
-    // `esc close` while it holds the hand-off.
+    // `esc close` while the pane refuses input.
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("Pane exited"), "{text}");
     assert!(text.contains("keys go to the dock"), "{text}");
     assert!(text.contains("esc close"), "{text}");
     // The dock's own Esc now closes it outright.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+}
+
+#[tokio::test]
+async fn a_handoff_selects_a_row_on_a_dock_never_toggled() {
+    // The launch default draws the dock open, never toggled: no row
+    // cursor exists. A dead pane's refused key hands the dock the
+    // keys — the footer's `m`/`⏎` promise must land on a real row,
+    // not fall back to the title with no menu and no action (the
+    // "looks interactive but isn't" class).
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    // The fixture boots --plain (closed); the field is the launch
+    // default a non-plain run starts with — open, unfocused, no row.
+    app.panel.mode = PanelMode::Expanded;
+    assert!(app.panel.open() && !app.panel.focused);
+    assert_eq!(app.panel.selected, None);
+    kill_focused_terminal(&mut app);
+    // A plain key is refused — the dock takes the keys and a real
+    // row is selected.
+    key(&mut app, hc_vt::Key::Char('m'));
+    assert!(app.panel.focused, "the dock took the keys");
+    assert_eq!(
+        app.panel.selected,
+        Some(Target::Studio("acme-shop".into())),
+        "the hand-off left a row cursor"
+    );
+    // `m` now opens the selected row's menu.
+    key(&mut app, hc_vt::Key::Char('m'));
+    assert!(app.menu.is_some(), "the selected row's menu opened");
+}
+
+#[tokio::test]
+async fn a_chord_focused_dock_over_a_dead_pane_reads_esc_close_and_esc_closes() {
+    // No hand-off ever fired: the pane died first, then the chord
+    // focused the dock. Esc must still close — the keys have no live
+    // pane to go back to — and the footer must say so, not `esc back`.
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    app.panel.mode = PanelMode::Expanded;
+    kill_focused_terminal(&mut app);
+    prefix(&mut app);
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert!(app.panel.focused, "the chord focused the dock");
+    assert!(app.pane.input_refused());
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("esc close"), "{text}");
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+}
+
+#[tokio::test]
+async fn a_revived_pane_flips_the_dock_footer_back_live() {
+    // At this width the dock overlays the panes. A click focuses it
+    // while the pane refuses input: Esc closes — the keys have
+    // nowhere to go back to. The pane comes back and the footer
+    // flips to `esc back` live — focus stays in the dock (one-way,
+    // no latch), and Esc still closes the overlay outright.
+    let mut app = app_with_panel_doc();
+    app.area = (50, 24);
+    app.panel.mode = PanelMode::Expanded;
+    draw_to(&mut app, 50, 24);
+    assert!(!app.panel_beside(50), "the dock overlays at 50");
+    kill_focused_terminal(&mut app);
+    // A left-click on the overlay's body — below every row — focuses
+    // the dock without acting like Enter. The pane's gone-card paints
+    // the footer row at this width, so the closed-out rule is read
+    // from the predicate the key and the label share.
+    let area = app.panel_hits.area;
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        area.x + 1,
+        area.y + area.height - 2,
+    ));
+    assert!(app.panel.focused, "the click focused the dock");
+    assert_eq!(app.focused.as_deref(), Some("t1"), "no row acted");
+    assert!(app.panel_esc_closes(), "Esc closes over a refusing pane");
+    // The terminal returns: the pane takes input again and the
+    // footer flips back.
+    revive_focused_terminal(&mut app);
+    assert!(!app.pane.input_refused(), "the pane takes input again");
+    let text = screen_lines(&draw_to(&mut app, 50, 24)).join("\n");
+    assert!(text.contains("esc back"), "{text}");
+    assert!(!text.contains("esc close"), "{text}");
+    // Focus stayed in the dock; Esc closes the overlay outright.
+    assert!(app.panel.focused);
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.panel.mode, PanelMode::Closed);
 }
