@@ -213,6 +213,21 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             y += 1;
         }
     }
+    // The consent disclosure: the stage answers the agent's
+    // first-use folder-trust prompt for the picked repo itself — a
+    // switch (`[stage] answer_trust`) in the user config turns it
+    // off. Skipped when the rows below would not fit.
+    if y < body.bottom().saturating_sub(6) {
+        card_line(
+            b,
+            body,
+            y,
+            p,
+            "Trust",
+            "the stage answers the agent's folder-trust prompt ([stage] answer_trust)",
+        );
+        y += 1;
+    }
     y += 1;
 
     // A plain-directory pick offers the explicit no-git toggle —
