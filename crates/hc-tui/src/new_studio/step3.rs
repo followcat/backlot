@@ -9,7 +9,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use super::step4::display_fits;
-use super::{NewStudio, NsHit, NsHits, Probe, selected_row};
+use super::{NewStudio, NsHit, NsHits, Probe, RunnerRow, selected_row};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::{put_segment, put_text};
 use crate::chrome::text_editor;
@@ -22,7 +22,9 @@ const RUNNER_NAMES: &str = "claude, codex, devin, cursor, opencode, cmd, cline, 
 /// frames give the model column what is left.
 fn columns(width: u16) -> [(u16, u16); 3] {
     let role = (width / 5).clamp(10, 20);
-    let runner = (width / 7).clamp(7, 12);
+    // The longest runner names the tool ships (`opencode`, `cline`,
+    // `claude`) fit without an ellipsis once `‹ ›` is gone.
+    let runner = (width / 7).clamp(9, 12);
     let effort = (width / 9).clamp(6, 9);
     let mut x = 2 + role + 1;
     let runner_x = x;
@@ -38,6 +40,25 @@ fn columns(width: u16) -> [(u16, u16); 3] {
 
 fn role_col_width(width: u16) -> u16 {
     (width / 5).clamp(10, 20)
+}
+
+/// The Cast footer's tier list for the focused cell: `⏎` opens the
+/// runner's catalog on a MODEL cell and dry-runs on RUNNER/EFFORT,
+/// and every tier names `tab` — the only key that moves the focus
+/// across the three value cells.
+pub(crate) fn hint_tiers(col: usize) -> &'static [&'static str] {
+    match col {
+        1 => &[
+            "tab col  ↑↓ role  ←→ value  ⏎ model list  a add  x remove  ^E editor  esc back",
+            "tab col  ↑↓  ←→  ⏎ model list  a/x  ^E  esc",
+            "tab  ⏎ model list  esc",
+        ],
+        _ => &[
+            "tab col  ↑↓ role  ←→ value  ⏎ dry-run  a add  x remove  ^E editor  esc back",
+            "tab col  ↑↓  ←→  ⏎ dry-run  a/x  ^E  esc",
+            "tab  ⏎ dry-run  esc",
+        ],
+    }
 }
 
 pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits: &mut NsHits) {
@@ -152,9 +173,10 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         .add_modifier(Modifier::BOLD);
     let cols = columns(body.width);
     let role_w = role_col_width(body.width);
-    // Each header stays inside its column span — the role label
-    // degrades to `ROLE` when the long form cannot fit.
-    let role_head_w = cols[0].1.saturating_sub(2) as usize;
+    // Each header stays inside its column span, with the one-space
+    // gap the rows use — the long label degrades to `ROLE` when it
+    // cannot fit, so it never runs into `RUNNER`.
+    let role_head_w = role_w as usize;
     put_text(
         b,
         body.x + 2,
@@ -197,7 +219,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             put_text(b, body.x, y, 1, "▸", Style::default().fg(p.accent).bg(rbg));
         }
         let role = if row.candidate {
-            format!("{} (cand)", row.key)
+            format!("{}*", row.key)
         } else {
             row.key.clone()
         };
@@ -262,9 +284,12 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 }
             } else {
                 let text = cells[col].clone();
+                // The focused cell is already marked by `▸`, the
+                // selection background and bold — `‹ ›` would only
+                // eat width a real runner or model name needs.
                 let (text, style) = if active {
                     (
-                        format!("‹ {text} ›"),
+                        text,
                         Style::default()
                             .fg(p.accent)
                             .bg(rbg)
@@ -287,6 +312,37 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         y += 1;
     }
     y += 1;
+    // The focused row's whole value, under the table: a long model
+    // name may clip in its column, and the runner's resolved binary
+    // is what a launch will actually run. The path drops to its own
+    // line rather than sharing the values line's remaining width.
+    if y < body.bottom()
+        && let Some((values, path)) = detail_line(d, runners)
+    {
+        let room = body.width.saturating_sub(3) as usize;
+        put_text(
+            b,
+            body.x + 2,
+            y,
+            body.width.saturating_sub(2),
+            &crate::chrome::text::truncate_end(&values, room),
+            Style::default().fg(p.overlay0).bg(p.panel_bg),
+        );
+        y += 1;
+        if let Some(path) = path
+            && y < body.bottom()
+        {
+            put_text(
+                b,
+                body.x + 4,
+                y,
+                body.width.saturating_sub(4),
+                &crate::chrome::text::truncate_end(&path, room),
+                Style::default().fg(p.overlay1).bg(p.panel_bg),
+            );
+            y += 1;
+        }
+    }
     if y < body.bottom() {
         put_text(
             b,
@@ -313,6 +369,40 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             );
         }
     }
+}
+
+/// `role · runner · model · effort` for the focused row, and the
+/// runner's resolved binary when detection named one — the lines that
+/// keep a clipped column readable.
+fn detail_line(d: &NewStudio, runners: &[RunnerRow]) -> Option<(String, Option<String>)> {
+    let row = d.cast.rows.get(d.cast.sel)?;
+    let runner = runners.get(row.runner);
+    let name = runner.map(|r| r.runner.as_str()).unwrap_or("-");
+    let model = runner
+        .and_then(|r| r.models.get(row.model))
+        .map(String::as_str)
+        .unwrap_or("-");
+    let effort = runner
+        .and_then(|r| {
+            r.efforts.get(row.effort).cloned().or_else(|| {
+                if r.efforts.is_empty() {
+                    r.models
+                        .get(row.model)
+                        .and_then(|m| super::model::depth_in(m))
+                        .map(str::to_string)
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap_or_else(|| "-".into());
+    let role = if row.candidate {
+        format!("{}*", row.key)
+    } else {
+        row.key.clone()
+    };
+    let values = format!("{role} · {name} · {model} · {effort}");
+    Some((values, runner.and_then(|r| r.path.clone())))
 }
 
 /// The open MODEL list: `auto` first, then the row's runner

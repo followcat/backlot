@@ -433,11 +433,10 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
         Step::Cast if d.model_pick.is_some() => {
             &["↑↓ move  type to filter  ⏎ pick  esc cancel", "↑↓  ⏎  esc"]
         }
-        Step::Cast => &[
-            "↑↓ role  ←→ value  ⏎ model list or dry-run  a add  x remove  ^E editor  esc back",
-            "↑↓  ←→  ⏎ list or dry-run  a/x  ^E  esc",
-            "↑↓  ⏎  esc",
-        ],
+        // `⏎` is cell-dependent — the MODEL cell opens its runner's
+        // catalog, the others dry-run — so the footer names the
+        // focused cell's meaning and teaches `tab`.
+        Step::Cast => step3::hint_tiers(d.cast.col),
         Step::CheckStart => &[
             "space toggle start-stage  ⏎ create studio  esc back to cast",
             "space toggle  ⏎ create  esc",

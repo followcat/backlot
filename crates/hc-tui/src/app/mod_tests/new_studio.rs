@@ -236,6 +236,41 @@ async fn dialog_app() -> (App, Recorded) {
     (app, recorded)
 }
 
+/// `base_answers` with a catalog whose runner and model names are
+/// long enough to test truncation, plus a resolved binary path.
+fn answers_with_long_names() -> Vec<(&'static str, Result<String, String>)> {
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "runners --json");
+    answers.push((
+        "runners --json",
+        Ok(serde_json::json!([
+            { "runner": "claude", "status": "found", "version": "9",
+              "path": "/home/user/.local/bin/claude",
+              "models": ["claude-sonnet-5-5"], "efforts": ["low", "high"] }
+        ])
+        .to_string()),
+    ));
+    answers
+}
+
+/// Open the dialog and land on the Cast step, the draft seeded.
+async fn to_cast(app: &mut App) {
+    key(app, hc_vt::Key::Tab);
+    key(app, hc_vt::Key::Enter);
+    key(app, hc_vt::Key::Enter);
+    drain_ns(app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::Cast);
+}
+
+/// The dialog's footer line, whatever tier it picked.
+fn footer(backend: &ratatui::backend::TestBackend) -> String {
+    screen_lines(backend)
+        .into_iter()
+        .rev()
+        .find(|l| l.contains("tab") || l.contains("⏎"))
+        .unwrap_or_default()
+}
+
 /// Walk step 1 → 4: pick the repo, pass step 2, draft the cast.
 async fn to_step4(app: &mut App) {
     // Repo pane, first row is `acme-shop` (git_ready) — Enter picks.
@@ -781,15 +816,6 @@ async fn a_needs_path_runner_cycles_in() {
     }
 }
 
-/// Walk an open dialog to the cast step — the picker's home.
-async fn to_cast(app: &mut App) {
-    key(app, hc_vt::Key::Tab);
-    key(app, hc_vt::Key::Enter);
-    key(app, hc_vt::Key::Enter);
-    drain_ns(app).await;
-    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::Cast);
-}
-
 /// The generated cast.toml the table currently stands for.
 fn cast_toml(app: &App) -> String {
     let d = app.new_studio.as_ref().unwrap();
@@ -1092,6 +1118,151 @@ async fn no_runners_found_shows_the_banner() {
     let backend = draw_to(&mut app, 120, 36);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("No runners"), "banner expected:\n{text}");
+}
+
+/// The footer teaches Tab and names what `⏎` does on the focused
+/// cell: the runner/effort cells dry-run, the model cell opens its
+/// list. The old footer said neither.
+#[tokio::test]
+async fn the_cast_footer_teaches_tab_and_enter_per_cell() {
+    let (mut app, _) = dialog_app().await;
+    to_cast(&mut app).await;
+
+    // RUNNER cell: `⏎ dry-run`, and `tab col` is on screen.
+    let text = footer(&draw_to(&mut app, 120, 36));
+    assert!(text.contains("tab col"), "the footer teaches tab: {text}");
+    assert!(text.contains("dry-run"), "on RUNNER ⏎ is dry-run: {text}");
+
+    // MODEL cell: the same footer, but `⏎ model list` instead.
+    key(&mut app, hc_vt::Key::Tab);
+    let text = footer(&draw_to(&mut app, 120, 36));
+    assert!(text.contains("tab col"), "{text}");
+    assert!(
+        text.contains("model list"),
+        "on MODEL ⏎ opens the list: {text}"
+    );
+    assert!(
+        !text.contains("dry-run"),
+        "the model cell must not claim dry-run: {text}"
+    );
+
+    // EFFORT cell: back to `⏎ dry-run`.
+    key(&mut app, hc_vt::Key::Tab);
+    let text = footer(&draw_to(&mut app, 120, 36));
+    assert!(text.contains("dry-run"), "on EFFORT ⏎ is dry-run: {text}");
+}
+
+/// A candidate row is tagged `actor-a*`, never truncated to `(c…`,
+/// and the runner cell drops the `‹ ›` marks so a real name fits.
+#[tokio::test]
+async fn long_values_stay_readable_at_typical_widths() {
+    let mut app = app_multi(vec![term("t1")], vec![]);
+    app.set_plain(false);
+    install_run(&mut app, &answers_with_long_names());
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    to_cast(&mut app).await;
+
+    for w in [60u16, 80, 120] {
+        let text = screen_lines(&draw_to(&mut app, w, 36)).join("\n");
+        assert!(
+            text.contains("claude"),
+            "the runner name fits at {w}:\n{text}"
+        );
+        assert!(
+            text.contains("actor-a*"),
+            "the candidate tag is `actor-a*` at {w}:\n{text}"
+        );
+        // The *values* never clip — the path on the detail line may,
+        // it is a diagnostic tail, not a cast value.
+        for cell in text.lines().filter(|l| l.contains("claude-sonnet")) {
+            assert!(
+                cell.contains("claude-sonnet-5-5"),
+                "the model value clips at {w}: {cell}"
+            );
+        }
+        assert!(
+            !text.contains("(c…"),
+            "the candidate tag is not `(c…` at {w}:\n{text}"
+        );
+        assert!(
+            !text.contains('‹'),
+            "the selected cell carries no ‹ › marks at {w}:\n{text}"
+        );
+    }
+}
+
+/// A focused-row detail line under the table names the whole value
+/// the columns may clip, plus the runner's resolved binary path.
+#[tokio::test]
+async fn the_focused_row_has_a_full_detail_line() {
+    let mut app = app_multi(vec![term("t1")], vec![]);
+    app.set_plain(false);
+    install_run(&mut app, &answers_with_long_names());
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    to_cast(&mut app).await;
+
+    let text = screen_lines(&draw_to(&mut app, 80, 36)).join("\n");
+    assert!(
+        text.contains("claude-sonnet-5-5"),
+        "the whole model name is on the detail line:\n{text}"
+    );
+    assert!(
+        text.contains("/home/user/.local/bin/claude"),
+        "the resolved runner path is on the detail line:\n{text}"
+    );
+}
+
+/// An app on a core that holds one studio, the dialog still closed —
+/// `new_workspace` opens the wizard rather than the opening page.
+fn app_under_studio() -> App {
+    let mut app = app_multi(vec![term("t1")], vec![]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    publish_summary(
+        &mut app,
+        None,
+        serde_json::json!({
+            "schema": "backlot/1", "updated_ms": 2,
+            "studios": [{
+                "id": "acme-shop", "title": "Acme shop", "state": "live",
+                "requirement_version": 1, "mode": "standard",
+                "open_reviews": 0, "waiting": 0,
+                "roles": [{ "role": "producer", "name": "producer",
+                            "terminal": "t1", "state": "live" }]
+            }]
+        }),
+    );
+    app
+}
+
+/// The chord that opens the dialog is swallowed: `prefix+shift+n`
+/// must not type its tail `N` into step 1's repo filter, where it
+/// would read `/N…` and match nothing.
+#[tokio::test]
+async fn the_opening_chord_never_types_into_the_repo_filter() {
+    // A studio is on the core, the dialog still closed: `new_workspace`
+    // opens the wizard over it.
+    let mut app = app_under_studio();
+    let _ = install_run(&mut app, &base_answers());
+    assert!(app.new_studio.is_none(), "the dialog starts closed");
+    // `ctrl+b` arms the prefix; `shift+n` is `new_workspace`, which
+    // opens the wizard over a studio.
+    key_mods(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
+    key_mods(&mut app, hc_vt::Key::Char('N'), hc_vt::Mods::SHIFT);
+    drain_ns(&mut app).await;
+    let d = app
+        .new_studio
+        .as_ref()
+        .expect("the chord opened the dialog");
+    assert_eq!(d.step, Step::MachineRepo);
+    assert_eq!(
+        d.repos.filter.as_str(),
+        "",
+        "the chord tail leaked into the filter: {:?}",
+        d.repos.filter.as_str()
+    );
 }
 
 // ---------- step 4 ----------
