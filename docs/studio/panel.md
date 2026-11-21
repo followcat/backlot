@@ -59,14 +59,16 @@ requirement, `Tell producer…`, the stage start/stop, `Finish studio…` and `A
 `Finish` enters the confirm even while tasks are open, because the command's own refusal names
 them, and it draws teal when the studio is ready to finish.
 
-A finished studio has no live producer and no second finish, so its list swaps those rows: it
-offers `Reopen producer (o)` in `Finish`'s place and drops `Focus producer` (there is no terminal
-to land on). `Reopen producer` runs the same people-reopen path a closed person's own row uses —
-a fixed seat reopens without a saved session — and it is the one reopen entry a finished studio
-has, since the sidebar and the band show no person rows for it. The rest of the list stands: the
-sheet, the requirement and `Actor records` read the ledger, the stage still starts and stops, and
-`Tell producer…` queues mail for a person reopened later. Individual people's reopens stay on
-their own closed rows, never in this menu.
+A finished studio has no second finish, so its list swaps that row: while the producer seat is
+closed it offers `Reopen producer (o)` in `Finish`'s place and drops `Focus producer` (there is
+no terminal to land on). `Reopen producer` runs the same people-reopen path a closed person's own
+row uses — a fixed seat reopens without a saved session — and it is the one reopen entry a
+finished studio has, since the sidebar and the band show no person rows for it. Once the producer
+is live again the seat is already open, so the row reads `Focus producer` and lands on its
+terminal like the live menu's own item. The rest of the list stands: the sheet, the requirement
+and `Actor records` read the ledger, the stage still starts and stops, and `Tell producer…`
+queues mail for a person reopened later. Individual people's reopens stay on their own closed
+rows, never in this menu.
 
 A ready-but-unfinished studio reads `state: "finished"` in the document too, so the menu keys on
 `ready_to_finish` to keep `Finish` for it. In the band, `f` on a studio's frame arms that finish

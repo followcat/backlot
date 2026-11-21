@@ -9,12 +9,20 @@ use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
 use crate::studio::StudioKey;
 
-/// The producer's `MenuRole` for a finished studio's reopen row —
-/// derived from the fixed seat, not a role row, so it holds even when
-/// the document lists no producer (a finished studio lists people as
-/// closed). `resumable` is on: a fixed seat reopens without a saved
-/// session, the same rule a closed-person row uses.
-fn producer_role() -> Option<MenuRole> {
+/// The producer's `MenuRole` for a finished studio's menu — the
+/// document's own row when it lists one, so a producer reopened after
+/// the finish reads live and the menu can offer `Focus producer`
+/// instead of a reopen it does not need (A12). The fixed seat still
+/// synthesises its row when the document lists none (a finished
+/// studio lists people as closed). `resumable` stays on either way:
+/// a fixed seat reopens without a saved session, the same rule a
+/// closed-person row uses, and a live seat never consults it.
+fn producer_role(summary: &StudioSummary) -> Option<MenuRole> {
+    if let Some(role) = summary.roles.iter().find(|r| r.role == "producer") {
+        let mut role = MenuRole::from(role);
+        role.resumable = true;
+        return Some(role);
+    }
     Some(MenuRole {
         role: "producer".into(),
         name: "producer".into(),
@@ -60,6 +68,17 @@ impl From<&RoleSummary> for MenuRole {
             terminal: role.terminal.clone(),
             attention_seq: role.attention_seq,
             attention_user: role.attention_user,
+        }
+    }
+}
+
+impl MenuRole {
+    /// `studio::live_terminal`'s rule on the menu's own copy: live
+    /// with a terminal to land on.
+    fn live_terminal(&self) -> Option<&str> {
+        match self.state.as_str() {
+            "live" => self.terminal.as_deref(),
+            _ => None,
         }
     }
 }
@@ -274,7 +293,11 @@ impl StudioMenu {
         StudioMenu {
             kind: MenuKind::Studio,
             studio: Some(key.clone()),
-            role: if finished { producer_role() } else { None },
+            role: if finished {
+                producer_role(summary)
+            } else {
+                None
+            },
             task: None,
             card: None,
             stage_down,

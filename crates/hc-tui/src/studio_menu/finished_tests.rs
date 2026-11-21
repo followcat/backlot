@@ -135,6 +135,54 @@ fn a_finished_studio_offers_reopen_and_no_finish() {
     );
 }
 
+/// A12: a finished studio whose producer was reopened and is live
+/// again offers the live menu's `Focus producer` — the seat is open,
+/// so a `Reopen` row would lie — and still no Finish.
+#[test]
+fn a_finished_studio_with_a_live_producer_offers_focus() {
+    let mut s = finished();
+    s.roles = vec![producer_live()];
+    let menu = StudioMenu::studio(&key(None), &s, false, false);
+    let labels = labels(&menu);
+    assert!(
+        labels.iter().any(|l| l == "Focus producer"),
+        "a live producer is focused, not reopened: {labels:?}"
+    );
+    assert!(
+        !labels.iter().any(|l| l.starts_with("Reopen")),
+        "nothing to reopen while the producer is live: {labels:?}"
+    );
+    assert!(
+        !labels.iter().any(|l| l.starts_with("Finish studio")),
+        "{labels:?}"
+    );
+    let focus = item(&menu, "Focus producer").expect("the focus item");
+    assert_eq!(focus.act, StudioAct::FocusTerminal);
+    assert_eq!(focus.key, Some('\r'), "the live menu's own focus row");
+    // The press lands on the producer's own terminal — the menu
+    // carries the live row's address.
+    assert_eq!(
+        menu.role.as_ref().and_then(|r| r.terminal.as_deref()),
+        Some("t1")
+    );
+}
+
+/// A live `state` with no terminal is not focusable — the same rule
+/// `live_terminal` applies everywhere else — so the reopen stays.
+#[test]
+fn a_finished_studio_with_a_seatless_producer_still_reopens() {
+    let mut s = finished();
+    let mut producer = producer_live();
+    producer.terminal = None;
+    s.roles = vec![producer];
+    let menu = StudioMenu::studio(&key(None), &s, false, false);
+    assert!(
+        item(&menu, "Reopen producer").is_some(),
+        "no terminal to land on, the reopen stays: {:?}",
+        labels(&menu)
+    );
+}
+
 /// The rows a finished studio keeps: the sheet, the records and the
 /// requirement read the ledger, and the stage and `tell` still work.
 #[test]

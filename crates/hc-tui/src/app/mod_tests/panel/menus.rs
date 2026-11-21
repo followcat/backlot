@@ -474,3 +474,67 @@ async fn a_finished_studios_dock_menu_reopens_the_producer() {
         ]]
     );
 }
+
+/// A12: a finished studio whose producer was reopened is done, not
+/// dead — `m` offers the live menu's `Focus producer` on the
+/// producer's terminal, never a `Reopen` that lies about the seat.
+#[tokio::test]
+async fn a_finished_studios_dock_menu_focuses_a_live_producer() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    app.view.documents_mut().insert(
+        DocKey {
+            machine: None,
+            name: "backlot".into(),
+        },
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 3,
+                "studios": [{
+                    "id": "acme-shop", "title": "Acme shop", "state": "finished",
+                    "requirement_version": 1, "mode": "standard",
+                    "open_reviews": 0, "waiting": 0, "tasks_total": 1,
+                    "roles": [
+                        { "role": "producer", "name": "producer",
+                          "state": "live", "terminal": "t5" }
+                    ]
+                }]
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    draw_to(&mut app, 120, 24);
+    open_panel(&mut app);
+    app.panel.selected = Some(Target::Studio("acme-shop".into()));
+    key(&mut app, hc_vt::Key::Char('m'));
+    let Some(menu) = app.menu.take() else {
+        panic!("the menu stayed shut")
+    };
+    let ContextMenuTarget::Studio(sm) = &menu.target else {
+        panic!("a studio menu")
+    };
+    let labels: Vec<_> = sm.items().iter().map(|i| i.label.clone()).collect();
+    assert!(labels.iter().any(|l| l == "Focus producer"), "{labels:?}");
+    assert!(
+        !labels.iter().any(|l| l.starts_with("Reopen")),
+        "{labels:?}"
+    );
+    assert!(
+        !labels.iter().any(|l| l.starts_with("Finish studio")),
+        "{labels:?}"
+    );
+    // The focus row lands on the producer's live terminal.
+    let focus = sm
+        .items()
+        .into_iter()
+        .find(|i| i.label == "Focus producer")
+        .expect("the focus item");
+    assert_eq!(focus.act, crate::studio_menu::StudioAct::FocusTerminal);
+    assert_eq!(
+        sm.role.as_ref().and_then(|r| r.terminal.as_deref()),
+        Some("t5")
+    );
+}
