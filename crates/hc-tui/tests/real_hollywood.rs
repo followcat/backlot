@@ -98,6 +98,38 @@ fn wait_hmessage(state: &Path, label: &str, needle: &str) -> String {
     }
 }
 
+/// Every `message.sent` whose body file ends with `suffix` — `n` of
+/// them — has a `message.delivered` targeting its seq: solo or
+/// inside a digest, that record is the delivery (D20).
+fn wait_hdelivered(state: &Path, suffix: &str, n: usize) {
+    let deadline = Instant::now() + DEADLINE;
+    loop {
+        let ev = hledger(state);
+        let sent: Vec<&Value> = ev
+            .iter()
+            .filter(|e| {
+                e["kind"] == "message.sent"
+                    && e["file"].as_str().is_some_and(|f| f.ends_with(suffix))
+            })
+            .collect();
+        let done = sent
+            .iter()
+            .filter(|s| {
+                ev.iter()
+                    .any(|e| e["kind"] == "message.delivered" && e["target"] == s["seq"])
+            })
+            .count();
+        if done >= n {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "only {done}/{n} {suffix} notices delivered: {ev:?}"
+        );
+        std::thread::sleep(POLL);
+    }
+}
+
 /// The newest `card.proposed`'s seq — the `cN` the user applies.
 fn last_card(state: &Path) -> u64 {
     hledger(state)
@@ -208,7 +240,11 @@ async fn real_hollywood_oversees_two_studios() {
     assert!(!env_text.contains("BACKLOT_STUDIO="), "{env_text}");
 
     // Both studios come up; each producer's prompt is one notice to
-    // Hollywood naming its studio, delivered into its inbox.
+    // Hollywood naming its studio. The trust-model producers also
+    // earn the stage's informational `folder trusted` attention, so
+    // hollywood's notices go out in digest batches — the prompt
+    // file is real (`wait_hmessage`), and the send that carried it,
+    // solo or inside a digest, is the `message.delivered` record.
     for s in ["acme-shop", "acme"] {
         let p = wait_terminal(&client, &format!("bl-{s}-producer")).await;
         wait_read(&client, &p.address, &format!("of {s}")).await;
@@ -217,7 +253,7 @@ async fn real_hollywood_oversees_two_studios() {
     }
     wait_hmessage(&state, "prompt", "acme-shop");
     wait_hmessage(&state, "prompt", "acme");
-    wait_inbox(&state, "fake-inbox-hollywood", "-prompt.md");
+    wait_hdelivered(&state, "-prompt.md", 2);
 
     // `tell hollywood` is delivered and recorded delivered —
     // solo or inside a digest, the `message.delivered` targeting
