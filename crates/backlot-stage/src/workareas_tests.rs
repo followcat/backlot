@@ -2,7 +2,7 @@
 //! reuse and failure paths; one test drives the real git on a
 //! temporary repository.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,8 +16,8 @@ fn tmp() -> TestDir {
     TestDir::new("backlot-work-test")
 }
 
-/// A fake git that records every call and simulates the four verbs
-/// the plan uses.
+/// A fake git that records every call and simulates the verbs the
+/// plan uses.
 #[derive(Default)]
 struct FakeGit {
     calls: Vec<String>,
@@ -27,6 +27,10 @@ struct FakeGit {
     branches: BTreeSet<String>,
     /// Fail any call whose argv contains this text.
     fail: Option<String>,
+    /// `member path → git-common-dir` answers for `rev-parse
+    /// --git-common-dir`; an unconfigured member defaults to its
+    /// own `.git`.
+    common_dirs: BTreeMap<String, String>,
 }
 
 impl FakeGit {
@@ -50,6 +54,21 @@ impl FakeGit {
                     }
                     Some(&"--is-inside-work-tree") => {
                         return out(128, String::new(), "fatal: not a git repository\n".into());
+                    }
+                    Some(&"--path-format=absolute") => {
+                        let member = argv
+                            .iter()
+                            .position(|a| *a == "-C")
+                            .and_then(|i| argv.get(i + 1))
+                            .copied()
+                            .unwrap_or("");
+                        let dir = self.common_dirs.get(member).cloned().unwrap_or_else(|| {
+                            Path::new(member)
+                                .join(".git")
+                                .to_string_lossy()
+                                .into_owned()
+                        });
+                        return out(0, format!("{dir}\n"), String::new());
                     }
                     Some(&"--verify") => {
                         let r = argv.last().unwrap();
@@ -708,6 +727,122 @@ fn linked_worktrees_lay_one_worktree_per_distinct_repository() {
             );
         }
     }
+}
+
+/// The reported failure (D10): a workspace naming one repository
+/// twice — a linked worktree listed before its main checkout — plus
+/// one distinct repository lays one worktree per repository, never
+/// one per member spelling, the kept checkout is the main one
+/// (`core`, not the linked leaf), and the director's cwd is the
+/// `work/integration` container.
+#[test]
+fn repeated_repository_members_count_once_for_work_areas() {
+    let root = tmp();
+    let ws = root.join("ws");
+    // `.git` a directory marks the main checkout; a linked worktree's
+    // `.git` is a gitfile.
+    let main = ws.join("core");
+    fs::create_dir_all(main.join(".git")).unwrap();
+    let linked = ws.join("core-alpha-verify");
+    fs::create_dir_all(&linked).unwrap();
+    fs::write(linked.join(".git"), "gitdir: elsewhere\n").unwrap();
+    let common = "/git/core/.git".to_string();
+    let mut fake = FakeGit {
+        inside: true,
+        common_dirs: BTreeMap::from([
+            (main.to_string_lossy().into_owned(), common.clone()),
+            (linked.to_string_lossy().into_owned(), common),
+        ]),
+        ..FakeGit::default()
+    };
+    let mut git = |argv: &[&str], cwd: &str| fake.run(argv, cwd);
+    let members = vec![
+        linked.to_string_lossy().into_owned(),
+        main.to_string_lossy().into_owned(),
+        "/ws/embedding".into(),
+    ];
+    let dir = root.join("state");
+    fs::create_dir_all(&dir).unwrap();
+    let cwd = ensure(
+        &mut git,
+        "aiflows",
+        &ws.to_string_lossy(),
+        &members,
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
+    assert_eq!(cwd, dir.join("work").join("integration"));
+    let adds: Vec<String> = fake
+        .calls
+        .iter()
+        .filter(|c| c.contains("worktree add"))
+        .cloned()
+        .collect();
+    assert_eq!(adds.len(), 2, "{:?}", fake.calls);
+    let integration = dir.join("work").join("integration");
+    assert!(
+        adds.iter()
+            .any(|c| c.contains(&integration.join("core").display().to_string())),
+        "{adds:?}"
+    );
+    assert!(
+        adds.iter()
+            .any(|c| c.contains(&integration.join("embedding").display().to_string())),
+        "{adds:?}"
+    );
+    assert!(
+        !adds.iter().any(|c| c.contains("core-alpha-verify")),
+        "{adds:?}"
+    );
+}
+
+/// A member git cannot answer the common dir for keeps itself as its
+/// identity — the same fallback `paths::common_dir` has — and is
+/// still probed like any other: its worktree lays under its own leaf.
+#[test]
+fn a_member_git_cannot_answer_keeps_itself_as_identity() {
+    let dir = tmp();
+    let mut fake = FakeGit {
+        inside: true,
+        fail: Some("--git-common-dir".into()),
+        ..FakeGit::default()
+    };
+    let mut git = |argv: &[&str], cwd: &str| fake.run(argv, cwd);
+    let members = vec!["/ws/core".to_string()];
+    let cwd = ensure(
+        &mut git,
+        "s",
+        "/ws",
+        &members,
+        false,
+        &dir,
+        &Area::Integration,
+    )
+    .unwrap();
+    assert_eq!(cwd, dir.join("work").join("integration"));
+    assert!(
+        fake.calls
+            .iter()
+            .any(|c| c == "-C /ws/core rev-parse --is-inside-work-tree"),
+        "the member is still probed: {:?}",
+        fake.calls
+    );
+    assert!(
+        fake.calls.iter().any(|c| {
+            c.contains("worktree add")
+                && c.contains(
+                    &dir.join("work")
+                        .join("integration")
+                        .join("core")
+                        .display()
+                        .to_string(),
+                )
+        }),
+        "{:?}",
+        fake.calls
+    );
 }
 
 /// A no-git studio: every role's area is the bound path itself —
