@@ -228,7 +228,8 @@ pub(crate) struct RunnerRow {
     /// `found` | `not working` | `missing`.
     pub status: String,
     pub version: Option<String>,
-    /// The binary's absolute path when found.
+    /// The binary's absolute path when found — the cast step's
+    /// focused-row detail line names it.
     pub path: Option<String>,
     /// The hit needs a `[runner_env]` PATH write to launch.
     pub needs_path: bool,
