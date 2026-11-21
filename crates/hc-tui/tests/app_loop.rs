@@ -289,6 +289,12 @@ async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
     let producer = tokio::spawn(async move {
         let settled = loopcore::settled_draws(&counters).await;
         assert!(settled > 0, "the initial frame never drew");
+        // A draw armed just before the counters settle can still land
+        // after the settle read — including the first one-second tick,
+        // whose freshly formatted cell counts as a change. Absorb one
+        // whole tick period so the window contains only later draws.
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let baseline = counters.draws.load(Ordering::Relaxed);
         let start_minute = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -304,7 +310,7 @@ async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
             .as_secs()
             / 60;
         drop(ui_tx);
-        (settled, later, end_minute - start_minute)
+        (baseline, later, end_minute - start_minute)
     });
     tokio::time::timeout(
         Duration::from_secs(6),
@@ -313,11 +319,15 @@ async fn tab_bar_datetime_unchanged_minutes_skip_idle_redraws() {
     .await
     .expect("the loop must stay responsive")
     .unwrap();
-    let (settled, later, boundaries) = producer.await.unwrap();
+    let (baseline, later, boundaries) = producer.await.unwrap();
+    // One unrelated startup frame can still land in the window (it does
+    // with no clock cell at all); a broken clock draws once per tick —
+    // two or three frames here — so boundaries + one is the honest
+    // allowance.
     assert!(
-        later - settled <= boundaries,
+        later - baseline <= boundaries + 1,
         "idle clock ticks drew {} extra frames across {} minute boundaries",
-        later - settled,
+        later - baseline,
         boundaries
     );
 }
