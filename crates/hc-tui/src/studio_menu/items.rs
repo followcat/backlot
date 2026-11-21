@@ -110,22 +110,37 @@ impl StudioMenu {
 
     /// A finished studio's rows: the studio ended and every role was
     /// released, so a dead `Finish studio…` is gone (a dimmed row
-    /// looks pressable but rejects "already finished") and
-    /// `Focus producer` has no terminal to land on. `Reopen producer`
-    /// takes Finish's place — the fixed seat reopens the same way a
-    /// closed person's own row does. The rest of the set stands: the
-    /// sheet, the records and the requirement read the ledger, the
-    /// stage still starts and stops, and `tell` still queues mail for
-    /// a person reopened later.
+    /// looks pressable but rejects "already finished"). `Reopen
+    /// producer` takes Finish's place — the fixed seat reopens the
+    /// same way a closed person's own row does. When the producer
+    /// came back live the live menu's own `Focus producer` stands in
+    /// its place: the seat is already open, so the row lands on its
+    /// terminal instead of offering a reopen it does not need (A12).
+    /// The rest of the set stands: the sheet, the records and the
+    /// requirement read the ledger, the stage still starts and stops,
+    /// and `tell` still queues mail for a person reopened later.
     fn finished_studio_items(
         &self,
         item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
     ) -> Vec<StudioItem> {
-        let mut out = vec![item(
-            "Reopen producer (o)".to_owned(),
-            Some('o'),
-            StudioAct::Reopen,
-        )];
+        let mut out = vec![if self
+            .role
+            .as_ref()
+            .and_then(MenuRole::live_terminal)
+            .is_some()
+        {
+            item(
+                "Focus producer".to_owned(),
+                Some('\r'),
+                StudioAct::FocusTerminal,
+            )
+        } else {
+            item(
+                "Reopen producer (o)".to_owned(),
+                Some('o'),
+                StudioAct::Reopen,
+            )
+        }];
         out.push(item(
             "Inspect studio sheet (v)".to_owned(),
             Some('v'),

@@ -1,5 +1,24 @@
 # Studio progress
 
+## Ux: a finished studio with a live producer offers Focus (A12)
+
+- Done: a finished studio's menu kept showing `Reopen producer (o)` after the
+  producer was reopened — the `studio.finished` marker is authoritative, so the
+  finished branch rendered its reopen row unconditionally. The menu now carries
+  the producer's own document row instead of always synthesising a closed seat,
+  and the finished list picks its first row on the same check the live menu's
+  focus uses (`live` plus a terminal to land on): a live producer gets `Focus
+  producer` on Enter, landing on its terminal; a closed or seatless one keeps
+  `Reopen producer (o)`. `panel.md` restates the finished list.
+- Measured: `studio_menu/finished_tests.rs` covers the live-producer list
+  (Focus present with `FocusTerminal` on `\r` and the producer's terminal
+  carried on the menu's role, Reopen and Finish absent) and a seatless live row
+  keeping the reopen; one app test drives the dock's `m` on a finished studio
+  whose document lists a live producer and checks the same list. `cargo fmt
+  --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` pass.
+- Not verified: no live-session run — the swap is exercised through the
+  summary fixtures only.
+
 ## Ux: the studio menu follows the studio's state
 
 - Done: the menu the band chip, the dock row and the studio header share
