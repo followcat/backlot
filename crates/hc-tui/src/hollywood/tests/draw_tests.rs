@@ -234,10 +234,15 @@ fn the_band_draws_sprockets_title_and_counts() {
     assert!(text.contains("acme-shop needs a look"), "{text}");
     assert!(text.contains("CARD c3  acme-shop · pause t1"), "{text}");
     assert!(text.contains("apply a"), "{text}");
+    // No row is selected: the footer names the sheet's own keys and
+    // the fixed right block — no row keys, and the old bare
+    // all-keys tier is gone.
     assert!(
-        text.contains("↑↓ move   ⏎ open   y/d answer   a/x card   f finish   r start   p peek   i tell   m menu   ? help   esc close"),
+        text.contains("i tell   ↑↓ ⏎   m menu   ? help   esc"),
         "{text}"
     );
+    assert!(!text.contains("y/d a/x"), "{text}");
+    assert!(!text.contains("↑↓ move"), "{text}");
 }
 
 #[test]
@@ -358,6 +363,133 @@ fn the_frames_fold_into_the_chip_strip_under_pressure() {
     // `tell` and the waiting rows stay visible through the fold.
     assert!(text.contains("tell hollywood"), "{text}");
     assert!(text.contains("CARD c3"), "{text}");
+}
+
+// ---------- the footer ----------
+
+#[test]
+fn a_prompt_row_footer_names_y_d_answer() {
+    // D9: alice's user-owned prompt is a sheet row — its footer
+    // names the answers it takes, the peek and the tell line, then
+    // the fixed right block.
+    let summary = with_user_prompt("acme-shop", "actor-alice");
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let selected = Target::Prompt(
+        crate::studio::StudioKey::local("acme-shop"),
+        "actor-alice".into(),
+    );
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, selected),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(
+        text.contains("y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_row_without_answers_never_names_their_keys() {
+    // The headline, the calm row and the tell line run no row keys —
+    // their footers name only `i tell` and the fixed right block.
+    let summary = summary();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    for selected in [Target::Headline, Target::Calm, Target::Input] {
+        let (buf, _) = draw(
+            area,
+            Some(&summary),
+            true,
+            &selecting(LayerMode::Expanded, selected.clone()),
+            false,
+            &palette,
+        );
+        let text = lines(&buf, area).join("\n");
+        assert!(
+            text.contains("i tell   ↑↓ ⏎   m menu   ? help   esc"),
+            "{selected:?}: {text}"
+        );
+        assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
+        assert!(!text.contains("a/x card"), "{selected:?}: {text}");
+        assert!(!text.contains("f finish"), "{selected:?}: {text}");
+        assert!(!text.contains("r start"), "{selected:?}: {text}");
+    }
+}
+
+#[test]
+fn a_card_row_footer_names_a_x_card() {
+    let summary = summary();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let selected = Target::Card("c3".into());
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, selected),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(
+        text.contains("a/x card   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_ready_studio_footer_names_f_finish_from_row_and_frame() {
+    // The READY row and the studio's own frame are one studio: both
+    // arm `f`, so both footers name it.
+    let mut summary = summary();
+    summary.studios[0].ready_to_finish = true;
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let key = crate::studio::StudioKey::local("acme-shop");
+    for selected in [Target::Ready(key.clone()), Target::Studio(key)] {
+        let (buf, _) = draw(
+            area,
+            Some(&summary),
+            true,
+            &selecting(LayerMode::Expanded, selected.clone()),
+            false,
+            &palette,
+        );
+        let text = lines(&buf, area).join("\n");
+        assert!(
+            text.contains("f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+            "{selected:?}: {text}"
+        );
+    }
+}
+
+#[test]
+fn a_narrow_prompt_row_still_names_y_d() {
+    // At the 40-column floor the compact tier keeps the row's keys
+    // and the menu hint beside the bare block.
+    let summary = with_user_prompt("acme-shop", "actor-alice");
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 40, 24);
+    let selected = Target::Prompt(
+        crate::studio::StudioKey::local("acme-shop"),
+        "actor-alice".into(),
+    );
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, selected),
+        true,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("y/d p i   ↑↓ ⏎   m menu   esc"), "{text}");
 }
 
 // ---------- the no-agent bar ----------

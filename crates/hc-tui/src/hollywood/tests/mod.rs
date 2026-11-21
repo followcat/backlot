@@ -72,6 +72,24 @@ pub(super) fn summary() -> Summary {
     serde_json::from_value(summary_json()).unwrap()
 }
 
+/// The fixture with `attention_user` on `role` of `studio` — the
+/// D9 user-owned prompt a sheet prompt row needs.
+pub(super) fn with_user_prompt(studio: &str, role: &str) -> Summary {
+    let mut value = summary_json();
+    for s in value["studios"].as_array_mut().unwrap() {
+        if s["id"] == studio {
+            for r in s["roles"].as_array_mut().unwrap() {
+                if r["role"] == role {
+                    r["attention_user"] = true.into();
+                    r["attention_seq"] = 7.into();
+                    r["attention_detail"] = "may I run the tests?".into();
+                }
+            }
+        }
+    }
+    serde_json::from_value(value).unwrap()
+}
+
 /// A summary wrapped as this core's machine row — the shape the
 /// aggregate APIs take; `None` is no document anywhere.
 pub(super) fn machines(summary: Option<&Summary>) -> Vec<crate::panel::data::MachineSummary> {
