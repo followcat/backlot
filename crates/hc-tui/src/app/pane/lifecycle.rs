@@ -381,12 +381,19 @@ impl Pane {
         }
     }
 
+    /// Whether fresh human input would be refused — a dead pane, or a
+    /// spec whose role never carries input (observe, size holders).
+    /// `push_pending` refuses on exactly this rule; the app checks it
+    /// before handing a refused key to the drawn dock.
+    pub(crate) fn input_refused(&self) -> bool {
+        matches!(self.state, State::Gone { .. })
+            || self.spec().is_none_or(|spec| spec.role != Role::Active)
+    }
+
     pub(super) fn push_pending(&mut self, item: Pending) -> bool {
         // Previously held controls are older than this new input event.
         self.push_controls();
-        if matches!(self.state, State::Gone { .. })
-            || self.spec().is_none_or(|spec| spec.role != Role::Active)
-        {
+        if self.input_refused() {
             self.dropped_input += 1;
             self.input_rejection = Some("Terminal input is unavailable in this view".into());
             return false;

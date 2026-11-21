@@ -104,6 +104,7 @@ impl App {
     pub(super) fn panel_close(&mut self) {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
+        self.panel.esc_close = false;
         self.panel.selected = None;
         self.panel.selected_row = None;
         self.panel.drawer = None;
@@ -117,7 +118,30 @@ impl App {
             self.panel_close();
         } else {
             self.panel.focused = false;
+            self.panel.esc_close = false;
         }
+    }
+
+    /// A press the focused pane refused while the dock sits drawn
+    /// beside the panes, unfocused: the press stays refused — it is
+    /// never re-read as a dock action — but the dock takes the keys
+    /// from here on. Its `Esc` then closes outright (the footer says
+    /// `esc close`) and the notice says where the keys went. One-way:
+    /// a pane that comes back never takes the keys back by itself.
+    pub(super) fn dead_pane_handoff(&mut self) {
+        if !self.panel.open()
+            || self.panel_fullscreen()
+            || self.panel.focused
+            || !self.pane.input_refused()
+        {
+            return;
+        }
+        self.panel.focused = true;
+        self.panel.esc_close = true;
+        // The dock hand-off says it better than the pane's generic
+        // text — take the rejection so the wake does not re-show it.
+        self.pane.take_input_rejection();
+        self.reject_input("Pane exited · keys go to the dock");
     }
 
     /// Collapsed ↔ expanded (the `c` key and the title click).

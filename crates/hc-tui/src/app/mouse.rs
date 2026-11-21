@@ -230,6 +230,7 @@ impl App {
             }
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) && self.panel.focused {
                 self.panel.focused = false;
+                self.panel.esc_close = false;
             }
         }
         if contains(self.take_control_hit, (mouse.col, mouse.row)) {

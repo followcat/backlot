@@ -284,6 +284,47 @@ async fn esc_backs_out_of_the_dock() {
 }
 
 #[tokio::test]
+async fn a_dead_panes_refused_keys_hand_off_to_the_drawn_dock() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    // `esc back`: the dock stays painted beside the panes, unfocused.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused);
+    assert!(app.panel_beside(120));
+    // The focused terminal leaves the inventory: the pane goes dead
+    // while the dock still sits beside it.
+    let terms: Vec<_> = app
+        .view
+        .inventory
+        .terminals()
+        .values()
+        .filter(|&t| t.address != "t1")
+        .cloned()
+        .collect();
+    app.view.inventory_mut().replace(2, terms);
+    let view = app.view.clone();
+    app.pane.on_view(&view);
+    // A plain key is refused — and the drawn dock takes the keys.
+    let backlog = app.pane.input_backlog();
+    key(&mut app, hc_vt::Key::Char('m'));
+    assert_eq!(app.pane.input_backlog().0, backlog.0, "the key was refused");
+    assert!(
+        app.pane.input_backlog().1 > backlog.1,
+        "the key was refused"
+    );
+    assert!(app.panel.focused, "the dock took the keys");
+    // The notice says where the keys went; the dock's footer reads
+    // `esc close` while it holds the hand-off.
+    let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(text.contains("keys go to the dock"), "{text}");
+    assert!(text.contains("esc close"), "{text}");
+    // The dock's own Esc now closes it outright.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+}
+
+#[tokio::test]
 async fn enter_on_a_studio_focuses_its_producer() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
