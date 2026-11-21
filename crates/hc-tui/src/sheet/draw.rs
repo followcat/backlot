@@ -7,6 +7,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
+use ratatui::widgets::{Clear, Widget};
 
 use super::lines::{Row, lines_for};
 use super::{Sheet, SheetTab};
@@ -14,6 +15,10 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs;
+
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
 
 /// What a render leaves for the caller — the modal's rect, for the
 /// click-outside test and the tests' geometry assertions.
@@ -76,7 +81,11 @@ pub(crate) fn render(
         };
     }
     // The shared dialog frame — every modal paints the same
-    // `panel_bg` box with an accent border (A6.2).
+    // `panel_bg` box with an accent border (A6.2). The dimmed
+    // backdrop is the caller's; the dead panes' frozen screens
+    // behind must not keep their modifiers under the panel's patch
+    // fill — clear the sheet's own rect before the frame.
+    Clear.render(frame, buf);
     let Some(_inner) = crate::chrome::dialogs::panel(buf, frame, palette.accent, palette.panel_bg)
     else {
         return SheetRender {

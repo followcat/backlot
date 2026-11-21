@@ -13,6 +13,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
+use ratatui::widgets::{Clear, Widget};
 
 use backlot_stage::config::HollywoodCfg;
 
@@ -22,6 +23,10 @@ use crate::chrome::render::{put_right_text, put_segment, put_text};
 use crate::chrome::text::{display_width, truncate_end};
 use crate::chrome::text_editor::TextEditor;
 use crate::new_studio::{ModelPick, Probe, RunnerRow};
+
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
 
 /// The dialog's rows — `Effort` only exists while the selected
 /// runner declares an effort list.
@@ -295,6 +300,10 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSetup, p: &Palette, band: Rect) -> Hw
         );
         return hits;
     };
+    // The dimmed backdrop is the caller's; the dead panes' frozen
+    // screens behind must not keep their modifiers under the panel's
+    // patch fill — clear the dialog's own rect before the frame.
+    Clear.render(outer, b);
     let Some(inner) = crate::chrome::dialogs::panel(b, outer, p.accent, p.panel_bg) else {
         return hits;
     };
