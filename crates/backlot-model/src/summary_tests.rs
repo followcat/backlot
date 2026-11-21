@@ -504,6 +504,35 @@ fn finished_studios_drop_for_size_but_live_stay() {
     assert_eq!(s.studios[0].roles.len(), 350);
 }
 
+/// A studio that never created a task still reads `finished` once
+/// `studio.finished` is in the ledger — the marker wins; the
+/// all-terminal-tasks predicate only covers ledgers that predate
+/// it. `ready_to_finish` stays false so the studio menu shows the
+/// finished rows, not the finish row.
+#[test]
+fn a_taskless_studio_with_the_marker_is_finished() {
+    let state = replay(&[
+        ev(1, "user", studio_kind()),
+        ev(
+            2,
+            "user",
+            EventKind::StudioFinished {
+                reason: "done".into(),
+            },
+        ),
+    ]);
+    let s = summary(
+        &[("taskless".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(s.studios[0].state, "finished");
+    assert!(!s.studios[0].ready_to_finish);
+}
+
 /// Finished studios fill only the slots live ones leave.
 #[test]
 fn finished_studios_drop_off_after_live_ones() {

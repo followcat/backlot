@@ -9,15 +9,17 @@ use crate::event::Priority;
 use crate::state::{RoleLifecycle, StudioState, Task, actor_task};
 use crate::summary::{RoleSummary, TaskSummary, Work, cap, steady};
 
-/// A studio is finished when every task it knows is terminal and no
-/// recorded role is still live.
+/// A studio is finished when its ledger carries `studio.finished`,
+/// or — for ledgers that predate the marker — when every task it
+/// knows is terminal and no recorded role is still live.
 pub(crate) fn finished(state: &StudioState) -> bool {
-    !state.tasks.is_empty()
-        && state.tasks.values().all(|t| t.status.is_terminal())
-        && state
-            .roles
-            .values()
-            .all(|r| r.lifecycle() != RoleLifecycle::Live)
+    state.finished.is_some()
+        || (!state.tasks.is_empty()
+            && state.tasks.values().all(|t| t.status.is_terminal())
+            && state
+                .roles
+                .values()
+                .all(|r| r.lifecycle() != RoleLifecycle::Live))
 }
 
 /// One task's dock projection (S2): the row state, the dependency
