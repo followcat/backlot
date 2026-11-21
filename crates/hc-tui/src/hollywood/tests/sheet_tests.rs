@@ -4,9 +4,8 @@
 
 use super::*;
 use crate::hollywood::rows::Target;
-use crate::hollywood::tests::{machines, remote, summary, summary_json};
+use crate::hollywood::tests::{machines, remote, summary, with_user_prompt};
 use crate::studio::StudioKey;
-use backlot_model::summary::Summary;
 
 /// A status closure over named facts: `online` machines are
 /// `Conn::Online`, `down` machines have a stopped stage; this core
@@ -22,23 +21,6 @@ fn status<'a>(online: &'a [&'a str], down: &'a [&'a str]) -> Box<Status<'a>> {
             (Conn::Online, !down.contains(&name))
         }
     })
-}
-
-/// The fixture with `attention_user` on `role` of `studio`.
-fn with_user_prompt(studio: &str, role: &str) -> Summary {
-    let mut value = summary_json();
-    for s in value["studios"].as_array_mut().unwrap() {
-        if s["id"] == studio {
-            for r in s["roles"].as_array_mut().unwrap() {
-                if r["role"] == role {
-                    r["attention_user"] = true.into();
-                    r["attention_seq"] = 7.into();
-                    r["attention_detail"] = "may I run the tests?".into();
-                }
-            }
-        }
-    }
-    serde_json::from_value(value).unwrap()
 }
 
 #[test]

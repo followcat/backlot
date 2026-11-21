@@ -18,7 +18,7 @@ use super::plan;
 use super::rows::{self, Row, Target};
 use super::sheet::{Status, Wait};
 use super::view;
-use super::{Hollywood, LayerMode, LayerOpts, band, chips, frames, items, title};
+use super::{Hollywood, LayerMode, LayerOpts, band, chips, frames, hints, items, title};
 use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics};
@@ -319,10 +319,8 @@ fn render_band(
         scroll,
     ));
     if plan.hints {
-        let tier = crate::chrome::text::fit_hints(
-            &band::HINT_TIERS,
-            (area.width as usize).saturating_sub((MARGIN * 2) as usize),
-        );
+        let usable = (area.width as usize).saturating_sub((MARGIN * 2) as usize);
+        let tier = hints::for_row(hollywood.selected.as_ref(), &waits, usable);
         let w = tier.chars().count() as u16;
         let x = (area.x + area.width.saturating_sub(MARGIN))
             .saturating_sub(w)
@@ -332,7 +330,7 @@ fn render_band(
             x,
             y,
             w.min(area.width),
-            tier,
+            &tier,
             Style::default()
                 .fg(palette.overlay0)
                 .bg(palette.surface_dim),

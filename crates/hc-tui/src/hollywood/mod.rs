@@ -13,6 +13,7 @@ mod band;
 mod chips;
 mod draw;
 mod frames;
+mod hints;
 mod items;
 mod keys;
 mod new_frame;
