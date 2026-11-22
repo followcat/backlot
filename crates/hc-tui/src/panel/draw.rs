@@ -14,8 +14,8 @@ use ratatui::style::{Modifier, Style};
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
-    draw_input, draw_owed, draw_person, draw_person_line, draw_talk, draw_top, draw_usage,
-    frame_style,
+    draw_input, draw_owed, draw_person, draw_person_line, draw_reopen, draw_talk, draw_top,
+    draw_usage, frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_summary};
 use super::draw_tasks::{draw_drawer, draw_fold, draw_task};
@@ -48,6 +48,9 @@ pub(crate) struct PanelRender {
     pub viewport_rows: usize,
     /// A working mark was drawn this frame.
     pub working_drawn: bool,
+    /// The `›` line's editor cursor while its studio composes —
+    /// `None` while every input row rests.
+    pub cursor: Option<crate::chrome::help::CursorState>,
 }
 
 /// Render the panel into `area`. `body` rows under the title scroll;
@@ -160,7 +163,7 @@ pub(crate) fn render(
         // and the `›` line shows its own, so the dock teaches its
         // verbs where the cursor sits (A2.2's "cursor on something
         // real" made readable).
-        let focused_tiers = hint_tiers(panel.selected.as_ref(), machines, esc);
+        let focused_tiers = hint_tiers(panel.selected.as_ref(), panel.editing, machines, esc);
         let tier_refs: Vec<&str> = focused_tiers.iter().map(String::as_str).collect();
         let keys_line = if panel.focused {
             fit_hints(&tier_refs, area.width as usize).to_string()
@@ -250,6 +253,7 @@ pub(crate) fn render(
                     | Row::Strip { .. }
                     | Row::Talk { .. }
                     | Row::Input { .. }
+                    | Row::ReopenProducer { .. }
             );
         if paints {
             // A block-interior row's `│` borders keep the border
@@ -262,6 +266,7 @@ pub(crate) fn render(
                     | Row::AcceptedFold { .. }
                     | Row::Talk { .. }
                     | Row::Input { .. }
+                    | Row::ReopenProducer { .. }
             ) {
                 Rect {
                     x: rect.x + 1,
@@ -385,16 +390,33 @@ pub(crate) fn render(
                     None
                 };
                 hits.working_drawn |= cue.is_some();
-                draw_input(
+                // This studio's own draft only — another block's
+                // line never paints its text here (R3-B3). An empty
+                // stand-in keeps the borrow cheap while it rests.
+                let empty;
+                let draft = match panel.draft(&studio.key()) {
+                    Some(draft) => draft,
+                    None => {
+                        empty = crate::chrome::text_editor::TextEditor::new("", false);
+                        &empty
+                    }
+                };
+                let composing = paints && panel.editing;
+                hits.cursor = draw_input(
                     buf,
                     rect,
-                    &panel.input,
+                    draft,
                     paints,
+                    composing,
                     cue,
                     panel.spin,
                     frame_of(&studio.key()),
                     palette,
-                );
+                )
+                .or(hits.cursor.take());
+            }
+            Row::ReopenProducer { studio } => {
+                draw_reopen(buf, rect, frame_of(&studio.key()), palette);
             }
             Row::Stacked(studio) => {
                 draw_stacked(
@@ -442,6 +464,7 @@ pub(crate) fn render(
                     | Row::AcceptedFold { .. }
                     | Row::Talk { .. }
                     | Row::Input { .. }
+                    | Row::ReopenProducer { .. }
             ) {
                 rect.x + 1
             } else {
@@ -477,10 +500,15 @@ pub(crate) fn render(
 
 /// The focused footer's three width tiers — what the *selected* row
 /// can do, so the hints a person sees change with the cursor: a
-/// person line offers `p`/`y`/`d`, a task `+`/`-`, a `›` line owns
-/// every key (its `esc`/`↑` peel back to the rows). `esc` is the
-/// label the caller already resolved (`esc`/`esc back`/`esc close`).
-fn hint_tiers(selected: Option<&Target>, machines: &[MachineSummary], esc: &str) -> [String; 3] {
+/// person line offers `p`/`y`/`d`, a task `+`/`-`, a composing `›`
+/// line's `⏎` sends and `↑`/`esc` leave the edit. `esc` is the label
+/// the caller already resolved (`esc`/`esc back`/`esc close`).
+fn hint_tiers(
+    selected: Option<&Target>,
+    editing: bool,
+    machines: &[MachineSummary],
+    esc: &str,
+) -> [String; 3] {
     let s = |v: &[&str]| {
         let mut out = [String::new(), String::new(), esc.to_string()];
         for (i, t) in v.iter().enumerate() {
@@ -489,7 +517,9 @@ fn hint_tiers(selected: Option<&Target>, machines: &[MachineSummary], esc: &str)
         out
     };
     match selected {
-        Some(Target::Input(_)) => s(&["⏎ send  ↑ rows", "⏎ send  ↑"]),
+        Some(Target::Input(_)) if editing => s(&["⏎ send · ↑/esc done", "⏎ ↑/esc"]),
+        Some(Target::Input(_)) => s(&["⏎ compose  i tell  / verb  m", "⏎ i / m", "⏎ m"]),
+        Some(Target::ReopenProducer(_)) => s(&["o reopen  m", "o m"]),
         Some(Target::Talk(key, seq)) => {
             let has_file = super::data::studio(machines, key).is_some_and(|st| {
                 st.studio
@@ -503,8 +533,15 @@ fn hint_tiers(selected: Option<&Target>, machines: &[MachineSummary], esc: &str)
                 s(&["i tell  v sheet  m", "i v m", "m"])
             }
         }
-        Some(Target::Person(..)) => {
-            s(&["⏎ focus  v sheet  p peek  i tell  m", "⏎ v p i m", "⏎ v m"])
+        Some(Target::Person(key, role_name)) => {
+            let closed = super::data::studio(machines, key)
+                .and_then(|st| st.studio.roles.iter().find(|r| r.role == *role_name))
+                .is_some_and(|r| r.state == "closed");
+            if closed {
+                s(&["o reopen  i tell  m", "o i m", "o m"])
+            } else {
+                s(&["⏎ focus  v sheet  p peek  i tell  m", "⏎ v p i m", "⏎ v m"])
+            }
         }
         Some(Target::Task(..)) => s(&["v sheet  +- pri  i tell  m", "v +- i m", "v m"]),
         Some(Target::Studio(_) | Target::Block(_) | Target::Strip(_)) => {

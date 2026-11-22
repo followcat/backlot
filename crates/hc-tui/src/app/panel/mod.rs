@@ -51,12 +51,14 @@ impl App {
         panel::data::summaries(&self.view)
     }
 
-    /// Whether the `›` line owns the keys: the selection sits on a
-    /// block's `Input` row while the panel is focused — one rule, no
-    /// separate latch, so the highlight and the key receiver can
-    /// never disagree (the Call Sheet's same model).
+    /// Whether the `›` line owns the keys — `Compose`: the panel is
+    /// focused, the selection sits on a `Input` row and the explicit
+    /// `panel.editing` latch is set (R3-B2). `Resting` on the same
+    /// row keeps `j`/`k`/`m`/`Esc` navigation live.
     pub(crate) fn panel_editing(&self) -> bool {
-        self.panel.focused && matches!(self.panel.selected, Some(Target::Input(_)))
+        self.panel.focused
+            && self.panel.editing
+            && matches!(self.panel.selected, Some(Target::Input(_)))
     }
 
     /// Whether `machine`'s (`None` is this core) inventory shows a
@@ -115,6 +117,7 @@ impl App {
     pub(super) fn panel_close(&mut self) {
         self.panel.mode = PanelMode::Closed;
         self.panel.focused = false;
+        self.panel.editing = false;
         self.panel.selected = None;
         self.panel.selected_row = None;
         self.panel.drawer = None;
@@ -124,6 +127,7 @@ impl App {
     /// Leave the panel after a row focused a terminal: full-screen
     /// closes (the pane becomes visible), beside stays open unfocused.
     pub(super) fn panel_leave(&mut self) {
+        self.panel.editing = false;
         if self.panel_fullscreen() {
             self.panel_close();
         } else {

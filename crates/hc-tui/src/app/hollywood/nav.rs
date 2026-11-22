@@ -25,6 +25,7 @@ impl App {
             .unwrap_or(0);
         let next = (current as isize + delta).clamp(0, frames.len() as isize - 1) as usize;
         self.hollywood.selected = Some(frames[next].clone());
+        self.hollywood_sync_editing();
         self.hollywood_keep_frame_visible();
     }
 
@@ -44,6 +45,7 @@ impl App {
                 // Back up into the frames.
                 if let Some(last) = frames.last() {
                     self.hollywood.selected = Some(last.clone());
+                    self.hollywood_sync_editing();
                     self.hollywood_keep_frame_visible();
                 }
                 return;

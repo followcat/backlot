@@ -212,7 +212,7 @@ pub(crate) fn render(
         } else {
             ""
         };
-        format!(" {more}{below}tab/1-3 tabs · j/k · o read · esc close ")
+        format!(" {more}{below}tab/1-3 tabs · j/k · ⏎ read · esc close ")
     };
     let fw = (display_width(&footer) as u16).min(frame.width.saturating_sub(2));
     put_text(

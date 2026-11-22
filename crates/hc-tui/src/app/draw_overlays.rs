@@ -314,6 +314,21 @@ pub(super) fn render_overlays_and_cursor(
             ..cursor
         };
     }
+    // The dock's `›` line owns the host cursor while it composes —
+    // unless the Call Sheet floats over it (R3-B2); the sheet's own
+    // cursor block below outranks this one then.
+    if app.popup.is_none()
+        && !app.hollywood.expanded()
+        && app.hollywood.view.is_none()
+        && let Some(cursor) = app.panel_hits.cursor.as_ref()
+    {
+        app.want_cursor = CursorWish {
+            pos: cursor.visible.then_some((cursor.x, cursor.y)),
+            anchor: Some((cursor.x, cursor.y)),
+            shape: CursorShape::Default,
+            blinking: true,
+        };
+    }
     if mode_bar.is_some_and(|bar| app.want_cursor.pos.is_some_and(|(_, y)| y == bar.y)) {
         app.want_cursor.pos = None;
         app.want_cursor.anchor = None;

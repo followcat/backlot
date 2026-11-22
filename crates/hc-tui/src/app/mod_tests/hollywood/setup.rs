@@ -111,13 +111,19 @@ async fn the_setup_row_opens_the_dialog_and_apply_writes_the_table() {
 }
 
 #[tokio::test]
-async fn c_reopens_the_dialog_prefilled_when_the_table_exists() {
+async fn c_is_inert_and_the_settings_path_reopens_the_dialog_prefilled() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     let _recorded = install(&mut app);
     alt_y(&mut app);
+    // R3-5: `c` is the dock's collapse key only — inert on the Call
+    // Sheet; Hollywood settings live on the pill menu and `Ctrl+B s
+    // → studio → overseer → ⏎`.
     key(&mut app, hc_vt::Key::Char('c'));
-    assert!(app.hw_setup.is_some(), "c opens the reconfigure dialog");
+    assert!(app.hw_setup.is_none(), "c is inert on the Call Sheet");
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    app.hw_setup_open();
+    assert!(app.hw_setup.is_some(), "the settings path opened it");
     drain_ns(&mut app).await;
     // The cfg's own values are seated: runner fake (found index 0),
     // model model-h verbatim, effort high (index 1 of low/high).

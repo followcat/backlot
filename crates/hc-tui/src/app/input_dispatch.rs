@@ -74,8 +74,10 @@ impl App {
                         }
                     } else if self.settings.is_some() || self.update_modal.is_some() {
                         // The Settings overlay has no text field — eat it.
-                    } else if self.panel_focused() {
-                        // The panel has no text field — eat it.
+                    } else if self.insert_editors_text(&lossy) {
+                        // A composing `›` line took it, or an open
+                        // textless surface (resting `›`, Task Sheet,
+                        // menu, dock) ate it — never the pane (R3-B2).
                     } else if self.popup_paste(&text) {
                         // The popup terminal owns paste while open.
                     } else if self.peek.is_some() {
@@ -107,8 +109,9 @@ impl App {
                     }
                 } else if self.settings.is_some() || self.update_modal.is_some() {
                     // The Settings overlay has no text field — eat it.
-                } else if self.panel_focused() {
-                    // The panel has no text field — eat it.
+                } else if self.insert_editors_text(&text) {
+                    // A composing `›` line took it, or an open
+                    // textless surface ate it — never the pane (R3-B2).
                 } else if self.popup_text(text.clone().into_bytes()) {
                     // The popup terminal owns IME text while open.
                 } else if self.peek.is_some() {
@@ -129,6 +132,34 @@ impl App {
         }
     }
 
+    /// Paste or IME text for the surfaces with a live `TextEditor`:
+    /// the Call Sheet's `›` line and a dock `›` draft, but only while
+    /// that line is in `Compose` — a resting or textless surface
+    /// (Task Sheet, menu, resting dock) still eats the text so it
+    /// never leaks to the terminal behind it (R3-B2).
+    pub(super) fn insert_editors_text(&mut self, text: &str) -> bool {
+        // Modals own their text first — the Task Sheet has no field;
+        // a context menu's press is never an editor's.
+        if self.sheet.is_some() || self.menu.is_some() {
+            return true;
+        }
+        if self.hollywood.expanded() || self.hollywood.view.is_some() {
+            if self.hollywood.editing {
+                let _ = self.hollywood.input.insert(text);
+            }
+            return true;
+        }
+        if self.panel_focused() {
+            if self.panel_editing()
+                && let Some(crate::panel::Target::Input(key)) = self.panel.selected.clone()
+            {
+                let _ = self.panel.draft_mut(&key).insert(text);
+            }
+            return true;
+        }
+        false
+    }
+
     /// Derived from herdr src/client/shell/input.rs `host_text_commit`
     /// (Apache-2.0): while the host reports every key as an escape
     /// code, plain arriving text is an IME/compose commit — forward it
@@ -144,6 +175,10 @@ impl App {
             || self.hw_setup.is_some()
             || self.navigator.is_some()
             || self.settings.is_some()
+            || self.sheet.is_some()
+            || self.menu.is_some()
+            || self.hollywood.expanded()
+            || self.hollywood.view.is_some()
             || self.panel_focused()
         {
             return None;

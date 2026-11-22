@@ -224,12 +224,13 @@ impl App {
         )
     }
 
-    /// One latch, not two: the line edits iff the selection rests on
-    /// it. Every selection change ends in this so a highlight can
-    /// never claim one row while keys land in another.
+    /// The `Compose` latch can only live on the `›` row — every
+    /// selection change ends in this clamp so walking onto or past
+    /// the line rests it (`Resting`, draft kept) instead of
+    /// re-arming the edit (R3-B2). Only `Enter`/`i`/a click on the
+    /// row arms `Compose` again.
     pub(super) fn hollywood_sync_editing(&mut self) {
-        self.hollywood.editing =
-            self.has_hollywood_cfg && self.hollywood.selected == Some(Target::Input);
+        self.hollywood.editing &= self.hollywood.selected == Some(Target::Input);
     }
 
     /// What an opening selects (A2.1): the first waiting item, else

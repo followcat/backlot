@@ -86,6 +86,9 @@ impl App {
                     if target != crate::panel::Target::None {
                         self.panel.selected = Some(target);
                         self.panel.selected_row = Some(1 + start + pos);
+                        // `panel_activate` re-arms Compose only on
+                        // the `›` row — a click elsewhere rests it.
+                        self.panel.editing = false;
                         self.panel_activate();
                     }
                 }

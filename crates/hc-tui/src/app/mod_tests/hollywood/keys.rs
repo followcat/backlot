@@ -277,3 +277,58 @@ async fn a_kitty_shifted_question_mark_opens_the_help_too() {
     let text = screen_lines(&draw_to(&mut app, 140, 40)).join("\n");
     assert!(text.contains("Actions & Keybinds"), "{text}");
 }
+
+/// R3-B2's paste/IME routing: a composing `›` takes `Paste`/`Text`
+/// as editor input; a resting sheet still eats them — the band owns
+/// the event whether or not it is a key it maps.
+#[tokio::test]
+async fn paste_and_ime_land_only_in_a_composing_line() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Char('i'));
+    assert!(app.hollywood.editing);
+    app.on_input(UiEvent::Paste(b"via paste".to_vec()), 120);
+    assert_eq!(app.hollywood.input.as_str(), "via paste");
+    app.on_input(UiEvent::Text(" + ime".into()), 120);
+    assert_eq!(app.hollywood.input.as_str(), "via paste + ime");
+    // Resting: the same events are eaten — the parked draft and the
+    // pane's input queue are both untouched.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.hollywood.editing);
+    app.on_input(UiEvent::Paste(b"rest".to_vec()), 120);
+    app.on_input(UiEvent::Text("text".into()), 120);
+    assert_eq!(app.hollywood.input.as_str(), "via paste + ime");
+    assert_eq!(app.pane.input_backlog().0, 0, "nothing leaked");
+}
+
+/// R3-M11's Home/End: `Resting` they are the first frame / the
+/// band's last row; `Compose` hands them to the editor's cursor.
+#[tokio::test]
+async fn home_end_move_the_sheet_or_the_lines_cursor() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    // Resting: End lands on the band's last row (the `›` line),
+    // Home on the first frame — never arms Compose.
+    key(&mut app, hc_vt::Key::End);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(!app.hollywood.editing);
+    key(&mut app, hc_vt::Key::Home);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("acme-shop".into()))
+    );
+    assert!(!app.hollywood.editing);
+    // Compose: Home/End are the editor's own — cursor, not rows.
+    key(&mut app, hc_vt::Key::Char('i'));
+    for ch in "abc".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Home);
+    key(&mut app, hc_vt::Key::Char('x'));
+    key(&mut app, hc_vt::Key::End);
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert_eq!(app.hollywood.input.as_str(), "xabcy");
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+}

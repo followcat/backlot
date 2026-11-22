@@ -33,25 +33,23 @@ impl App {
         if self.hollywood.confirm.is_some() {
             return;
         }
-        // The editing input line takes every key but Esc — Enter
-        // submits a nonempty line, Esc leaves the editor.
+        // `Compose` (R3-B2/R3-2): the `›` line owns every key —
+        // `⏎` sends and stays in Compose for the next `tell
+        // hollywood`, `esc` rests the line keeping its draft, `↑`
+        // rests and steps up one row, the rest is the editor's.
         if self.hollywood.editing {
             if code == KeyCode::Esc && modifiers.is_empty() {
-                // One Esc out of a resting line collapses the sheet;
-                // with a draft it only drops the line — the text is
-                // kept until Enter or another Esc.
-                if self.hollywood.input.as_str().is_empty() {
-                    self.hollywood_leave();
-                } else {
-                    self.hollywood.editing = false;
-                }
+                // One Esc out of Compose rests the line — draft and
+                // all. The Esc that collapses the sheet is the
+                // resting one below, a press later.
+                self.hollywood.editing = false;
                 return;
             }
             if code == KeyCode::Enter && modifiers.is_empty() {
                 self.hollywood_input_submit();
                 return;
             }
-            // `↑` is how a resting line steps out into the rows —
+            // `↑` is how a composing line steps out into the rows —
             // Esc no longer doubles as vertical navigation.
             if code == KeyCode::Up && modifiers.is_empty() {
                 self.hollywood.editing = false;
@@ -104,6 +102,26 @@ impl App {
             self.hollywood_scroll_to(self.hollywood.scroll.saturating_sub(page as usize));
             return;
         }
+        // `Resting` Home/End: the sheet's first frame / its band's
+        // last row (R3-M11) — in Compose they are the editor's own.
+        if code == KeyCode::Home && plain {
+            if let Some(first) = self.hollywood_frames().first().cloned() {
+                self.hollywood.selected = Some(first);
+                self.hollywood_sync_editing();
+                self.hollywood_keep_frame_visible();
+            }
+            return;
+        }
+        if code == KeyCode::End && plain {
+            let band = self.hollywood_band();
+            if let Some(last) = band.last().cloned() {
+                let index = band.len() - 1;
+                self.hollywood.selected = Some(last);
+                self.hollywood_reveal_card(&band, index);
+                self.hollywood_sync_editing();
+            }
+            return;
+        }
         if key.input.action != hc_vt::Action::Press {
             return;
         }
@@ -116,9 +134,6 @@ impl App {
                 self.hollywood.selected = Some(crate::hollywood::Target::Input);
                 self.hollywood.editing = true;
             }
-            // `c` reconfigures — the setup dialog prefilled from the
-            // live `[hollywood]` table.
-            KeyCode::Char('c') if plain && self.has_hollywood_cfg => self.hw_setup_open(),
             KeyCode::Char('n') if plain => self.hollywood_new_studio(),
             KeyCode::Char('m') if plain => self.hollywood_menu_selected(),
             KeyCode::Char('?') if question => {
@@ -152,6 +167,7 @@ impl App {
         };
         if let Some(target) = frames.get(index).cloned() {
             self.hollywood.selected = Some(target);
+            self.hollywood_sync_editing();
             self.hollywood_keep_frame_visible();
         }
     }

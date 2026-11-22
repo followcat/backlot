@@ -48,9 +48,9 @@ async fn a_click_outside_a_focused_panel_returns_focus_to_the_panes() {
 }
 
 #[tokio::test]
-async fn a_closed_persons_click_reopens_it() {
-    // S5 §2: a resumable closed seat's click is its Enter — the
-    // `backlot reopen` action runs straight away.
+async fn a_closed_persons_click_notices_instead_of_reopening() {
+    // R3-M11: a resumable closed seat's click is its Enter — the
+    // closed notice, never a respawn; `o` owns the reopen.
     let mut app = app_with_panel_doc();
     let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
     let sink = recorded.clone();
@@ -73,8 +73,11 @@ async fn a_closed_persons_click_reopens_it() {
         dave.x + 2,
         dave.y,
     ));
-    assert_eq!(recorded.lock().unwrap().len(), 1, "the reopen ran");
-    assert_eq!(recorded.lock().unwrap()[0][0], "reopen");
+    assert!(
+        recorded.lock().unwrap().is_empty(),
+        "Enter/click never runs reopen"
+    );
+    assert!(app.notice.is_some(), "the closed notice names `o`");
 }
 
 #[tokio::test]
