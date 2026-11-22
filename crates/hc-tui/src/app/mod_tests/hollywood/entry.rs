@@ -113,7 +113,9 @@ async fn a_queued_document_does_not_decide_the_entry() {
     assert!(!app.opening_visible());
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(!text.contains("New studio"), "{text}");
-    assert!(text.contains("acme-shop"), "{text}");
+    // R3-M6: a plain `new` workspace is no studio workspace — the
+    // sidebar stays studio-free; the pill's count proves the read.
+    assert!(text.contains("✦2"), "{text}");
 }
 
 // ---------- another machine's late studios (U6a) ----------

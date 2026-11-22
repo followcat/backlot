@@ -3,6 +3,7 @@
 //! the top row at every supported width without overlapping or
 //! clipping each other.
 use super::*;
+use crate::panel::PanelMode;
 
 fn version() -> String {
     format!("v{}", env!("CARGO_PKG_VERSION"))
@@ -136,4 +137,64 @@ async fn the_pill_keeps_the_tab_bars_right_end_outside_a_studio_workspace() {
             assert!(rect.right() <= pill.x, "{w}: a tab lies under the pill");
         }
     }
+}
+
+/// R3-M6: over a non-studio workspace (`backlot`'s stray agent) the
+/// remembered current studio stops painting as active — the dock
+/// block loses its `▸` and the lower sidebar no longer casts its
+/// people — while `studio.current` stays remembered for re-entry.
+#[tokio::test]
+async fn a_non_studio_workspace_clears_the_dock_mark_and_the_cast() {
+    fn regions(app: &mut App, w: u16, h: u16) -> (String, String) {
+        let backend = draw_to(app, w, h);
+        let buf = backend.buffer();
+        let side_w = app.sidebar_render_width(w);
+        let sidebar = (0..h)
+            .map(|y| {
+                (0..side_w)
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let area = app.panel_hits.area;
+        let dock = (area.y..area.bottom())
+            .map(|y| {
+                (area.x..area.right())
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        (sidebar, dock)
+    }
+
+    let mut app = studio_app();
+    app.panel.mode = PanelMode::Expanded;
+    assert!(app.studio.lot.studio_workspace, "fixture focuses t1");
+    // In the studio workspace: `▸` on the dock block, the cast rows
+    // in the sidebar.
+    let (sidebar, dock) = regions(&mut app, 120, 40);
+    assert!(dock.contains('▸'), "in-studio mark: {dock}");
+    assert!(sidebar.contains("acme-shop · Local"), "cast: {sidebar}");
+    assert!(sidebar.contains("producer"), "cast row: {sidebar}");
+
+    // The stray `backlot` agent is no studio workspace: the blocks
+    // stay, `▸` and the cast go.
+    app.focused = Some("t50".into());
+    app.reconcile_published_view();
+    assert!(!app.studio.lot.studio_workspace);
+    assert!(
+        app.studio.current.is_some(),
+        "the studio stays remembered for Alt+Down re-entry"
+    );
+    let (sidebar, dock) = regions(&mut app, 120, 40);
+    assert!(!dock.contains('▸'), "mark cleared: {dock}");
+    assert!(dock.contains("acme-shop"), "the blocks stay: {dock}");
+    assert!(
+        !sidebar.contains("acme-shop · Local"),
+        "cast cleared: {sidebar}"
+    );
+    assert!(!sidebar.contains("producer"), "cast row gone: {sidebar}");
+    assert!(sidebar.contains("cast"), "the bare cast head: {sidebar}");
 }

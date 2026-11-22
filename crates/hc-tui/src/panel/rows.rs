@@ -80,6 +80,8 @@ pub(crate) enum Owed {
     Step,
     /// `→ finish studio · user [f]` — ready to finish.
     Finish,
+    /// `· report pending` — the wrap report is still owed (R3-3).
+    ReportPending,
     /// `! finish <id>? [y]` — `f` armed the inline confirm.
     Confirm,
     /// `◌ stage stopped · s start`.
@@ -271,23 +273,43 @@ fn block_rows<'a>(
         Some((Owed::StageDown, "stage stopped · s start".to_string()))
     } else if let Some(error) = &studio.studio.error {
         Some((Owed::Error, error.clone()))
-    } else if let Some(next) = &studio.studio.next {
-        Some((Owed::Step, owed_text(studio.studio, next)))
     } else if studio.studio.ready_to_finish {
+        // R3-3: `f` is offered as soon as every task is accepted —
+        // a post-acceptance `node report` step must not hide it.
         Some((Owed::Finish, "finish studio · user [f]".to_string()))
     } else {
-        None
+        studio
+            .studio
+            .next
+            .as_ref()
+            .map(|next| (Owed::Step, owed_text(studio.studio, next)))
     };
     if let Some((kind, text)) = owed {
         out.push(Row::Owed { studio, kind, text });
     }
+    // R3-3: while the wrap report is missing the offer carries a
+    // dim `report pending` under it.
+    let report_pending = super::data::report_pending(studio.studio);
+    if report_pending {
+        out.push(Row::Owed {
+            studio,
+            kind: Owed::ReportPending,
+            text: "report pending".to_string(),
+        });
+    }
     // `f` armed the finish confirm — its `y`/`n` line sits under
-    // the owed step, cleared by Esc or a selection move (S2 §2).
+    // the owed step, cleared by Esc or a selection move (S2 §2). An
+    // early finish (report still pending) warns inside the ask.
     if panel.finish_confirm.as_ref() == Some(&studio.key()) {
+        let pending = if report_pending {
+            " (report pending)"
+        } else {
+            ""
+        };
         out.push(Row::Owed {
             studio,
             kind: Owed::Confirm,
-            text: format!("finish {}? [y/n]", studio.studio.id),
+            text: format!("finish {}{pending}? [y/n]", studio.studio.id),
         });
     }
     // P4a: runner-reported usage sits beside the owed line — a
@@ -384,6 +406,11 @@ pub(crate) fn rows<'a>(
             out.push(Row::StageDown { machine: None });
         }
         out.push(Row::Empty);
+        // R3-M5: a brand-new install is exactly who the setup hint
+        // is for — the early return must not swallow it.
+        if mode == PanelMode::Expanded && panel.hollywood_hint {
+            out.push(Row::SetupHint);
+        }
         return out;
     }
     for machine in machines {

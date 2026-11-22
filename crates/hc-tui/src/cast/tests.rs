@@ -136,7 +136,8 @@ fn the_header_names_the_studio_and_its_position() {
     let view = cast_view(&summary, vec![], false, Some("t4"));
     let (buf, ..) = draw(&view, 26, 20);
     let text = lines(&buf, Rect::new(0, 0, 26, 20)).join("\n");
-    assert!(text.contains("cast · acme-shop"), "{text}");
+    assert!(text.contains("acme-shop"), "{text}");
+    assert!(!text.contains("cast ·"), "{text}");
     assert!(text.contains("1/1"), "{text}");
 }
 

@@ -334,9 +334,11 @@ async fn enter_on_talk_and_headline_opens_read_only_card_view_and_esc_preserves_
     let mut app = app_with_hollywood();
     let mut value = summary_json();
     value["hollywood"]["headline_seq"] = serde_json::json!(9);
+    // The newest reply is not the headline — otherwise R3-M1's dedup
+    // drops the headline row and `Target::Headline` never selects.
     value["hollywood"]["exchange"] = serde_json::json!([
         { "seq": 8, "who": "user", "text": "how are the studios?" },
-        { "seq": 9, "who": "hollywood", "text": "acme-shop needs a look", "has_body": true }
+        { "seq": 10, "who": "hollywood", "text": "beta-tools back on track", "has_body": true }
     ]);
     app.view.documents_mut().insert(
         doc_key(),

@@ -126,11 +126,17 @@ pub(crate) fn band_rows<'a>(
     let mut out: Vec<Row<'a>> = Vec::new();
     let summary = local_summary(machines);
     if agent
-        && let Some(headline) = summary
-            .and_then(|s| s.hollywood.as_ref())
-            .and_then(|h| h.headline.as_deref())
+        && let Some(hw) = summary.and_then(|s| s.hollywood.as_ref())
+        && let Some(headline) = hw.headline.as_deref()
     {
-        out.push(Row::Headline(headline));
+        // R3-M1: the newest exchange line already prints this
+        // headline — drawing both doubles the report in one band.
+        let newest_reply = hw.exchange.iter().rev().find(|e| e.who == "hollywood");
+        let duplicated = newest_reply
+            .is_some_and(|e| hw.headline_seq == Some(e.seq) || e.text.trim() == headline.trim());
+        if !duplicated {
+            out.push(Row::Headline(headline));
+        }
     }
     let waits = waiting_items(machines, status);
     if waits.is_empty() {

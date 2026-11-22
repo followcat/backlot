@@ -1,4 +1,4 @@
-//! The cast's renderer: divider and `cast · <id>` header in the
+//! The cast's renderer: divider and ` <id>` header in the
 //! agents section's slots, then the rows under `chrome/scroll`'s list
 //! metrics — same scroll model as herdr's agents list, so the wheel
 //! and the scrollbar take no new code.
@@ -31,7 +31,7 @@ fn short_model(model: &str) -> String {
     truncate_end(tail.strip_prefix("claude-").unwrap_or(tail), 10)
 }
 
-/// The whole cast section: `─` divider, ` cast · <id>` + `<n>/<total>`
+/// The whole cast section: `─` divider, ` <id>` + `<n>/<total>`
 /// header, one blank row, then the scrolled rows.
 pub(crate) fn render_cast(
     buffer: &mut Buffer,
@@ -60,9 +60,11 @@ pub(crate) fn render_cast(
     let header = Rect::new(area.x, area.y + 1, area.width, 1);
     match view.studio {
         Some(studio) => {
+            // R3-N2: no `cast · ` prefix under a studio label — the
+            // section is the studio's own; the label needs the cells.
             let id_width = header
                 .width
-                .saturating_sub(13) // " cast · " plus the `1/12` tail
+                .saturating_sub(6) // " " plus the ` 1/12` tail
                 .max(4);
             let label = view
                 .label
@@ -74,7 +76,7 @@ pub(crate) fn render_cast(
                 header.x,
                 header.y,
                 header.width,
-                &format!(" cast · {label}"),
+                &format!(" {label}"),
                 Style::default()
                     .fg(palette.overlay0)
                     .add_modifier(Modifier::BOLD),

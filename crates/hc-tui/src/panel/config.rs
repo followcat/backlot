@@ -126,10 +126,11 @@ impl StudioKeys {
         }
     }
 
-    /// The unfocused panel's shortcuts row: `alt ↑↓ studio  ←→ role`
-    /// when the configured keys are all arrows sharing one modifier —
-    /// the pair's individual labels otherwise.
-    pub(crate) fn shortcut_label(&self) -> String {
+    /// The footer's two hint halves — `("alt ↑↓ studio", "←→ role")`
+    /// — so the caller can drop the half whose navigation has nowhere
+    /// to go (wide-01: `studio` only across ≥2 studios, `role` only
+    /// across ≥2 cast entries) or fit them as separate tiers.
+    pub(crate) fn shortcut_parts(&self) -> (String, String) {
         use crossterm::event::KeyCode;
         let four = [
             self.previous_studio,
@@ -154,9 +155,12 @@ impl StudioKeys {
                 Some(_) => Some(crossterm::event::KeyModifiers::empty()),
             });
         if arrows && mods.is_some_and(|m| !m.is_empty()) {
-            return format!(
-                "{} ↑↓ studio  ←→ role",
-                mods_label(mods.unwrap_or(crossterm::event::KeyModifiers::ALT))
+            return (
+                format!(
+                    "{} ↑↓ studio",
+                    mods_label(mods.unwrap_or(crossterm::event::KeyModifiers::ALT))
+                ),
+                "←→ role".to_string(),
             );
         }
         let pair = |a: Option<KeyCombo>, b: Option<KeyCombo>| {
@@ -171,11 +175,28 @@ impl StudioKeys {
                 labels.join("/")
             }
         };
-        format!(
-            "{} studio  {} role",
-            pair(self.previous_studio, self.next_studio),
-            pair(self.previous_role, self.next_role)
+        (
+            format!("{} studio", pair(self.previous_studio, self.next_studio)),
+            format!("{} role", pair(self.previous_role, self.next_role)),
         )
+    }
+
+    /// The unfocused footer's width tiers (R3-M13 / wide-01): the
+    /// combined hint, then each surviving half alone — nothing when
+    /// neither navigation has anywhere to go.
+    pub(crate) fn footer_tiers(&self, studio_nav: bool, role_nav: bool) -> Vec<String> {
+        let (studio, role) = self.shortcut_parts();
+        let mut tiers = Vec::new();
+        if studio_nav && role_nav {
+            tiers.push(format!("{studio}  {role}"));
+        }
+        if studio_nav {
+            tiers.push(studio);
+        }
+        if role_nav {
+            tiers.push(role);
+        }
+        tiers
     }
 }
 

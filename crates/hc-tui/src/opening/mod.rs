@@ -108,8 +108,9 @@ pub(super) fn actions(opts: &OpeningOpts) -> Vec<Action> {
 
 /// The one-line description.
 pub(super) const TAGLINE: &str = "a film studio for coding agents";
-/// The dim last line — names the plain multiplexer.
-pub(super) const PLAIN_HINT: &str = "backlot --plain — a plain multiplexer";
+/// The dim last line — how plain mode starts; a note, never a row
+/// that reads like an in-page action (R3-M13).
+pub(super) const PLAIN_HINT: &str = "plain: backlot --plain";
 
 /// Paint the page over `area` (the pane surface). `frame` is the
 /// one-time animation's frame, or `None` for the static page.
@@ -141,7 +142,8 @@ fn render_plain(buffer: &mut Buffer, area: Rect, palette: &Palette, opts: &Openi
         .map(|a| display_width(a.label) as u16)
         .max()
         .unwrap_or(0);
-    let block = (display_width(PLAIN_HINT) as u16)
+    let block = (display_width(TAGLINE) as u16)
+        .max(display_width(PLAIN_HINT) as u16)
         .max(key_col + 2 + label_max)
         .min(40)
         .min(area.width);

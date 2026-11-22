@@ -265,7 +265,7 @@ impl App {
         };
         if ok {
             self.has_hollywood_cfg = true;
-            self.hollywood_overseer = Some(format!("{} · {}", cfg.runner, cfg.model));
+            self.hollywood_overseer = Some(super::hollywood::overseer_label(&cfg));
             self.panel.hollywood_hint = false;
             self.hollywood_cfg = Some(cfg);
         }

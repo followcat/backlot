@@ -123,6 +123,29 @@ pub(super) fn render_overlays_and_cursor(
             app.panel_overlay_rect(layout.pane_surface, area.width)
         };
         let machines = app.panel_summaries();
+        // R3-M6: `▸` belongs to a studio workspace's studio only —
+        // over `backlot`/`stage`, `bl-hollywood` or a plain workspace
+        // the remembered `current` does not paint as active.
+        let mark = if app.studio.lot.studio_workspace {
+            app.studio.current.as_ref()
+        } else {
+            None
+        };
+        // wide-01: `←→ role` only has somewhere to go while the
+        // current studio cycles ≥2 live members (roles + shells).
+        let cast_entries = app
+            .studio
+            .current_index(&machines)
+            .map(|index| {
+                let studios = crate::panel::data::studios(&machines);
+                let studio = studios[index];
+                crate::studio::cast_order(studio.studio)
+                    .iter()
+                    .filter(|role| crate::studio::live_terminal(role).is_some())
+                    .count()
+                    + app.studio_shells_live(&studio.key()).len()
+            })
+            .unwrap_or(0);
         crate::panel::render(
             buf,
             rect,
@@ -132,6 +155,8 @@ pub(super) fn render_overlays_and_cursor(
             &app.panel,
             app.panel_mode_at(area.width),
             app.studio.current.as_ref(),
+            mark,
+            cast_entries,
             Some(crate::project::LOCAL_LABEL),
             &app.panel_config.keys,
             app.hollywood_key.map(|key| {

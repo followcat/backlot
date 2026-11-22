@@ -83,10 +83,6 @@ pub(super) fn draw_stacked(
 /// health glyph, a short `id·<machine>` label and `<done>/<total>`
 /// or `!<n>` right-aligned (A4.3). Never blank: a studio with no
 /// tasks and nothing waiting still shows its health and name.
-/// The collapsed strip's studio line: `● acme·Loc  1/3` — the
-/// health glyph, a short `id·<machine>` label and `<done>/<total>`
-/// or `!<n>` right-aligned (A4.3). Never blank: a studio with no
-/// tasks and nothing waiting still shows its health and name.
 pub(super) fn draw_strip(
     buf: &mut Buffer,
     rect: Rect,
@@ -144,10 +140,6 @@ pub(super) fn draw_strip(
 /// `◐ act-a    t1 ↑` — the mark keeps its colour, the name
 /// truncates, the task id and its priority flag or the `USER` word
 /// hold the right edge (A4.3).
-/// A strip's active-or-blocked role line: `× dir      USER` or
-/// `◐ act-a    t1 ↑` — the mark keeps its colour, the name
-/// truncates, the task id and its priority flag or the `USER` word
-/// hold the right edge (A4.3).
 pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, palette: &Palette) {
     let mark = Person::of(role);
     put_text(
@@ -167,6 +159,11 @@ pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, 
         if let Some(flag) = flag {
             right.push(' ');
             right.push_str(flag.glyph());
+        }
+        // R3-N2: `t2 dir` — a director-blocked person is not just
+        // its task id; the `dir` cue stays beside it.
+        if mark == Person::DirPrompt {
+            right.push_str(" dir");
         }
     } else if mark == Person::DirPrompt {
         right = "dir".to_string();

@@ -46,8 +46,6 @@ pub(crate) fn mark_counts(studio: &StudioSummary) -> Vec<(Person, usize)> {
 
 /// The health one studio's rows share — the block header's glyph
 /// and the strip line's mark compute it the same way.
-/// The health one studio's rows share — the block header's glyph
-/// and the strip line's mark compute it the same way.
 pub(crate) fn health_of(
     studio: &StudioSummary,
     stage: bool,
@@ -65,9 +63,6 @@ pub(crate) fn health_of(
     }
 }
 
-/// The studio's non-closed roles in display order: `producer`,
-/// `director`, `writer` first when present, then the actors in the
-/// summary's order. Closed roles come after (S2 §2).
 /// The studio's non-closed roles in display order: `producer`,
 /// `director`, `writer` first when present, then the actors in the
 /// summary's order. Closed roles come after (S2 §2).
@@ -100,10 +95,6 @@ pub(super) fn represented(studio: &StudioSummary, task: &TaskSummary) -> bool {
         .any(|r| r.state != "closed" && (r.task.as_deref() == Some(task.id.as_str())))
 }
 
-/// The dock's task rows: tasks with no live actor row, minus the
-/// terminal states that never draw (`abandoned`, `taken_over`) and,
-/// while the accepted fold is shut, `accepted`/`partially_accepted`.
-/// Ledger order is the summary's order.
 /// The dock's task rows: tasks with no live actor row, minus the
 /// terminal states that never draw (`abandoned`, `taken_over`) and,
 /// while the accepted fold is shut, `accepted`/`partially_accepted`.
@@ -143,8 +134,6 @@ pub(super) fn task_rows(
 
 /// The number of accepted tasks behind the fold — the `✓ <n>`
 /// line's count; `0` means no fold line at all.
-/// The number of accepted tasks behind the fold — the `✓ <n>`
-/// line's count; `0` means no fold line at all.
 pub(super) fn fold_count(studio: &StudioSummary) -> usize {
     studio
         .tasks
@@ -159,8 +148,6 @@ pub(super) fn fold_count(studio: &StudioSummary) -> usize {
         .count()
 }
 
-/// A person's line count: itself plus its cue/failed line, the
-/// closed hint and an open drawer.
 /// A person's line count: itself plus its cue/failed line and an
 /// open drawer — as tall as the drawer's own lines, one more when
 /// the stage's answer line rides along.
@@ -204,8 +191,10 @@ pub(super) fn block_height(
     owed: bool,
     accepted_open: bool,
 ) -> usize {
-    let mut height =
-        3 + usize::from(owed) + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
+    let mut height = 3
+        + usize::from(owed)
+        + usize::from(super::data::report_pending(studio.studio))
+        + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
     for role in live_roles(studio.studio) {
         height += person_height(studio, role, panel);
     }
@@ -216,9 +205,6 @@ pub(super) fn block_height(
     height
 }
 
-/// Which studios draw an expanded block: all of them while every
-/// expanded block fits the body; past that, the current studio and any
-/// block `Space` opened by hand — `collapsed_blocks` wins either way.
 /// Which studios draw an expanded block: all of them while every
 /// expanded block fits the body; past that, the current studio and any
 /// block `Space` opened by hand — `collapsed_blocks` wins either way.
@@ -344,8 +330,6 @@ pub(super) fn talk_budgets(
     budgets
 }
 
-/// One studio's expanded block: header, owed-step subheader, live
-/// roles, task rows, the accepted fold, closed roles, bottom border.
 /// The collapsed strip's role lines: live roles that are working or
 /// carry an attention — the strip is never blank while the studio
 /// has something to say (A4.3).

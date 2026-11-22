@@ -148,6 +148,19 @@ pub(crate) fn studio<'a>(machines: &'a [MachineSummary], key: &StudioKey) -> Opt
     studios(machines).into_iter().find(|s| &s.key() == key)
 }
 
+/// Whether the wrap report is still owed on a ready-to-finish studio
+/// (R3-3): every task is accepted but `next` is the `node report`
+/// step — the director's (or producer's) wrap-up has not landed yet.
+/// Both surfaces draw the dim `report pending` line off this, and an
+/// early `f` finish confirm warns with it.
+pub(crate) fn report_pending(studio: &backlot_model::summary::StudioSummary) -> bool {
+    studio.ready_to_finish
+        && studio
+            .next
+            .as_deref()
+            .is_some_and(|next| next.starts_with("node report"))
+}
+
 /// Whether studios come from more than one machine — headers name
 /// the machine only then; one machine draws exactly like before.
 pub(crate) fn spans_machines(machines: &[MachineSummary]) -> bool {
@@ -202,16 +215,17 @@ impl StudioLabel {
     }
 }
 
-/// A studio's header text: `id`, or `id · machine` when the
-/// aggregate spans machines. `local` is this core's name, used for
-/// local studios.
+/// A studio's header text: `id`, or `id · machine`. A remote studio
+/// names its machine always (R3-N1) — `· host-b` is the only cue its
+/// terminals run off-core; the local name still reads only while the
+/// aggregate spans machines.
 pub(crate) fn studio_label(
     id: &str,
     machine: Option<&str>,
     local: Option<&str>,
     multi: bool,
 ) -> StudioLabel {
-    match machine.or(local).filter(|_| multi) {
+    match machine.or_else(|| local.filter(|_| multi)) {
         Some(machine) => StudioLabel {
             full: format!("{id} · {machine}"),
             id: id.to_string(),

@@ -136,10 +136,12 @@ async fn callsheet_band_spans_pane_and_dock_only_leaving_sidebar_whole() {
     assert_eq!(app.hollywood_hits.area.x, 25);
     assert_eq!(app.hollywood_hits.area.width, 135);
 
-    // Sidebar headings (`machines` and `cast`) stay 100% uncovered in cols 0..25.
+    // Sidebar headings (`machines` and the cast's studio label) stay
+    // 100% uncovered in cols 0..25 — the header names the studio
+    // directly now that `cast · ` is dropped (R3-N2).
     let sidebar_text = columns_text(&backend, 0, 25);
     assert!(sidebar_text.contains("machines"), "{sidebar_text}");
-    assert!(sidebar_text.contains("cast"), "{sidebar_text}");
+    assert!(sidebar_text.contains("acme-shop"), "{sidebar_text}");
     assert!(
         !sidebar_text.contains("H O L L Y W O O D"),
         "Call Sheet must not paint into sidebar: {sidebar_text}"

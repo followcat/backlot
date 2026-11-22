@@ -163,3 +163,59 @@ fn cast_marks_follow_the_role_state() {
         ]
     );
 }
+
+/// R3-M1: the headline row never doubles the newest Hollywood
+/// exchange reply — the same seq or the same text means the band
+/// shows the report once.
+#[test]
+fn the_headline_never_repeats_the_newest_reply() {
+    // Baseline: the fixture has a headline and no exchange — the
+    // headline row lists.
+    let summary = summary();
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(matches!(rows[0], Row::Headline("acme-shop needs a look")));
+
+    // The newest reply already carries the headline's text — no
+    // second copy above the waits.
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "who": "user", "seq": 8, "text": "how is the shop?" },
+        { "who": "hollywood", "seq": 9, "text": "acme-shop needs a look" },
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        rows.iter().all(|r| !matches!(r, Row::Headline(_))),
+        "the headline must dedup"
+    );
+    assert_eq!(rows.iter().filter(|r| matches!(r, Row::Talk(_))).count(), 2);
+
+    // The seq tie counts even when the texts differ — `headline_seq`
+    // names the reply it repeats.
+    let mut value = summary_json();
+    value["hollywood"]["headline_seq"] = serde_json::json!(9);
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "who": "hollywood", "seq": 9, "text": "a longer report follows" },
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        rows.iter().all(|r| !matches!(r, Row::Headline(_))),
+        "the headline must dedup"
+    );
+
+    // A headline that is not the newest reply still lists — older
+    // replies are not it.
+    let mut value = summary_json();
+    value["hollywood"]["headline_seq"] = serde_json::json!(7);
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "who": "hollywood", "seq": 9, "text": "something else entirely" },
+    ]);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(matches!(rows[0], Row::Headline("acme-shop needs a look")));
+}

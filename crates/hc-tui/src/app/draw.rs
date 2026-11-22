@@ -88,6 +88,10 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.projection.snapshot,
             &app.view,
             app.studio.current.as_ref(),
+            // R3-M6: the cast belongs to a focused studio workspace —
+            // over `backlot`/`stage`, `bl-hollywood` or a plain
+            // workspace no studio's people paint as the cast.
+            app.studio.lot.studio_workspace,
             Some(crate::project::LOCAL_LABEL),
             &app.shell,
             app.studio.others_expanded,

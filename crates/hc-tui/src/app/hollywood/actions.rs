@@ -136,8 +136,9 @@ impl App {
             // A studio frame's `p`: peek the role on set — the live
             // worker the frame already names, else the producer. The
             // footer's `p peek` is no longer dead weight off prompt
-            // rows.
-            (Some(Target::Studio(key)) | Some(Target::Ready(key)), KeyCode::Char('p')) => {
+            // rows. The READY row is `f`/`↵` only (S1 §4) — peek stays
+            // on its frame.
+            (Some(Target::Studio(key)), KeyCode::Char('p')) => {
                 self.hollywood_peek_on_set(&key);
             }
             (Some(Target::Stage(machine, false)), KeyCode::Char('s')) => {

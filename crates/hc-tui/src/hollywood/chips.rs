@@ -14,7 +14,6 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::put_text;
 use crate::chrome::text::display_width;
 use crate::panel::data::studio_label;
-use crate::studio::glyphs::Health;
 
 /// What the strip drew: the chip rects and whether it scrolled.
 #[derive(Default)]
@@ -69,11 +68,9 @@ pub(crate) fn render(
             Frame::Studio(studio) => {
                 let label = studio_label(&studio.studio.id, studio.machine, local, multi);
                 let (conn, stage) = status(studio.machine);
-                let health = match (conn, stage) {
-                    (Conn::Offline, _) => Health::Offline,
-                    (_, false) => Health::StageDown,
-                    _ => Health::Live,
-                };
+                // The shared read (R3-M10): a `ready_to_finish` or
+                // `finished` chip draws `✓`, not a live `●`.
+                let health = crate::panel::health_of(studio.studio, stage, conn != Conn::Offline);
                 let mut segs = vec![
                     ("[".into(), palette.overlay0),
                     (digit, palette.accent),

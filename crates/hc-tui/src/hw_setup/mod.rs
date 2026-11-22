@@ -483,13 +483,21 @@ pub(crate) fn render(b: &mut Buffer, d: &HwSetup, p: &Palette, band: Rect) -> Hw
             Style::default().fg(p.peach).bg(p.panel_bg),
         );
     }
-    let hint = " ↑↓ field  ←→ value  ⏎ list · apply  e text  esc cancel";
+    // R3-M13: clean tiers — a hint never clips mid-word.
+    let hint = crate::chrome::text::fit_hints(
+        &[
+            " ↑↓ field  ←→ value  ⏎ list · apply  e text  esc cancel",
+            " ↑↓ field  ←→ value  ⏎ apply  esc",
+            " ↑↓ · ←→ · ⏎ · esc",
+        ],
+        inner.width as usize,
+    );
     put_text(
         b,
         inner.x,
         inner.bottom().saturating_sub(1),
         inner.width,
-        &truncate_end(hint, inner.width as usize),
+        hint,
         Style::default().fg(p.overlay0).bg(p.panel_bg),
     );
     hits

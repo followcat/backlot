@@ -177,6 +177,7 @@ pub(super) fn draw_owed(
     draw_inner(buf, rect, frame);
     let (mark, style) = match kind {
         Owed::Step | Owed::Finish => ("→", Style::default().fg(palette.subtext0)),
+        Owed::ReportPending => ("·", Style::default().fg(palette.overlay0)),
         Owed::StageDown => ("◌", Style::default().fg(palette.peach)),
         Owed::Offline => ("×", Style::default().fg(palette.red)),
         Owed::Error | Owed::Confirm => ("!", Style::default().fg(palette.peach)),
@@ -230,9 +231,6 @@ pub(super) fn word_style(mark: Person, palette: &Palette) -> Style {
     }
 }
 
-/// One person inside a block: `│ <mark> <name> · <task> <flag>   <state> │`
-/// — no model, no runner, no `doing` line. The mark, the state word
-/// and the priority flag all read the shared vocabulary.
 /// One person inside a block: `│ <mark> <name> · <task> <flag>   <state> │`
 /// — no model, no runner, no `doing` line. The mark, the state word
 /// and the priority flag all read the shared vocabulary.
@@ -454,11 +452,6 @@ pub(super) fn draw_talk(
     }
 }
 
-/// A person's extra line at the name column. The cue is the
-/// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
-/// user-owned prompt, `! prompt · director reviewing` for a
-/// director-owned one (D9), `! <attention>` otherwise. `Failed`
-/// shows the last turn's error.
 /// A person's extra line at the name column. The cue is the
 /// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
 /// user-owned prompt, `! prompt · director reviewing` for a
