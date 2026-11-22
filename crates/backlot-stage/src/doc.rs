@@ -121,6 +121,7 @@ mod tests {
                     usage: None,
                     tasks: Vec::new(),
                     roles: Vec::new(),
+                    exchange: Vec::new(),
                 })
                 .collect(),
             hollywood: None,

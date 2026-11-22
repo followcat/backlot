@@ -221,7 +221,7 @@ pub(crate) fn report_show(
 
 /// The `--file` argument as a validated studio-relative path — the
 /// same check `report_show` runs before touching the filesystem.
-fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
+pub(crate) fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
     use std::path::Component;
     if file.is_absolute()
         || file.as_os_str().is_empty()
