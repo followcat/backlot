@@ -230,8 +230,19 @@ impl App {
         if let Some(dir) = dir {
             argv.extend(["--from".into(), dir]);
         }
+        // `--all` keeps dot-directories in the answer; the live filter
+        // hides them until the query starts with `.`.
+        argv.push("--all".into());
         tokio::spawn(async move {
-            let out = run(machine, argv, None).await;
+            let out = match run(machine.clone(), argv.clone(), None).await {
+                // A machine still on an older backlot rejects `--all`;
+                // its listing simply has no dot-directories to reveal.
+                Err(e) if e.contains("--all") => {
+                    let plain: Vec<String> = argv.into_iter().filter(|a| a != "--all").collect();
+                    run(machine, plain, None).await
+                }
+                out => out,
+            };
             let _ = tx.send(NsReply::Repos { epoch, out }).await;
         });
     }

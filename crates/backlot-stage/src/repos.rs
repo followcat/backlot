@@ -1,4 +1,4 @@
-//! `backlot repos [--json] [--from <dir>]` (G4): the directory
+//! `backlot repos [--json] [--from <dir>] [--all]` (G4): the directory
 //! listing the New Studio dialog browses on whichever machine the
 //! command runs on. It never leaves the user's own tree: `--from`
 //! resolves through `~` and `..` to a canonical directory that must
@@ -7,6 +7,11 @@
 //! wizard's picker: a `.git` mark and `git log -1` tell `git_ready`
 //! from `git_empty`; a plain directory is `dir`. A studio's recorded
 //! repo marks `in_use_studio`.
+//!
+//! Dot-directories (`.cache`, `.config`, …) stay hidden unless `--all`
+//! asks for them, so a `$HOME` listing opens on real work rather than
+//! on dotfiles. The dialog passes `--all` and applies the same rule to
+//! its live filter, so typing `.` still reveals them there.
 
 use std::path::{Path, PathBuf};
 
@@ -151,8 +156,10 @@ fn in_use(env: &Env, common: &Common) -> std::collections::BTreeMap<PathBuf, Str
 
 /// The listing: `cwd` is the canonical `--from`, `entries` its child
 /// directories — git repositories first (`git_ready`, then
-/// `git_empty`), plain directories last, each group by name.
-fn list(env: &Env, common: &Common, from: Option<&str>) -> Result<Listing, Fail> {
+/// `git_empty`), workspaces over member repositories next, plain
+/// directories last, each group by name. Dot-directories are skipped
+/// unless `all` asks for them.
+fn list(env: &Env, common: &Common, from: Option<&str>, all: bool) -> Result<Listing, Fail> {
     let (dir, _anchor) = resolve_from(env, from)?;
     let in_use = in_use(env, common);
     let rd = std::fs::read_dir(&dir)
@@ -161,6 +168,10 @@ fn list(env: &Env, common: &Common, from: Option<&str>) -> Result<Listing, Fail>
     for e in rd.flatten() {
         let path = e.path();
         if !path.is_dir() {
+            continue;
+        }
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !all && name.starts_with('.') {
             continue;
         }
         let canonical = path.canonicalize().unwrap_or(path.clone());
@@ -176,13 +187,16 @@ fn list(env: &Env, common: &Common, from: Option<&str>) -> Result<Listing, Fail>
                 .collect(),
             _ => Vec::new(),
         };
-        let name = e.file_name().to_string_lossy().into_owned();
+        let rank = match kind {
+            "git_ready" => 0,
+            "git_empty" => 1,
+            // A directory holding member repositories is a workspace —
+            // the shape a studio usually wants, above a plain pick.
+            _ if !members.is_empty() => 2,
+            _ => 3,
+        };
         entries.push((
-            match kind {
-                "git_ready" => 0,
-                "git_empty" => 1,
-                _ => 2,
-            },
+            rank,
             Entry {
                 name,
                 path: canonical.to_string_lossy().into_owned(),
@@ -202,8 +216,14 @@ fn list(env: &Env, common: &Common, from: Option<&str>) -> Result<Listing, Fail>
 
 /// `backlot repos`: JSON for the dialog, a readable table without
 /// `--json` — the same rows either way.
-pub fn run(env: &Env, common: &Common, json: bool, from: Option<&str>) -> Result<String, Fail> {
-    let listing = list(env, common, from)?;
+pub fn run(
+    env: &Env,
+    common: &Common,
+    json: bool,
+    from: Option<&str>,
+    all: bool,
+) -> Result<String, Fail> {
+    let listing = list(env, common, from, all)?;
     if json {
         return serde_json::to_string_pretty(&listing)
             .map_err(|e| Fail::refused(format!("repos: {e}")));

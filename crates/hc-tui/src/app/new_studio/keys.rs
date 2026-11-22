@@ -301,8 +301,10 @@ impl App {
     }
 
     /// Step 3: the cast table — `↑↓` rows, `tab`/`←→` the cell,
-    /// `a`/`x` the candidates, `e` free text on a model, `^E` the
-    /// generated file in `$EDITOR`.
+    /// `space` the focused cell's picker (MODEL) or its next value
+    /// (RUNNER/EFFORT), `⏎` always the Step-4 dry run, `a`/`x` the
+    /// candidates, `e` free text on a model, `^E` the generated file
+    /// in `$EDITOR`.
     fn ns_key_step3(&mut self, key: &TerminalKey) {
         if key.input.key == Key::Char('r') && key.input.mods == Mods::CTRL {
             self.ns_probe_runners();
@@ -313,13 +315,9 @@ impl App {
             return;
         }
         if key.input.key == Key::Enter {
-            // `⏎` on the MODEL cell opens its runner's catalog
-            // list — the dry-run's Enter lives on the other cells.
-            let on_model = self.new_studio.as_ref().is_some_and(|d| d.cast.col == 1);
-            if on_model {
-                self.new_studio.as_mut().unwrap().open_model_pick();
-                return;
-            }
+            // `⏎` advances to the dry run on every column. The model
+            // list is `space`'s; while it is open the earlier branch
+            // seats the pick, so a second `⏎` lands here and advances.
             let ready = self
                 .new_studio
                 .as_ref()
@@ -344,14 +342,14 @@ impl App {
             Key::BackTab => {
                 d.cast.col = (d.cast.col + 2) % 3;
             }
-            Key::ArrowLeft => {
+            Key::ArrowLeft | Key::Char('h') if key.input.mods == Mods::NONE => {
                 let runners = match &d.runners {
                     Probe::Done(rows) => rows.as_slice(),
                     _ => &[],
                 };
                 d.cast.cycle(runners, -1);
             }
-            Key::ArrowRight => {
+            Key::ArrowRight | Key::Char('l') if key.input.mods == Mods::NONE => {
                 let runners = match &d.runners {
                     Probe::Done(rows) => rows.as_slice(),
                     _ => &[],
@@ -368,8 +366,18 @@ impl App {
             Key::Char('x') if key.input.mods == Mods::NONE => {
                 d.cast.remove();
             }
-            Key::Char(' ') if key.input.mods == Mods::NONE && d.cast.col == 1 => {
-                d.open_model_pick();
+            Key::Char(' ') if key.input.mods == Mods::NONE => {
+                // MODEL opens its catalog; RUNNER and EFFORT have no
+                // sub-picker, so space takes their next value.
+                if d.cast.col == 1 {
+                    d.open_model_pick();
+                } else {
+                    let runners = match &d.runners {
+                        Probe::Done(rows) => rows.as_slice(),
+                        _ => &[],
+                    };
+                    d.cast.cycle(runners, 1);
+                }
             }
             Key::Char('e') if key.input.mods == Mods::NONE && d.cast.col == 1 => {
                 let current = match &d.runners {

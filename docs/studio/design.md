@@ -293,7 +293,9 @@ the core ids (`--session` disambiguates). `BACKLOT_STATE_DIR`, `--session` and `
 scan, so role terminals and directed commands never drift.
 
 `backlot studio list [--json]` is the discovery half: it reads every core directory (or the pinned one) and prints
-each studio's core id, ledger state (`live`/`finished`/`failed`), title and bound path, newest activity first.
+each studio's core (`core.json`'s name, else the short core id, else `local`), ledger state (`live`/`finished`/`failed`),
+title and bound path, newest activity first. `--remote <host> studio list` reads one machine's studios; the command's
+`--help` explains the local default and that form.
 
 ## Summary document
 

@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
+use super::step3::version_label;
 use super::{NewStudio, render};
 use crate::chrome::palette::Palette;
 
@@ -49,4 +50,21 @@ fn the_dialog_clears_the_frozen_screen_behind_it() {
     let hits = render(&mut buf, &NewStudio::new(), &palette, band);
     assert!(hits.area.width > 0, "the frame must fit the band");
     assert_no_bleed(&buf, hits.area);
+}
+
+/// The detection line names each runner once: `claude --version`
+/// already prints `claude 2.1.0`, and `fake` prints `fake-runner
+/// 1.0` — both lose the duplicate token.
+#[test]
+fn runner_versions_never_repeat_the_runner_name() {
+    assert_eq!(version_label("claude", "claude 2.1.0"), "claude 2.1.0");
+    assert_eq!(version_label("Claude", "claude 2.1.0"), "Claude 2.1.0");
+    assert_eq!(version_label("fake", "fake-runner 1.0"), "fake 1.0");
+    assert_eq!(version_label("codex", "codex 0.9.0"), "codex 0.9.0");
+    // A version that is only the name prints it once.
+    assert_eq!(version_label("cline", "cline"), "cline");
+    // A version without the name keeps both words.
+    assert_eq!(version_label("codex", "0.9.0"), "codex 0.9.0");
+    // A longer word that merely starts with the name is not a token.
+    assert_eq!(version_label("fake", "fake-runner2"), "fake fake-runner2");
 }

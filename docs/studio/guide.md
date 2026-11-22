@@ -143,7 +143,10 @@ failure is a notice and the dialog does not come back. Only a refused `studio ne
 dialog on step 4 with its error and the draft intact, and a dry run never closes anything.
 
 The repository list comes from `backlot repos --json` on the target machine — a breadcrumb, a
-`/` filter, `→` to descend and `←` to ascend. Every listed path can be picked: a git repository
+live filter, `→` to descend and `←` to ascend. Git repositories lead, workspaces over member
+repositories follow, and plain `will git init` directories come last, so a `$HOME` listing opens
+on real work; dot-directories (`.cache`, `.config`, …) stay hidden until the filter starts with
+`.`. Every listed path can be picked: a git repository
 shows its branch, one without commits says `0 commits · will create initial commit`, a
 directory holding member repositories says `workspace · N repos · <names>` and a plain
 directory says `directory · will git init`. A path another studio uses warns, and a remote
@@ -199,10 +202,12 @@ yourself is never rewritten (a warning instead when it still cannot reach the bi
 `backlot runners` prints the same table whenever a role says "not found" — runner, status,
 version, path, needs PATH — read-only, with no core needed. `backlot runners --json` prints the
 detection as JSON, with the models and efforts backlot knows per runner — it is what the New
-Studio dialog's cast table cycles. `backlot repos --json [--from <dir>]` lists a directory's
+Studio dialog's cast table cycles. `backlot repos --json [--from <dir>] [--all]` lists a directory's
 entries the same way — each classified `git_ready`, `git_empty` or `dir`, a `dir` carrying its
 direct-child repository names as `members`, each entry naming the studio that uses it — and is
-how the dialog browses a remote machine's repositories.
+how the dialog browses a remote machine's repositories. Git repositories and workspaces lead the
+list; dot-directories stay hidden unless `--all` asks for them (the dialog passes it and hides
+them behind a `.`-prefixed filter).
 
 The page only ever appears when there is no studio. `backlot` waits for its first `backlot`
 read before drawing it (two seconds at most), so a client with studios never flashes the page
@@ -342,15 +347,18 @@ backlot status --studio acme-shop
 ```
 
 `backlot studio list` answers the question before that one — what studios exist at all. It reads
-every core's state directory and prints one row per studio with its core id, ledger state
-(`live`, `finished`, or `failed` when the log will not load), title and bound path, newest
+every core's state directory and prints one row per studio with its core (`core.json`'s name when
+the core carries one, else the short core id, and `local` for an unbound state directory), ledger
+state (`live`, `finished`, or `failed` when the log will not load), title and bound path, newest
 activity first; `--json` prints the same rows structured. A pinned `BACKLOT_STATE_DIR`,
 `--session` or `--remote` lists that one directory only, so a role terminal never sees other
-cores.
+cores. `--remote <host>` (`backlot --remote host-b studio list`) reads the studios on that
+machine; `--help` spells both reads out.
 
 ```sh
 backlot studio list
 backlot studio list --json
+backlot --remote host-b studio list
 ```
 
 The `next:` lines are what the ledger still owes — one per outstanding step, naming the step, the

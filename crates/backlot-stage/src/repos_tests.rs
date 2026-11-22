@@ -242,3 +242,63 @@ fn linked_worktrees_count_once_in_members() {
         .collect();
     assert_eq!(members, ["core", "web"]);
 }
+
+/// Dot-directories stay out of a plain listing — `$HOME` opens on
+/// real work, not on `.cache` — and `--all` brings them back.
+#[test]
+fn repos_hides_dot_directories_unless_all() {
+    let (_scratch, env, home) = home_env();
+    fs::create_dir_all(home.join(".cache")).unwrap();
+    fs::create_dir_all(home.join(".config").join("app-a")).unwrap();
+    repo(&home.join("code"), true);
+
+    let doc = json(&env, "repos --json");
+    let names: Vec<&str> = doc["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["code"], "dot-directories hidden: {doc}");
+    let table = ok(&env, "repos");
+    assert!(
+        !table.contains(".cache"),
+        "the table hides them too: {table}"
+    );
+
+    let doc = json(&env, "repos --json --all");
+    let names: Vec<&str> = doc["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    // The git repository still leads; the dot-directories follow by
+    // name.
+    assert_eq!(names, ["code", ".cache", ".config"]);
+}
+
+/// Git repositories lead, a workspace over member repositories
+/// follows, and a plain `will git init` directory comes last — never
+/// pre-selected above real work on `$HOME`.
+#[test]
+fn repos_sorts_git_then_workspace_then_plain() {
+    let (_scratch, env, home) = home_env();
+    repo(&home.join("zeta-repo"), true);
+    fs::create_dir_all(home.join("alpha-dir")).unwrap();
+    repo(&home.join("mid-work").join("member"), true);
+
+    let doc = json(&env, "repos --json");
+    let names: Vec<&str> = doc["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["zeta-repo", "mid-work", "alpha-dir"]);
+    assert_eq!(entry(&doc, "mid-work")["kind"], "dir");
+    assert_eq!(
+        entry(&doc, "mid-work")["members"],
+        serde_json::json!(["member"])
+    );
+}
