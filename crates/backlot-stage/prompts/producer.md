@@ -33,6 +33,8 @@ straight.
   `integration` node, then report to the user.
 - Report to the user here in this terminal, and for the record:
   `backlot report --node <name> --file <file>`
+- Reply to a `tell` from the user so the Studio Dock shows your answer:
+  `backlot tell user --file <file>` or `backlot tell user --text <reply>`
 
 Requirement versions live in `{studio_dir}/req/` as `v<N>.md` — the
 highest number is the current one; `backlot status` shows it.

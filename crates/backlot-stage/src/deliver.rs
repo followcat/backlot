@@ -88,15 +88,16 @@ fn item_line(it: &OutItem, dir: &Path) -> String {
 }
 
 /// Every role's pending items, one `Outbound` each. Messages and
-/// reports share the queue; a `to: user` report is never sent. One
-/// pending item keeps its own line; two or more merge into
-/// `messages/digest-<top seq>.md` behind a single `stage → <role>`
-/// line naming the file and the count — the items inside sit in
-/// the digest's priority order (`digest::rank`), ties by seq.
+/// reports share the queue; a `to: user` message or report is never
+/// sent to a terminal. One pending item keeps its own line; two or
+/// more merge into `messages/digest-<top seq>.md` behind a single
+/// `stage → <role>` line naming the file and the count — the items
+/// inside sit in the digest's priority order (`digest::rank`), ties
+/// by seq.
 pub fn outbox(state: &StudioState, dir: &Path) -> Vec<Outbound> {
     let mut by_role: BTreeMap<String, Vec<OutItem>> = BTreeMap::new();
     for m in &state.messages {
-        if !m.delivered && !m.dropped {
+        if !m.delivered && !m.dropped && m.to != "user" {
             by_role
                 .entry(m.to.clone())
                 .or_default()

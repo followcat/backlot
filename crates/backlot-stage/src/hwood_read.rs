@@ -171,12 +171,13 @@ fn cast_suggest(common: &Common, env: &Env, base: &Path, json: bool) -> Result<S
 
 /// `report show --studio <s> --file <relpath>` (G3): streams one
 /// studio artifact to `out`. Only `reports/…`, `checks/…`,
-/// `attention/<seq>.txt` and `requirements/v<n>.md` (the on-disk
-/// `req/` directory — `req/v<n>.md` is accepted as the same root)
-/// are served, the bytes are capped at 1 MiB, and the resolved path
-/// must stay inside the studio directory — `..`, absolute paths and
-/// symlinks that leave it are refused. `out` is a parameter so the
-/// read can be captured in tests; production hands it stdout.
+/// `messages/<file>`, `attention/<seq>.txt` and `requirements/v<n>.md`
+/// (the on-disk `req/` directory — `req/v<n>.md` is accepted as the
+/// same root) are served, the bytes are capped at 1 MiB, and the
+/// resolved path must stay inside the studio directory — `..`,
+/// absolute paths and symlinks that leave it are refused. `out` is a
+/// parameter so the read can be captured in tests; production hands
+/// it stdout.
 pub(crate) fn report_show(
     common: &Common,
     env: &Env,
@@ -249,6 +250,7 @@ fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
     let name = parts.last().map(String::as_str).unwrap_or_default();
     let ok = match root.as_str() {
         "reports" | "checks" => parts.len() >= 2,
+        "messages" => parts.len() == 2,
         "attention" => tail_ok(&parts, |n| {
             n.strip_suffix(".txt")
                 .is_some_and(|seq| !seq.is_empty() && seq.chars().all(|c| c.is_ascii_digit()))
@@ -264,7 +266,7 @@ fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
     };
     if !ok {
         return Err(Fail::refused(format!(
-            "--file '{name}' is not under reports/, checks/, attention/ or requirements/"
+            "--file '{name}' is not under reports/, checks/, messages/, attention/ or requirements/"
         )));
     }
     let mut rel = std::path::PathBuf::from(root.as_str());
