@@ -280,3 +280,64 @@ fn studio_exchange_caps_count_and_200_char_utf8_and_stays_under_budget() {
     let bytes = serde_json::to_vec(&doc).unwrap().len();
     assert!(bytes < 60_000, "summary grew to {bytes} bytes");
 }
+
+#[test]
+fn studio_pending_tell_tracks_undelivered_user_messages_only() {
+    let mut state = base_state();
+    // Internal producer -> director message does not set `pending_tell`.
+    state.messages.push(msg(
+        2,
+        "producer",
+        "director",
+        Some("messages/2-dispatch.md"),
+        Some("dispatch"),
+        None,
+    ));
+    // Producer -> user reply (`to == "user"`) never sits behind a terminal send gate.
+    state.messages.push(msg(
+        3,
+        "producer",
+        "user",
+        Some("messages/3-reply.md"),
+        None,
+        None,
+    ));
+    let build = |s: &StudioState| {
+        summary_with_exchange(
+            &[("acme-shop".into(), s.clone())],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            1,
+        )
+        .studios
+        .remove(0)
+    };
+    let calm = build(&state);
+    assert!(!calm.pending_tell);
+    assert!(
+        serde_json::to_value(&calm)
+            .unwrap()
+            .get("pending_tell")
+            .is_none()
+    );
+
+    // User -> producer tell waiting behind send gate sets `pending_tell = true`.
+    state.messages.push(msg(
+        4,
+        "user",
+        "producer",
+        Some("messages/4-tell.txt"),
+        None,
+        None,
+    ));
+    let queued = build(&state);
+    assert!(queued.pending_tell);
+    assert_eq!(serde_json::to_value(&queued).unwrap()["pending_tell"], true);
+
+    // Delivery clears `pending_tell` automatically.
+    state.messages.last_mut().unwrap().delivered = true;
+    assert!(!build(&state).pending_tell);
+}

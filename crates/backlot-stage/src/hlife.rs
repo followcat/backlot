@@ -89,7 +89,7 @@ impl Stage {
         };
         self.hrefresh(&hdir);
         self.hdiscover(&hdir, terminals);
-        self.hsample(terminals, &cfg.runner, now_ms).await;
+        self.hsample(&hdir, terminals, &cfg.runner, now_ms).await;
         match self.hdeliver(&hdir, terminals, now_ms).await {
             Err(e @ Fail::Core(_)) => return Err(e),
             Err(e) => self.hlog(&format!("deliver: {}", e.message())),
