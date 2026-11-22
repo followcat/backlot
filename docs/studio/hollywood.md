@@ -29,7 +29,7 @@ layout, so toggling it resizes nothing.
   model / effort plus the right-hand studio count and `k waiting on you` (red while a prompt
   or a down stage waits, peach otherwise), then one seven-row frame per studio — the
   machine-qualified id in the top edge (accent on `selection_bg` when selected), its own
-  machine's `■ live` / `◌ stage down` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
+  machine's `■ live` / `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
   task counts, the role on set, what it is doing (a broken ledger's error in red), and one
   `◆` per cast member coloured by its state. The last frame is always the dashed
   **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`, a narrow screen
@@ -76,7 +76,7 @@ included; `↓` `↑` (or `j` `k`) leave the frames for the waiting rows and com
 new-studio frame; `Enter` activates the selection. Each waiting row has its own keys: on a
 **prompt** row `y` answers `allow` and `d` answers `deny` (`backlot approve --person <role>
 --decision <d>` on the prompt's own machine), `p` peeks at the role's live screen read-only;
-on a **stage** row `r` runs `backlot stage start` on that machine, and an offline machine's
+on a **stage** row `s` runs `backlot stage start` on that machine, and an offline machine's
 `Enter` reports the watcher's last read; on a **card** row `a` applies, `x` cancels and `s`
 shows the card (`backlot card show` in a read-only view); on a **ready** row `f` asks
 `finish studio? y/n` inline, and `y` runs `backlot studio finish` on the studio's own

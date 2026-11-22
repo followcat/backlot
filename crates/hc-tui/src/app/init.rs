@@ -176,7 +176,7 @@ impl App {
             action_rx,
             action_toast: None,
             action_toast_hit: ratatui::layout::Rect::default(),
-            action_copy_hit: ratatui::layout::Rect::default(),
+            action_chip_hit: ratatui::layout::Rect::default(),
             studio_dialog: None,
             studio_dialog_hits: crate::chrome::studio_dialogs::DialogHits::default(),
             studio_dialog_gen: 0,

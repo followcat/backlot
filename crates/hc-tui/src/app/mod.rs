@@ -363,10 +363,11 @@ pub struct App {
     /// The §3 toast — the 3.5 s success card or the 8 s failure
     /// card carrying `copy cmd`.
     action_toast: Option<action_tracker::ActionToast>,
-    /// Last frame's action-toast rects — the card and its `copy
-    /// cmd` chip.
+    /// Last frame's action-toast rects — the card and its chip
+    /// (`copy cmd` on a failure, `start stage` on the stopped-stage
+    /// offer).
     action_toast_hit: ratatui::layout::Rect,
-    action_copy_hit: ratatui::layout::Rect,
+    action_chip_hit: ratatui::layout::Rect,
     /// The S3 native dialogs — reason, confirm, Tell and Revise.
     studio_dialog: Option<crate::studio_dialog::StudioDialog>,
     /// Last frame's dialog hit map (`StudioDialogRender`).

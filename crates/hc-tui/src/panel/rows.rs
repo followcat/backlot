@@ -34,9 +34,9 @@ pub(crate) enum Target {
     Task(StudioKey, String),
     /// The `✓ <n> accepted` fold line — Space/Enter opens it.
     Fold(StudioKey),
-    /// A `stage not running` row — the bare machine line or a
-    /// block's owed-step `◌ … — [r] start`; Enter/click is the
-    /// `[r]` (U6c). `None` names this core.
+    /// A `stage stopped` row — the bare machine line or a block's
+    /// owed-step `◌ … · s start`; Enter/click is the `s` (U6c).
+    /// `None` names this core.
     Stage(Option<String>),
     /// An expanded block's user-facing exchange row (`seq`) above `›` —
     /// Enter/click opens its full `messages/…` or `reports/…` file in
@@ -78,7 +78,7 @@ pub(crate) enum Owed {
     Finish,
     /// `! finish <id>? [y]` — `f` armed the inline confirm.
     Confirm,
-    /// `◌ stage not running — [r] start`.
+    /// `◌ stage stopped · s start`.
     StageDown,
     /// `× <machine> unreachable`.
     Offline,
@@ -99,9 +99,9 @@ pub(crate) enum PersonLine {
 #[derive(Debug)]
 pub(crate) enum Row<'a> {
     Title,
-    /// `stage not running` — one per machine whose document answered
-    /// but whose stage is down; `machine` names it when several
-    /// machines answered.
+    /// `◌ stage stopped · s start` — one per machine whose document
+    /// answered but whose stage is down; `machine` names it when
+    /// several machines answered.
     StageDown {
         machine: Option<&'a str>,
     },
@@ -197,7 +197,7 @@ impl Row<'_> {
     /// Owed/cue/drawer/border rows are `Target::None` (A2.2).
     pub fn target(&self) -> Target {
         match self {
-            // The stage-down rows are the `[r] start` their text
+            // The stage-down rows are the `s start` their text
             // advertises (U6c); every other informative row stays
             // `None` — skipped by the cursor keys and clicks (A2.2).
             Row::StageDown { machine } => {
@@ -258,7 +258,7 @@ fn block_rows<'a>(
             format!("{} unreachable", studio.machine.unwrap_or("local")),
         ))
     } else if !stage {
-        Some((Owed::StageDown, "stage not running — [r] start".to_string()))
+        Some((Owed::StageDown, "stage stopped · s start".to_string()))
     } else if let Some(error) = &studio.studio.error {
         Some((Owed::Error, error.clone()))
     } else if let Some(next) = &studio.studio.next {
@@ -371,7 +371,7 @@ pub(crate) fn rows<'a>(
     for machine in machines {
         // A machine's own line only when it has no studio blocks to
         // carry the state — inside a block the owed-step subheader
-        // says the same thing (`◌ stage not running`, `× …unreachable`).
+        // says the same thing (`◌ stage stopped`, `× …unreachable`).
         if !machine.summary.studios.is_empty() {
             continue;
         }

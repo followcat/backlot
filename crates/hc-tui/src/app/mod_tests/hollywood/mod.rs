@@ -14,6 +14,7 @@ mod menu;
 mod mouse;
 mod opening;
 mod setup;
+mod stage;
 
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};

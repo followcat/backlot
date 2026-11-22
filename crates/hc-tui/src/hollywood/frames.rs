@@ -244,7 +244,8 @@ fn draw_studio(
     // stage — and right-aligned `r<ver> · <done>/<total>` plus the
     // waiting chip (red when a prompt is the user's).
     let (conn, stage) = status(studio.machine);
-    let (mark, word, colour) = studio_line(studio.studio, conn, stage, palette);
+    let room = inner.saturating_sub(2) as usize;
+    let (mark, word, colour) = studio_line(studio.studio, conn, stage, room, palette);
     let y = rect.y + 1;
     put_text(buf, rect.x + 2, y, 1, mark, on(colour, bg));
     put_text(
@@ -366,12 +367,14 @@ fn draw_studio(
 }
 
 /// The frame's state line, machine-aware (A8.2): `× error`, then
-/// `× offline`, `◌ stage down`, `✓ ready`, `✓ done`, `● live` —
-/// `(mark, word, colour)`.
+/// `× offline`, `◌ stage stopped`, `✓ ready`, `✓ done`, `● live` —
+/// `(mark, word, colour)`. `room` is the width the word gets; the
+/// stopped-stage line names its `s start` key only when it fits.
 pub(crate) fn studio_line<'a>(
     studio: &'a StudioSummary,
     conn: Conn,
     stage: bool,
+    room: usize,
     palette: &Palette,
 ) -> (&'static str, &'a str, Color) {
     if studio.error.is_some() {
@@ -381,7 +384,12 @@ pub(crate) fn studio_line<'a>(
         return ("×", "offline", palette.red);
     }
     if !stage {
-        return ("◌", "stage down", palette.peach);
+        let word = if room >= "stage stopped · s start".len() {
+            "stage stopped · s start"
+        } else {
+            "stage stopped"
+        };
+        return ("◌", word, palette.peach);
     }
     if studio.ready_to_finish {
         return ("✓", "ready", palette.teal);

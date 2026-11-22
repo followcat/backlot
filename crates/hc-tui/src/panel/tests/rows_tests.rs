@@ -246,7 +246,7 @@ fn a_dead_stage_moves_the_stage_word_inside_the_block() {
         Some("acme-shop"),
         100,
     );
-    // No top `stage not running` row — the owed subheader inside the
+    // No top `stage stopped` row — the owed subheader inside the
     // block carries it now (S2 §2): one extra row under the block's
     // top border — the clickable `Stage` target U6c gave it — every
     // other row untouched.

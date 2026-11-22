@@ -410,6 +410,15 @@ impl App {
             self.hollywood_toggle();
             return None;
         }
+        // The stopped-stage toast's `s` offer (R3 §1b) outranks the
+        // surfaces that would own a bare letter — a mutation that
+        // completed under an open Call Sheet or Dock still answers
+        // `s`. A surface reading `s` as text or an answer keeps it
+        // (the check itself knows those), and every modal above
+        // already took the press.
+        if self.action_toast_start_key(&press) {
+            return None;
+        }
         // The expanded layer (or an open read-only CardView) owns
         // every key like the focused panel does; the toggle and the
         // studio keys already took theirs.

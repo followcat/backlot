@@ -406,7 +406,7 @@ drawer under a person or task, or folds a studio block on its header. The marks:
 | `!` | `lost` — the role's terminal vanished without a deliberate close |
 | `✓` | `closed` — the stage released the role on purpose; it stays listed and can be reopened |
 
-The title line counts the studios (`lot · 2`). `stage not running` means no live
+The title line counts the studios (`lot · 2`). `stage stopped` means no live
 `backlot-stage` terminal — the panel and the cast keep the last document. The collapsed
 16-column strip shows each studio's health, a short `id·machine` label and progress or
 attention, and one row per active or blocked role.
@@ -415,7 +415,7 @@ Panel keys while it is focused: `j`/`k` or the arrows move the selection, `Enter
 live person's terminal (a closed person reopens a resumable or fixed seat through the action
 tracker; `o` does the same), `Space` opens a drawer or folds a studio, `v` opens the Task &
 Delivery Sheet for the selected studio or task, `p` peeks, `y`/`d` answer a user-owned prompt,
-`+`/`-` raise and lower a task's priority, `r`/`f` start the stage and finish the studio,
+`+`/`-` raise and lower a task's priority, `s`/`f` start the stage and finish the studio,
 `c` switches collapsed and expanded, `q` closes, `?` opens help, `Esc` unfocuses the dock
 beside the panes and closes it outright over an overlay.
 While the panel is focused it owns the keys — `Ctrl+B y` again closes it — except the four
@@ -525,7 +525,7 @@ a terminal on that machine running the official installer with `BACKLOT_SKIP_COR
 never touched — and a `backlot` managed by mise, Homebrew, Nix, cargo or a dev build is refused
 first with the channel's own upgrade command. An upgraded machine whose stage ran is restarted
 afterwards: the ledger replays, so no studio state is lost. The same restart sits on the menu,
-and a `stage not running` row in the dock starts the stage on Enter or click.
+and a `stage stopped` row in the dock starts the stage on `s`, Enter or click.
 
 ## Permission prompts
 

@@ -68,7 +68,7 @@ titles and spacers are skipped. While it is focused it owns these keys:
 | `p` | Peek the terminal |
 | `y`/`d` | Answer a user-owned prompt |
 | `+`/`-` | Raise or lower a task's priority |
-| `r`/`f` | Start the stage / finish the studio |
+| `s`/`f` | Start the stage / finish the studio |
 | `m` | The row's context menu — same list a right-click opens |
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
@@ -121,7 +121,7 @@ or `expanded`. While the band is expanded it owns these keys:
 | `Enter` | Activate the selection — a frame opens it, a prompt opens the role, a card shows it, an offline machine reports its last read, the setup line opens the Hollywood setup dialog |
 | `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine |
 | `p` | On a prompt row: peek at the role's live screen, read-only |
-| `r` | On a stage row: `backlot stage start` on that machine |
+| `s` | On a stage row or a stopped-stage frame: `backlot stage start` on that machine |
 | `a` / `x` / `s` | On a card row: `backlot card apply` / `cancel` / `show` |
 | `f` | On a ready row: arm `finish studio?`, then `y` runs `backlot studio finish`, `n`/`Esc` stands down |
 | `n` | New studio — the dialog, with the bar collapsed first |
@@ -168,7 +168,10 @@ runs, a success toast shows for 3.5 seconds, and a failure card holds for 8 seco
 command's first `stderr` line — a remote studio's toast always names its machine (`host-b:
 paused task t1` / `host-b failed: …`). `C` on the failure card, or a click on `copy cmd`,
 writes the exact command line (`ssh <machine> -- backlot …` for a remote studio) to the
-clipboard; `Esc` or a click dismisses it.
+clipboard; `Esc` or a click dismisses it. A mutation that lands while its machine's stage is
+stopped keeps the success title but says `recorded on disk · stage stopped` and holds the full
+8 seconds with a `[s] start stage` chip — `s` or a click runs `backlot stage start` on that
+machine and dismisses it.
 
 ## The New Studio dialog
 

@@ -217,8 +217,8 @@ async fn a_prompts_allow_chip_decides_it() {
 
 #[tokio::test]
 async fn a_stages_start_chip_starts_the_stage() {
-    // Drop the stage terminal: the `stage not running` row carries
-    // the `r start` chip.
+    // Drop the stage terminal: the `stage stopped` row carries
+    // the `s start` chip.
     let mut app = super::super::help_launcher::s5_app();
     let (recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
@@ -238,7 +238,7 @@ async fn a_stages_start_chip_starts_the_stage() {
         .hollywood_hits
         .chips
         .iter()
-        .find(|(_, t, key)| matches!(t, Target::Stage(..)) && *key == 'r')
+        .find(|(_, t, key)| matches!(t, Target::Stage(..)) && *key == 's')
         .cloned()
         .expect("the stage's start chip");
     app.on_mouse(mouse(

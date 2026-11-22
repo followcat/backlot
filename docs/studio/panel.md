@@ -41,7 +41,7 @@ tail still wins while the panel is closed or unfocused.
 | `y`/`d` | Answer a user-owned prompt; director-owned prompts carry the `dir` tag and no cue |
 | `+`/`=` | Raise the selected actor's or task's priority (`backlot priority … --as user`) |
 | `-`/`_` | Lower it |
-| `r`/`f` | Start the stage / finish the studio — the Call Sheet's own actions |
+| `s`/`f` | Start the stage / finish the studio — the Call Sheet's own actions |
 | `c` | Switch collapsed and expanded |
 | `q` | Close the dock |
 | `?` | Open `Ctrl+B ?` help |
@@ -222,7 +222,7 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   a 16-column overlay under that — and the pane geometry keeps the closed shape beneath it.
 - The document is the local `backlot` summary, schema `backlot/1`. A missing, malformed or
   foreign-schema document reads as `no studios`, never an error. Without a live `backlot-stage`
-  terminal the panel shows `stage not running` and keeps the last document.
+  terminal the panel shows `stage stopped` and keeps the last document.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the
   injected runner (`std::env::current_exe()` in production, a recorder in tests); a failure
   shows its first stderr line.

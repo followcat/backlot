@@ -28,16 +28,17 @@ const SLOTS: [(&str, &str); 6] = [
     ("y/d answer", "y/d"),
     ("a/x card", "a/x"),
     ("f finish", "f"),
-    ("r start", "r"),
+    ("s start", "s"),
     ("p peek", "p"),
     ("i tell", "i"),
 ];
 
 /// Which slots the selected row answers, in `SLOTS`' order: `y/d` on
 /// a prompt, `a/x` on a card, `f` on a ready studio (its frame
-/// included), `r` on a stage row whose machine can start, `p` on
-/// prompts and studio frames, and `i` while an agent is configured —
-/// the tell line is the sheet's own, and the key dies without one.
+/// included), `s` on a stage row whose machine can start — or on a
+/// studio frame while its machine's stage is down — `p` on prompts
+/// and studio frames, and `i` while an agent is configured — the
+/// tell line is the sheet's own, and the key dies without one.
 /// Every lit slot is one the row's dispatch would actually run.
 fn slots(selected: Option<&Target>, waits: &[Wait<'_>], agent: bool) -> [bool; 6] {
     // A frame's `f` follows its studio: the READY row's wait is the
@@ -47,13 +48,23 @@ fn slots(selected: Option<&Target>, waits: &[Wait<'_>], agent: bool) -> [bool; 6
             .iter()
             .any(|w| w.target() == Target::Ready(key.clone()))
     };
+    // A frame's `s` follows its machine: the STAGE STOPPED row's wait
+    // names the machine whose stage the frame's `s` starts.
+    let stage_down = |key: &StudioKey| {
+        waits.iter().any(|w| {
+            matches!(
+                w,
+                Wait::Stage(item)
+                    if !item.offline && item.machine == key.machine.as_deref()
+            )
+        })
+    };
     match selected {
         Some(Target::Prompt(..)) => [true, false, false, false, true, agent],
         Some(Target::Card(_)) => [false, true, false, false, false, agent],
         Some(Target::Stage(_, offline)) => [false, false, false, !offline, false, agent],
-        Some(Target::Ready(key)) | Some(Target::Studio(key)) => {
-            [false, false, ready(key), false, true, agent]
-        }
+        Some(Target::Ready(key)) => [false, false, ready(key), false, true, agent],
+        Some(Target::Studio(key)) => [false, false, ready(key), stage_down(key), true, agent],
         _ => [false, false, false, false, false, agent],
     }
 }
@@ -192,13 +203,13 @@ mod tests {
     }
 
     #[test]
-    fn a_down_stage_row_names_r_start_an_offline_one_does_not() {
+    fn a_down_stage_row_names_s_start_an_offline_one_does_not() {
         let list = machines(Some(&summary()));
         let waits = waits_stage_down(&list);
         let down = Target::Stage(None, false);
         assert_eq!(
             for_row(Some(&down), &waits, true, 200),
-            "r start   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "s start   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
         let offline = Target::Stage(Some("host-b".into()), true);
         assert_eq!(

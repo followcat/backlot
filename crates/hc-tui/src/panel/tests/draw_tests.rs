@@ -460,7 +460,7 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
     );
     let text = lines(&buf, area).join("\n");
     // The stage-down word is the block's owed-step line (S2 §2).
-    assert!(text.contains("stage not running"), "{text}");
+    assert!(text.contains("stage stopped · s start"), "{text}");
     assert!(text.contains("acme-shop"), "{text}");
 }
 

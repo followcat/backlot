@@ -103,8 +103,8 @@ impl App {
         }
     }
 
-    /// `r` while the selected row's studio has a down stage:
-    /// `backlot stage start` on that machine — the `[r] start` the
+    /// `s` while the selected row's studio has a down stage:
+    /// `backlot stage start` on that machine — the `s start` the
     /// owed-step line prints (S2 §2). Any other row is a no-op.
     pub(super) fn panel_stage_start(&mut self) {
         let machines = self.panel_summaries();
@@ -112,7 +112,7 @@ impl App {
         let index = self.panel_selected_index(&targets);
         let machine = match targets.get(index) {
             // The stage-down row's own machine (U6c) — Enter/click
-            // already runs it; `r` on the row does too.
+            // already runs it; `s` on the row does too.
             Some(Target::Stage(machine)) => machine.clone(),
             Some(target) => {
                 let Some(studio) = target
