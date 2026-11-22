@@ -76,6 +76,7 @@ pub(crate) fn render(
     sheet: Option<String>,
     overlay: bool,
     pane_refuses: bool,
+    active_surface: bool,
     pending: &crate::action::ActionTracker,
     palette: &Palette,
 ) -> PanelRender {
@@ -101,7 +102,7 @@ pub(crate) fn render(
     // `lot · <n>` — accent while the panel owns the keys; the call
     // sheet's key sits at the row's right end when it fits.
     let title = Rect::new(area.x, area.y, area.width, 1);
-    let title_fg = if panel.focused {
+    let title_fg = if panel.focused && active_surface {
         palette.accent
     } else {
         palette.text
@@ -217,7 +218,7 @@ pub(crate) fn render(
     let frame_of = |studio: &StudioKey| {
         frame_style(
             selected_studio.as_ref() == Some(studio),
-            panel.focused,
+            panel.focused && active_surface,
             palette,
         )
     };
@@ -233,9 +234,11 @@ pub(crate) fn render(
         // target shows on its top border only — with `selection_bg`,
         // a bold `text` foreground and the accent `▌` at the row's
         // left edge (inside the block border on a person's row). An
-        // unfocused panel keeps the remembered row but draws none of
-        // it: no highlight, no `▌`.
+        // unfocused panel (or one dimmed behind an active modal)
+        // keeps the remembered row but draws none of it: no
+        // highlight, no `▌`.
         let paints = panel.focused
+            && active_surface
             && selected == Some(&target)
             && matches!(
                 row,

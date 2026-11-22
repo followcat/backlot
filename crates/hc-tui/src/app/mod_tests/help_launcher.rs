@@ -290,10 +290,11 @@ async fn the_legend_stays_pinned_and_the_sizes_hold() {
     app.help_state.scroll = usize::MAX;
     let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(text.contains("◐ work"), "scrolled: {text}");
-    // §3's launcher ladder — herdr's overlay keeps its own sizes.
+    // Centered inside `pane_surface` at desktop widths (132x46 at 160x47,
+    // 92x35 at 120x36), falling back to full area on narrow screens.
     for (cols, rows, want) in [
-        (160u16, 47u16, (96u16, 32u16)),
-        (120, 36, (88, 28)),
+        (160u16, 47u16, (90u16, 31u16)),
+        (120, 36, (80, 27)),
         (80, 24, (76, 20)),
         (60, 24, (58, 20)),
         (40, 24, (38, 20)),

@@ -59,6 +59,7 @@ fn draw(
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette(),
     );
@@ -421,6 +422,7 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette(),
     );
@@ -455,6 +457,7 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette(),
     );
@@ -543,6 +546,7 @@ fn studios_spanning_machines_name_their_machine() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette(),
     );
@@ -579,6 +583,7 @@ fn one_machine_keeps_the_bare_id_headers() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette(),
     );
@@ -653,6 +658,7 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette(),
     );
@@ -666,4 +672,65 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let (buf, _) = draw(area, Some(&ready_summary), &panel, None);
     let ready_text = lines(&buf, area).join("\n");
     assert!(ready_text.contains("✓ ready"), "{ready_text}");
+}
+
+#[test]
+fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
+    let summary = summary();
+    let mut panel = panel(PanelMode::Expanded);
+    panel.focused = true;
+    panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    let area = Rect::new(0, 0, 36, 20);
+    let palette = palette();
+
+    let mut active_buf = Buffer::empty(area);
+    let active_hits = render(
+        &mut active_buf,
+        area,
+        &machines(Some(&summary)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        None,
+        None,
+        &keys(),
+        None,
+        false,
+        false,
+        true,
+        &Default::default(),
+        &palette,
+    );
+    let sel_y = active_hits
+        .rows
+        .iter()
+        .find(|(_, t)| *t == Target::Person("acme-shop".into(), "actor-alice".into()))
+        .unwrap()
+        .0
+        .y;
+    assert_eq!(active_buf[(1, sel_y)].symbol(), "▌");
+    assert_eq!(active_buf[(4, sel_y)].bg, palette.selection_bg);
+
+    let mut suppressed_buf = Buffer::empty(area);
+    render(
+        &mut suppressed_buf,
+        area,
+        &machines(Some(&summary)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        None,
+        None,
+        &keys(),
+        None,
+        false,
+        false,
+        false,
+        &Default::default(),
+        &palette,
+    );
+    assert_ne!(suppressed_buf[(1, sel_y)].symbol(), "▌");
+    assert_ne!(suppressed_buf[(4, sel_y)].bg, palette.selection_bg);
 }

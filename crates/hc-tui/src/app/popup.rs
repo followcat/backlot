@@ -110,6 +110,9 @@ pub(super) struct PeekState {
     pub seen: bool,
     /// The Call Sheet prompt this peek is answering, when it is one.
     pub prompt: Option<(crate::studio::StudioKey, String)>,
+    /// Backlot studio role title (`<studio>[ · <machine>] · <role>`),
+    /// `None` for Herdr's plain navigator peek (`R3-M14`).
+    pub studio_title: Option<String>,
 }
 
 impl App {
@@ -541,13 +544,40 @@ impl App {
         self.popup.is_some()
     }
 
-    /// Peek floats like herdr-app's 0.8 dialog; a press outside closes it.
+    /// Format a Backlot role peek title as `<studio>[ · <machine>] · <role>`,
+    /// qualifying `· <machine>` when remote or multi-machine (`R3-M14`).
+    pub(super) fn studio_peek_title(
+        &self,
+        studio: &crate::studio::StudioKey,
+        role_name: &str,
+    ) -> String {
+        let machines = self.panel_summaries();
+        let multi = crate::panel::data::spans_machines(&machines);
+        let machine = studio
+            .machine
+            .as_deref()
+            .or_else(|| multi.then_some(crate::project::LOCAL_LABEL));
+        match machine {
+            Some(m) => format!("{} · {m} · {role_name}", studio.id),
+            None => format!("{} · {role_name}", studio.id),
+        }
+    }
+
+    /// Peek floats like herdr-app's 0.8 dialog; Backlot studio role peeks
+    /// center inside `backlot_modal_surface` (`R3-M2`). A press outside closes it.
     fn peek_outer(&self) -> Option<Rect> {
-        self.peek.as_ref()?;
+        let peek = self.peek.as_ref()?;
+        let area = self.frame_area();
+        let surface = if peek.studio_title.is_some() && !self.plain {
+            let layout = self.chrome_layout(area.width, area.height);
+            self.backlot_modal_surface(area, &layout, 64)
+        } else {
+            area
+        };
         resolve_popup_geometry(
             Some(PopupSize::Percent(80)),
             Some(PopupSize::Percent(80)),
-            self.frame_area(),
+            surface,
         )
         .map(|g| g.outer)
     }
@@ -586,6 +616,11 @@ impl App {
         for cell in &mut buf.content {
             cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
         }
+        let backlot_peek =
+            self.peek.as_ref().is_some_and(|p| p.studio_title.is_some()) && !self.plain;
+        if backlot_peek {
+            super::draw::dim_cells(buf);
+        }
         let palette = &self.shell.palette;
         if let Some(outer) = self.peek_outer()
             && let Some(peek) = self.peek.as_mut()
@@ -598,13 +633,20 @@ impl App {
                 .and_then(|t| t.labels.get("herdr.title").cloned())
                 .filter(|t| !t.is_empty())
                 .unwrap_or_else(|| peek.terminal.clone());
+            let (border_title, header_title) = match peek.studio_title.as_deref() {
+                Some(studio_title) if !self.plain => {
+                    (format!(" {studio_title} "), studio_title.to_owned())
+                }
+                _ => (
+                    format!(" peek {title} — enter keeps it as a tab, esc closes "),
+                    title,
+                ),
+            };
             let mut block = Block::default()
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(palette.accent).bg(palette.panel_bg))
                 .style(Style::default().bg(palette.panel_bg))
-                .title(format!(
-                    " peek {title} — enter keeps it as a tab, esc closes "
-                ));
+                .title(border_title);
             if peek.prompt.is_some() {
                 block = block.title_bottom(" y allow  d deny  ↵ focus terminal  esc back ");
             }
@@ -617,7 +659,7 @@ impl App {
                 inner.width,
                 inner.height.saturating_sub(1),
             );
-            Paragraph::new(format!(" {}", title))
+            Paragraph::new(format!(" {header_title}"))
                 .style(
                     Style::default()
                         .fg(palette.text)
@@ -737,6 +779,7 @@ impl App {
             owner_tab: self.projection.snapshot.focused_tab_id.clone(),
             seen: true,
             prompt: None,
+            studio_title: None,
         });
     }
 

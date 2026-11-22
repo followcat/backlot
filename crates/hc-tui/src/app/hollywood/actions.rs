@@ -44,16 +44,18 @@ impl App {
                 .roles
                 .iter()
                 .find(|r| r.role == role)
-                .map(|r| (r.terminal.clone(), r.attention_user))
+                .map(|r| (r.terminal.clone(), r.attention_user, r.name.clone()))
         });
         match found {
-            Some((Some(terminal), attention_user)) => {
+            Some((Some(terminal), attention_user, role_name)) => {
+                let studio_title = self.studio_peek_title(studio, &role_name);
                 self.open_peek(terminal);
                 if let Some(peek) = self.peek.as_mut() {
+                    peek.studio_title = Some(studio_title);
                     peek.prompt = attention_user.then(|| (studio.clone(), role.to_string()));
                 }
             }
-            Some((None, _)) | None => {
+            Some((None, _, _)) | None => {
                 self.show_notice("Hollywood", "the role has no screen to peek")
             }
         }

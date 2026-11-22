@@ -48,8 +48,6 @@ pub(super) fn render_reason(
     let _ = input;
     if let Some(error) = &d.error {
         dim_line(b, i.x, i.y + 3, i.width, &format!(" ! {error}"), palette);
-    } else {
-        dim_line(b, i.x, i.y + 3, i.width, " ↵ submit  esc cancel", palette);
     }
     let rs = super::super::dialogs::row(i, &[12, 12], 2, 4);
     let [ok, cancel] = rs.as_slice() else {

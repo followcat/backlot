@@ -177,7 +177,12 @@ impl App {
 
 /// `true` when a notice or notification card painted — the draw pass
 /// counts it as overlay damage over the pane surfaces.
-pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
+pub(super) fn render(
+    app: &mut App,
+    buffer: &mut Buffer,
+    area: Rect,
+    layout: &crate::chrome::snapshot::ClientShellLayout,
+) -> bool {
     app.take_control_hit = Rect::default();
     app.notification_hit = Rect::default();
     app.update_toast_hit = Rect::default();
@@ -207,6 +212,11 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
             .map(|error| ("Connection lost", error.as_str(), false, false))
     };
     let mobile = area.width <= app.shell.mobile_width_threshold;
+    let (render_area, card_top_offset) = if app.plain {
+        (area, 1)
+    } else {
+        (app.toast_surface(area, layout), 0)
+    };
     let palette = &app.shell.palette;
     // The reference's `if notice else if notification`: the endpoint
     // notice takes precedence; the toast shows only in its absence.
@@ -223,7 +233,7 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
         let rect = if mobile {
             crate::chrome::notice_render::render_mobile_notice_banner(
                 buffer,
-                area,
+                render_area,
                 title,
                 Some(body),
                 dot,
@@ -233,11 +243,11 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
         } else {
             crate::chrome::notice_render::render_notification_card(
                 buffer,
-                area,
+                render_area,
                 title,
                 body,
                 crate::config::ToastHerdrPosition::TopRight,
-                1,
+                card_top_offset,
                 dot,
                 palette,
             )
@@ -252,7 +262,7 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
         app.notification_hit = if mobile {
             crate::chrome::notice_render::render_mobile_notification_banner(
                 buffer,
-                area,
+                render_area,
                 notification,
                 false,
                 palette,
@@ -260,7 +270,7 @@ pub(super) fn render(app: &mut App, buffer: &mut Buffer, area: Rect) -> bool {
         } else {
             crate::chrome::notice_render::render_visible_notification(
                 buffer,
-                area,
+                render_area,
                 notification,
                 app.shell.toast_position,
                 0,
