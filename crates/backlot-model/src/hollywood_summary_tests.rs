@@ -28,6 +28,7 @@ fn a_document_without_hollywood_still_parses() {
     assert_eq!(v["state"], "down");
     assert!(v.get("runner").is_none());
     assert!(v.get("headline").is_none());
+    assert!(v.get("headline_seq").is_none());
     assert!(v.get("cards").is_none());
 }
 
@@ -46,10 +47,26 @@ fn hollywood_section_caps() {
             "hollywood",
             HollywoodKind::Reported {
                 headline: "h".repeat(300),
-                body: None,
+                body: Some("reports/20-body.md".into()),
             },
         ),
     );
+    for seq in 21..=28 {
+        apply(
+            &mut state,
+            &hev(
+                seq,
+                "user",
+                HollywoodKind::MessageSent {
+                    to: "hollywood".into(),
+                    studio: None,
+                    text: Some("✦".repeat(300)),
+                    file: None,
+                    source_seq: None,
+                },
+            ),
+        );
+    }
     let s = hollywood_section(
         &state,
         "live",
@@ -60,6 +77,7 @@ fn hollywood_section_caps() {
     assert_eq!(s.state, "live");
     assert_eq!(s.runner.as_deref(), Some("runner-a"));
     assert_eq!(s.headline.as_ref().unwrap().chars().count(), 200);
+    assert_eq!(s.headline_seq, Some(20));
     assert_eq!(s.cards.len(), MAX_OPEN_CARDS);
     assert_eq!(s.cards[0].id, "c1");
     assert_eq!(s.cards[0].action, "pause t1");
@@ -98,10 +116,26 @@ fn the_document_stays_under_64kib_at_the_hollywood_caps() {
             "hollywood",
             HollywoodKind::Reported {
                 headline: "h".repeat(300),
-                body: None,
+                body: Some("reports/20-body.md".into()),
             },
         ),
     );
+    for seq in 21..=28 {
+        apply(
+            &mut state,
+            &hev(
+                seq,
+                "user",
+                HollywoodKind::MessageSent {
+                    to: "hollywood".into(),
+                    studio: None,
+                    text: Some("✦".repeat(300)),
+                    file: None,
+                    source_seq: None,
+                },
+            ),
+        );
+    }
     let studios: Vec<(String, StudioState)> = (0..12)
         .map(|i| (format!("studio-{i}"), base_state()))
         .collect();
@@ -212,4 +246,100 @@ fn the_exchange_is_the_conversation_newest_last() {
         lines,
         [("user", "hi"), ("hollywood", "hi back"), ("user", "go")]
     );
+}
+
+/// Exchange lines keep up to `HEADLINE_CHARS` (200) characters intact
+/// on both user tells and Hollywood report headlines, and truncate
+/// cleanly past 200 without splitting multibyte UTF-8 scalar values.
+#[test]
+fn exchange_preserves_up_to_200_chars_and_truncates_cleanly_above() {
+    use crate::summary::{HEADLINE_CHARS, Summary};
+
+    let mut state = HollywoodState::default();
+    let tell_97 = "a".repeat(97);
+    let report_150 = "b".repeat(150);
+    let tell_200 = "c".repeat(HEADLINE_CHARS);
+    let report_200 = "d".repeat(HEADLINE_CHARS);
+    let tell_over = format!("{}tail", "é".repeat(HEADLINE_CHARS));
+    let report_over = format!("{}tail", "✦".repeat(HEADLINE_CHARS));
+
+    let tell = |text: String| HollywoodKind::MessageSent {
+        to: "hollywood".into(),
+        studio: None,
+        text: Some(text),
+        file: None,
+        source_seq: None,
+    };
+    apply(&mut state, &hev(1, "user", tell(tell_97.clone())));
+    apply(
+        &mut state,
+        &hev(
+            2,
+            "hollywood",
+            HollywoodKind::Reported {
+                headline: report_150.clone(),
+                body: None,
+            },
+        ),
+    );
+    apply(&mut state, &hev(3, "user", tell(tell_200.clone())));
+    apply(
+        &mut state,
+        &hev(
+            4,
+            "hollywood",
+            HollywoodKind::Reported {
+                headline: report_200.clone(),
+                body: Some("reports/4-detail.md".into()),
+            },
+        ),
+    );
+    apply(&mut state, &hev(5, "user", tell(tell_over)));
+    apply(
+        &mut state,
+        &hev(
+            6,
+            "hollywood",
+            HollywoodKind::Reported {
+                headline: report_over,
+                body: Some("reports/6-detail.md".into()),
+            },
+        ),
+    );
+
+    let s = hollywood_section(&state, "live", None, None, None);
+    assert_eq!(s.headline_seq, Some(6));
+    assert_eq!(s.exchange.len(), 6);
+    assert_eq!(s.exchange[0].text, tell_97);
+    assert!(!s.exchange[0].has_body);
+    assert_eq!(s.exchange[1].text, report_150);
+    assert!(!s.exchange[1].has_body);
+    assert_eq!(s.exchange[2].text, tell_200);
+    assert_eq!(s.exchange[3].text, report_200);
+    assert!(s.exchange[3].has_body);
+    assert_eq!(s.exchange[4].text, "é".repeat(HEADLINE_CHARS));
+    assert_eq!(s.exchange[4].text.chars().count(), HEADLINE_CHARS);
+    assert_eq!(s.exchange[5].text, "✦".repeat(HEADLINE_CHARS));
+    assert_eq!(s.exchange[5].text.chars().count(), HEADLINE_CHARS);
+    assert!(s.exchange[5].has_body);
+
+    // Pre-existing wire documents without `headline_seq` or `has_body`
+    // deserialize cleanly, and false `has_body` is omitted on the wire.
+    let v = serde_json::to_value(&s).unwrap();
+    assert!(v["exchange"][0].get("has_body").is_none());
+    assert_eq!(v["exchange"][3]["has_body"], true);
+    let legacy = serde_json::json!({
+        "schema": SUMMARY_SCHEMA,
+        "updated_ms": 1,
+        "studios": [],
+        "hollywood": {
+            "state": "live",
+            "headline": "hello",
+            "exchange": [{ "seq": 1, "who": "user", "text": "hi" }]
+        }
+    });
+    let parsed: Summary = serde_json::from_value(legacy).unwrap();
+    let hw = parsed.hollywood.unwrap();
+    assert_eq!(hw.headline_seq, None);
+    assert!(!hw.exchange[0].has_body);
 }
