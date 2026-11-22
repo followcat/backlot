@@ -34,6 +34,7 @@ pub(crate) struct HelpRender {
     pub picker: Rect,
     pub picker_rows: Vec<(Rect, usize)>,
 }
+#[derive(Debug)]
 pub(crate) struct CursorState {
     pub x: u16,
     pub y: u16,

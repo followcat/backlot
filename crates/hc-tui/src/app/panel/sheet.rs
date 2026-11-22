@@ -1,7 +1,7 @@
 //! The Task & Delivery Sheet's App wiring (S2 §3): `v` opens it on
 //! the dock's selected studio/task, `status --json` and
 //! `records --json` fetch asynchronously on the studio's machine —
-//! the New Studio runner shared — and `o` streams a delivery's
+//! the New Studio runner shared — and `⏎` streams a delivery's
 //! report or a check's log through `backlot report show` (G3).
 //! Replies carry the open epoch so a sheet already closed or
 //! reopened drops a late answer.
@@ -110,7 +110,7 @@ impl App {
         }
     }
 
-    /// `o` inside the sheet: the selected line's file streams
+    /// `⏎` inside the sheet: the selected line's file streams
     /// through `backlot report show` — a local studio's run reads
     /// its own file; a remote studio's runs the same G3 command on
     /// its machine (S2 §3). On the Deliveries tab only.
@@ -220,11 +220,11 @@ impl App {
         let Some(sheet) = self.sheet.as_mut() else {
             return;
         };
-        // An opened report eats movement as its own scroll; `Esc`
-        // or `o` retires it back to the tab body.
+        // An opened report eats movement as its own scroll; `Esc`,
+        // `⏎` or `q` retires it back to the tab body.
         if sheet.view.is_some() {
             match combo.code {
-                KeyCode::Esc | KeyCode::Char('o') | KeyCode::Char('q') => {
+                KeyCode::Esc | KeyCode::Enter | KeyCode::Char('q') => {
                     sheet.view = None;
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
@@ -271,7 +271,9 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => self.sheet_move(-1),
             KeyCode::PageDown => self.sheet_page(1),
             KeyCode::PageUp => self.sheet_page(-1),
-            KeyCode::Char('o') => self.sheet_open_file(),
+            // `⏎` reads the selected report/log — `o` is reopen-only
+            // and no longer belongs to the sheet (R3-M11).
+            KeyCode::Enter => self.sheet_open_file(),
             _ => {}
         }
     }
@@ -279,7 +281,7 @@ impl App {
     /// Sheet mouse: a press outside the frame cancels like every
     /// modal; the wheel scrolls the open report or the tab body; a
     /// press on a selectable body line lands the selection there —
-    /// the same `o` then reads its file.
+    /// the same `⏎` then reads its file.
     pub(crate) fn sheet_mouse(&mut self, mouse: crate::app::input::MouseInput) {
         use crate::app::input::{MouseButton, MouseEventKind};
         let pos = (mouse.col, mouse.row);

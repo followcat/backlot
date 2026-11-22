@@ -43,18 +43,23 @@ async fn alt_y_draws_the_expanded_band_over_the_opening_page() {
 }
 
 #[tokio::test]
-async fn esc_collapses_the_band_first_then_dismisses_the_page() {
+async fn esc_rests_then_collapses_the_band_then_dismisses_the_page() {
     let mut app = page_app();
     alt_y(&mut app);
     draw_to(&mut app, 120, 24);
 
+    // A calm sheet opens in `Compose` — the first Esc rests the `›`
+    // line (R3-2), the second collapses the band.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.hollywood.editing, "the first Esc rests the line");
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(
         app.hollywood.mode,
         LayerMode::Collapsed,
-        "a resting line collapses on the first Esc"
+        "a resting line collapses on the next Esc"
     );
-    assert!(app.opening_visible(), "the page survives the first Esc");
+    assert!(app.opening_visible(), "the page survives the band's Esc");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(!text.contains("H O L L Y W O O D"), "{text}");
     assert!(
@@ -99,24 +104,37 @@ async fn a_calm_sheet_opens_editing_a_waiting_one_does_not() {
     assert_eq!(busy.hollywood.input.as_str(), "");
 }
 
-/// `↑` out of a resting line steps into the rows, `↓` returns typing;
-/// Esc on a draft drops the line, on an empty line collapses once.
+/// `↑` out of a composing line rests it a row up, draft kept; `↓`
+/// steps back onto the `›` row still `Resting` — walking onto the
+/// line never arms `Compose`, `Enter` does. `Esc` in `Compose`
+/// rests; the resting `Esc` collapses the sheet (R3-2/R3-B2).
 #[tokio::test]
-async fn up_leaves_the_line_and_esc_collapse_is_one_press() {
+async fn up_rests_a_row_up_and_esc_rest_then_collapse() {
     let mut app = page_app();
     alt_y(&mut app);
     assert!(app.hollywood.editing);
     key(&mut app, hc_vt::Key::Char('h'));
-    // A draft survives arrows: `↑` leaves the editor onto the rows.
+    // A draft survives the step out: `↑` rests the line a row up.
     key(&mut app, hc_vt::Key::ArrowUp);
     assert!(!app.hollywood.editing);
+    assert!(app.hollywood.selected != Some(Target::Input));
     assert_eq!(app.hollywood.input.as_str(), "h");
-    // `↓` returns to the line still editing.
+    // `↓` steps back onto the line — `Resting`, draft still parked.
     key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.input.as_str(), "h");
+    // `Enter` on the resting row re-arms `Compose` with the draft.
+    key(&mut app, hc_vt::Key::Enter);
     assert!(app.hollywood.editing);
     assert_eq!(app.hollywood.input.as_str(), "h");
-    // Esc with a draft lets the line go — the sheet stays open.
+    // The compose `Esc` rests on the row — the sheet stays open.
     key(&mut app, hc_vt::Key::Escape);
     assert!(!app.hollywood.editing);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(app.hollywood.input.as_str(), "h");
+    // The resting `Esc` collapses the sheet.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+    assert_eq!(app.hollywood.input.as_str(), "h", "the draft survives");
 }

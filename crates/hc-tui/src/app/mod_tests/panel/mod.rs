@@ -2,6 +2,7 @@
 //! `prefix+y` toggle and the closed-panel identity guarantee. Focused
 //! keys live in `keys`, mouse in `mouse`. Neutral fixtures only
 //! (`acme-shop`, `alice`).
+mod compose;
 mod draw;
 mod exchange;
 mod input;
@@ -153,6 +154,31 @@ fn app_with_two_machines() -> App {
     app.reconcile_published_view();
     app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
     app
+}
+
+/// A `terminal.run`-recording panel runner — the local dock's
+/// `backlot …` argv capture.
+fn runner() -> (
+    std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+    crate::app::action_tracker::TestPanelRunner,
+) {
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    (
+        recorded,
+        std::sync::Arc::new(move |argv: Vec<String>| {
+            sink.lock().unwrap().push(argv);
+            Box::pin(async { Ok(()) })
+        }),
+    )
+}
+
+/// The studio's parked draft — what its `›` row would paint.
+fn draft(app: &App, key: &str) -> String {
+    app.panel
+        .draft(&key.into())
+        .map(|draft| draft.as_str().to_owned())
+        .unwrap_or_default()
 }
 
 fn key(app: &mut App, k: hc_vt::Key) {

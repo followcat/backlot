@@ -121,6 +121,7 @@ async fn a_studio_switch_leaves_the_docks_input_line() {
     app.panel.mode = PanelMode::Expanded;
     app.panel.focused = true;
     app.panel.selected = Some(Target::Input(StudioKey::local("acme-shop")));
+    app.panel.editing = true;
     assert!(app.panel_editing());
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));

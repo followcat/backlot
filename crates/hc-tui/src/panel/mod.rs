@@ -77,10 +77,15 @@ pub(crate) struct Panel {
     /// `finish <id>? [y/n]` confirm — `y` runs `studio finish`, `n`
     /// or `Esc` stands down (S2 §2's `[f]` hint made real).
     pub finish_confirm: Option<crate::studio::StudioKey>,
-    /// The `›` line's editor — it holds keys while the selection
-    /// sits on a block's `Target::Input` row (`i`, `Enter`, a click
-    /// or `j`/`k` land it there).
-    pub input: crate::chrome::text_editor::TextEditor,
+    /// Every studio's `›` line draft, keyed by its `StudioKey` —
+    /// typing in `acme-shop` never paints into `beta-tools`' row.
+    /// Resting on the row keeps the draft for the next `Compose`.
+    pub drafts:
+        std::collections::HashMap<crate::studio::StudioKey, crate::chrome::text_editor::TextEditor>,
+    /// Whether the `›` line owns the keys — `Compose` vs `Resting`
+    /// on a `Target::Input` row. Only `Enter`/`i`/`/`/a click arms
+    /// it; selection movement, `Esc`, `↑` and a send all clear it.
+    pub editing: bool,
     /// Spinner frame counter for working marks (~120 ms ticks).
     pub spin: usize,
     /// The width the dock's border drag last left — the session's
@@ -112,7 +117,8 @@ impl Panel {
             drawer: None,
             accepted_folds: Default::default(),
             finish_confirm: None,
-            input: crate::chrome::text_editor::TextEditor::new("", false),
+            drafts: std::collections::HashMap::new(),
+            editing: false,
             spin: 0,
             drag_width: None,
             // The flag stays off until `set_hollywood` reads the
@@ -130,5 +136,28 @@ impl Panel {
     /// rows draw instead of the `✓ <n> accepted` line.
     pub(crate) fn accepted_open(&self, key: &crate::studio::StudioKey) -> bool {
         self.accepted_folds.contains(key)
+    }
+
+    /// The studio's parked `›` draft — `None` while it never typed.
+    pub(crate) fn draft(
+        &self,
+        key: &crate::studio::StudioKey,
+    ) -> Option<&crate::chrome::text_editor::TextEditor> {
+        self.drafts.get(key)
+    }
+
+    /// The studio's draft for writing — created empty on first use.
+    pub(crate) fn draft_mut(
+        &mut self,
+        key: &crate::studio::StudioKey,
+    ) -> &mut crate::chrome::text_editor::TextEditor {
+        self.drafts
+            .entry(key.clone())
+            .or_insert_with(|| crate::chrome::text_editor::TextEditor::new("", false))
+    }
+
+    /// Drop the studio's draft — a send already did its work.
+    pub(crate) fn clear_draft(&mut self, key: &crate::studio::StudioKey) {
+        self.drafts.remove(key);
     }
 }

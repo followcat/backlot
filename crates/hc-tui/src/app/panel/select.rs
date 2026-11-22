@@ -53,6 +53,7 @@ impl App {
     /// `None` row, so the cursor starts on something real.
     pub(super) fn panel_select_first(&mut self) {
         let targets = self.panel_targets();
+        self.panel.editing = false;
         if let Some(index) = targets.iter().position(|t| *t != Target::None) {
             self.panel.selected = Some(targets[index].clone());
             self.panel.selected_row = Some(index);
@@ -103,6 +104,9 @@ impl App {
         self.panel.selected = Some(targets[index].clone());
         self.panel.selected_row = Some(index);
         self.panel.finish_confirm = None;
+        // Any row movement drops Compose — the `›` row rests with its
+        // draft kept so `j`/`k`/`m`/`Esc` act on the dock at once.
+        self.panel.editing = false;
         // Keep the selection inside the scrolled body (title is fixed).
         let body_height = self.panel_hits.body.height.max(1);
         let heights: Vec<u16> = rows.iter().skip(1).map(|r| r.height()).collect();
@@ -147,6 +151,9 @@ impl App {
             .filter(|t| **t != Target::None)
             .cloned();
         self.panel.selected_row = self.panel.selected.as_ref().map(|_| selected);
+        // A clamp that leaves the `›` row drops Compose; staying on
+        // it keeps the edit.
+        self.panel.editing &= matches!(self.panel.selected, Some(Target::Input(_)));
     }
 
     /// Space — the S2 meaning by row: a studio header folds or

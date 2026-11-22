@@ -1,26 +1,14 @@
-//! The `›` line's keys: `i`/`/` select it (the derived editing
-//! does the rest), a plain line is a `tell` to the producer, a
-//! `/verb` dispatches through the studio-menu arm — `/stop` arms
-//! the same confirm `m` would — and an armed `finish` prompt's
-//! letters answer it instead of landing in the draft.
+//! The `›` line's keys: `i`/`/`/`⏎`/a click arm `Compose` on it
+//! (the explicit `editing` latch does the rest), a plain line is a
+//! `tell` to the producer, a `/verb` dispatches through the
+//! studio-menu arm — `/stop` arms the same confirm `m` would — and
+//! an armed `finish` prompt's letters answer it instead of landing
+//! in the draft. `⏎` sends back to `Resting` (R3-2's dock rule):
+//! the buffer clears, the selection stays on `Target::Input`, and
+//! `j`/`k`/`m`/`Esc` act on the dock at once. Cross-studio draft
+//! isolation, paste/IME routing, Home/End and the finished-studio
+//! reopen row live in `compose`.
 use super::*;
-
-/// A `terminal.run`-recording panel runner — the local dock's
-/// `backlot …` argv capture.
-fn runner() -> (
-    std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
-    crate::app::action_tracker::TestPanelRunner,
-) {
-    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
-    let sink = recorded.clone();
-    (
-        recorded,
-        std::sync::Arc::new(move |argv: Vec<String>| {
-            sink.lock().unwrap().push(argv);
-            Box::pin(async { Ok(()) })
-        }),
-    )
-}
 
 #[tokio::test]
 async fn i_lands_the_selection_on_the_input_row_and_types() {
@@ -33,12 +21,12 @@ async fn i_lands_the_selection_on_the_input_row_and_types() {
     // Letters are text on the line, not dock keys — `j` moves
     // nothing while the line owns the keys.
     key(&mut app, hc_vt::Key::Char('j'));
-    assert_eq!(app.panel.input.as_str(), "j");
+    assert_eq!(draft(&app, "acme-shop"), "j");
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
 }
 
 #[tokio::test]
-async fn a_plain_line_tells_the_producer_and_the_line_stays() {
+async fn a_plain_line_tells_the_producer_and_the_row_rests() {
     let mut app = app_with_panel_doc();
     let (recorded, run) = runner();
     app.set_panel_runner(run);
@@ -62,34 +50,57 @@ async fn a_plain_line_tells_the_producer_and_the_line_stays() {
             "user".into(),
         ]]
     );
-    // The buffer cleared but the line stays selected — the next
-    // line sends at once (the Call Sheet's keep-talking rule).
-    assert_eq!(app.panel.input.as_str(), "");
+    // R3-2's dock rule: the send cleared the draft and the row
+    // dropped to `Resting` — `j`/`k`/`m`/`Esc` work at once while
+    // the selection keeps its `›` place.
+    assert_eq!(draft(&app, "acme-shop"), "");
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
-    assert!(app.panel_editing());
+    assert!(!app.panel_editing());
 }
 
 #[tokio::test]
-async fn esc_and_up_step_back_into_the_rows() {
+async fn esc_rests_keeping_the_draft_and_a_second_esc_unfocuses() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     open_panel(&mut app);
     key(&mut app, hc_vt::Key::Char('i'));
+    key(&mut app, hc_vt::Key::Char('x'));
+    // First Esc: `Compose` → `Resting` on the same row, draft kept.
     key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel_editing());
+    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert_eq!(draft(&app, "acme-shop"), "x");
+    // Second Esc: the dock's usual leave — focus hands back.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused);
+    // The parked draft survived the whole round-trip.
+    assert_eq!(draft(&app, "acme-shop"), "x");
+}
+
+#[tokio::test]
+async fn up_rests_and_steps_off_the_line() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Char('i'));
+    key(&mut app, hc_vt::Key::Char('x'));
+    key(&mut app, hc_vt::Key::ArrowUp);
     assert!(!app.panel_editing());
     assert!(matches!(
         app.panel.selected,
         Some(Target::Person(..) | Target::Studio(..) | Target::Task(..) | Target::Fold(..))
     ));
-    // ↑ from the line does the same step.
-    key(&mut app, hc_vt::Key::Char('i'));
-    key(&mut app, hc_vt::Key::Char('x'));
-    key(&mut app, hc_vt::Key::ArrowUp);
-    assert!(!app.panel_editing());
-    // …and ↓ steps back onto the line.
+    assert_eq!(draft(&app, "acme-shop"), "x", "the draft parked");
+    // ↓ steps back onto the line — still `Resting`: walking onto a
+    // `›` row never arms `Compose` on its own.
     key(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    assert!(!app.panel_editing());
+    assert_eq!(draft(&app, "acme-shop"), "x");
+    // `Enter` on the resting row re-arms `Compose` with the draft.
+    key(&mut app, hc_vt::Key::Enter);
     assert!(app.panel_editing());
+    assert_eq!(draft(&app, "acme-shop"), "x");
 }
 
 #[tokio::test]
@@ -102,7 +113,7 @@ async fn i_on_a_person_seeds_their_tell() {
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
     key(&mut app, hc_vt::Key::Char('i'));
     assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
-    assert_eq!(app.panel.input.as_str(), "/tell actor-alice ");
+    assert_eq!(draft(&app, "acme-shop"), "/tell actor-alice ");
     // The press named its target — finishing the line sends
     // `tell actor-alice` without touching the dialog.
     for ch in "ship it".chars() {
@@ -130,7 +141,7 @@ async fn slash_stop_arms_the_same_confirm_the_menu_arms() {
     app.area = (120, 24);
     open_panel(&mut app);
     key(&mut app, hc_vt::Key::Char('/'));
-    assert_eq!(app.panel.input.as_str(), "/");
+    assert_eq!(draft(&app, "acme-shop"), "/");
     for ch in "stop".chars() {
         key(&mut app, hc_vt::Key::Char(ch));
     }
@@ -164,6 +175,39 @@ async fn an_unknown_verb_notices_with_the_verb_list() {
 }
 
 #[tokio::test]
+async fn a_mistyped_leading_letter_verb_never_sends() {
+    let mut app = app_with_panel_doc();
+    let (recorded, run) = runner();
+    app.set_panel_runner(run);
+    app.area = (120, 24);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Char('i'));
+    // The fat-fingered `i/tell producer hi` a resting `i` left in
+    // the buffer — rejected, draft kept, no producer tell.
+    for ch in "i/tell producer hi".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(recorded.lock().unwrap().is_empty(), "no tell ran");
+    assert_eq!(draft(&app, "acme-shop"), "i/tell producer hi");
+    assert!(app.panel_editing(), "the line keeps Compose for the fix");
+    assert!(app.notice.is_some(), "the guard explained itself");
+}
+
+#[tokio::test]
+async fn tab_completes_a_slash_verb_prefix() {
+    let mut app = app_with_panel_doc();
+    app.area = (120, 24);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Char('/'));
+    for ch in "sto".chars() {
+        key(&mut app, hc_vt::Key::Char(ch));
+    }
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(draft(&app, "acme-shop"), "/stop ");
+}
+
+#[tokio::test]
 async fn an_armed_finish_prompt_answers_instead_of_drafting() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
@@ -173,5 +217,5 @@ async fn an_armed_finish_prompt_answers_instead_of_drafting() {
     // edit — `y` decides, it never lands as text.
     app.panel.finish_confirm = Some("acme-shop".into());
     key(&mut app, hc_vt::Key::Char('y'));
-    assert_eq!(app.panel.input.as_str(), "");
+    assert_eq!(draft(&app, "acme-shop"), "");
 }

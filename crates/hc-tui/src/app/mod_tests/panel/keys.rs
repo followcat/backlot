@@ -1,5 +1,5 @@
 //! Focused-panel keys: movement, flipping, group collapse, the Enter
-//! actions (focus, two-step reopen, non-resumable refusal) and the
+//! actions (focus, the closed-seat notice, non-resumable refusal) and the
 //! injected `priority` runner with its failure notice.
 use super::*;
 use crate::panel::Target;
@@ -156,9 +156,10 @@ async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
                 | Target::Input(..)
         )
     ));
-    // A leap that lands on the `›` line owns the letters — `esc`
-    // peels back to the rows before `c` reads as a key again.
-    key(&mut app, hc_vt::Key::Escape);
+    // A leap that lands on the `›` line is `Resting` — there is no
+    // editing to peel back and `c` reads as the mode key at once
+    // (R3-B2's explicit `Compose`).
+    assert!(!app.panel.editing);
     // c collapses the panel to its strip.
     key(&mut app, hc_vt::Key::Char('c'));
     assert_eq!(app.panel.mode, PanelMode::Collapsed);
@@ -281,9 +282,9 @@ async fn enter_on_the_strip_row_closes_a_full_screen_dock() {
 }
 
 #[tokio::test]
-async fn a_closed_persons_enter_runs_reopen() {
-    // S5 §2: Enter on a resumable closed seat is its reopen — the
-    // same `backlot reopen --person` `o` runs, no hint step.
+async fn a_closed_persons_enter_notices_instead_of_reopening() {
+    // R3-M11: `o` owns the reopen — Enter on a closed seat explains
+    // itself and never respawns the agent.
     let mut app = app_with_panel_doc();
     let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
     let sink = recorded.clone();
@@ -295,18 +296,11 @@ async fn a_closed_persons_enter_runs_reopen() {
     open_panel(&mut app);
     app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-dave".into()));
     key(&mut app, hc_vt::Key::Enter);
-    assert_eq!(
-        recorded.lock().unwrap().as_slice(),
-        &[vec![
-            "reopen".to_string(),
-            "--person".into(),
-            "actor-dave".into(),
-            "--studio".into(),
-            "acme-shop".into(),
-            "--as".into(),
-            "user".into(),
-        ]]
+    assert!(
+        recorded.lock().unwrap().is_empty(),
+        "Enter never runs reopen"
     );
+    assert!(app.notice.is_some(), "the closed notice names `o`");
 }
 
 #[tokio::test]

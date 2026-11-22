@@ -89,7 +89,12 @@ async fn up_down_and_esc_preserve_panel_editing_invariant_across_talk_rows() {
         Some(Target::Talk("acme-shop".into(), 11))
     );
     assert!(!app.panel_editing());
-    assert_eq!(app.panel.input.as_str(), "", "`k` moved, never typed");
+    assert!(
+        app.panel
+            .draft(&"acme-shop".into())
+            .is_none_or(|draft| draft.as_str().is_empty()),
+        "`k` moved, never typed"
+    );
 
     key(&mut app, hc_vt::Key::Char('k'));
     assert_eq!(
@@ -106,16 +111,16 @@ async fn up_down_and_esc_preserve_panel_editing_invariant_across_talk_rows() {
     );
     assert!(!app.panel_editing());
 
-    // `Esc` from `Input` also steps straight onto Talk(#12) without closing the dock.
+    // `Esc` from `Input` rests the line on the same row — the dock
+    // keeps its place and the keys (R3-2); a second `Esc` unfocuses.
     key(&mut app, hc_vt::Key::Char('i'));
     assert!(app.panel_editing());
     key(&mut app, hc_vt::Key::Escape);
     assert!(app.panel.focused);
     assert!(!app.panel_editing());
-    assert_eq!(
-        app.panel.selected,
-        Some(Target::Talk("acme-shop".into(), 12))
-    );
+    assert_eq!(app.panel.selected, Some(Target::Input("acme-shop".into())));
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused);
 }
 
 #[tokio::test]

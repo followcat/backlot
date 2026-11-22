@@ -36,7 +36,13 @@ fn footer_of(app: &App, agent: bool) -> String {
     let machines = app.panel_summaries();
     let status = crate::hollywood::status_of(&app.view);
     let waits = crate::hollywood::waiting_items(&machines, &status);
-    crate::hollywood::for_row(app.hollywood.selected.as_ref(), &waits, agent, 196)
+    crate::hollywood::for_row(
+        app.hollywood.selected.as_ref(),
+        app.hollywood.editing,
+        &waits,
+        agent,
+        196,
+    )
 }
 
 /// The base document plus the variants that put a user-owned

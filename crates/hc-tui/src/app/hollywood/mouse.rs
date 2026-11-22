@@ -112,6 +112,7 @@ impl App {
                         Some(crate::hollywood::Target::NewStudio) => self.hollywood_new_studio(),
                         Some(target) => {
                             self.hollywood.selected = Some(target);
+                            self.hollywood_sync_editing();
                             self.hollywood_activate();
                         }
                         None => {}
@@ -140,6 +141,7 @@ impl App {
                         .map(|(_, target)| target.clone());
                     if let Some(target) = hit {
                         self.hollywood.selected = Some(target.clone());
+                        self.hollywood_sync_editing();
                         self.hollywood_menu(&target, point);
                     }
                 }

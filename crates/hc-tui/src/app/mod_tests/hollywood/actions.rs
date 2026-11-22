@@ -35,7 +35,7 @@ async fn apply_and_cancel_run_the_exact_argv() {
 }
 
 #[tokio::test]
-async fn show_me_on_a_studio_new_card_runs_card_show_and_opens_the_view() {
+async fn enter_on_a_studio_new_card_runs_card_show_and_opens_the_view() {
     let mut app = app_with_hollywood();
     let (recorded, _) = recorder();
     let sink = recorded.clone();
@@ -46,7 +46,7 @@ async fn show_me_on_a_studio_new_card_runs_card_show_and_opens_the_view() {
     app.area = (120, 24);
     alt_y(&mut app);
     app.hollywood.selected = Some(Target::Card("c4".into()));
-    key(&mut app, hc_vt::Key::Char('s'));
+    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "show", "c4", "--as", "user"]]
@@ -79,7 +79,7 @@ async fn the_view_applies_and_cancels_the_card_it_shows() {
     app.area = (120, 24);
     alt_y(&mut app);
     app.hollywood.selected = Some(Target::Card("c3".into()));
-    key(&mut app, hc_vt::Key::Char('s'));
+    key(&mut app, hc_vt::Key::Enter);
     let result = app.action_rx.recv().await.expect("the view");
     app.on_action_reply(result);
     assert!(app.hollywood.view.is_some());
@@ -158,15 +158,16 @@ async fn a_failed_card_answer_keeps_the_view_and_notices() {
 }
 
 #[tokio::test]
-async fn show_me_runs_card_show_on_any_card() {
-    // S1: `s` shows any card's detail, not only a studio-new draft.
+async fn enter_runs_card_show_on_any_card() {
+    // `⏎` reads any card's detail — `s` is stage-start only now
+    // (R3-M11), so a card's show rides the row's Enter.
     let mut app = app_with_hollywood();
     let (recorded, runner) = recorder();
     app.set_hollywood_runner(runner);
     app.area = (120, 24);
     alt_y(&mut app);
     app.hollywood.selected = Some(Target::Card("c3".into()));
-    key(&mut app, hc_vt::Key::Char('s'));
+    key(&mut app, hc_vt::Key::Enter);
     assert_eq!(
         recorded.lock().unwrap().as_slice(),
         &[vec!["card", "show", "c3", "--as", "user"]]
@@ -216,9 +217,12 @@ async fn the_input_line_sends_tell_hollywood_and_empty_sends_nothing() {
         &[vec!["tell", "hollywood", "hi", "--as", "user"]]
     );
     assert_eq!(app.hollywood.input.as_str(), "");
-    // A sent line keeps the dialog open — and with the line back to
-    // empty, the one Esc collapses the sheet.
+    // R3-2: the send keeps `Compose` for the next tell — the first
+    // Esc rests the line, the second collapses the sheet.
     assert!(app.hollywood.editing);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
 }

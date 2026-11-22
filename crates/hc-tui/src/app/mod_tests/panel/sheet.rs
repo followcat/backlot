@@ -1,6 +1,6 @@
 //! The Task & Delivery Sheet's tests (S2 §3): `v` opens it on the
 //! dock's selection with the summary instant and the ledger reads
-//! out, `Tab`/`1`–`3` switch its tabs, `o` streams a delivery's
+//! out, `Tab`/`1`–`3` switch its tabs, `⏎` streams a delivery's
 //! report through G3 — locally or machine-qualified — `Esc` backs
 //! out of the report first, and a late reply lands dead.
 use super::*;
@@ -134,7 +134,7 @@ async fn a_reply_for_a_closed_or_reopened_sheet_lands_dead() {
 }
 
 #[tokio::test]
-async fn the_deliveries_tab_lists_every_delivery_and_o_reads_its_report() {
+async fn the_deliveries_tab_lists_every_delivery_and_enter_reads_its_report() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     let calls: Recorded = Default::default();
@@ -182,7 +182,8 @@ async fn the_deliveries_tab_lists_every_delivery_and_o_reads_its_report() {
     key(&mut app, hc_vt::Key::Char('2'));
     let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(text.contains("d1 agent-a/m · a1..b2"), "{text}");
-    // `o` on the delivery row: G3 on the local studio.
+    // `⏎` on the delivery row: G3 on the local studio — `o` is
+    // reopen-only and no longer belongs to the sheet (R3-M11).
     let sheet = app.sheet.as_mut().unwrap();
     sheet.sel = sheet.sel.max(
         lines_for(sheet, None)
@@ -190,7 +191,7 @@ async fn the_deliveries_tab_lists_every_delivery_and_o_reads_its_report() {
             .position(|l| l.file.is_some())
             .unwrap_or(0),
     );
-    key(&mut app, hc_vt::Key::Char('o'));
+    key(&mut app, hc_vt::Key::Enter);
     drain_sheet(&mut app).await;
     let argv: Vec<String> = calls
         .lock()
@@ -248,7 +249,7 @@ async fn a_remote_studio_reads_and_reports_on_its_machine() {
             .any(|(_, a)| a == "records --studio beta-tools --json"),
         "{seen:?}"
     );
-    // An `o` read on a check log runs the same G3 remotely.
+    // An `⏎` read on a check log runs the same G3 remotely.
     let status = serde_json::json!({
         "schema": "studio/1", "id": "beta-tools", "requirement_version": 1,
         "last_seq": 3,
@@ -288,7 +289,7 @@ async fn a_remote_studio_reads_and_reports_on_its_machine() {
             .position(|l| l.file.as_deref() == Some("checks/d1-units.txt"))
             .expect("a check line carries its log file");
     }
-    key(&mut app, hc_vt::Key::Char('o'));
+    key(&mut app, hc_vt::Key::Enter);
     tokio::task::yield_now().await;
     let seen: Vec<(Option<String>, String)> = calls
         .lock()
@@ -305,7 +306,7 @@ async fn a_remote_studio_reads_and_reports_on_its_machine() {
 
 #[tokio::test]
 async fn an_open_report_leaves_no_tab_text_inside_the_body() {
-    // S2 round-1 review: `o` on a populated Deliveries tab must not
+    // S2 round-1 review: `⏎` on a populated Deliveries tab must not
     // leave the tab's rows showing under the report.
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
@@ -364,7 +365,7 @@ async fn an_open_report_leaves_no_tab_text_inside_the_body() {
         );
         sheet.sel = lines.iter().position(|l| l.file.is_some()).unwrap_or(0);
     }
-    key(&mut app, hc_vt::Key::Char('o'));
+    key(&mut app, hc_vt::Key::Enter);
     drain_sheet(&mut app).await;
     let buf = draw_to(&mut app, 120, 36);
     let body = app.sheet_hits.body;

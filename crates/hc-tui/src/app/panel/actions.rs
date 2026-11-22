@@ -1,4 +1,4 @@
-//! The dock's studio actions: the `o`/`p`/`r`/`f`/`+`/`-`/`y`/`d`
+//! The dock's studio actions: the `o`/`p`/`s`/`f`/`+`/`-`/`y`/`d`
 //! runners that build a `studio_cmds::Action` for the selected row
 //! and run it through the one `ActionTracker` (S3 §3) — the only
 //! keys that leave the view and write to the ledger.
@@ -11,34 +11,45 @@ use crate::studio_cmds;
 use super::App;
 
 impl App {
-    /// `o` on a closed person: `backlot reopen --person <role>` on
-    /// the studio's machine (S2 §4). Anything else is a no-op.
+    /// `o` on a closed person or a finished studio's `↺ reopen
+    /// producer` line: `backlot reopen --person <role>` on the
+    /// studio's machine (S2 §4, R3-N7). Anything else is a no-op —
+    /// `o` is reopen-only (R3-M11).
     pub(super) fn panel_reopen_selected(&mut self) {
         let machines = self.panel_summaries();
         let targets = self.panel_targets();
         let index = self.panel_selected_index(&targets);
-        let Some(Target::Person(key, role_name)) = targets.get(index).cloned() else {
-            return;
+        let (key, role_name) = match targets.get(index).cloned() {
+            Some(Target::Person(key, role_name)) => (key, role_name),
+            // The finished studio's row names its one reopenable seat.
+            Some(Target::ReopenProducer(key)) => (key, "producer".to_owned()),
+            _ => return,
         };
-        let Some(role) = crate::panel::data::studio(&machines, &key)
+        let reopen_row = matches!(targets.get(index), Some(Target::ReopenProducer(_)));
+        match crate::panel::data::studio(&machines, &key)
             .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name))
-        else {
-            return;
-        };
-        if role.state != "closed" {
-            return;
+        {
+            Some(role) => {
+                if role.state != "closed" {
+                    return;
+                }
+                // The dock menu's rule: a resumable seat reopens, a fixed
+                // seat (the producer) reopens anyway.
+                let fixed = role.role == "producer" || !role.role.starts_with("actor");
+                if !(role.resumable || fixed) {
+                    self.show_notice(
+                        "Cannot reopen",
+                        &format!("{} has no saved session to resume", role.name),
+                    );
+                    return;
+                }
+            }
+            // A finished studio's ledger can drop the producer row —
+            // the fixed seat still reopens (`StudioMenu`'s own rule).
+            None if reopen_row => {}
+            None => return,
         }
-        // The dock menu's rule: a resumable seat reopens, a fixed
-        // seat (the producer) reopens anyway.
-        let fixed = role.role == "producer" || !role.role.starts_with("actor");
-        if !(role.resumable || fixed) {
-            self.show_notice(
-                "Cannot reopen",
-                &format!("{} has no saved session to resume", role.name),
-            );
-            return;
-        }
-        self.run_action(studio_cmds::reopen(&key, &role.role));
+        self.run_action(studio_cmds::reopen(&key, &role_name));
     }
 
     /// `p` on a person: the role's live screen, read-only — a

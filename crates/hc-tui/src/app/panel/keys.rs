@@ -6,7 +6,6 @@ use backlot_model::summary::RoleSummary;
 
 use crate::app::input::TerminalKey;
 use crate::panel::Target;
-use crate::panel::data::StudioRef;
 use crate::studio_cmds;
 
 use super::App;
@@ -76,17 +75,19 @@ impl App {
                 _ => {}
             }
         }
-        // The `›` line owns every key while the selection sits on
-        // it — `↑` steps back into the rows, `⏎` sends (or runs a
-        // `/verb`), `esc` peels back to the rows, the rest is text.
+        // `Compose`: the `›` line owns every key — `⏎` sends (or runs
+        // a `/verb`) back to `Resting`, `esc` rests the line keeping
+        // its draft, `↑` rests and steps up one row, `Tab` completes
+        // the `/verb`, the rest is text for the studio's draft.
         if self.panel_editing() {
             if key.input.action != hc_vt::Action::Press {
                 return;
             }
             match code {
-                crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Up
-                    if modifiers.is_empty() =>
-                {
+                crossterm::event::KeyCode::Esc if modifiers.is_empty() => {
+                    self.panel.editing = false;
+                }
+                crossterm::event::KeyCode::Up if modifiers.is_empty() => {
                     self.panel_move(-1);
                 }
                 crossterm::event::KeyCode::Down if modifiers.is_empty() => {
@@ -95,8 +96,13 @@ impl App {
                 crossterm::event::KeyCode::Enter if modifiers.is_empty() => {
                     self.panel_input_submit();
                 }
+                crossterm::event::KeyCode::Tab if modifiers.is_empty() => {
+                    self.panel_input_complete();
+                }
                 _ => {
-                    let _ = self.panel.input.handle_key(key);
+                    if let Some(Target::Input(studio_key)) = self.panel.selected.clone() {
+                        let _ = self.panel.draft_mut(&studio_key).handle_key(key);
+                    }
                 }
             }
             return;
@@ -124,6 +130,15 @@ impl App {
         }
         if code == crossterm::event::KeyCode::PageUp && plain {
             self.panel_move(-page);
+            return;
+        }
+        // `Resting` Home/End: the body's first/last actionable row.
+        if code == crossterm::event::KeyCode::Home && plain {
+            self.panel_move(isize::MIN);
+            return;
+        }
+        if code == crossterm::event::KeyCode::End && plain {
+            self.panel_move(isize::MAX);
             return;
         }
         if key.input.action != hc_vt::Action::Press {
@@ -220,9 +235,19 @@ impl App {
                     self.run_action(studio_cmds::report_show(&key, seq, &rel));
                 }
             }
-            // Selecting the `›` line is what opens it — the derived
-            // `panel_editing` puts the keys there already.
-            Some(Target::Input(_)) => {}
+            // Selecting the `›` line is Resting — `Enter`/`i`/`/`/a
+            // click arms `Compose` on it (R3-B2's explicit states).
+            Some(Target::Input(_)) => {
+                self.panel.editing = true;
+            }
+            // A finished studio's `↺ reopen producer [o]` line — `o`
+            // owns the reopen; Enter never respawns a closed seat.
+            Some(Target::ReopenProducer(key)) => {
+                let studio = crate::panel::data::studio(&machines, &key);
+                if studio.is_some() {
+                    self.show_notice("Studio finished", "press o to reopen the producer");
+                }
+            }
             Some(Target::Block(id)) => {
                 // A single-line block expands — the same manual
                 // override Space writes; the selection follows the
@@ -236,16 +261,10 @@ impl App {
                     .position(|t| *t == Target::Studio(id.clone()));
             }
             Some(Target::Person(key, role_name)) => {
-                let studio = crate::panel::data::studio(&machines, &key);
-                let role = studio.and_then(|s| {
-                    s.studio
-                        .roles
-                        .iter()
-                        .find(|r| r.role == role_name)
-                        .map(|r| (s, r))
-                });
-                if let Some((studio, role)) = role.map(|(s, r)| (s, r.clone())) {
-                    self.panel_person_enter(studio, &role);
+                let role = crate::panel::data::studio(&machines, &key)
+                    .and_then(|s| s.studio.roles.iter().find(|r| r.role == role_name).cloned());
+                if let Some(role) = role {
+                    self.panel_person_enter(&role);
                 }
             }
             _ => {}
@@ -254,20 +273,14 @@ impl App {
 
     /// Enter on a person: a live one focuses its terminal — a remote
     /// one lands through the same machine-qualified address the
-    /// sidebar uses; a closed one runs `backlot reopen --person`
-    /// when the seat can reopen — resumable or a fixed seat like the
-    /// dock menu's rule — else the notice the hint carried (S5 §2).
-    fn panel_person_enter(&mut self, studio: StudioRef<'_>, role: &RoleSummary) {
+    /// sidebar uses; a closed one is never respawned by Enter —
+    /// `o` owns the reopen (R3-M11's one-key-one-meaning).
+    fn panel_person_enter(&mut self, role: &RoleSummary) {
         if role.state == "closed" {
-            let fixed = role.role == "producer" || !role.role.starts_with("actor");
-            if !(role.resumable || fixed) {
-                self.show_notice(
-                    "Cannot reopen",
-                    &format!("{} has no saved session to resume", role.name),
-                );
-                return;
-            }
-            self.run_action(studio_cmds::reopen(&studio.key(), &role.role));
+            self.show_notice(
+                "Person closed",
+                &format!("{} is closed — press o to reopen", role.name),
+            );
             return;
         }
         if role.state == "live"

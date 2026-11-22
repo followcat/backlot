@@ -89,7 +89,7 @@ impl App {
                     } else {
                         rows.push(HelpRow {
                             label: format!("Start stage · {machine}"),
-                            hint: self.sheet_hint("r"),
+                            hint: self.sheet_hint("s"),
                             glyph: "◌",
                             launch: Launch::Act {
                                 menu: Box::new(menu),

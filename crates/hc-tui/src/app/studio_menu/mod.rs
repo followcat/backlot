@@ -163,7 +163,7 @@ impl App {
                     !self.machine_reachable(studio.machine),
                 ))
             }
-            Target::Fold(key) | Target::Input(key) => {
+            Target::Fold(key) | Target::Input(key) | Target::ReopenProducer(key) => {
                 let studio = crate::panel::data::studio(machines, key)?;
                 Some(StudioMenu::studio(
                     key,

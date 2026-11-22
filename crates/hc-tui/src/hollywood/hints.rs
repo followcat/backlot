@@ -72,13 +72,23 @@ fn slots(selected: Option<&Target>, waits: &[Wait<'_>], agent: bool) -> [bool; 6
 /// The footer for the selected row: the longest tier that fits
 /// `width` — full words, then bare keys, then the block alone; `""`
 /// when even the block is too wide. `agent` is the `[hollywood]`
-/// gate the `i tell` slot shares with the key's dispatch.
+/// gate the `i tell` slot shares with the key's dispatch. `editing`
+/// is the `›` line's `Compose` latch — a composing line's footer
+/// names its exits instead of the rows' (R3-2).
 pub(crate) fn for_row(
     selected: Option<&Target>,
+    editing: bool,
     waits: &[Wait<'_>],
     agent: bool,
     width: usize,
 ) -> String {
+    if editing && matches!(selected, Some(Target::Input)) {
+        return ["⏎ send   ↑/esc done", "⏎ ↑/esc", "esc"]
+            .into_iter()
+            .find(|tier| display_width(tier) <= width)
+            .unwrap_or_default()
+            .to_owned();
+    }
     let mask = slots(selected, waits, agent);
     let mut full = String::new();
     let mut compact = String::new();
@@ -144,7 +154,7 @@ mod tests {
         let waits = waits_of(&list);
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
         assert_eq!(
-            for_row(Some(&selected), &waits, true, 200),
+            for_row(Some(&selected), false, &waits, true, 200),
             "y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -158,18 +168,22 @@ mod tests {
         let with_tell = "i tell   ↑↓ ⏎   m menu   ? help   esc";
         for selected in [Target::Calm, Target::Input] {
             assert_eq!(
-                for_row(Some(&selected), &waits, true, 200),
+                for_row(Some(&selected), false, &waits, true, 200),
                 with_tell,
                 "{selected:?}"
             );
         }
-        assert_eq!(for_row(None, &waits, true, 200), with_tell, "no selection");
+        assert_eq!(
+            for_row(None, false, &waits, true, 200),
+            with_tell,
+            "no selection"
+        );
         // Headline and Talk rows spell out `⏎ read` so Enter's
         // read-only CardView open is advertised in context.
         let with_read = "i tell   ↑↓ ⏎ read   m menu   ? help   esc";
         for selected in [Target::Headline, Target::Talk(7)] {
             assert_eq!(
-                for_row(Some(&selected), &waits, true, 200),
+                for_row(Some(&selected), false, &waits, true, 200),
                 with_read,
                 "{selected:?}"
             );
@@ -179,16 +193,20 @@ mod tests {
         let bare = "↑↓ ⏎   m menu   ? help   esc";
         for selected in [Target::Calm, Target::Input, Target::Setup] {
             assert_eq!(
-                for_row(Some(&selected), &waits, false, 200),
+                for_row(Some(&selected), false, &waits, false, 200),
                 bare,
                 "{selected:?}"
             );
         }
         assert_eq!(
-            for_row(Some(&Target::Headline), &waits, false, 200),
+            for_row(Some(&Target::Headline), false, &waits, false, 200),
             "↑↓ ⏎ read   m menu   ? help   esc"
         );
-        assert_eq!(for_row(None, &waits, false, 200), bare, "no selection");
+        assert_eq!(
+            for_row(None, false, &waits, false, 200),
+            bare,
+            "no selection"
+        );
     }
 
     #[test]
@@ -197,7 +215,7 @@ mod tests {
         let waits = waits_of(&list);
         let selected = Target::Card("c3".into());
         assert_eq!(
-            for_row(Some(&selected), &waits, true, 200),
+            for_row(Some(&selected), false, &waits, true, 200),
             "a/x card   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -208,12 +226,12 @@ mod tests {
         let waits = waits_stage_down(&list);
         let down = Target::Stage(None, false);
         assert_eq!(
-            for_row(Some(&down), &waits, true, 200),
+            for_row(Some(&down), false, &waits, true, 200),
             "s start   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
         let offline = Target::Stage(Some("host-b".into()), true);
         assert_eq!(
-            for_row(Some(&offline), &waits, true, 200),
+            for_row(Some(&offline), false, &waits, true, 200),
             "i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -227,7 +245,7 @@ mod tests {
         let key = StudioKey::local("acme-shop");
         for selected in [Target::Ready(key.clone()), Target::Studio(key)] {
             assert_eq!(
-                for_row(Some(&selected), &waits, true, 200),
+                for_row(Some(&selected), false, &waits, true, 200),
                 "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc",
                 "{selected:?}"
             );
@@ -240,7 +258,7 @@ mod tests {
         let waits = waits_of(&list);
         let selected = Target::Studio(StudioKey::local("acme-shop"));
         assert_eq!(
-            for_row(Some(&selected), &waits, true, 200),
+            for_row(Some(&selected), false, &waits, true, 200),
             "p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -255,12 +273,12 @@ mod tests {
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
         // The compact tier keeps the row's keys and the menu hint.
         assert_eq!(
-            for_row(Some(&selected), &waits, true, 36),
+            for_row(Some(&selected), false, &waits, true, 36),
             "y/d p i   ↑↓ ⏎   m menu   esc"
         );
         // The floor is the bare block — the old bare all-keys tier is
         // gone, and past it the footer is empty.
-        assert_eq!(for_row(Some(&selected), &waits, true, 8), "↑↓ ⏎ esc");
-        assert_eq!(for_row(Some(&selected), &waits, true, 7), "");
+        assert_eq!(for_row(Some(&selected), false, &waits, true, 8), "↑↓ ⏎ esc");
+        assert_eq!(for_row(Some(&selected), false, &waits, true, 7), "");
     }
 }

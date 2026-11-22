@@ -313,25 +313,25 @@ pub(super) fn draw_person(
 }
 
 /// The block's `›` line — the studio's own input surface inside its
-/// frame. `text` is the editor buffer; while it is empty a dim
-/// placeholder teaches both channels: a plain line `tell`s the
-/// producer, a leading `/` runs the deterministic verbs. `editing`
-/// (the selected row owns the keys) draws the `›` in accent and the
-/// buffer in the text colour; otherwise everything sits dim so the
-/// line reads as an affordance, not a cursor.
+/// frame. `draft` is that studio's parked buffer (empty when it never
+/// typed); `composing` is the explicit `panel.editing` latch — the
+/// row shows the editor's viewport and returns the hardware cursor
+/// only then. Resting draws the placeholder — or the parked draft —
+/// dim, so the line reads as an affordance, not a cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_input(
     buf: &mut Buffer,
     rect: Rect,
-    input: &crate::chrome::text_editor::TextEditor,
-    editing: bool,
+    draft: &crate::chrome::text_editor::TextEditor,
+    selected: bool,
+    composing: bool,
     cue: Option<(&str, ratatui::style::Color)>,
     spin: usize,
     frame: Style,
     palette: &Palette,
-) {
+) -> Option<crate::chrome::help::CursorState> {
     draw_inner(buf, rect, frame);
-    let mark = Style::default().fg(if editing {
+    let mark = Style::default().fg(if composing {
         palette.accent
     } else {
         palette.overlay0
@@ -346,29 +346,34 @@ pub(super) fn draw_input(
     } else {
         rect.width.saturating_sub(4)
     };
-    let (shown, style) = if input.as_str().is_empty() {
-        (
-            truncate_end("tell producer · / actions", width as usize),
+    let text = Rect::new(rect.x + 4, rect.y, width, 1);
+    let cursor = if composing {
+        crate::chrome::text_editor::render(buf, text, draft, Style::default().fg(palette.text))
+    } else if draft.as_str().is_empty() {
+        put_text(
+            buf,
+            text.x,
+            text.y,
+            width,
+            &truncate_end("tell producer · / actions", width as usize),
             Style::default().fg(palette.overlay0),
-        )
+        );
+        None
     } else {
-        // While the keys are on it the viewport follows the cursor;
-        // a parked draft just shows from the start.
-        let (text, _) = if editing {
-            input.viewport(width)
-        } else {
-            (input.as_str(), 0)
-        };
-        (
-            truncate_end(text, width as usize),
-            Style::default().fg(if editing {
-                palette.text
+        put_text(
+            buf,
+            text.x,
+            text.y,
+            width,
+            &truncate_end(draft.as_str(), width as usize),
+            Style::default().fg(if selected {
+                palette.subtext0
             } else {
                 palette.overlay0
             }),
-        )
+        );
+        None
     };
-    put_text(buf, rect.x + 4, rect.y, width, &shown, style);
     if let Some((badge, fg)) = badge {
         put_text(
             buf,
@@ -379,6 +384,22 @@ pub(super) fn draw_input(
             Style::default().fg(fg),
         );
     }
+    cursor
+}
+
+/// A finished studio's resting row: `│ ↺ reopen producer [o]    │`
+/// — the row where a live studio's `›` line sits (R3-N7).
+pub(super) fn draw_reopen(buf: &mut Buffer, rect: Rect, frame: Style, palette: &Palette) {
+    draw_inner(buf, rect, frame);
+    let width = rect.width.saturating_sub(3);
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        width,
+        &truncate_end("↺ reopen producer [o]", width as usize),
+        Style::default().fg(palette.teal),
+    );
 }
 
 /// One user-facing exchange turn inside a block: `│ › <text> │` for

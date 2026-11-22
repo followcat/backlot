@@ -157,7 +157,8 @@ impl App {
             }
             (Some(Target::Card(id)), KeyCode::Char('a')) => self.hollywood_card_apply(&id),
             (Some(Target::Card(id)), KeyCode::Char('x')) => self.hollywood_card_cancel(&id),
-            (Some(Target::Card(id)), KeyCode::Char('s')) => self.hollywood_card_show(&id),
+            // `s` is stage-start only (R3-M11) — a card's read is
+            // `⏎`, so no card arm names `s` anymore.
             (Some(Target::Ready(key)), KeyCode::Char('f')) => {
                 self.hollywood.confirm = Some(Confirm::Finish(key));
             }
@@ -200,10 +201,11 @@ impl App {
         true
     }
 
-    /// Enter on the editing input line: a nonempty line goes out as
-    /// `backlot tell hollywood "<line>"` (D20) and the dialog keeps
-    /// editing for the next; an empty Enter sends nothing and lets
-    /// the line go — the dialog's way of leaving without Esc.
+    /// Enter on the composing `›` line: a nonempty line goes out as
+    /// `backlot tell hollywood "<line>"` (D20) and the line stays in
+    /// `Compose` for the next message (R3-2's Call Sheet rule — the
+    /// dock's Enter rests instead); an empty Enter sends nothing and
+    /// lets the line rest.
     pub(super) fn hollywood_input_submit(&mut self) {
         let line = self.hollywood.input.as_str().trim().to_string();
         if line.is_empty() {
