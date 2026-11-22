@@ -202,11 +202,13 @@ pub enum Cmd {
     Runners {
         json: bool,
     },
-    /// `backlot repos [--json] [--from <dir>]` — the G4 directory
-    /// listing the New Studio dialog browses.
+    /// `backlot repos [--json] [--from <dir>] [--all]` — the G4
+    /// directory listing the New Studio dialog browses.
     Repos {
         json: bool,
         from: Option<String>,
+        /// `--all`: include `.`-prefixed directories.
+        all: bool,
     },
     /// `backlot studio list [--json]` — every studio under every
     /// core's state directory, read-only.
@@ -307,6 +309,15 @@ pub(crate) fn parse_set(v: &str, u: &'static str) -> Result<(String, String), Fa
     Ok((k.to_string(), val.to_string()))
 }
 
+/// A caller flag `common_flag` recognizes — the leading loop skips
+/// only these, so an unknown flag still reaches the command parser's
+/// own error.
+fn is_common_flag(arg: &str) -> bool {
+    ["--studio", "--as", "--task", "--session", "--remote"]
+        .iter()
+        .any(|flag| arg == *flag || eq(arg, flag).is_some())
+}
+
 /// Per-command arg loops: `--x v` and `--x=v`, common flags anywhere,
 /// `-h`/`--help` prints the command's usage.
 pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
@@ -314,6 +325,17 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
     let mut it = It {
         it: args.iter().peekable(),
     };
+    // Common flags may lead the command: `backlot --remote host-b
+    // studio list` reads the same as `backlot studio list --remote
+    // host-b`. A line with no command word behind them never reaches
+    // here — `maybe_run` leaves it to the TUI's own parser.
+    while let Some(arg) = it.peek().map(str::to_owned) {
+        if !is_common_flag(&arg) {
+            break;
+        }
+        it.next();
+        common_flag(&mut it, &mut common, &arg, U_STATUS)?;
+    }
     let Some(word) = it.next() else {
         return Err(usage("missing studio command", U_STATUS));
     };

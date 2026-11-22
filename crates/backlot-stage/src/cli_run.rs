@@ -78,8 +78,12 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
         }
         // `repos` reads the directory itself; `in_use_studio` needs
         // the ledger base, which `repos::run` resolves best-effort.
-        Cmd::Repos { json, ref from } => {
-            return crate::repos::run(env, &common, json, from.as_deref());
+        Cmd::Repos {
+            json,
+            ref from,
+            all,
+        } => {
+            return crate::repos::run(env, &common, json, from.as_deref(), all);
         }
         // `studio prune` reads the ledgers and reaps finished work —
         // no studio event is appended.

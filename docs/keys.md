@@ -184,10 +184,10 @@ reachability and `backlot --version`.
 
 | Step | Keys |
 |---|---|
-| 1 Machine & Repo | `Tab` between the machine list and the repository list; `↑`/`↓` move; `→`/`←` descend/ascend a directory; `/` filters; `Enter` picks the repository. A machine without `backlot`, or offline, shows its reason and cannot be picked; a git repository without commits is disabled with its hint; a repository another studio uses warns. |
+| 1 Machine & Repo | `Tab` between the machine list and the repository list; `↑`/`↓` move; `→`/`←` descend/ascend a directory; a printable key filters live; `Enter` picks the repository. A machine without `backlot`, or offline, shows its reason and cannot be picked; a repository another studio uses warns. Git repositories lead, workspaces follow, plain `will git init` directories come last; dot-directories stay hidden until the filter starts with `.`. |
 | 2 ID & Title | `Tab`/`↑`/`↓` between fields; the id validates live against `[a-z0-9][a-z0-9_-]*` and that machine's existing studios; `Enter` continues. |
-| 3 Cast | `↑`/`↓` pick the role, `←`/`→` cycle the runner/model/effort among what `backlot runners --json` found on the target machine; `a` adds an actor candidate, `x` removes one; `e` on a model cell types a free-text model; `Ctrl+E` edits the generated cast.toml in `$EDITOR` and reloads it; `Ctrl+R` re-probes. |
-| 4 Check & Start | `Space` toggles `[x] Ensure stage is running`; `Enter` runs `backlot studio new` on the target machine — over hc's `terminal.run` when it is remote — then `stage start` when checked, and the new producer's terminal takes focus. |
+| 3 Cast | `↑`/`↓` pick the role, `Tab` moves across the runner/model/effort cells, `←`/`→` (or `h`/`l`) cycle the focused cell, and `Space` opens the model list on a MODEL cell (on RUNNER/EFFORT it takes the next value); `Enter` runs the step-4 dry run from every column, and inside the open model list it seats the pick first. `a` adds an actor candidate, `x` removes one; `e` on a model cell types a free-text model; `Ctrl+E` edits the generated cast.toml in `$EDITOR` and reloads it; `Ctrl+R` re-probes. |
+| 4 Check & Start | `Space` toggles `[x] Ensure stage is running`; `Enter` runs `backlot studio new` on the target machine — over hc's `terminal.run` when it is remote — then `stage start` when checked, and the new producer's terminal takes focus. At `80×24` the checkbox label is truncated clear of the `Create ⏎` button. |
 
 The dialog creates a studio on any attached machine: every question is answered by running
 `backlot … --json` on that machine, so a remote repository path is never checked against the

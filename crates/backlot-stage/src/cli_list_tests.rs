@@ -229,3 +229,109 @@ fn the_table_shortens_the_core_id() {
     assert!(table.contains("core-aaa"), "{table}");
     assert!(!table.contains(id), "the table shows the long id: {table}");
 }
+
+/// A pinned read names the local core in the table: `core.json`'s
+/// name when the state directory carries one, else `local` — never a
+/// bare `-`.
+#[test]
+fn the_table_names_the_local_core() {
+    let root = TestDir::new("backlot-xdg");
+    let core_a = core(&root, "core-a");
+    write_ledger(
+        &core_a,
+        "acme-shop",
+        &[ev(1, 1_000, created("Shop", "/home/user/acme-shop"))],
+    );
+    let mut env = shell(&root);
+    env.vars.insert(
+        "BACKLOT_STATE_DIR".into(),
+        core_a.to_string_lossy().into_owned(),
+    );
+
+    let table = ok(&env, "studio list");
+    let row = table
+        .lines()
+        .find(|line| line.starts_with("acme-shop"))
+        .unwrap_or_else(|| panic!("no acme-shop row: {table}"));
+    assert!(
+        row.contains(" local "),
+        "an unbound state is local: {table}"
+    );
+
+    fs::write(
+        core_a.join("core.json"),
+        r#"{"id":"core-a","name":"host-a"}"#,
+    )
+    .unwrap();
+    let table = ok(&env, "studio list");
+    let row = table
+        .lines()
+        .find(|line| line.starts_with("acme-shop"))
+        .unwrap_or_else(|| panic!("no acme-shop row: {table}"));
+    assert!(
+        row.contains(" host-a "),
+        "core.json names the core: {table}"
+    );
+    assert!(!row.contains(" local "), "{table}");
+}
+
+/// The same rule on a scanned read: each core's own `core.json` names
+/// the `core` cell instead of the bare directory id.
+#[test]
+fn a_scanned_cores_document_names_the_core_cell() {
+    let root = TestDir::new("backlot-xdg");
+    let core_a = core(&root, "core-a");
+    write_ledger(
+        &core_a,
+        "acme-shop",
+        &[ev(1, 1_000, created("Shop", "/home/user/acme-shop"))],
+    );
+    fs::write(
+        core_a.join("core.json"),
+        r#"{"id":"core-a","name":"host-a"}"#,
+    )
+    .unwrap();
+    let env = shell(&root);
+
+    let table = ok(&env, "studio list");
+    let row = table
+        .lines()
+        .find(|line| line.starts_with("acme-shop"))
+        .unwrap_or_else(|| panic!("no acme-shop row: {table}"));
+    assert!(
+        row.contains(" host-a "),
+        "core.json names the core: {table}"
+    );
+    // The JSON still carries the directory id, not the display name.
+    let json = ok(&env, "studio list --json");
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["studios"][0]["core"], "core-a", "{json}");
+}
+
+/// `studio list --help` says what the default read covers and how a
+/// remote read is asked for.
+#[test]
+fn studio_list_help_names_the_local_and_remote_reads() {
+    let root = TestDir::new("backlot-xdg");
+    let env = shell(&root);
+    let help = ok(&env, "studio list --help");
+    assert!(help.contains("local state directory"), "{help}");
+    assert!(help.contains("--remote <host>"), "{help}");
+    assert!(
+        help.contains("backlot --remote host-b studio list"),
+        "{help}"
+    );
+}
+
+/// The help's leading-flag form is real: `backlot --remote host-b
+/// studio list` parses into the same command as the trailing form.
+#[test]
+fn a_leading_remote_flag_parses_before_the_command() {
+    let words: Vec<String> = ["--remote", "host-b", "studio", "list"]
+        .iter()
+        .map(|w| w.to_string())
+        .collect();
+    let (common, cmd) = crate::args::parse(&words).expect("the documented form parses");
+    assert_eq!(common.remote.as_deref(), Some("host-b"));
+    assert!(matches!(cmd, crate::args::Cmd::StudioList { json: false }));
+}

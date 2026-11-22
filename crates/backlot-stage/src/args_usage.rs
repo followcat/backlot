@@ -2,6 +2,7 @@
 //! `args::usage`, which appends `args::COMMON`.
 
 pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--mode standard|experimental] [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>] [--mode standard|experimental]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]\n       backlot studio migrate [<studio> | --all] [--dry-run]\n       backlot studio list [--json]";
+pub(crate) const U_STUDIO_LIST: &str = "usage: backlot studio list [--json]\n       backlot --remote <host> studio list [--json]\n  studio list reads the local state directory (every local core) by default.\n  --remote <host> lists the studios on <host>, for example\n  `backlot --remote host-b studio list`.";
 pub(crate) const U_REQ: &str = "usage: backlot req revise (--file <f> | --stdin) --summary <s>";
 pub(crate) const U_PLAN: &str =
     "usage: backlot plan request | publish --kind plan|acceptance --file <f>";
@@ -31,4 +32,4 @@ pub(crate) const U_RECORDS: &str =
     "usage: backlot records [--studio <name>] [--all] [--kind <task_kind>] [--json]";
 pub(crate) const U_STAGE: &str = "usage: backlot stage start|stop [--session <s>] [--remote <t>]\n       backlot stage run\n       backlot stage watch [--target <hc-terminal>] [--restart]\n       backlot stage service [--print | --write] [--session <s>]";
 pub(crate) const U_RUNNERS: &str = "usage: backlot runners [--json]";
-pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>]";
+pub(crate) const U_REPOS: &str = "usage: backlot repos [--json] [--from <dir>] [--all]\n       dot-directories stay hidden unless --all is given";

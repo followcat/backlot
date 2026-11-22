@@ -264,18 +264,30 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
     );
     let check = if d.start_stage { "[x]" } else { "[ ]" };
     let toggle = format!(" {check} Ensure stage is running on {machine} and focus producer");
+    // The button owns the row's right edge; the label is truncated
+    // short of it (plus a two-cell gap) so `80×24` never runs
+    // `…focus producer` mid-word into `Create ⏎`.
+    let button = " Create ⏎ ";
+    let bw = crate::chrome::text::display_width(button) as u16;
+    let show_button = body.width >= bw + 12;
+    let label_w = if show_button {
+        body.width.saturating_sub(bw + 4)
+    } else {
+        body.width.saturating_sub(1)
+    };
     put_text(
         b,
         body.x + 1,
         y,
-        body.width.saturating_sub(1),
-        &crate::chrome::text::truncate_end(&toggle, body.width as usize - 10),
+        label_w,
+        &crate::chrome::text::truncate_end(&toggle, label_w as usize),
         Style::default().fg(p.text).bg(p.surface0),
     );
-    hits.push(row, NsHit::StartToggle);
-    let button = " Create ⏎ ";
-    let bw = button.len() as u16;
-    if body.width > bw + 4 {
+    // The toggle's hit stops at the label's end — the button below
+    // owns its own cells, so a click there creates, never toggles.
+    let toggle_rect = Rect::new(body.x, y, (label_w + 1).min(body.width), 1);
+    hits.push(toggle_rect, NsHit::StartToggle);
+    if show_button {
         let rect = Rect::new(body.right().saturating_sub(bw + 1), y, bw, 1);
         put_text(
             b,

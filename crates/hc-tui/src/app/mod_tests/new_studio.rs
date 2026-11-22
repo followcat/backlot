@@ -95,6 +95,28 @@ fn repos_json() -> String {
     .to_string()
 }
 
+/// The same home with dot-directories in the answer — what the
+/// dialog's `--all` request returns.
+fn repos_json_with_dots() -> String {
+    serde_json::json!({
+        "cwd": "/home/user",
+        "entries": [
+            { "name": ".cache", "path": "/home/user/.cache",
+              "kind": "dir", "in_use_studio": null, "branch": null },
+            { "name": ".config", "path": "/home/user/.config",
+              "kind": "dir", "in_use_studio": null, "branch": null },
+            { "name": "acme-shop", "path": "/home/user/acme-shop",
+              "kind": "git_ready", "in_use_studio": null, "branch": "main" },
+            { "name": "mono", "path": "/home/user/mono",
+              "kind": "dir", "in_use_studio": null, "branch": null,
+              "members": ["beta-api", "web"] },
+            { "name": "notes", "path": "/home/user/notes",
+              "kind": "dir", "in_use_studio": null, "branch": null }
+        ]
+    })
+    .to_string()
+}
+
 fn notes_json() -> String {
     serde_json::json!({
         "cwd": "/home/user/notes",
@@ -143,6 +165,20 @@ fn runners_json() -> String {
           "models": ["m"], "efforts": ["low", "high"] },
         { "runner": "claude", "status": "missing", "version": null,
           "models": ["sonnet"], "efforts": ["low", "medium", "high"] }
+    ])
+    .to_string()
+}
+
+/// Versions that repeat their runner's name — the banner must strip
+/// the duplicate token rather than print `claude claude 2.1.0`.
+fn runners_json_stuttering_versions() -> String {
+    serde_json::json!([
+        { "runner": "claude", "status": "found", "version": "claude 2.1.0",
+          "models": ["sonnet"], "efforts": ["high"] },
+        { "runner": "codex", "status": "found", "version": "codex 0.9.0",
+          "models": ["o5"], "efforts": ["high"] },
+        { "runner": "fake", "status": "found", "version": "fake-runner 1.0",
+          "models": ["m"], "efforts": ["low"] }
     ])
     .to_string()
 }
@@ -394,7 +430,7 @@ async fn an_empty_repo_picks_like_any_path() {
     {
         let d = app.new_studio.as_mut().unwrap();
         d.pane = Step1Pane::Repos;
-        d.repos.sel = 1; // beta-tools is git_empty — pickable (D4).
+        d.repos.sel = 2; // the fixture's sorted list puts beta-tools third.
         assert_eq!(d.repo().unwrap().kind, RepoKind::GitEmpty);
     }
     key(&mut app, hc_vt::Key::Enter);
@@ -426,7 +462,7 @@ async fn pick_to_step4(app: &mut App, sel: usize) {
 #[tokio::test]
 async fn a_plain_dir_rides_init_and_g_flips_to_no_git() {
     let (mut app, recorded) = dialog_app().await;
-    pick_to_step4(&mut app, 3).await; // notes — a plain directory.
+    pick_to_step4(&mut app, 4).await; // notes — a plain directory.
     let argv_of = |recorded: &Recorded| {
         recorded
             .lock()
@@ -455,7 +491,7 @@ async fn a_plain_dir_rides_init_and_g_flips_to_no_git() {
 #[tokio::test]
 async fn a_workspace_picks_with_no_git_flags() {
     let (mut app, recorded) = dialog_app().await;
-    pick_to_step4(&mut app, 4).await; // mono — two member repos.
+    pick_to_step4(&mut app, 3).await; // mono — two member repos.
     let calls = recorded.lock().unwrap();
     let argv = calls
         .iter()
@@ -473,7 +509,8 @@ async fn an_in_use_repo_warns_but_passes() {
     let (mut app, _) = dialog_app().await;
     let d = app.new_studio.as_mut().unwrap();
     d.pane = Step1Pane::Repos;
-    d.repos.sel = 2; // taken — in use by taken-stud-tool.
+    d.repos.sel = 1; // taken — in use by taken-stud-tool.
+
     assert_eq!(
         d.repo().unwrap().in_use_studio.as_deref(),
         Some("taken-stud-tool")
@@ -504,7 +541,7 @@ async fn typing_narrows_the_list_without_a_slash_mode() {
         let d = app.new_studio.as_ref().unwrap();
         d.repos.visible().iter().map(|e| e.name.as_str()).collect()
     };
-    assert_eq!(names, ["acme-shop", "beta-tools", "taken"]);
+    assert_eq!(names, ["acme-shop", "taken", "beta-tools"]);
     // Enter picks the filtered row and steps forward.
     key(&mut app, hc_vt::Key::Enter);
     let d = app.new_studio.as_ref().unwrap();
@@ -519,6 +556,54 @@ async fn slash_is_an_ordinary_filter_character_now() {
     let d = app.new_studio.as_ref().unwrap();
     assert_eq!(d.repos.filter.as_str(), "/", "no mode — a literal char");
     assert!(d.repos.visible().is_empty(), "no name contains '/'");
+}
+
+/// `$HOME` opens on real work: dot-directories are hidden and the
+/// git repository leads the workspace and the plain directory. A
+/// query that starts with `.` reveals the dot-directories, so the
+/// wizard can still reach `.config` when asked.
+#[tokio::test]
+async fn dot_directories_stay_hidden_until_the_filter_asks() {
+    let mut app = app_multi(vec![term("t1")], vec![]);
+    app.set_plain(false);
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "repos --json");
+    answers.push(("repos --json", Ok(repos_json_with_dots())));
+    let recorded = install_run(&mut app, &answers);
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+
+    // The dialog asks for `--all` and filters locally.
+    assert!(
+        recorded
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, argv, _)| argv.iter().any(|a| a == "--all")),
+        "the listing requested dot-directories"
+    );
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let names: Vec<&str> = d.repos.visible().iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["acme-shop", "mono", "notes"],
+            "dotfiles hidden, git first, workspace above a plain pick"
+        );
+    }
+    // A `.` query is the one way to see them.
+    key(&mut app, hc_vt::Key::Char('.'));
+    key(&mut app, hc_vt::Key::Char('c'));
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        let names: Vec<&str> = d.repos.visible().iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, [".cache", ".config"], "a dot query reveals them");
+    }
+    // Clearing the query hides them again.
+    key(&mut app, hc_vt::Key::Backspace);
+    key(&mut app, hc_vt::Key::Backspace);
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(d.repos.visible().len(), 3, "the dotfiles stay hidden");
 }
 
 #[tokio::test]
@@ -538,7 +623,7 @@ async fn the_vim_keys_are_filter_text_arrows_navigate() {
     // Arrows still do: clear, sit on `notes`, `→` descends.
     key(&mut app, hc_vt::Key::Backspace);
     key(&mut app, hc_vt::Key::Backspace);
-    app.new_studio.as_mut().unwrap().repos.sel = 3;
+    app.new_studio.as_mut().unwrap().repos.sel = 4;
     key(&mut app, hc_vt::Key::ArrowRight);
     drain_ns(&mut app).await;
     assert_eq!(
@@ -618,12 +703,12 @@ async fn committed_text_and_paste_land_in_the_filter_not_the_terminal() {
 async fn descending_into_a_dir_clears_the_filter() {
     let (mut app, _) = dialog_app().await;
     install_run(&mut app, &answers_with_dirs());
-    // `no` narrows to the `notes` dir — `→` descends.
-    for c in ['n', 'o'] {
+    // `not` narrows to the `notes` dir — `→` descends.
+    for c in ['n', 'o', 't'] {
         key(&mut app, hc_vt::Key::Char(c));
     }
     let d = app.new_studio.as_ref().unwrap();
-    assert_eq!(d.repos.filter.as_str(), "no");
+    assert_eq!(d.repos.filter.as_str(), "not");
     assert_eq!(d.repo().map(|r| r.name.as_str()), Some("notes"));
     key(&mut app, hc_vt::Key::ArrowRight);
     drain_ns(&mut app).await;
@@ -665,7 +750,7 @@ async fn climbing_to_the_parent_clears_the_filter_too() {
     let (mut app, _) = dialog_app().await;
     install_run(&mut app, &answers_with_dirs());
     // Descend into `notes` first so `dir` sits under `home`.
-    app.new_studio.as_mut().unwrap().repos.sel = 3;
+    app.new_studio.as_mut().unwrap().repos.sel = 4;
     key(&mut app, hc_vt::Key::ArrowRight);
     drain_ns(&mut app).await;
     assert_eq!(
@@ -827,7 +912,7 @@ fn cast_toml(app: &App) -> String {
 }
 
 #[tokio::test]
-async fn enter_or_space_on_the_model_cell_opens_its_runners_list() {
+async fn space_on_the_model_cell_opens_its_runners_list() {
     let mut app = app_multi(vec![term("t1")], vec![machine("host-b", "connected")]);
     app.set_plain(false);
     app.focused = Some("t1".into());
@@ -835,12 +920,17 @@ async fn enter_or_space_on_the_model_cell_opens_its_runners_list() {
     app.new_studio_open(None);
     drain_ns(&mut app).await;
     to_cast(&mut app).await;
-    // `space` on another column opens nothing; `tab` onto MODEL,
-    // then `⏎` opens the row's own runner catalog.
+    // `space` on RUNNER takes the next seat — past the `missing`
+    // claude row, `cmd` — and opens no list.
     key(&mut app, hc_vt::Key::Char(' '));
-    assert!(app.new_studio.as_ref().unwrap().model_pick.is_none());
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert!(d.model_pick.is_none(), "no sub-picker on RUNNER");
+        assert_eq!(d.cast.rows[0].runner, 2, "space cycled to cmd");
+    }
+    key(&mut app, hc_vt::Key::ArrowLeft); // back to fake
     key(&mut app, hc_vt::Key::Tab); // col → MODEL
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     {
         let d = app.new_studio.as_ref().unwrap();
         let pick = d.model_pick.as_ref().expect("the list is open");
@@ -855,7 +945,7 @@ async fn enter_or_space_on_the_model_cell_opens_its_runners_list() {
     key(&mut app, hc_vt::Key::BackTab); // col → RUNNER
     key(&mut app, hc_vt::Key::ArrowRight); // fake → cmd
     key(&mut app, hc_vt::Key::Tab); // col → MODEL
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     {
         let d = app.new_studio.as_ref().unwrap();
         let pick = d.model_pick.as_ref().unwrap();
@@ -875,7 +965,7 @@ async fn picking_a_model_seats_it_into_the_cast() {
     install_run(&mut app, &answers_with_wide_runner());
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     // The current `w-00` seats at index 1 — two downs land `w-02`.
     key(&mut app, hc_vt::Key::ArrowDown);
     key(&mut app, hc_vt::Key::ArrowDown);
@@ -898,7 +988,7 @@ async fn esc_cancel_keeps_the_old_model() {
     install_run(&mut app, &answers_with_wide_runner());
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     // Move away from the current value, then bail.
     for _ in 0..3 {
         key(&mut app, hc_vt::Key::ArrowDown);
@@ -922,7 +1012,7 @@ async fn auto_is_an_explicit_first_entry() {
     let (mut app, _) = dialog_app().await;
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     // `auto` sits first — the runner's own default, meaning it is
     // not a catalog position.
     {
@@ -964,7 +1054,7 @@ async fn a_catalog_auto_is_not_doubled_in_the_list() {
     install_run(&mut app, &answers_with_auto_runner());
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     let d = app.new_studio.as_ref().unwrap();
     let pick = d.model_pick.as_ref().expect("the list is open");
     assert_eq!(
@@ -1005,7 +1095,7 @@ async fn typing_filters_the_model_list() {
     install_run(&mut app, &answers_with_wide_runner());
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     // Implicit like the repo picker — `w`,`-`,`1` narrows to w-1*.
     for c in ['w', '-', '1'] {
         key(&mut app, hc_vt::Key::Char(c));
@@ -1036,7 +1126,7 @@ async fn the_model_list_scrolls_through_a_big_catalog() {
     install_run(&mut app, &answers_with_wide_runner());
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     // 15 models + auto — the bottom row needs the window to follow.
     for _ in 0..14 {
         key(&mut app, hc_vt::Key::ArrowDown);
@@ -1053,7 +1143,7 @@ async fn a_click_on_the_list_picks_and_committed_text_filters() {
     install_run(&mut app, &answers_with_wide_runner());
     to_cast(&mut app).await;
     app.new_studio.as_mut().unwrap().cast.col = 1;
-    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Char(' '));
     // IME/committed text narrows the list like the repo picker's.
     app.on_input(UiEvent::Text("w-1".into()), app.area.0);
     {
@@ -1093,12 +1183,56 @@ async fn a_click_on_the_list_picks_and_committed_text_filters() {
 async fn enter_elsewhere_still_dry_runs() {
     let (mut app, _) = dialog_app().await;
     to_cast(&mut app).await;
-    // `⏎` only opens the list on the MODEL cell — on RUNNER it
-    // keeps meaning `dry-run`.
+    // `⏎` on the RUNNER cell is the dry run — now on MODEL too.
     assert_eq!(app.new_studio.as_ref().unwrap().cast.col, 0);
     key(&mut app, hc_vt::Key::Enter);
     drain_ns(&mut app).await;
     assert_eq!(app.new_studio.as_ref().unwrap().step, Step::CheckStart);
+}
+
+/// The Step-3 loop the audit found: `space` opens the MODEL picker,
+/// `⏎` seats the pick and closes it, and the next `⏎` on the same
+/// MODEL cell advances to the Step-4 dry run instead of reopening
+/// the list.
+#[tokio::test]
+async fn space_picks_a_model_and_the_next_enter_advances() {
+    let (mut app, recorded) = dialog_app().await;
+    to_cast(&mut app).await;
+    app.new_studio.as_mut().unwrap().cast.col = 1;
+    recorded.lock().unwrap().clear();
+
+    key(&mut app, hc_vt::Key::Char(' '));
+    assert!(
+        app.new_studio.as_ref().unwrap().model_pick.is_some(),
+        "space opens the model list"
+    );
+    // The closed `fake` catalog is `auto, m`; take `auto`.
+    key(&mut app, hc_vt::Key::ArrowUp);
+    key(&mut app, hc_vt::Key::Enter);
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert!(d.model_pick.is_none(), "⏎ seats the pick");
+        assert_eq!(d.step, Step::Cast, "and stays on the cast step");
+        assert_eq!(d.cast.col, 1, "the MODEL cell keeps focus");
+        assert_eq!(d.cast.rows[0].model, 1, "the picked row seated");
+    }
+    assert!(cast_toml(&app).contains("model = \"auto\""));
+    // The second `⏎` never reopens the list — it dry-runs.
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    {
+        let d = app.new_studio.as_ref().unwrap();
+        assert!(d.model_pick.is_none(), "the list did not reopen");
+        assert_eq!(d.step, Step::CheckStart, "⏎ advanced to the dry run");
+    }
+    assert!(
+        recorded
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, argv, _)| argv.last().is_some_and(|a| a == "--dry-run")),
+        "the dry run actually ran"
+    );
 }
 
 #[tokio::test]
@@ -1120,36 +1254,72 @@ async fn no_runners_found_shows_the_banner() {
     assert!(text.contains("No runners"), "banner expected:\n{text}");
 }
 
-/// The footer teaches Tab and names what `⏎` does on the focused
-/// cell: the runner/effort cells dry-run, the model cell opens its
-/// list. The old footer said neither.
+/// Step 3's detection banner names each runner once: a version that
+/// already leads with the runner's name loses that token.
 #[tokio::test]
-async fn the_cast_footer_teaches_tab_and_enter_per_cell() {
+async fn the_detection_banner_never_stutters_runner_names() {
+    let mut app = app_multi(vec![term("t1")], vec![]);
+    app.set_plain(false);
+    let mut answers = base_answers();
+    answers.retain(|(k, _)| *k != "runners --json");
+    answers.push(("runners --json", Ok(runners_json_stuttering_versions())));
+    install_run(&mut app, &answers);
+    app.new_studio_open(None);
+    drain_ns(&mut app).await;
+    key(&mut app, hc_vt::Key::Tab);
+    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
+    assert!(
+        text.contains("claude 2.1.0, codex 0.9.0, fake 1.0"),
+        "the banner formats each runner once:\n{text}"
+    );
+    for stutter in [
+        "claude claude",
+        "codex codex",
+        "fake fake",
+        "claude claude 2.1.0",
+    ] {
+        assert!(!text.contains(stutter), "stutter '{stutter}':\n{text}");
+    }
+}
+
+/// The footer teaches the one key map: `space` picks on MODEL and
+/// takes the next value on RUNNER/EFFORT, `←→` changes the cell, and
+/// `⏎` always runs the Step-4 dry run.
+#[tokio::test]
+async fn the_cast_footer_teaches_space_and_enter_per_cell() {
     let (mut app, _) = dialog_app().await;
     to_cast(&mut app).await;
 
-    // RUNNER cell: `⏎ dry-run`, and `tab col` is on screen.
+    // RUNNER cell: `space next`, `←→ change`, `⏎ dry-run`.
     let text = footer(&draw_to(&mut app, 120, 36));
     assert!(text.contains("tab col"), "the footer teaches tab: {text}");
-    assert!(text.contains("dry-run"), "on RUNNER ⏎ is dry-run: {text}");
+    assert!(
+        text.contains("space next"),
+        "on RUNNER space cycles: {text}"
+    );
+    assert!(text.contains("←→ change"), "the arrows change: {text}");
+    assert!(text.contains("⏎ dry-run"), "on RUNNER ⏎ is dry-run: {text}");
 
-    // MODEL cell: the same footer, but `⏎ model list` instead.
+    // MODEL cell: the picker is `space`'s, but `⏎` still dry-runs.
     key(&mut app, hc_vt::Key::Tab);
     let text = footer(&draw_to(&mut app, 120, 36));
-    assert!(text.contains("tab col"), "{text}");
+    assert!(text.contains("space pick"), "on MODEL space picks: {text}");
     assert!(
-        text.contains("model list"),
-        "on MODEL ⏎ opens the list: {text}"
-    );
-    assert!(
-        !text.contains("dry-run"),
-        "the model cell must not claim dry-run: {text}"
+        text.contains("⏎ dry-run"),
+        "the model cell never claims ⏎ opens the list: {text}"
     );
 
-    // EFFORT cell: back to `⏎ dry-run`.
+    // EFFORT cell: back to `space next`, still dry-run.
     key(&mut app, hc_vt::Key::Tab);
     let text = footer(&draw_to(&mut app, 120, 36));
-    assert!(text.contains("dry-run"), "on EFFORT ⏎ is dry-run: {text}");
+    assert!(
+        text.contains("space next"),
+        "on EFFORT space cycles: {text}"
+    );
+    assert!(text.contains("⏎ dry-run"), "on EFFORT ⏎ is dry-run: {text}");
 }
 
 /// A candidate row is tagged `actor-a*`, never truncated to `(c…`,
@@ -1384,9 +1554,9 @@ async fn the_dry_run_argv_and_a_verbatim_error() {
 async fn the_dry_run_carries_the_plain_dirs_flag() {
     let (mut app, recorded) = dialog_app().await;
     key(&mut app, hc_vt::Key::Tab);
-    // `notes` — the plain directory — is index 3. Its row already
-    // promises the init the launch will run.
-    app.new_studio.as_mut().unwrap().repos.sel = 3;
+    // `notes` — the plain directory — is the sorted list's last row.
+    // Its row already promises the init the launch will run.
+    app.new_studio.as_mut().unwrap().repos.sel = 4;
     let backend = draw_to(&mut app, 100, 24);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("will git init"), "the pick row: {text}");
@@ -1858,5 +2028,75 @@ async fn narrow_widths_truncate_with_ellipsis_and_collapse_the_strip() {
     assert!(
         text.contains("3 Cast") && text.contains("4 Check & Start"),
         "the full strip at 80:\n{text}"
+    );
+}
+
+// ---------- R3-M8: step 4 at 80×24 ----------
+
+/// The final check at `80×24` keeps the checkbox label clear of the
+/// `Create ⏎` button — a gap (or an ellipsis) before it, never a
+/// word cut in half under it — and the button's click creates.
+#[tokio::test]
+async fn step4_at_80x24_keeps_the_checkbox_clear_of_create() {
+    let (mut app, recorded) = dialog_app().await;
+    to_step4(&mut app).await;
+    let backend = draw_to(&mut app, 80, 24);
+    let row = screen_lines(&backend)
+        .into_iter()
+        .find(|line| line.contains("Ensure stage"))
+        .expect("the start-stage toggle row is on screen");
+    let at = row.find(" Create ⏎").expect("the button rides the row");
+    assert!(
+        row[..at].ends_with(' '),
+        "a gap separates the label from the button: {row:?}"
+    );
+    assert!(
+        !row[..at].contains("and foc Create"),
+        "the label is not cut mid-word under the button: {row:?}"
+    );
+
+    // The toggle's hit rect stops at the label; the button owns its
+    // own cells, so a click there creates rather than toggling.
+    let create = app
+        .ns_hits
+        .cells
+        .iter()
+        .find_map(|(rect, hit)| matches!(hit, crate::new_studio::NsHit::Create).then_some(*rect))
+        .expect("the Create button is clickable");
+    let toggle = app
+        .ns_hits
+        .cells
+        .iter()
+        .find_map(|(rect, hit)| {
+            matches!(hit, crate::new_studio::NsHit::StartToggle).then_some(*rect)
+        })
+        .expect("the toggle row is clickable");
+    assert!(
+        toggle.right() <= create.x,
+        "the toggle hit ends before the button: toggle {toggle:?}, create {create:?}"
+    );
+
+    let before = app.new_studio.as_ref().unwrap().start_stage;
+    recorded.lock().unwrap().clear();
+    app.on_mouse(MouseInput {
+        col: create.x + 2,
+        row: create.y,
+        kind: MouseEventKind::Down(MouseButton::Left),
+        mods: hc_vt::Mods::NONE,
+        sgr_position: None,
+    });
+    drain_ns(&mut app).await;
+    // A successful create closes the wizard; while it stays open the
+    // checkbox must be exactly as the click found it.
+    if let Some(d) = &app.new_studio {
+        assert_eq!(d.start_stage, before, "the button never toggles the box");
+    }
+    assert!(
+        recorded
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, argv, _)| argv.starts_with(&["studio".into(), "new".into()])),
+        "the button click ran the create"
     );
 }

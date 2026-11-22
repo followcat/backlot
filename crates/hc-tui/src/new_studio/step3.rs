@@ -18,6 +18,36 @@ use crate::chrome::text_editor;
 /// banner lists what was looked for.
 const RUNNER_NAMES: &str = "claude, codex, devin, cursor, opencode, cmd, cline, agy";
 
+/// A runner's version often repeats its own name (`claude 2.1.0`,
+/// `fake-runner 1.0`). Strip that leading token so the detection
+/// banner reads `claude 2.1.0, fake 1.0` without a stutter.
+pub(crate) fn version_label(runner: &str, version: &str) -> String {
+    /// `value` without `prefix` when it leads with it as a whole
+    /// word — case-insensitively; byte offsets stay on char
+    /// boundaries because `get` refuses a split.
+    fn strip<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
+        let head = value.get(..prefix.len())?;
+        if !head.eq_ignore_ascii_case(prefix) {
+            return None;
+        }
+        let rest = &value[prefix.len()..];
+        if rest.is_empty() || rest.starts_with([' ', '\t']) {
+            Some(rest.trim_start())
+        } else {
+            None
+        }
+    }
+    let rest = strip(version, &format!("{runner}-runner"))
+        .or_else(|| strip(version, runner))
+        .unwrap_or(version)
+        .trim();
+    if rest.is_empty() {
+        runner.to_string()
+    } else {
+        format!("{runner} {rest}")
+    }
+}
+
 /// The three value columns' (width, x-offset from body.x) — narrow
 /// frames give the model column what is left.
 fn columns(width: u16) -> [(u16, u16); 3] {
@@ -42,21 +72,21 @@ fn role_col_width(width: u16) -> u16 {
     (width / 5).clamp(10, 20)
 }
 
-/// The Cast footer's tier list for the focused cell: `⏎` opens the
-/// runner's catalog on a MODEL cell and dry-runs on RUNNER/EFFORT,
-/// and every tier names `tab` — the only key that moves the focus
-/// across the three value cells.
+/// The Cast footer's tier list for the focused cell: `space` opens the
+/// MODEL column's catalog (RUNNER and EFFORT take their next value),
+/// `←`/`→` change the cell's value, and `⏎` runs the Step-4 dry run
+/// from every column — the spec's one studio key map.
 pub(crate) fn hint_tiers(col: usize) -> &'static [&'static str] {
     match col {
         1 => &[
-            "tab col  ↑↓ role  ←→ value  ⏎ model list  a add  x remove  ^E editor  esc back",
-            "tab col  ↑↓  ←→  ⏎ model list  a/x  ^E  esc",
-            "tab  ⏎ model list  esc",
+            "tab col  ↑↓ role  space pick  ←→ change  ⏎ dry-run  a add  x remove  ^E editor  esc back",
+            "tab col  ↑↓  space pick  ←→ change  ⏎ dry-run  a/x  ^E  esc",
+            "tab  space pick  ⏎ dry-run  esc",
         ],
         _ => &[
-            "tab col  ↑↓ role  ←→ value  ⏎ dry-run  a add  x remove  ^E editor  esc back",
-            "tab col  ↑↓  ←→  ⏎ dry-run  a/x  ^E  esc",
-            "tab  ⏎ dry-run  esc",
+            "tab col  ↑↓ role  space next  ←→ change  ⏎ dry-run  a add  x remove  ^E editor  esc back",
+            "tab col  ↑↓  space next  ←→ change  ⏎ dry-run  a/x  ^E  esc",
+            "tab  space next  ⏎ dry-run  esc",
         ],
     }
 }
@@ -99,7 +129,7 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
                 .filter(|r| r.found())
                 .map(|r| {
                     let base = match &r.version {
-                        Some(v) => format!("{} {v}", r.runner),
+                        Some(v) => version_label(&r.runner, v),
                         None => r.runner.clone(),
                     };
                     match r.bin_hint() {

@@ -162,17 +162,33 @@ impl Default for Repos {
 
 impl Repos {
     /// Entries surviving the filter — case-insensitive substring on
-    /// the name, like the picker's own `filter`.
+    /// the name, like the picker's own `filter`. Dot-directories stay
+    /// hidden unless the query itself starts with `.`, so a `$HOME`
+    /// listing opens on real work while `.config` stays one `.` away.
     pub(crate) fn visible(&self) -> Vec<&RepoEntry> {
         let entries = match &self.listing {
             Probe::Done(entries) => entries,
             _ => return Vec::new(),
         };
         let needle = self.filter.as_str().trim().to_lowercase();
+        let show_dot = needle.starts_with('.');
         entries
             .iter()
+            .filter(|e| show_dot || !e.name.starts_with('.'))
             .filter(|e| needle.is_empty() || e.name.to_lowercase().contains(&needle))
             .collect()
+    }
+}
+
+/// The order `backlot repos` prints and the dialog shows: git
+/// repositories first (`git_ready`, then `git_empty`), workspaces
+/// over member repositories next, plain directories last.
+fn repo_rank(e: &RepoEntry) -> u8 {
+    match e.kind {
+        RepoKind::GitReady => 0,
+        RepoKind::GitEmpty => 1,
+        RepoKind::Dir if !e.members.is_empty() => 2,
+        RepoKind::Dir => 3,
     }
 }
 
@@ -198,7 +214,7 @@ pub(crate) fn parse_repos(text: &str) -> Result<(String, Vec<RepoEntry>), String
         members: Vec<String>,
     }
     let doc: Doc = serde_json::from_str(text).map_err(|e| format!("repos: bad document: {e}"))?;
-    let entries = doc
+    let mut entries: Vec<RepoEntry> = doc
         .entries
         .into_iter()
         .map(|e| RepoEntry {
@@ -214,6 +230,10 @@ pub(crate) fn parse_repos(text: &str) -> Result<(String, Vec<RepoEntry>), String
             members: e.members,
         })
         .collect();
+    // `backlot repos` already sorts; a machine still on an older
+    // version answers in readdir order, so the dialog applies the
+    // same rule — real work above `will git init` rows.
+    entries.sort_by(|a, b| repo_rank(a).cmp(&repo_rank(b)).then(a.name.cmp(&b.name)));
     Ok((doc.cwd, entries))
 }
 

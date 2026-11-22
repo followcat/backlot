@@ -3,8 +3,10 @@
 //! for one name. Every core's state directory is read: each studio's
 //! name, core id, ledger state, title and bound path. `BACKLOT_STATE_DIR`
 //! (and `--session`/`--remote`) pin the read to one directory, so a
-//! role terminal lists only its own core. Rows sort by recency — the
-//! last event's clock — newest first.
+//! role terminal lists only its own core. The table's `core` cell
+//! names the core (`core.json`'s name, else the short id) and reads
+//! `local` for an unbound state directory — never a bare `-`. Rows
+//! sort by recency — the last event's clock — newest first.
 
 use std::path::Path;
 
@@ -25,6 +27,12 @@ struct Row {
     /// `BACKLOT_STATE_DIR` is no core directory.
     #[serde(skip_serializing_if = "Option::is_none")]
     core: Option<String>,
+    /// The core cell the plain table prints: the core's own
+    /// `core.json` name when one is present, else the short core id,
+    /// else `local` — never a bare `-`. Table-only, so the JSON keeps
+    /// its documented shape.
+    #[serde(skip)]
+    core_label: String,
     /// `live`, `finished`, or `failed` when the ledger cannot be read.
     state: &'static str,
     /// The studio's display title, once `studio.created` has landed.
@@ -46,11 +54,39 @@ struct Listing {
     studios: Vec<Row>,
 }
 
-/// Read one directory's studios into `rows`.
-fn scan(dir: &Path, core: Option<&str>, rows: &mut Vec<Row>) {
+/// The core's display name from `<dir>/core.json` — hc's own identity
+/// document (`{"id": …, "name": …}`), absent on some cores and on a
+/// scratch state directory.
+fn core_name(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("core.json")).ok()?;
+    let doc: serde_json::Value = serde_json::from_str(&text).ok()?;
+    doc.get("name")
+        .and_then(|n| n.as_str())
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_owned)
+}
+
+/// The table's `core` cell: the core document's name, else the short
+/// core id (`core` for a scanned core, `hint` for a session-pinned
+/// one), else `local` — a `BACKLOT_STATE_DIR` with no core behind it.
+fn core_label(dir: &Path, core: Option<&str>, hint: Option<&str>) -> String {
+    core_name(dir)
+        .or_else(|| {
+            core.or(hint)
+                .map(|id| id.chars().take(SHORT_CORE).collect::<String>())
+        })
+        .unwrap_or_else(|| "local".into())
+}
+
+/// Read one directory's studios into `rows`. `core` is the scanned
+/// core directory's id (absent when the base is pinned); `hint` names
+/// the core a session-pinned base belongs to.
+fn scan(dir: &Path, core: Option<&str>, hint: Option<&str>, rows: &mut Vec<Row>) {
     let Ok(names) = store::studios(dir) else {
         return;
     };
+    let label = core_label(dir, core, hint);
     for name in names {
         let sdir = store::studio_dir(dir, &name);
         let row = match store::load_events(&sdir) {
@@ -60,6 +96,7 @@ fn scan(dir: &Path, core: Option<&str>, rows: &mut Vec<Row>) {
                 Row {
                     name,
                     core: core.map(String::from),
+                    core_label: label.clone(),
                     state: if state.finished.is_some() {
                         "finished"
                     } else {
@@ -75,6 +112,7 @@ fn scan(dir: &Path, core: Option<&str>, rows: &mut Vec<Row>) {
             Err(_) => Row {
                 name,
                 core: core.map(String::from),
+                core_label: label.clone(),
                 state: "failed",
                 title: None,
                 repo: None,
@@ -94,7 +132,14 @@ fn collect(env: &Env, common: &Common) -> Result<Listing, Fail> {
     if pinned {
         // A pinned base is the whole world — one directory, no scan.
         let base = crate::cli::base(env, common)?;
-        scan(&base, None, &mut rows);
+        // A `BACKLOT_STATE_DIR` names no core; `--session`/`--remote`
+        // pin to a core directory whose file name is the core id.
+        let hint = if env.get("BACKLOT_STATE_DIR").is_some() {
+            None
+        } else {
+            base.file_name().and_then(|n| n.to_str()).map(str::to_owned)
+        };
+        scan(&base, None, hint.as_deref(), &mut rows);
     } else {
         let root = store::root_dir(&env.vars);
         if let Ok(entries) = std::fs::read_dir(&root) {
@@ -103,7 +148,7 @@ fn collect(env: &Env, common: &Common) -> Result<Listing, Fail> {
                     continue;
                 }
                 let core = entry.file_name().to_string_lossy().into_owned();
-                scan(&entry.path(), Some(&core), &mut rows);
+                scan(&entry.path(), Some(&core), None, &mut rows);
             }
         }
     }
@@ -131,10 +176,7 @@ fn table(rows: &[Row]) -> String {
         .map(|r| {
             [
                 r.name.clone(),
-                r.core
-                    .as_deref()
-                    .map(|c| c.chars().take(SHORT_CORE).collect())
-                    .unwrap_or_else(|| "-".into()),
+                r.core_label.clone(),
                 r.state.to_string(),
                 r.title.clone().unwrap_or_else(|| "-".into()),
                 r.repo.clone().unwrap_or_else(|| "-".into()),
