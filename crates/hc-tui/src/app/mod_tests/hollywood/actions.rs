@@ -119,7 +119,7 @@ async fn a_card_answer_from_the_view_closes_it_on_success() {
     }));
     app.area = (120, 24);
     app.hollywood.view = Some(crate::hollywood::CardView {
-        card: "c3".into(),
+        card: Some("c3".into()),
         title: "c3".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
@@ -143,7 +143,7 @@ async fn a_failed_card_answer_keeps_the_view_and_notices() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     app.hollywood.view = Some(crate::hollywood::CardView {
-        card: "c3".into(),
+        card: Some("c3".into()),
         title: "c3".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
@@ -323,4 +323,119 @@ async fn a_failed_action_shows_a_notice_with_the_stderr_line() {
     assert!(app.action_toast.is_some());
     let text = screen_lines(&draw_to(&mut app, 120, 40)).join("\n");
     assert!(text.contains("no card 'c3'"), "{text}");
+}
+
+#[tokio::test]
+async fn enter_on_talk_and_headline_opens_read_only_card_view_and_esc_preserves_selection() {
+    let mut app = app_with_hollywood();
+    let mut value = summary_json();
+    value["hollywood"]["headline_seq"] = serde_json::json!(9);
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 8, "who": "user", "text": "how are the studios?" },
+        { "seq": 9, "who": "hollywood", "text": "acme-shop needs a look", "has_body": true }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    let (recorded, _) = recorder();
+    let sink = recorded.clone();
+    app.set_hollywood_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv);
+        Box::pin(async {
+            Ok(
+                "acme-shop needs a look\n\n## Report\n- actor-alice blocked on t1\n- card c3 open"
+                    .to_string(),
+            )
+        })
+    }));
+    app.area = (120, 30);
+    alt_y(&mut app);
+
+    // Enter on `Target::Talk(8)` runs `hollywood show 8` instead of focusing `bl-hollywood`.
+    let focused_before = app.focused.clone();
+    app.hollywood.selected = Some(Target::Talk(8));
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.focused, focused_before, "raw terminal not focused");
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec!["hollywood", "show", "8", "--as", "user"]]
+    );
+    let reply = app.action_rx.recv().await.expect("show reply");
+    app.on_action_reply(reply);
+    let view = app.hollywood.view.as_ref().expect("read-only CardView");
+    assert_eq!(view.card, None);
+    assert_eq!(view.title, "hollywood #8");
+
+    // `a` and `x` are inert on a read-only view; `j` scrolls; `Esc` peels back to Call Sheet.
+    key(&mut app, hc_vt::Key::Char('a'));
+    key(&mut app, hc_vt::Key::Char('x'));
+    assert_eq!(recorded.lock().unwrap().len(), 1, "a/x inert on card: None");
+    assert!(app.studio_dialog.is_none(), "x opens no cancel dialog");
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.view.as_ref().unwrap().scroll, 1);
+
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.hollywood.view.is_none());
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Talk(8)),
+        "Esc preserves the selected Talk row"
+    );
+
+    // Enter on `Target::Headline` resolves `headline_seq` (9) and opens `hollywood show 9`.
+    app.hollywood.selected = Some(Target::Headline);
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(
+        recorded.lock().unwrap().last().unwrap().as_slice(),
+        &["hollywood", "show", "9", "--as", "user"]
+    );
+    let reply = app.action_rx.recv().await.expect("headline show reply");
+    app.on_action_reply(reply);
+    let view = app.hollywood.view.as_ref().expect("headline CardView");
+    assert_eq!(view.card, None);
+    assert_eq!(view.title, "hollywood #9");
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.hollywood.view.is_none());
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+}
+
+#[tokio::test]
+async fn records_action_opens_read_only_card_view_without_stuffing_card_id() {
+    let mut app = app_with_hollywood();
+    let (recorded, _) = recorder();
+    let sink = recorded.clone();
+    app.set_hollywood_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv);
+        Box::pin(async { Ok("runner-a · 3 accepted".to_string()) })
+    }));
+    app.area = (120, 30);
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+
+    app.run_action(crate::studio_cmds::records(
+        &crate::studio::StudioKey::local("acme-shop"),
+    ));
+    let reply = app.action_rx.recv().await.expect("records reply");
+    app.on_action_reply(reply);
+
+    let view = app.hollywood.view.as_ref().expect("records CardView");
+    assert_eq!(view.card, None);
+    assert_eq!(view.title, "records acme-shop");
+    let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
+    assert!(text.contains("records acme-shop"), "{text}");
+    assert!(text.contains("↑↓ scroll  esc back"), "{text}");
+    assert!(!text.contains("a apply"), "{text}");
+
+    // `a`/`x` do nothing; `Esc` closes the read-only CardView cleanly.
+    key(&mut app, hc_vt::Key::Char('a'));
+    key(&mut app, hc_vt::Key::Char('x'));
+    assert_eq!(recorded.lock().unwrap().len(), 1);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(app.hollywood.view.is_none());
 }

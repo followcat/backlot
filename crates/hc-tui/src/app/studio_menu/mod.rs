@@ -267,6 +267,8 @@ impl App {
                 Some(m)
             }
             T::Card(id) => Some(StudioMenu::card(id)),
+            T::Headline => Some(StudioMenu::hollywood(self.hollywood_headline_seq())),
+            T::Talk(seq) => Some(StudioMenu::hollywood(Some(*seq))),
             _ => None,
         };
         if let Some(menu) = menu {

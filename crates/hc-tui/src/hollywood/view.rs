@@ -14,11 +14,12 @@ use crate::chrome::render::put_text;
 use crate::chrome::scroll::{ScrollMetrics, list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::truncate_end;
 
-/// The open view: the card's id in the title, the command's stdout
-/// as scrollable lines. `card` is the id `a`/`x` act on.
+/// The open view: `card` is `Some(id)` when showing an actionable
+/// card (`a`/`x` apply/cancel it) and `None` for read-only views
+/// (`hollywood show`, `records`).
 #[derive(Debug)]
 pub(crate) struct CardView {
-    pub card: String,
+    pub card: Option<String>,
     pub title: String,
     pub lines: Vec<String>,
     pub scroll: usize,
@@ -34,8 +35,10 @@ pub(crate) struct ViewRender {
     pub metrics: Option<ScrollMetrics>,
 }
 
-/// The view's key line — `a`/`x` answer the card, not close it.
-const HINTS: &str = "a apply  x cancel  esc back";
+/// The view's key line when showing an actionable card.
+const CARD_HINTS: &str = "a apply  x cancel  esc back";
+/// The view's key line when showing a read-only entry or log.
+const READ_HINTS: &str = "↑↓ scroll  esc back";
 
 /// Draw the view centered over the frame — at most the frame's
 /// middle 7/8, at least a 20×6 box when the frame has room. `pending`
@@ -108,9 +111,10 @@ pub(crate) fn render_view(
         }
     }
     put_text(buf, area.x, bottom, 1, "╰", edge);
-    let hints = match pending {
-        Some(label) => format!("… {label}"),
-        None => HINTS.to_string(),
+    let hints = match (view.card.is_some(), pending) {
+        (true, Some(label)) => format!("… {label}"),
+        (true, None) => CARD_HINTS.to_string(),
+        (false, _) => READ_HINTS.to_string(),
     };
     if area.width > 2 {
         let foot = format!(" {} ", truncate_end(&hints, area.width as usize - 4));

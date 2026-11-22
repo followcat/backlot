@@ -32,6 +32,7 @@ impl StudioMenu {
             MenuKind::Stage => self.stage_items(&item),
             MenuKind::Lot => self.lot_items(&item),
             MenuKind::Machine => self.machine_items(&item),
+            MenuKind::Hollywood(seq) => self.hollywood_items(seq, &item),
         };
         // An unreachable machine dims every row that runs a command —
         // Focus/Peek/sheet opens stay live: they read what is already
@@ -519,6 +520,25 @@ impl StudioMenu {
                 "Hollywood settings…".to_owned(),
                 Some('h'),
                 StudioAct::HollywoodSettings,
+            ),
+        ]
+    }
+
+    fn hollywood_items(
+        &self,
+        seq: Option<u64>,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        let read_label = match seq {
+            Some(seq) => format!("Read entry #{seq}"),
+            None => "Read headline".to_owned(),
+        };
+        vec![
+            item(read_label, Some('\r'), StudioAct::HollywoodShow),
+            item(
+                "Focus Hollywood terminal".to_owned(),
+                Some('t'),
+                StudioAct::FocusHollywood,
             ),
         ]
     }

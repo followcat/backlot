@@ -406,9 +406,10 @@ impl App {
             self.hollywood_toggle();
             return None;
         }
-        // The expanded layer owns every key like the focused panel
-        // does; the toggle and the studio keys already took theirs.
-        if self.hollywood.expanded() {
+        // The expanded layer (or an open read-only CardView) owns
+        // every key like the focused panel does; the toggle and the
+        // studio keys already took theirs.
+        if self.hollywood.expanded() || self.hollywood.view.is_some() {
             self.handle_hollywood_key(&press);
             return None;
         }

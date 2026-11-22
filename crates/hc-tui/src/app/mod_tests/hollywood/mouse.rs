@@ -345,7 +345,7 @@ async fn an_outside_click_closes_the_show_me_view() {
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
     app.hollywood.view = Some(crate::hollywood::CardView {
-        card: "c4".into(),
+        card: Some("c4".into()),
         title: "c4".into(),
         lines: vec!["one".into(), "two".into()],
         scroll: 0,

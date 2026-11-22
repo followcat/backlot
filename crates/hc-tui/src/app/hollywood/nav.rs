@@ -189,14 +189,59 @@ impl App {
                 self.focus_studio(&key);
                 self.hollywood_leave();
             }
-            Some(Target::Input) => self.hollywood.editing = true,
-            // A dialog line — Enter follows it into Hollywood's own
-            // terminal, where the longer conversation lives.
-            Some(Target::Talk(_)) => self.hollywood_focus_terminal(),
+            Some(Target::Input) => {
+                self.hollywood.selected = Some(Target::Input);
+                self.hollywood.editing = true;
+            }
+            Some(Target::Headline) => self.hollywood_headline_open(),
+            Some(Target::Talk(seq)) => {
+                self.run_action(crate::studio_cmds::hollywood_show(seq));
+            }
             // U7's setup line: the in-TUI dialog — runner/model/
             // effort pickers, the write through `hollywood setup`.
             Some(Target::Setup) => self.hw_setup_open(),
             _ => {}
+        }
+    }
+
+    /// Resolve the ledger `seq` backing `Target::Headline` — prefers
+    /// `headline_seq` and falls back to the newest Hollywood line in
+    /// `exchange` when reading an older stage's document.
+    pub(crate) fn hollywood_headline_seq(&self) -> Option<u64> {
+        let machines = self.panel_summaries();
+        let hw = crate::hollywood::local_summary(&machines)?
+            .hollywood
+            .as_ref()?;
+        hw.headline_seq.or_else(|| {
+            hw.exchange
+                .iter()
+                .rfind(|e| e.who == "hollywood")
+                .map(|e| e.seq)
+        })
+    }
+
+    /// Open `Target::Headline` in the read-only `CardView`: fetches
+    /// `backlot hollywood show <seq>` when a seq is known, or shows
+    /// the published headline text directly on legacy documents.
+    pub(crate) fn hollywood_headline_open(&mut self) {
+        if let Some(seq) = self.hollywood_headline_seq() {
+            self.run_action(crate::studio_cmds::hollywood_show(seq));
+            return;
+        }
+        let machines = self.panel_summaries();
+        if let Some(headline) = crate::hollywood::local_summary(&machines)
+            .and_then(|s| s.hollywood.as_ref())
+            .and_then(|h| h.headline.as_deref())
+        {
+            let lines: Vec<String> = headline.lines().map(str::to_string).collect();
+            if !lines.is_empty() {
+                self.hollywood.view = Some(crate::hollywood::CardView {
+                    card: None,
+                    title: "hollywood".into(),
+                    lines,
+                    scroll: 0,
+                });
+            }
         }
     }
 
@@ -251,7 +296,7 @@ impl App {
 
     /// Focus the `bl-hollywood` terminal — same read `reap` and
     /// `stage_running` make of the inventory: the terminal named so.
-    pub(super) fn hollywood_focus_terminal(&mut self) {
+    pub(crate) fn hollywood_focus_terminal(&mut self) {
         let terminal = self
             .view
             .inventory

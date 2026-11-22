@@ -396,12 +396,13 @@ fn a_prompt_row_footer_names_y_d_answer() {
 
 #[test]
 fn a_row_without_answers_never_names_their_keys() {
-    // The headline, the calm row and the tell line run no row keys —
-    // their footers name only `i tell` and the fixed right block.
+    // The calm row and the tell line run no row keys — their footers
+    // name only `i tell` and the fixed right block; Headline/Talk
+    // spell out `⏎ read` for their CardView open.
     let summary = summary();
     let palette = palettes()[0].clone();
     let area = Rect::new(0, 0, 160, 45);
-    for selected in [Target::Headline, Target::Calm, Target::Input] {
+    for selected in [Target::Calm, Target::Input] {
         let (buf, _) = draw(
             area,
             Some(&summary),
@@ -419,6 +420,23 @@ fn a_row_without_answers_never_names_their_keys() {
         assert!(!text.contains("a/x card"), "{selected:?}: {text}");
         assert!(!text.contains("f finish"), "{selected:?}: {text}");
         assert!(!text.contains("r start"), "{selected:?}: {text}");
+    }
+    for selected in [Target::Headline, Target::Talk(1)] {
+        let (buf, _) = draw(
+            area,
+            Some(&summary),
+            true,
+            &selecting(LayerMode::Expanded, selected.clone()),
+            false,
+            &palette,
+        );
+        let text = lines(&buf, area).join("\n");
+        assert!(
+            text.contains("i tell   ↑↓ ⏎ read   m menu   ? help   esc"),
+            "{selected:?}: {text}"
+        );
+        assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
+        assert!(!text.contains("a/x card"), "{selected:?}: {text}");
     }
 }
 
@@ -717,7 +735,7 @@ fn the_card_view_draws_over_the_layer() {
     let summary = summary();
     let mut open = layer(LayerMode::Expanded);
     open.view = Some(CardView {
-        card: "c4".into(),
+        card: Some("c4".into()),
         title: "c4".into(),
         lines: (0..30).map(|i| format!("draft line {i}")).collect(),
         scroll: 0,
@@ -740,7 +758,7 @@ fn the_card_view_has_a_complete_border_and_footer() {
     let summary = summary();
     let mut open = layer(LayerMode::Expanded);
     open.view = Some(CardView {
-        card: "c4".into(),
+        card: Some("c4".into()),
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
@@ -789,7 +807,7 @@ fn the_card_views_footer_shows_the_pending_mark() {
     let mut open = layer(LayerMode::Expanded);
     open.pending = Some("card apply c4".into());
     open.view = Some(CardView {
-        card: "c4".into(),
+        card: Some("c4".into()),
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
@@ -799,6 +817,34 @@ fn the_card_views_footer_shows_the_pending_mark() {
     let view = hits.view.expect("the view's hit map");
     let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
     assert!(bottom.contains("… card apply c4"), "footer: {bottom}");
+}
+
+#[test]
+fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
+    let mut open = layer(LayerMode::Expanded);
+    open.pending = Some("task:Local:acme-shop:t1".into());
+    open.view = Some(CardView {
+        card: None,
+        title: "hollywood #7".into(),
+        lines: vec![
+            "two studios checked".into(),
+            String::new(),
+            "detail line".into(),
+        ],
+        scroll: 0,
+    });
+    let area = Rect::new(0, 0, 80, 24);
+    let (buf, hits) = draw(area, None, true, &open, false, &palettes()[0]);
+    let view = hits.view.expect("the view's hit map");
+    let top = row_of(&buf, area, view.area.y);
+    assert!(top.contains("hollywood #7"), "top: {top}");
+    let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
+    assert!(
+        bottom.contains("↑↓ scroll  esc back"),
+        "read-only footer: {bottom}"
+    );
+    assert!(!bottom.contains("a apply"), "no card keys: {bottom}");
+    assert!(!bottom.contains("x cancel"), "no card keys: {bottom}");
 }
 
 #[test]

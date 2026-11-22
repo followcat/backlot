@@ -173,7 +173,7 @@ pub(super) fn render_overlays_and_cursor(
         // only the columns left of the panel; a full-screen panel
         // leaves it none. The expanded band keeps the whole frame —
         // floating over the panel is its job.
-        let hollywood_area = if app.hollywood.expanded() {
+        let hollywood_area = if app.hollywood.expanded() || app.hollywood.view.is_some() {
             area
         } else {
             let panel_cols = if app.panel_fullscreen_at(area.width) {
@@ -343,6 +343,17 @@ pub(super) fn render_overlays_and_cursor(
     // input's own cursor takes its place while the line edits. A strip
     // or a hidden bar covers no cells and changes nothing; a popup owns
     // the cursor while one is open.
+    if app.popup.is_none()
+        && let Some(view) = app.hollywood_hits.view.as_ref()
+        && app
+            .want_cursor
+            .pos
+            .is_some_and(|(x, y)| view.area.contains(ratatui::layout::Position::new(x, y)))
+    {
+        app.want_cursor.pos = None;
+        app.want_cursor.anchor = None;
+        app.want_cursor.shape = CursorShape::Default;
+    }
     if app.hollywood.expanded() && app.popup.is_none() {
         if app
             .want_cursor

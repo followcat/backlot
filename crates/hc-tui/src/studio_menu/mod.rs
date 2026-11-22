@@ -127,6 +127,9 @@ pub(crate) enum MenuKind {
     /// An endpoint sidebar machine row (U6c) — install/upgrade,
     /// the stage and `New studio here`, plus the endpoint ops.
     Machine,
+    /// A Call Sheet `Headline` or `Talk(seq)` row — read entry or
+    /// focus the raw `bl-hollywood` terminal.
+    Hollywood(Option<u64>),
 }
 
 /// What the machine menu knows about `backlot` there — the
@@ -212,6 +215,10 @@ pub(crate) enum StudioAct {
     MachineRemove,
     /// `machine.add` — the Local row's own op.
     MachineAdd,
+    /// `hollywood show <seq>` — open the report or message in `CardView`.
+    HollywoodShow,
+    /// Focus the raw `bl-hollywood` terminal.
+    FocusHollywood,
 }
 
 /// One menu line.
@@ -440,6 +447,15 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+        }
+    }
+
+    /// A Call Sheet `Headline` or `Talk(seq)` row's menu — reads the
+    /// entry or focuses `bl-hollywood`.
+    pub(crate) fn hollywood(seq: Option<u64>) -> StudioMenu {
+        StudioMenu {
+            kind: MenuKind::Hollywood(seq),
+            ..StudioMenu::lot()
         }
     }
 }

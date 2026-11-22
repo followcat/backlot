@@ -240,6 +240,14 @@ impl App {
                 }
             }
             StudioAct::MachineAdd => self.machine_add(),
+            StudioAct::HollywoodShow => match menu.kind {
+                crate::studio_menu::MenuKind::Hollywood(Some(seq)) => {
+                    self.run_action(studio_cmds::hollywood_show(seq));
+                }
+                crate::studio_menu::MenuKind::Hollywood(None) => self.hollywood_headline_open(),
+                _ => {}
+            },
+            StudioAct::FocusHollywood => self.hollywood_focus_terminal(),
         }
     }
 

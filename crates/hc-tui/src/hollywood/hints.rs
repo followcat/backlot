@@ -12,8 +12,11 @@ use crate::studio::StudioKey;
 /// The footer's right block — the same keys in the same words on
 /// every row, whatever the left part names.
 const RIGHT: &str = "↑↓ ⏎   m menu   ? help   esc";
+/// The right block on Talk/Headline rows where Enter opens the entry.
+const RIGHT_READ: &str = "↑↓ ⏎ read   m menu   ? help   esc";
 /// The right block when the width pinches: `? help` yields first.
 const RIGHT_MID: &str = "↑↓ ⏎   m menu   esc";
+const RIGHT_READ_MID: &str = "↑↓ ⏎ read   m menu   esc";
 /// The floor — the block alone, bare. The old bare all-keys tier is
 /// gone with it: the narrowest footer names nothing the selection
 /// cannot run.
@@ -87,9 +90,13 @@ pub(crate) fn for_row(
             format!("{left}   {right}")
         }
     };
+    let (right, right_mid) = match selected {
+        Some(Target::Headline | Target::Talk(_)) => (RIGHT_READ, RIGHT_READ_MID),
+        _ => (RIGHT, RIGHT_MID),
+    };
     [
-        join(&full, RIGHT),
-        join(&compact, RIGHT_MID),
+        join(&full, right),
+        join(&compact, right_mid),
         RIGHT_BARE.to_owned(),
     ]
     .into_iter()
@@ -138,7 +145,7 @@ mod tests {
         // With an agent the tell line is the sheet's own — every row
         // without keys of its own still names it.
         let with_tell = "i tell   ↑↓ ⏎   m menu   ? help   esc";
-        for selected in [Target::Calm, Target::Headline, Target::Input] {
+        for selected in [Target::Calm, Target::Input] {
             assert_eq!(
                 for_row(Some(&selected), &waits, true, 200),
                 with_tell,
@@ -146,16 +153,30 @@ mod tests {
             );
         }
         assert_eq!(for_row(None, &waits, true, 200), with_tell, "no selection");
+        // Headline and Talk rows spell out `⏎ read` so Enter's
+        // read-only CardView open is advertised in context.
+        let with_read = "i tell   ↑↓ ⏎ read   m menu   ? help   esc";
+        for selected in [Target::Headline, Target::Talk(7)] {
+            assert_eq!(
+                for_row(Some(&selected), &waits, true, 200),
+                with_read,
+                "{selected:?}"
+            );
+        }
         // Without an agent `i` is a dead key: the Setup row — and
         // every other one — names nothing but the block.
         let bare = "↑↓ ⏎   m menu   ? help   esc";
-        for selected in [Target::Calm, Target::Headline, Target::Input, Target::Setup] {
+        for selected in [Target::Calm, Target::Input, Target::Setup] {
             assert_eq!(
                 for_row(Some(&selected), &waits, false, 200),
                 bare,
                 "{selected:?}"
             );
         }
+        assert_eq!(
+            for_row(Some(&Target::Headline), &waits, false, 200),
+            "↑↓ ⏎ read   m menu   ? help   esc"
+        );
         assert_eq!(for_row(None, &waits, false, 200), bare, "no selection");
     }
 
