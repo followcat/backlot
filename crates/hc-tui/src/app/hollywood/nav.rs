@@ -51,6 +51,7 @@ impl App {
             let next = (index as isize + delta).clamp(0, band.len() as isize - 1) as usize;
             self.hollywood.selected = Some(band[next].clone());
             self.hollywood_reveal_card(&band, next);
+            self.hollywood_sync_editing();
             return;
         }
         let current = self
@@ -76,6 +77,7 @@ impl App {
             self.hollywood.selected = Some(first.clone());
             self.hollywood_reveal_card(&band, 0);
         }
+        self.hollywood_sync_editing();
     }
 
     /// Scroll the frame window so the selected frame shows, whole rows

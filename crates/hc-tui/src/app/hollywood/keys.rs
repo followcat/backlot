@@ -37,11 +37,25 @@ impl App {
         // submits a nonempty line, Esc leaves the editor.
         if self.hollywood.editing {
             if code == KeyCode::Esc && modifiers.is_empty() {
-                self.hollywood.editing = false;
+                // One Esc out of a resting line collapses the sheet;
+                // with a draft it only drops the line — the text is
+                // kept until Enter or another Esc.
+                if self.hollywood.input.as_str().is_empty() {
+                    self.hollywood_leave();
+                } else {
+                    self.hollywood.editing = false;
+                }
                 return;
             }
             if code == KeyCode::Enter && modifiers.is_empty() {
                 self.hollywood_input_submit();
+                return;
+            }
+            // `↑` is how a resting line steps out into the rows —
+            // Esc no longer doubles as vertical navigation.
+            if code == KeyCode::Up && modifiers.is_empty() {
+                self.hollywood.editing = false;
+                self.hollywood_row_move(-1);
                 return;
             }
             let _ = self.hollywood.input.handle_key(key);
