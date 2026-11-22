@@ -76,9 +76,7 @@ impl App {
         match machine {
             None => Backlot::Installed {
                 version: env!("CARGO_PKG_VERSION").to_owned(),
-                exe: std::env::current_exe()
-                    .ok()
-                    .map(|p| p.to_string_lossy().into_owned()),
+                exe: Some(crate::live_exe::live_exe().to_string_lossy().into_owned()),
             },
             Some(machine) => {
                 let summaries = self.panel_summaries();

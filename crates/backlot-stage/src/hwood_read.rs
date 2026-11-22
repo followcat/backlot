@@ -257,9 +257,12 @@ pub(crate) fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
         }),
         // `requirements/` is the G3 name for the ledger's `req/`.
         "requirements" | "req" => tail_ok(&parts, |n| {
-            n.strip_suffix(".md").is_some_and(|v| {
-                v.strip_prefix('v')
-                    .is_some_and(|ver| !ver.is_empty() && ver.chars().all(|c| c.is_ascii_digit()))
+            n.strip_suffix(".md").is_some_and(|stem| {
+                let ver = stem
+                    .split_once('-')
+                    .map_or(stem, |(ver, slug)| if !slug.is_empty() { ver } else { "" });
+                ver.strip_prefix('v')
+                    .is_some_and(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()))
             })
         }),
         _ => false,

@@ -160,6 +160,10 @@ impl App {
         match (code, mods) {
             (KeyCode::Esc, _) => return None,
             (KeyCode::Char('e'), m) if m == KeyModifiers::CONTROL => {
+                if d.body.is_none() {
+                    d.error = Some("still loading current requirement…".to_owned());
+                    return Some(StudioDialog::Revise(d));
+                }
                 self.studio_dialog = Some(StudioDialog::Revise(d));
                 self.revise_editor();
                 return self.studio_dialog.take();
@@ -209,12 +213,22 @@ impl App {
     }
 
     /// `backlot req revise --stdin --summary <s>` — the body pipes
-    /// through the runner; a missing summary refuses inline.
+    /// through the runner; blocks while loading, on missing summary,
+    /// and on first submit when the base requirement read failed.
     fn revise_submit(&mut self, mut d: ReviseDialog) -> Option<StudioDialog> {
+        if d.body.is_none() {
+            d.error = Some("still loading current requirement…".to_owned());
+            return Some(StudioDialog::Revise(d));
+        }
         let summary = d.summary.as_str().trim().to_owned();
         if summary.is_empty() {
             d.error = Some("a one-line summary is required".to_owned());
             d.field = DialogField::Summary;
+            return Some(StudioDialog::Revise(d));
+        }
+        if d.prefill_failed && !d.confirm_overwrite {
+            d.confirm_overwrite = true;
+            d.error = Some("base read failed — press Ctrl+S / Send again to overwrite".to_owned());
             return Some(StudioDialog::Revise(d));
         }
         let body = d.body.as_ref().map(|b| b.text()).unwrap_or_default();

@@ -62,6 +62,10 @@ pub struct StudioSummary {
     /// terminal and no role is live.
     pub state: String,
     pub requirement_version: u32,
+    /// Current requirement's studio-relative path (`req/v<n>.md`),
+    /// absent while `requirement_version == 0` or on older stage docs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub req_file: Option<String>,
     pub mode: StudioMode,
     /// Delivered tasks still awaiting a review.
     pub open_reviews: u32,
@@ -404,6 +408,7 @@ pub fn summary_with_exchange(
                     title: String::new(),
                     state: "live".into(),
                     requirement_version: 0,
+                    req_file: None,
                     mode: StudioMode::default(),
                     open_reviews: 0,
                     waiting: 0,
@@ -487,6 +492,12 @@ pub fn summary_with_exchange(
             title: cap(&cfg.title),
             state: if done { "finished" } else { "live" }.into(),
             requirement_version: state.requirement_version,
+            req_file: state
+                .requirements
+                .iter()
+                .rfind(|r| r.version == state.requirement_version)
+                .or_else(|| state.requirements.last())
+                .map(|r| cap(&r.file)),
             mode: cfg.mode,
             open_reviews: state
                 .tasks

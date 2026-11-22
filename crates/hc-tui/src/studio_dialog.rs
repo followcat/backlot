@@ -84,6 +84,11 @@ pub(crate) struct ReviseDialog {
     pub(crate) local: bool,
     /// A failed prefill or a refused submit explains itself here.
     pub(crate) error: Option<String>,
+    /// True when the base requirement read failed (`from > 0`).
+    pub(crate) prefill_failed: bool,
+    /// Armed by a first submit attempt after `prefill_failed`, so only
+    /// a second explicit submit overwrites without the base text.
+    pub(crate) confirm_overwrite: bool,
     /// Bumps per `$EDITOR` write so a closed editor's late file is
     /// never re-read.
     pub(crate) editor_gen: u64,

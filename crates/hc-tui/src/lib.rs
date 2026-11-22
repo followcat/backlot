@@ -20,6 +20,7 @@ pub mod core_start;
 pub mod diag;
 pub mod host;
 pub mod input;
+mod live_exe;
 pub mod preferences;
 pub mod project;
 pub mod restart;

@@ -128,7 +128,7 @@ impl App {
         rows
     }
 
-    /// The `backlot` call for a machine: `current_exe` locally with
+    /// The `backlot` call for a machine: `live_exe()` locally with
     /// the endpoint flags, `RemoteRunner::run_output` remotely —
     /// never a remote path checked against the local disk (A6.3).
     /// Tests inject their own through `ns_run`. The sheet's ledger
@@ -138,11 +138,9 @@ impl App {
             return run.clone();
         }
         let remote = self.remote_runner.clone();
-        let exe = std::env::current_exe().ok();
         let endpoint_args = self.panel_endpoint_args.clone();
         Arc::new(move |machine, argv, stdin| {
             let remote = remote.clone();
-            let exe = exe.clone();
             match machine {
                 Some(machine) => match remote {
                     Some(runner) => runner.run_output(machine, argv, stdin),
@@ -155,11 +153,7 @@ impl App {
                     // same argv shape `panel_argv` builds.
                     let mut full = argv.clone();
                     full.extend(endpoint_args.iter().cloned());
-                    let Some(exe) = exe else {
-                        return Box::pin(
-                            async move { Err("cannot find this executable".to_string()) },
-                        );
-                    };
+                    let exe = crate::live_exe::live_exe();
                     Box::pin(run_local(exe, full, stdin))
                 }
             }

@@ -110,6 +110,8 @@ fn the_revise_dialog_shows_the_prefilled_body() {
         field: crate::studio_dialog::DialogField::Body,
         local: false,
         error: None,
+        prefill_failed: false,
+        confirm_overwrite: false,
         editor_gen: 0,
     });
     let hits = render(&mut buf, band, &d, &palette).unwrap();

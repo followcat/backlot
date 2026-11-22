@@ -37,66 +37,73 @@ impl App {
         }));
     }
 
-    /// `Revise requirement…` — opens at once with the body loading;
-    /// the prefill fetch fills it (`requirements/v<n>.md` — a local
-    /// read on this core, `backlot report show` on a remote studio).
+    /// `Revise requirement…` — opens at once; when `from > 0`, the
+    /// prefill fetch reads the studio's real `req/…` file from the
+    /// state dir via `backlot report show` on both local and remote
+    /// studios. When `from == 0`, opens an empty editor with no fetch.
     pub(crate) fn revise_dialog_open(&mut self, menu: &StudioMenu) {
         let Some(key) = menu.studio.clone() else {
             return;
         };
         let (from, to) = (menu.req_version, menu.req_version + 1);
-        let file = format!("requirements/v{from}.md");
         let local = key.machine.is_none();
+        let file = if from == 0 {
+            None
+        } else {
+            Some(
+                menu.req_file
+                    .clone()
+                    .or_else(|| {
+                        let machines = self.panel_summaries();
+                        crate::panel::data::studio(&machines, &key)
+                            .and_then(|s| s.studio.req_file.clone())
+                    })
+                    .unwrap_or_else(|| format!("req/v{from}.md")),
+            )
+        };
         self.studio_dialog = Some(StudioDialog::Revise(ReviseDialog {
             title: format!(
                 "Revise requirement (v{from} → v{to}) · {}",
                 studio_dialog::StudioDialog::place(&key)
             ),
             key: key.clone(),
-            body: None,
+            body: (from == 0).then(BodyEditor::default),
             summary: crate::chrome::text_editor::TextEditor::new("", false),
             field: DialogField::Body,
             local,
             error: None,
+            prefill_failed: false,
+            confirm_overwrite: false,
             editor_gen: 0,
         }));
-        self.revise_prefill(&key, &file);
+        if let Some(file) = file {
+            self.revise_prefill(&key, &file);
+        } else {
+            self.studio_dialog_gen += 1;
+        }
     }
 
-    /// The prefill fetch — the local read happens off the loop like
-    /// the remote call, so a slow disk never stalls input. A stale
-    /// generation drops the reply (the dialog may be gone).
+    /// The prefill fetch — reads the studio state directory's `req/…`
+    /// artifact via `backlot report show` on both local and remote
+    /// studios, off the input loop. A stale generation drops late
+    /// replies.
     fn revise_prefill(&mut self, key: &crate::studio::StudioKey, file: &str) {
         self.studio_dialog_gen += 1;
         let epoch = self.studio_dialog_gen;
         let tx = self.dialog_fetch_tx.clone();
-        if let Some(machine) = key.machine.clone() {
-            let run = self.ns_runner();
-            let argv = vec![
-                "report".into(),
-                "show".into(),
-                "--studio".into(),
-                key.id.clone(),
-                "--file".into(),
-                file.to_owned(),
-            ];
-            tokio::spawn(async move {
-                let _ = tx.send((epoch, run(Some(machine), argv, None).await)).await;
-            });
-        } else {
-            let machines = self.panel_summaries();
-            let dir =
-                crate::panel::data::studio(&machines, key).and_then(|s| s.studio.repo.clone());
-            let file = file.to_owned();
-            tokio::spawn(async move {
-                let result = match dir {
-                    Some(dir) => std::fs::read_to_string(std::path::Path::new(&dir).join(&file))
-                        .map_err(|e| format!("cannot read {}: {e}", file)),
-                    None => Err("the studio has no repo path".to_owned()),
-                };
-                let _ = tx.send((epoch, result)).await;
-            });
-        }
+        let run = self.ns_runner();
+        let machine = key.machine.clone();
+        let argv = vec![
+            "report".into(),
+            "show".into(),
+            "--studio".into(),
+            key.id.clone(),
+            "--file".into(),
+            file.to_owned(),
+        ];
+        tokio::spawn(async move {
+            let _ = tx.send((epoch, run(machine, argv, None).await)).await;
+        });
     }
 
     /// The prefill reply — only while the matching Revise dialog is
@@ -110,9 +117,16 @@ impl App {
             return;
         };
         match result {
-            Ok(text) => d.body = Some(BodyEditor::new(&text)),
+            Ok(text) => {
+                d.body = Some(BodyEditor::new(&text));
+                d.prefill_failed = false;
+                d.confirm_overwrite = false;
+                d.error = None;
+            }
             Err(error) => {
                 d.body = Some(BodyEditor::default());
+                d.prefill_failed = true;
+                d.confirm_overwrite = false;
                 d.error = Some(error);
             }
         }
