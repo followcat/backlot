@@ -1260,3 +1260,75 @@ fn an_elapsed_only_diff_is_not_a_change() {
     let c = build("waiting for the user");
     assert!(!a.same_as(&c));
 }
+
+#[test]
+fn summary_exposes_current_requirement_file_when_present() {
+    let mut no_req = state_with(&[], vec![]);
+    no_req.studio = Some(crate::state::StudioConfig {
+        title: "acme-shop".into(),
+        repo: "/home/user/acme-shop".into(),
+        members: Vec::new(),
+        no_git: false,
+        mode: crate::event::StudioMode::Experimental,
+        roles: crate::event::RoleConfigs {
+            producer: actor("prod"),
+            director: actor("dir"),
+            writer: actor("wri"),
+        },
+        candidates: Vec::new(),
+        rework_cap: 3,
+        stall_limit_s: 300,
+        nudge_after_s: 120,
+        escalate_after_s: 300,
+        check_env: Vec::new(),
+        checks: Vec::new(),
+        task_budget_s: None,
+        limits: BTreeMap::new(),
+    });
+    let s0 = summary(
+        &[("acme-shop".into(), no_req)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        1,
+    );
+    assert_eq!(s0.studios[0].requirement_version, 0);
+    assert_eq!(s0.studios[0].req_file, None);
+
+    let s1_state = state_with(&base_events(), vec![]);
+    let s1 = summary(
+        &[("acme-shop".into(), s1_state.clone())],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        2,
+    );
+    assert_eq!(s1.studios[0].req_file.as_deref(), Some("req/v1.md"));
+
+    let s2_state = state_with(
+        &base_events(),
+        vec![(
+            "user",
+            EventKind::ReqVersion {
+                version: 2,
+                file: "req/v2-checkout.md".into(),
+                summary: "slugged".into(),
+            },
+        )],
+    );
+    let s2 = summary(
+        &[("acme-shop".into(), s2_state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        3,
+    );
+    assert_eq!(s2.studios[0].requirement_version, 2);
+    assert_eq!(
+        s2.studios[0].req_file.as_deref(),
+        Some("req/v2-checkout.md")
+    );
+}

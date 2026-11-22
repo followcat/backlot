@@ -725,6 +725,26 @@ fn report_show_streams_allowed_roots() {
     // `requirements/` is the G3 name for the on-disk `req/` root.
     assert_eq!(show("requirements/v1.md").unwrap(), "# requirement\n");
     assert_eq!(show("req/v1.md").unwrap(), "# requirement\n");
+    // Slugged requirement filenames under `req/` also resolve cleanly.
+    fs::write(sdir.join("req/v1-initial-spec.md"), "# slugged\n").unwrap();
+    assert_eq!(show("req/v1-initial-spec.md").unwrap(), "# slugged\n");
+    assert_eq!(
+        show("requirements/v1-initial-spec.md").unwrap(),
+        "# slugged\n"
+    );
+    assert_eq!(
+        crate::hwood_read::report_relpath(std::path::Path::new("req/v1.md")).unwrap(),
+        std::path::Path::new("req/v1.md")
+    );
+    assert_eq!(
+        crate::hwood_read::report_relpath(std::path::Path::new("req/v1-initial-spec.md")).unwrap(),
+        std::path::Path::new("req/v1-initial-spec.md")
+    );
+    // CLI `report show` accepts `req/v1.md` without refusal.
+    assert_eq!(
+        ok(&env, "report show --studio acme-shop --file req/v1.md"),
+        ""
+    );
 
     // `tell user` from producer and `tell producer` from user write
     // `messages/<seq>-…` files that `report show` streams cleanly.
@@ -765,6 +785,7 @@ fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
         "attention/7.log",
         "requirements/readme.md",
         "requirements/vx.md",
+        "req/v1-.md",
         "events.jsonl",
         "reports/nul\0.md",
     ] {

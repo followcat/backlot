@@ -109,6 +109,7 @@ mod tests {
                     title: format!("studio {i}"),
                     state: "live".into(),
                     requirement_version: 1,
+                    req_file: None,
                     mode: backlot_model::event::StudioMode::Standard,
                     open_reviews: 0,
                     waiting: 0,

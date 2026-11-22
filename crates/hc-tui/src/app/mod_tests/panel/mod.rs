@@ -9,6 +9,7 @@ mod keys;
 mod menus;
 mod merge;
 mod mouse;
+mod revise;
 mod sheet;
 
 use super::*;

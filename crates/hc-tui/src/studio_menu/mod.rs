@@ -269,6 +269,9 @@ pub(crate) struct StudioMenu {
     /// The requirement version — the Revise title counts `v<n> →
     /// v<n+1>`.
     pub req_version: u32,
+    /// Current requirement's studio-relative path (`req/v<n>.md`), if
+    /// published in the summary.
+    pub req_file: Option<String>,
     /// A Stage row's machine — studio rows derive theirs from
     /// `studio.machine` instead.
     pub machine: Option<String>,
@@ -321,6 +324,7 @@ impl StudioMenu {
             finished,
             ready: summary.ready_to_finish,
             req_version: summary.requirement_version,
+            req_file: summary.req_file.clone(),
             machine: None,
             backlot: None,
             latest: None,
@@ -350,6 +354,7 @@ impl StudioMenu {
             finished: false,
             ready: false,
             req_version: 0,
+            req_file: None,
             machine: None,
             backlot: None,
             latest: None,
@@ -370,6 +375,7 @@ impl StudioMenu {
             finished: false,
             ready: false,
             req_version: 0,
+            req_file: None,
             machine: None,
             backlot: None,
             latest: None,
@@ -390,6 +396,7 @@ impl StudioMenu {
             finished: false,
             ready: false,
             req_version: 0,
+            req_file: None,
             machine: None,
             backlot: None,
             latest: None,
@@ -411,6 +418,7 @@ impl StudioMenu {
             finished: false,
             ready: false,
             req_version: 0,
+            req_file: None,
             machine: None,
             backlot: None,
             latest: None,
@@ -439,6 +447,7 @@ impl StudioMenu {
             finished: false,
             ready: false,
             req_version: 0,
+            req_file: None,
             machine,
             backlot: Some(backlot),
             latest,
@@ -459,6 +468,7 @@ impl StudioMenu {
             finished: false,
             ready: false,
             req_version: 0,
+            req_file: None,
             machine: None,
             backlot: None,
             latest: None,
