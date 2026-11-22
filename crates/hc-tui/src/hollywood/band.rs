@@ -10,6 +10,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
+use backlot_model::summary::Exchange;
+
 use super::draw::HollywoodRender;
 use super::items::{chip_text, chips_of, target_label, ultra_head, wait_head};
 use super::rows::{Row, SETUP_COMMAND, SETUP_LEAD};
@@ -112,6 +114,7 @@ pub(crate) fn draw_row(
                 );
             }
         }
+        Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
         Row::Input => draw_input(buf, rect, hollywood, selected, palette, hits),
         Row::Setup => draw_setup(buf, rect, palette),
     }
@@ -294,6 +297,52 @@ fn draw_detail(
         width,
         &truncate_end(&text, width as usize),
         Style::default().fg(colour).bg(bg),
+    );
+}
+
+/// One exchange line: `✦ <text>` for Hollywood's half (its reported
+/// headline, the accent the headline row already carries), the
+/// sender's `who ›` for every other line — dimmer, the dialog's
+/// other side.
+fn draw_talk(
+    buf: &mut Buffer,
+    rect: Rect,
+    line: &Exchange,
+    selected: bool,
+    palette: &Palette,
+    hits: &mut HollywoodRender,
+) {
+    let _ = hits;
+    let base = if selected {
+        Style::default().bg(palette.active_row_bg)
+    } else {
+        Style::default().bg(palette.surface_dim)
+    };
+    buf.set_style(rect, base);
+    let (marker, who_style, text_style) = if line.who == "hollywood" {
+        (
+            "✦".to_string(),
+            base.fg(palette.accent),
+            base.fg(palette.text),
+        )
+    } else {
+        (
+            format!("{} ›", line.who),
+            base.fg(palette.subtext0),
+            base.fg(palette.subtext0),
+        )
+    };
+    let x = rect.x + MARGIN;
+    let left = marker.chars().count() as u16;
+    put_text(buf, x, rect.y, left, &marker, who_style);
+    let width = rect.width.saturating_sub(MARGIN + left + 1);
+    put_text(
+        buf,
+        x + left + 1,
+        rect.y,
+        width,
+        &truncate_end(&line.text, width as usize),
+        text_style,
     );
 }
 

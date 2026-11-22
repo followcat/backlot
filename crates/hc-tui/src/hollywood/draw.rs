@@ -228,9 +228,15 @@ fn render_band(
         y += 1;
     }
     // The band rows: headline, then the scroll window of waiting
-    // items (each with its detail when kept), then the tail — the
-    // calm row or the input/setup line.
+    // items (each with its detail when kept), then the dialog's
+    // newest exchange lines and the tail — the calm row or the
+    // input/setup line.
     let mut wait_seen = 0usize;
+    let talk_total = band_rows
+        .iter()
+        .filter(|r| matches!(r, Row::Talk(_)))
+        .count();
+    let mut talk_seen = 0usize;
     for row in &band_rows {
         match row {
             Row::Headline(headline) if plan.headline => {
@@ -272,6 +278,28 @@ fn render_band(
                     &mut hits,
                 );
                 y += h;
+            }
+            // The dialog keeps its newest lines: when the plan cut
+            // `talk` short the oldest rows skip without a row.
+            Row::Talk(_) => {
+                talk_seen += 1;
+                if talk_seen <= talk_total.saturating_sub(plan.talk as usize) {
+                    continue;
+                }
+                let rect = Rect::new(area.x, y, area.width, 1);
+                band::draw_row(
+                    buf,
+                    rect,
+                    row,
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    opts.mobile,
+                    palette,
+                    &mut hits,
+                );
+                y += 1;
             }
             Row::Calm { .. } | Row::Input | Row::Setup => {
                 // The scroll marker lives on this row's right edge

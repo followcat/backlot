@@ -123,3 +123,93 @@ fn the_document_stays_under_64kib_at_the_hollywood_caps() {
     let bytes = serde_json::to_vec(&s).unwrap().len();
     assert!(bytes < 64 * 1024, "{bytes}");
 }
+
+/// The dialog's lines: a `tell` and a `reported` headline interleave
+/// on their seqs, textless messages never show, and the cap keeps
+/// the newest.
+#[test]
+fn the_exchange_is_the_conversation_newest_last() {
+    let mut state = HollywoodState::default();
+    let tell = |text: String| HollywoodKind::MessageSent {
+        to: "hollywood".into(),
+        studio: None,
+        text: Some(text),
+        file: None,
+        source_seq: None,
+    };
+    apply(&mut state, &hev(2, "user", tell("first".into())));
+    apply(
+        &mut state,
+        &hev(
+            3,
+            "hollywood",
+            HollywoodKind::Reported {
+                headline: "on it".into(),
+                body: None,
+            },
+        ),
+    );
+    apply(
+        &mut state,
+        &hev(4, "user", tell("and stop the stage".into())),
+    );
+    // A notice without inline text (a file copy) never draws a line.
+    apply(
+        &mut state,
+        &hev(
+            5,
+            "stage",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: None,
+                file: Some("messages/5.txt".into()),
+                source_seq: Some(9),
+            },
+        ),
+    );
+    for seq in 6..=20 {
+        apply(&mut state, &hev(seq, "user", tell(format!("line {seq}"))));
+    }
+    let s = hollywood_section(&state, "live", None, None, None);
+    let exchange = &s.exchange;
+    assert_eq!(exchange.len(), crate::summary::MAX_EXCHANGE);
+    // The newest lines won the cap; seqs ascend into the input line.
+    assert_eq!(exchange.first().unwrap().seq, 13);
+    assert_eq!(exchange.last().unwrap().seq, 20);
+    assert_eq!(exchange[0].who, "user");
+    assert_eq!(exchange[0].text, "line 13");
+    // Order is the ledger's, so the answer sits between its tells.
+    let small = hollywood_section(
+        &{
+            let mut state = HollywoodState::default();
+            apply(&mut state, &hev(1, "user", tell("hi".into())));
+            apply(
+                &mut state,
+                &hev(
+                    2,
+                    "hollywood",
+                    HollywoodKind::Reported {
+                        headline: "hi back".into(),
+                        body: None,
+                    },
+                ),
+            );
+            apply(&mut state, &hev(3, "user", tell("go".into())));
+            state
+        },
+        "live",
+        None,
+        None,
+        None,
+    );
+    let lines: Vec<_> = small
+        .exchange
+        .iter()
+        .map(|e| (e.who.as_str(), e.text.as_str()))
+        .collect();
+    assert_eq!(
+        lines,
+        [("user", "hi"), ("hollywood", "hi back"), ("user", "go")]
+    );
+}

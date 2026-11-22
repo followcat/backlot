@@ -49,10 +49,15 @@ async fn esc_collapses_the_band_first_then_dismisses_the_page() {
     draw_to(&mut app, 120, 24);
 
     key(&mut app, hc_vt::Key::Escape);
+    assert!(
+        !app.hollywood.editing,
+        "the first Esc leaves the dialog's input"
+    );
+    key(&mut app, hc_vt::Key::Escape);
     assert_eq!(
         app.hollywood.mode,
         LayerMode::Collapsed,
-        "the visible band takes the first Esc"
+        "the band takes the next Esc"
     );
     assert!(app.opening_visible(), "the page survives the first Esc");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
@@ -75,4 +80,26 @@ async fn the_cards_h_opens_the_tell_line_over_the_page() {
     assert!(app.opening_visible(), "the page stays under the band");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
     assert!(text.contains("H O L L Y W O O D"), "{text}");
+}
+
+/// A calm sheet opens as a dialog: the `tell` line edits at once,
+/// typed letters land in it — Esc, not a key hunt, is the way out.
+/// A sheet with a waiting item keeps its letters instead.
+#[tokio::test]
+async fn a_calm_sheet_opens_editing_a_waiting_one_does_not() {
+    let mut app = page_app();
+    alt_y(&mut app);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert!(app.hollywood.editing, "nothing waits — the dialog opens");
+    key(&mut app, hc_vt::Key::Char('h'));
+    assert_eq!(app.hollywood.input.as_str(), "h");
+
+    let mut busy = app_with_hollywood();
+    alt_y(&mut busy);
+    assert_eq!(busy.hollywood.mode, LayerMode::Expanded);
+    assert!(
+        !busy.hollywood.editing,
+        "a waiting card keeps its a/x letters"
+    );
+    assert_eq!(busy.hollywood.input.as_str(), "");
 }

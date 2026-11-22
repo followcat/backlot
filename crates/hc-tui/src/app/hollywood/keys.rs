@@ -22,12 +22,20 @@ impl App {
             self.hollywood_view_key(key);
             return;
         }
+        let combo = crate::input::terminal_key_of(key);
+        let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
+        // An armed `y/n` confirm takes the next key before the editor
+        // — a question the sheet asked must not read typed letters as
+        // its answer, and typing must not answer it by accident.
+        if self.hollywood_confirm_key(code) && matches!(key.input.action, hc_vt::Action::Press) {
+            return;
+        }
+        if self.hollywood.confirm.is_some() {
+            return;
+        }
         // The editing input line takes every key but Esc — Enter
         // submits a nonempty line, Esc leaves the editor.
         if self.hollywood.editing {
-            let combo = crate::input::terminal_key_of(key);
-            let (code, modifiers) =
-                crate::config::normalize_key_combo((combo.code, combo.modifiers));
             if code == KeyCode::Esc && modifiers.is_empty() {
                 self.hollywood.editing = false;
                 return;
@@ -47,25 +55,16 @@ impl App {
             self.prefix.swallow(key);
             return;
         }
-        let combo = crate::input::terminal_key_of(key);
         if self.live.matches_prefix(&combo) {
             let _ = self.prefix.feed(key, &self.live);
             return;
         }
-        let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
         let plain = modifiers.is_empty();
         // `?` needs Shift on most layouts, and a kitty-reporting host
         // (REPORT_ALTERNATE_KEYS) reports that Shift beside the key —
         // still the bare `?` here, never a dead key.
         let question = code == KeyCode::Char('?')
             && (plain || modifiers == crossterm::event::KeyModifiers::SHIFT);
-        // An armed `y/n` confirm takes the next key before anything.
-        if self.hollywood_confirm_key(code) && matches!(key.input.action, hc_vt::Action::Press) {
-            return;
-        }
-        if self.hollywood.confirm.is_some() {
-            return;
-        }
         if matches!(code, KeyCode::Down | KeyCode::Char('j')) && plain {
             self.hollywood_row_move(1);
             return;
