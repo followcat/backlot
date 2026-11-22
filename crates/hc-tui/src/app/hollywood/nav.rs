@@ -302,7 +302,11 @@ impl App {
             .inventory
             .terminals()
             .values()
-            .find(|t| t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL))
+            .find(|t| {
+                t.state == "live"
+                    && !t.address.contains('/')
+                    && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
+            })
             .map(|t| t.address.clone());
         match terminal {
             Some(id) => {

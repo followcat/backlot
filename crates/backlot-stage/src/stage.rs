@@ -224,18 +224,44 @@ async fn start_async(common: &Common, env: &Env) -> Result<String, Fail> {
     start_on(&link, env).await
 }
 
+/// Whether `t` is this core's own `backlot-stage` (never a federated
+/// `machine/tN` terminal imported from another host).
+fn is_local_stage(t: &Terminal) -> bool {
+    !t.address.contains('/') && t.name.as_deref() == Some(STAGE_NAME)
+}
+
+/// Best-effort removal of finished local `backlot-stage` tombstones so
+/// `stage stop` / restarts do not pile up `finished·killed` tabs.
+async fn reap_finished_stages(client: &hc_proto::client::Client, terminals: &[Terminal]) {
+    for t in terminals
+        .iter()
+        .filter(|t| t.state == "finished" && is_local_stage(t))
+    {
+        let _ = client
+            .terminal_rm(TerminalParams {
+                terminal: t.address.clone(),
+                caller: None,
+            })
+            .await;
+    }
+}
+
 /// The idempotent start on an already-connected core — `stage start`
 /// and `stage watch --restart` share this one path.
 pub(crate) async fn start_on(link: &link::Link, env: &Env) -> Result<String, Fail> {
     let list = link
         .client
-        .terminal_list(ListParams::default())
+        .terminal_list(ListParams {
+            all: true,
+            ..ListParams::default()
+        })
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
+    reap_finished_stages(&link.client, &list.terminals).await;
     if let Some(t) = list
         .terminals
         .iter()
-        .find(|t| t.state == "live" && t.name.as_deref() == Some(STAGE_NAME))
+        .find(|t| t.state == "live" && is_local_stage(t))
     {
         return Ok(format!("{STAGE_NAME} is already running ({})", t.address));
     }
@@ -270,7 +296,7 @@ pub fn start(common: &Common, env: &Env) -> Result<String, Fail> {
 fn stop_verdict(terminals: &[Terminal]) -> (Option<String>, &'static str) {
     match terminals
         .iter()
-        .find(|t| t.state == "live" && t.name.as_deref() == Some(STAGE_NAME))
+        .find(|t| t.state == "live" && is_local_stage(t))
     {
         Some(t) => (Some(t.address.clone()), "stage stopped"),
         None => (None, "stage already stopped"),
@@ -278,8 +304,9 @@ fn stop_verdict(terminals: &[Terminal]) -> (Option<String>, &'static str) {
 }
 
 /// `stage stop` (G1): `terminal.kill` on the core's live
-/// `backlot-stage` — the core's own graceful end. No live stage is
-/// still an exit-0 answer.
+/// `backlot-stage` — the core's own graceful end, then best-effort
+/// `terminal.rm` once it finishes so dead `backlot-stage` tabs do not
+/// linger. No live stage is still an exit-0 answer.
 async fn stop_async(common: &Common, env: &Env) -> Result<String, Fail> {
     let link = link::connect(
         env,
@@ -289,18 +316,36 @@ async fn stop_async(common: &Common, env: &Env) -> Result<String, Fail> {
     .await?;
     let list = link
         .client
-        .terminal_list(ListParams::default())
+        .terminal_list(ListParams {
+            all: true,
+            ..ListParams::default()
+        })
         .await
         .map_err(|e| Fail::refused(format!("terminal.list failed: {e}")))?;
+    reap_finished_stages(&link.client, &list.terminals).await;
     let (address, report) = stop_verdict(&list.terminals);
     if let Some(terminal) = address {
         link.client
             .terminal_kill(TerminalParams {
-                terminal,
+                terminal: terminal.clone(),
                 caller: None,
             })
             .await
             .map_err(|e| Fail::refused(format!("terminal.kill failed: {e}")))?;
+        for _ in 0..10 {
+            let params = TerminalParams {
+                terminal: terminal.clone(),
+                caller: None,
+            };
+            match link.client.terminal_get(params.clone()).await {
+                Ok(t) if t.state == "finished" => {
+                    let _ = link.client.terminal_rm(params).await;
+                    break;
+                }
+                Ok(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+                Err(_) => break,
+            }
+        }
     }
     Ok(report.into())
 }

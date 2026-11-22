@@ -206,3 +206,76 @@ fn the_terminal_env_marks_hollywood_alone() {
     );
     assert_eq!(env["PATH"], "/usr/bin");
 }
+
+/// `devin` takes `--prompt-file <path>`, never inline prompt text:
+/// fresh Hollywood launches write `<hdir>/prompts/hollywood.first.txt`
+/// pointing at `AGENTS.md` and pass that file path to `devin`, while
+/// resumes pass no `--prompt-file` and other runners keep inline text.
+#[test]
+fn devin_hollywood_launch_writes_and_passes_a_prompt_file() {
+    use crate::hlife::hprepare_launch;
+    use crate::hstage::hfirst_prompt;
+    use crate::runners::{LaunchCtx, plan};
+    use backlot_model::hollywood::{HOLLYWOOD, HOLLYWOOD_TERMINAL};
+
+    let tmp = crate::test_support::TestDir::new("bl-hdevin");
+    let hdir = tmp.path().join("hollywood");
+    let cwd = hdir.to_string_lossy().into_owned();
+    let stage_env = std::collections::BTreeMap::new();
+
+    // Fresh devin launch: `--prompt-file` receives an existing file path.
+    let prompt = hfirst_prompt(&hdir, "devin", None);
+    let actor = identity(&cfg("devin"));
+    let launch = plan(
+        &actor,
+        &LaunchCtx {
+            terminal: HOLLYWOOD_TERMINAL,
+            cwd: &cwd,
+            prompt: prompt.as_deref(),
+            resume: None,
+            studio_dir: &cwd,
+            stage_env: &stage_env,
+            role: HOLLYWOOD,
+            checks: &[],
+        },
+    )
+    .expect("devin plan");
+    hprepare_launch(&hdir, "devin", None).expect("prepare devin hollywood");
+    let pf_idx = launch
+        .argv
+        .iter()
+        .position(|a| a == "--prompt-file")
+        .expect("devin carries --prompt-file");
+    let pf_path = std::path::PathBuf::from(&launch.argv[pf_idx + 1]);
+    assert_eq!(pf_path, hdir.join("prompts/hollywood.first.txt"));
+    assert_eq!(
+        std::fs::read_to_string(&pf_path).expect("prompt file written"),
+        format!("Read {} and follow it.\n", hdir.join("AGENTS.md").display())
+    );
+    assert!(hdir.join("AGENTS.md").is_file());
+
+    // Resume devin launch: no `--prompt-file` arg.
+    let resume_prompt = hfirst_prompt(&hdir, "devin", Some("beaded-harp"));
+    assert!(resume_prompt.is_none());
+    let resumed = plan(
+        &actor,
+        &LaunchCtx {
+            terminal: HOLLYWOOD_TERMINAL,
+            cwd: &cwd,
+            prompt: resume_prompt.as_deref(),
+            resume: Some("beaded-harp"),
+            studio_dir: &cwd,
+            stage_env: &stage_env,
+            role: HOLLYWOOD,
+            checks: &[],
+        },
+    )
+    .expect("devin resume plan");
+    assert!(!resumed.argv.iter().any(|a| a == "--prompt-file"));
+
+    // Non-devin runner keeps the inline sentence.
+    assert_eq!(
+        hfirst_prompt(&hdir, "claude", None).as_deref(),
+        Some(format!("Read {} and follow it.", hdir.join("AGENTS.md").display()).as_str())
+    );
+}

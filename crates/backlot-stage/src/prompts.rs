@@ -228,7 +228,9 @@ pub fn first_line(file: &Path) -> String {
 /// `devin` takes the first prompt as a file (`--prompt-file`): the
 /// line written to `<dir>/prompts/<role>.first.txt`.
 pub fn first_file(dir: &Path, role: &str, line: &str) -> io::Result<PathBuf> {
-    let file = dir.join("prompts").join(format!("{role}.first.txt"));
+    let prompts = dir.join("prompts");
+    fs::create_dir_all(&prompts)?;
+    let file = prompts.join(format!("{role}.first.txt"));
     fs::write(&file, format!("{line}\n"))?;
     Ok(file)
 }
