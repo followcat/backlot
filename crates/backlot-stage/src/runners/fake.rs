@@ -9,7 +9,7 @@
 
 use backlot_model::ActorIdentity;
 
-use super::{Launch, LaunchCtx, PlanError, Session, tools_dir};
+use super::{Launch, LaunchCtx, PlanError, Session, probe};
 
 /// The script's model-driven modes: `trust` plays the folder-trust
 /// dialog, anything else a plain run — `m` is the draft's.
@@ -26,12 +26,14 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     env.insert("FAKE_SESSION".into(), format!("fake-{}", ctx.terminal));
     let hooks = super::claude::hook_setup(ctx);
     env.insert("BACKLOT_HOOK_CMD".into(), hooks.command.clone());
+    let override_path = ctx
+        .stage_env
+        .get(probe::FAKE_RUNNER_ENV)
+        .map(String::as_str);
+    let script = probe::fake_runner_path(probe::fake_runner_override(override_path).as_deref());
     Ok(Launch {
         argv: vec![
-            tools_dir()
-                .join("fake-runner.sh")
-                .to_string_lossy()
-                .into_owned(),
+            script.to_string_lossy().into_owned(),
             "--settings".into(),
             hooks.settings.to_string_lossy().into_owned(),
         ],

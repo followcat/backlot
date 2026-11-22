@@ -40,7 +40,9 @@ check_seed() {
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # Env arrays are built per machine: env -i guarantees no inherited
-# HC_*, HERDR_* or BACKLOT_* leaks into a rig process.
+# HC_*, HERDR_* or BACKLOT_* leaks into a rig process. The fake runner
+# is the one BACKLOT_* value passed through explicitly (rig.sh resolves
+# it), so an installed backlot finds its checkout's script.
 ENVV=()
 core_env() {
     local l=$1
@@ -56,6 +58,7 @@ core_env() {
         "HERDR_DISABLE_SOUND=1"
         "BACKLOT_NO_UPDATE_CHECK=1"
         "BACKLOT_STATE_DIR=$ROOT/backlot-$l"
+        "BACKLOT_FAKE_RUNNER=$FAKE_RUNNER"
         "LANG=C.UTF-8"
         "TERM=xterm-256color"
         "SHELL=/bin/sh")

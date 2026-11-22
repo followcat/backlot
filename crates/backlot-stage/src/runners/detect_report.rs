@@ -170,13 +170,15 @@ fn row(scope: &detect::Scope, runner: &str) -> Row {
 }
 
 /// `backlot runners --json` (G4): `RUNNERS`' detection plus `fake`
-/// where its `tools/` script exists — a dev build offers it, a
-/// packaged one does not.
+/// where its script exists — the `BACKLOT_FAKE_RUNNER` override or
+/// the shipped `tools/` script. A dev build offers it, a packaged
+/// one does not.
 pub fn report_json(env: &Env) -> Result<String, Fail> {
     let scope = detect::scope(env);
     let mut rows: Vec<Row> = RUNNERS.iter().map(|r| row(&scope, r)).collect();
-    if probe::installed("fake", None) {
-        let path = super::tools_dir().join("fake-runner.sh");
+    let fake_path = probe::fake_runner_path(env.get(probe::FAKE_RUNNER_ENV));
+    if fake_path.is_file() {
+        let path = fake_path;
         let version = detect::run_timed(
             &[path.to_string_lossy().into_owned(), "--version".to_string()],
             None,

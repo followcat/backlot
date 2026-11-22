@@ -10,7 +10,7 @@
 
 use crate::cli::Env;
 use crate::runners::detect::{self, Found, Scope, Source};
-use crate::runners::{probe, tools_dir};
+use crate::runners::probe;
 
 /// `runner`'s resolved launch binary — `Found` carries the path a
 /// launch would get plus where the hit came from — or a refusal
@@ -21,7 +21,8 @@ pub(crate) fn launch_binary(
     scope: &Scope,
 ) -> Result<Found, String> {
     if runner == "fake" {
-        let path = tools_dir().join("fake-runner.sh");
+        let override_path = (scope.env)(probe::FAKE_RUNNER_ENV);
+        let path = probe::fake_runner_path(override_path.as_deref());
         return if path.is_file() {
             Ok(Found {
                 path,
@@ -30,8 +31,8 @@ pub(crate) fn launch_binary(
             })
         } else {
             Err(format!(
-                "runner 'fake' is not installed: tools/fake-runner.sh missing under {}",
-                tools_dir().display()
+                "runner 'fake' is not installed: fake-runner.sh missing under {}",
+                path.parent().unwrap_or(&path).display()
             ))
         };
     }
