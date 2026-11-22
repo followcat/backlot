@@ -28,13 +28,22 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// `true` only for a cleanly exited record nothing else owns: never
-/// `killed`, `signaled`, `holder_lost`, `server_stop`, `host_shutdown`,
-/// `stopped_by_restart`, `live`, a wherdr worker/coordinator label, or a
-/// studio terminal — roles, the stage and hollywood are the stage's
-/// records to read and remove, not the client's.
+/// `true` only for a cleanly exited record (or a child killed solely
+/// because its parent ended via `die_with_parent`) that nothing else
+/// owns: never a manual `killed`, `signaled`, `holder_lost`,
+/// `server_stop`, `host_shutdown`, `stopped_by_restart`, `live`, a
+/// wherdr worker/coordinator label, or a studio terminal — roles, the
+/// stage and hollywood are the stage's records to read and remove, not
+/// the client's.
 pub(super) fn should_reap_exited(term: &Terminal, now_ms: u64) -> bool {
-    if term.state != "finished" || term.reason.as_deref() != Some("exited") {
+    let died_with_parent = term.reason.as_deref() == Some("killed")
+        && term
+            .extra
+            .get("ended_by")
+            .and_then(|v| v.get("by"))
+            .and_then(|v| v.as_str())
+            == Some("die_with_parent");
+    if term.state != "finished" || (term.reason.as_deref() != Some("exited") && !died_with_parent) {
         return false;
     }
     for label in [

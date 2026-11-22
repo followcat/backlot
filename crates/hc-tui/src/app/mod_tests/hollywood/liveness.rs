@@ -71,10 +71,23 @@ async fn call_sheet_and_collapsed_lot_pill_animate_when_hollywood_is_queued_or_w
     // 4. Settled (`work = "waiting"`, `pending = false`) stops animation and restores `✦`.
     app.hollywood_toggle();
     doc["hollywood"]["work"] = serde_json::json!("waiting");
-    publish_doc(&mut app, doc);
+    publish_doc(&mut app, doc.clone());
     let top_calm = screen_lines(&draw_to(&mut app, 120, 24))[0].clone();
     assert!(top_calm.contains('✦'), "{top_calm}");
     assert!(!app.has_animation(), "settled pill disarms animation");
+
+    // 5. Stopped Hollywood (`state = "down"`, e.g. `cannot resume`) with undelivered
+    //    inbox mail stays `down` instead of spinning `queued…` forever.
+    doc["hollywood"]["state"] = serde_json::json!("down");
+    doc["hollywood"]["pending"] = serde_json::json!(true);
+    publish_doc(&mut app, doc);
+    let top_down = screen_lines(&draw_to(&mut app, 120, 24))[0].clone();
+    assert!(!app.has_animation(), "down hollywood never spins queued");
+    assert!(top_down.contains('✦'), "{top_down}");
+    app.hollywood_open();
+    let expanded_down = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
+    assert!(expanded_down.contains("down"), "{expanded_down}");
+    assert!(!expanded_down.contains("queued…"), "{expanded_down}");
 }
 
 #[tokio::test]

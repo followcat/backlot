@@ -169,10 +169,13 @@ fn stage_stop_finds_only_a_live_named_terminal() {
     other.name = Some("shell".into());
     let mut dead = term("finished", Some(0));
     dead.name = Some(STAGE_NAME.into());
+    let mut federated = term("live", None);
+    federated.address = "pc-t14/t9".into();
     for list in [
         vec![],
         vec![other.clone()],
         vec![dead],
+        vec![federated],
         vec![other, term("finished", Some(1))],
     ] {
         let (address, report) = stop_verdict(&list);

@@ -79,6 +79,25 @@ pub(crate) fn identity(cfg: &HollywoodCfg) -> ActorIdentity {
     }
 }
 
+/// First-prompt value for `LaunchCtx.prompt`: `None` on resume, a
+/// `<hdir>/prompts/hollywood.first.txt` path for `devin` (`--prompt-file`),
+/// and the inline sentence for every other runner.
+pub(crate) fn hfirst_prompt(hdir: &Path, runner: &str, resume: Option<&str>) -> Option<String> {
+    if resume.is_some() {
+        return None;
+    }
+    let line = crate::prompts::first_line(&hdir.join("AGENTS.md"));
+    match runner {
+        "devin" => Some(
+            hdir.join("prompts")
+                .join(format!("{HOLLYWOOD}.first.txt"))
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        _ => Some(line),
+    }
+}
+
 /// What one reconcile pass decides — every move but `Drop` records.
 #[derive(Debug, PartialEq)]
 pub(crate) enum HMove {

@@ -233,7 +233,7 @@ pub(crate) fn hollywood_activity(
         return HollywoodActivity::Working;
     }
     let in_flight = pending_marks.is_some_and(|p| p.split_whitespace().any(|m| m == "hollywood"));
-    if in_flight || hw.is_some_and(|h| h.pending) {
+    if in_flight || hw.is_some_and(|h| h.state != "down" && h.pending) {
         return HollywoodActivity::Queued;
     }
     HollywoodActivity::Idle
