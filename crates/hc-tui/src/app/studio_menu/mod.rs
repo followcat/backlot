@@ -172,6 +172,21 @@ impl App {
                     !self.machine_reachable(studio.machine),
                 ))
             }
+            Target::Talk(key, seq) => {
+                let studio = crate::panel::data::studio(machines, key)?;
+                let file = studio
+                    .studio
+                    .exchange
+                    .iter()
+                    .find(|e| e.seq == *seq)
+                    .and_then(|e| e.file.clone());
+                Some(StudioMenu::studio_talk(
+                    key,
+                    *seq,
+                    file,
+                    !self.machine_reachable(studio.machine),
+                ))
+            }
             Target::Person(key, role_name) => {
                 let studio = crate::panel::data::studio(machines, key)?;
                 let role = studio.studio.roles.iter().find(|r| r.role == *role_name)?;

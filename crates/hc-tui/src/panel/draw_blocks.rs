@@ -361,6 +361,58 @@ pub(super) fn draw_input(
     put_text(buf, rect.x + 4, rect.y, width, &shown, style);
 }
 
+/// One user-facing exchange turn inside a block: `│ › <text> │` for
+/// the user (`subtext0`) and `│ ✦ <text> │` for `producer` /
+/// `hollywood` / reports (`accent` glyph, `text` snippet), matching
+/// the Call Sheet's talk rows.
+pub(super) fn draw_talk(
+    buf: &mut Buffer,
+    rect: Rect,
+    line: &backlot_model::summary::StudioExchange,
+    selected: bool,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    let from_user = line.who == "user";
+    let (glyph, glyph_fg, text_fg) = if from_user {
+        (
+            "›",
+            palette.subtext0,
+            if selected {
+                palette.text
+            } else {
+                palette.subtext0
+            },
+        )
+    } else {
+        ("✦", palette.accent, palette.text)
+    };
+    put_text(
+        buf,
+        rect.x + 2,
+        rect.y,
+        1,
+        glyph,
+        Style::default().fg(glyph_fg),
+    );
+    let width = rect.width.saturating_sub(5);
+    if width > 0 {
+        let mut style = Style::default().fg(text_fg);
+        if selected {
+            style = style.add_modifier(Modifier::BOLD);
+        }
+        put_text(
+            buf,
+            rect.x + 4,
+            rect.y,
+            width,
+            &truncate_end(&line.text, width as usize),
+            style,
+        );
+    }
+}
+
 /// A person's extra line at the name column. The cue is the
 /// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
 /// user-owned prompt, `! prompt · director reviewing` for a

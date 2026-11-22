@@ -248,6 +248,13 @@ impl App {
                 _ => {}
             },
             StudioAct::FocusHollywood => self.hollywood_focus_terminal(),
+            StudioAct::ReportShow => {
+                if let (Some(key), crate::studio_menu::MenuKind::StudioTalk(seq), Some(file)) =
+                    (&menu.studio, menu.kind, menu.talk_file.as_deref())
+                {
+                    self.run_action(studio_cmds::report_show(key, seq, file));
+                }
+            }
         }
     }
 

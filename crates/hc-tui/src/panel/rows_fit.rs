@@ -258,6 +258,92 @@ pub(super) fn expanded_set(
         .collect()
 }
 
+/// How many newest `exchange` lines each open block may render under
+/// `body_height` without starving roles, tasks or the `›` input line.
+pub(super) fn talk_budgets(
+    studios: &[StudioRef<'_>],
+    open: &std::collections::BTreeSet<StudioKey>,
+    panel: &Panel,
+    current: Option<&StudioKey>,
+    body_height: u16,
+    header_rows: usize,
+    ctx: &dyn Fn(StudioRef<'_>) -> bool,
+) -> std::collections::BTreeMap<StudioKey, usize> {
+    let mut budgets = std::collections::BTreeMap::new();
+    let open_studios: Vec<StudioRef<'_>> = studios
+        .iter()
+        .copied()
+        .filter(|s| open.contains(&s.key()) && !s.studio.exchange.is_empty())
+        .collect();
+    if open_studios.is_empty() {
+        return budgets;
+    }
+    if body_height == 0 {
+        for s in open_studios {
+            budgets.insert(s.key(), s.studio.exchange.len());
+        }
+        return budgets;
+    }
+    let used = header_rows
+        + usize::from(panel.hollywood_hint)
+        + studios
+            .iter()
+            .map(|studio| {
+                let key = studio.key();
+                if open.contains(&key) {
+                    block_height(*studio, panel, ctx(*studio), panel.accepted_open(&key))
+                        + usize::from(studio.studio.usage.is_some())
+                } else {
+                    1
+                }
+            })
+            .sum::<usize>();
+    let avail = body_height as usize;
+    if used > avail {
+        // When the non-chat rows already exceed a normal-height dock,
+        // the body scrolls anyway: keep at most the newest 2 turns at
+        // the bottom above `›`, and 0 on cramped heights (`<= 10`).
+        if avail > 10 {
+            for s in open_studios {
+                budgets.insert(s.key(), s.studio.exchange.len().min(2));
+            }
+        }
+        return budgets;
+    }
+    let mut slack = avail - used;
+    if slack == 0 {
+        return budgets;
+    }
+    // Distribute slack round-robin across open studios (`current`
+    // first so the active studio wins odd spare lines).
+    let mut ordered = Vec::with_capacity(open_studios.len());
+    if let Some(cur) = current {
+        ordered.extend(open_studios.iter().copied().filter(|s| &s.key() == cur));
+        ordered.extend(open_studios.iter().copied().filter(|s| &s.key() != cur));
+    } else {
+        ordered.extend(open_studios);
+    }
+    while slack > 0 {
+        let mut progressed = false;
+        for s in &ordered {
+            if slack == 0 {
+                break;
+            }
+            let key = s.key();
+            let cur = budgets.get(&key).copied().unwrap_or(0);
+            if cur < s.studio.exchange.len() {
+                budgets.insert(key, cur + 1);
+                slack -= 1;
+                progressed = true;
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+    budgets
+}
+
 /// One studio's expanded block: header, owed-step subheader, live
 /// roles, task rows, the accepted fold, closed roles, bottom border.
 /// The collapsed strip's role lines: live roles that are working or

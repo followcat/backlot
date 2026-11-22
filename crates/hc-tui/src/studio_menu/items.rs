@@ -33,6 +33,7 @@ impl StudioMenu {
             MenuKind::Lot => self.lot_items(&item),
             MenuKind::Machine => self.machine_items(&item),
             MenuKind::Hollywood(seq) => self.hollywood_items(seq, &item),
+            MenuKind::StudioTalk(seq) => self.studio_talk_items(seq, &item),
         };
         // An unreachable machine dims every row that runs a command —
         // Focus/Peek/sheet opens stay live: they read what is already
@@ -539,6 +540,35 @@ impl StudioMenu {
                 "Focus Hollywood terminal".to_owned(),
                 Some('t'),
                 StudioAct::FocusHollywood,
+            ),
+        ]
+    }
+
+    fn studio_talk_items(
+        &self,
+        seq: u64,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        let mut read = item(
+            format!("Read entry #{seq}"),
+            Some('\r'),
+            StudioAct::ReportShow,
+        );
+        if self.talk_file.is_none() {
+            read.dim = Some("no body".to_owned());
+        }
+        vec![
+            read,
+            item("Tell producer…".to_owned(), Some('t'), StudioAct::Tell),
+            item(
+                "Inspect studio sheet (v)".to_owned(),
+                Some('v'),
+                StudioAct::Sheet,
+            ),
+            item(
+                "Focus producer".to_owned(),
+                Some('p'),
+                StudioAct::FocusTerminal,
             ),
         ]
     }

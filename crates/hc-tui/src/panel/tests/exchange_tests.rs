@@ -1,0 +1,183 @@
+//! Studio Dock exchange rows: `›` (user) vs `✦` (producer /
+//! hollywood) glyphs, selection highlight inside `│ … │`, contextual
+//! `⏎ read` footer hint when `file.is_some()`, and `rows_fit` height
+//! degradation so narrow docks never starve roles, tasks or `›`.
+
+use super::*;
+use crate::chrome::palette::Palette;
+use crate::panel::config::StudioKeys;
+use crate::panel::rows::{Target, rows};
+use crate::panel::{Panel, PanelMode, render};
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+
+fn summary_with_exchange() -> Summary {
+    let mut v = summary_json();
+    v["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "check cart latency", "file": "messages/1-tell.txt" },
+        { "seq": 2, "who": "hollywood", "text": "prioritize p99 regressions", "file": "messages/2-hw.md" },
+        { "seq": 3, "who": "producer", "text": "cast alice on task-1", "file": "messages/3-reply.md" },
+        { "seq": 4, "who": "user", "text": "any blockers?" },
+        { "seq": 5, "who": "producer", "text": "milestone-1 green", "file": "reports/5-m1.md" },
+        { "seq": 6, "who": "producer", "text": "ready for final check", "file": "messages/6-ready.md" }
+    ]);
+    serde_json::from_value(v).unwrap()
+}
+
+fn lines(buf: &Buffer, area: Rect) -> Vec<String> {
+    (area.y..area.y + area.height)
+        .map(|y| {
+            (area.x..area.x + area.width)
+                .map(|x| buf[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn exchange_rows_render_glyphs_selection_and_contextual_read_hint() {
+    let summary = summary_with_exchange();
+    let palette = Palette::from_name("catppuccin").unwrap();
+    let area = Rect::new(0, 0, 38, 28);
+    let mut panel = Panel {
+        mode: PanelMode::Expanded,
+        focused: true,
+        selected: Some(Target::Talk("acme-shop".into(), 3)),
+        ..Panel::new()
+    };
+    let mut buf = Buffer::empty(area);
+    let current = crate::studio::StudioKey::local("acme-shop");
+    let hits = render(
+        &mut buf,
+        area,
+        &machines(Some(&summary)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        None,
+        &StudioKeys::default(),
+        None,
+        false,
+        false,
+        &Default::default(),
+        &palette,
+    );
+    let rendered = lines(&buf, area);
+    let text = rendered.join("\n");
+    assert!(
+        rendered
+            .iter()
+            .any(|l| l.contains("› check cart latency") && l.ends_with('│')),
+        "{text}"
+    );
+    assert!(
+        rendered
+            .iter()
+            .any(|l| l.contains("✦ prioritize p99") && l.ends_with('│')),
+        "{text}"
+    );
+    // Selected Talk(#3) paints selection_bg inside `│ … │` with `▌` at x=1.
+    let (sel_rect, _) = hits
+        .rows
+        .iter()
+        .find(|(_, t)| *t == Target::Talk("acme-shop".into(), 3))
+        .expect("Talk(3) hit");
+    assert_eq!(buf[(0, sel_rect.y)].symbol(), "│");
+    assert_eq!(buf[(1, sel_rect.y)].symbol(), "▌");
+    assert_eq!(buf[(2, sel_rect.y)].symbol(), "✦");
+    assert_eq!(buf[(2, sel_rect.y)].fg, palette.accent);
+    assert_eq!(buf[(4, sel_rect.y)].bg, palette.selection_bg);
+    assert_eq!(buf[(area.width - 1, sel_rect.y)].symbol(), "│");
+
+    // Footer shows `⏎ read` when `file.is_some()`.
+    let footer_with_file = rendered.last().unwrap();
+    assert!(footer_with_file.contains("⏎ read"), "{footer_with_file}");
+
+    // Selecting Talk(#4) (`file: None`) omits `⏎ read` from the footer.
+    panel.selected = Some(Target::Talk("acme-shop".into(), 4));
+    let mut buf2 = Buffer::empty(area);
+    render(
+        &mut buf2,
+        area,
+        &machines(Some(&summary)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        None,
+        &StudioKeys::default(),
+        None,
+        false,
+        false,
+        &Default::default(),
+        &palette,
+    );
+    let rendered2 = lines(&buf2, area);
+    let footer_no_file = rendered2.last().unwrap();
+    assert!(!footer_no_file.contains("⏎ read"), "{footer_no_file}");
+    assert!(footer_no_file.contains("i tell"), "{footer_no_file}");
+}
+
+#[test]
+fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
+    let summary = summary_with_exchange();
+    let panel = Panel {
+        mode: PanelMode::Expanded,
+        ..Panel::new()
+    };
+    let current = crate::studio::StudioKey::local("acme-shop");
+    let talk_seqs = |body_height: u16| -> Vec<u64> {
+        rows(
+            &machines(Some(&summary)),
+            |_| true,
+            |_| true,
+            &panel,
+            PanelMode::Expanded,
+            Some(&current),
+            body_height,
+        )
+        .iter()
+        .filter_map(|r| match r.target() {
+            Target::Talk(_, seq) => Some(seq),
+            _ => None,
+        })
+        .collect()
+    };
+
+    // Base block height in `summary()` is 3 (top + input + bottom) + 8 roles = 11.
+    // Unconstrained (0) and roomy (20 >= 11 + 6): all 6 turns render.
+    assert_eq!(talk_seqs(0), vec![1, 2, 3, 4, 5, 6]);
+    assert_eq!(talk_seqs(20), vec![1, 2, 3, 4, 5, 6]);
+    // Partial slack (13 = 11 + 2): newest 2 turns render above `›`.
+    assert_eq!(talk_seqs(13), vec![5, 6]);
+    // Exact fit (11) or cramped (9): 0 turns render so roles + `›` never starve.
+    assert_eq!(talk_seqs(11), Vec::<u64>::new());
+    assert_eq!(talk_seqs(9), Vec::<u64>::new());
+
+    // Even at exact fit (body_height = 11), every role and `›` Input remain present.
+    let exact_targets: Vec<Target> = rows(
+        &machines(Some(&summary)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        11,
+    )
+    .iter()
+    .map(|r| r.target())
+    .collect();
+    assert_eq!(
+        exact_targets
+            .iter()
+            .filter(|t| matches!(t, Target::Person(..)))
+            .count(),
+        8
+    );
+    assert!(exact_targets.contains(&Target::Input("acme-shop".into())));
+}

@@ -208,6 +208,18 @@ impl App {
             // R22: the `hollywood setup` hint is the in-TUI dialog's
             // button — same dialog the Call Sheet's row opens.
             Some(Target::Setup) => self.hw_setup_open(),
+            Some(Target::Talk(key, seq)) => {
+                let file = crate::panel::data::studio(&machines, &key).and_then(|s| {
+                    s.studio
+                        .exchange
+                        .iter()
+                        .find(|e| e.seq == seq)
+                        .and_then(|e| e.file.clone())
+                });
+                if let Some(rel) = file {
+                    self.run_action(studio_cmds::report_show(&key, seq, &rel));
+                }
+            }
             // Selecting the `›` line is what opens it — the derived
             // `panel_editing` puts the keys there already.
             Some(Target::Input(_)) => {}
