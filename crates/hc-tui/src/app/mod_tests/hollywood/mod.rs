@@ -9,6 +9,7 @@ mod entry;
 mod finish_key;
 mod hints;
 mod keys;
+mod liveness;
 mod menu;
 mod mouse;
 mod opening;

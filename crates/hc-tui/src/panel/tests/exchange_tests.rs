@@ -181,3 +181,102 @@ fn talk_budget_degrades_gracefully_without_starving_roles_or_input() {
     );
     assert!(exact_targets.contains(&Target::Input("acme-shop".into())));
 }
+
+#[test]
+fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
+    let palette = Palette::from_name("catppuccin").unwrap();
+    let area = Rect::new(0, 0, 38, 22);
+    let panel = Panel {
+        mode: PanelMode::Expanded,
+        ..Panel::new()
+    };
+    let current = crate::studio::StudioKey::local("acme-shop");
+
+    // 1. `pending_tell: true` -> `queued` badge on `›` row and `working_drawn = true`.
+    let mut v = summary_json();
+    for r in v["studios"][0]["roles"].as_array_mut().unwrap() {
+        r["work"] = serde_json::Value::Null;
+    }
+    v["studios"][0]["pending_tell"] = serde_json::json!(true);
+    v["studios"][0]["exchange"] = serde_json::json!([
+        { "seq": 1, "who": "user", "text": "check status", "file": "messages/1.txt" }
+    ]);
+    let s_queued: Summary = serde_json::from_value(v.clone()).unwrap();
+    let mut buf = Buffer::empty(area);
+    let hits = render(
+        &mut buf,
+        area,
+        &machines(Some(&s_queued)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        None,
+        &StudioKeys::default(),
+        None,
+        false,
+        false,
+        &Default::default(),
+        &palette,
+    );
+    assert!(hits.working_drawn, "queued cue arms spinner");
+    let text_queued = lines(&buf, area).join("\n");
+    assert!(text_queued.contains("queued"), "{text_queued}");
+
+    // 2. Delivered (`pending_tell: false`) while producer is `working` -> `thinking` cue.
+    v["studios"][0]["pending_tell"] = serde_json::json!(false);
+    v["studios"][0]["roles"][0]["work"] = serde_json::json!("working");
+    let s_thinking: Summary = serde_json::from_value(v.clone()).unwrap();
+    let mut buf2 = Buffer::empty(area);
+    let hits2 = render(
+        &mut buf2,
+        area,
+        &machines(Some(&s_thinking)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        None,
+        &StudioKeys::default(),
+        None,
+        false,
+        false,
+        &Default::default(),
+        &palette,
+    );
+    assert!(hits2.working_drawn);
+    let text_thinking = lines(&buf2, area).join("\n");
+    assert!(!text_thinking.contains("queued"), "{text_thinking}");
+    assert!(text_thinking.contains("thinking"), "{text_thinking}");
+
+    // 3. Once producer replies (`exchange.last().who == "producer"`) and settles -> no cue.
+    v["studios"][0]["roles"][0]["work"] = serde_json::json!("waiting");
+    v["studios"][0]["exchange"].as_array_mut().unwrap().push(
+        serde_json::json!({ "seq": 2, "who": "producer", "text": "all clear", "file": "messages/2.md" }),
+    );
+    let s_done: Summary = serde_json::from_value(v).unwrap();
+    let mut buf3 = Buffer::empty(area);
+    let hits3 = render(
+        &mut buf3,
+        area,
+        &machines(Some(&s_done)),
+        |_| true,
+        |_| true,
+        &panel,
+        PanelMode::Expanded,
+        Some(&current),
+        None,
+        &StudioKeys::default(),
+        None,
+        false,
+        false,
+        &Default::default(),
+        &palette,
+    );
+    assert!(!hits3.working_drawn, "settled studio stops animating");
+    let text_done = lines(&buf3, area).join("\n");
+    assert!(!text_done.contains("queued"), "{text_done}");
+    assert!(!text_done.contains("thinking"), "{text_done}");
+}

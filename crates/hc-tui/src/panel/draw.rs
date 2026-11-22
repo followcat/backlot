@@ -353,11 +353,35 @@ pub(crate) fn render(
                 draw_talk(buf, rect, line, paints, frame_of(&studio.key()), palette);
             }
             Row::Input { studio } => {
+                let producer_mark = crate::action::mark::role(&studio.key(), "producer");
+                let tell_in_flight = pending
+                    .pending_label(&producer_mark)
+                    .is_some_and(|l| l.starts_with("telling "));
+                let producer_working = studio.studio.roles.iter().any(|r| {
+                    r.role == "producer"
+                        && r.state == "live"
+                        && r.work == Some(backlot_model::summary::Work::Working)
+                });
+                let awaiting_reply = studio
+                    .studio
+                    .exchange
+                    .last()
+                    .is_some_and(|e| e.who == "user");
+                let cue = if studio.studio.pending_tell || tell_in_flight {
+                    Some(("queued", palette.peach))
+                } else if awaiting_reply && producer_working {
+                    Some(("thinking", palette.accent))
+                } else {
+                    None
+                };
+                hits.working_drawn |= cue.is_some();
                 draw_input(
                     buf,
                     rect,
                     &panel.input,
                     paints,
+                    cue,
+                    panel.spin,
                     frame_of(&studio.key()),
                     palette,
                 );

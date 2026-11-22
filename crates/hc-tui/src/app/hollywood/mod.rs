@@ -210,6 +210,9 @@ impl App {
         } else {
             self.hollywood.editing = false;
         }
+        let machines = self.panel_summaries();
+        self.sync_hollywood_seen(&machines);
+        self.studio.lot.counts.unread = 0;
     }
 
     /// Whether the selection is on a waiting item — the rows whose
@@ -268,11 +271,16 @@ impl App {
             } else {
                 self.hollywood.editing = false;
             }
+            let machines = self.panel_summaries();
+            self.sync_hollywood_seen(&machines);
+            self.studio.lot.counts.unread = 0;
         } else {
             // Leaving the panel retires its ephemeral sub-state.
             self.hollywood.view = None;
             self.hollywood.editing = false;
             self.hollywood.confirm = None;
+            let machines = self.panel_summaries();
+            self.sync_lot(&machines);
         }
     }
 

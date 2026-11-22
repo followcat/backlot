@@ -54,6 +54,8 @@ pub(crate) fn draw_title(
     machines: &[MachineSummary],
     waits: &[Wait<'_>],
     agent: bool,
+    activity: rows::HollywoodActivity,
+    spin: usize,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -93,6 +95,16 @@ pub(crate) fn draw_title(
     // aside — the state is what the row must say.
     let (agent_line, short_line) = if agent {
         let state = state.unwrap_or("down");
+        let suffix = match activity {
+            rows::HollywoodActivity::Working => " · thinking…",
+            rows::HollywoodActivity::Queued => " · queued…",
+            rows::HollywoodActivity::Idle => "",
+        };
+        let short = match activity {
+            rows::HollywoodActivity::Working => "thinking…".to_string(),
+            rows::HollywoodActivity::Queued => "queued…".to_string(),
+            rows::HollywoodActivity::Idle => state.to_string(),
+        };
         let details = summary
             .and_then(|s| s.hollywood.as_ref())
             .map(|h| {
@@ -104,9 +116,9 @@ pub(crate) fn draw_title(
             })
             .unwrap_or_default();
         if details.is_empty() {
-            (state.to_string(), state.to_string())
+            (format!("{state}{suffix}"), short)
         } else {
-            (format!("{state} · {details}"), state.to_string())
+            (format!("{state} · {details}{suffix}"), short)
         }
     } else {
         ("no agent".to_string(), String::new())
@@ -133,8 +145,20 @@ pub(crate) fn draw_title(
         text = pick(room);
     }
     if agent {
-        let colour = rows::state_color(state.unwrap_or("down"), palette);
-        put_text(buf, x, y, 1, "●", base.fg(colour));
+        let (glyph, colour) = match activity {
+            rows::HollywoodActivity::Working => (
+                crate::studio::glyphs::Person::Working.glyph(spin),
+                palette.accent,
+            ),
+            rows::HollywoodActivity::Queued => (
+                crate::studio::glyphs::Person::Working.glyph(spin),
+                palette.peach,
+            ),
+            rows::HollywoodActivity::Idle => {
+                ("●", rows::state_color(state.unwrap_or("down"), palette))
+            }
+        };
+        put_text(buf, x, y, 1, glyph, base.fg(colour));
     } else {
         put_text(buf, x, y, 1, "·", base.fg(palette.overlay0));
     }

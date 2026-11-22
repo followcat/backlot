@@ -65,6 +65,8 @@ pub(crate) struct HollywoodRender {
     pub view: Option<view::ViewRender>,
     /// The input editor's cursor while the line is editing.
     pub cursor: Option<crate::chrome::help::CursorState>,
+    /// Whether an animated spinner mark was drawn this frame.
+    pub working_drawn: bool,
 }
 
 impl HollywoodRender {
@@ -165,9 +167,15 @@ fn render_band(
         frame.width,
         plan.height().min(frame.height),
     );
+    let activity = if opts.agent {
+        rows::hollywood_activity(machines, hollywood.pending.as_deref())
+    } else {
+        rows::HollywoodActivity::Idle
+    };
     let mut hits = HollywoodRender {
         area,
         viewport_rows: plan.shown,
+        working_drawn: activity.is_active(),
         ..HollywoodRender::default()
     };
     if area.is_empty() {
@@ -189,7 +197,16 @@ fn render_band(
     }
     if plan.title {
         title::draw_title(
-            buf, area, y, machines, &waits, opts.agent, palette, &mut hits,
+            buf,
+            area,
+            y,
+            machines,
+            &waits,
+            opts.agent,
+            activity,
+            hollywood.spin,
+            palette,
+            &mut hits,
         );
         y += 1;
     }
@@ -262,6 +279,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    activity,
                     palette,
                     &mut hits,
                 );
@@ -286,6 +304,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    activity,
                     palette,
                     &mut hits,
                 );
@@ -308,6 +327,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    activity,
                     palette,
                     &mut hits,
                 );
@@ -326,6 +346,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    activity,
                     palette,
                     &mut hits,
                 );

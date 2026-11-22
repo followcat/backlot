@@ -341,5 +341,59 @@ fn exchange_preserves_up_to_200_chars_and_truncates_cleanly_above() {
     let parsed: Summary = serde_json::from_value(legacy).unwrap();
     let hw = parsed.hollywood.unwrap();
     assert_eq!(hw.headline_seq, None);
+    assert_eq!(hw.work, None);
+    assert!(!hw.pending);
     assert!(!hw.exchange[0].has_body);
+}
+
+#[test]
+fn hollywood_work_and_pending_project_cleanly_and_compare_in_same_as() {
+    use crate::summary::{Summary, Work, hollywood_section_with_work};
+
+    let mut state = HollywoodState::default();
+    let tell = HollywoodKind::MessageSent {
+        to: "hollywood".into(),
+        studio: None,
+        text: Some("status check".into()),
+        file: None,
+        source_seq: None,
+    };
+    apply(&mut state, &hev(1, "user", tell));
+
+    // Queued behind send gate: `pending` is true; `work` only publishes when `live`.
+    let down = hollywood_section_with_work(&state, "down", None, None, None, Some(Work::Working));
+    assert_eq!(down.work, None, "non-live role omits stale work");
+    assert!(down.pending);
+
+    let working =
+        hollywood_section_with_work(&state, "live", None, None, None, Some(Work::Working));
+    assert_eq!(working.work, Some(Work::Working));
+    assert!(working.pending);
+
+    // Delivered clears `pending`; `Waiting` serializes cleanly and skips false `pending`.
+    apply(
+        &mut state,
+        &hev(2, "stage", HollywoodKind::MessageDelivered { target: 1 }),
+    );
+    let settled =
+        hollywood_section_with_work(&state, "live", None, None, None, Some(Work::Waiting));
+    assert_eq!(settled.work, Some(Work::Waiting));
+    assert!(!settled.pending);
+    let wire = serde_json::to_value(&settled).unwrap();
+    assert_eq!(wire["work"], "waiting");
+    assert!(wire.get("pending").is_none());
+
+    // `Summary::same_as` detects work/pending flips without timestamp churn.
+    let mut a = Summary {
+        schema: SUMMARY_SCHEMA.into(),
+        updated_ms: 10,
+        studios: Vec::new(),
+        hollywood: Some(settled.clone()),
+        backlot_version: None,
+    };
+    let mut b = a.clone();
+    b.updated_ms = 9999;
+    assert!(a.same_as(&b), "ticking updated_ms alone never churns");
+    a.hollywood.as_mut().unwrap().work = Some(Work::Working);
+    assert!(!a.same_as(&b), "work transition publishes immediately");
 }

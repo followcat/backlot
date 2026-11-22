@@ -320,11 +320,14 @@ pub(super) fn draw_person(
 /// (the selected row owns the keys) draws the `›` in accent and the
 /// buffer in the text colour; otherwise everything sits dim so the
 /// line reads as an affordance, not a cursor.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_input(
     buf: &mut Buffer,
     rect: Rect,
     input: &crate::chrome::text_editor::TextEditor,
     editing: bool,
+    cue: Option<(&str, ratatui::style::Color)>,
+    spin: usize,
     frame: Style,
     palette: &Palette,
 ) {
@@ -335,7 +338,15 @@ pub(super) fn draw_input(
         palette.overlay0
     });
     put_text(buf, rect.x + 2, rect.y, 1, "›", mark);
-    let width = rect.width.saturating_sub(4);
+    let badge = cue
+        .filter(|_| rect.width >= 20)
+        .map(|(word, fg)| (format!("{} {word}", Person::Working.glyph(spin)), fg));
+    let badge_w = badge.as_ref().map_or(0, |(b, _)| display_width(b) as u16);
+    let width = if badge_w > 0 {
+        rect.width.saturating_sub(5 + badge_w + 1)
+    } else {
+        rect.width.saturating_sub(4)
+    };
     let (shown, style) = if input.as_str().is_empty() {
         (
             truncate_end("tell producer · / actions", width as usize),
@@ -359,6 +370,16 @@ pub(super) fn draw_input(
         )
     };
     put_text(buf, rect.x + 4, rect.y, width, &shown, style);
+    if let Some((badge, fg)) = badge {
+        put_text(
+            buf,
+            rect.x + rect.width.saturating_sub(1 + badge_w),
+            rect.y,
+            badge_w,
+            &badge,
+            Style::default().fg(fg),
+        );
+    }
 }
 
 /// One user-facing exchange turn inside a block: `│ › <text> │` for

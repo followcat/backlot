@@ -21,7 +21,7 @@ pub use crate::summary_build::role_name;
 // `summary::` path keeps them all.
 pub use crate::hollywood_summary::{
     CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
-    hollywood_section,
+    hollywood_section, hollywood_section_with_work,
 };
 pub use crate::studio_exchange::{
     MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,
@@ -107,6 +107,10 @@ pub struct StudioSummary {
     /// `to: user` reports, oldest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exchange: Vec<StudioExchange>,
+    /// True while an undelivered, non-dropped user `tell` sits in
+    /// this studio's outbox behind the send gate.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub pending_tell: bool,
 }
 
 /// One task's dock projection — the row the panel draws even when no
@@ -413,6 +417,7 @@ pub fn summary_with_exchange(
                     tasks: Vec::new(),
                     roles: Vec::new(),
                     exchange: Vec::new(),
+                    pending_tell: false,
                 });
             }
             continue;
@@ -516,6 +521,10 @@ pub fn summary_with_exchange(
                 .collect(),
             roles,
             exchange: crate::studio_exchange::studio_exchange(state, &studio_snippets),
+            pending_tell: state
+                .messages
+                .iter()
+                .any(|m| m.from == "user" && m.to != "user" && !m.delivered && !m.dropped),
         };
         if done {
             finished_studios.push(entry);

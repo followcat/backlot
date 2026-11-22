@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::hollywood_state::HollywoodState;
-use crate::summary::cap;
+use crate::summary::{Work, cap};
 
 /// The headline's character cap in the document.
 pub const HEADLINE_CHARS: usize = 200;
@@ -31,6 +31,14 @@ pub struct HollywoodSummary {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Screen/signal-classified work state (`working`, `waiting`,
+    /// `blocked`) while `state == "live"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work: Option<Work>,
+    /// True while an undelivered, non-dropped `message.sent` (`to:
+    /// hollywood`) sits in Hollywood's outbox behind the send gate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending: bool,
     /// The newest `hollywood.reported` headline (≤ [`HEADLINE_CHARS`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headline: Option<String>,
@@ -90,11 +98,29 @@ pub fn hollywood_section(
     model: Option<&str>,
     effort: Option<&str>,
 ) -> HollywoodSummary {
+    hollywood_section_with_work(state, role_state, runner, model, effort, None)
+}
+
+/// [`hollywood_section`] carrying the stage's latest sampled [`Work`]
+/// for `bl-hollywood` (published only while `role_state == "live"`).
+pub fn hollywood_section_with_work(
+    state: &HollywoodState,
+    role_state: &str,
+    runner: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
+    work: Option<Work>,
+) -> HollywoodSummary {
     HollywoodSummary {
         state: cap(role_state),
         runner: runner.map(cap),
         model: model.map(cap),
         effort: effort.map(cap),
+        work: (role_state == "live").then_some(work).flatten(),
+        pending: state
+            .messages
+            .iter()
+            .any(|m| m.to == "hollywood" && !m.delivered && !m.dropped),
         headline: state.last_headline().map(cap_headline),
         headline_seq: state.reports.last().map(|r| r.seq),
         cards: state

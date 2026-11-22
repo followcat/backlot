@@ -138,6 +138,8 @@ mod hsetup_tests;
 #[cfg(test)]
 mod hstage_tests;
 #[cfg(test)]
+mod hwatch_tests;
+#[cfg(test)]
 mod hwood_read_tests;
 #[cfg(test)]
 mod hwood_show_tests;

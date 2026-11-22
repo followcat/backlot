@@ -122,6 +122,7 @@ mod tests {
                     tasks: Vec::new(),
                     roles: Vec::new(),
                     exchange: Vec::new(),
+                    pending_tell: false,
                 })
                 .collect(),
             hollywood: None,

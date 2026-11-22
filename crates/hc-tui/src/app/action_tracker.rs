@@ -43,6 +43,11 @@ impl App {
     /// tracker's marks, re-synced on every start and reply.
     fn sync_pending(&mut self) {
         self.hollywood.pending = (!self.actions.pending.is_empty()).then(|| self.actions.marks());
+        if !self.plain && self.has_hollywood_cfg {
+            let machines = self.panel_summaries();
+            self.studio.lot.counts.activity =
+                crate::hollywood::hollywood_activity(&machines, self.hollywood.pending.as_deref());
+        }
     }
 
     /// The single door (§3): a duplicate press on the same target

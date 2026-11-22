@@ -602,12 +602,14 @@ impl Stage {
             } else {
                 "lost"
             };
-            s.hollywood = Some(backlot_model::summary::hollywood_section(
+            let hwork = self.work.borrow().get(&crate::hstage::hkey()).copied();
+            s.hollywood = Some(backlot_model::summary::hollywood_section_with_work(
                 &hs,
                 state,
                 Some(&cfg.runner),
                 Some(&cfg.model),
                 cfg.effort.as_deref(),
+                hwork,
             ));
         }
         s

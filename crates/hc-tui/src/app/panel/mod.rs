@@ -169,6 +169,12 @@ impl App {
 
     // ---------- animation ----------
 
+    /// Whether any spinner animation deadline is currently armed.
+    #[cfg(test)]
+    pub(crate) fn has_animation(&self) -> bool {
+        self.panel_anim_deadline.is_some() || self.opening_anim_deadline.is_some()
+    }
+
     /// The one-shot spin deadline fired: advance the frame, redraw —
     /// the draw re-arms the deadline only while a working mark is
     /// still on screen.

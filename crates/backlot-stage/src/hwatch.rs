@@ -70,11 +70,18 @@ impl Stage {
         }
     }
 
-    /// The work sample: screen classified by the runner's own
-    /// markers plus the core's structured state — the summary and
-    /// the send gate read it. No permission, stall or rate pass:
-    /// Hollywood's prompts are the user's (D17a).
-    pub(crate) async fn hsample(&self, terminals: &[LiveTerminal], runner: &str, now_ms: u64) {
+    /// The work sample: `roles/hollywood/signals.jsonl` first (when
+    /// the recorded session emitted hook lines), then the core's
+    /// structured state, then the runner's screen markers — identical
+    /// to studio roles (`sample.rs`). No permission, stall or rate
+    /// pass: Hollywood's prompts are the user's (D17a).
+    pub(crate) async fn hsample(
+        &self,
+        hdir: &Path,
+        terminals: &[LiveTerminal],
+        runner: &str,
+        now_ms: u64,
+    ) {
         let pair = hstage::hkey();
         if !work_due(self.work_looked.borrow().get(&pair).copied(), now_ms) {
             return;
@@ -95,11 +102,8 @@ impl Stage {
             Ok(r) => r.text,
             Err(_) => return,
         };
-        let work = crate::signals::combine(
-            None,
-            structured_state(t),
-            runners::work_state(runner, &text),
-        );
+        let session = self.hstate.borrow().role.session_id.clone();
+        let work = hsignal_work(hdir, session.as_deref(), t, runner, &text);
         self.work.borrow_mut().insert(pair.clone(), work);
         let prev = self.screens.borrow().get(&pair).cloned();
         self.screens.borrow_mut().insert(
@@ -107,4 +111,24 @@ impl Stage {
             crate::deliver::Screen::note(prev.as_ref(), text, now_ms),
         );
     }
+}
+
+/// Combine Hollywood's hook `signals.jsonl` state, the terminal's
+/// structured state and the runner's screen classification.
+pub(crate) fn hsignal_work(
+    hdir: &Path,
+    session_id: Option<&str>,
+    term: &LiveTerminal,
+    runner: &str,
+    text: &str,
+) -> backlot_model::summary::Work {
+    let signal_state = session_id.and_then(|sid| {
+        let tail = crate::signals::tail(&crate::signals::signals_path(hdir, HOLLYWOOD));
+        crate::signals::state(&tail, sid, &std::collections::BTreeSet::new())
+    });
+    crate::signals::combine(
+        signal_state,
+        structured_state(term),
+        runners::work_state(runner, text),
+    )
 }
