@@ -42,6 +42,8 @@ mod pane_cache;
 mod pane_factory;
 mod panel;
 mod preferences;
+mod r3_s4;
+mod r3_s4_b;
 mod reload;
 mod remote_children;
 mod reveal_focus;

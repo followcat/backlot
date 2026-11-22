@@ -88,17 +88,20 @@ pub(super) fn render_overlays_and_cursor(
     // `alt+y` gets visible feedback and its keys are never swallowed
     // behind an invisible layer. The collapsed strip still waits for
     // the card to leave (U7: with no studio the card is the surface).
+    let active_surface = !app.has_active_modal();
     let band_over_page = app.hollywood.expanded();
+    let call_sheet_band = app.call_sheet_band(area);
     let bar_h = if band_over_page && app.opening.ready() {
         let machines = app.panel_summaries();
         crate::hollywood::expanded_height(
-            area,
+            call_sheet_band,
             &machines,
             &crate::hollywood::status_of(&app.view),
             &app.hollywood,
             crate::hollywood::LayerOpts {
                 agent: app.has_hollywood_cfg,
                 mobile: app.area.0 <= app.shell.mobile_width_threshold,
+                suppress_highlights: !active_surface,
             },
         )
     } else {
@@ -139,49 +142,25 @@ pub(super) fn render_overlays_and_cursor(
             }),
             !app.panel_beside(area.width),
             app.pane.input_refused(),
+            active_surface,
             &app.actions,
             &app.shell.palette,
         )
     } else {
         crate::panel::PanelRender::default()
     };
-    // The Hollywood layer floats over everything the frame owns: the
-    // panes, the cast sidebar and the studio panel — but under the
-    // popup/notice/overlay stack. It reserves nothing: the pane
-    // layout is identical whether it is hidden, a strip or expanded.
-    // U7: it waits for the same first read the card does, and the
-    // collapsed strip never covers the card; the expanded band does
-    // (U8) — the user pressed its key, so it must be visible.
+    // The Hollywood layer floats over `pane + dock` (leaving the left
+    // sidebar whole — `R3-4` / `wide-13`), under the modal/notice stack.
     app.hollywood.spin = app.panel.spin;
-    app.hollywood_hits = if app.hollywood.view.is_some()
-        || (app.hollywood.visible()
-            && app.opening.ready()
-            && (band_over_page || !app.opening_visible()))
+    app.hollywood_hits = if app.hollywood.visible()
+        && app.opening.ready()
+        && (band_over_page || !app.opening_visible())
     {
-        overlay_painted = true;
+        overlay_painted |= app.hollywood.expanded();
         let machines = app.panel_summaries();
-        // The collapsed strip anchors the frame's top-right — the same
-        // corner a beside/full-screen panel's title row owns. Hand it
-        // only the columns left of the panel; a full-screen panel
-        // leaves it none. The expanded band keeps the whole frame —
-        // floating over the panel is its job.
-        let hollywood_area = if app.hollywood.expanded() || app.hollywood.view.is_some() {
-            area
-        } else {
-            let panel_cols = if app.panel_fullscreen_at(area.width) {
-                app.panel_overlay_rect(layout.pane_surface, area.width)
-                    .width
-            } else {
-                app.panel_width(area.width)
-            };
-            Rect {
-                width: area.width.saturating_sub(panel_cols),
-                ..area
-            }
-        };
         crate::hollywood::render(
             buf,
-            hollywood_area,
+            call_sheet_band,
             &machines,
             Some(crate::project::LOCAL_LABEL),
             &crate::hollywood::status_of(&app.view),
@@ -189,6 +168,7 @@ pub(super) fn render_overlays_and_cursor(
             crate::hollywood::LayerOpts {
                 agent: app.has_hollywood_cfg,
                 mobile: app.area.0 <= app.shell.mobile_width_threshold,
+                suppress_highlights: !active_surface,
             },
             &app.shell.palette,
         )
@@ -242,7 +222,7 @@ pub(super) fn render_overlays_and_cursor(
         super::draw_overlays_s3::dim_cells(buf);
         // S5's launcher or herdr's overlay — `draw_overlays_s5` owns
         // the branch and the floating picker.
-        super::draw_overlays_s5::render_help(app, buf, area)
+        super::draw_overlays_s5::render_help(app, buf, area, layout)
     } else {
         crate::chrome::help::HelpRender::default()
     };
@@ -311,10 +291,10 @@ pub(super) fn render_overlays_and_cursor(
     }
     overlay_painted |= app.popup.is_some() || app.peek.is_some();
     app.draw_popups(buf, _now);
-    overlay_painted |= crate::app::notices::render(app, buf, area);
+    overlay_painted |= crate::app::notices::render(app, buf, area, layout);
     // S3's action toast (§3) — the pending reply's card under the
     // notice slot; its `copy cmd` chip feeds the next mouse press.
-    overlay_painted |= super::draw_overlays_s3::draw_action_toast(app, buf, area);
+    overlay_painted |= super::draw_overlays_s3::draw_action_toast(app, buf, area, layout);
     // The restore would repaint the bar over a full-screen panel —
     // skipped then; beside the panes the bar is never covered anyway.
     if !app.panel_fullscreen_at(area.width)
@@ -346,18 +326,7 @@ pub(super) fn render_overlays_and_cursor(
     // input's own cursor takes its place while the line edits. A strip
     // or a hidden bar covers no cells and changes nothing; a popup owns
     // the cursor while one is open.
-    if app.popup.is_none()
-        && let Some(view) = app.hollywood_hits.view.as_ref()
-        && app
-            .want_cursor
-            .pos
-            .is_some_and(|(x, y)| view.area.contains(ratatui::layout::Position::new(x, y)))
-    {
-        app.want_cursor.pos = None;
-        app.want_cursor.anchor = None;
-        app.want_cursor.shape = CursorShape::Default;
-    }
-    if app.hollywood.expanded() && app.popup.is_none() {
+    if app.hollywood.expanded() && app.popup.is_none() && !app.has_active_modal() {
         if app
             .want_cursor
             .pos
@@ -449,17 +418,18 @@ pub(super) fn render_overlays_and_cursor(
     }
     overlay_painted |= app.dialog.is_some();
     app.render_dialog(buf);
-    // The S3 native dialogs (§2): dimmed background, centred inside
-    // `modal_band` — beside a dock they never cross its border
-    // (A6.2); their field cursor owns the host cursor.
-    overlay_painted |= super::draw_overlays_s3::draw_studio_dialog(app, buf, area);
     // The New Studio dialog dims like the help overlay and paints
     // the same panel frame; its hit map feeds the next mouse press
     // and its cursor wish owns the host cursor like the fields do.
     app.ns_hits = if let Some(d) = app.new_studio.as_ref() {
         overlay_painted = true;
         super::draw_overlays_s3::dim_cells(buf);
-        crate::new_studio::render(buf, d, &app.shell.palette, app.modal_band(area))
+        crate::new_studio::render(
+            buf,
+            d,
+            &app.shell.palette,
+            app.backlot_modal_surface(area, layout, 64),
+        )
     } else {
         crate::new_studio::NsHits::default()
     };
@@ -472,12 +442,17 @@ pub(super) fn render_overlays_and_cursor(
         };
     }
     // The Hollywood setup dialog dims like the other modals and
-    // centres in `modal_band()`; its hit map and cursor feed the
-    // next press and the host cursor like the fields do.
+    // centres in `backlot_modal_surface`; its hit map and cursor feed
+    // the next press and the host cursor like the fields do.
     app.hw_hits = if let Some(d) = app.hw_setup.as_ref() {
         overlay_painted = true;
         super::draw_overlays_s3::dim_cells(buf);
-        crate::hw_setup::render(buf, d, &app.shell.palette, app.modal_band(area))
+        crate::hw_setup::render(
+            buf,
+            d,
+            &app.shell.palette,
+            app.backlot_modal_surface(area, layout, 64),
+        )
     } else {
         crate::hw_setup::HwHits::default()
     };
@@ -490,8 +465,8 @@ pub(super) fn render_overlays_and_cursor(
         };
     }
     // The Task & Delivery Sheet dims like the other modals and
-    // centres in `modal_band()` — never crossing a beside dock's
-    // border (A6.2); its keys are the sheet's own while open.
+    // centres in `backlot_modal_surface`; its keys are the sheet's
+    // own while open.
     app.sheet_hits = if let Some(sheet) = app.sheet.as_ref() {
         overlay_painted = true;
         super::draw_overlays_s3::dim_cells(buf);
@@ -502,7 +477,7 @@ pub(super) fn render_overlays_and_cursor(
             .find(|s| s.id == sheet.studio.id);
         crate::sheet::render(
             buf,
-            app.modal_band(area),
+            app.backlot_modal_surface(area, layout, 64),
             sheet,
             summary,
             &app.shell.palette,
@@ -510,6 +485,13 @@ pub(super) fn render_overlays_and_cursor(
     } else {
         crate::sheet::SheetRender::default()
     };
+    // The unified top-level Backlot Reader (`CardView` + Task Sheet
+    // report reads) dims everything underneath and centers via
+    // `backlot_modal_surface` (`R3-M2`).
+    overlay_painted |= super::draw_overlays_s3::draw_reader(app, buf, area, layout);
+    // The S3 native dialogs (§2): dimmed background, centred inside
+    // `backlot_modal_surface`; their field cursor owns the host cursor.
+    overlay_painted |= super::draw_overlays_s3::draw_studio_dialog(app, buf, area, layout);
     // The context menu is the topmost shell overlay; the reference
     // suppresses the host cursor while it is open.
     if let Some(menu) = &app.menu {
@@ -520,8 +502,16 @@ pub(super) fn render_overlays_and_cursor(
         for cell in &mut buf.content {
             cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
         }
+        let max_right = match &menu.target {
+            crate::chrome::menu::ContextMenuTarget::Studio(sm)
+                if sm.clamp_outside_dock && !app.plain =>
+            {
+                area.x + area.width.saturating_sub(app.dock_reserve(area.width))
+            }
+            _ => area.x + area.width,
+        };
         if let Some(rendered) =
-            crate::chrome::menu::render_context_menu(buf, menu, &app.shell.palette)
+            crate::chrome::menu::render_context_menu_in(buf, menu, max_right, &app.shell.palette)
         {
             app.hit_map.context_menu_rows = rendered.rows;
         }

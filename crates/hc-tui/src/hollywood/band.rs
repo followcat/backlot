@@ -39,12 +39,13 @@ pub(crate) fn draw_row(
     local: &str,
     multi: bool,
     mobile: bool,
+    suppress_highlights: bool,
     activity: HollywoodActivity,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
     let target = row.target(waits);
-    let selected = hollywood.selected.as_ref() == Some(&target);
+    let selected = !suppress_highlights && hollywood.selected.as_ref() == Some(&target);
     match row {
         Row::Headline(headline) => {
             let base = Style::default().bg(palette.surface_dim);
@@ -116,7 +117,16 @@ pub(crate) fn draw_row(
             }
         }
         Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
-        Row::Input => draw_input(buf, rect, hollywood, selected, activity, palette, hits),
+        Row::Input => draw_input(
+            buf,
+            rect,
+            hollywood,
+            selected,
+            suppress_highlights,
+            activity,
+            palette,
+            hits,
+        ),
         Row::Setup => draw_setup(buf, rect, palette),
     }
     hits.rows.push((rect, target));
@@ -349,11 +359,13 @@ fn draw_talk(
 
 /// The `tell hollywood` line on `active_row_bg`: `›` in accent, then
 /// the placeholder or the editor's text.
+#[allow(clippy::too_many_arguments)]
 fn draw_input(
     buf: &mut Buffer,
     rect: Rect,
     hollywood: &Hollywood,
     selected: bool,
+    suppress_highlights: bool,
     activity: HollywoodActivity,
     palette: &Palette,
     hits: &mut HollywoodRender,
@@ -367,7 +379,12 @@ fn draw_input(
     if field.width < 4 {
         return;
     }
-    buf.set_style(field, Style::default().bg(palette.active_row_bg));
+    let field_bg = if suppress_highlights {
+        palette.surface_dim
+    } else {
+        palette.active_row_bg
+    };
+    buf.set_style(field, Style::default().bg(field_bg));
     if selected {
         put_text(
             buf,
@@ -386,17 +403,15 @@ fn draw_input(
             Style::default().fg(palette.accent).bg(palette.surface_dim),
         );
     }
-    put_text(
-        buf,
-        field.x + 1,
-        field.y,
-        1,
-        "›",
+    let prompt_style = if suppress_highlights {
+        Style::default().fg(palette.overlay0).bg(field_bg)
+    } else {
         Style::default()
             .fg(palette.accent)
-            .bg(palette.active_row_bg)
-            .add_modifier(Modifier::BOLD),
-    );
+            .bg(field_bg)
+            .add_modifier(Modifier::BOLD)
+    };
+    put_text(buf, field.x + 1, field.y, 1, "›", prompt_style);
     hits.input = field;
     let badge = match activity {
         HollywoodActivity::Working if field.width >= 24 => Some((
@@ -422,12 +437,12 @@ fn draw_input(
         (field.width - 3).saturating_sub(badge_w),
         1,
     );
-    if hollywood.editing {
+    if hollywood.editing && !suppress_highlights {
         hits.cursor = crate::chrome::text_editor::render(
             buf,
             text,
             &hollywood.input,
-            Style::default().fg(palette.text).bg(palette.active_row_bg),
+            Style::default().fg(palette.text).bg(field_bg),
         );
     } else if hollywood.input.as_str().is_empty() {
         put_text(
@@ -438,7 +453,7 @@ fn draw_input(
             &truncate_end("tell hollywood what you need…", text.width as usize),
             Style::default()
                 .fg(palette.overlay0)
-                .bg(palette.active_row_bg)
+                .bg(field_bg)
                 .add_modifier(Modifier::ITALIC),
         );
     } else {
@@ -448,7 +463,13 @@ fn draw_input(
             text.y,
             text.width,
             &truncate_end(hollywood.input.as_str(), text.width as usize),
-            Style::default().fg(palette.text).bg(palette.active_row_bg),
+            Style::default()
+                .fg(if suppress_highlights {
+                    palette.overlay0
+                } else {
+                    palette.text
+                })
+                .bg(field_bg),
         );
     }
     if let Some((badge, fg)) = badge {
@@ -458,7 +479,7 @@ fn draw_input(
             field.y,
             badge_w,
             &badge,
-            Style::default().fg(fg).bg(palette.active_row_bg),
+            Style::default().fg(fg).bg(field_bg),
         );
     }
 }

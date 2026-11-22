@@ -224,37 +224,7 @@ pub(crate) fn render(
         Style::default().fg(palette.overlay0),
     );
 
-    // The `o`-opened report covers the body: title line, then the
-    // file's own text scrolled.
-    if let Some(view) = &sheet.view {
-        let head = format!(" {} ", view.title);
-        put_text(
-            buf,
-            body.x,
-            body.y,
-            body.width,
-            &truncate_end(&head, body.width as usize),
-            Style::default()
-                .fg(palette.text)
-                .add_modifier(Modifier::BOLD),
-        );
-        let vscroll = view.scroll.min(view.lines.len().saturating_sub(1));
-        for (at, l) in view
-            .lines
-            .iter()
-            .skip(vscroll)
-            .take(body.height.saturating_sub(1) as usize)
-            .enumerate()
-        {
-            put_text(
-                buf,
-                body.x,
-                body.y + 1 + at as u16,
-                body.width,
-                &truncate_end(l, body.width as usize),
-                Style::default().fg(palette.text),
-            );
-        }
-    }
+    // Report reads (`sheet.view`) render through the unified top-level
+    // Reader modal in `draw_overlays` (`R3-M2`).
     SheetRender { frame, body }
 }

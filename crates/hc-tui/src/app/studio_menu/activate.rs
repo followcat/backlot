@@ -282,11 +282,18 @@ impl App {
             self.show_notice("Peek unavailable", "the role has no screen to peek");
             return;
         };
+        let studio_title = menu
+            .studio
+            .as_ref()
+            .map(|key| self.studio_peek_title(key, &role.name));
         self.open_peek(terminal);
-        if role.attention_user
-            && let (Some(peek), Some(key)) = (self.peek.as_mut(), menu.studio.as_ref())
-        {
-            peek.prompt = Some((key.clone(), role.role.clone()));
+        if let Some(peek) = self.peek.as_mut() {
+            peek.studio_title = studio_title;
+            if role.attention_user
+                && let Some(key) = menu.studio.as_ref()
+            {
+                peek.prompt = Some((key.clone(), role.role.clone()));
+            }
         }
     }
 }

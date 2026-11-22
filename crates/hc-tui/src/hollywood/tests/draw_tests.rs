@@ -104,6 +104,7 @@ fn draw(
         LayerOpts {
             agent: true,
             mobile,
+            ..LayerOpts::default()
         },
         palette,
     )
@@ -124,6 +125,7 @@ fn draw_without_agent(
         LayerOpts {
             agent: false,
             mobile: false,
+            ..LayerOpts::default()
         },
         palette,
     )
@@ -692,6 +694,7 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
             LayerOpts {
                 agent: true,
                 mobile: false,
+                ..LayerOpts::default()
             },
             &palettes()[0],
         );
@@ -732,22 +735,20 @@ fn the_band_is_opaque() {
 
 #[test]
 fn the_card_view_draws_over_the_layer() {
-    let summary = summary();
-    let mut open = layer(LayerMode::Expanded);
-    open.view = Some(CardView {
+    let view = CardView {
         card: Some("c4".into()),
         title: "c4".into(),
         lines: (0..30).map(|i| format!("draft line {i}")).collect(),
         scroll: 0,
-    });
+    };
     let area = Rect::new(0, 0, 80, 24);
-    let (buf, hits) = draw(area, Some(&summary), true, &open, false, &palettes()[0]);
+    let mut buf = Buffer::empty(area);
+    let view_hits = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("draft line 0"), "{text}");
     assert!(text.contains("╭"), "{text}");
     assert!(text.contains("c4"), "{text}");
-    let view = hits.view.expect("the view's hit map");
-    assert!(view.metrics.unwrap().max_offset_from_bottom > 0);
+    assert!(view_hits.metrics.unwrap().max_offset_from_bottom > 0);
 }
 
 #[test]
@@ -755,18 +756,16 @@ fn the_card_view_has_a_complete_border_and_footer() {
     // §4: the view is a real box — `─` fills the top edge after the
     // title, `│` runs down both sides, and the bottom edge carries
     // `a apply  x cancel  esc back`.
-    let summary = summary();
-    let mut open = layer(LayerMode::Expanded);
-    open.view = Some(CardView {
+    let view = CardView {
         card: Some("c4".into()),
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
-    });
+    };
     let area = Rect::new(0, 0, 80, 24);
+    let mut buf = Buffer::empty(area);
     let palette = palettes()[0].clone();
-    let (buf, hits) = draw(area, Some(&summary), true, &open, false, &palette);
-    let view = hits.view.expect("the view's hit map");
+    let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palette);
     let top = row_of(&buf, area, view.area.y);
     assert!(top.contains('╭') && top.contains('╮'), "top edge: {top}");
     // Everything after the title up to `╮` is `─`.
@@ -804,26 +803,23 @@ fn the_card_view_has_a_complete_border_and_footer() {
 fn the_card_views_footer_shows_the_pending_mark() {
     // An action kicked off inside the view reports `… <label>` in
     // the footer while it runs.
-    let mut open = layer(LayerMode::Expanded);
-    open.pending = Some("card apply c4".into());
-    open.view = Some(CardView {
+    let view = CardView {
         card: Some("c4".into()),
         title: "c4".into(),
         lines: vec!["cast: alice".into()],
         scroll: 0,
-    });
+    };
     let area = Rect::new(0, 0, 80, 24);
-    let (buf, hits) = draw(area, None, true, &open, false, &palettes()[0]);
-    let view = hits.view.expect("the view's hit map");
+    let mut buf = Buffer::empty(area);
+    let view =
+        crate::hollywood::render_view(&mut buf, area, &view, Some("card apply c4"), &palettes()[0]);
     let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
     assert!(bottom.contains("… card apply c4"), "footer: {bottom}");
 }
 
 #[test]
 fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
-    let mut open = layer(LayerMode::Expanded);
-    open.pending = Some("task:Local:acme-shop:t1".into());
-    open.view = Some(CardView {
+    let view = CardView {
         card: None,
         title: "hollywood #7".into(),
         lines: vec![
@@ -832,10 +828,10 @@ fn a_read_only_card_view_draws_the_scroll_footer_without_card_keys() {
             "detail line".into(),
         ],
         scroll: 0,
-    });
+    };
     let area = Rect::new(0, 0, 80, 24);
-    let (buf, hits) = draw(area, None, true, &open, false, &palettes()[0]);
-    let view = hits.view.expect("the view's hit map");
+    let mut buf = Buffer::empty(area);
+    let view = crate::hollywood::render_view(&mut buf, area, &view, None, &palettes()[0]);
     let top = row_of(&buf, area, view.area.y);
     assert!(top.contains("hollywood #7"), "top: {top}");
     let bottom = row_of(&buf, area, view.area.y + view.area.height - 1);
@@ -880,6 +876,7 @@ fn the_stage_and_ready_rows_compact_like_the_others() {
             LayerOpts {
                 agent: true,
                 mobile: true,
+                ..LayerOpts::default()
             },
             &palettes()[0],
         );
@@ -973,6 +970,7 @@ fn a_remote_studios_frame_titles_its_machine() {
         LayerOpts {
             agent: true,
             mobile: false,
+            ..LayerOpts::default()
         },
         &palettes()[0],
     );

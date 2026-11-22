@@ -4,7 +4,7 @@
 use super::*;
 
 /// The dim every modal paints under itself.
-pub(super) fn dim_cells(buf: &mut Buffer) {
+pub(in crate::app) fn dim_cells(buf: &mut Buffer) {
     for cell in &mut buf.content {
         cell.modifier = Modifier::from_bits_truncate(cell.modifier.bits() & !0xf000);
         cell.set_style(cell.style().add_modifier(Modifier::DIM));
@@ -15,16 +15,31 @@ pub(super) fn dim_cells(buf: &mut Buffer) {
 /// slot; its chip — `copy cmd` on a failure, `start stage` on the
 /// stopped-stage offer — feeds the next mouse press. `true` when it
 /// painted.
-pub(super) fn draw_action_toast(app: &mut App, buf: &mut Buffer, area: Rect) -> bool {
+pub(super) fn draw_action_toast(
+    app: &mut App,
+    buf: &mut Buffer,
+    area: Rect,
+    layout: &crate::chrome::snapshot::ClientShellLayout,
+) -> bool {
     let Some(toast) = app.action_toast.as_ref() else {
         app.action_toast_hit = Rect::default();
         app.action_chip_hit = Rect::default();
         return false;
     };
-    let offset = if app.notice.is_some() || !app.notification_hit.is_empty() {
-        5
+    let (toast_area, offset) = if app.plain {
+        let offset = if app.notice.is_some() || !app.notification_hit.is_empty() {
+            5
+        } else {
+            1
+        };
+        (area, offset)
     } else {
-        1
+        let offset = if app.notice.is_some() || !app.notification_hit.is_empty() {
+            4
+        } else {
+            0
+        };
+        (app.toast_surface(area, layout), offset)
     };
     let (body, chip) = if toast.fail {
         (
@@ -41,7 +56,7 @@ pub(super) fn draw_action_toast(app: &mut App, buf: &mut Buffer, area: Rect) -> 
     };
     let (rect, chip_hit) = crate::chrome::notice_render::render_action_toast(
         buf,
-        area,
+        toast_area,
         &toast.title,
         body,
         chip,
@@ -53,14 +68,63 @@ pub(super) fn draw_action_toast(app: &mut App, buf: &mut Buffer, area: Rect) -> 
     true
 }
 
+/// The unified top-level Backlot Reader (`R3-M2`): renders `hollywood.view`
+/// (`card show`, `report show`, `hollywood show`, `records`) or an open
+/// Task Sheet report (`sheet.view`) centered inside `backlot_modal_surface`
+/// with dimmed backdrop. `true` when one painted.
+pub(super) fn draw_reader(
+    app: &mut App,
+    buf: &mut Buffer,
+    area: Rect,
+    layout: &crate::chrome::snapshot::ClientShellLayout,
+) -> bool {
+    let owned_sheet_view;
+    let (view, pending) = if let Some(view) = app.hollywood.view.as_ref() {
+        (view, app.hollywood.pending.as_deref())
+    } else if let Some(sv) = app.sheet.as_ref().and_then(|s| s.view.as_ref()) {
+        owned_sheet_view = crate::hollywood::CardView {
+            card: None,
+            title: sv.title.clone(),
+            lines: sv.lines.clone(),
+            scroll: sv.scroll,
+        };
+        (&owned_sheet_view, None)
+    } else {
+        app.hollywood_hits.view = None;
+        return false;
+    };
+    dim_cells(buf);
+    let surface = app.backlot_modal_surface(area, layout, 64);
+    app.hollywood_hits.view = Some(crate::hollywood::render_view(
+        buf,
+        surface,
+        view,
+        pending,
+        &app.shell.palette,
+    ));
+    app.want_cursor.pos = None;
+    app.want_cursor.anchor = None;
+    true
+}
+
 /// The S3 native dialogs (§2): dimmed background, centred inside
-/// `modal_band` — beside a dock they never cross its border (A6.2);
-/// their field cursor owns the host cursor. `true` when one painted.
-pub(super) fn draw_studio_dialog(app: &mut App, buf: &mut Buffer, area: Rect) -> bool {
+/// `backlot_modal_surface` — beside a dock they never cross its border
+/// (A6.2); their field cursor owns the host cursor. `true` when one painted.
+pub(super) fn draw_studio_dialog(
+    app: &mut App,
+    buf: &mut Buffer,
+    area: Rect,
+    layout: &crate::chrome::snapshot::ClientShellLayout,
+) -> bool {
     app.studio_dialog_hits = if let Some(d) = app.studio_dialog.as_ref() {
         dim_cells(buf);
-        crate::chrome::studio_dialogs::render(buf, app.modal_band(area), d, &app.shell.palette)
-            .unwrap_or_default()
+        crate::chrome::studio_dialogs::render(
+            buf,
+            app.backlot_modal_surface(area, layout, 64),
+            d,
+            &app.shell.palette,
+        )
+        .unwrap_or_default()
     } else {
         crate::chrome::studio_dialogs::DialogHits::default()
     };

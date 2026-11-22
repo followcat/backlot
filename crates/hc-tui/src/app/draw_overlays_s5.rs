@@ -13,6 +13,7 @@ pub(super) fn render_help(
     app: &mut App,
     buf: &mut ratatui::buffer::Buffer,
     area: ratatui::layout::Rect,
+    layout: &crate::chrome::snapshot::ClientShellLayout,
 ) -> crate::chrome::help::HelpRender {
     if !app.help_launcher() {
         return crate::chrome::help::render_help_overlay(
@@ -33,13 +34,13 @@ pub(super) fn render_help(
         .unwrap_or_default();
     }
     // S5's action launcher: runnable rows on top, herdr's reference
-    // sections under them, the glyph legend pinned. `modal_band`
-    // keeps it off a beside dock's columns.
+    // sections under them, the glyph legend pinned. `backlot_modal_surface`
+    // centers it inside `pane_surface` (falling back on narrow windows).
     let groups = app.help_filtered_groups();
     let legend = app.help_legend();
     let mut hits = crate::chrome::help_launcher::render_launcher(
         buf,
-        app.modal_band(area),
+        app.backlot_modal_surface(area, layout, 64),
         &app.help_state,
         &groups,
         &legend,

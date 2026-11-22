@@ -44,6 +44,8 @@ pub(crate) struct FramesView<'a> {
     pub multi: bool,
     /// Each frame's own machine line and stage — `machine` keyed.
     pub status: &'a Status<'a>,
+    /// Suppress selection border/background while a modal covers it.
+    pub suppress_highlights: bool,
 }
 
 /// What the frames drew.
@@ -116,7 +118,7 @@ pub(crate) fn render(
             }
             let rect = Rect::new(x, y, fw, FRAME_H);
             let frame = &frames[index];
-            let selected = view.selected == Some(&frame.target());
+            let selected = !view.suppress_highlights && view.selected == Some(&frame.target());
             match frame {
                 Frame::Studio(studio) => {
                     let label =

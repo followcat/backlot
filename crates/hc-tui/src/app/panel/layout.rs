@@ -184,6 +184,20 @@ impl App {
         }
     }
 
+    /// The horizontal band the expanded Call Sheet spans: everything
+    /// right of the rendered sidebar (`pane + dock`), so the left
+    /// sidebar (`machines` and `cast` headings included) stays fully
+    /// visible (`R3-4` / `wide-13`).
+    pub(crate) fn call_sheet_band(&self, area: Rect) -> Rect {
+        let sidebar_w = self.sidebar_render_width(area.width);
+        Rect::new(
+            area.x + sidebar_w,
+            area.y,
+            area.width.saturating_sub(sidebar_w),
+            area.height,
+        )
+    }
+
     /// The horizontal band a full-buffer modal centers in: `area`
     /// minus a beside dock's columns, sidebar included — the one
     /// geometry every dimmed dialog shares (A6.2). With no dock open
@@ -197,6 +211,62 @@ impl App {
         )
     }
 
+    /// The centering rect for Backlot's own modals (`R3-M2`):
+    /// `layout.pane_surface` when it is at least `min_modal_w` wide
+    /// (so modals stay between the sidebar and any beside-Dock),
+    /// falling back to `modal_band(area)` (full viewport when no
+    /// beside-Dock is open, e.g. `80×24` / `60×20`).
+    pub(crate) fn backlot_modal_surface(
+        &self,
+        area: Rect,
+        layout: &crate::chrome::snapshot::ClientShellLayout,
+        min_modal_w: u16,
+    ) -> Rect {
+        if layout.pane_surface.width >= min_modal_w {
+            layout.pane_surface
+        } else {
+            self.modal_band(area)
+        }
+    }
+
+    /// The studio-mode toast/notice anchor rect (`R3-M12`): top-right
+    /// of `layout.pane_surface` (left of any beside-Dock), pushed
+    /// below an expanded Call Sheet band when one covers the top of
+    /// `pane_surface`.
+    pub(crate) fn toast_surface(
+        &self,
+        _area: Rect,
+        layout: &crate::chrome::snapshot::ClientShellLayout,
+    ) -> Rect {
+        let mut rect = layout.pane_surface;
+        if self.hollywood.expanded() && self.hollywood_hits.area.height > 0 {
+            let below = self.hollywood_hits.area.bottom();
+            if below > rect.y {
+                let bottom = rect.bottom();
+                rect.y = below.min(bottom);
+                rect.height = bottom.saturating_sub(rect.y);
+            }
+        }
+        rect
+    }
+
+    /// Whether any modal (Backlot or Herdr covering Backlot surfaces)
+    /// is currently open — used to suppress underlying Dock and Call
+    /// Sheet active highlights, `▌` bars, and secondary cursors (`R3-M2`).
+    pub(crate) fn has_active_modal(&self) -> bool {
+        self.new_studio.is_some()
+            || self.hw_setup.is_some()
+            || self.sheet.is_some()
+            || self.hollywood.view.is_some()
+            || self.studio_dialog.is_some()
+            || self.peek.is_some()
+            || self.help
+            || self.settings.is_some()
+            || self.navigator.is_some()
+            || self.dialog.is_some()
+            || self.update_modal.is_some()
+    }
+
     /// The focused pane's hardware cursor stays hidden while any
     /// overlay owns the frame — every modal above plus the sheet and
     /// a full-screen dock; otherwise it would print through the
@@ -207,6 +277,9 @@ impl App {
             || self.new_studio.is_some()
             || self.hw_setup.is_some()
             || self.sheet.is_some()
+            || self.studio_dialog.is_some()
+            || self.hollywood.view.is_some()
+            || self.peek.is_some()
             || self.menu.is_some()
             || self.navigator.is_some()
             || self.settings.is_some()

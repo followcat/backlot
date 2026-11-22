@@ -54,6 +54,10 @@ fn the_reason_dialog_shows_its_title_and_line() {
         "{text}"
     );
     assert!(text.contains("reason:"), "{text}");
+    // R3-N4: only the button row carries `↵ submit` / `esc cancel`, no
+    // duplicate plain-text hint line above the buttons.
+    assert_eq!(text.matches("↵ submit").count(), 1, "{text}");
+    assert_eq!(text.matches("esc cancel").count(), 1, "{text}");
 }
 
 #[test]

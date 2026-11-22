@@ -368,7 +368,7 @@ async fn an_open_report_leaves_no_tab_text_inside_the_body() {
     drain_sheet(&mut app).await;
     let buf = draw_to(&mut app, 120, 36);
     let body = app.sheet_hits.body;
-    let text: String = (body.y..body.y + body.height)
+    let body_text: String = (body.y..body.y + body.height)
         .map(|y| {
             (body.x..body.x + body.width)
                 .map(|x| buf.buffer()[(x, y)].symbol().to_string())
@@ -376,11 +376,25 @@ async fn an_open_report_leaves_no_tab_text_inside_the_body() {
         })
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(text.contains("short body"), "{text}");
     assert!(
-        !text.contains("agent-a"),
-        "tab text under the report: {text}"
+        !body_text.contains("agent-a"),
+        "tab text under the report: {body_text}"
     );
+    let reader = app
+        .hollywood_hits
+        .view
+        .as_ref()
+        .expect("unified Reader rendered")
+        .area;
+    let reader_text: String = (reader.y..reader.y + reader.height)
+        .map(|y| {
+            (reader.x..reader.x + reader.width)
+                .map(|x| buf.buffer()[(x, y)].symbol().to_string())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(reader_text.contains("short body"), "{reader_text}");
 }
 
 /// R14: an experimental studio's overview head carries `exp` —

@@ -286,6 +286,37 @@ impl App {
         let (frame, body) = (self.sheet_hits.frame, self.sheet_hits.body);
         let hit =
             |r: ratatui::layout::Rect| r.contains(ratatui::layout::Position { x: pos.0, y: pos.1 });
+        // An opened report renders in the unified top-level Reader (`R3-M2`):
+        // wheel scrolls it, clicks outside Reader close only the Reader.
+        if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
+            let reader_area = self.hollywood_hits.view.as_ref().map(|v| v.area);
+            let max_scroll = self
+                .hollywood_hits
+                .view
+                .as_ref()
+                .and_then(|v| v.metrics)
+                .map(|m| m.max_offset_from_bottom);
+            match mouse.kind {
+                MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                    let delta: isize = if mouse.kind == MouseEventKind::ScrollDown {
+                        3
+                    } else {
+                        -3
+                    };
+                    if let Some(view) = self.sheet.as_mut().and_then(|s| s.view.as_mut()) {
+                        let next = view.scroll.saturating_add_signed(delta);
+                        view.scroll = max_scroll.map_or(next, |max| next.min(max));
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Left) if reader_area.is_none_or(|r| !hit(r)) => {
+                    if let Some(sheet) = self.sheet.as_mut() {
+                        sheet.view = None;
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) if !hit(frame) => {
                 self.sheet = None;
@@ -296,25 +327,17 @@ impl App {
                 } else {
                     -3
                 };
-                if self.sheet.as_ref().is_some_and(|s| s.view.is_some()) {
-                    if let Some(view) = self.sheet.as_mut().and_then(|s| s.view.as_mut()) {
-                        view.scroll = view.scroll.saturating_add_signed(delta);
-                    }
-                } else {
-                    self.sheet_move(delta);
-                }
+                self.sheet_move(delta);
             }
             MouseEventKind::Down(MouseButton::Left) if hit(body) => {
                 let summary = self.sheet_summary();
                 let Some(sheet) = self.sheet.as_mut() else {
                     return;
                 };
-                if sheet.view.is_none() {
-                    let lines = lines_for(sheet, summary.as_ref());
-                    let row = sheet.scroll + (pos.1 - body.y) as usize;
-                    if lines.get(row).is_some_and(|l| l.selectable) {
-                        sheet.sel = row;
-                    }
+                let lines = lines_for(sheet, summary.as_ref());
+                let row = sheet.scroll + (pos.1 - body.y) as usize;
+                if lines.get(row).is_some_and(|l| l.selectable) {
+                    sheet.sel = row;
                 }
             }
             _ => {}

@@ -97,22 +97,9 @@ pub(crate) fn render(
 ) -> HollywoodRender {
     match hollywood.mode {
         // The collapsed bar is the lot pill in the chrome's own row —
-        // the floating strip is gone, so a hidden or collapsed layer
-        // draws nothing unless a read-only `CardView` (`records`,
-        // `report show`) is open.
-        LayerMode::Hidden | LayerMode::Collapsed => match hollywood.view.as_ref() {
-            Some(view) => HollywoodRender {
-                view: Some(view::render_view(
-                    buf,
-                    frame,
-                    view,
-                    hollywood.pending.as_deref(),
-                    palette,
-                )),
-                ..HollywoodRender::default()
-            },
-            None => HollywoodRender::default(),
-        },
+        // the floating strip is gone; Reader (`CardView`) renders as
+        // a top-level dimmed modal in `draw_overlays` (`R3-M2`).
+        LayerMode::Hidden | LayerMode::Collapsed => HollywoodRender::default(),
         LayerMode::Expanded => render_band(
             buf, frame, machines, local, status, hollywood, opts, palette,
         ),
@@ -226,6 +213,7 @@ fn render_band(
                 local,
                 multi,
                 status,
+                suppress_highlights: opts.suppress_highlights,
             },
             palette,
         );
@@ -245,6 +233,7 @@ fn render_band(
             hollywood.frame_scroll,
             local,
             multi,
+            opts.suppress_highlights,
             palette,
         );
         hits.rows.extend(drawn.hits);
@@ -279,6 +268,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    opts.suppress_highlights,
                     activity,
                     palette,
                     &mut hits,
@@ -304,6 +294,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    opts.suppress_highlights,
                     activity,
                     palette,
                     &mut hits,
@@ -327,6 +318,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    opts.suppress_highlights,
                     activity,
                     palette,
                     &mut hits,
@@ -346,6 +338,7 @@ fn render_band(
                     local_label,
                     multi,
                     opts.mobile,
+                    opts.suppress_highlights,
                     activity,
                     palette,
                     &mut hits,
@@ -400,15 +393,6 @@ fn render_band(
     }
     if plan.bottom_sprocket {
         title::draw_sprocket(buf, area, y, '▀', palette);
-    }
-    if let Some(view) = hollywood.view.as_ref() {
-        hits.view = Some(view::render_view(
-            buf,
-            area,
-            view,
-            hollywood.pending.as_deref(),
-            palette,
-        ));
     }
     hits
 }

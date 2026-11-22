@@ -118,7 +118,7 @@ impl App {
                     .find(|(_, t)| *t == Target::Input(key.clone()))
                     .map(|(rect, _)| (rect.x + 1, rect.y + 1))
                     .unwrap_or((self.panel_hits.area.x + 1, self.panel_hits.area.y + 2));
-                self.open_studio_menu(studio_menu(), point);
+                self.open_studio_menu(studio_menu().inside_dock(), point);
             }
             "help" | "?" => self.show_notice("/ verbs", SLASH_HELP),
             "tell" => {

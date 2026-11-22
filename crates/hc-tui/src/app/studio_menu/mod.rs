@@ -71,7 +71,7 @@ impl App {
         let Some(menu) = self.studio_menu_for(target, &machines) else {
             return;
         };
-        self.open_studio_menu(menu, point);
+        self.open_studio_menu(menu.inside_dock(), point);
     }
 
     /// `m` while the dock owns the keys — the selected row's menu,

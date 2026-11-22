@@ -34,7 +34,7 @@ pub(crate) use rows::{
     hollywood_unread_count, local_summary, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
-pub(crate) use view::CardView;
+pub(crate) use view::{CardView, render_view};
 
 use crate::chrome::text_editor::TextEditor;
 
@@ -61,6 +61,9 @@ pub(crate) struct LayerOpts {
     pub agent: bool,
     /// The narrow-width full-screen cut.
     pub mobile: bool,
+    /// Suppress active selection highlights, `▌` bars, active `›`
+    /// `active_row_bg`, and edit cursors while a modal covers it (`R3-M2`).
+    pub suppress_highlights: bool,
 }
 
 /// The whole client-local layer state (D21): which of the three

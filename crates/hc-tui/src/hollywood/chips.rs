@@ -36,6 +36,7 @@ pub(crate) fn render(
     scroll: usize,
     local: Option<&str>,
     multi: bool,
+    suppress_highlights: bool,
     palette: &Palette,
 ) -> ChipsRender {
     let mut out = ChipsRender::default();
@@ -53,7 +54,7 @@ pub(crate) fn render(
         // ` !N?` , `]` — each measured so a chip that does not fit
         // whole sets `more_right` and stops the row.
         let target = frame.target();
-        let sel = selected == Some(&target);
+        let sel = !suppress_highlights && selected == Some(&target);
         let bg = if sel {
             palette.selection_bg
         } else {

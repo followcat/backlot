@@ -63,6 +63,7 @@ fn exchange_rows_render_glyphs_selection_and_contextual_read_hint() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette,
     );
@@ -114,6 +115,7 @@ fn exchange_rows_render_glyphs_selection_and_contextual_read_hint() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette,
     );
@@ -217,6 +219,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette,
     );
@@ -243,6 +246,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette,
     );
@@ -272,6 +276,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
         None,
         false,
         false,
+        true,
         &Default::default(),
         &palette,
     );

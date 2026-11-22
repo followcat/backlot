@@ -227,13 +227,25 @@ pub(crate) struct ContextMenuRender {
     pub rows: Vec<(Rect, usize)>,
 }
 
+#[cfg(test)]
 pub(crate) fn render_context_menu(
     buffer: &mut Buffer,
     menu: &ContextMenu,
     palette: &Palette,
 ) -> Option<ContextMenuRender> {
+    render_context_menu_in(buffer, menu, buffer.area.right(), palette)
+}
+
+/// Render `menu` horizontally clamped inside `screen.x..max_right`.
+pub(crate) fn render_context_menu_in(
+    buffer: &mut Buffer,
+    menu: &ContextMenu,
+    max_right: u16,
+    palette: &Palette,
+) -> Option<ContextMenuRender> {
     let items = menu.items();
     let screen = buffer.area;
+    let bound_w = max_right.saturating_sub(screen.x).min(screen.width);
     let max_item_width = items
         .iter()
         .map(|item| {
@@ -241,20 +253,20 @@ pub(crate) fn render_context_menu(
         })
         .max()
         .unwrap_or(0);
-    // S3 §1: menus clamp to `min(34, cols - 4)`; the reference menus
+    // S3 §1: menus clamp to `min(34, bound_w - 4)`; the reference menus
     // fit under that cap at every tested size, so one rule serves.
-    let max_width = screen.width.saturating_sub(4).clamp(1, 34);
+    let max_width = bound_w.saturating_sub(4).clamp(1, 34);
     let width = max_item_width
         .saturating_add(4)
         .max(14)
         .min(max_width)
-        .min(screen.width.max(1));
+        .min(bound_w.max(1));
     let height = (items.len() as u16)
         .saturating_add(2)
         .min(screen.height.max(1));
     let x = menu
         .x
-        .min(screen.x.saturating_add(screen.width.saturating_sub(width)));
+        .min(screen.x.saturating_add(bound_w.saturating_sub(width)));
     let y = menu.y.min(
         screen
             .y

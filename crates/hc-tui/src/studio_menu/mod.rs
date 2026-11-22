@@ -284,9 +284,19 @@ pub(crate) struct StudioMenu {
     /// Studio-relative file path on a `StudioTalk` row (`messages/…`
     /// or `reports/…`).
     pub talk_file: Option<String>,
+    /// Clamp horizontally left of any beside-Dock when opened outside
+    /// the Dock (`R3-M12`: Lot Pill, Call Sheet, Sidebar, `Ctrl+B m`).
+    pub clamp_outside_dock: bool,
 }
 
 impl StudioMenu {
+    /// Mark this menu as opened from inside the Dock itself so it
+    /// clamps to the full frame width rather than left of `dock_reserve`.
+    pub(crate) fn inside_dock(mut self) -> Self {
+        self.clamp_outside_dock = false;
+        self
+    }
+
     /// The machine stage acts run on — a Stage row's own, else the
     /// studio's.
     pub(crate) fn machine(&self) -> Option<&str> {
@@ -329,6 +339,7 @@ impl StudioMenu {
             backlot: None,
             latest: None,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
@@ -359,6 +370,7 @@ impl StudioMenu {
             backlot: None,
             latest: None,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
@@ -380,6 +392,7 @@ impl StudioMenu {
             backlot: None,
             latest: None,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
@@ -401,6 +414,7 @@ impl StudioMenu {
             backlot: None,
             latest: None,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
@@ -423,6 +437,7 @@ impl StudioMenu {
             backlot: None,
             latest: None,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
@@ -452,6 +467,7 @@ impl StudioMenu {
             backlot: Some(backlot),
             latest,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
@@ -473,6 +489,7 @@ impl StudioMenu {
             backlot: None,
             latest: None,
             talk_file: None,
+            clamp_outside_dock: true,
         }
     }
 
