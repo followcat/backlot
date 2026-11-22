@@ -313,6 +313,54 @@ pub(super) fn draw_person(
     );
 }
 
+/// The block's `›` line — the studio's own input surface inside its
+/// frame. `text` is the editor buffer; while it is empty a dim
+/// placeholder teaches both channels: a plain line `tell`s the
+/// producer, a leading `/` runs the deterministic verbs. `editing`
+/// (the selected row owns the keys) draws the `›` in accent and the
+/// buffer in the text colour; otherwise everything sits dim so the
+/// line reads as an affordance, not a cursor.
+pub(super) fn draw_input(
+    buf: &mut Buffer,
+    rect: Rect,
+    input: &crate::chrome::text_editor::TextEditor,
+    editing: bool,
+    frame: Style,
+    palette: &Palette,
+) {
+    draw_inner(buf, rect, frame);
+    let mark = Style::default().fg(if editing {
+        palette.accent
+    } else {
+        palette.overlay0
+    });
+    put_text(buf, rect.x + 2, rect.y, 1, "›", mark);
+    let width = rect.width.saturating_sub(4);
+    let (shown, style) = if input.as_str().is_empty() {
+        (
+            truncate_end("tell producer · / actions", width as usize),
+            Style::default().fg(palette.overlay0),
+        )
+    } else {
+        // While the keys are on it the viewport follows the cursor;
+        // a parked draft just shows from the start.
+        let (text, _) = if editing {
+            input.viewport(width)
+        } else {
+            (input.as_str(), 0)
+        };
+        (
+            truncate_end(text, width as usize),
+            Style::default().fg(if editing {
+                palette.text
+            } else {
+                palette.overlay0
+            }),
+        )
+    };
+    put_text(buf, rect.x + 4, rect.y, width, &shown, style);
+}
+
 /// A person's extra line at the name column. The cue is the
 /// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
 /// user-owned prompt, `! prompt · director reviewing` for a

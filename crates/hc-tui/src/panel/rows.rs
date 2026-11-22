@@ -38,6 +38,10 @@ pub(crate) enum Target {
     /// block's owed-step `◌ … — [r] start`; Enter/click is the
     /// `[r]` (U6c). `None` names this core.
     Stage(Option<String>),
+    /// An expanded block's `›` line — Enter/click lands the keys on
+    /// it: text is a `tell` to the producer, a leading `/` runs the
+    /// deterministic verbs (`/stop`, `/pause t1`, …).
+    Input(StudioKey),
     /// The `hollywood setup` hint row (R22) — Enter/click opens the
     /// in-TUI setup dialog.
     Setup,
@@ -53,7 +57,8 @@ impl Target {
             | Target::Strip(key)
             | Target::Person(key, _)
             | Target::Task(key, _)
-            | Target::Fold(key) => Some(key),
+            | Target::Fold(key)
+            | Target::Input(key) => Some(key),
             Target::Stage(..) | Target::Setup | Target::None => Option::None,
         }
     }
@@ -147,6 +152,11 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         text: String,
     },
+    /// The block's `›` tell/command line — the studio's own input
+    /// surface inside its frame, before the bottom border.
+    Input {
+        studio: StudioRef<'a>,
+    },
     /// A stacked block's single line: `╶ <id> ⠿2 ○3 ×1 !<n>`.
     Stacked(StudioRef<'a>),
     /// The collapsed strip's studio line — `● id·machine  d/t`.
@@ -195,6 +205,7 @@ impl Row<'_> {
             Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
+            Row::Input { studio } => Target::Input(studio.key()),
             Row::Stacked(studio) => Target::Block(studio.key()),
             Row::Strip { studio, .. } | Row::StripRole { studio, .. } => {
                 Target::Strip(studio.key())
@@ -299,6 +310,9 @@ fn block_rows<'a>(
     for role in closed_roles(studio.studio) {
         emit_person(out, role);
     }
+    // The `›` tell/command line closes the block — the studio's own
+    // input surface inside its frame (S2 §4's input row).
+    out.push(Row::Input { studio });
     out.push(Row::BlockBottom(studio));
 }
 
