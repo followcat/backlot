@@ -413,6 +413,8 @@ mod decision_tests;
 #[cfg(test)]
 mod detect_tests;
 #[cfg(test)]
+mod fake_runner_tests;
+#[cfg(test)]
 mod resolve_tests;
 #[cfg(test)]
 mod work_tests;

@@ -23,10 +23,16 @@
 set -euo pipefail
 
 SELF_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SELF_DIR/../.." && pwd)
 # shellcheck source=scripts/rig/lib.sh
 source "$SELF_DIR/lib.sh"
 # shellcheck source=scripts/rig/world.sh
 source "$SELF_DIR/world.sh"
+
+# The fake runner an installed `backlot` launches. Rig processes run under
+# `env -i`, so they never inherit it; rig.sh names its own checkout's script
+# so a `backlot` from a removed build tree still finds one.
+FAKE_RUNNER=${BACKLOT_FAKE_RUNNER:-$REPO_ROOT/tools/fake-runner.sh}
 
 # Inherited state that must never reach a rig process.
 STRIP_VARS="HC_SCOPE HC_TERMINAL_ID HC_TERMINAL_SOCKET HERDR_ENV WAYLAND_DISPLAY BACKLOT_STUDIO BACKLOT_ROLE BACKLOT_TASK BACKLOT_STATE_DIR"

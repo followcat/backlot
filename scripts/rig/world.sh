@@ -61,6 +61,7 @@ exec env -i "PATH=$ROOT/bin-$l:/usr/bin:/bin" \\
     "XDG_CONFIG_HOME=$ROOT/config-$l" "XDG_RUNTIME_DIR=$ROOT/run-$l" \\
     "HC_SESSION=rig-$l" "HC_SOCKET=$ROOT/core-$l.sock" \\
     "BACKLOT_STATE_DIR=$ROOT/backlot-$l" "HERDR_DISABLE_SOUND=1" \\
+    "BACKLOT_FAKE_RUNNER=$FAKE_RUNNER" \\
     sh -c "\$1"
 EOF
     chmod 755 "$ROOT/via/host-$l.sh"
@@ -161,6 +162,7 @@ print_plan() {
     printf 'display=%s\n' "$shown_display"
     printf 'size=%s\n' "$SIZE"
     printf 'strip=%s\n' "$STRIP_VARS"
+    printf 'fake-runner=%s\n' "$FAKE_RUNNER"
     printf 'tool backlot=%s\n' "${BL:-missing}"
     printf 'tool hc=%s\n' "${HC:-missing}"
     printf 'tool core=%s\n' "${CORE:-missing}"

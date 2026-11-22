@@ -76,6 +76,10 @@ WAYLAND_DISPLAY BACKLOT_STUDIO BACKLOT_ROLE BACKLOT_TASK
 BACKLOT_STATE_DIR
 ```
 
+`BACKLOT_FAKE_RUNNER` is the one exception: `rig.sh` exports it from its own
+checkout's `tools/fake-runner.sh`, so an installed `backlot` works even when its
+original build tree was removed.
+
 The rig refuses `--root /` and `--root "$HOME"`, and `down` uses
 `"${ROOT:?}"` before removing anything. It never connects to a named
 session it did not create and never signals a process it did not
