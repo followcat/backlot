@@ -113,6 +113,7 @@ impl App {
             // frame trailing them.
             KeyCode::Char(d @ '0'..='9') if plain => self.hollywood_jump(d),
             KeyCode::Char('i') if plain && self.has_hollywood_cfg => {
+                self.hollywood.selected = Some(crate::hollywood::Target::Input);
                 self.hollywood.editing = true;
             }
             // `c` reconfigures — the setup dialog prefilled from the

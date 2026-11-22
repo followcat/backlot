@@ -77,6 +77,7 @@ async fn a_click_on_the_input_line_edits_it() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     app.hollywood.mode = LayerMode::Expanded;
+    app.hollywood.selected = Some(Target::Card("c3".into()));
     draw_to(&mut app, 120, 24);
     let input = app.hollywood_hits.input;
     assert!(!input.is_empty());
@@ -85,6 +86,7 @@ async fn a_click_on_the_input_line_edits_it() {
         input.x,
         input.y,
     ));
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
 }
 
