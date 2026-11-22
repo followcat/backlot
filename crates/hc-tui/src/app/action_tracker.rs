@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use crate::action::{
     Action, DONE_HOLD, FAIL_HOLD, copy_line, done_title, fail_body, fail_title, mark,
+    mutates_ledger,
 };
 
 use super::App;
@@ -27,6 +28,10 @@ pub(crate) struct ActionToast {
     pub(crate) fail: bool,
     /// The exact command line `C` / `copy cmd` writes — failures only.
     pub(crate) command: Option<String>,
+    /// `Some(machine)` when the success toast offers `[s] start
+    /// stage` — a mutation that completed while the machine's stage
+    /// is stopped (`None` inside names this core).
+    pub(crate) start_stage: Option<Option<String>>,
     pub(crate) deadline: Instant,
 }
 
@@ -143,12 +148,29 @@ impl App {
                 if resolved {
                     self.hollywood.view = None;
                 }
+                // A mutation that landed while its machine's stage is
+                // down is on disk but unseen — the toast stays up for
+                // the actionable hold with `[s] start stage` (R3 §1b).
+                let stopped = mutates_ledger(&pending.action)
+                    && !self.machine_stage_running(pending.action.machine.as_deref());
+                let (body, hold) = if stopped {
+                    (
+                        match &pending.action.machine {
+                            Some(m) => format!("recorded on disk · stage stopped on {m}"),
+                            None => "recorded on disk · stage stopped".to_owned(),
+                        },
+                        FAIL_HOLD,
+                    )
+                } else {
+                    (String::new(), DONE_HOLD)
+                };
                 self.action_toast = Some(ActionToast {
                     title: done_title(&pending),
-                    body: String::new(),
+                    body,
                     fail: false,
                     command: None,
-                    deadline: now + DONE_HOLD,
+                    start_stage: stopped.then(|| pending.action.machine.clone()),
+                    deadline: now + hold,
                 });
             }
             Err(err) => {
@@ -157,6 +179,7 @@ impl App {
                     body: fail_body(&err),
                     fail: true,
                     command: Some(copy_line(&pending)),
+                    start_stage: None,
                     deadline: now + FAIL_HOLD,
                 });
             }
@@ -171,7 +194,7 @@ impl App {
             .is_some_and(|t| now >= t.deadline)
         {
             self.action_toast = None;
-            self.action_copy_hit = Default::default();
+            self.action_chip_hit = Default::default();
             self.action_toast_hit = Default::default();
             return true;
         }
@@ -198,6 +221,51 @@ impl App {
         }
     }
 
+    /// The stopped-stage toast's `s` ahead of the surfaces (R3 §1b):
+    /// a mutation that completed under an open Dock or Call Sheet
+    /// still answers the offer, while a surface that would read `s`
+    /// as text or an answer — the tell line, an armed `y/n`, the
+    /// card view — keeps the key. `Esc`/`C` keep their usual place.
+    pub(crate) fn action_toast_start_key(&mut self, key: &super::input::TerminalKey) -> bool {
+        if self
+            .action_toast
+            .as_ref()
+            .is_none_or(|t| t.start_stage.is_none())
+        {
+            return false;
+        }
+        if self.hollywood.editing
+            || self.hollywood.confirm.is_some()
+            || self.hollywood.view.is_some()
+            || self.panel_editing()
+            || self.panel.finish_confirm.is_some()
+        {
+            return false;
+        }
+        let combo = crate::input::terminal_key_of(key);
+        let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
+        code == crossterm::event::KeyCode::Char('s')
+            && modifiers.is_empty()
+            && key.input.action == hc_vt::Action::Press
+            && self.action_toast_start()
+    }
+
+    /// `[s] start stage` on the stopped-stage toast — the chip click
+    /// and both key paths share this: `backlot stage start` on the
+    /// recorded machine, then the card dismisses.
+    pub(crate) fn action_toast_start(&mut self) -> bool {
+        let Some(machine) = self
+            .action_toast
+            .as_ref()
+            .and_then(|t| t.start_stage.clone())
+        else {
+            return false;
+        };
+        self.run_action(crate::studio_cmds::stage_start(machine));
+        self.action_toast = None;
+        true
+    }
+
     /// `C` while the failure card is up — the exact command lands on
     /// the host clipboard through OSC 52 and the `copied command`
     /// flash answers. `no modal owns input` is the caller's gate
@@ -217,8 +285,9 @@ impl App {
         true
     }
 
-    /// A press inside the toast rect: `copy cmd` copies, anywhere
-    /// else on the card dismisses.
+    /// A press inside the toast rect: the chip runs its action —
+    /// `copy cmd` on a failure, `start stage` on the stopped-stage
+    /// offer — anywhere else on the card dismisses.
     pub(crate) fn action_toast_press(&mut self, point: (u16, u16)) -> bool {
         use ratatui::layout::Position;
         let contains = |rect: ratatui::layout::Rect| {
@@ -228,8 +297,12 @@ impl App {
                     y: point.1,
                 })
         };
-        if contains(self.action_copy_hit) {
-            return self.action_copy();
+        if contains(self.action_chip_hit) {
+            return match self.action_toast.as_ref() {
+                Some(toast) if toast.fail => self.action_copy(),
+                Some(_) => self.action_toast_start(),
+                None => false,
+            };
         }
         if contains(self.action_toast_hit) {
             self.action_toast = None;

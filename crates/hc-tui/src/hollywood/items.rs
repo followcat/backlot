@@ -57,7 +57,7 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             } else {
                 vec![Chip {
                     label: "start",
-                    key: "r",
+                    key: "s",
                     primary: true,
                 }]
             }
@@ -130,7 +130,7 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
             } else {
                 (
                     format!(
-                        "STAGE DOWN {machine} · affects {studios} studio{}",
+                        "STAGE STOPPED {machine} · affects {studios} studio{}",
                         if *studios == 1 { "" } else { "s" }
                     ),
                     "◌",

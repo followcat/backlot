@@ -273,13 +273,20 @@ pub(crate) fn render(
         match row {
             Row::Title => {}
             Row::StageDown { machine } => {
-                // `host-b · stage not running` once several machines
-                // answered; bare on the only machine.
+                // `◌ host-b · stage stopped · s start` once several
+                // machines answered; bare on the only machine.
                 let text = match if multi { machine.or(local) } else { None } {
-                    Some(name) => format!("{name} · stage not running"),
-                    None => "stage not running".to_string(),
+                    Some(name) => format!("◌ {name} · stage stopped · s start"),
+                    None => "◌ stage stopped · s start".to_string(),
                 };
-                put_text(buf, rect.x, rect.y, rect.width, &text, dim);
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    &truncate_end(&text, rect.width as usize),
+                    Style::default().fg(palette.peach),
+                );
             }
             Row::Empty => {
                 put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
@@ -501,7 +508,7 @@ fn hint_tiers(selected: Option<&Target>, machines: &[MachineSummary], esc: &str)
             s(&["⏎ focus  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
         }
         Some(Target::Fold(_)) => s(&["⏎ open  i tell  m", "⏎ i m", "⏎ m"]),
-        Some(Target::Stage(_)) => s(&["⏎ start  m", "⏎ m"]),
+        Some(Target::Stage(_)) => s(&["s start  m", "s m"]),
         Some(Target::Setup) => s(&["⏎ setup", "⏎"]),
         _ => s(&["↑↓ move  i tell  m menu  ? keys", "↑↓ i m ?", "m ?"]),
     }

@@ -164,9 +164,8 @@ pub(super) fn draw_top(
 }
 
 /// The owed-step subheader: `→ <label> · <name>` and its state
-/// variants — `◌ stage not running`, `× host unreachable`, `! error`.
-/// The owed-step subheader: `→ <label> · <name>` and its state
-/// variants — `◌ stage not running`, `× host unreachable`, `! error`.
+/// variants — `◌ stage stopped · s start`, `× host unreachable`,
+/// `! error`.
 pub(super) fn draw_owed(
     buf: &mut Buffer,
     rect: Rect,

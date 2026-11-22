@@ -363,7 +363,7 @@ re-raise one `stall_limit_s` later.
   against a real agent's history yet — every record the tests show is a seeded one.
 - **A studio with no candidates cannot run tasks.** `backlot cast` refuses anyone not in
   `[[candidates]]` — only the fixed roles ever start.
-- **A `stage not running` row starts the stage.** Enter, a click or `r` on the line runs
+- **A `stage stopped` row starts the stage.** Enter, a click or `s` on the line runs
   `backlot stage start` on that row's machine through the action tracker — the panel still
   shows the last document while it comes up.
 

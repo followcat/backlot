@@ -379,8 +379,9 @@ carry on. Only losing the core ends the stage: a dead wire — `Closed` or `Prot
 stream. A timeout, a full queue or an unoffered method is one studio's refused pass, and a failed terminal-list
 refresh keeps the last inventory for the next pass.
 
-The panel shows a one-line "stage not running" while keeping the last document on screen. Starting
-the stage from the panel is not implemented — the stage runs as its own process.
+The panel shows a one-line "stage stopped" while keeping the last document on screen. `s`, Enter
+or a click on the line runs `backlot stage start` on that machine — the stage runs as its own
+process either way.
 
 ## Studio panel
 

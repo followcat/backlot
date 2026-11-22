@@ -12,12 +12,13 @@ pub(super) fn dim_cells(buf: &mut Buffer) {
 }
 
 /// S3's action toast (§3): the pending reply's card under the notice
-/// slot; its `copy cmd` chip feeds the next mouse press. `true` when
-/// it painted.
+/// slot; its chip — `copy cmd` on a failure, `start stage` on the
+/// stopped-stage offer — feeds the next mouse press. `true` when it
+/// painted.
 pub(super) fn draw_action_toast(app: &mut App, buf: &mut Buffer, area: Rect) -> bool {
     let Some(toast) = app.action_toast.as_ref() else {
         app.action_toast_hit = Rect::default();
-        app.action_copy_hit = Rect::default();
+        app.action_chip_hit = Rect::default();
         return false;
     };
     let offset = if app.notice.is_some() || !app.notification_hit.is_empty() {
@@ -25,16 +26,30 @@ pub(super) fn draw_action_toast(app: &mut App, buf: &mut Buffer, area: Rect) -> 
     } else {
         1
     };
-    let (rect, copy) = crate::chrome::notice_render::render_action_toast(
+    let (body, chip) = if toast.fail {
+        (
+            Some(toast.body.as_str()),
+            Some(crate::chrome::notice_render::ToastChip::CopyCmd),
+        )
+    } else if toast.start_stage.is_some() {
+        (
+            Some(toast.body.as_str()),
+            Some(crate::chrome::notice_render::ToastChip::StartStage),
+        )
+    } else {
+        (None, None)
+    };
+    let (rect, chip_hit) = crate::chrome::notice_render::render_action_toast(
         buf,
         area,
         &toast.title,
-        toast.fail.then_some(toast.body.as_str()),
+        body,
+        chip,
         offset,
         &app.shell.palette,
     );
     app.action_toast_hit = rect;
-    app.action_copy_hit = copy;
+    app.action_chip_hit = chip_hit;
     true
 }
 

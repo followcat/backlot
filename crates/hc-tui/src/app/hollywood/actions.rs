@@ -73,8 +73,8 @@ impl App {
         }
     }
 
-    /// `r` on a stage row: `backlot stage start` on the machine —
-    /// the same command the panel's `s` runs.
+    /// `s` on a stage row or a stopped-stage frame: `backlot stage
+    /// start` on the machine — the same command the panel's `s` runs.
     pub(super) fn hollywood_stage_start(&mut self, machine: Option<String>) {
         self.run_action(studio_cmds::stage_start(machine));
     }
@@ -138,8 +138,20 @@ impl App {
             (Some(Target::Studio(key)) | Some(Target::Ready(key)), KeyCode::Char('p')) => {
                 self.hollywood_peek_on_set(&key);
             }
-            (Some(Target::Stage(machine, false)), KeyCode::Char('r')) => {
+            (Some(Target::Stage(machine, false)), KeyCode::Char('s')) => {
                 self.hollywood_stage_start(machine);
+            }
+            // `s` on a studio frame whose machine's stage is down
+            // starts it — the same offer the STAGE STOPPED row and
+            // the frame's own state line make. The guard is the row's
+            // own rule: an unreachable machine stays a check, not a
+            // start.
+            (Some(Target::Studio(key)), KeyCode::Char('s'))
+                if crate::hollywood::conn_of(&self.view, key.machine.as_deref())
+                    != crate::hollywood::Conn::Offline
+                    && !self.machine_stage_running(key.machine.as_deref()) =>
+            {
+                self.hollywood_stage_start(key.machine.clone());
             }
             (Some(Target::Card(id)), KeyCode::Char('a')) => self.hollywood_card_apply(&id),
             (Some(Target::Card(id)), KeyCode::Char('x')) => self.hollywood_card_cancel(&id),

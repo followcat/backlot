@@ -419,7 +419,7 @@ fn a_row_without_answers_never_names_their_keys() {
         assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
         assert!(!text.contains("a/x card"), "{selected:?}: {text}");
         assert!(!text.contains("f finish"), "{selected:?}: {text}");
-        assert!(!text.contains("r start"), "{selected:?}: {text}");
+        assert!(!text.contains("s start"), "{selected:?}: {text}");
     }
     for selected in [Target::Headline, Target::Talk(1)] {
         let (buf, _) = draw(
@@ -886,11 +886,11 @@ fn the_stage_and_ready_rows_compact_like_the_others() {
         let text = lines(&buf, area).join("\n");
         let stage = text
             .lines()
-            .find(|l| l.contains("STAGE DOWN"))
+            .find(|l| l.contains("STAGE STOPPED"))
             .unwrap_or("");
         let ready = text.lines().find(|l| l.contains("READY")).unwrap_or("");
         assert!(
-            stage.contains("[r]"),
+            stage.contains("[s]"),
             "stage row at {width}: {stage}\n{text}"
         );
         assert!(
@@ -898,7 +898,7 @@ fn the_stage_and_ready_rows_compact_like_the_others() {
             "ready row at {width}: {ready}\n{text}"
         );
         assert!(!ready.contains("finish f"), "{ready}");
-        assert!(!stage.contains("start r"), "{stage}");
+        assert!(!stage.contains("start s"), "{stage}");
     }
 }
 

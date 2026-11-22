@@ -355,7 +355,7 @@ async fn a_stage_down_row_click_starts_the_stage() {
         .collect();
     app.view.inventory_mut().replace(2, terms);
     app.reconcile_published_view();
-    // Ctrl+B y opens the dock; the `stage not running` row is a hit.
+    // Ctrl+B y opens the dock; the `stage stopped` row is a hit.
     key(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
     key(&mut app, hc_vt::Key::Char('y'), hc_vt::Mods::NONE);
     draw_to(&mut app, 120, 24);
@@ -365,7 +365,7 @@ async fn a_stage_down_row_click_starts_the_stage() {
         .iter()
         .find(|(_, t)| matches!(t, crate::panel::Target::Stage(Some(m)) if m == "host-b"))
         .cloned()
-        .expect("the stage-not-running row");
+        .expect("the stage-stopped row");
     app.on_mouse(mouse(
         MouseEventKind::Down(MouseButton::Left),
         rect.x + 2,

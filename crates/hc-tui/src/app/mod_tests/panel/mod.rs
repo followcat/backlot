@@ -11,6 +11,7 @@ mod merge;
 mod mouse;
 mod revise;
 mod sheet;
+mod stage;
 
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};

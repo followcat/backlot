@@ -116,6 +116,15 @@ pub(crate) fn done_title(p: &Pending) -> String {
     }
 }
 
+/// Whether a completed action changed the on-disk ledger — the
+/// stopped-stage toast only offers `[s] start stage` on those.
+/// Reads (`view`) open the card instead of a toast; the machine's
+/// own `stage` verbs and the `hollywood setup` write are not
+/// studio/task/role mutations.
+pub(crate) fn mutates_ledger(action: &Action) -> bool {
+    !action.view && !action.mark.starts_with("stage:") && action.mark != mark::hollywood_setup()
+}
+
 /// `host-b failed: pause task t1` / `failed: pause task t1` (§3.3).
 pub(crate) fn fail_title(p: &Pending) -> String {
     match &p.action.machine {

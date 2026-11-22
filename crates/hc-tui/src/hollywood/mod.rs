@@ -33,7 +33,7 @@ pub(crate) use rows::{
     HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_reply_max_seq,
     hollywood_unread_count, local_summary, on_set,
 };
-pub(crate) use sheet::{Wait, machine_label, status_of, waiting_items};
+pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
 pub(crate) use view::CardView;
 
 use crate::chrome::text_editor::TextEditor;

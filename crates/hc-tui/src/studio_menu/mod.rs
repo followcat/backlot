@@ -119,7 +119,7 @@ pub(crate) enum MenuKind {
     Task,
     /// A Call Sheet card row.
     Card,
-    /// A machine's stage row (Call Sheet `STAGE DOWN`).
+    /// A machine's stage row (Call Sheet `STAGE STOPPED`).
     Stage,
     /// The lot pill's quick menu (S5 §2.3) — lot-wide surfaces,
     /// not one studio's.
@@ -455,7 +455,7 @@ impl StudioMenu {
         }
     }
 
-    /// A Call Sheet `STAGE DOWN` row's menu — `Start stage` alone.
+    /// A Call Sheet `STAGE STOPPED` row's menu — `Start stage` alone.
     pub(crate) fn stage(offline: bool) -> StudioMenu {
         StudioMenu {
             kind: MenuKind::Stage,

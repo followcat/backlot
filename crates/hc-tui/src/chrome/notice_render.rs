@@ -212,29 +212,50 @@ pub(crate) fn render_mobile_notification_banner(
     )
 }
 
+/// The action toast's chip — the failure card's `copy cmd` or the
+/// stopped-stage offer's `start stage` (R3 §1b).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ToastChip {
+    /// `[C] copy cmd` — the failure's exact command through OSC 52.
+    CopyCmd,
+    /// `[s] start stage` — `backlot stage start` on the recorded
+    /// machine while the stage is stopped.
+    StartStage,
+}
+
+impl ToastChip {
+    /// The chip text as drawn.
+    fn text(self) -> &'static str {
+        match self {
+            ToastChip::CopyCmd => "[C] copy cmd",
+            ToastChip::StartStage => "[s] start stage",
+        }
+    }
+}
+
 /// The S3 action toast (§3): a success card is the title alone and
-/// fades after 3.5 s; a failure carries the first `stderr` line and
-/// the `[C] copy cmd`/`[esc]` hint row and holds 8 s. Returns the
-/// card rect and the `copy cmd` chip's hit rect.
+/// fades after 3.5 s; a body plus a chip holds 8 s — the failure
+/// card's `stderr` line and `[C] copy cmd`, or the stopped-stage
+/// offer's `recorded on disk` line and `[s] start stage`, which
+/// keeps the success card's neutral border and green dot. Returns
+/// the card rect and the chip's hit rect.
 pub(crate) fn render_action_toast(
     buffer: &mut Buffer,
     area: Rect,
     title: &str,
     body: Option<&str>,
+    chip: Option<ToastChip>,
     top_offset: u16,
     palette: &Palette,
 ) -> (Rect, Rect) {
     if area.is_empty() {
         return (Rect::default(), Rect::default());
     }
-    let hint = "[C] copy cmd  [esc] dismiss";
+    let fail = chip == Some(ToastChip::CopyCmd);
+    let hint = chip.map(|c| format!("{}  [esc] dismiss", c.text()));
     let content_width = UnicodeWidthStr::width(title)
         .max(body.map_or(0, UnicodeWidthStr::width))
-        .max(if body.is_some() {
-            UnicodeWidthStr::width(hint)
-        } else {
-            0
-        })
+        .max(hint.as_deref().map_or(0, UnicodeWidthStr::width))
         .saturating_add(6);
     let width = u16::try_from(content_width)
         .unwrap_or(u16::MAX)
@@ -251,19 +272,11 @@ pub(crate) fn render_action_toast(
     Clear.render(rect, buffer);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if body.is_some() {
-            palette.red
-        } else {
-            palette.overlay0
-        }))
+        .border_style(Style::default().fg(if fail { palette.red } else { palette.overlay0 }))
         .style(Style::default().bg(palette.panel_bg));
     let inner = block.inner(rect);
     block.render(rect, buffer);
-    let dot = if body.is_some() {
-        palette.red
-    } else {
-        palette.green
-    };
+    let dot = if fail { palette.red } else { palette.green };
     Paragraph::new(Line::from(vec![
         Span::styled("●", Style::default().fg(dot)),
         Span::raw(" "),
@@ -275,7 +288,7 @@ pub(crate) fn render_action_toast(
         ),
     ]))
     .render(Rect::new(inner.x, inner.y, inner.width, 1), buffer);
-    let mut copy_hit = Rect::default();
+    let mut chip_hit = Rect::default();
     if let Some(body) = body {
         if inner.height > 1 {
             Paragraph::new(Line::from(Span::styled(
@@ -292,17 +305,20 @@ pub(crate) fn render_action_toast(
                 buffer,
             );
         }
-        if inner.height > 2 {
-            // `[C] copy cmd` is the chip — the rest of the hint is
-            // inert text so the click target is unambiguous (§3.3).
+        if inner.height > 2
+            && let Some(chip) = chip
+        {
+            // The chip is the click target — the rest of the
+            // hint is inert text so it stays unambiguous (§3.3).
             let hint_y = inner.y + 2;
-            let chip_w = UnicodeWidthStr::width("[C] copy cmd") as u16;
+            let chip_text = chip.text();
+            let chip_w = UnicodeWidthStr::width(chip_text) as u16;
             put_text(
                 buffer,
                 inner.x + 2,
                 hint_y,
                 inner.width.saturating_sub(2),
-                "[C] copy cmd",
+                chip_text,
                 Style::default().fg(palette.teal),
             );
             put_text(
@@ -313,11 +329,11 @@ pub(crate) fn render_action_toast(
                 "  [esc] dismiss",
                 Style::default().fg(palette.overlay0),
             );
-            copy_hit = Rect::new(inner.x + 2, hint_y, chip_w.min(inner.width), 1);
+            chip_hit = Rect::new(inner.x + 2, hint_y, chip_w.min(inner.width), 1);
         }
     }
     super::overlay::fill_default_bg(buffer, rect, palette);
-    (rect, copy_hit)
+    (rect, chip_hit)
 }
 
 #[cfg(test)]

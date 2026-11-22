@@ -17,7 +17,7 @@ const ROW_KEYS: [(char, &str); 7] = [
     ('a', "a/x card"),
     ('x', "a/x card"),
     ('f', "f finish"),
-    ('r', "r start"),
+    ('s', "s start"),
     ('p', "p peek"),
 ];
 
@@ -64,7 +64,7 @@ fn fixtures(agent: bool) -> Vec<(&'static str, App)> {
     let mut value = summary_json();
     value["hollywood"]["cards"] = serde_json::json!([]);
     out.push(("calm", with_doc(value, read(agent), path)));
-    // The stage down: the Stage row `r` restarts.
+    // The stage down: the Stage row `s` restarts.
     let mut app = app_with_doc();
     let terminals: Vec<_> = app
         .view
@@ -83,7 +83,7 @@ fn fixtures(agent: bool) -> Vec<(&'static str, App)> {
     app.set_hollywood(read(agent), path);
     out.push(("stage-down", app));
     // host-b's document with no machine row: unreachable, its
-    // studios live — the offline Stage row `r` never runs on.
+    // studios live — the offline Stage row `s` never runs on.
     let mut app = app_with_doc();
     app.view.documents_mut().insert(
         DocKey {
@@ -128,7 +128,7 @@ fn with_doc(
 async fn the_footer_names_exactly_the_keys_the_dispatch_runs() {
     for agent in [true, false] {
         for (name, mut app) in fixtures(agent) {
-            let (_, runner) = recorder();
+            let (recorded, runner) = recorder();
             app.set_hollywood_runner(runner);
             app.area = (200, 40);
             for target in app.hollywood_targets() {
@@ -136,7 +136,23 @@ async fn the_footer_names_exactly_the_keys_the_dispatch_runs() {
                 app.hollywood.selected = Some(target.clone());
                 let footer = footer_of(&app, agent);
                 for (ch, token) in ROW_KEYS {
-                    let ran = app.hollywood_row_key(KeyCode::Char(ch));
+                    // Each press measured on its own: an earlier
+                    // key's run still pends (no reply is pumped) and
+                    // a same-mark spawn dedups before the runner
+                    // sees argv — the slot names what this press
+                    // would dispatch, not what a pending mark swallows.
+                    app.actions.pending.clear();
+                    let before = recorded.lock().unwrap().len();
+                    let mut ran = app.hollywood_row_key(KeyCode::Char(ch));
+                    if ch == 's' {
+                        // `s` is dual-use — on a card it runs `card
+                        // show`, which the `s start` slot does not
+                        // name. The slot follows the stage dispatch
+                        // this press made, or did not make.
+                        ran = recorded.lock().unwrap()[before..]
+                            .iter()
+                            .any(|a| a.first().is_some_and(|w| w == "stage"));
+                    }
                     assert_eq!(
                         footer.contains(token),
                         ran,

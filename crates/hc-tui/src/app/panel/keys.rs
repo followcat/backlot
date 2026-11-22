@@ -152,7 +152,7 @@ impl App {
                 self.help = true;
                 self.help_state = crate::chrome::help::HelpState::default();
             }
-            KeyCode::Char('r') if plain => self.panel_stage_start(),
+            KeyCode::Char('s') if plain => self.panel_stage_start(),
             KeyCode::Char('f') if plain => self.panel_finish_selected(),
             KeyCode::Char(c @ ('y' | 'd')) if plain => self.panel_decide(c == 'y'),
             KeyCode::Char('n') if plain => {
@@ -199,8 +199,8 @@ impl App {
                 }
             }
             Some(Target::Stage(machine)) => {
-                // The `[r] start` the row prints (U6c) — a click or
-                // Enter on `stage not running` is the same call.
+                // The `s start` the row prints (U6c) — a click or
+                // Enter on `stage stopped` is the same call.
                 if !self.machine_stage_running(machine.as_deref()) {
                     self.run_action(studio_cmds::stage_start(machine));
                 }

@@ -2,7 +2,7 @@
 //! like the studio panel's focused mode — j/k/arrows and paging
 //! move the selection, `1`–`9` jump to a frame, Enter activates the
 //! row, each waiting kind's letters run its commands (`y`/`d`/`p` on
-//! a prompt, `r` on a stage, `a`/`x`/`s` on a card, `f` with its
+//! a prompt, `s` on a stage, `a`/`x`/`s` on a card, `f` with its
 //! `y/n` ask on a ready studio), `i` opens the `tell` line, `?` is
 //! the sheet's keys in `Ctrl+B ?`, and `Esc` collapses it. While
 //! the input line edits every key is the editor's; `Esc` leaves it.
