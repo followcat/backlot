@@ -200,6 +200,19 @@ impl App {
         self.hollywood.selected = self.hollywood_initial_target();
         self.hollywood.frame_scroll = 0;
         self.hollywood.scroll = 0;
+        // A calm sheet opens as a dialog: nothing waits for a key, so
+        // the `tell` line edits at once — Esc drops into the rows.
+        // A waiting item keeps its `y`/`a`/`x` letters instead.
+        self.hollywood.editing = self.has_hollywood_cfg && !self.hollywood_wait_selected();
+    }
+
+    /// Whether the selection is on a waiting item — the rows whose
+    /// letters decide, apply, cancel or finish.
+    fn hollywood_wait_selected(&self) -> bool {
+        matches!(
+            self.hollywood.selected,
+            Some(Target::Prompt(..) | Target::Stage(..) | Target::Card(_) | Target::Ready(_))
+        )
     }
 
     /// What an opening selects (A2.1): the first waiting item, else
@@ -235,6 +248,7 @@ impl App {
             self.hollywood.selected = self.hollywood_initial_target();
             self.hollywood.frame_scroll = 0;
             self.hollywood.scroll = 0;
+            self.hollywood.editing = self.has_hollywood_cfg && !self.hollywood_wait_selected();
         } else {
             // Leaving the panel retires its ephemeral sub-state.
             self.hollywood.view = None;

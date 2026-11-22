@@ -186,13 +186,14 @@ impl App {
         true
     }
 
-    /// Enter on the editing input line: the editor closes — a
-    /// nonempty line goes out as `backlot tell hollywood "<line>"`
-    /// (D20); an empty one sends nothing.
+    /// Enter on the editing input line: a nonempty line goes out as
+    /// `backlot tell hollywood "<line>"` (D20) and the dialog keeps
+    /// editing for the next; an empty Enter sends nothing and lets
+    /// the line go — the dialog's way of leaving without Esc.
     pub(super) fn hollywood_input_submit(&mut self) {
-        self.hollywood.editing = false;
         let line = self.hollywood.input.as_str().trim().to_string();
         if line.is_empty() {
+            self.hollywood.editing = false;
             return;
         }
         self.hollywood.input.clear();

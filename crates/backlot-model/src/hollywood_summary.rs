@@ -12,6 +12,9 @@ use crate::summary::cap;
 pub const HEADLINE_CHARS: usize = 200;
 /// At most this many open cards reach the document.
 pub const MAX_OPEN_CARDS: usize = 10;
+/// At most this many exchange lines reach the document — the
+/// conversation the expanded layer draws above its input (D21).
+pub const MAX_EXCHANGE: usize = 8;
 
 /// Hollywood's section of the document: the layer reads the role's
 /// state and runner, its newest headline and its open cards. `None`
@@ -34,6 +37,24 @@ pub struct HollywoodSummary {
     /// Up to [`MAX_OPEN_CARDS`] open cards, each string capped.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cards: Vec<CardSummary>,
+    /// The newest [`MAX_EXCHANGE`] exchange lines — the user's
+    /// `tell`s and Hollywood's `reported` headlines, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exchange: Vec<Exchange>,
+}
+
+/// One line of the user's exchange with Hollywood: the user half is
+/// a `message.sent` `to` it (`who` is the sender), the Hollywood half
+/// a `reported` headline (`who` is `hollywood`). `seq` orders the
+/// halves into one conversation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Exchange {
+    /// The ledger seq — orders messages and reports on one timeline.
+    pub seq: u64,
+    /// The sender: `user`, `hollywood`, or a stage-written notice's `by`.
+    pub who: String,
+    /// The line's text (≤ [`HEADLINE_CHARS`]).
+    pub text: String,
 }
 
 /// One open card as the layer shows it.
@@ -79,5 +100,31 @@ pub fn hollywood_section(
                 why: cap(&c.why),
             })
             .collect(),
+        exchange: exchange(state),
     }
+}
+
+/// The conversation lines: each `message.sent` `to` Hollywood that
+/// carries text and each `reported` headline, merged on their seq
+/// and cut to the newest [`MAX_EXCHANGE`].
+fn exchange(state: &HollywoodState) -> Vec<Exchange> {
+    let mut lines: Vec<Exchange> = state
+        .messages
+        .iter()
+        .filter(|m| m.to == "hollywood")
+        .filter_map(|m| {
+            m.text.as_ref().map(|text| Exchange {
+                seq: m.seq,
+                who: cap(&m.from),
+                text: cap(text),
+            })
+        })
+        .chain(state.reports.iter().map(|r| Exchange {
+            seq: r.seq,
+            who: "hollywood".into(),
+            text: cap(&r.headline),
+        }))
+        .collect();
+    lines.sort_by_key(|e| e.seq);
+    lines.split_off(lines.len().saturating_sub(MAX_EXCHANGE))
 }

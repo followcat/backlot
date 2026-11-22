@@ -10,7 +10,7 @@
 
 use ratatui::style::Color;
 
-use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
+use backlot_model::summary::{Exchange, RoleSummary, StudioSummary, Summary, Work};
 
 use super::sheet::{Status, Wait, waiting_items};
 use crate::panel::data::{MachineSummary, StudioRef};
@@ -27,6 +27,9 @@ pub(crate) enum Target {
     NewStudio,
     /// Hollywood's newest headline — shown, not actionable.
     Headline,
+    /// A line of the user's exchange with Hollywood — Enter focuses
+    /// its terminal. Identity is the ledger seq.
+    Talk(u64),
     /// A user-owned prompt row (studio, role) — `y`/`d` decide, `p`
     /// peeks, Enter focuses the role's terminal.
     Prompt(StudioKey, String),
@@ -88,6 +91,9 @@ pub(crate) enum Row<'a> {
     /// `flags` is the open attention the sheet does not list (it is
     /// not the user's), so a `!N` chip never contradicts the row.
     Calm { studios: usize, flags: usize },
+    /// A line of the user's exchange with Hollywood — the dialog's
+    /// half drawn above the input (D21).
+    Talk(&'a Exchange),
     /// `› <input>` — the `tell hollywood` line.
     Input,
     /// `✦ an agent can watch every studio …` — the bar without an
@@ -99,6 +105,7 @@ impl Row<'_> {
     pub fn target(&self, waits: &[Wait<'_>]) -> Target {
         match self {
             Row::Headline(_) => Target::Headline,
+            Row::Talk(line) => Target::Talk(line.seq),
             Row::Wait(i) => waits[*i].target(),
             Row::Calm { .. } => Target::Calm,
             Row::Input => Target::Input,
@@ -145,6 +152,15 @@ pub(crate) fn band_rows<'a>(
         });
     } else {
         out.extend((0..waits.len()).map(Row::Wait));
+    }
+    // The dialog's visible half: the newest exchange lines, oldest
+    // first, right above the input they continue into.
+    if agent {
+        let talk = summary
+            .and_then(|s| s.hollywood.as_ref())
+            .map(|h| h.exchange.as_slice())
+            .unwrap_or(&[]);
+        out.extend(talk.iter().map(Row::Talk));
     }
     out.push(if agent { Row::Input } else { Row::Setup });
     (waits, out)

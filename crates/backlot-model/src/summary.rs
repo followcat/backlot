@@ -20,7 +20,8 @@ pub use crate::summary_build::role_name;
 // Hollywood's section types live beside this file; the
 // `summary::` path keeps them all.
 pub use crate::hollywood_summary::{
-    CardSummary, HEADLINE_CHARS, HollywoodSummary, MAX_OPEN_CARDS, hollywood_section,
+    CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
+    hollywood_section,
 };
 
 /// The `schema` value this generation writes.
