@@ -1,5 +1,6 @@
 //! Read-only application tests and shared fixtures.
 mod alt_arrows;
+mod alt_arrows_b;
 mod argv_hygiene;
 mod cases_1;
 mod cases_2;

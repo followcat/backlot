@@ -154,10 +154,18 @@ async fn the_waiting_group_leads_with_runnable_rows() {
     assert!(labels.contains(&"Apply card c3: pause t1 · acme-shop"));
     assert!(labels.contains(&"Cancel card c3…"));
     assert!(labels.contains(&"Finish studio · beta-tools"));
-    // The studio groups and herdr's sections follow.
+    // The studio groups and herdr's sections follow — the four
+    // studio keys lead the actions group (R3-N6), not a `studio`
+    // tail section.
     assert_eq!(groups[1].title, "studio & task actions");
+    assert!(
+        groups[1]
+            .rows
+            .iter()
+            .any(|r| r.label.starts_with("next studio"))
+    );
     assert_eq!(groups[2].title, "hollywood");
-    assert!(groups.iter().any(|g| g.title == "studio"));
+    assert!(!groups.iter().any(|g| g.title == "studio"));
     let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(text.contains("Actions & Keybinds"), "{text}");
     assert!(text.contains("waiting on you"), "{text}");

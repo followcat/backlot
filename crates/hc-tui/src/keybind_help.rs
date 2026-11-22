@@ -257,22 +257,7 @@ pub(crate) fn backlot_help_groups(
         })
         .unwrap_or_else(|| "unset".to_owned())
     };
-    let shadow = |combo: Option<crate::config::KeyCombo>| -> String {
-        combo
-            .and_then(|(code, modifiers)| {
-                crate::input::resolve_direct_binding(
-                    keybinds,
-                    &crate::config::TerminalKey::new(code, modifiers),
-                )
-            })
-            .map(|hit| match hit {
-                crate::input::KeybindMatch::Action(action) => {
-                    format!("  (shadows herdr: {})", action_name(action))
-                }
-                crate::input::KeybindMatch::Command(_) => "  (shadows a custom command)".to_owned(),
-            })
-            .unwrap_or_default()
-    };
+    let shadow = |combo| studio_key_shadow(keybinds, combo);
     let studio_key = |combo: Option<crate::config::KeyCombo>| {
         combo
             .map(crate::config::format_key_combo)
@@ -374,6 +359,29 @@ pub(crate) fn backlot_help_groups(
         ),
     ];
     groups
+}
+
+/// The `  (shadows herdr: <action>)` note a studio key combo carries
+/// on this herdr config — `""` when it shadows nothing, a custom
+/// command's note when it is one.
+pub(crate) fn studio_key_shadow(
+    keybinds: &Keybinds,
+    combo: Option<crate::config::KeyCombo>,
+) -> String {
+    combo
+        .and_then(|(code, modifiers)| {
+            crate::input::resolve_direct_binding(
+                keybinds,
+                &crate::config::TerminalKey::new(code, modifiers),
+            )
+        })
+        .map(|hit| match hit {
+            crate::input::KeybindMatch::Action(action) => {
+                format!("  (shadows herdr: {})", action_name(action))
+            }
+            crate::input::KeybindMatch::Command(_) => "  (shadows a custom command)".to_owned(),
+        })
+        .unwrap_or_default()
 }
 
 /// The config key a resolved herdr action carries — the shadow note's
