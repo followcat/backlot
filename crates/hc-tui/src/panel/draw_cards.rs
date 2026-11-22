@@ -198,3 +198,97 @@ pub(super) fn draw_strip_role(buf: &mut Buffer, rect: Rect, role: &RoleSummary, 
         Style::default().fg(palette.subtext0),
     );
 }
+
+/// R3-N9: compact 1-line calm/owed summary under an idle strip studio
+/// (`○2 ✓1` or a short owed cue), fitting inside `rect.width - 2`
+/// (`14` inner columns at width 16).
+pub(super) fn draw_strip_summary(
+    buf: &mut Buffer,
+    rect: Rect,
+    studio: StudioRef<'_>,
+    stage: bool,
+    reachable: bool,
+    palette: &Palette,
+) {
+    let start_x = rect.x + 2;
+    let inner_w = rect.width.saturating_sub(2);
+    if inner_w == 0 {
+        return;
+    }
+    if !reachable {
+        put_text(
+            buf,
+            start_x,
+            rect.y,
+            inner_w,
+            &truncate_end("× offline", inner_w as usize),
+            Style::default().fg(palette.red),
+        );
+        return;
+    }
+    if !stage {
+        put_text(
+            buf,
+            start_x,
+            rect.y,
+            inner_w,
+            &truncate_end("◌ stage down", inner_w as usize),
+            Style::default().fg(palette.peach),
+        );
+        return;
+    }
+    if studio.studio.error.is_some() {
+        put_text(
+            buf,
+            start_x,
+            rect.y,
+            inner_w,
+            &truncate_end("! error", inner_w as usize),
+            Style::default().fg(palette.red),
+        );
+        return;
+    }
+    if studio.studio.ready_to_finish {
+        put_text(
+            buf,
+            start_x,
+            rect.y,
+            inner_w,
+            &truncate_end("✓ ready", inner_w as usize),
+            Style::default().fg(palette.teal),
+        );
+        return;
+    }
+    let counts = mark_counts(studio.studio);
+    if counts.is_empty() {
+        put_text(
+            buf,
+            start_x,
+            rect.y,
+            inner_w,
+            &truncate_end("○ idle", inner_w as usize),
+            Style::default().fg(palette.overlay0),
+        );
+        return;
+    }
+    let end_x = rect.x + rect.width;
+    let mut x = start_x;
+    for (i, (mark, n)) in counts.into_iter().enumerate() {
+        let token = format!("{}{}", mark.glyph(0), n);
+        let w = display_width(&token) as u16;
+        let gap = u16::from(i > 0);
+        if x + gap + w > end_x {
+            break;
+        }
+        x += gap;
+        put_text(
+            buf,
+            x,
+            rect.y,
+            w,
+            &token,
+            Style::default().fg(mark.color(palette)),
+        );
+        x += w;
+    }
+}

@@ -104,7 +104,7 @@ pub(super) fn render_overlays_and_cursor(
     } else {
         0
     };
-    app.panel_hits = if app.panel.open() {
+    app.panel_hits = if app.panel_mode_at(area.width) != crate::panel::PanelMode::Closed {
         overlay_painted |= app.panel_fullscreen_at(area.width);
         let rect = if app.panel_beside(area.width) {
             let width = app.panel_width(area.width);

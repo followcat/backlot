@@ -275,29 +275,31 @@ async fn the_beside_panel_shaves_columns_off_the_panes() {
         assert_eq!(layout.pane_surface.width, region - app.sidebar_width);
         assert!(!app.panel_fullscreen());
     }
-    // The spec's dock-width tiers: 38 at 160+, 36 at 100+, 28 under —
-    // where the column still leaves 44 pane columns past the sidebar.
+    // The spec's dock-width tiers when wide enough to sit beside:
+    // 38 at 140+, 36 at 100..=139. Below 100 (or when panes+dock
+    // cannot fit), an unfocused dock auto-hides to 0 columns.
     assert_eq!(app.panel_width(160), 38);
     assert_eq!(app.panel_width(120), 36);
-    assert_eq!(app.panel_width(99), 28);
-    // At 80 the column cannot fit — it resolves to the 16-column
-    // strip for that width.
-    assert_eq!(app.panel_width(80), 16);
-    // A collapsed strip is 16 wide.
+    assert_eq!(app.panel_width(99), 0);
+    assert_eq!(app.panel_width(80), 0);
+    // A collapsed strip is 16 wide when >= 100 cols.
     app.panel.mode = PanelMode::Collapsed;
     assert_eq!(app.panel_width(120), 16);
     assert!(app.panel_beside(120));
+    assert_eq!(app.panel_width(80), 0);
+    assert!(!app.panel_beside(80));
 }
 
 #[tokio::test]
 async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
     let mut app = app_with_panel_doc();
-    // 80 − 16 = 64 and 76 − 4 − 28 = 44 dip under the 64-column mobile
-    // threshold; the window itself is still desktop-width, so the
-    // chrome must keep its desktop layout and sidebar.
+    // At 100 cols with a collapsed 4-col sidebar and 36-col expanded
+    // dock, 100 − 36 = 64 dips to the 64-column mobile threshold; the
+    // window itself is still desktop-width, so the chrome must keep
+    // its desktop layout and sidebar.
     app.shell_state.sidebar_collapsed = true;
-    for (cols, width) in [(80u16, PanelMode::Collapsed), (76, PanelMode::Expanded)] {
-        app.panel.mode = width;
+    for (cols, mode) in [(100u16, PanelMode::Collapsed), (100, PanelMode::Expanded)] {
+        app.panel.mode = mode;
         app.area = (cols, 24);
         assert!(app.panel_beside(cols), "cols {cols}");
         let layout = app.chrome_layout(cols, 24);
@@ -326,30 +328,41 @@ async fn a_beside_panel_never_flips_the_chrome_to_mobile() {
     }
 }
 
-/// Too narrow for panes+dock: the expanded dock resolves to the
-/// collapsed strip — beside from `STRIP_BESIDE_COLS`, a 16-column
-/// overlay under that — instead of covering the pane surface. The
-/// choice itself is remembered: widen the window and it is expanded
-/// again.
+/// Below 100 columns (`R3-1` / `R3-M3`), an unfocused dock hides
+/// completely (`0` columns) so panes keep full width, while `panel.mode`
+/// remembers `Expanded` and automatically restores the beside column
+/// when widened back to `>= 100`. Focusing (`Ctrl+B y`) opens the
+/// full `Expanded` dock as a `pane_surface` overlay (`R3-B4`), never
+/// downgraded to `Collapsed`.
 #[tokio::test]
-async fn a_too_narrow_terminal_falls_back_to_the_strip() {
+async fn a_too_narrow_terminal_hides_unfocused_and_overlays_focused() {
     let mut app = app_with_panel_doc();
     app.panel.mode = PanelMode::Expanded;
-    // 80 cannot hold sidebar + 28 + 44 but holds the strip beside.
+    // At 80 cols unfocused: 0 columns reserved, pane gets full 80 - sidebar.
     app.area = (80, 24);
-    assert!(app.panel_beside(80));
-    assert_eq!(app.panel_width(80), 16);
+    assert_eq!(app.panel_mode_at(80), PanelMode::Closed);
+    assert!(!app.panel_beside(80));
+    assert_eq!(app.panel_width(80), 0);
+    assert_eq!(app.dock_reserve(80), 0);
     assert!(!app.panel_fullscreen());
-    // Under 60 the strip overlays the pane's right edge — 16
-    // columns, never the whole surface the dock used to take.
-    app.area = (50, 24);
-    assert!(!app.panel_beside(50));
-    assert_eq!(
-        app.panel_overlay_rect(ratatui::layout::Rect::new(0, 0, 50, 24), 50)
-            .width,
-        16
-    );
-    // The logical mode is untouched — widening restores the column.
+    // When focused at 80: stays Expanded and overlays inside pane_surface (>= 36 cols).
+    app.panel.focused = true;
+    assert_eq!(app.panel_mode_at(80), PanelMode::Expanded);
+    assert!(!app.panel_beside(80));
+    assert!(app.panel_fullscreen());
+    let layout80 = app.chrome_layout(80, 24);
+    let overlay80 = app.panel_overlay_rect(layout80.pane_surface, 80);
+    assert_eq!(overlay80.width, 36);
+    assert!(overlay80.x >= layout80.pane_surface.x);
+    // At 60 (mobile) focused: full pane_surface width (60 cols).
+    app.area = (60, 20);
+    assert!(!app.panel_beside(60));
+    let layout60 = app.chrome_layout(60, 20);
+    assert!(layout60.sidebar.is_empty());
+    assert_eq!(layout60.pane_surface.width, 60);
+    assert_eq!(app.panel_overlay_rect(layout60.pane_surface, 60).width, 60);
+    // Unfocusing and widening restores the beside column cleanly.
+    app.panel.focused = false;
     assert_eq!(app.panel.mode, PanelMode::Expanded);
     assert!(app.panel_beside(120));
     assert_eq!(app.panel_width(120), 36);
@@ -432,4 +445,212 @@ async fn an_open_panel_draws_its_column_and_fullscreen_covers() {
     let backend = draw_to(&mut app, 80, 24);
     let text = screen_lines(&backend).join("\n");
     assert!(text.contains("acme-shop"), "{text}");
+}
+
+#[tokio::test]
+async fn mobile_60x20_activates_mobile_header_full_pane_and_full_width_overlay() {
+    let mut app = app_with_panel_doc();
+    app.area = (60, 20);
+    // Unfocused default at 60x20: mobile header active, sidebar hidden,
+    // dock hidden (0 cols), pane gets all 60 columns.
+    assert!(!app.panel_beside(60));
+    assert_eq!(app.panel_mode_at(60), PanelMode::Closed);
+    assert_eq!(app.dock_reserve(60), 0);
+    assert_eq!(app.sidebar_render_width(60), 0);
+    let layout = app.chrome_layout(60, 20);
+    assert!(layout.sidebar.is_empty());
+    assert!(layout.mobile_header.height > 0);
+    assert_eq!(layout.pane_surface.width, 60);
+
+    let drawn = draw_to(&mut app, 60, 20);
+    let header_row = screen_lines(&drawn)[0].clone();
+    assert!(header_row.contains("acme-shop"), "{header_row}");
+    assert!(header_row.contains("producer"), "{header_row}");
+    assert!(header_row.contains("✦1"), "{header_row}");
+    let header_area: String = screen_lines(&drawn)[..2].join("\n");
+    assert!(header_area.contains("switch"), "{header_area}");
+
+    // `Ctrl+B y` opens the full-width 60-col Expanded overlay inside pane_surface.
+    open_panel(&mut app);
+    assert!(app.panel_fullscreen());
+    assert_eq!(
+        app.panel_overlay_rect(layout.pane_surface, 60),
+        layout.pane_surface
+    );
+    let open = draw_to(&mut app, 60, 20);
+    let text = screen_lines(&open).join("\n");
+    assert!(text.contains("lot · 1"), "{text}");
+    assert!(text.contains("alice · task-1"), "{text}");
+    assert!(text.contains("tell producer"), "{text}");
+    // Mobile header stays visible on row 0 above the overlay.
+    assert!(screen_lines(&open)[0].contains("acme-shop"), "{text}");
+
+    // `Esc` closes back to the 60-col pane; a second `Ctrl+B y` re-opens cleanly.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.panel.mode, PanelMode::Closed);
+    assert!(!app.panel_fullscreen());
+    assert!(!app.panel_focused());
+    open_panel(&mut app);
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+    assert!(app.panel.focused);
+}
+
+#[tokio::test]
+async fn narrow_80x24_hides_unfocused_and_opens_expanded_overlay_on_toggle() {
+    let mut app = app_with_panel_doc();
+    app.sidebar_width = 25;
+    app.area = (80, 24);
+    // Unfocused default at 80x24: dock auto-hides to 0 cols; pane gets 55 cols.
+    assert_eq!(app.panel_mode_at(80), PanelMode::Closed);
+    assert_eq!(app.dock_reserve(80), 0);
+    let layout = app.chrome_layout(80, 24);
+    assert_eq!(layout.sidebar.width, 25);
+    assert_eq!(layout.pane_surface.width, 55);
+
+    // `Ctrl+B y` opens Expanded overlay (>= 36 cols) inside the 55-col pane_surface,
+    // leaving the 25-col sidebar untouched.
+    open_panel(&mut app);
+    assert_eq!(app.panel_mode_at(80), PanelMode::Expanded);
+    assert!(app.panel_fullscreen());
+    let overlay = app.panel_overlay_rect(layout.pane_surface, 80);
+    assert!(overlay.width >= 36, "overlay {overlay:?}");
+    assert!(overlay.x >= layout.pane_surface.x, "overlay {overlay:?}");
+    assert_eq!(overlay.x + overlay.width, 80);
+
+    let open = draw_to(&mut app, 80, 24);
+    let text = screen_lines(&open).join("\n");
+    assert!(text.contains("alice · task-1"), "{text}");
+    assert!(text.contains("tell producer"), "{text}");
+    // Space drawer works inside the 80x24 Expanded overlay.
+    app.panel.selected = Some(Target::Person("acme-shop".into(), "actor-alice".into()));
+    key(&mut app, hc_vt::Key::Char(' '));
+    assert!(app.panel.drawer.is_some());
+
+    // `Esc` closes back to 0 cols; second `Ctrl+B y` re-opens cleanly.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.panel_mode_at(80), PanelMode::Closed);
+    assert!(!app.panel.focused);
+    open_panel(&mut app);
+    assert_eq!(app.panel_mode_at(80), PanelMode::Expanded);
+    assert!(app.panel.focused);
+
+    // `Ctrl+B y` while overlay open closes it too; widening unfocused from 80 -> 120
+    // restores the beside 36-col Expanded column when mode remained Expanded.
+    key(&mut app, hc_vt::Key::Escape);
+    app.panel.mode = PanelMode::Expanded;
+    app.panel.focused = false;
+    assert_eq!(app.panel_mode_at(80), PanelMode::Closed);
+    app.area = (120, 40);
+    assert_eq!(app.panel_mode_at(120), PanelMode::Expanded);
+    assert!(app.panel_beside(120));
+    assert_eq!(app.panel_width(120), 36);
+}
+
+#[tokio::test]
+async fn narrow_80x24_opening_page_renders_47_col_backlot_frame() {
+    let mut app = app_with(&["t1"]);
+    app.set_plain(false);
+    app.sidebar_width = 25;
+    app.focused = Some("t1".into());
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 2,
+                "studios": []
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.area = (80, 24);
+    assert!(app.opening_visible());
+    let layout = app.chrome_layout(80, 24);
+    assert_eq!(layout.pane_surface.width, 55);
+    let drawn = draw_to(&mut app, 80, 24);
+    let text = screen_lines(&drawn).join("\n");
+    assert!(
+        text.contains("█▀▄"),
+        "47-col BACKLOT art frame fits in 55-col pane:\n{text}"
+    );
+    assert!(text.contains("a film studio for coding agents"), "{text}");
+}
+
+#[tokio::test]
+async fn manual_c_strip_at_120x40_shows_calm_summary_for_idle_studio() {
+    let mut app = app_with(&["t1"]);
+    app.set_plain(false);
+    let mut stage = crate::sidebar::fixture::term("t9");
+    stage.name = Some("backlot-stage".into());
+    stage.state = "live".into();
+    let terminals: Vec<_> = app
+        .view
+        .inventory
+        .terminals()
+        .values()
+        .cloned()
+        .chain(std::iter::once(stage))
+        .collect();
+    app.view.inventory_mut().replace(2, terminals);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: serde_json::json!({
+                "schema": "backlot/1",
+                "updated_ms": 2,
+                "studios": [{
+                    "id": "acme-shop",
+                    "title": "Acme shop",
+                    "state": "live",
+                    "requirement_version": 1,
+                    "mode": "standard",
+                    "open_reviews": 0,
+                    "waiting": 0,
+                    "tasks_done": 1,
+                    "tasks_total": 5,
+                    "roles": [
+                        { "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" },
+                        { "role": "director", "name": "director", "state": "live", "work": "waiting" },
+                        { "role": "actor-a", "name": "alice", "state": "closed", "resumable": true }
+                    ]
+                }]
+            }),
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.focused = Some("t1".into());
+    app.reconcile_published_view();
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
+    app.area = (120, 40);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Char('c'));
+    assert_eq!(app.panel.mode, PanelMode::Collapsed);
+    assert!(app.panel_beside(120));
+    assert_eq!(app.panel_width(120), 16);
+    let drawn = draw_to(&mut app, 120, 40);
+    let text = screen_lines(&drawn).join("\n");
+    assert!(text.contains("○2 ✓1"), "{text}");
+}
+
+#[tokio::test]
+async fn plain_mode_is_unaffected_at_120_80_and_60() {
+    let mut app = app_with_plain(true);
+    for (cols, rows) in [(120u16, 40u16), (80, 24), (60, 20)] {
+        app.area = (cols, rows);
+        assert_eq!(app.panel.mode, PanelMode::Closed);
+        assert!(!app.panel_beside(cols));
+        assert_eq!(app.panel_width(cols), 0);
+        let direct = app.shell.layout_config().layout(
+            cols,
+            rows,
+            app.shell_state.sidebar_collapsed,
+            crate::app::pane_geometry::focused_tab_count(&app),
+            app.sidebar_width,
+            false,
+        );
+        assert_eq!(app.chrome_layout(cols, rows), direct, "cols {cols}");
+    }
 }

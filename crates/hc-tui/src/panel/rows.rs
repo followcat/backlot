@@ -180,6 +180,13 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         role: &'a RoleSummary,
     },
+    /// R3-N9: compact 1-line calm/owed summary under a strip studio
+    /// when it has zero active/blocked `StripRole` lines.
+    StripSummary {
+        studio: StudioRef<'a>,
+        stage: bool,
+        reachable: bool,
+    },
     /// H4: `no hollywood — backlot hollywood setup …` — the expanded
     /// panel's last row while `[hollywood]` is absent (R22).
     SetupHint,
@@ -219,9 +226,9 @@ impl Row<'_> {
             Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
             Row::Input { studio } => Target::Input(studio.key()),
             Row::Stacked(studio) => Target::Block(studio.key()),
-            Row::Strip { studio, .. } | Row::StripRole { studio, .. } => {
-                Target::Strip(studio.key())
-            }
+            Row::Strip { studio, .. }
+            | Row::StripRole { studio, .. }
+            | Row::StripSummary { studio, .. } => Target::Strip(studio.key()),
         }
     }
 
@@ -384,20 +391,27 @@ pub(crate) fn rows<'a>(
     match mode {
         PanelMode::Closed | PanelMode::Collapsed => {
             for studio in &studios {
-                let health = health_of(
-                    studio.studio,
-                    stage_running(studio.machine),
-                    reachable(studio.machine),
-                );
+                let stage = stage_running(studio.machine);
+                let reach = reachable(studio.machine);
+                let health = health_of(studio.studio, stage, reach);
                 out.push(Row::Strip {
                     studio: *studio,
                     health,
                 });
-                for role in strip_roles(studio.studio) {
-                    out.push(Row::StripRole {
+                let roles = strip_roles(studio.studio);
+                if roles.is_empty() {
+                    out.push(Row::StripSummary {
                         studio: *studio,
-                        role,
+                        stage,
+                        reachable: reach,
                     });
+                } else {
+                    for role in roles {
+                        out.push(Row::StripRole {
+                            studio: *studio,
+                            role,
+                        });
+                    }
                 }
             }
         }

@@ -260,3 +260,40 @@ fn a_dead_stage_moves_the_stage_word_inside_the_block() {
     );
     assert_eq!(&dead[3..], &alive[2..]);
 }
+
+#[test]
+fn idle_collapsed_strip_emits_summary_row_under_studio() {
+    let value = serde_json::json!({
+        "schema": "backlot/1",
+        "updated_ms": 1,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "Acme shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "roles": [
+                { "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" },
+                { "role": "director", "name": "director", "terminal": "t2", "state": "live", "work": "waiting" },
+                { "role": "actor-a", "name": "alice", "state": "closed", "resumable": true }
+            ]
+        }]
+    });
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let p = panel(PanelMode::Collapsed);
+    let r = rows(&list, |_| true, |_| true, &p, PanelMode::Collapsed, None, 0);
+    assert!(
+        r.iter()
+            .any(|row| matches!(row, crate::panel::Row::StripSummary { .. })),
+        "idle strip emits StripSummary: {r:?}"
+    );
+    assert!(
+        r.iter()
+            .skip(1)
+            .all(|row| row.target() == Target::Strip("acme-shop".into())),
+        "StripSummary shares Strip target"
+    );
+}

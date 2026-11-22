@@ -17,7 +17,7 @@ use super::draw_blocks::{
     draw_input, draw_owed, draw_person, draw_person_line, draw_talk, draw_top, draw_usage,
     frame_style,
 };
-use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role};
+use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role, draw_strip_summary};
 use super::draw_tasks::{draw_drawer, draw_fold, draw_task};
 use super::rows::{Row, Target};
 use super::{Panel, PanelMode, rows};
@@ -402,6 +402,13 @@ pub(crate) fn render(
             }
             Row::StripRole { role, .. } => {
                 draw_strip_role(buf, rect, role, palette);
+            }
+            Row::StripSummary {
+                studio,
+                stage,
+                reachable,
+            } => {
+                draw_strip_summary(buf, rect, *studio, *stage, *reachable, palette);
             }
             Row::SetupHint => {
                 put_text(
