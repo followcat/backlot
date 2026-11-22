@@ -5,6 +5,7 @@
 //! `backlot` document and the inventory's stage flag.
 
 mod actions;
+mod input;
 mod keys;
 mod layout;
 mod mouse;
@@ -17,7 +18,7 @@ use hc_proto::endpoint::Endpoint;
 
 use super::App;
 use crate::panel::data::MachineSummary;
-use crate::panel::{self, PanelConfig, PanelMode};
+use crate::panel::{self, PanelConfig, PanelMode, Target};
 
 /// The working-mark spin interval (~8 fps); the deadline is a one-shot
 /// that re-arms only while a working mark is drawn.
@@ -47,6 +48,14 @@ impl App {
     /// first, then each added machine's, in `machine.list` order.
     pub(crate) fn panel_summaries(&self) -> Vec<MachineSummary> {
         panel::data::summaries(&self.view)
+    }
+
+    /// Whether the `›` line owns the keys: the selection sits on a
+    /// block's `Input` row while the panel is focused — one rule, no
+    /// separate latch, so the highlight and the key receiver can
+    /// never disagree (the Call Sheet's same model).
+    pub(crate) fn panel_editing(&self) -> bool {
+        self.panel.focused && matches!(self.panel.selected, Some(Target::Input(_)))
     }
 
     /// Whether `machine`'s (`None` is this core) inventory shows a

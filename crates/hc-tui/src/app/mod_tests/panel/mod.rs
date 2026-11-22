@@ -3,6 +3,7 @@
 //! keys live in `keys`, mouse in `mouse`. Neutral fixtures only
 //! (`acme-shop`, `alice`).
 mod draw;
+mod input;
 mod keys;
 mod menus;
 mod merge;

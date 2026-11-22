@@ -52,6 +52,55 @@ impl App {
         }
         let (code, modifiers) = crate::config::normalize_key_combo((combo.code, combo.modifiers));
         let plain = modifiers.is_empty();
+        // An armed `finish <id>? [y/n]` outranks even a `›` line's
+        // edit — its letters answer the prompt, never land in a
+        // draft (the Call Sheet's same rule).
+        if self.panel.finish_confirm.is_some() && key.input.action == hc_vt::Action::Press {
+            match code {
+                crossterm::event::KeyCode::Char('y') if plain => {
+                    self.panel_decide(true);
+                    return;
+                }
+                crossterm::event::KeyCode::Char('d') if plain => {
+                    self.panel_decide(false);
+                    return;
+                }
+                crossterm::event::KeyCode::Char('n') if plain => {
+                    self.panel.finish_confirm = None;
+                    return;
+                }
+                crossterm::event::KeyCode::Esc => {
+                    self.panel.finish_confirm = None;
+                    return;
+                }
+                _ => {}
+            }
+        }
+        // The `›` line owns every key while the selection sits on
+        // it — `↑` steps back into the rows, `⏎` sends (or runs a
+        // `/verb`), `esc` peels back to the rows, the rest is text.
+        if self.panel_editing() {
+            if key.input.action != hc_vt::Action::Press {
+                return;
+            }
+            match code {
+                crossterm::event::KeyCode::Esc | crossterm::event::KeyCode::Up
+                    if modifiers.is_empty() =>
+                {
+                    self.panel_move(-1);
+                }
+                crossterm::event::KeyCode::Down if modifiers.is_empty() => {
+                    self.panel_move(1);
+                }
+                crossterm::event::KeyCode::Enter if modifiers.is_empty() => {
+                    self.panel_input_submit();
+                }
+                _ => {
+                    let _ = self.panel.input.handle_key(key);
+                }
+            }
+            return;
+        }
         if matches!(
             code,
             crossterm::event::KeyCode::Down | crossterm::event::KeyCode::Char('j')
@@ -109,6 +158,8 @@ impl App {
             KeyCode::Char('n') if plain => {
                 self.panel.finish_confirm = None;
             }
+            KeyCode::Char('i') if plain => self.panel_input_focus(false),
+            KeyCode::Char('/') if plain => self.panel_input_focus(true),
             KeyCode::Char('m') if plain => self.panel_menu_selected(),
             KeyCode::Char('+') | KeyCode::Char('=')
                 if plain || modifiers == KeyModifiers::SHIFT =>
@@ -157,6 +208,9 @@ impl App {
             // R22: the `hollywood setup` hint is the in-TUI dialog's
             // button — same dialog the Call Sheet's row opens.
             Some(Target::Setup) => self.hw_setup_open(),
+            // Selecting the `›` line is what opens it — the derived
+            // `panel_editing` puts the keys there already.
+            Some(Target::Input(_)) => {}
             Some(Target::Block(id)) => {
                 // A single-line block expands — the same manual
                 // override Space writes; the selection follows the

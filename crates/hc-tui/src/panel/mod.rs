@@ -77,6 +77,10 @@ pub(crate) struct Panel {
     /// `finish <id>? [y/n]` confirm — `y` runs `studio finish`, `n`
     /// or `Esc` stands down (S2 §2's `[f]` hint made real).
     pub finish_confirm: Option<crate::studio::StudioKey>,
+    /// The `›` line's editor — it holds keys while the selection
+    /// sits on a block's `Target::Input` row (`i`, `Enter`, a click
+    /// or `j`/`k` land it there).
+    pub input: crate::chrome::text_editor::TextEditor,
     /// Spinner frame counter for working marks (~120 ms ticks).
     pub spin: usize,
     /// The width the dock's border drag last left — the session's
@@ -108,6 +112,7 @@ impl Panel {
             drawer: None,
             accepted_folds: Default::default(),
             finish_confirm: None,
+            input: crate::chrome::text_editor::TextEditor::new("", false),
             spin: 0,
             drag_width: None,
             // The flag stays off until `set_hollywood` reads the

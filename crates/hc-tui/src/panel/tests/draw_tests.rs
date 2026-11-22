@@ -327,13 +327,33 @@ fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
     focused.focused = true;
     let (buf, _) = draw(area, Some(&summary), &focused, None);
     let last = &lines(&buf, area)[area.height as usize - 1];
-    assert!(last.contains("m menu"), "{last}");
+    assert!(last.contains('m'), "{last}");
+    assert!(last.contains('?'), "{last}");
     // Under 8 rows the line is dropped.
     let area = Rect::new(0, 0, 30, 7);
     let (buf, _) = draw(area, Some(&summary), &unfocused, None);
     let text = lines(&buf, area).join("\n");
     assert!(!text.contains("studio  ←"), "{text}");
     assert!(!text.contains("m menu"), "{text}");
+}
+
+#[test]
+fn an_expanded_block_draws_its_input_line() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, Some("acme-shop"));
+    let text = lines(&buf, area).join("\n");
+    // The `›` line sits inside the block's frame and its empty
+    // placeholder teaches both channels (tell · /verbs).
+    assert!(text.contains('›'), "{text}");
+    assert!(text.contains("tell producer"), "{text}");
+    assert!(
+        hits.rows
+            .iter()
+            .any(|(_, t)| matches!(t, Target::Input(id) if id.id == "acme-shop")),
+        "the `›` line is a hit target"
+    );
 }
 
 #[test]

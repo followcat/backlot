@@ -195,12 +195,9 @@ pub(super) fn tasks_height(studio: StudioRef<'_>, panel: &Panel, accepted_open: 
     height
 }
 
-/// An expanded block's height: top + bottom borders, the owed-step
-/// line when present, the armed finish confirm, each person's
-/// lines, the task section and the closed section.
-/// An expanded block's height: top + bottom borders, the owed-step
-/// line when present, the armed finish confirm, each person's
-/// lines, the task section and the closed section.
+/// An expanded block's height: top + bottom borders, the `›` input
+/// line, the owed-step line when present, the armed finish confirm,
+/// each person's lines, the task section and the closed section.
 pub(super) fn block_height(
     studio: StudioRef<'_>,
     panel: &Panel,
@@ -208,7 +205,7 @@ pub(super) fn block_height(
     accepted_open: bool,
 ) -> usize {
     let mut height =
-        2 + usize::from(owed) + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
+        3 + usize::from(owed) + usize::from(panel.finish_confirm.as_ref() == Some(&studio.key()));
     for role in live_roles(studio.studio) {
         height += person_height(studio, role, panel);
     }

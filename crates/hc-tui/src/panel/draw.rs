@@ -14,7 +14,7 @@ use ratatui::style::{Modifier, Style};
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
-    draw_owed, draw_person, draw_person_line, draw_top, draw_usage, frame_style,
+    draw_input, draw_owed, draw_person, draw_person_line, draw_top, draw_usage, frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role};
 use super::draw_tasks::{draw_drawer, draw_fold, draw_task};
@@ -153,11 +153,12 @@ pub(crate) fn render(
         } else {
             "esc"
         };
-        let focused_tiers = [
-            format!("↑↓ move  m menu  ? keys  {esc}"),
-            format!("↑↓ move  ? keys  {esc}"),
-            esc.to_string(),
-        ];
+        // The footer's focused hints name what the selected row can
+        // do — a person line and a studio line offer different keys
+        // and the `›` line shows its own, so the dock teaches its
+        // verbs where the cursor sits (A2.2's "cursor on something
+        // real" made readable).
+        let focused_tiers = hint_tiers(panel.selected.as_ref(), esc);
         let tier_refs: Vec<&str> = focused_tiers.iter().map(String::as_str).collect();
         let keys_line = if panel.focused {
             fit_hints(&tier_refs, area.width as usize).to_string()
@@ -243,6 +244,7 @@ pub(crate) fn render(
                     | Row::AcceptedFold { .. }
                     | Row::Stacked(_)
                     | Row::Strip { .. }
+                    | Row::Input { .. }
             );
         if paints {
             // A block-interior row's `│` borders keep the border
@@ -250,7 +252,10 @@ pub(crate) fn render(
             // inside them.
             let inner = if matches!(
                 row,
-                Row::Person { .. } | Row::Task { .. } | Row::AcceptedFold { .. }
+                Row::Person { .. }
+                    | Row::Task { .. }
+                    | Row::AcceptedFold { .. }
+                    | Row::Input { .. }
             ) {
                 Rect {
                     x: rect.x + 1,
@@ -341,6 +346,16 @@ pub(crate) fn render(
             Row::Drawer { studio, text, .. } => {
                 draw_drawer(buf, rect, text, frame_of(&studio.key()), palette);
             }
+            Row::Input { studio } => {
+                draw_input(
+                    buf,
+                    rect,
+                    &panel.input,
+                    paints,
+                    frame_of(&studio.key()),
+                    palette,
+                );
+            }
             Row::Stacked(studio) => {
                 draw_stacked(
                     buf,
@@ -375,7 +390,10 @@ pub(crate) fn render(
             // redraws over it.
             let bar_x = if matches!(
                 row,
-                Row::Person { .. } | Row::Task { .. } | Row::AcceptedFold { .. }
+                Row::Person { .. }
+                    | Row::Task { .. }
+                    | Row::AcceptedFold { .. }
+                    | Row::Input { .. }
             ) {
                 rect.x + 1
             } else {
@@ -408,3 +426,32 @@ pub(crate) fn render(
 
 // The frame's colour and the `│` edges live in `draw_blocks` — the
 // error/next/divider/bottom rows share them with the painters there.
+
+/// The focused footer's three width tiers — what the *selected* row
+/// can do, so the hints a person sees change with the cursor: a
+/// person line offers `p`/`y`/`d`, a task `+`/`-`, a `›` line owns
+/// every key (its `esc`/`↑` peel back to the rows). `esc` is the
+/// label the caller already resolved (`esc`/`esc back`/`esc close`).
+fn hint_tiers(selected: Option<&Target>, esc: &str) -> [String; 3] {
+    let s = |v: &[&str]| {
+        let mut out = [String::new(), String::new(), esc.to_string()];
+        for (i, t) in v.iter().enumerate() {
+            out[i] = format!("{t}  {esc}");
+        }
+        out
+    };
+    match selected {
+        Some(Target::Input(_)) => s(&["⏎ send  ↑ rows", "⏎ send  ↑"]),
+        Some(Target::Person(..)) => {
+            s(&["⏎ focus  v sheet  p peek  i tell  m", "⏎ v p i m", "⏎ v m"])
+        }
+        Some(Target::Task(..)) => s(&["v sheet  +- pri  i tell  m", "v +- i m", "v m"]),
+        Some(Target::Studio(_) | Target::Block(_) | Target::Strip(_)) => {
+            s(&["⏎ focus  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
+        }
+        Some(Target::Fold(_)) => s(&["⏎ open  i tell  m", "⏎ i m", "⏎ m"]),
+        Some(Target::Stage(_)) => s(&["⏎ start  m", "⏎ m"]),
+        Some(Target::Setup) => s(&["⏎ setup", "⏎"]),
+        _ => s(&["↑↓ move  i tell  m menu  ? keys", "↑↓ i m ?", "m ?"]),
+    }
+}

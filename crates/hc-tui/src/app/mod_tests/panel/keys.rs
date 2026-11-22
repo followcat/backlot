@@ -147,8 +147,18 @@ async fn focused_panel_keys_move_flip_collapse_and_do_not_leak() {
     key(&mut app, hc_vt::Key::PageDown);
     assert!(matches!(
         app.panel.selected,
-        Some(Target::Studio(..) | Target::Block(..) | Target::Person(..))
+        Some(
+            Target::Studio(..)
+                | Target::Block(..)
+                | Target::Person(..)
+                | Target::Task(..)
+                | Target::Fold(..)
+                | Target::Input(..)
+        )
     ));
+    // A leap that lands on the `›` line owns the letters — `esc`
+    // peels back to the rows before `c` reads as a key again.
+    key(&mut app, hc_vt::Key::Escape);
     // c collapses the panel to its strip.
     key(&mut app, hc_vt::Key::Char('c'));
     assert_eq!(app.panel.mode, PanelMode::Collapsed);
@@ -531,9 +541,11 @@ async fn keys_reach_a_remote_actor_across_publishes() {
     app.area = (160, 47);
     open_panel(&mut app);
     draw_to(&mut app, 160, 47);
-    // `j` once per target past acme-shop's block to `actor-a` on
+    // `↓` once per target past acme-shop's block to `actor-a` on
     // `host-b` — a document republish lands between every press, so
     // the selection must survive rebuilt row lists to get there.
+    // (`↓`, not `j`: landing on a `›` line makes the keys text —
+    // the arrow is what steps through, the same as the Call Sheet.)
     let actor = Target::Person(
         StudioKey {
             machine: Some("host-b".into()),
@@ -546,7 +558,7 @@ async fn keys_reach_a_remote_actor_across_publishes() {
             break;
         }
         republish(&mut app);
-        key(&mut app, hc_vt::Key::Char('j'));
+        key(&mut app, hc_vt::Key::ArrowDown);
     }
     assert_eq!(app.panel.selected, Some(actor.clone()));
     // `-` lowers the actor's high task to normal — on host-b.
