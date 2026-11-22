@@ -23,6 +23,8 @@ pub(crate) enum Launch {
     /// Open the compact target picker — its rows name concrete
     /// targets; Enter on one acts like Enter on that target's row.
     Pick(Pick),
+    /// A studio key's own navigation — Enter runs `studio_nav`.
+    Nav(crate::panel::StudioNav),
     /// Herdr's own keybind rows and the legend — Enter just closes.
     Close,
 }

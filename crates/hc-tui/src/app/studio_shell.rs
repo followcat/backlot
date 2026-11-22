@@ -14,6 +14,7 @@ use crate::operations::{Action, Change, Creation, Edit};
 use crate::shells::{
     SHELL_LABEL, STUDIO_LABEL, next_shell_n, shell_name, shell_tab_id, studio_shells,
 };
+use crate::studio::StudioKey;
 
 impl App {
     /// `new_tab` and the splits in studio mode: a studio shell
@@ -184,15 +185,11 @@ impl App {
         }
     }
 
-    /// The current studio's shell terminals for the role keys —
-    /// after the people, in shell-number order, on its own machine.
-    pub(crate) fn focused_studio_shells(&self) -> Vec<String> {
-        let machines = self.panel_summaries();
-        let Some(index) = self.studio.current_index(&machines) else {
-            return Vec::new();
-        };
-        let current = crate::panel::data::studios(&machines)[index];
-        studio_shells(&self.view, current.machine, &current.studio.id)
+    /// `key`'s live shell terminals in shell-number order, on the
+    /// studio's own machine — the role keys' tail and the shell
+    /// fallback `focus_studio` lands on.
+    pub(crate) fn studio_shells_live(&self, key: &StudioKey) -> Vec<String> {
+        studio_shells(&self.view, key.machine.as_deref(), &key.id)
             .into_iter()
             .map(|(_, address)| address)
             .filter(|address| {
@@ -202,6 +199,17 @@ impl App {
                     .is_some_and(|t| t.state == "live")
             })
             .collect()
+    }
+
+    /// The current studio's shell terminals for the role keys —
+    /// after the people, in shell-number order, on its own machine.
+    pub(crate) fn focused_studio_shells(&self) -> Vec<String> {
+        let machines = self.panel_summaries();
+        let Some(index) = self.studio.current_index(&machines) else {
+            return Vec::new();
+        };
+        let current = crate::panel::data::studios(&machines)[index];
+        self.studio_shells_live(&current.key())
     }
 }
 

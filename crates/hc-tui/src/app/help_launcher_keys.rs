@@ -73,6 +73,10 @@ impl App {
                     selected: 0,
                 });
             }
+            Launch::Nav(nav) => {
+                self.help = false;
+                self.studio_nav(nav);
+            }
             Launch::Close => self.help = false,
         }
     }

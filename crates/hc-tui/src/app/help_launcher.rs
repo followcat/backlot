@@ -214,13 +214,59 @@ impl App {
         }
     }
 
-    /// The `studio & task actions` group — the four surface rows
-    /// then the `…` pickers. A picker with no targets at all leaves
-    /// no row: the overlay never offers a no-op press.
+    /// The four studio keys, leading the `studio & task actions`
+    /// group (R3-N6): each row names its combo — `unset` when the
+    /// `[keys]` entry is `""` — and the herdr action it shadows, and
+    /// Enter runs the navigation itself.
+    fn studio_key_rows(&self) -> Vec<HelpRow> {
+        let keys = &self.panel_config.keys;
+        [
+            (
+                crate::panel::StudioNav::PreviousStudio,
+                keys.previous_studio,
+                "previous studio",
+            ),
+            (
+                crate::panel::StudioNav::NextStudio,
+                keys.next_studio,
+                "next studio",
+            ),
+            (
+                crate::panel::StudioNav::PreviousRole,
+                keys.previous_role,
+                "previous role",
+            ),
+            (
+                crate::panel::StudioNav::NextRole,
+                keys.next_role,
+                "next role",
+            ),
+        ]
+        .into_iter()
+        .map(|(nav, combo, label)| HelpRow {
+            label: format!(
+                "{}{}",
+                label,
+                crate::keybind_help::studio_key_shadow(&self.live.keybinds, combo)
+            ),
+            hint: combo
+                .map(crate::config::format_key_combo)
+                .unwrap_or_else(|| "unset".to_owned()),
+            glyph: "",
+            launch: combo.map_or(Launch::Close, |_| Launch::Nav(nav)),
+        })
+        .collect()
+    }
+
+    /// The `studio & task actions` group — the four studio keys,
+    /// then the surface rows, then the `…` pickers. A picker with
+    /// no targets at all leaves no row: the overlay never offers a
+    /// no-op press.
     fn actions_group(&self) -> HelpGroup {
         let prefix = crate::config::format_prefix_combos(&self.live.prefix);
         let dock = self.dock_chord();
-        let mut rows = vec![
+        let mut rows = self.studio_key_rows();
+        rows.extend([
             HelpRow {
                 label: "Open Call Sheet (prompts, cards, tell hollywood)".to_owned(),
                 hint: self.hollywood_key_label(),
@@ -245,7 +291,7 @@ impl App {
                 glyph: "",
                 launch: Launch::Pick(Pick::Machine),
             },
-        ];
+        ]);
         if !self.picker_rows(Pick::Task).is_empty() {
             rows.push(HelpRow {
                 label: "Inspect task deliveries, checks & reviews…".to_owned(),
@@ -323,7 +369,13 @@ impl App {
         groups.extend(
             reference
                 .into_iter()
-                .filter(|(title, _)| *title != "backlot" && *title != "glyph legend")
+                .filter(|(title, _)| {
+                    // `backlot`'s chords are named by the actions
+                    // group already, the `studio` rows lead it
+                    // (R3-N6) and the legend is pinned by the
+                    // renderer — none list again down here.
+                    !matches!(*title, "backlot" | "studio" | "glyph legend")
+                })
                 .map(|(title, entries)| HelpGroup {
                     title: title.to_owned(),
                     rows: entries

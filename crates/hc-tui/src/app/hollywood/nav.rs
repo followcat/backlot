@@ -153,7 +153,7 @@ impl App {
 
     /// Leave the layer after a row focused a terminal: the panel
     /// collapses back to its strip so the focused pane stays visible.
-    pub(super) fn hollywood_leave(&mut self) {
+    pub(crate) fn hollywood_leave(&mut self) {
         self.hollywood.mode = LayerMode::Collapsed;
         self.hollywood.editing = false;
         self.hollywood.view = None;

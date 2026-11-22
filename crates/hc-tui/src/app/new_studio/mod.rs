@@ -652,7 +652,8 @@ impl App {
         };
         let seated = crate::studio::cast_order(studio.studio)
             .iter()
-            .any(|role| crate::studio::live_terminal(role).is_some());
+            .any(|role| crate::studio::live_terminal(role).is_some())
+            || !self.studio_shells_live(&key).is_empty();
         if seated {
             self.ns_pending_focus = None;
             self.focus_studio(&key);
