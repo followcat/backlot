@@ -31,6 +31,7 @@ use crate::connerr;
 use crate::deliver;
 use crate::discover;
 use crate::doc;
+use crate::exchange_read;
 use crate::link;
 use crate::ratelimit;
 use crate::reconcile;
@@ -251,6 +252,9 @@ pub(crate) struct Stage {
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
+    /// Cached `(studio, seq) -> snippet` lines for `StudioSummary.exchange`
+    /// so immutable message/report files are read from disk at most once.
+    pub(crate) exchange_cache: std::cell::RefCell<BTreeMap<(String, u64), String>>,
     /// Whether the core still answers `terminal.label` on a live
     /// terminal — `false` once a call is refused or unoffered: a core
     /// that cannot change labels keeps every terminal where it
@@ -550,7 +554,20 @@ impl Stage {
                 )
             })
             .collect();
-        let mut s = summary::summary(&owned, doing, &self.work.borrow(), &failed, &errors, 0);
+        let snippets = exchange_read::studio_snippets(
+            &self.base,
+            &owned,
+            &mut self.exchange_cache.borrow_mut(),
+        );
+        let mut s = summary::summary_with_exchange(
+            &owned,
+            doing,
+            &self.work.borrow(),
+            &failed,
+            &errors,
+            &snippets,
+            0,
+        );
         // U6c: the stage's own version rides the document so clients
         // read each machine's backlot version without probing.
         s.backlot_version = Some(env!("CARGO_PKG_VERSION").to_string());
@@ -641,6 +658,7 @@ impl Stage {
             hcfg: std::cell::RefCell::new(None),
             stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
+            exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
@@ -731,6 +749,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hcfg: std::cell::RefCell::new(None),
         stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
+        exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)

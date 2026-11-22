@@ -23,6 +23,9 @@ pub use crate::hollywood_summary::{
     CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
     hollywood_section,
 };
+pub use crate::studio_exchange::{
+    MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,
+};
 
 /// The `schema` value this generation writes.
 /// The `schema` value this generation writes.
@@ -100,6 +103,10 @@ pub struct StudioSummary {
     pub tasks: Vec<TaskSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roles: Vec<RoleSummary>,
+    /// The newest [`MAX_STUDIO_EXCHANGE`] user-facing messages and
+    /// `to: user` reports, oldest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exchange: Vec<StudioExchange>,
 }
 
 /// One task's dock projection — the row the panel draws even when no
@@ -357,6 +364,29 @@ pub fn summary(
     errors: &BTreeMap<String, String>,
     updated_ms: u64,
 ) -> Summary {
+    summary_with_exchange(
+        studios,
+        live,
+        work,
+        failed,
+        errors,
+        &BTreeMap::new(),
+        updated_ms,
+    )
+}
+
+/// [`summary`] with stage-read `(studio, seq) -> snippet` lines so
+/// `StudioSummary.exchange` participates in [`TARGET_BYTES`] sizing
+/// while `backlot-model` stays pure.
+pub fn summary_with_exchange(
+    studios: &[(String, StudioState)],
+    live: &BTreeMap<String, String>,
+    work: &BTreeMap<(String, String), Work>,
+    failed: &BTreeMap<(String, String), String>,
+    errors: &BTreeMap<String, String>,
+    snippets: &BTreeMap<(String, u64), String>,
+    updated_ms: u64,
+) -> Summary {
     let mut live_studios = Vec::new();
     let mut finished_studios = Vec::new();
     for (name, state) in studios {
@@ -382,6 +412,7 @@ pub fn summary(
                     usage: None,
                     tasks: Vec::new(),
                     roles: Vec::new(),
+                    exchange: Vec::new(),
                 });
             }
             continue;
@@ -442,6 +473,10 @@ pub fn summary(
                 stage_answer_ms: None,
             });
         }
+        let studio_snippets: BTreeMap<u64, String> = snippets
+            .iter()
+            .filter_map(|((s, seq), text)| (s == name).then_some((*seq, text.clone())))
+            .collect();
         let entry = StudioSummary {
             id: cap(name),
             title: cap(&cfg.title),
@@ -480,6 +515,7 @@ pub fn summary(
                 .map(|t| task_summary(state, t))
                 .collect(),
             roles,
+            exchange: crate::studio_exchange::studio_exchange(state, &studio_snippets),
         };
         if done {
             finished_studios.push(entry);

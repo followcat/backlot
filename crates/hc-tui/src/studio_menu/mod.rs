@@ -130,6 +130,9 @@ pub(crate) enum MenuKind {
     /// A Call Sheet `Headline` or `Talk(seq)` row — read entry or
     /// focus the raw `bl-hollywood` terminal.
     Hollywood(Option<u64>),
+    /// A Studio Dock `Talk(studio, seq)` row — read message/report
+    /// body or act on its studio.
+    StudioTalk(u64),
 }
 
 /// What the machine menu knows about `backlot` there — the
@@ -219,6 +222,9 @@ pub(crate) enum StudioAct {
     HollywoodShow,
     /// Focus the raw `bl-hollywood` terminal.
     FocusHollywood,
+    /// `report show --file <rel> --studio <s>` — open a studio
+    /// exchange entry in `CardView`.
+    ReportShow,
 }
 
 /// One menu line.
@@ -272,6 +278,9 @@ pub(crate) struct StudioMenu {
     /// The newest known release (`0.2.4`, no `v`) — the
     /// `Upgrade backlot to v<latest>` label reads it.
     pub latest: Option<String>,
+    /// Studio-relative file path on a `StudioTalk` row (`messages/…`
+    /// or `reports/…`).
+    pub talk_file: Option<String>,
 }
 
 impl StudioMenu {
@@ -315,6 +324,7 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+            talk_file: None,
         }
     }
 
@@ -343,6 +353,7 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+            talk_file: None,
         }
     }
 
@@ -362,6 +373,7 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+            talk_file: None,
         }
     }
 
@@ -381,6 +393,7 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+            talk_file: None,
         }
     }
 
@@ -401,6 +414,7 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+            talk_file: None,
         }
     }
 
@@ -428,6 +442,7 @@ impl StudioMenu {
             machine,
             backlot: Some(backlot),
             latest,
+            talk_file: None,
         }
     }
 
@@ -447,6 +462,7 @@ impl StudioMenu {
             machine: None,
             backlot: None,
             latest: None,
+            talk_file: None,
         }
     }
 
@@ -455,6 +471,24 @@ impl StudioMenu {
     pub(crate) fn hollywood(seq: Option<u64>) -> StudioMenu {
         StudioMenu {
             kind: MenuKind::Hollywood(seq),
+            ..StudioMenu::lot()
+        }
+    }
+
+    /// A Studio Dock `Talk(studio, seq)` row's menu — reads its
+    /// `messages/…` or `reports/…` file when present, plus quick
+    /// studio actions.
+    pub(crate) fn studio_talk(
+        key: &StudioKey,
+        seq: u64,
+        talk_file: Option<String>,
+        offline: bool,
+    ) -> StudioMenu {
+        StudioMenu {
+            kind: MenuKind::StudioTalk(seq),
+            studio: Some(key.clone()),
+            offline,
+            talk_file,
             ..StudioMenu::lot()
         }
     }

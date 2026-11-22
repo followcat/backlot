@@ -725,6 +725,20 @@ fn report_show_streams_allowed_roots() {
     // `requirements/` is the G3 name for the on-disk `req/` root.
     assert_eq!(show("requirements/v1.md").unwrap(), "# requirement\n");
     assert_eq!(show("req/v1.md").unwrap(), "# requirement\n");
+
+    // `tell user` from producer and `tell producer` from user write
+    // `messages/<seq>-…` files that `report show` streams cleanly.
+    ok(&env, "tell user --text ready-to-ship --as producer");
+    let reply = fixture(&scratch, "reply.md", "Full producer reply.\nLine two.\n");
+    ok(&env, &format!("tell user --file {reply} --as producer"));
+    let state = crate::store::load_state(&sdir).unwrap();
+    assert_eq!(state.messages.len(), 2);
+    assert_eq!(state.messages[0].to, "user");
+    assert_eq!(state.messages[0].from, "producer");
+    let m0 = state.messages[0].file.as_deref().unwrap();
+    let m1 = state.messages[1].file.as_deref().unwrap();
+    assert_eq!(show(m0).unwrap(), "ready-to-ship");
+    assert_eq!(show(m1).unwrap(), "Full producer reply.\nLine two.\n");
 }
 
 #[test]
@@ -740,10 +754,13 @@ fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
     for bad in [
         "../events.jsonl",
         "reports/../../etc/passwd",
+        "messages/../../etc/passwd",
         "/etc/passwd",
-        "messages/1-x.txt",
+        "messages/sub/nested.md",
+        "work/t1/secret.rs",
         "plan/1-plan-x.md",
         "reports",
+        "messages",
         "attention/nope.txt",
         "attention/7.log",
         "requirements/readme.md",
@@ -775,6 +792,20 @@ fn report_show_rejects_traversal_absolutes_and_foreign_roots() {
         "report show --studio acme-shop --file reports/leak.md",
     );
     assert!(err.contains("outside studio"), "{err}");
+    fs::create_dir_all(sdir.join("messages")).unwrap();
+    std::os::unix::fs::symlink(&outside, sdir.join("messages/leak.md")).unwrap();
+    let err = refused(
+        &env,
+        "report show --studio acme-shop --file messages/leak.md",
+    );
+    assert!(err.contains("outside studio"), "{err}");
+    assert!(
+        refused(
+            &env,
+            "report show --studio acme-shop --file messages/absent.md"
+        )
+        .contains("no file")
+    );
     // An inside-pointing symlink is served — containment follows the
     // resolved path, not the spelling.
     let inside = sdir.join("checks/ok.log");

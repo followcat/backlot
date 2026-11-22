@@ -52,6 +52,7 @@ fn outbox_gathers_each_roles_pending_items() {
     state.messages.push(message(3, "writer", false));
     state.messages.push(message(2, "writer", true));
     state.messages.push(message(4, "director", false));
+    state.messages.push(message(8, "user", false));
     state.reports.push(ReportRecord {
         seq: 6,
         from: "director".into(),

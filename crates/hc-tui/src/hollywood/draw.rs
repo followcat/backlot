@@ -94,11 +94,11 @@ pub(crate) fn render(
     palette: &Palette,
 ) -> HollywoodRender {
     match hollywood.mode {
-        LayerMode::Hidden => HollywoodRender::default(),
         // The collapsed bar is the lot pill in the chrome's own row —
-        // the floating strip is gone, so a collapsed layer draws
-        // nothing unless a read-only `CardView` (`records`) is open.
-        LayerMode::Collapsed => match hollywood.view.as_ref() {
+        // the floating strip is gone, so a hidden or collapsed layer
+        // draws nothing unless a read-only `CardView` (`records`,
+        // `report show`) is open.
+        LayerMode::Hidden | LayerMode::Collapsed => match hollywood.view.as_ref() {
             Some(view) => HollywoodRender {
                 view: Some(view::render_view(
                     buf,

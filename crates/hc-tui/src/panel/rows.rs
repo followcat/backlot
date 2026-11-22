@@ -4,7 +4,7 @@
 //! stacked block's `╶ id …` line — so the scroll math stays in
 //! one-line steps.
 
-use backlot_model::summary::{RoleSummary, TaskSummary};
+use backlot_model::summary::{RoleSummary, StudioExchange, TaskSummary};
 
 use super::data::{MachineSummary, StudioRef};
 use super::row_lines::{owed_text, person_drawer, task_drawer};
@@ -38,6 +38,10 @@ pub(crate) enum Target {
     /// block's owed-step `◌ … — [r] start`; Enter/click is the
     /// `[r]` (U6c). `None` names this core.
     Stage(Option<String>),
+    /// An expanded block's user-facing exchange row (`seq`) above `›` —
+    /// Enter/click opens its full `messages/…` or `reports/…` file in
+    /// the read-only `CardView`.
+    Talk(StudioKey, u64),
     /// An expanded block's `›` line — Enter/click lands the keys on
     /// it: text is a `tell` to the producer, a leading `/` runs the
     /// deterministic verbs (`/stop`, `/pause t1`, …).
@@ -58,6 +62,7 @@ impl Target {
             | Target::Person(key, _)
             | Target::Task(key, _)
             | Target::Fold(key)
+            | Target::Talk(key, _)
             | Target::Input(key) => Some(key),
             Target::Stage(..) | Target::Setup | Target::None => Option::None,
         }
@@ -152,6 +157,12 @@ pub(crate) enum Row<'a> {
         studio: StudioRef<'a>,
         text: String,
     },
+    /// One user-facing exchange turn (`›` user / `✦` producer or
+    /// hollywood) above the studio's `›` input row.
+    Talk {
+        studio: StudioRef<'a>,
+        line: &'a StudioExchange,
+    },
     /// The block's `›` tell/command line — the studio's own input
     /// surface inside its frame, before the bottom border.
     Input {
@@ -205,6 +216,7 @@ impl Row<'_> {
             Row::PersonLine { studio, role, .. } => Target::Person(studio.key(), role.role.clone()),
             Row::Task { studio, task } => Target::Task(studio.key(), task.id.clone()),
             Row::AcceptedFold { studio, .. } => Target::Fold(studio.key()),
+            Row::Talk { studio, line } => Target::Talk(studio.key(), line.seq),
             Row::Input { studio } => Target::Input(studio.key()),
             Row::Stacked(studio) => Target::Block(studio.key()),
             Row::Strip { studio, .. } | Row::StripRole { studio, .. } => {
@@ -221,13 +233,15 @@ impl Row<'_> {
 }
 
 /// One studio's expanded block: header, owed-step subheader, live
-/// roles, task rows, the accepted fold, closed roles, bottom border.
+/// roles, task rows, the accepted fold, closed roles, bounded
+/// exchange rows, input row, bottom border.
 fn block_rows<'a>(
     out: &mut Vec<Row<'a>>,
     studio: StudioRef<'a>,
     panel: &Panel,
     stage: bool,
     reachable: bool,
+    talk_limit: usize,
 ) {
     let health = health_of(studio.studio, stage, reachable);
     out.push(Row::BlockTop { studio, health });
@@ -310,6 +324,13 @@ fn block_rows<'a>(
     for role in closed_roles(studio.studio) {
         emit_person(out, role);
     }
+    if talk_limit > 0 {
+        let ex = &studio.studio.exchange;
+        let skip = ex.len().saturating_sub(talk_limit);
+        for line in &ex[skip..] {
+            out.push(Row::Talk { studio, line });
+        }
+    }
     // The `›` tell/command line closes the block — the studio's own
     // input surface inside its frame (S2 §4's input row).
     out.push(Row::Input { studio });
@@ -381,6 +402,7 @@ pub(crate) fn rows<'a>(
             }
         }
         PanelMode::Expanded => {
+            let header_rows = out.len().saturating_sub(1);
             let owed = |studio: StudioRef<'_>| {
                 !reachable(studio.machine)
                     || !stage_running(studio.machine)
@@ -389,11 +411,22 @@ pub(crate) fn rows<'a>(
                     || studio.studio.ready_to_finish
             };
             let open = expanded_set(&studios, panel, current, body_height, &owed);
+            let budgets = talk_budgets(
+                &studios,
+                &open,
+                panel,
+                current,
+                body_height,
+                header_rows,
+                &owed,
+            );
             for studio in studios {
-                if open.contains(&studio.key()) {
+                let key = studio.key();
+                if open.contains(&key) {
                     let stage = stage_running(studio.machine);
                     let reach = reachable(studio.machine);
-                    block_rows(&mut out, studio, panel, stage, reach);
+                    let talk_limit = budgets.get(&key).copied().unwrap_or(0);
+                    block_rows(&mut out, studio, panel, stage, reach, talk_limit);
                 } else {
                     out.push(Row::Stacked(studio));
                 }

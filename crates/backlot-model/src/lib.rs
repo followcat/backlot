@@ -28,6 +28,7 @@ pub mod refusal;
 pub mod roles;
 pub mod state;
 pub mod steps;
+mod studio_exchange;
 pub mod summary;
 mod summary_build;
 pub mod task_reduce;
@@ -84,6 +85,8 @@ mod roles_tests;
 mod state_tests;
 #[cfg(test)]
 mod steps_tests;
+#[cfg(test)]
+mod studio_exchange_tests;
 #[cfg(test)]
 mod summary_tests;
 #[cfg(test)]

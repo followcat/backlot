@@ -162,9 +162,10 @@ pub(super) fn render_overlays_and_cursor(
     // U7: it waits for the same first read the card does, and the
     // collapsed strip never covers the card; the expanded band does
     // (U8) — the user pressed its key, so it must be visible.
-    app.hollywood_hits = if app.hollywood.visible()
-        && app.opening.ready()
-        && (band_over_page || !app.opening_visible())
+    app.hollywood_hits = if app.hollywood.view.is_some()
+        || (app.hollywood.visible()
+            && app.opening.ready()
+            && (band_over_page || !app.opening_visible()))
     {
         overlay_painted = true;
         let machines = app.panel_summaries();

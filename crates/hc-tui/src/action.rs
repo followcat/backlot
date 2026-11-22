@@ -214,6 +214,10 @@ pub(crate) mod mark {
     pub(crate) fn hollywood_entry(seq: u64) -> String {
         format!("hollywood:{seq}")
     }
+    /// One studio exchange read — `report show --file <rel>`.
+    pub(crate) fn studio_talk(key: &StudioKey, seq: u64) -> String {
+        format!("talk:{}:{}:{seq}", machine(key.machine.as_deref()), key.id)
+    }
 
     /// A dock `Target`'s mark — `None` targets mark nothing.
     pub(crate) fn of(target: &Target) -> Option<String> {
@@ -223,6 +227,7 @@ pub(crate) mod mark {
             | Target::Strip(key)
             | Target::Fold(key)
             | Target::Input(key) => Some(studio(key)),
+            Target::Talk(key, seq) => Some(studio_talk(key, *seq)),
             Target::Person(key, r) => Some(role(key, r)),
             Target::Task(key, t) => Some(task(key, t)),
             Target::Stage(m) => Some(stage(m.as_deref())),

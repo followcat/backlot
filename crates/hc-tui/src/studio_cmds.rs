@@ -371,3 +371,21 @@ pub(crate) fn records(key: &StudioKey) -> Action {
     a.view = true;
     a
 }
+
+/// `report show --file <rel> --studio <s> --as user` — streams a
+/// studio message or report body into the read-only `CardView`.
+pub(crate) fn report_show(key: &StudioKey, seq: u64, file: &str) -> Action {
+    let mut a = action(
+        format!("reading #{seq}"),
+        format!("read #{seq}"),
+        format!("{} #{seq}", key.id),
+        key,
+        mark::studio_talk(key, seq),
+    );
+    a.argv = studio_argv(
+        &["report".into(), "show".into(), "--file".into(), file.into()],
+        key,
+    );
+    a.view = true;
+    a
+}

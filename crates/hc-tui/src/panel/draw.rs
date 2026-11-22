@@ -14,7 +14,8 @@ use ratatui::style::{Modifier, Style};
 use super::config::StudioKeys;
 use super::data::{MachineSummary, spans_machines, studio_count, studio_label};
 use super::draw_blocks::{
-    draw_input, draw_owed, draw_person, draw_person_line, draw_top, draw_usage, frame_style,
+    draw_input, draw_owed, draw_person, draw_person_line, draw_talk, draw_top, draw_usage,
+    frame_style,
 };
 use super::draw_cards::{draw_stacked, draw_strip, draw_strip_role};
 use super::draw_tasks::{draw_drawer, draw_fold, draw_task};
@@ -158,7 +159,7 @@ pub(crate) fn render(
         // and the `›` line shows its own, so the dock teaches its
         // verbs where the cursor sits (A2.2's "cursor on something
         // real" made readable).
-        let focused_tiers = hint_tiers(panel.selected.as_ref(), esc);
+        let focused_tiers = hint_tiers(panel.selected.as_ref(), machines, esc);
         let tier_refs: Vec<&str> = focused_tiers.iter().map(String::as_str).collect();
         let keys_line = if panel.focused {
             fit_hints(&tier_refs, area.width as usize).to_string()
@@ -244,6 +245,7 @@ pub(crate) fn render(
                     | Row::AcceptedFold { .. }
                     | Row::Stacked(_)
                     | Row::Strip { .. }
+                    | Row::Talk { .. }
                     | Row::Input { .. }
             );
         if paints {
@@ -255,6 +257,7 @@ pub(crate) fn render(
                 Row::Person { .. }
                     | Row::Task { .. }
                     | Row::AcceptedFold { .. }
+                    | Row::Talk { .. }
                     | Row::Input { .. }
             ) {
                 Rect {
@@ -346,6 +349,9 @@ pub(crate) fn render(
             Row::Drawer { studio, text, .. } => {
                 draw_drawer(buf, rect, text, frame_of(&studio.key()), palette);
             }
+            Row::Talk { studio, line } => {
+                draw_talk(buf, rect, line, paints, frame_of(&studio.key()), palette);
+            }
             Row::Input { studio } => {
                 draw_input(
                     buf,
@@ -393,6 +399,7 @@ pub(crate) fn render(
                 Row::Person { .. }
                     | Row::Task { .. }
                     | Row::AcceptedFold { .. }
+                    | Row::Talk { .. }
                     | Row::Input { .. }
             ) {
                 rect.x + 1
@@ -432,7 +439,7 @@ pub(crate) fn render(
 /// person line offers `p`/`y`/`d`, a task `+`/`-`, a `›` line owns
 /// every key (its `esc`/`↑` peel back to the rows). `esc` is the
 /// label the caller already resolved (`esc`/`esc back`/`esc close`).
-fn hint_tiers(selected: Option<&Target>, esc: &str) -> [String; 3] {
+fn hint_tiers(selected: Option<&Target>, machines: &[MachineSummary], esc: &str) -> [String; 3] {
     let s = |v: &[&str]| {
         let mut out = [String::new(), String::new(), esc.to_string()];
         for (i, t) in v.iter().enumerate() {
@@ -442,6 +449,19 @@ fn hint_tiers(selected: Option<&Target>, esc: &str) -> [String; 3] {
     };
     match selected {
         Some(Target::Input(_)) => s(&["⏎ send  ↑ rows", "⏎ send  ↑"]),
+        Some(Target::Talk(key, seq)) => {
+            let has_file = super::data::studio(machines, key).is_some_and(|st| {
+                st.studio
+                    .exchange
+                    .iter()
+                    .any(|e| e.seq == *seq && e.file.is_some())
+            });
+            if has_file {
+                s(&["⏎ read  i tell  v sheet  m", "⏎ i v m", "⏎ m"])
+            } else {
+                s(&["i tell  v sheet  m", "i v m", "m"])
+            }
+        }
         Some(Target::Person(..)) => {
             s(&["⏎ focus  v sheet  p peek  i tell  m", "⏎ v p i m", "⏎ v m"])
         }
