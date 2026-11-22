@@ -49,15 +49,10 @@ async fn esc_collapses_the_band_first_then_dismisses_the_page() {
     draw_to(&mut app, 120, 24);
 
     key(&mut app, hc_vt::Key::Escape);
-    assert!(
-        !app.hollywood.editing,
-        "the first Esc leaves the dialog's input"
-    );
-    key(&mut app, hc_vt::Key::Escape);
     assert_eq!(
         app.hollywood.mode,
         LayerMode::Collapsed,
-        "the band takes the next Esc"
+        "a resting line collapses on the first Esc"
     );
     assert!(app.opening_visible(), "the page survives the first Esc");
     let text = screen_lines(&draw_to(&mut app, 120, 24)).join("\n");
@@ -102,4 +97,26 @@ async fn a_calm_sheet_opens_editing_a_waiting_one_does_not() {
         "a waiting card keeps its a/x letters"
     );
     assert_eq!(busy.hollywood.input.as_str(), "");
+}
+
+/// `↑` out of a resting line steps into the rows, `↓` returns typing;
+/// Esc on a draft drops the line, on an empty line collapses once.
+#[tokio::test]
+async fn up_leaves_the_line_and_esc_collapse_is_one_press() {
+    let mut app = page_app();
+    alt_y(&mut app);
+    assert!(app.hollywood.editing);
+    key(&mut app, hc_vt::Key::Char('h'));
+    // A draft survives arrows: `↑` leaves the editor onto the rows.
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.input.as_str(), "h");
+    // `↓` returns to the line still editing.
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert!(app.hollywood.editing);
+    assert_eq!(app.hollywood.input.as_str(), "h");
+    // Esc with a draft lets the line go — the sheet stays open.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
 }

@@ -201,9 +201,15 @@ impl App {
         self.hollywood.frame_scroll = 0;
         self.hollywood.scroll = 0;
         // A calm sheet opens as a dialog: nothing waits for a key, so
-        // the `tell` line edits at once — Esc drops into the rows.
-        // A waiting item keeps its `y`/`a`/`x` letters instead.
-        self.hollywood.editing = self.has_hollywood_cfg && !self.hollywood_wait_selected();
+        // the selection lands *on* the `tell` line editing — the
+        // highlight and the keystrokes point at the same row. A
+        // waiting item keeps its `y`/`a`/`x` letters instead.
+        if self.has_hollywood_cfg && !self.hollywood_wait_selected() {
+            self.hollywood.selected = Some(Target::Input);
+            self.hollywood.editing = true;
+        } else {
+            self.hollywood.editing = false;
+        }
     }
 
     /// Whether the selection is on a waiting item — the rows whose
@@ -213,6 +219,14 @@ impl App {
             self.hollywood.selected,
             Some(Target::Prompt(..) | Target::Stage(..) | Target::Card(_) | Target::Ready(_))
         )
+    }
+
+    /// One latch, not two: the line edits iff the selection rests on
+    /// it. Every selection change ends in this so a highlight can
+    /// never claim one row while keys land in another.
+    pub(super) fn hollywood_sync_editing(&mut self) {
+        self.hollywood.editing =
+            self.has_hollywood_cfg && self.hollywood.selected == Some(Target::Input);
     }
 
     /// What an opening selects (A2.1): the first waiting item, else
@@ -248,7 +262,12 @@ impl App {
             self.hollywood.selected = self.hollywood_initial_target();
             self.hollywood.frame_scroll = 0;
             self.hollywood.scroll = 0;
-            self.hollywood.editing = self.has_hollywood_cfg && !self.hollywood_wait_selected();
+            if self.has_hollywood_cfg && !self.hollywood_wait_selected() {
+                self.hollywood.selected = Some(Target::Input);
+                self.hollywood.editing = true;
+            } else {
+                self.hollywood.editing = false;
+            }
         } else {
             // Leaving the panel retires its ephemeral sub-state.
             self.hollywood.view = None;

@@ -216,12 +216,9 @@ async fn the_input_line_sends_tell_hollywood_and_empty_sends_nothing() {
         &[vec!["tell", "hollywood", "hi", "--as", "user"]]
     );
     assert_eq!(app.hollywood.input.as_str(), "");
-    // A sent line keeps the dialog open — `Esc` leaves the editor,
-    // and only then collapses the sheet.
+    // A sent line keeps the dialog open — and with the line back to
+    // empty, the one Esc collapses the sheet.
     assert!(app.hollywood.editing);
-    key(&mut app, hc_vt::Key::Escape);
-    assert!(!app.hollywood.editing);
-    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
 }
