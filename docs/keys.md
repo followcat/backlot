@@ -207,18 +207,21 @@ next_role = "alt+right"
 
 | Keys | Action |
 |---|---|
-| `Alt+Up`, `Alt+Down` | Previous or next studio in document order. Wraps around. Focuses the person last used there, else the studio's producer, else its first live role. A studio with no live terminal still becomes current — the cast and the panel frame follow — and a notice says so. |
-| `Alt+Left`, `Alt+Right` | Inside a studio workspace: previous or next person of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered person. |
+| `Alt+Up`, `Alt+Down` | Previous or next studio in document order. Wraps around. Focuses the member last used there — a role or a shell — else the studio's producer, else its first live role, else its first live shell. Pressed from outside a studio workspace, the first press enters the current studio rather than stepping past it. A studio with no live member still becomes current — the cast and the panel frame follow: one whose stage is still seating its cast queues the landing until a member arrives; a settled one gets a notice. |
+| `Alt+Left`, `Alt+Right` | Inside a studio workspace: previous or next member of the current studio in cast order, then its shells. Wraps around and skips people with no live terminal. Pressed from outside the studio's cast, the first press focuses the remembered member. |
 
 Focusing goes through the panel's existing focus path (workspace, tab, pane): it only moves the
-focus — no pane and no program is resized.
+focus — no pane and no program is resized — and a focused dock, the Call Sheet or a card that was
+up releases the keys to the pane the switch lands on.
 
 These keys exist only in studio mode — that is, always unless you run `backlot --plain`. They
 win over a Herdr binding on the same key — the usual Herdr config binds `previous_tab = "alt+left"`
 and friends — so set different chords in either file if you want both; `Ctrl+B ?` lists each
-studio key with the Herdr action it shadows on your config. `Alt+Left`/`Alt+Right` own the key
+studio key near the top of its studio group with the Herdr action it shadows on your config, and
+Enter on one runs the navigation. `Alt+Left`/`Alt+Right` own the key
 only inside a studio workspace — on your own workspaces and on the `backlot` stage workspace the
-keys fall through to Herdr's `previous_tab`/`next_tab`. Under `--plain` Herdr's
+keys fall through to Herdr's `previous_tab`/`next_tab`. With no studio at all, all four keys are
+Herdr's again. Under `--plain` Herdr's
 bindings, or the program, get the keys exactly as before. An empty string unbinds a key; a value
 that does not parse falls back to the default with one notice naming the file.
 

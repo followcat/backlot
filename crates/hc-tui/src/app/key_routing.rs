@@ -381,10 +381,14 @@ impl App {
                 nav,
                 crate::panel::StudioNav::PreviousRole | crate::panel::StudioNav::NextRole
             );
-            // The role keys only win in a studio workspace — where a
-            // studio header sits — and fall through to herdr's own
-            // binding everywhere else, so tabs still switch there.
-            if !role_key || self.studio.lot.studio_workspace {
+            // No studio at all hands every studio key back to herdr;
+            // the role keys also only win in a studio workspace —
+            // where a studio header sits — and fall through to
+            // herdr's own binding everywhere else, so tabs still
+            // switch there.
+            let owns = !crate::panel::data::studios(&self.panel_summaries()).is_empty()
+                && (!role_key || self.studio.lot.studio_workspace);
+            if owns {
                 // Like the panel chord: an armed prefix disarms on
                 // the intercepted press.
                 self.prefix.reset();
