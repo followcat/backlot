@@ -14,7 +14,7 @@ use backlot_model::summary::Exchange;
 
 use super::draw::HollywoodRender;
 use super::items::{chip_text, chips_of, target_label, ultra_head, wait_head};
-use super::rows::{Row, SETUP_COMMAND, SETUP_LEAD};
+use super::rows::{HollywoodActivity, Row, SETUP_COMMAND, SETUP_LEAD};
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
 use crate::chrome::palette::Palette;
@@ -39,6 +39,7 @@ pub(crate) fn draw_row(
     local: &str,
     multi: bool,
     mobile: bool,
+    activity: HollywoodActivity,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -115,7 +116,7 @@ pub(crate) fn draw_row(
             }
         }
         Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
-        Row::Input => draw_input(buf, rect, hollywood, selected, palette, hits),
+        Row::Input => draw_input(buf, rect, hollywood, selected, activity, palette, hits),
         Row::Setup => draw_setup(buf, rect, palette),
     }
     hits.rows.push((rect, target));
@@ -353,6 +354,7 @@ fn draw_input(
     rect: Rect,
     hollywood: &Hollywood,
     selected: bool,
+    activity: HollywoodActivity,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
@@ -396,7 +398,30 @@ fn draw_input(
             .add_modifier(Modifier::BOLD),
     );
     hits.input = field;
-    let text = Rect::new(field.x + 3, field.y, field.width - 3, 1);
+    let badge = match activity {
+        HollywoodActivity::Working if field.width >= 24 => Some((
+            format!(
+                " {} thinking… ",
+                crate::studio::glyphs::Person::Working.glyph(hollywood.spin)
+            ),
+            palette.accent,
+        )),
+        HollywoodActivity::Queued if field.width >= 24 => Some((
+            format!(
+                " {} queued… ",
+                crate::studio::glyphs::Person::Working.glyph(hollywood.spin)
+            ),
+            palette.peach,
+        )),
+        _ => None,
+    };
+    let badge_w = badge.as_ref().map_or(0, |(b, _)| display_width(b) as u16);
+    let text = Rect::new(
+        field.x + 3,
+        field.y,
+        (field.width - 3).saturating_sub(badge_w),
+        1,
+    );
     if hollywood.editing {
         hits.cursor = crate::chrome::text_editor::render(
             buf,
@@ -424,6 +449,16 @@ fn draw_input(
             text.width,
             &truncate_end(hollywood.input.as_str(), text.width as usize),
             Style::default().fg(palette.text).bg(palette.active_row_bg),
+        );
+    }
+    if let Some((badge, fg)) = badge {
+        put_text(
+            buf,
+            field.x + field.width - badge_w,
+            field.y,
+            badge_w,
+            &badge,
+            Style::default().fg(fg).bg(palette.active_row_bg),
         );
     }
 }

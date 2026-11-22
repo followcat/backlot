@@ -29,7 +29,10 @@ pub(crate) use draw::{HollywoodRender, render};
 pub(crate) use hints::for_row;
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_height;
-pub(crate) use rows::{Target, band_rows, frames, local_summary, on_set};
+pub(crate) use rows::{
+    HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_reply_max_seq,
+    hollywood_unread_count, local_summary, on_set,
+};
 pub(crate) use sheet::{Wait, machine_label, status_of, waiting_items};
 pub(crate) use view::CardView;
 
@@ -87,6 +90,11 @@ pub(crate) struct Hollywood {
     /// The running action's row label — the row draws `…` until the
     /// result lands.
     pub pending: Option<String>,
+    /// Spinner frame counter synced from `panel.spin`.
+    pub spin: usize,
+    /// Highest Hollywood reply `seq` viewed by the user (`None` until
+    /// seeded from the first received summary document).
+    pub seen_hollywood_seq: Option<u64>,
 }
 
 /// The inline `y/n` confirm S1 arms on a ready row: which studio
@@ -109,6 +117,8 @@ impl Hollywood {
             view: None,
             confirm: None,
             pending: None,
+            spin: 0,
+            seen_hollywood_seq: None,
         }
     }
 

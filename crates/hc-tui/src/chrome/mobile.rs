@@ -127,6 +127,7 @@ pub(crate) fn render_mobile_header(
             &lot.counts,
             super::lot::PillTier::Mobile,
             lot.agent,
+            lot.spin,
             palette,
         );
     }

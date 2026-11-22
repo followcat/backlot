@@ -14,17 +14,21 @@ use ratatui::style::{Modifier, Style};
 use super::palette::Palette;
 use super::render::{ShellHitMap, display_width, put_text};
 use super::status::panel_contrast_fg;
+use crate::hollywood::HollywoodActivity;
 use crate::studio::StudioKey;
 use crate::studio::glyphs::{Person, PriorityMark};
 
 /// What the pill counts: `S` studios, `U` waits that are the user's
 /// (user-owned prompts, stopped stages under live studios, ledger
-/// errors) and `C` ready work (open cards + `ready_to_finish`).
+/// errors), `C` ready work (open cards + `ready_to_finish`), `unread`
+/// new Hollywood replies while collapsed, and `activity` for spinner.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LotCounts {
     pub studios: usize,
     pub urgent: usize,
     pub cards: usize,
+    pub unread: usize,
+    pub activity: HollywoodActivity,
 }
 
 /// Which text ladder a terminal width gets — the spec §3 rows.
@@ -85,12 +89,14 @@ pub(crate) fn pill_tier(cols: u16, mobile_threshold: u16) -> PillTier {
 /// A segment's role — the pill styles each part by kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Seg {
-    /// `✦` — the lot mark, always the accent (or contrast on red).
+    /// `✦` (or spinner while active) — the lot mark, accent.
     Spark,
     /// Counts and connective text.
     Body,
     /// The card/ready segment — peach under the card style.
     Cards,
+    /// Unread Hollywood replies — bold accent.
+    Unread,
     /// The all-clear `●`/`live` word — green under the calm style.
     Live,
 }
@@ -105,25 +111,58 @@ fn count(n: usize) -> String {
 
 /// The pill's styled text segments for `tier` — the `hollywood`
 /// flag is the 0-studios empty form (` ✦ hollywood · idle `).
-fn segments(counts: &LotCounts, tier: PillTier, hollywood: bool) -> Vec<(String, Seg)> {
-    let (s, u, c) = (counts.studios, counts.urgent, counts.cards);
+fn segments(
+    counts: &LotCounts,
+    tier: PillTier,
+    hollywood: bool,
+    spin: usize,
+) -> Vec<(String, Seg)> {
+    let (s, u, c, n) = (counts.studios, counts.urgent, counts.cards, counts.unread);
+    let spark = if counts.activity.is_active() {
+        Person::Working.glyph(spin)
+    } else {
+        "✦"
+    };
     if s == 0 && hollywood {
+        let (tail, tail_seg) = if n > 0 {
+            (format!(" · +{} new ", count(n)), Seg::Unread)
+        } else {
+            match counts.activity {
+                HollywoodActivity::Working => (" · thinking ".into(), Seg::Spark),
+                HollywoodActivity::Queued => (" · queued ".into(), Seg::Cards),
+                HollywoodActivity::Idle => (" · idle ".into(), Seg::Live),
+            }
+        };
         return match tier {
             PillTier::Full => vec![
-                (" ✦ hollywood".into(), Seg::Spark),
-                (" · idle ".into(), Seg::Live),
+                (format!(" {spark} hollywood"), Seg::Spark),
+                (tail, tail_seg),
             ],
-            PillTier::Wide => vec![(" ✦ 0".into(), Seg::Spark), (" · idle ".into(), Seg::Live)],
+            PillTier::Wide => vec![(format!(" {spark} 0"), Seg::Spark), (tail, tail_seg)],
             PillTier::Compact | PillTier::Mobile => {
-                vec![(" ✦0 ".into(), Seg::Spark), ("● ".into(), Seg::Live)]
+                let tail = if n > 0 {
+                    (format!("+{} ", count(n)), Seg::Unread)
+                } else {
+                    ("● ".into(), Seg::Live)
+                };
+                vec![(format!(" {spark}0 "), Seg::Spark), tail]
             }
-            PillTier::Tiny => vec![(" ✦0 ".into(), Seg::Spark)],
+            PillTier::Tiny => {
+                if n > 0 {
+                    vec![
+                        (format!(" {spark}"), Seg::Spark),
+                        (format!("+{} ", count(n)), Seg::Unread),
+                    ]
+                } else {
+                    vec![(format!(" {spark}0 "), Seg::Spark)]
+                }
+            }
         };
     }
     match tier {
         PillTier::Full => {
             let mut out = vec![
-                (" ✦ ".into(), Seg::Spark),
+                (format!(" {spark} "), Seg::Spark),
                 (format!("{s} studios"), Seg::Body),
             ];
             if u > 0 {
@@ -131,24 +170,7 @@ fn segments(counts: &LotCounts, tier: PillTier, hollywood: bool) -> Vec<(String,
             }
             if c > 0 {
                 out.push((
-                    format!(" · {} card{}", count(c), if c == 1 { "" } else { "s" }),
-                    Seg::Cards,
-                ));
-            }
-            if u == 0 && c == 0 {
-                out.push((" · live".into(), Seg::Live));
-            }
-            out.push((" ".into(), Seg::Body));
-            out
-        }
-        PillTier::Wide => {
-            let mut out = vec![(" ✦ ".into(), Seg::Spark), (format!("{s}"), Seg::Body)];
-            if u > 0 {
-                out.push((format!(" · !{} you", count(u)), Seg::Body));
-            }
-            if c > 0 {
-                out.push((
-                    if u > 0 {
+                    if n > 0 {
                         format!(" · {}c", count(c))
                     } else {
                         format!(" · {} card{}", count(c), if c == 1 { "" } else { "s" })
@@ -156,21 +178,87 @@ fn segments(counts: &LotCounts, tier: PillTier, hollywood: bool) -> Vec<(String,
                     Seg::Cards,
                 ));
             }
-            if u == 0 && c == 0 {
-                out.push((" · live".into(), Seg::Live));
+            if n > 0 {
+                out.push((format!(" · +{} new", count(n)), Seg::Unread));
+            }
+            if u == 0 && c == 0 && n == 0 {
+                match counts.activity {
+                    HollywoodActivity::Working => out.push((" · thinking".into(), Seg::Spark)),
+                    HollywoodActivity::Queued => out.push((" · queued".into(), Seg::Cards)),
+                    HollywoodActivity::Idle => out.push((" · live".into(), Seg::Live)),
+                }
+            }
+            out.push((" ".into(), Seg::Body));
+            out
+        }
+        PillTier::Wide => {
+            let mut out = vec![
+                (format!(" {spark} "), Seg::Spark),
+                (format!("{s}"), Seg::Body),
+            ];
+            if u > 0 {
+                out.push((format!(" · !{} you", count(u)), Seg::Body));
+            }
+            if c > 0 {
+                out.push((
+                    if u > 0 || n > 0 {
+                        format!(" · {}c", count(c))
+                    } else {
+                        format!(" · {} card{}", count(c), if c == 1 { "" } else { "s" })
+                    },
+                    Seg::Cards,
+                ));
+            }
+            if n > 0 {
+                out.push((
+                    if u == 0 && c == 0 {
+                        format!(" · +{} new", count(n))
+                    } else {
+                        format!(" · +{}", count(n))
+                    },
+                    Seg::Unread,
+                ));
+            }
+            if u == 0 && c == 0 && n == 0 {
+                match counts.activity {
+                    HollywoodActivity::Working => out.push((" · work".into(), Seg::Spark)),
+                    HollywoodActivity::Queued => out.push((" · queue".into(), Seg::Cards)),
+                    HollywoodActivity::Idle => out.push((" · live".into(), Seg::Live)),
+                }
             }
             out.push((" ".into(), Seg::Body));
             out
         }
         PillTier::Compact | PillTier::Mobile => {
-            let mut out = vec![(" ✦".into(), Seg::Spark), (format!("{s}"), Seg::Body)];
+            let mut out = vec![
+                (format!(" {spark}"), Seg::Spark),
+                (format!("{s}"), Seg::Body),
+            ];
+            let dense = u > 0 && c > 0 && n > 0;
             if u > 0 {
                 out.push((format!(" !{}", count(u)), Seg::Body));
             }
             if c > 0 {
-                out.push((format!(" c{}", count(c)), Seg::Cards));
+                out.push((
+                    if dense {
+                        format!("c{}", count(c))
+                    } else {
+                        format!(" c{}", count(c))
+                    },
+                    Seg::Cards,
+                ));
             }
-            if u == 0 && c == 0 {
+            if n > 0 {
+                out.push((
+                    if dense {
+                        format!("+{}", count(n))
+                    } else {
+                        format!(" +{}", count(n))
+                    },
+                    Seg::Unread,
+                ));
+            }
+            if u == 0 && c == 0 && n == 0 {
                 out.push((" ●".into(), Seg::Live));
             }
             out.push((" ".into(), Seg::Body));
@@ -179,23 +267,31 @@ fn segments(counts: &LotCounts, tier: PillTier, hollywood: bool) -> Vec<(String,
         PillTier::Tiny => {
             if u > 0 {
                 vec![
-                    (" ✦".into(), Seg::Spark),
+                    (format!(" {spark}"), Seg::Spark),
                     (format!("!{} ", count(u)), Seg::Body),
+                ]
+            } else if n > 0 {
+                vec![
+                    (format!(" {spark}"), Seg::Spark),
+                    (format!("+{} ", count(n)), Seg::Unread),
                 ]
             } else if c > 0 {
                 vec![
-                    (" ✦".into(), Seg::Spark),
+                    (format!(" {spark}"), Seg::Spark),
                     (format!("c{} ", count(c)), Seg::Cards),
                 ]
             } else {
-                vec![(" ✦".into(), Seg::Spark), (format!("{s} "), Seg::Body)]
+                vec![
+                    (format!(" {spark}"), Seg::Spark),
+                    (format!("{s} "), Seg::Body),
+                ]
             }
         }
     }
 }
 
-/// A segment's style under the pill's three colour rules (§3):
-/// urgent paints the whole pill `red`, cards sit `peach` on
+/// A segment's style under the pill's colour rules (§3):
+/// urgent paints the whole pill `red`, cards or unread replies sit on
 /// `surface0`, the calm pill is `surface_dim` with a green `●`.
 fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
     if counts.urgent > 0 {
@@ -204,12 +300,13 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
             .bg(palette.red)
             .add_modifier(Modifier::BOLD);
     }
-    if counts.cards > 0 {
+    if counts.cards > 0 || counts.unread > 0 {
         let base = Style::default().bg(palette.surface0);
         match seg {
             Seg::Spark => base.fg(palette.accent),
             Seg::Body => base.fg(palette.text),
             Seg::Cards => base.fg(palette.peach).add_modifier(Modifier::BOLD),
+            Seg::Unread => base.fg(palette.accent).add_modifier(Modifier::BOLD),
             Seg::Live => base.fg(palette.green),
         }
     } else {
@@ -218,6 +315,7 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
             Seg::Spark => base.fg(palette.accent),
             Seg::Body => base.fg(palette.subtext0),
             Seg::Cards => base.fg(palette.peach).add_modifier(Modifier::BOLD),
+            Seg::Unread => base.fg(palette.accent).add_modifier(Modifier::BOLD),
             Seg::Live => base.fg(palette.green),
         }
     }
@@ -225,10 +323,15 @@ fn seg_style(seg: Seg, counts: &LotCounts, palette: &Palette) -> Style {
 
 /// The pill's drawn width at `tier` — demoting until the text fits
 /// the tier's cap. Returns the segments and the tier used.
-fn pill_fit(counts: &LotCounts, tier: PillTier, hollywood: bool) -> (Vec<(String, Seg)>, PillTier) {
+fn pill_fit(
+    counts: &LotCounts,
+    tier: PillTier,
+    hollywood: bool,
+    spin: usize,
+) -> (Vec<(String, Seg)>, PillTier) {
     let mut tier = tier;
     loop {
-        let segs = segments(counts, tier, hollywood);
+        let segs = segments(counts, tier, hollywood, spin);
         let width: u16 = segs.iter().map(|(t, _)| display_width(t)).sum();
         if width <= tier.cap() {
             return (segs, tier);
@@ -243,7 +346,7 @@ fn pill_fit(counts: &LotCounts, tier: PillTier, hollywood: bool) -> (Vec<(String
 /// The width the pill would claim at `tier` — the tab bar reserves
 /// exactly this at its right end.
 pub(crate) fn pill_width(counts: &LotCounts, tier: PillTier, hollywood: bool) -> u16 {
-    let (segs, _) = pill_fit(counts, tier, hollywood);
+    let (segs, _) = pill_fit(counts, tier, hollywood, 0);
     segs.iter().map(|(t, _)| display_width(t)).sum()
 }
 
@@ -255,12 +358,13 @@ pub(crate) fn render_pill(
     counts: &LotCounts,
     tier: PillTier,
     hollywood: bool,
+    spin: usize,
     palette: &Palette,
 ) -> Rect {
     if rect.width == 0 || rect.height == 0 {
         return Rect::default();
     }
-    let (segs, used) = pill_fit(counts, tier, hollywood);
+    let (segs, used) = pill_fit(counts, tier, hollywood, spin);
     let mut x = rect.x;
     let right = rect.right();
     for (text, seg) in segs {
@@ -325,6 +429,7 @@ pub(crate) struct LotFrame<'a> {
     /// The full terminal width — the pill tier and the header's
     /// truncation read it.
     pub cols: u16,
+    pub spin: usize,
 }
 
 /// What the header shows under the focused terminal (Decision 5):
@@ -506,6 +611,7 @@ pub(crate) fn render_studio_header(
         &lot.counts,
         tier,
         lot.agent,
+        lot.spin,
         palette,
     );
 }

@@ -101,6 +101,7 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             pill: app.studio.lot.pill,
             header: app.studio.lot.header.as_ref(),
             cols: app.area.0,
+            spin: app.panel.spin,
         },
     );
     let update_latest = app.update_ready_version().map(str::to_owned);

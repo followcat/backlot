@@ -325,6 +325,7 @@ pub(crate) fn render_shell(
                     &lot.map(|l| l.counts).unwrap_or_default(),
                     tier,
                     lot.is_some_and(|l| l.agent),
+                    lot.map_or(0, |l| l.spin),
                     &config.palette,
                 );
             }

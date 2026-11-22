@@ -203,3 +203,76 @@ pub(crate) fn on_set(studio: &StudioSummary) -> Option<&RoleSummary> {
         .find(|role| role.state == "live" && role.work == Some(Work::Working))
         .or_else(|| studio.roles.iter().find(|role| role.role == "producer"))
 }
+
+/// Hollywood's live liveness / outbox state for the Call Sheet and Lot Pill.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HollywoodActivity {
+    #[default]
+    Idle,
+    /// A `tell hollywood` command is in flight or an undelivered
+    /// message sits in Hollywood's outbox behind the send gate.
+    Queued,
+    /// Hollywood's terminal is actively `Working`.
+    Working,
+}
+
+impl HollywoodActivity {
+    pub(crate) fn is_active(self) -> bool {
+        !matches!(self, HollywoodActivity::Idle)
+    }
+}
+
+/// Derive Hollywood's activity from the local summary and in-flight
+/// `ActionTracker` marks.
+pub(crate) fn hollywood_activity(
+    machines: &[MachineSummary],
+    pending_marks: Option<&str>,
+) -> HollywoodActivity {
+    let hw = local_summary(machines).and_then(|s| s.hollywood.as_ref());
+    if hw.is_some_and(|h| h.state == "live" && h.work == Some(Work::Working)) {
+        return HollywoodActivity::Working;
+    }
+    let in_flight = pending_marks.is_some_and(|p| p.split_whitespace().any(|m| m == "hollywood"));
+    if in_flight || hw.is_some_and(|h| h.pending) {
+        return HollywoodActivity::Queued;
+    }
+    HollywoodActivity::Idle
+}
+
+/// Highest `seq` among Hollywood's own replies (`who == "hollywood"`
+/// in `exchange` plus `headline_seq`), or `0` when none exist.
+pub(crate) fn hollywood_reply_max_seq(
+    hw: Option<&backlot_model::summary::HollywoodSummary>,
+) -> u64 {
+    let Some(hw) = hw else { return 0 };
+    hw.exchange
+        .iter()
+        .filter(|e| e.who == "hollywood")
+        .map(|e| e.seq)
+        .chain(hw.headline_seq)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Count of new Hollywood replies (`who == "hollywood"` in `exchange`,
+/// plus `headline_seq` when absent from `exchange`) with `seq > seen`
+/// — strictly excluding the user's own `tell` entries.
+pub(crate) fn hollywood_unread_count(
+    hw: Option<&backlot_model::summary::HollywoodSummary>,
+    seen: u64,
+) -> usize {
+    let Some(hw) = hw else { return 0 };
+    let in_exchange = hw
+        .exchange
+        .iter()
+        .filter(|e| e.who == "hollywood" && e.seq > seen)
+        .count();
+    let extra_headline = hw.headline_seq.is_some_and(|hseq| {
+        hseq > seen
+            && !hw
+                .exchange
+                .iter()
+                .any(|e| e.who == "hollywood" && e.seq == hseq)
+    });
+    in_exchange + usize::from(extra_headline)
+}

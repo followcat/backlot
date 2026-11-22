@@ -28,6 +28,7 @@ impl super::App {
             ..Lot::default()
         };
         if !self.plain {
+            self.sync_hollywood_seen(machines);
             self.lot_counts(machines, &mut lot.counts);
             lot.pill = lot.counts.studios > 0
                 || self.has_hollywood_cfg
@@ -38,8 +39,30 @@ impl super::App {
                 .as_ref()
                 .is_some_and(|h| !matches!(h.kind, HeaderKind::Hollywood));
             self.lot_start_policy(&mut lot, prior.was_urgent);
+            if self.hollywood.mode == LayerMode::Expanded {
+                self.sync_hollywood_seen(machines);
+                lot.counts.unread = 0;
+            }
         }
         self.studio.lot = lot;
+    }
+
+    /// Seed `seen_hollywood_seq` from the first received summary
+    /// document, and advance it whenever the Call Sheet is `Expanded`.
+    pub(crate) fn sync_hollywood_seen(&mut self, machines: &[MachineSummary]) {
+        let Some(local) = crate::hollywood::local_summary(machines) else {
+            return;
+        };
+        let max_seq = crate::hollywood::hollywood_reply_max_seq(local.hollywood.as_ref());
+        match self.hollywood.seen_hollywood_seq {
+            None => {
+                self.hollywood.seen_hollywood_seq = Some(max_seq);
+            }
+            Some(prev) if self.hollywood.mode == LayerMode::Expanded => {
+                self.hollywood.seen_hollywood_seq = Some(prev.max(max_seq));
+            }
+            Some(_) => {}
+        }
     }
 
     /// U = prompts the user owns + stopped stages + ledger errors.
@@ -47,6 +70,16 @@ impl super::App {
     fn lot_counts(&self, machines: &[MachineSummary], counts: &mut LotCounts) {
         let studios = data::studios(machines);
         counts.studios = studios.len();
+        counts.activity = if self.has_hollywood_cfg {
+            crate::hollywood::hollywood_activity(machines, self.hollywood.pending.as_deref())
+        } else {
+            crate::hollywood::HollywoodActivity::Idle
+        };
+        if self.hollywood.mode != LayerMode::Expanded {
+            let seen = self.hollywood.seen_hollywood_seq.unwrap_or(0);
+            let hw = crate::hollywood::local_summary(machines).and_then(|s| s.hollywood.as_ref());
+            counts.unread = crate::hollywood::hollywood_unread_count(hw, seen);
+        }
         for m in machines {
             if !m.summary.studios.is_empty() && !stage_running(&self.view, m.machine.as_deref()) {
                 counts.urgent += 1;

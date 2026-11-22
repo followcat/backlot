@@ -120,7 +120,7 @@ pub(super) fn render_overlays_and_cursor(
             app.panel_overlay_rect(layout.pane_surface, area.width)
         };
         let machines = app.panel_summaries();
-        let hits = crate::panel::render(
+        crate::panel::render(
             buf,
             rect,
             &machines,
@@ -141,18 +141,8 @@ pub(super) fn render_overlays_and_cursor(
             app.pane.input_refused(),
             &app.actions,
             &app.shell.palette,
-        );
-        if hits.working_drawn {
-            // Arm only when nothing is pending — a redraw before the
-            // deadline must not push it out or the spin starves.
-            app.panel_anim_deadline
-                .get_or_insert(_now + super::super::panel::PANEL_SPIN);
-        } else {
-            app.panel_anim_deadline = None;
-        }
-        hits
+        )
     } else {
-        app.panel_anim_deadline = None;
         crate::panel::PanelRender::default()
     };
     // The Hollywood layer floats over everything the frame owns: the
@@ -162,6 +152,7 @@ pub(super) fn render_overlays_and_cursor(
     // U7: it waits for the same first read the card does, and the
     // collapsed strip never covers the card; the expanded band does
     // (U8) — the user pressed its key, so it must be visible.
+    app.hollywood.spin = app.panel.spin;
     app.hollywood_hits = if app.hollywood.view.is_some()
         || (app.hollywood.visible()
             && app.opening.ready()
@@ -204,6 +195,17 @@ pub(super) fn render_overlays_and_cursor(
     } else {
         crate::hollywood::HollywoodRender::default()
     };
+    let pill_working = app.studio.lot.pill
+        && app.hollywood.visible()
+        && app.studio.lot.counts.activity.is_active();
+    if app.panel_hits.working_drawn || app.hollywood_hits.working_drawn || pill_working {
+        // Arm only when nothing is pending — a redraw before the
+        // deadline must not push it out or the spin starves.
+        app.panel_anim_deadline
+            .get_or_insert(_now + super::super::panel::PANEL_SPIN);
+    } else {
+        app.panel_anim_deadline = None;
+    }
     // The input line's cursor is placed below, once the pane's own wish
     // is known: it must be able to replace it, not be overwritten by it.
     // The mobile switcher IS the Navigate surface under the threshold —
