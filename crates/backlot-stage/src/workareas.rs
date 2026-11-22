@@ -124,12 +124,72 @@ pub fn worktree_listed(list: &str, dir: &Path, branch: &str) -> bool {
 }
 
 /// A member repository's leaf name under `work/<area>/` — the
-/// directory a workspace lays one worktree per member into (D10).
+/// directory a workspace lays one worktree per distinct repository
+/// into (D10).
 fn member_leaf(member: &str) -> String {
     Path::new(member)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| member.to_string())
+}
+
+/// The repository a member path stands for — `rev-parse
+/// --git-common-dir` through the injected runner, canonicalized when
+/// possible: every linked worktree of one repository answers the same
+/// directory. `--path-format=absolute` makes the main checkout answer
+/// an absolute path like a linked worktree does, so canonicalizing
+/// lands both on one spelling — a symlinked parent cannot split
+/// them. A path git cannot answer keeps itself as its identity — the
+/// probes below still report it. Mirrors `paths::common_dir`, which
+/// shells out directly and cannot drive the fake seam.
+fn member_common_dir(git: &mut GitRun<'_>, member: &str) -> PathBuf {
+    let out = git(
+        &[
+            "-C",
+            member,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+            "--end-of-options",
+        ],
+        member,
+    );
+    if out.code != 0 {
+        return PathBuf::from(member);
+    }
+    let raw = PathBuf::from(out.stdout.trim());
+    let abs = if raw.is_absolute() {
+        raw
+    } else {
+        Path::new(member).join(raw)
+    };
+    abs.canonicalize().unwrap_or(abs)
+}
+
+/// One member per repository (D10): the identity is the member's
+/// common dir, so a workspace that names one repository twice — a
+/// checkout and its linked worktrees — lays its per-member worktree
+/// once and can never collide on the one checkout a branch allows.
+/// The main checkout (`.git` a directory, not a worktree's gitfile)
+/// wins the slot, keeping the `work/<area>/<member-leaf>` names
+/// sensible. Mirrors `paths::distinct` over the injected runner; a
+/// member git cannot answer keeps itself as its identity and is
+/// still probed below.
+fn distinct_members<'a>(git: &mut GitRun<'_>, members: &'a [String]) -> Vec<&'a str> {
+    let mut kept: Vec<(PathBuf, &'a str, bool)> = Vec::new();
+    for member in members {
+        let id = member_common_dir(git, member);
+        let main = Path::new(member).join(".git").is_dir();
+        match kept.iter_mut().find(|(mid, ..)| *mid == id) {
+            None => kept.push((id, member.as_str(), main)),
+            Some((_, stored, stored_main)) if main && !*stored_main => {
+                *stored = member.as_str();
+                *stored_main = main;
+            }
+            Some(_) => {}
+        }
+    }
+    kept.into_iter().map(|(_, m, _)| m).collect()
 }
 
 /// One worktree, creating its branch when needed. `path_name` is the
@@ -186,9 +246,12 @@ fn ensure_worktree(
 /// `Repo` needs nothing; the others first prove every repository in
 /// play is a git work tree — `NotGit` starts no actor or director.
 /// `members` is empty for a single-repository studio; a workspace
-/// lays one worktree per member under `work/<area>/<member>` and the
-/// role's cwd is the `work/<area>` directory itself (D10). A studio
-/// bound with no git shares the bound path between every role.
+/// lays one worktree per distinct repository under
+/// `work/<area>/<member-leaf>` and the role's cwd is the
+/// `work/<area>` directory itself (D10). Members naming one
+/// repository twice — a checkout and its linked worktrees — count
+/// once, preferring the main checkout. A studio bound with no git
+/// shares the bound path between every role.
 pub fn ensure(
     git: &mut GitRun<'_>,
     studio: &str,
@@ -203,7 +266,7 @@ pub fn ensure(
     }
     let repos: Vec<&str> = match members.is_empty() {
         true => vec![repo],
-        false => members.iter().map(String::as_str).collect(),
+        false => distinct_members(git, members),
     };
     for member in &repos {
         let probe = git(
