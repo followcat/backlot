@@ -144,7 +144,7 @@ impl App {
             && let Some(key) = hits.studio_key.clone()
         {
             self.studio.current = Some(key.clone());
-            if !self.panel.open() {
+            if self.panel_mode_at(self.area.0) == crate::panel::PanelMode::Closed {
                 self.panel.mode = crate::panel::PanelMode::Expanded;
             }
             self.panel.focused = true;

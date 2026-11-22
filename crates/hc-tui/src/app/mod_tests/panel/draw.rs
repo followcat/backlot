@@ -98,18 +98,26 @@ async fn a_resize_moves_the_panel_between_beside_and_overlay() {
     app.area = (120, 24);
     open_panel(&mut app);
     draw_to(&mut app, 120, 24);
-    // At 80 the sidebar + the 28-column dock can't leave 44 pane
-    // columns: the expanded dock resolves to the collapsed strip —
-    // the right 16 columns carry the strip, the pane keeps its
-    // surface (S2 §1's fallback).
+    // At 80 while focused (`R3-B4`), the dock stays Expanded as a
+    // 36-column right-aligned overlay inside `pane_surface` (cols 44..80),
+    // leaving the left sidebar untouched (`Reconnecting` still paints
+    // rows 1..4 over the top of `pane_surface`, so the lower dock rows
+    // show below it).
     app.area = (80, 24);
-    let wide = draw_to(&mut app, 80, 24);
-    let text = screen_lines(&wide).join("\n");
-    assert!(text.contains("PANE-ALPHA"), "{text}");
-    let right = columns_text(&wide, 64, 80);
-    assert!(right.contains("lot"), "{right}");
+    let overlay = draw_to(&mut app, 80, 24);
+    let right = columns_text(&overlay, 44, 80);
+    assert!(right.contains("alice · task-1"), "{right}");
+    assert!(right.contains("tell producer"), "{right}");
     assert!(!right.contains("PANE-ALPHA"), "{right}");
-    // Back at 120 the expanded column returns.
+    // When unfocused at 80 (`R3-1` / `R3-M3`), the dock auto-hides to
+    // 0 columns and the pane surface gets the full 80 − sidebar width.
+    app.panel.focused = false;
+    let hidden = draw_to(&mut app, 80, 24);
+    let text = screen_lines(&hidden).join("\n");
+    assert!(text.contains("PANE-ALPHA"), "{text}");
+    let edge = columns_text(&hidden, 64, 80);
+    assert!(!edge.contains("lot"), "{edge}");
+    // Back at 120 the expanded beside column returns automatically.
     app.area = (120, 24);
     let back = draw_to(&mut app, 120, 24);
     let right = columns_text(&back, 84, 120);

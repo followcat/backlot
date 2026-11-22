@@ -222,7 +222,7 @@ impl App {
         // The open panel owns its rect: rows act like Enter, the wheel
         // scrolls, the scrollbar grabs. A press outside a focused panel
         // hands focus back to the panes and routes normally.
-        if self.panel.open() {
+        if self.panel_mode_at(self.area.0) != crate::panel::PanelMode::Closed {
             if contains(self.panel_hits.area, (mouse.col, mouse.row)) {
                 self.panel_mouse(mouse);
                 self.sched.mark_dirty(Instant::now());

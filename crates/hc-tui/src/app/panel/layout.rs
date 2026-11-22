@@ -10,22 +10,41 @@ use super::{COLLAPSED_WIDTH, MIN_PANE_BESIDE_DOCK, STRIP_BESIDE_COLS};
 use crate::app::Mode;
 use crate::panel::{self, PanelMode};
 
+/// Minimum terminal width where the dock may sit beside the panes
+/// while unfocused (`R3-1` / `R3-M3`). Below this, unfocused docks
+/// auto-hide to 0 columns and `Ctrl+B y` opens an Expanded overlay.
+const BESIDE_MIN_COLS: u16 = 100;
+
 impl App {
     /// The mode the dock draws at `cols`: the chosen mode, except an
-    /// expanded column that cannot leave `MIN_PANE_BESIDE_DOCK`
-    /// columns for the panes resolves to the collapsed strip — the
-    /// dock never steals the whole surface. `panel.mode` keeps the
-    /// choice, so widening the window restores the column.
+    /// unfocused dock below `BESIDE_MIN_COLS` (or when it cannot fit
+    /// beside the panes with `MIN_PANE_BESIDE_DOCK` columns left)
+    /// auto-hides to `Closed` (0 columns). When focused, `Expanded`
+    /// stays `Expanded` and draws as a `pane_surface` overlay (`R3-B4`).
+    /// `panel.mode` keeps the user's choice, so widening restores it.
     pub(crate) fn panel_mode_at(&self, cols: u16) -> PanelMode {
         match self.panel.mode {
-            PanelMode::Expanded if !self.expanded_beside(cols) => PanelMode::Collapsed,
-            mode => mode,
+            PanelMode::Closed => PanelMode::Closed,
+            PanelMode::Collapsed => {
+                if !self.panel.focused && !self.strip_beside(cols) {
+                    PanelMode::Closed
+                } else {
+                    PanelMode::Collapsed
+                }
+            }
+            PanelMode::Expanded => {
+                if !self.panel.focused && !self.expanded_beside(cols) {
+                    PanelMode::Closed
+                } else {
+                    PanelMode::Expanded
+                }
+            }
         }
     }
 
     /// The expanded column's width: the `[dock]`/`[panel]` width
     /// when the file set one, else the spec's tier (38 at 140+, 36
-    /// at 100+, 28 under).
+    /// under).
     fn expanded_width(&self, cols: u16) -> u16 {
         // The border drag's manual width wins for the session —
         // over the file's width and the spec's tier (S5 §2).
@@ -38,16 +57,11 @@ impl App {
                 .width
                 .clamp(panel::WIDTH_MIN, panel::WIDTH_MAX);
         }
-        match cols {
-            0..=99 => 28,
-            100..=139 => 36,
-            _ => 38,
-        }
+        if cols >= 140 { 38 } else { 36 }
     }
 
-    /// The panel's reserved width at `cols`: 0 closed, 16 collapsed
-    /// — an expanded dock that cannot fit beside the panes included,
-    /// since it resolves to the strip at `cols`.
+    /// The panel's reserved width at `cols`: 0 when closed or
+    /// auto-hidden, 16 when collapsed, else `expanded_width(cols)`.
     pub(crate) fn panel_width(&self, cols: u16) -> u16 {
         match self.panel_mode_at(cols) {
             PanelMode::Closed => 0,
@@ -59,7 +73,7 @@ impl App {
     /// The columns the sidebar draws in at `cols` — the same math
     /// `layout()` applies, needed here because the beside test looks
     /// past the sidebar at the pane surface that would remain.
-    pub(super) fn sidebar_render_width(&self, cols: u16) -> u16 {
+    pub(crate) fn sidebar_render_width(&self, cols: u16) -> u16 {
         if cols <= self.shell.mobile_width_threshold {
             return 0;
         }
@@ -81,34 +95,46 @@ impl App {
     }
 
     /// Whether the expanded column fits beside the panes at `cols`:
-    /// the sidebar plus the dock still leave `MIN_PANE_BESIDE_DOCK`
-    /// columns for the panes.
+    /// desktop width (`>= 100` and above `mobile_width_threshold`) and
+    /// sidebar plus dock still leave `MIN_PANE_BESIDE_DOCK` columns.
     fn expanded_beside(&self, cols: u16) -> bool {
-        cols > self.shell.mobile_width_threshold
+        cols >= BESIDE_MIN_COLS
+            && cols > self.shell.mobile_width_threshold
             && cols
                 .saturating_sub(self.sidebar_render_width(cols))
                 .saturating_sub(self.expanded_width(cols))
                 >= MIN_PANE_BESIDE_DOCK
     }
 
-    /// Whether the panel draws beside the panes at `cols` — the
-    /// collapsed strip from `STRIP_BESIDE_COLS`, the expanded dock
-    /// while it still leaves `MIN_PANE_BESIDE_DOCK` columns (under
-    /// that it resolves to the strip, so the strip's rule applies).
+    /// Whether the collapsed strip may sit beside the panes at `cols`:
+    /// requires desktop width (`>= 100` and above
+    /// `mobile_width_threshold`), `STRIP_BESIDE_COLS`, and
+    /// `MIN_PANE_BESIDE_DOCK` columns past the sidebar.
+    fn strip_beside(&self, cols: u16) -> bool {
+        cols >= BESIDE_MIN_COLS
+            && cols > self.shell.mobile_width_threshold
+            && cols >= STRIP_BESIDE_COLS
+            && cols
+                .saturating_sub(self.sidebar_render_width(cols))
+                .saturating_sub(COLLAPSED_WIDTH)
+                >= MIN_PANE_BESIDE_DOCK
+    }
+
+    /// Whether the panel draws beside the panes at `cols`.
     pub(crate) fn panel_beside(&self, cols: u16) -> bool {
         match self.panel_mode_at(cols) {
             PanelMode::Closed => false,
-            PanelMode::Collapsed => cols >= STRIP_BESIDE_COLS,
+            PanelMode::Collapsed => self.strip_beside(cols),
             PanelMode::Expanded => self.expanded_beside(cols),
         }
     }
 
-    /// An open panel that does not fit beside the panes at `cols`
-    /// draws over the pane surface — the pane geometry keeps the
+    /// An open panel that is visible at `cols` and does not sit beside
+    /// the panes draws over `pane_surface` — the pane geometry keeps the
     /// panel-closed shape. `panel_fullscreen` answers for the app's
     /// live size; the draw path asks for the frame it is painting.
     pub(crate) fn panel_fullscreen_at(&self, cols: u16) -> bool {
-        self.panel.open() && !self.panel_beside(cols)
+        self.panel_mode_at(cols) != PanelMode::Closed && !self.panel_beside(cols)
     }
 
     /// `panel_fullscreen_at` for `self.area` — key/mouse logic.
@@ -127,16 +153,22 @@ impl App {
         self.panel_fullscreen() || self.pane.input_refused()
     }
 
-    /// The rect an open-not-beside panel owns inside `pane` at
-    /// `cols`: the surface's right `panel_width` columns — the
-    /// sidebar is never covered. Only the strip ever overlays a
-    /// desktop window: an expanded dock that cannot fit resolves to
-    /// it, so the whole surface is never taken.
+    /// The rect an overlay panel owns inside `pane` at `cols`: on mobile
+    /// (`cols <= mobile_width_threshold`), an expanded dock takes the
+    /// full `pane.width`; on narrow desktop it right-aligns inside
+    /// `pane` at `expanded_width(cols)` (clamped to `pane.width`), so
+    /// the sidebar is never covered.
     pub(crate) fn panel_overlay_rect(&self, pane: Rect, cols: u16) -> Rect {
         let width = match self.panel_mode_at(cols) {
             PanelMode::Closed => 0,
             PanelMode::Collapsed => COLLAPSED_WIDTH.min(pane.width),
-            PanelMode::Expanded => self.expanded_width(cols).min(pane.width),
+            PanelMode::Expanded => {
+                if cols <= self.shell.mobile_width_threshold {
+                    pane.width
+                } else {
+                    self.expanded_width(cols).min(pane.width)
+                }
+            }
         };
         Rect::new(pane.x + pane.width - width, pane.y, width, pane.height)
     }
@@ -194,7 +226,7 @@ impl App {
     ) -> crate::chrome::snapshot::ClientShellLayout {
         let reserve = u16::from(self.panel_beside(cols)) * self.panel_width(cols);
         let mut config = self.shell.layout_config();
-        if reserve > 0 {
+        if cols > self.shell.mobile_width_threshold && reserve > 0 {
             // The mobile/desktop decision belongs to the whole window.
             // Beside already means `cols > mobile_width_threshold`, so
             // the leftover columns must never flip the chrome to the

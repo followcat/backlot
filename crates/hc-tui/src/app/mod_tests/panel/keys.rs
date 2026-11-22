@@ -210,15 +210,21 @@ async fn a_full_screen_panel_owns_the_keyboard() {
     open_panel(&mut app);
     assert!(app.panel_fullscreen());
     assert!(app.panel_focused());
-    // Even with the focus latch off the panel still eats the keys —
-    // nobody can see the panes it covers.
-    app.panel.focused = false;
-    assert!(app.panel_focused());
     key(&mut app, hc_vt::Key::Char('j'));
-    // The dock resolves to the strip at 40 columns — its rows are
-    // strip targets; the pane still sees no keys.
-    assert_eq!(app.panel.selected, Some(Target::Strip("acme-shop".into())));
+    // At 40 cols the focused overlay stays Expanded (`R3-B4`), so `j`
+    // steps into the expanded block rows and no key leaks to the pane.
+    assert!(
+        matches!(app.panel.selected, Some(Target::Person(..))),
+        "{:?}",
+        app.panel.selected
+    );
     assert_eq!(app.pane.input_backlog().0, 0, "keys leaked to the pane");
+    // When unfocused at < 100 cols (`R3-1`), the dock auto-hides to 0
+    // cols and returns keyboard focus to the pane.
+    app.panel.focused = false;
+    assert_eq!(app.panel_mode_at(40), PanelMode::Closed);
+    assert!(!app.panel_fullscreen());
+    assert!(!app.panel_focused());
 }
 
 #[tokio::test]
@@ -241,13 +247,25 @@ async fn the_chord_closes_full_screen_on_the_first_press() {
     let mut app = app_with_panel_doc();
     app.area = (120, 24);
     open_panel(&mut app);
-    // Unfocus beside the panes, then shrink under the threshold: the
-    // next chord must close, not re-focus.
-    key(&mut app, hc_vt::Key::Escape);
+    // Shrink under the threshold while focused: the overlay stays open
+    // and the next chord closes on the first press.
     app.area = (40, 20);
+    assert!(app.panel_fullscreen());
     prefix(&mut app);
     key(&mut app, hc_vt::Key::Char('y'));
     assert_eq!(app.panel.mode, PanelMode::Closed);
+    // If unfocused before shrinking, the dock auto-hides at 40 cols so
+    // the chord opens the Expanded overlay cleanly.
+    app.area = (120, 24);
+    open_panel(&mut app);
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.panel.focused);
+    app.area = (40, 20);
+    assert_eq!(app.panel_mode_at(40), PanelMode::Closed);
+    prefix(&mut app);
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert_eq!(app.panel.mode, PanelMode::Expanded);
+    assert!(app.panel.focused);
 }
 
 #[tokio::test]
@@ -255,8 +273,8 @@ async fn enter_on_the_strip_row_closes_a_full_screen_dock() {
     let mut app = app_with_panel_doc();
     app.area = (40, 20);
     open_panel(&mut app);
-    // The strip's studio row: Enter is the studio's focus + leave —
-    // the overlay closes for the pane it covered.
+    // The Expanded overlay's studio row: Enter focuses the studio and
+    // closes the overlay for the pane it covered.
     key(&mut app, hc_vt::Key::Enter);
     assert_eq!(app.focused.as_deref(), Some("t1"));
     assert_eq!(app.panel.mode, PanelMode::Closed);
@@ -404,19 +422,19 @@ async fn a_chord_focused_dock_over_a_dead_pane_reads_esc_close_and_esc_closes() 
 
 #[tokio::test]
 async fn a_revived_pane_flips_the_dock_footer_back_live() {
-    // At this width the dock overlays the panes. A click focuses it
+    // At this width the focused dock overlays the panes. Open it
     // while the pane refuses input: Esc closes — the keys have
     // nowhere to go back to. The pane comes back and the footer
     // flips to `esc back` live — focus stays in the dock (one-way,
     // no latch), and Esc still closes the overlay outright.
     let mut app = app_with_panel_doc();
     app.area = (50, 24);
-    app.panel.mode = PanelMode::Expanded;
+    open_panel(&mut app);
     draw_to(&mut app, 50, 24);
     assert!(!app.panel_beside(50), "the dock overlays at 50");
     kill_focused_terminal(&mut app);
-    // A left-click on the overlay's body — below every row — focuses
-    // the dock without acting like Enter. The pane's gone-card paints
+    // A left-click on the overlay's body — below every row — keeps
+    // focus without acting like Enter. The pane's gone-card paints
     // the footer row at this width, so the closed-out rule is read
     // from the predicate the key and the label share.
     let area = app.panel_hits.area;
@@ -425,7 +443,7 @@ async fn a_revived_pane_flips_the_dock_footer_back_live() {
         area.x + 1,
         area.y + area.height - 2,
     ));
-    assert!(app.panel.focused, "the click focused the dock");
+    assert!(app.panel.focused, "the click kept dock focus");
     assert_eq!(app.focused.as_deref(), Some("t1"), "no row acted");
     assert!(app.panel_esc_closes(), "Esc closes over a refusing pane");
     // The terminal returns: the pane takes input again and the

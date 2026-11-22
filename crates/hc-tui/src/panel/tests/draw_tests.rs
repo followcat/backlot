@@ -175,7 +175,7 @@ fn the_waiting_count_shows_only_above_zero() {
     );
     let mut value = summary_json();
     value["studios"][0]["waiting"] = serde_json::json!(2);
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     let top = &lines(&buf, area)[1];
     assert!(top.contains("!2"), "{top}");
@@ -200,7 +200,7 @@ fn the_usage_line_shows_only_with_figures() {
         "output_tokens": 3_100,
         "cost_micros_usd": 80_000
     });
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("12.4k/3.1k tok · $0.08"), "{text}");
@@ -239,7 +239,7 @@ fn a_person_draws_one_line_with_the_state_word_right() {
 fn an_attention_adds_a_bang_line_under_the_person() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 40, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
@@ -259,7 +259,7 @@ fn an_attention_adds_a_bang_line_under_the_person() {
 fn a_failed_role_draws_its_failed_line_when_no_attention() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["failed"] = serde_json::json!("rate_limit");
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 40, 30);
     let (buf, hits) = draw(area, Some(&summary), &panel, None);
@@ -282,7 +282,7 @@ fn short_height_stacks_other_blocks_to_single_lines() {
     let mut second = value["studios"][0].clone();
     second["id"] = serde_json::json!("second-studio");
     value["studios"].as_array_mut().unwrap().push(second);
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
     // Tall enough for one expanded block but not two → the
     // non-current studio draws its `╶` line with mark counts.
@@ -384,7 +384,7 @@ fn collapsed_strip_draws_health_id_machine_and_attention() {
     let mut value = summary_json();
     value["studios"][0]["roles"][3]["attention"] = serde_json::json!("needs permission");
     value["studios"][0]["waiting"] = serde_json::json!(1);
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     // `!1` takes tail room, so the id truncates to `acme-…·loc`.
     let strip = lines(&buf, area)
@@ -594,7 +594,7 @@ fn one_machine_keeps_the_bare_id_headers() {
 fn an_experimental_studio_flags_its_header() {
     let mut value = summary_json();
     value["studios"][0]["mode"] = serde_json::json!("experimental");
-    let summary: Summary = serde_json::from_value(value).unwrap();
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 30);
     let (buf, _) = draw(area, Some(&summary), &panel, Some("acme-shop"));
@@ -606,4 +606,64 @@ fn an_experimental_studio_flags_its_header() {
     let top = &lines(&buf, area)[1];
     assert!(top.contains("acme-shop"), "{top}");
     assert!(!top.contains("acme-shop exp"), "{top}");
+}
+
+#[test]
+fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
+    let value = serde_json::json!({
+        "schema": "backlot/1",
+        "updated_ms": 1,
+        "studios": [{
+            "id": "acme-shop",
+            "title": "Acme shop",
+            "state": "live",
+            "requirement_version": 1,
+            "mode": "standard",
+            "open_reviews": 0,
+            "waiting": 0,
+            "tasks_done": 1,
+            "tasks_total": 5,
+            "roles": [
+                { "role": "producer", "name": "producer", "terminal": "t1", "state": "live", "work": "waiting" },
+                { "role": "director", "name": "director", "terminal": "t2", "state": "live", "work": "waiting" },
+                { "role": "actor-a", "name": "alice", "state": "closed", "resumable": true }
+            ]
+        }]
+    });
+    let summary: Summary = serde_json::from_value(value.clone()).unwrap();
+    let panel = panel(PanelMode::Collapsed);
+    let area = Rect::new(0, 0, 16, 12);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("○2 ✓1"), "calm role counts render: {text}");
+
+    // Stage down renders a concise stage cue instead of blank space.
+    let mut down_buf = Buffer::empty(area);
+    render(
+        &mut down_buf,
+        area,
+        &machines(Some(&summary)),
+        |_| false,
+        |_| true,
+        &panel,
+        PanelMode::Collapsed,
+        None,
+        None,
+        &keys(),
+        None,
+        false,
+        false,
+        &Default::default(),
+        &palette(),
+    );
+    let down_text = lines(&down_buf, area).join("\n");
+    assert!(down_text.contains("◌ stage down"), "{down_text}");
+
+    // Ready to finish renders `✓ ready`.
+    let mut ready_val = value;
+    ready_val["studios"][0]["ready_to_finish"] = serde_json::json!(true);
+    let ready_summary: Summary = serde_json::from_value(ready_val).unwrap();
+    let (buf, _) = draw(area, Some(&ready_summary), &panel, None);
+    let ready_text = lines(&buf, area).join("\n");
+    assert!(ready_text.contains("✓ ready"), "{ready_text}");
 }

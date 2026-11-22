@@ -41,7 +41,8 @@ impl App {
     /// panes, or whenever the panel covers the frame: nobody can see
     /// the panes then, so their keys must not reach them either.
     pub(crate) fn panel_focused(&self) -> bool {
-        self.panel.open() && (self.panel.focused || self.panel_fullscreen())
+        self.panel_mode_at(self.area.0) != PanelMode::Closed
+            && (self.panel.focused || self.panel_fullscreen())
     }
 
     /// Every machine's `backlot` summary for this view — this core's
@@ -82,12 +83,13 @@ impl App {
         }
     }
 
-    /// The toggle chord (`prefix+<panel.key>`): closed opens expanded
-    /// and focused; open-but-unfocused focuses; focused closes.
-    /// Opening or focusing selects the first actionable row — a row
-    /// cursor is always visible while the panel owns the keys (A2.2).
+    /// The toggle chord (`prefix+<panel.key>`): closed or auto-hidden
+    /// opens expanded and focused; visible-but-unfocused focuses;
+    /// focused (or overlay) closes. Opening or focusing selects the
+    /// first actionable row — a row cursor is always visible while the
+    /// panel owns the keys (A2.2).
     pub(crate) fn panel_toggle(&mut self) {
-        if !self.panel.open() {
+        if self.panel_mode_at(self.area.0) == PanelMode::Closed {
             self.panel.mode = PanelMode::Expanded;
             self.panel.focused = true;
             self.panel.selected = None;
@@ -139,7 +141,7 @@ impl App {
     /// the footer's `m`/`⏎` promise holds on a dock never toggled,
     /// and the notice says where the keys went.
     pub(super) fn dead_pane_handoff(&mut self) {
-        if !self.panel.open()
+        if self.panel_mode_at(self.area.0) == PanelMode::Closed
             || self.panel_fullscreen()
             || self.panel.focused
             || !self.pane.input_refused()
