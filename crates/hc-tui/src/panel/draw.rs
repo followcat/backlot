@@ -74,6 +74,13 @@ pub(crate) fn render(
     panel: &Panel,
     mode: PanelMode,
     current: Option<&StudioKey>,
+    // The studio the `▸` marker may paint on — `current` when a
+    // studio workspace is focused, `None` over `backlot`/`stage` or
+    // a plain workspace (R3-M6: a remembered studio is not active).
+    mark: Option<&StudioKey>,
+    // The `current` studio's cast size (roles + shells) — the
+    // footer's `←→ role` hint reads it (wide-01).
+    cast_entries: usize,
     local: Option<&str>,
     keys: &StudioKeys,
     sheet: Option<String>,
@@ -168,7 +175,12 @@ pub(crate) fn render(
         let keys_line = if panel.focused {
             fit_hints(&tier_refs, area.width as usize).to_string()
         } else {
-            keys.shortcut_label()
+            // R3-M13 + wide-01: the unfocused footer fits clean
+            // tiers too, and each nav hint is conditional — `studio`
+            // needs ≥2 studios, `role` ≥2 cast entries.
+            let tiers = keys.footer_tiers(studios >= 2, cast_entries >= 2);
+            let refs: Vec<&str> = tiers.iter().map(String::as_str).collect();
+            fit_hints(&refs, area.width as usize).to_string()
         };
         put_text(
             buf,
@@ -317,7 +329,7 @@ pub(crate) fn render(
                     *studio,
                     &label(*studio),
                     *health,
-                    current == Some(&studio.key()),
+                    mark == Some(&studio.key()),
                     frame,
                     palette,
                 );

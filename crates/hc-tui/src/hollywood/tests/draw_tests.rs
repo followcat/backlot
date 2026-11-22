@@ -367,6 +367,31 @@ fn the_frames_fold_into_the_chip_strip_under_pressure() {
     assert!(text.contains("CARD c3"), "{text}");
 }
 
+/// R3-M10: a `ready_to_finish` or `finished` chip draws the shared
+/// health read's `✓` — never a hardcoded live `●`.
+#[test]
+fn a_ready_studios_chip_draws_the_ready_mark() {
+    let mut summary = summary();
+    summary.studios[0].ready_to_finish = true;
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 80, 24);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    // acme-shop ready (with its `!2` count after the mark) and
+    // beta-tools finished both read `✓`; gamma-site's ledger error
+    // reads the offline mark instead.
+    assert!(text.contains("[1 acme-shop ✓"), "{text}");
+    assert!(text.contains("[2 beta-tools ✓"), "{text}");
+    assert!(!text.contains("[3 gamma-site ✓"), "{text}");
+}
+
 // ---------- the footer ----------
 
 #[test]
@@ -466,13 +491,24 @@ fn a_card_row_footer_names_a_x_card() {
 #[test]
 fn a_ready_studio_footer_names_f_finish_from_row_and_frame() {
     // The READY row and the studio's own frame are one studio: both
-    // arm `f`, so both footers name it.
+    // arm `f`, so both footers name it. The row is `f`/`↵` only —
+    // peek stays on the frame (R3-N5).
     let mut summary = summary();
     summary.studios[0].ready_to_finish = true;
     let palette = palettes()[0].clone();
     let area = Rect::new(0, 0, 160, 45);
     let key = crate::studio::StudioKey::local("acme-shop");
-    for selected in [Target::Ready(key.clone()), Target::Studio(key)] {
+    let cases = [
+        (
+            Target::Ready(key.clone()),
+            "f finish   i tell   ↑↓ ⏎   m menu   ? help   esc",
+        ),
+        (
+            Target::Studio(key),
+            "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc",
+        ),
+    ];
+    for (selected, footer) in cases {
         let (buf, _) = draw(
             area,
             Some(&summary),
@@ -482,11 +518,65 @@ fn a_ready_studio_footer_names_f_finish_from_row_and_frame() {
             &palette,
         );
         let text = lines(&buf, area).join("\n");
-        assert!(
-            text.contains("f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"),
-            "{selected:?}: {text}"
-        );
+        assert!(text.contains(footer), "{selected:?}: {text}");
     }
+}
+
+/// R3-3: while the wrap report is still owed the READY row carries
+/// a dim `report pending` under it — gone once `next` is a normal
+/// step again.
+#[test]
+fn a_ready_row_names_the_pending_report_in_a_dim_line() {
+    let mut pending = summary();
+    pending.studios[0].ready_to_finish = true;
+    pending.studios[0].next = Some("node report — director".into());
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let layer = selecting(
+        LayerMode::Expanded,
+        Target::Ready(crate::studio::StudioKey::local("acme-shop")),
+    );
+    let (buf, _) = draw(area, Some(&pending), true, &layer, false, &palette);
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("report pending"), "{text}");
+
+    let mut landed = summary();
+    landed.studios[0].ready_to_finish = true;
+    let (buf, _) = draw(area, Some(&landed), true, &layer, false, &palette);
+    let text = lines(&buf, area).join("\n");
+    assert!(!text.contains("report pending"), "{text}");
+}
+
+/// R3-N5/R3-3: an armed `finish <id>?` owns every key but `y`/`n`/
+/// `Esc` — the footer names just those, and the ask itself warns
+/// while the wrap report is still pending. The frame's `f` arms the
+/// row's ask too.
+#[test]
+fn an_armed_finish_confirm_names_yes_no_and_warns_on_a_pending_report() {
+    let mut pending = summary();
+    pending.studios[0].ready_to_finish = true;
+    pending.studios[0].next = Some("node report — director".into());
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let key = crate::studio::StudioKey::local("acme-shop");
+    // The selection sits on the studio frame — the confirm still
+    // draws on the READY row it targets.
+    let mut layer = selecting(LayerMode::Expanded, Target::Studio(key.clone()));
+    layer.confirm = Some(crate::hollywood::Confirm::Finish(key));
+    let (buf, _) = draw(area, Some(&pending), true, &layer, false, &palette);
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("finish studio (report pending)?"), "{text}");
+    assert!(text.contains("y confirm   n / esc cancel"), "{text}");
+    assert!(!text.contains("p peek"), "{text}");
+
+    // Report landed: the ask drops the warning, the footer stays.
+    let mut landed = summary();
+    landed.studios[0].ready_to_finish = true;
+    let (buf, _) = draw(area, Some(&landed), true, &layer, false, &palette);
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("finish studio?"), "{text}");
+    assert!(!text.contains("(report pending)"), "{text}");
+    assert!(text.contains("y confirm   n / esc cancel"), "{text}");
 }
 
 #[test]
@@ -534,6 +624,36 @@ fn without_an_agent_the_band_is_the_setup_line() {
     assert!(!text.contains("tell hollywood what"), "{text}");
     assert!(!text.contains("acme-shop needs a look"), "{text}");
     assert!(hits.input.is_empty(), "no input line without an agent");
+}
+
+/// R3-M13: the setup row's lead shortens through clean tiers before
+/// the `⏎ hollywood setup` button ever clips — full sentence, then
+/// `✦ watch every studio:`, then the bare button.
+#[test]
+fn the_setup_row_shortens_its_lead_before_the_button_clips() {
+    let summary = summary();
+    for (width, want, not) in [
+        (120u16, "an agent can watch every studio", ""),
+        (60, "✦ watch every studio:", "an agent can watch"),
+        (36, "", "watch every studio"),
+    ] {
+        let area = Rect::new(0, 0, width, 24);
+        let (buf, _) = draw_without_agent(
+            area,
+            Some(&summary),
+            true,
+            &layer(LayerMode::Expanded),
+            &palettes()[0],
+        );
+        let text = lines(&buf, area).join("\n");
+        assert!(text.contains("⏎ hollywood setup"), "{width}: {text}");
+        if !want.is_empty() {
+            assert!(text.contains(want), "{width}: {text}");
+        }
+        if !not.is_empty() {
+            assert!(!text.contains(not), "{width}: {text}");
+        }
+    }
 }
 
 #[test]

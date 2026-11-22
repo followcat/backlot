@@ -80,3 +80,22 @@ async fn an_unshadowed_studio_key_carries_no_note() {
     // The default config binds nothing on alt+arrows — no note.
     assert!(!text.contains("shadows"), "{text}");
 }
+
+/// R3-N6: both pinned glyph-legend lines stay ≤ 66 cells — inside
+/// the 80×24 overlay's 74 inner columns `✓ closed` never clips.
+#[tokio::test]
+async fn the_glyph_legend_fits_inside_eighty_columns() {
+    let mut app = two_studio_app();
+    app.help = true;
+    let text = screen_lines(&draw_to(&mut app, 80, 24)).join("\n");
+    assert!(text.contains("◐ work"), "{text}");
+    assert!(text.contains("✓ closed"), "{text}");
+    // The renderer's ` {key:<7} {label}` at ≤66 cells each.
+    for (key, label) in app.help_legend() {
+        let line = format!(" {key:<7} {label}");
+        assert!(
+            crate::chrome::text::display_width(&line) <= 66,
+            "{line:?} wider than 66"
+        );
+    }
+}

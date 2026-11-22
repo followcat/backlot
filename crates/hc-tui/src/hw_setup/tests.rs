@@ -50,3 +50,40 @@ fn the_dialog_clears_the_frozen_screen_behind_it() {
     assert!(hits.area.width > 0, "the frame must fit the band");
     assert_no_bleed(&buf, hits.area);
 }
+
+/// R3-M13: the footer's hint tiers shorten whole — a hint never
+/// clips mid-word inside the 56-column dialog.
+#[test]
+fn the_footer_names_whole_hint_tiers_never_a_mid_word_cut() {
+    let palette = Palette::catppuccin();
+    let tiers = [
+        "↑↓ field  ←→ value  ⏎ list · apply  e text  esc cancel",
+        "↑↓ field  ←→ value  ⏎ apply  esc",
+        "↑↓ · ←→ · ⏎ · esc",
+    ];
+    for width in [80u16, 64, 48, 36] {
+        let band = Rect::new(0, 0, width, 24);
+        let mut buf = Buffer::empty(band);
+        let hits = render(&mut buf, &HwSetup::new(None), &palette, band);
+        let text = (hits.area.y..hits.area.bottom())
+            .map(|y| {
+                (hits.area.x..hits.area.right())
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let footers: Vec<&str> = text.lines().filter(|line| line.contains("↑↓")).collect();
+        assert!(
+            footers.len() <= 1,
+            "{width}: at most one hint line: {footers:?}"
+        );
+        if let Some(footer) = footers.first() {
+            assert!(
+                tiers.iter().any(|t| footer.contains(t)),
+                "{width}: {footer:?} is no whole tier"
+            );
+            assert!(!footer.contains('…'), "{width}: clipped: {footer:?}");
+        }
+    }
+}

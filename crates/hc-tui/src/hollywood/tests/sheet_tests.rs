@@ -112,6 +112,39 @@ fn an_empty_machine_never_lists_a_stage_row() {
     assert!(waits.iter().all(|w| !matches!(w, Wait::Stage(_))));
 }
 
+/// R3-3: a READY row earns its second line only while the wrap
+/// report is still owed — the dim `report pending` is what the line
+/// holds; prompts and cards always detail, a stage row never does.
+#[test]
+fn a_ready_row_details_only_while_the_report_pends() {
+    let mut pending = summary();
+    pending.studios[0].ready_to_finish = true;
+    pending.studios[0].next = Some("node report — director".into());
+    let all = machines(Some(&pending));
+    let waits = waiting_items(&all, &status(&[], &[]));
+    let ready = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Ready(_)))
+        .expect("the ready studio lists");
+    assert!(ready.detailable());
+
+    let mut landed = summary();
+    landed.studios[0].ready_to_finish = true;
+    let all = machines(Some(&landed));
+    let waits = waiting_items(&all, &status(&[], &[]));
+    let ready = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Ready(_)))
+        .expect("the ready studio still lists");
+    assert!(!ready.detailable());
+    // The other kinds keep their own rule.
+    assert!(
+        waits
+            .iter()
+            .all(|w| matches!(w, Wait::Card(_)) == w.detailable())
+    );
+}
+
 #[test]
 fn wait_targets_are_machine_qualified() {
     let mut all = machines(Some(&with_user_prompt("acme-shop", "actor-alice")));

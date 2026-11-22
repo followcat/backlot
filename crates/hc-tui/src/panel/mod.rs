@@ -26,7 +26,7 @@ pub(crate) use draw::{PanelRender, render};
 pub(crate) use remote::RemoteRunner;
 pub(crate) use row_lines::owed_text;
 pub(crate) use rows::{Row, Target, rows};
-pub(crate) use rows_fit::mark_counts;
+pub(crate) use rows_fit::{health_of, mark_counts};
 
 /// How the panel sits on screen. The default is `Expanded`: the
 /// dock opens on its column beside the panes. A window too narrow

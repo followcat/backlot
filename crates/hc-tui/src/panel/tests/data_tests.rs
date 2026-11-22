@@ -1,7 +1,7 @@
 //! Reading `backlot` out of the view: soft failures only, the
 //! per-machine aggregate and the stage's live check.
 use super::summary_json;
-use crate::panel::data::{local_summary, stage_running, summaries};
+use crate::panel::data::{local_summary, report_pending, stage_running, studio_label, summaries};
 use hc_proto::watch::{DocKey, Document, View};
 
 fn view_with_document(value: serde_json::Value) -> View {
@@ -154,4 +154,38 @@ fn stage_running_is_per_machine() {
     assert!(stage_running(&view, Some("host-b")));
     assert!(!stage_running(&view, None));
     assert!(!stage_running(&view, Some("host-a")));
+}
+
+#[test]
+fn report_pending_is_a_ready_studio_still_owing_its_wrap_report() {
+    // R3-3: `ready_to_finish` plus `next == "node report …"` — the
+    // director's wrap-up has not landed yet. Every other shape is
+    // calm: the offer alone is no warning.
+    let mut value = summary_json();
+    value["studios"][0]["ready_to_finish"] = true.into();
+    value["studios"][0]["next"] = "node report — director".into();
+    let mut summary: backlot_model::summary::Summary = serde_json::from_value(value).unwrap();
+    assert!(report_pending(&summary.studios[0]));
+    summary.studios[0].next = Some("review delivery 2 — director".into());
+    assert!(!report_pending(&summary.studios[0]));
+    summary.studios[0].next = Some("node report — director".into());
+    summary.studios[0].ready_to_finish = false;
+    assert!(!report_pending(&summary.studios[0]));
+}
+
+#[test]
+fn a_remote_studio_names_its_machine_even_on_a_single_machine_lot() {
+    // R3-N1: `· host-b` is the only cue its terminals run off-core —
+    // it never waits for a second machine to earn the label. The
+    // local name still reads only while the aggregate spans.
+    let remote = studio_label("beta-tools", Some("host-b"), Some("Local"), false);
+    assert_eq!(remote.full, "beta-tools · host-b");
+    // The fit ladder keeps the machine while it shrinks — `@`
+    // first, then the id truncates inside `id@mach…`.
+    assert_eq!(remote.fit(16), "beta-tools@host…");
+    assert_eq!(remote.fit(15), "beta-too…@host…");
+    let local = studio_label("acme-shop", None, Some("Local"), false);
+    assert_eq!(local.full, "acme-shop");
+    let spanned = studio_label("acme-shop", None, Some("Local"), true);
+    assert_eq!(spanned.full, "acme-shop · Local");
 }

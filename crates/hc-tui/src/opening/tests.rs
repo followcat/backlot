@@ -50,10 +50,7 @@ fn draw_with(
 }
 
 fn footer() -> String {
-    format!(
-        " v{} · backlot --plain — a plain multiplexer",
-        env!("CARGO_PKG_VERSION")
-    )
+    format!(" v{} · {}", env!("CARGO_PKG_VERSION"), PLAIN_HINT)
 }
 
 /// The target page, exactly as the brief draws it, 47 columns wide.

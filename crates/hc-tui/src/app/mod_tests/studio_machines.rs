@@ -165,9 +165,9 @@ async fn the_endpoint_sidebar_keeps_the_cast_under_the_machine_tree() {
     assert!(sidebar.contains("host-b"), "{sidebar}");
     // The lower section is the current studio's cast — the
     // single-endpoint sidebar's section, herdr's agents header gone.
-    // A8.3: the machine tag is never dropped whole — it truncates
-    // inside `id@machine` instead.
-    assert!(sidebar.contains("cast · acme-…@Local"), "{sidebar}");
+    // R3-N2: no `cast · ` prefix under a studio label — the label
+    // gets the full width (`id · machine` fits at 26 columns).
+    assert!(sidebar.contains("acme-shop · Local"), "{sidebar}");
     assert!(sidebar.contains("producer"), "{sidebar}");
     assert!(sidebar.contains("director"), "{sidebar}");
     assert!(sidebar.contains("alice task-1"), "{sidebar}");

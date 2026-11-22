@@ -287,8 +287,13 @@ pub(crate) fn effort_rule(runner: &str, effort: Option<&str>) -> Result<(), Stri
 /// Read `[hollywood]` from the user config; a missing file or section
 /// is `Ok(None)`.
 pub fn hollywood(env: &BTreeMap<String, String>) -> Result<Option<HollywoodCfg>, String> {
-    let path = config_path(env);
-    match std::fs::read_to_string(&path) {
+    hollywood_at(&config_path(env))
+}
+
+/// Read `[hollywood]` from an explicit path — the TUI's Settings
+/// reload reads the file its own `panel_config_path` names (R3-M15).
+pub fn hollywood_at(path: &Path) -> Result<Option<HollywoodCfg>, String> {
+    match std::fs::read_to_string(path) {
         Ok(text) => hollywood_in(&text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(format!("config.toml: {e}")),

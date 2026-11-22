@@ -217,7 +217,7 @@ async fn a_studio_hides_the_page() {
     assert!(!app.opening_visible());
     let backend = draw_to(&mut app, 80, 24);
     let text = screen_lines(&backend).join("\n");
-    assert!(text.contains("cast · acme-shop"), "{text}");
+    assert!(text.contains("acme-shop"), "{text}");
 }
 
 #[tokio::test]

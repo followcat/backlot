@@ -297,3 +297,103 @@ fn idle_collapsed_strip_emits_summary_row_under_studio() {
         "StripSummary shares Strip target"
     );
 }
+
+/// R3-3/R3-M10: a `ready_to_finish` studio owes `finish studio ·
+/// user [f]` ahead of the post-acceptance `node report` step — the
+/// ledger step must not hide the `f` — and a dim `report pending`
+/// line rides under the offer while the wrap report is still owed.
+#[test]
+fn a_ready_studio_owes_finish_while_its_wrap_report_is_pending() {
+    use crate::panel::rows::{Owed, Row};
+    let mut pending = summary();
+    pending.studios[0].ready_to_finish = true;
+    pending.studios[0].next = Some("node report — director".into());
+    let p = panel(PanelMode::Expanded);
+    let pending_machines = machines(Some(&pending));
+    let out = rows(&pending_machines, |_| true, |_| true, &p, p.mode, None, 40);
+    let kinds: Vec<Owed> = out
+        .iter()
+        .filter_map(|row| match row {
+            Row::Owed { kind, .. } => Some(*kind),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kinds, [Owed::Finish, Owed::ReportPending], "{out:?}");
+
+    // The wrap report landed — `next` is a normal ledger step again:
+    // the offer stays, the pending cue goes.
+    let mut done = summary();
+    done.studios[0].ready_to_finish = true;
+    let done_machines = machines(Some(&done));
+    let out = rows(&done_machines, |_| true, |_| true, &p, p.mode, None, 40);
+    let kinds: Vec<Owed> = out
+        .iter()
+        .filter_map(|row| match row {
+            Row::Owed { kind, .. } => Some(*kind),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(kinds, [Owed::Finish], "{out:?}");
+}
+
+/// R3-3: `f` armed on a ready studio asks `finish <id>? [y/n]` —
+/// while the wrap report is still owed the ask itself warns.
+#[test]
+fn the_armed_finish_confirm_warns_while_the_report_pends() {
+    use crate::panel::rows::{Owed, Row};
+    let mut armed = panel(PanelMode::Expanded);
+    armed.finish_confirm = Some(StudioKey::local("acme-shop"));
+    let confirm_text = |summary: &Summary| {
+        let machines = machines(Some(summary));
+        let out = rows(&machines, |_| true, |_| true, &armed, armed.mode, None, 40);
+        out.iter()
+            .filter_map(|row| match row {
+                Row::Owed {
+                    kind: Owed::Confirm,
+                    text,
+                    ..
+                } => Some(text.clone()),
+                _ => None,
+            })
+            .next()
+            .unwrap_or_default()
+    };
+    let mut pending = summary();
+    pending.studios[0].ready_to_finish = true;
+    pending.studios[0].next = Some("node report — director".into());
+    assert_eq!(
+        confirm_text(&pending),
+        "finish acme-shop (report pending)? [y/n]"
+    );
+    let mut landed = summary();
+    landed.studios[0].ready_to_finish = true;
+    assert_eq!(confirm_text(&landed), "finish acme-shop? [y/n]");
+}
+
+/// R3-M5: a brand-new install — no machine's document parsed — still
+/// shows the expanded dock's `⏎ hollywood setup` row; the collapsed
+/// strip does not.
+#[test]
+fn a_first_run_dock_names_the_setup_row() {
+    let mut p = panel(PanelMode::Expanded);
+    p.hollywood_hint = true;
+    let empty = machines(None);
+    let out = rows(&empty, |_| true, |_| true, &p, p.mode, None, 24);
+    assert!(
+        out.iter()
+            .any(|row| matches!(row, crate::panel::Row::SetupHint)),
+        "{out:?}"
+    );
+    assert!(
+        out.iter().any(|row| row.target() == Target::Setup),
+        "the row is actionable: {out:?}"
+    );
+    let mut strip = panel(PanelMode::Collapsed);
+    strip.hollywood_hint = true;
+    let out = rows(&empty, |_| true, |_| true, &strip, strip.mode, None, 24);
+    assert!(
+        out.iter()
+            .all(|row| !matches!(row, crate::panel::Row::SetupHint)),
+        "{out:?}"
+    );
+}

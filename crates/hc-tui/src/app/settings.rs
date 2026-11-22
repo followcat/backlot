@@ -28,6 +28,9 @@ impl App {
     /// on the configured theme, with the restore snapshot taken.
     pub(super) fn open_settings_overlay(&mut self) {
         self.release_pane_mouse();
+        // R3-M15: the studio tab re-reads `[hollywood]` — an edit
+        // made since start lands without a restart.
+        self.reload_hollywood_cfg();
         self.settings = Some(SettingsOverlay {
             section: SettingsSection::Theme,
             selected: theme_index(self.shell.own_theme.names(), &self.shell.theme_name),
@@ -249,9 +252,9 @@ impl App {
     }
 
     /// The studio tab's rows: the start policy and dock width cycle
-    /// their choices, `Alt+Y` toggles; the overseer row is read-only
-    /// until the S3/S4 dialogs bring a native setup. Every write
-    /// lands in backlot's own `config.toml`.
+    /// their choices, `Alt+Y` toggles; the overseer row opens the
+    /// setup dialog (R3-5). Every write lands in backlot's own
+    /// `config.toml`.
     fn apply_studio_row(&mut self, row: usize) {
         use crate::chrome::settings::{
             STUDIO_ALT_Y, STUDIO_DOCK_WIDTH, STUDIO_OVERSEER, STUDIO_START,

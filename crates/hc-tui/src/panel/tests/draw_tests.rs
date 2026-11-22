@@ -54,6 +54,8 @@ fn draw(
         panel,
         panel.mode,
         current.as_ref(),
+        current.as_ref(),
+        2,
         None,
         &keys(),
         None,
@@ -315,24 +317,37 @@ fn short_height_stacks_other_blocks_to_single_lines() {
 
 #[test]
 fn the_shortcuts_line_shows_keys_and_drops_under_eight_rows() {
-    let summary = summary();
+    // Two studios + a 2-entry cast (`cast_entries = 2` in `draw`)
+    // light both nav hints (wide-01).
+    let mut value = summary_json();
+    let mut second = value["studios"][0].clone();
+    second["id"] = serde_json::json!("second-studio");
+    value["studios"].as_array_mut().unwrap().push(second);
+    let two_studios: Summary = serde_json::from_value(value).unwrap();
     let unfocused = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 20);
-    let (buf, _) = draw(area, Some(&summary), &unfocused, None);
+    let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
     let last = &lines(&buf, area)[area.height as usize - 1];
     assert!(last.contains("alt"), "{last}");
     assert!(last.contains("studio"), "{last}");
     assert!(last.contains("role"), "{last}");
+    // One studio alone drops the `studio` hint — the key has
+    // nowhere to go.
+    let one = summary();
+    let (buf, _) = draw(area, Some(&one), &unfocused, None);
+    let last = &lines(&buf, area)[area.height as usize - 1];
+    assert!(!last.contains("studio"), "{last}");
+    assert!(last.contains("role"), "{last}");
     // Focused panel shows its own keys.
     let mut focused = panel(PanelMode::Expanded);
     focused.focused = true;
-    let (buf, _) = draw(area, Some(&summary), &focused, None);
+    let (buf, _) = draw(area, Some(&two_studios), &focused, None);
     let last = &lines(&buf, area)[area.height as usize - 1];
     assert!(last.contains('m'), "{last}");
     assert!(last.contains('?'), "{last}");
     // Under 8 rows the line is dropped.
     let area = Rect::new(0, 0, 30, 7);
-    let (buf, _) = draw(area, Some(&summary), &unfocused, None);
+    let (buf, _) = draw(area, Some(&two_studios), &unfocused, None);
     let text = lines(&buf, area).join("\n");
     assert!(!text.contains("studio  ←"), "{text}");
     assert!(!text.contains("m menu"), "{text}");
@@ -418,6 +433,8 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         panel.mode,
         None,
         None,
+        0,
+        None,
         &keys(),
         None,
         false,
@@ -452,6 +469,8 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
         &panel,
         panel.mode,
         None,
+        None,
+        0,
         None,
         &keys(),
         None,
@@ -541,6 +560,8 @@ fn studios_spanning_machines_name_their_machine() {
         &panel,
         panel.mode,
         None,
+        None,
+        0,
         Some(crate::project::LOCAL_LABEL),
         &keys(),
         None,
@@ -578,6 +599,8 @@ fn one_machine_keeps_the_bare_id_headers() {
         &panel,
         panel.mode,
         None,
+        None,
+        0,
         Some(crate::project::LOCAL_LABEL),
         &keys(),
         None,
@@ -654,6 +677,8 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
         PanelMode::Collapsed,
         None,
         None,
+        0,
+        None,
         &keys(),
         None,
         false,
@@ -694,6 +719,8 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
         PanelMode::Expanded,
         None,
         None,
+        0,
+        None,
         &keys(),
         None,
         false,
@@ -723,6 +750,8 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
         PanelMode::Expanded,
         None,
         None,
+        0,
+        None,
         &keys(),
         None,
         false,
@@ -733,4 +762,130 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
     );
     assert_ne!(suppressed_buf[(1, sel_y)].symbol(), "▌");
     assert_ne!(suppressed_buf[(4, sel_y)].bg, palette.selection_bg);
+}
+
+/// R3-M6: `▸` belongs to a studio workspace's studio only — the
+/// renderer takes `mark` separately from `current` so a remembered
+/// studio never paints as active over `backlot`/`stage` or a plain
+/// workspace. The block itself is unaffected.
+#[test]
+fn the_mark_paints_only_where_a_studio_workspace_points() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 20);
+    let key = crate::studio::StudioKey::local("acme-shop");
+    for (mark, want) in [(Some(&key), true), (None, false)] {
+        let mut buf = Buffer::empty(area);
+        render(
+            &mut buf,
+            area,
+            &machines(Some(&summary)),
+            |_| true,
+            |_| true,
+            &panel,
+            panel.mode,
+            Some(&key),
+            mark,
+            2,
+            None,
+            &keys(),
+            None,
+            false,
+            false,
+            true,
+            &Default::default(),
+            &palette(),
+        );
+        let text = lines(&buf, area).join("\n");
+        assert_eq!(text.contains('▸'), want, "mark {mark:?}: {text}");
+        assert!(text.contains("acme-shop"), "block stays: {text}");
+    }
+}
+
+/// wide-01: `←→ role` only has somewhere to go while the focused
+/// studio cycles ≥2 cast entries — a solo cast drops the hint.
+#[test]
+fn a_solo_cast_drops_the_role_hint() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 20);
+    for (cast_entries, want) in [(2usize, true), (0, false)] {
+        let mut buf = Buffer::empty(area);
+        render(
+            &mut buf,
+            area,
+            &machines(Some(&summary)),
+            |_| true,
+            |_| true,
+            &panel,
+            panel.mode,
+            None,
+            None,
+            cast_entries,
+            None,
+            &keys(),
+            None,
+            false,
+            false,
+            true,
+            &Default::default(),
+            &palette(),
+        );
+        let last = &lines(&buf, area)[area.height as usize - 1];
+        assert_eq!(last.contains("role"), want, "{cast_entries}: {last}");
+    }
+}
+
+/// wide-01: the unfocused footer's `↑↓ studio` names a navigation
+/// that exists — a lone studio drops the half, two studios keep it.
+#[test]
+fn a_lone_studio_drops_the_studio_hint() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 30, 20);
+    let two = vec![
+        remote(&summary),
+        crate::panel::data::MachineSummary {
+            machine: None,
+            summary: summary.clone(),
+        },
+    ];
+    for (list, want) in [(machines(Some(&summary)), false), (two, true)] {
+        let mut buf = Buffer::empty(area);
+        render(
+            &mut buf,
+            area,
+            &list,
+            |_| true,
+            |_| true,
+            &panel,
+            panel.mode,
+            None,
+            None,
+            0,
+            None,
+            &keys(),
+            None,
+            false,
+            false,
+            true,
+            &Default::default(),
+            &palette(),
+        );
+        let last = &lines(&buf, area)[area.height as usize - 1];
+        assert_eq!(last.contains("studio"), want, "{last}");
+    }
+}
+
+/// R3-N2: a director-blocked person is not just its task id in the
+/// 16-column strip — the `dir` cue rides beside it.
+#[test]
+fn a_director_blocked_role_keeps_its_dir_cue_in_the_strip() {
+    let summary = summary();
+    let panel = panel(PanelMode::Collapsed);
+    let area = Rect::new(0, 0, 16, 20);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    // bob: blocked on `task-3` — `task-3 dir`, not bare `task-3`.
+    assert!(text.contains("dir"), "{text}");
 }

@@ -352,11 +352,16 @@ pub(crate) fn backlot_help_groups(
         (
             "glyph legend",
             vec![
+                // R3-N6: ` · ` joins keep both rows ≤ 66 columns —
+                // `✓ closed` never clips inside 80×24's 74 inner cols.
                 entry(
                     "people",
-                    "◐ work  ○ idle  ◌ slot  × USER/dir  ! fail  ✓ closed",
+                    "◐ work · ○ idle · ◌ slot · × USER/dir · ! fail · ✓ closed",
                 ),
-                entry("tasks", "· wait  ◐ run   ◈ rev   ✓ pass  = pause  ↑/↓ prio"),
+                entry(
+                    "tasks",
+                    "· wait · ◐ run · ◈ rev · ✓ pass · = pause · ↑/↓ prio",
+                ),
             ],
         ),
     ];

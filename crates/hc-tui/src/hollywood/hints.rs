@@ -63,7 +63,9 @@ fn slots(selected: Option<&Target>, waits: &[Wait<'_>], agent: bool) -> [bool; 6
         Some(Target::Prompt(..)) => [true, false, false, false, true, agent],
         Some(Target::Card(_)) => [false, true, false, false, false, agent],
         Some(Target::Stage(_, offline)) => [false, false, false, !offline, false, agent],
-        Some(Target::Ready(key)) => [false, false, ready(key), false, true, agent],
+        // R3-N5: a READY row has no peek of its own — `p` stays on
+        // prompt rows and studio frames only.
+        Some(Target::Ready(key)) => [false, false, ready(key), false, false, agent],
         Some(Target::Studio(key)) => [false, false, ready(key), stage_down(key), true, agent],
         _ => [false, false, false, false, false, agent],
     }
@@ -123,6 +125,16 @@ pub(crate) fn for_row(
     .into_iter()
     .find(|tier| display_width(tier) <= width)
     .unwrap_or_default()
+}
+
+/// The armed confirm's footer (R3-N5): while a `finish?` ask owns
+/// every key but `y`/`n`/`Esc`, the footer names just those.
+pub(crate) fn for_confirm(width: usize) -> String {
+    ["y confirm   n / esc cancel", "y/n/esc"]
+        .into_iter()
+        .find(|tier| display_width(tier) <= width)
+        .unwrap_or_default()
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -243,13 +255,16 @@ mod tests {
         let list = machines(Some(&ready));
         let waits = waits_of(&list);
         let key = StudioKey::local("acme-shop");
-        for selected in [Target::Ready(key.clone()), Target::Studio(key)] {
-            assert_eq!(
-                for_row(Some(&selected), false, &waits, true, 200),
-                "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc",
-                "{selected:?}"
-            );
-        }
+        // The READY row's own keys are `f` and the sheet's `i` — no
+        // `p peek` on it (R3-N5); the studio frame still names it.
+        assert_eq!(
+            for_row(Some(&Target::Ready(key.clone())), false, &waits, true, 200),
+            "f finish   i tell   ↑↓ ⏎   m menu   ? help   esc"
+        );
+        assert_eq!(
+            for_row(Some(&Target::Studio(key)), false, &waits, true, 200),
+            "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
+        );
     }
 
     #[test]

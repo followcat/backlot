@@ -271,17 +271,26 @@ fn draw_detail(
     buf.set_style(rect, Style::default().bg(bg));
     let x = rect.x + MARGIN + 2;
     let width = rect.width.saturating_sub(MARGIN * 2 + 2);
-    // The finish confirm reuses the line while it asks `y/n`.
-    if selected
-        && let Some(confirm) = hollywood.confirm.as_ref()
-        && matches!(confirm, Confirm::Finish(_))
+    // The finish confirm reuses the line while it asks `y/n` — an
+    // early finish (the wrap report still owed) warns inside the ask
+    // (R3-3). It draws on the wait the confirm targets, wherever the
+    // selection sits — a frame's `f` arms the same row.
+    if let Some(Confirm::Finish(key)) = hollywood.confirm.as_ref()
+        && wait.target() == super::Target::Ready(key.clone())
     {
+        let pending =
+            matches!(wait, Wait::Ready(item) if crate::panel::data::report_pending(item.studio));
+        let text = if pending {
+            "finish studio (report pending)?  y yes   n no"
+        } else {
+            "finish studio?  y yes   n no"
+        };
         put_text(
             buf,
             x,
             rect.y,
             width,
-            &truncate_end("finish studio?  y yes   n no", width as usize),
+            &truncate_end(text, width as usize),
             Style::default()
                 .fg(palette.peach)
                 .bg(bg)
@@ -299,6 +308,11 @@ fn draw_detail(
             palette.subtext0,
         ),
         Wait::Card(card) => (format!("why: {}", card.why), palette.subtext0),
+        // R3-3: the wrap report has not landed — a dim line under the
+        // READY row says so, like the dock's `· report pending`.
+        Wait::Ready(item) if crate::panel::data::report_pending(item.studio) => {
+            ("report pending".to_string(), palette.overlay0)
+        }
         _ => return,
     };
     put_text(
@@ -491,17 +505,22 @@ fn draw_input(
 fn draw_setup(buf: &mut Buffer, rect: Rect, palette: &Palette) {
     let x = rect.x + MARGIN;
     let base = Style::default().bg(palette.surface_dim);
-    let lead = format!("{SETUP_LEAD} ");
+    // R3-M13: the lead shortens before the button ever clips — the
+    // full sentence while both fit, the short lead under ~84 cols,
+    // the bare button at the narrowest.
     let room = rect.width.saturating_sub(MARGIN);
-    let lead_w = (lead.chars().count() as u16).min(room);
-    put_text(
-        buf,
-        x,
-        rect.y,
-        lead_w,
-        &truncate_end(&lead, lead_w as usize),
-        base.fg(palette.overlay0),
-    );
+    let cmd_w = display_width(SETUP_COMMAND);
+    let lead = if room as usize >= display_width(SETUP_LEAD) + 1 + cmd_w {
+        format!("{SETUP_LEAD} ")
+    } else if room as usize >= display_width("✦ watch every studio:") + 1 + cmd_w {
+        "✦ watch every studio: ".to_string()
+    } else {
+        String::new()
+    };
+    let lead_w = (display_width(&lead) as u16).min(room);
+    if lead_w > 0 {
+        put_text(buf, x, rect.y, lead_w, &lead, base.fg(palette.overlay0));
+    }
     let rest = room.saturating_sub(lead_w);
     if rest > 0 {
         put_text(

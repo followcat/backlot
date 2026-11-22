@@ -58,17 +58,18 @@ pub(crate) struct CastView<'a> {
 
 impl<'a> CastView<'a> {
     /// Build the frame's cast: the studio `current` points at (or the
-    /// first in the aggregate's order when it does not resolve), the
-    /// people in cast order, its shells on its own machine and every
-    /// herdr agent that no studio's person seats — `others`. With no
-    /// studio anywhere the cast still draws so the `others` row
-    /// exists; only `others` has rows then.
+    /// first in the aggregate's order when it does not resolve) — but
+    /// only while `in_studio_workspace`, the focused-terminal latch
+    /// (R3-M6: over `backlot`/`stage`, `bl-hollywood` or a plain
+    /// workspace no studio's people paint as the cast). With no
+    /// studio shown the cast still draws so the `others` row exists.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn build(
         machines: &'a [MachineSummary],
         snapshot: &'a ClientShellSnapshot,
         view: &'a hc_proto::watch::View,
         current: Option<&'a StudioKey>,
+        in_studio_workspace: bool,
         local: Option<&'a str>,
         config: &'a ClientShellConfig,
         others_expanded: bool,
@@ -77,9 +78,9 @@ impl<'a> CastView<'a> {
     ) -> CastView<'a> {
         let studios = crate::panel::data::studios(machines);
         let index = current.and_then(|key| studios.iter().position(|s| &s.key() == key));
-        let (index, studio) = match index {
-            Some(index) => (index, Some(studios[index])),
-            None if !studios.is_empty() => (0, Some(studios[0])),
+        let (index, studio) = match (in_studio_workspace, index) {
+            (true, Some(index)) => (index, Some(studios[index])),
+            (true, None) if !studios.is_empty() => (0, Some(studios[0])),
             _ => (0, None),
         };
         let multi = spans_machines(machines);

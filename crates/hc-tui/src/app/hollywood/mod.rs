@@ -18,6 +18,20 @@ use std::path::Path;
 use super::App;
 use crate::hollywood::{self, CallSheetKeys, LayerMode, Target};
 
+/// The overseer row's `runner / model / effort` — the Call Sheet
+/// title's own join; `effort` drops when unset or `auto` (R3-M15).
+pub(super) fn overseer_label(cfg: &backlot_stage::config::HollywoodCfg) -> String {
+    [
+        Some(cfg.runner.as_str()),
+        Some(cfg.model.as_str()),
+        cfg.effort.as_deref().filter(|effort| *effort != "auto"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" / ")
+}
+
 impl App {
     // ---------- config ----------
 
@@ -37,8 +51,9 @@ impl App {
             Err(e) => (None, Some(format!("Hollywood config: {e}"))),
         };
         self.has_hollywood_cfg = cfg.is_some();
-        // The settings tab's read-only overseer row.
-        self.hollywood_overseer = cfg.as_ref().map(|c| format!("{} · {}", c.runner, c.model));
+        // The settings tab's read-only overseer row — the Call Sheet
+        // title's own `runner / model / effort` join (R3-M15).
+        self.hollywood_overseer = cfg.as_ref().map(overseer_label);
         // The reconfigure dialog's prefill — `key`/`default_cast`
         // carry over verbatim on its write.
         self.hollywood_cfg = cfg.clone();
@@ -90,6 +105,15 @@ impl App {
     /// overseer row's setup hint while `[hollywood]` is unset.
     pub(crate) fn set_setup_runner_hint(&mut self, runner: Option<String>) {
         self.setup_runner_hint = runner;
+    }
+
+    /// R3-M15: `Ctrl+B s` re-reads `[hollywood]` from the file
+    /// `panel_config_path` names — an edit made since start lands in
+    /// the studio tab without a restart. The same `set_hollywood`
+    /// install the startup read takes.
+    pub(super) fn reload_hollywood_cfg(&mut self) {
+        let path = self.panel_config_path.clone();
+        self.set_hollywood(backlot_stage::config::hollywood_at(&path), &path);
     }
 
     /// The `--plain` latch on the layer (D6, D15a): plain has no

@@ -374,13 +374,19 @@ fn render_band(
     ));
     if plan.hints {
         let usable = (area.width as usize).saturating_sub((MARGIN * 2) as usize);
-        let tier = hints::for_row(
-            hollywood.selected.as_ref(),
-            hollywood.editing,
-            &waits,
-            opts.agent,
-            usable,
-        );
+        // An armed `finish?` owns every key but `y`/`n`/`Esc` — the
+        // footer names just those while it asks (R3-N5).
+        let tier = if hollywood.confirm.is_some() {
+            hints::for_confirm(usable)
+        } else {
+            hints::for_row(
+                hollywood.selected.as_ref(),
+                hollywood.editing,
+                &waits,
+                opts.agent,
+                usable,
+            )
+        };
         let w = display_width(&tier) as u16;
         let x = (area.x + area.width.saturating_sub(MARGIN))
             .saturating_sub(w)

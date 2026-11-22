@@ -106,9 +106,15 @@ impl Wait<'_> {
     }
 
     /// Whether the row can offer a detail line — prompts and cards
-    /// can; stage and ready rows are one line each.
+    /// always can; a ready row gets one while the wrap report is
+    /// still owed (R3-3's dim `report pending`); stage rows are one
+    /// line each.
     pub fn detailable(&self) -> bool {
-        matches!(self, Wait::Prompt(_) | Wait::Card(_))
+        match self {
+            Wait::Prompt(_) | Wait::Card(_) => true,
+            Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
+            Wait::Stage(_) => false,
+        }
     }
 }
 
