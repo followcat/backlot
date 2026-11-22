@@ -100,6 +100,24 @@ fn only_a_finished_exited_terminal_is_eligible() {
     let mut unknown = exited("t1", 0);
     unknown.reason = None;
     assert!(!should_reap_exited(&unknown, now));
+
+    // A child ended automatically with its closed parent (`die_with_parent`)
+    // is reaped instead of leaving residual `finished·killed` tabs behind.
+    let mut child = exited("t1", 0);
+    child.reason = Some("killed".into());
+    child.extra.insert(
+        "ended_by".into(),
+        json!({"by": "die_with_parent", "parent": "t0"}),
+    );
+    assert!(should_reap_exited(&child, now));
+
+    // Explicit `terminal.kill` without `rm` still stays.
+    let mut manual_kill = exited("t1", 0);
+    manual_kill.reason = Some("killed".into());
+    manual_kill
+        .extra
+        .insert("ended_by".into(), json!({"by": "terminal.kill"}));
+    assert!(!should_reap_exited(&manual_kill, now));
 }
 
 #[test]
