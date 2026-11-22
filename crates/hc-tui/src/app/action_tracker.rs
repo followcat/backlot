@@ -103,17 +103,25 @@ impl App {
         }
         match result {
             Ok(stdout) if pending.action.view => {
-                let title = pending
+                let card = pending
                     .action
-                    .label
-                    .trim_start_matches("card show ")
-                    .to_string();
+                    .mark
+                    .strip_prefix("card:")
+                    .or_else(|| pending.action.label.strip_prefix("card show "))
+                    .map(str::to_owned);
+                let title = match &card {
+                    Some(id) => id.clone(),
+                    None => match &pending.action.machine {
+                        Some(machine) => format!("{} · {machine}", pending.action.name),
+                        None => pending.action.name.clone(),
+                    },
+                };
                 let lines: Vec<String> = stdout.lines().map(str::to_string).collect();
                 if lines.is_empty() {
                     self.show_notice("Hollywood", &format!("{title}: nothing to show"));
                 } else {
                     self.hollywood.view = Some(crate::hollywood::CardView {
-                        card: title.clone(),
+                        card,
                         title,
                         lines,
                         scroll: 0,
@@ -125,7 +133,8 @@ impl App {
                     .hollywood
                     .view
                     .as_ref()
-                    .is_some_and(|v| pending.action.mark == format!("card:{}", v.card));
+                    .and_then(|v| v.card.as_deref())
+                    .is_some_and(|card| pending.action.mark == mark::card(card));
                 if resolved {
                     self.hollywood.view = None;
                 }

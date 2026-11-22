@@ -34,6 +34,10 @@ pub struct HollywoodSummary {
     /// The newest `hollywood.reported` headline (≤ [`HEADLINE_CHARS`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headline: Option<String>,
+    /// Ledger `seq` of the newest `hollywood.reported` event so the
+    /// Call Sheet's headline row can open its full report body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headline_seq: Option<u64>,
     /// Up to [`MAX_OPEN_CARDS`] open cards, each string capped.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cards: Vec<CardSummary>,
@@ -55,6 +59,10 @@ pub struct Exchange {
     pub who: String,
     /// The line's text (≤ [`HEADLINE_CHARS`]).
     pub text: String,
+    /// Whether this entry carries a file body on disk (`--body` on a
+    /// report, or `messages/…` on a message).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub has_body: bool,
 }
 
 /// One open card as the layer shows it.
@@ -87,9 +95,8 @@ pub fn hollywood_section(
         runner: runner.map(cap),
         model: model.map(cap),
         effort: effort.map(cap),
-        headline: state
-            .last_headline()
-            .map(|h| h.chars().take(HEADLINE_CHARS).collect()),
+        headline: state.last_headline().map(cap_headline),
+        headline_seq: state.reports.last().map(|r| r.seq),
         cards: state
             .open_cards()
             .take(MAX_OPEN_CARDS)
@@ -104,6 +111,10 @@ pub fn hollywood_section(
     }
 }
 
+fn cap_headline(s: &str) -> String {
+    s.chars().take(HEADLINE_CHARS).collect()
+}
+
 /// The conversation lines: each `message.sent` `to` Hollywood that
 /// carries text and each `reported` headline, merged on their seq
 /// and cut to the newest [`MAX_EXCHANGE`].
@@ -116,13 +127,15 @@ fn exchange(state: &HollywoodState) -> Vec<Exchange> {
             m.text.as_ref().map(|text| Exchange {
                 seq: m.seq,
                 who: cap(&m.from),
-                text: cap(text),
+                text: cap_headline(text),
+                has_body: m.file.is_some(),
             })
         })
         .chain(state.reports.iter().map(|r| Exchange {
             seq: r.seq,
             who: "hollywood".into(),
-            text: cap(&r.headline),
+            text: cap_headline(&r.headline),
+            has_body: r.body.is_some(),
         }))
         .collect();
     lines.sort_by_key(|e| e.seq);

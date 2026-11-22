@@ -342,6 +342,21 @@ pub(crate) fn tell_hollywood(text: &str) -> Action {
     }
 }
 
+/// `hollywood show <seq>` — full report body or message text, opened
+/// in the read-only `CardView`.
+pub(crate) fn hollywood_show(seq: u64) -> Action {
+    Action {
+        label: format!("reading #{seq}"),
+        done: format!("read #{seq}"),
+        name: format!("hollywood #{seq}"),
+        mark: mark::hollywood_entry(seq),
+        argv: plain_argv(&["hollywood".into(), "show".into(), seq.to_string()]),
+        machine: None,
+        stdin: None,
+        view: true,
+    }
+}
+
 /// `records --studio <s>` — the actor-records read, opened as a
 /// view on success.
 pub(crate) fn records(key: &StudioKey) -> Action {

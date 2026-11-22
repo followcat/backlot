@@ -97,8 +97,20 @@ pub(crate) fn render(
         LayerMode::Hidden => HollywoodRender::default(),
         // The collapsed bar is the lot pill in the chrome's own row —
         // the floating strip is gone, so a collapsed layer draws
-        // nothing here.
-        LayerMode::Collapsed => HollywoodRender::default(),
+        // nothing unless a read-only `CardView` (`records`) is open.
+        LayerMode::Collapsed => match hollywood.view.as_ref() {
+            Some(view) => HollywoodRender {
+                view: Some(view::render_view(
+                    buf,
+                    frame,
+                    view,
+                    hollywood.pending.as_deref(),
+                    palette,
+                )),
+                ..HollywoodRender::default()
+            },
+            None => HollywoodRender::default(),
+        },
         LayerMode::Expanded => render_band(
             buf, frame, machines, local, status, hollywood, opts, palette,
         ),

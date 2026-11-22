@@ -118,3 +118,35 @@ async fn a_vanished_selection_falls_back_to_the_first_frame_for_m() {
         "the first frame, not the title"
     );
 }
+
+#[tokio::test]
+async fn m_on_a_talk_or_headline_row_offers_raw_hollywood_terminal_focus() {
+    let mut app = app_with_hollywood();
+    let mut doc = summary_json();
+    doc["hollywood"]["headline_seq"] = serde_json::json!(9);
+    doc["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 8, "who": "user", "text": "status?" },
+        { "seq": 9, "who": "hollywood", "text": "acme-shop needs a look" }
+    ]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value: doc,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.area = (120, 30);
+    alt_y(&mut app);
+    draw_to(&mut app, 120, 30);
+    app.hollywood.selected = Some(Target::Talk(9));
+    key(&mut app, hc_vt::Key::Char('m'));
+    assert!(app.menu.is_some(), "`m` on Talk opens the entry menu");
+    let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
+    assert!(text.contains("Read entry #9"), "{text}");
+    assert!(text.contains("Focus Hollywood terminal"), "{text}");
+
+    key(&mut app, hc_vt::Key::Char('t'));
+    assert_eq!(app.focused.as_deref(), Some("t10"));
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+}

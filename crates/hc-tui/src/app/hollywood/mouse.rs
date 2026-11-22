@@ -51,6 +51,7 @@ impl App {
             LayerMode::Expanded => match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
                     if contains(self.hollywood_hits.input, point) {
+                        self.hollywood.selected = Some(crate::hollywood::Target::Input);
                         self.hollywood.editing = true;
                         return;
                     }

@@ -148,7 +148,9 @@ async fn the_input_line_edits_then_esc_leaves() {
     let mut app = app_with_hollywood();
     app.area = (120, 24);
     alt_y(&mut app);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
     key(&mut app, hc_vt::Key::Char('i'));
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
     assert!(app.hollywood.editing);
     // Typing lands in the editor, not the pane.
     key(&mut app, hc_vt::Key::Char('h'));
@@ -157,6 +159,23 @@ async fn the_input_line_edits_then_esc_leaves() {
     assert_eq!(app.pane.input_backlog().0, 0);
     key(&mut app, hc_vt::Key::Escape);
     assert!(!app.hollywood.editing);
+}
+
+#[tokio::test]
+async fn i_from_a_non_input_row_moves_selection_to_input() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    app.hollywood.selected = Some(Target::Studio("acme-shop".into()));
+    assert!(!app.hollywood.editing);
+
+    key(&mut app, hc_vt::Key::Char('i'));
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert_eq!(
+        app.hollywood.editing,
+        app.hollywood.selected == Some(Target::Input),
+        "single-focus invariant: editing matches Input selection"
+    );
 }
 
 #[tokio::test]

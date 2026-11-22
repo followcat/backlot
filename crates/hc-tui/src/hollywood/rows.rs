@@ -25,10 +25,10 @@ pub(crate) enum Target {
     Studio(StudioKey),
     /// The trailing `+ new studio` frame — Enter opens the wizard.
     NewStudio,
-    /// Hollywood's newest headline — shown, not actionable.
+    /// Hollywood's newest headline — Enter reads its full report.
     Headline,
-    /// A line of the user's exchange with Hollywood — Enter focuses
-    /// its terminal. Identity is the ledger seq.
+    /// A line of the user's exchange with Hollywood — Enter reads its
+    /// full text or report body. Identity is the ledger seq.
     Talk(u64),
     /// A user-owned prompt row (studio, role) — `y`/`d` decide, `p`
     /// peeks, Enter focuses the role's terminal.

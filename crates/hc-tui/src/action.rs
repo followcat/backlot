@@ -210,6 +210,10 @@ pub(crate) mod mark {
     pub(crate) fn hollywood_setup() -> String {
         "hollywood:setup".to_owned()
     }
+    /// One Hollywood report/message read — `hollywood show <seq>`.
+    pub(crate) fn hollywood_entry(seq: u64) -> String {
+        format!("hollywood:{seq}")
+    }
 
     /// A dock `Target`'s mark — `None` targets mark nothing.
     pub(crate) fn of(target: &Target) -> Option<String> {

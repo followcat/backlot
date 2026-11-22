@@ -328,6 +328,7 @@ pub fn run(common: Common, cmd: Cmd, env: &Env) -> Result<String, Fail> {
             ref headline,
             ref body,
         }) => hreport(&common, env, headline, body.clone()),
+        Cmd::Hollywood(HollywoodCmd::Show { seq }) => crate::hwood_show::show(&common, env, seq),
         Cmd::Hollywood(HollywoodCmd::Setup { ref cfg }) => crate::hsetup::hsetup(&common, env, cfg),
         Cmd::Card(CardCmd::List) => crate::hwood_read::card_list(&common, env),
         Cmd::Card(CardCmd::Show { id }) => crate::hwood_read::card_show(&common, env, id),
