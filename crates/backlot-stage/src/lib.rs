@@ -37,6 +37,7 @@ mod hwatch;
 mod hwood;
 mod hwood_base;
 mod hwood_read;
+mod hwood_show;
 mod limits;
 pub mod link;
 mod migrate;
@@ -135,6 +136,8 @@ mod hsetup_tests;
 mod hstage_tests;
 #[cfg(test)]
 mod hwood_read_tests;
+#[cfg(test)]
+mod hwood_show_tests;
 #[cfg(test)]
 mod hwood_tests;
 #[cfg(test)]

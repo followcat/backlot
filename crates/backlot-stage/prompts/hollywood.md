@@ -24,6 +24,9 @@ confirms first.
 - `backlot hollywood propose reopen --studio acme-shop --person actor-t1-c1 --why "work returned"`
 - `backlot hollywood report "two studios idle, one card open"` — your
   standing headline; the summary document carries the latest.
+- `backlot hollywood report "two studios idle, one card open" --body report.md` —
+  attach a longer markdown body (`--body <file>`) when the headline
+  needs detail; the Call Sheet opens it in a read-only view on Enter.
 
 Anything else stops for the user to approve — a prompt is theirs, never
 yours to answer.

@@ -22,6 +22,8 @@ pub enum HollywoodCmd {
         headline: String,
         body: Option<PathBuf>,
     },
+    /// `hollywood show <seq>` — full report body or message text.
+    Show { seq: u64 },
     /// `hollywood setup` (R22) — writes the `[hollywood]` table.
     Setup { cfg: HollywoodCfg },
 }
@@ -48,6 +50,7 @@ pub(crate) const U_HOLLYWOOD: &str = "usage:
 [--level low|normal|high] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] --why <line>
        actions: studio-new | close | reopen | priority | pause | resume | abandon
   backlot hollywood report \"<headline>\" [--body <f>]
+  backlot hollywood show <seq>
   backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>]";
 pub(crate) const U_CARD: &str = "usage:
   backlot card list
@@ -55,7 +58,7 @@ pub(crate) const U_CARD: &str = "usage:
   backlot card apply <id>
   backlot card cancel <id> [--reason <r>]";
 
-/// `backlot hollywood propose|report`.
+/// `backlot hollywood propose|report|show|setup`.
 pub(crate) fn hollywood(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let Some(sub) = it.next() else {
         return Err(usage("missing hollywood subcommand", U_HOLLYWOOD));
@@ -63,6 +66,7 @@ pub(crate) fn hollywood(common: &mut Common, it: &mut It) -> Result<(Common, Cmd
     match sub.as_str() {
         "propose" => propose(common, it),
         "report" => hreport(common, it),
+        "show" => hshow(common, it),
         "setup" => hsetup_args(common, it),
         "-h" | "--help" => Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD))),
         _ => Err(usage(
@@ -229,6 +233,35 @@ pub(crate) fn hreport(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
         Cmd::Hollywood(HollywoodCmd::Report {
             headline: headline.ok_or_else(|| usage("missing <headline>", U_HOLLYWOOD))?,
             body,
+        }),
+    ))
+}
+
+/// `hollywood show <seq>`: `<seq>` or `#<seq>`.
+fn hshow(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut seq = None;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_HOLLYWOOD)));
+        }
+        if common_flag(it, common, &arg, U_HOLLYWOOD)? {
+            continue;
+        }
+        if !arg.starts_with('-') && seq.is_none() {
+            let parsed = arg
+                .strip_prefix('#')
+                .unwrap_or(arg.as_str())
+                .parse::<u64>()
+                .map_err(|_| usage(format!("bad seq '{arg}', want <seq>"), U_HOLLYWOOD))?;
+            seq = Some(parsed);
+        } else {
+            return Err(usage(format!("unexpected argument '{arg}'"), U_HOLLYWOOD));
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Hollywood(HollywoodCmd::Show {
+            seq: seq.ok_or_else(|| usage("missing <seq>", U_HOLLYWOOD))?,
         }),
     ))
 }
