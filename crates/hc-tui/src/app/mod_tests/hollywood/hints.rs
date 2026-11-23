@@ -36,11 +36,13 @@ fn footer_of(app: &App, agent: bool) -> String {
     let machines = app.panel_summaries();
     let status = crate::hollywood::status_of(&app.view);
     let waits = crate::hollywood::waiting_items(&machines, &status);
+    let asking = crate::hollywood::hollywood_asking(&machines);
     crate::hollywood::for_row(
         app.hollywood.selected.as_ref(),
         app.hollywood.editing,
         &waits,
         agent,
+        asking,
         196,
     )
 }
@@ -62,6 +64,14 @@ fn fixtures(agent: bool) -> Vec<(&'static str, App)> {
     value["studios"][0]["roles"][0]["attention_seq"] = 7.into();
     value["studios"][0]["roles"][0]["attention_detail"] = "may I run the tests?".into();
     out.push(("prompt", with_doc(value, read(agent), path)));
+    // Hollywood's own prompt: the live row under the user line.
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "recast the producer" }]);
+    value["hollywood"]["work"] = "blocked".into();
+    value["hollywood"]["attention_user"] = true.into();
+    value["hollywood"]["attention_detail"] = "backlot --help".into();
+    out.push(("hollywood-prompt", with_doc(value, read(agent), path)));
     // beta-tools ready to finish: the READY row and its frame.
     let mut value = summary_json();
     value["studios"][1]["ready_to_finish"] = true.into();

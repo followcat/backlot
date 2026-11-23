@@ -72,6 +72,7 @@ pub(crate) fn plan(
             .iter()
             .filter(|r| matches!(r, Row::Talk(_)))
             .count() as u16,
+        live: band_rows.iter().any(|r| matches!(r, Row::Live(_))),
         tail_rows: if waits.is_empty() { 2 } else { 1 }, // calm|+ tell
         hints: true,
         bottom_sprocket: true,
@@ -100,6 +101,8 @@ pub(crate) struct Plan {
     /// How many exchange lines the dialog shows above the input —
     /// the oldest lines leave first when the band runs short.
     pub talk: u16,
+    /// Hollywood's live progress row under the newest user line.
+    pub live: bool,
     /// The tell/setup/calm tail rows — always drawn, `calm` or
     /// `setup` standing in for the waiting list.
     pub tail_rows: u16,
@@ -125,6 +128,7 @@ impl Plan {
             + u16::from(self.headline)
             + waits
             + self.talk
+            + u16::from(self.live)
             + self.tail_rows
             + u16::from(self.hints)
             + u16::from(self.bottom_sprocket)
@@ -159,6 +163,8 @@ pub(crate) fn fit(plan: &mut Plan, height: u16, rows: u16, keep: Option<usize>) 
             plan.hints = false;
         } else if plan.talk > 0 {
             plan.talk -= 1;
+        } else if plan.live {
+            plan.live = false;
         } else if rows < 10 && plan.top_sprocket {
             plan.top_sprocket = false;
         } else if plan.shown > usize::from(!plan.details.is_empty()) {

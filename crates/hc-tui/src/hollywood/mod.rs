@@ -30,8 +30,8 @@ pub(crate) use hints::for_row;
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_height;
 pub(crate) use rows::{
-    HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_reply_max_seq,
-    hollywood_unread_count, local_summary, on_set,
+    HollywoodActivity, Target, band_rows, frames, hollywood_activity, hollywood_asking,
+    hollywood_reply_max_seq, hollywood_unread_count, local_summary, on_set,
 };
 pub(crate) use sheet::{Conn, Wait, conn_of, machine_label, status_of, waiting_items};
 pub(crate) use view::{CardView, render_view};

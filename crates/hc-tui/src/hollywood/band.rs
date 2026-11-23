@@ -13,8 +13,8 @@ use ratatui::style::{Modifier, Style};
 use backlot_model::summary::Exchange;
 
 use super::draw::HollywoodRender;
-use super::items::{chip_text, chips_of, target_label, ultra_head, wait_head};
-use super::rows::{HollywoodActivity, Row, SETUP_COMMAND, SETUP_LEAD};
+use super::items::{chip_text, chips_of, live_head, target_label, ultra_head, wait_head};
+use super::rows::{HollywoodActivity, Live, Row, SETUP_COMMAND, SETUP_LEAD};
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
 use crate::chrome::palette::Palette;
@@ -117,6 +117,7 @@ pub(crate) fn draw_row(
             }
         }
         Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
+        Row::Live(live) => draw_live(buf, rect, live, selected, palette),
         Row::Input => draw_input(
             buf,
             rect,
@@ -368,6 +369,64 @@ fn draw_talk(
         width,
         &truncate_end(&line.text, width as usize),
         text_style,
+    );
+}
+
+/// Hollywood's live row under the newest `user ›` line: `… sending to
+/// hollywood`, `⠶ hollywood: <doing>` or `⚠ hollywood asks: <prompt>` —
+/// one line, cut to the width, on the band's own background.
+fn draw_live(buf: &mut Buffer, rect: Rect, live: &Live<'_>, selected: bool, palette: &Palette) {
+    let bg = if selected {
+        palette.active_row_bg
+    } else {
+        palette.surface_dim
+    };
+    buf.set_style(rect, Style::default().bg(bg));
+    let (text, glyph) = live_head(live);
+    let (colour, bold) = match live {
+        Live::Pending => (palette.overlay0, false),
+        Live::Working(_) => (palette.yellow, false),
+        Live::Prompt(_) => (palette.red, true),
+    };
+    let mut x = rect.x;
+    if selected {
+        put_text(
+            buf,
+            x,
+            rect.y,
+            1,
+            "▌",
+            Style::default().fg(palette.accent).bg(bg),
+        );
+        put_text(
+            buf,
+            x + 1,
+            rect.y,
+            1,
+            "▸",
+            Style::default().fg(palette.accent).bg(bg),
+        );
+    }
+    x += MARGIN;
+    let glyph_style = if bold {
+        Style::default()
+            .fg(colour)
+            .bg(bg)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(colour).bg(bg)
+    };
+    let glyph_w = display_width(glyph) as u16;
+    put_text(buf, x, rect.y, glyph_w, glyph, glyph_style);
+    let text_x = x + glyph_w + 1;
+    let width = rect.width.saturating_sub(MARGIN + glyph_w + 1);
+    put_text(
+        buf,
+        text_x,
+        rect.y,
+        width,
+        &truncate_end(&text, width as usize),
+        Style::default().fg(palette.text).bg(bg),
     );
 }
 

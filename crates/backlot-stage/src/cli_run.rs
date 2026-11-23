@@ -40,6 +40,16 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             env,
         );
     }
+    // `approve --person hollywood` answers a prompt on Hollywood's
+    // own screen: its own ledger, no studio (D13, D9).
+    if let Cmd::Approve {
+        ref person,
+        decision,
+    } = cmd
+        && person == backlot_model::hollywood::HOLLYWOOD
+    {
+        return crate::hwood::approve(&common, env, decision);
+    }
     match cmd {
         // The stage connects itself; no ledger command needs it here.
         Cmd::StageStart => {

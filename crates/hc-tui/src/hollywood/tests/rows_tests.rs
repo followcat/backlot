@@ -1,7 +1,7 @@
 //! The bar's model: the frames and the band rows — all pure reads
 //! of the document.
 use super::*;
-use crate::hollywood::rows::{Frame, Row, Target, band_rows, frames, on_set};
+use crate::hollywood::rows::{Frame, Live, Row, Target, band_rows, frames, hollywood_live, on_set};
 use crate::hollywood::sheet::{Conn, Status};
 use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
@@ -218,4 +218,100 @@ fn the_headline_never_repeats_the_newest_reply() {
     let list = machines(Some(&summary));
     let (_, rows) = band_rows(&list, &all_live, true);
     assert!(matches!(rows[0], Row::Headline("acme-shop needs a look")));
+}
+
+/// A document with one unanswered `user ›` line, its Hollywood state
+/// set to `patch`.
+fn with_live(patch: serde_json::Value) -> Summary {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "recast the producer" }]);
+    for (key, setting) in patch.as_object().unwrap() {
+        value["hollywood"][key] = setting.clone();
+    }
+    serde_json::from_value(value).unwrap()
+}
+
+/// The live row sits under the newest user line — pending first, then
+/// working (with the terminal's `doing`), then a user-owned prompt —
+/// and no row at all once a reply follows.
+#[test]
+fn the_live_row_follows_the_newest_user_line_until_a_reply() {
+    // Pending: the line is still behind the send gate.
+    let summary = with_live(serde_json::json!({ "pending": true }));
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    let live = rows
+        .iter()
+        .position(|r| matches!(r, Row::Live(_)))
+        .expect("the live row");
+    assert!(matches!(rows[live], Row::Live(Live::Pending)));
+    assert!(
+        matches!(rows[live - 1], Row::Talk(line) if line.who == "user"),
+        "the live row follows the newest user line"
+    );
+    assert_eq!(rows[live].target(&waits), Target::Hollywood);
+
+    // Working: the terminal's doing, else the bare word.
+    let summary = with_live(serde_json::json!({
+        "work": "working",
+        "doing": "reading the ledgers",
+    }));
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, Row::Live(Live::Working(Some("reading the ledgers")))))
+    );
+    let summary = with_live(serde_json::json!({ "work": "working" }));
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, Row::Live(Live::Working(None))))
+    );
+
+    // A user-owned prompt wins over both.
+    let summary = with_live(serde_json::json!({
+        "pending": true,
+        "work": "blocked",
+        "attention_user": true,
+        "attention_detail": "backlot --help",
+    }));
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, Row::Live(Live::Prompt("backlot --help"))))
+    );
+
+    // A reply after the user line ends the row.
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] = serde_json::json!([
+        { "seq": 8, "who": "user", "text": "recast the producer" },
+        { "seq": 9, "who": "hollywood", "text": "done" },
+    ]);
+    value["hollywood"]["work"] = "working".into();
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (_, rows) = band_rows(&list, &all_live, true);
+    assert!(!rows.iter().any(|r| matches!(r, Row::Live(_))));
+    assert!(hollywood_live(&list).is_none());
+}
+
+/// Only a user-owned prompt lights the row's `y`/`d`; every other
+/// state leaves them to the footer's silence.
+#[test]
+fn hollywood_asking_tracks_the_user_owned_prompt() {
+    let list = machines(Some(&with_live(serde_json::json!({
+        "work": "working",
+        "doing": "reading the ledgers",
+    }))));
+    assert!(!crate::hollywood::hollywood_asking(&list));
+    let list = machines(Some(&with_live(serde_json::json!({
+        "work": "blocked",
+        "attention_user": true,
+        "attention_detail": "backlot --help",
+    }))));
+    assert!(crate::hollywood::hollywood_asking(&list));
 }

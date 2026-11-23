@@ -2,6 +2,7 @@
 //! action chips and detail line — kept apart from the band's
 //! painter so the words and the cells change independently.
 
+use super::rows::Live;
 use super::sheet::{PromptItem, ReadyItem, StageItem, Wait, machine_label};
 
 /// One action chip's label and its key — `allow y` draws ` allow y `.
@@ -91,6 +92,17 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 primary: false,
             },
         ],
+    }
+}
+
+/// The live row's glyph and text: `… sending to hollywood`,
+/// `⠶ hollywood: <doing>` and `⚠ hollywood asks: <prompt>`.
+pub(crate) fn live_head(live: &Live<'_>) -> (String, &'static str) {
+    match live {
+        Live::Pending => ("sending to hollywood".into(), "…"),
+        Live::Working(Some(doing)) => (format!("hollywood: {doing}"), "⠶"),
+        Live::Working(None) => ("hollywood is working".into(), "⠶"),
+        Live::Prompt(prompt) => (format!("hollywood asks: {prompt}"), "⚠"),
     }
 }
 

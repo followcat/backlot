@@ -125,6 +125,7 @@ fn render_band(
     }
     let multi = spans_machines(machines);
     let local_label = local.unwrap_or("Local");
+    let live_prompt = rows::hollywood_asking(machines);
     let all_frames = rows::frames(machines);
     let (waits, band_rows) = rows::band_rows(machines, status, opts.agent);
     let plan = plan::plan(frame, &waits, &band_rows, hollywood, opts);
@@ -325,6 +326,25 @@ fn render_band(
                 );
                 y += 1;
             }
+            Row::Live(_) if plan.live => {
+                let rect = Rect::new(area.x, y, area.width, 1);
+                band::draw_row(
+                    buf,
+                    rect,
+                    row,
+                    &waits,
+                    hollywood,
+                    local_label,
+                    multi,
+                    opts.mobile,
+                    opts.suppress_highlights,
+                    activity,
+                    palette,
+                    &mut hits,
+                );
+                y += 1;
+            }
+            Row::Live(_) => {}
             Row::Calm { .. } | Row::Input | Row::Setup => {
                 // The scroll marker lives on this row's right edge
                 // when items hid — `2/6` of the sheet showing.
@@ -384,6 +404,7 @@ fn render_band(
                 hollywood.editing,
                 &waits,
                 opts.agent,
+                live_prompt,
                 usable,
             )
         };
