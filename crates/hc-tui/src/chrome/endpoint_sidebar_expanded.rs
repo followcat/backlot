@@ -20,6 +20,7 @@ use super::sidebar_render::{
 use super::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
 use super::studio_rows::endpoint_is_machine;
+use super::studio_tree::SidebarRow;
 use super::workspace::WorkspaceEntry;
 
 enum Row {
@@ -34,6 +35,53 @@ enum Row {
         endpoint: usize,
         row: crate::chrome::studio_tree::Row,
     },
+}
+
+impl Row {
+    /// W1b: the flat-cursor identity this drawn row stands for, when it
+    /// is selectable — the same `SidebarRow` the tree's cursor walks.
+    fn selectable(&self, endpoints: &[super::snapshot::ClientShellEndpoint]) -> Option<SidebarRow> {
+        match self {
+            Row::Endpoint(index) => Some(SidebarRow::Machine(
+                endpoints.get(*index)?.endpoint_id.clone(),
+            )),
+            Row::Workspace { endpoint, entry } => {
+                let endpoint = endpoints.get(*endpoint)?;
+                let workspace_id = endpoint
+                    .snapshot
+                    .as_deref()?
+                    .workspaces
+                    .get(entry.index)?
+                    .workspace_id
+                    .clone();
+                Some(SidebarRow::Workspace {
+                    endpoint: endpoint.endpoint_id.clone(),
+                    workspace_id,
+                })
+            }
+            Row::Studio { endpoint, row } => Some(SidebarRow::Studio {
+                endpoint: endpoints.get(*endpoint)?.endpoint_id.clone(),
+                row: row.clone(),
+            }),
+        }
+    }
+}
+
+/// W1b: the keyboard cursor's mark — a `▌` at the row's left edge in
+/// the accent, over the row's own background.
+fn paint_tree_cursor(buffer: &mut Buffer, rect: Rect, palette: &super::palette::Palette) {
+    if rect.is_empty() {
+        return;
+    }
+    buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
+    put_text(
+        buffer,
+        rect.x,
+        rect.y,
+        1,
+        "▌",
+        Style::default().fg(palette.accent),
+    );
 }
 
 pub(crate) fn render_expanded(
@@ -84,6 +132,17 @@ pub(crate) fn render_expanded(
             );
         }
     }
+    // W1b: the flat-cursor identity of every drawn row, so the highlight
+    // and the keyboard cursor name the same thing.
+    let identities: Vec<Option<SidebarRow>> = rows
+        .iter()
+        .map(|row| row.selectable(state.endpoints))
+        .collect();
+    let cursor_row = state.tree_cursor.and_then(|cursor| {
+        identities
+            .iter()
+            .position(|row| row.as_ref() == Some(cursor))
+    });
     // A machine row's second line is U6c's version sub-line —
     // `machine_lines` is `None` in plain mode, so Herdr's rows stay
     // one line and the scroll math is unchanged there.
@@ -249,6 +308,20 @@ pub(crate) fn render_expanded(
         );
         *state.workspace_scroll = machine_row.min(metrics.max_offset_from_bottom);
     }
+    // W1b: `Ctrl+B t`'s cursor never falls out of view — the section
+    // scrolls to the highlighted row, as it does for the current studio.
+    if !body.is_empty()
+        && std::mem::take(state.reveal_tree_row)
+        && let Some(cursor_row) = cursor_row
+    {
+        *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
+            &row_heights,
+            &gaps,
+            body.height,
+            *state.workspace_scroll,
+            cursor_row,
+        );
+    }
     let metrics = super::scroll::list_scroll_metrics(
         &row_heights,
         &gaps,
@@ -264,6 +337,10 @@ pub(crate) fn render_expanded(
     let content_width = body.width.saturating_sub(u16::from(show_scrollbar));
     let mut y = body.y;
     for (row_index, row) in rows.iter().enumerate().skip(*state.workspace_scroll) {
+        // W1b: the keyboard cursor paints the row it names with a `▌`
+        // at its left edge, the accent mark the focused studio row uses
+        // so the tree's own selection reads at a glance.
+        let is_cursor = cursor_row == Some(row_index);
         match row {
             Row::Endpoint(index) => {
                 if y >= body.bottom() {
@@ -310,6 +387,9 @@ pub(crate) fn render_expanded(
                     ),
                     endpoint_id: endpoint.endpoint_id.clone(),
                 });
+                if is_cursor {
+                    paint_tree_cursor(buffer, rect, palette);
+                }
                 y = y
                     .saturating_add(height)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
@@ -398,6 +478,9 @@ pub(crate) fn render_expanded(
 
                     group_toggle,
                 });
+                if is_cursor {
+                    paint_tree_cursor(buffer, rect, palette);
+                }
                 y = y
                     .saturating_add(height)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
@@ -417,6 +500,9 @@ pub(crate) fn render_expanded(
                     row,
                     hits,
                 );
+                if is_cursor {
+                    paint_tree_cursor(buffer, rect, palette);
+                }
                 y = y.saturating_add(1);
             }
         }

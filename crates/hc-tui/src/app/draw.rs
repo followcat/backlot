@@ -168,6 +168,8 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         studio_tree: studio_tree.as_ref(),
         current_studio: current_studio.as_ref(),
         reveal_studio_row: &mut app.shell_state.reveal_studio_row,
+        reveal_tree_row: &mut app.shell_state.reveal_tree_row,
+        tree_cursor: app.tree_focus.as_ref(),
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

@@ -31,6 +31,7 @@ The defaults you'll use most:
 | `Ctrl+B r` | Resize mode |
 | `Ctrl+B x` | Close the pane |
 | `Ctrl+B y` | Toggle the studio panel |
+| `Ctrl+B t` | Focus the left machines tree — `Esc` back, `↑/↓` move, `Enter` acts like a click, `m` opens the row's menu |
 | `Ctrl+G` | Lock the keyboard, so every key goes to the program. Press again to unlock. |
 
 `Ctrl+B Ctrl+B` sends a literal `Ctrl+B` to the program. Custom commands bound in your Herdr config work here too.
@@ -41,6 +42,26 @@ studio mode the overlay gains a `studio` tab — call-sheet start policy, the di
 and the Hollywood overseer (Enter opens the setup dialog — a first setup while it is unset, a prefilled
 reconfigure with one) — which writes to backlot's own `config.toml`. [Runtime](runtime.md) covers the prefix,
 lock and navigation in more detail.
+
+## The left machines tree
+
+`Ctrl+B t` moves the keyboard into the left machines tree — it opens the sidebar first when it is
+collapsed, and highlights the row for the current place (the focused workspace's space, else the
+machine row). `Esc` gives the keys back to the terminal. `Ctrl+B t` is free in the default keymap;
+`Ctrl+B Tab` and `Ctrl+B h` would have collided with `cycle_pane_next` and `focus_pane_left`.
+
+While the tree owns the keys:
+
+| Keys | Action |
+|---|---|
+| `↑`/`↓`, `k`/`j` | Move the highlighted row; the section scrolls to it |
+| `Enter` | The same action a left-click runs: a workspace row focuses its terminal; a stage-down studio starts the machine's stage; a live studio with no space becomes current; the `finished (n)` fold toggles; a finished studio opens its finished-studio menu; a machine row folds its section |
+| `m` | The highlighted row's context menu — the machine menu on a machine row, the studio menu on a studio or a workspace's studio |
+| `Esc` | Leave the tree, keys back to the terminal |
+
+The highlighted row draws the accent `▌` the focused studio row uses. Every row the launcher's
+`machines` group names — `Stage log`, `Unfold finished studios (n)`, `Machine menu` — is the same
+action this tree's `Enter` and `m` run.
 
 ## The studio panel
 

@@ -528,6 +528,10 @@ header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-
 confused with the local `acme-shop`.
 
 The **left machines tree** lists every machine's studios even when its document cannot answer.
+Drawing the tree is only half of it: `Ctrl+B t` moves the keyboard into it (opening the sidebar
+if it is collapsed), `↑`/`↓` move the highlight, `Enter` runs the row's click action — a studio's
+space, `stage down` start, the finished fold, a finished studio's menu — and `m` opens the row's
+menu; `Esc` returns the keys to the terminal. The same rows are in `Ctrl+B ?`'s `machines` group.
 A machine whose stage is down — or that published no document — is asked for
 `backlot studio list --json` (locally, or over `terminal.run` for a remote), and the answer is
 cached and refreshed when the stage state changes or every 30 s at most. Its studios draw dim

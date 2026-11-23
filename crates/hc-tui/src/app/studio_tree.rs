@@ -239,7 +239,7 @@ impl App {
 
     /// A finished studio's existing menu — from the document when it
     /// still lists the studio, from the ledger's word alone otherwise.
-    fn finished_studio_menu(&self, key: &StudioKey) -> StudioMenu {
+    pub(super) fn finished_studio_menu(&self, key: &StudioKey) -> StudioMenu {
         let machines = self.panel_summaries();
         let stage_down = !self.machine_stage_running(key.machine.as_deref());
         let offline = !self.machine_reachable(key.machine.as_deref());

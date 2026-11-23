@@ -18,6 +18,15 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   latter opens the same menu a right-click does — beside the existing stage rows, all filterable
   by machine name.
 
+- **The left tree answers to the keyboard: focus, movement and row actions.** `Ctrl+B t` moves
+  the keyboard into the left machines tree (opening the sidebar if it is collapsed) and
+  highlights the row for the current place; `↑`/`↓` (and `k`/`j`) move the highlight and the
+  section scrolls to it; `Enter` runs the same action a left-click does — a workspace row focuses
+  its terminal, a stage-down studio starts the machine's stage, the `finished (n)` fold toggles,
+  a finished studio opens its menu, a machine row folds its section — and `m` opens the row's
+  context menu. `Esc` returns the keys to the terminal. `Ctrl+B t` is free in the default keymap
+  (`Ctrl+B Tab`/`Ctrl+B h` would collide with the pane cycle/focus bindings).
+
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same
   `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the

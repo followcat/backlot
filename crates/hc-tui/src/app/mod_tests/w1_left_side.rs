@@ -62,7 +62,7 @@ fn click(app: &mut App, rect: ratatui::layout::Rect) {
 
 /// `two_machine_studio_app` with host-b's stage gone and its document
 /// unpublished — the ledger alone knows `beta-tools`.
-fn stage_down_host_b() -> App {
+pub(super) fn stage_down_host_b() -> App {
     let mut app = two_machine_studio_app();
     let version = app.view.version + 1;
     let terms: Vec<_> = app
