@@ -98,9 +98,6 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
             &app.projection.snapshot,
             &app.view,
             app.studio.current.as_ref(),
-            // Cast belongs to a focused studio workspace — or any studio
-            // selected via `StudioFocus::Studio(_)`.
-            app.studio.lot.studio_workspace || studio_focused,
             Some(crate::project::LOCAL_LABEL),
             &app.shell,
             app.studio.others_expanded,

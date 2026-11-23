@@ -243,3 +243,80 @@ async fn a_short_sidebar_scrolls_to_the_selected_machines_row() {
     );
     assert!(sidebar.contains("beta-tools"), "the studio row: {sidebar}");
 }
+
+/// One machine's studios with no current studio: the build must show a
+/// lone live studio and hint when more than one exists.
+#[test]
+fn the_cast_shows_the_only_live_studio_and_hints_otherwise() {
+    fn summary(ids: &[&str]) -> backlot_model::summary::Summary {
+        let studios: Vec<serde_json::Value> = ids
+            .iter()
+            .map(|id| {
+                json!({"id": id, "title": id, "state": "live",
+                       "requirement_version": 1, "mode": "standard",
+                       "open_reviews": 0, "waiting": 0, "roles": []})
+            })
+            .collect();
+        serde_json::from_value(json!({
+            "schema": "backlot/1", "updated_ms": 1, "studios": studios
+        }))
+        .unwrap()
+    }
+    let config = crate::chrome::ClientShellConfig::from_config(
+        &crate::config::Config::default(),
+        None,
+        None,
+        std::path::PathBuf::new(),
+    );
+    let view = hc_proto::watch::View::default();
+    let snapshot = crate::chrome::snapshot::ClientShellSnapshot {
+        boot_id: String::new(),
+        revision: 0,
+        focused_workspace_id: None,
+        focused_tab_id: None,
+        focused_pane_id: None,
+        tab_bar_right: Vec::new(),
+        tab_bar_right_separator: String::new(),
+        agent_order: Vec::new(),
+        agent_view_label: None,
+        workspaces: Vec::new(),
+        tabs: Vec::new(),
+        panes: Vec::new(),
+        agents: Vec::new(),
+        commands: Vec::new(),
+    };
+    fn build<'a>(
+        machines: &'a [crate::panel::data::MachineSummary],
+        snapshot: &'a crate::chrome::snapshot::ClientShellSnapshot,
+        view: &'a hc_proto::watch::View,
+        config: &'a crate::chrome::ClientShellConfig,
+    ) -> crate::cast::CastView<'a> {
+        crate::cast::CastView::build(
+            machines,
+            snapshot,
+            view,
+            None,
+            Some(crate::project::LOCAL_LABEL),
+            config,
+            false,
+            None,
+            0,
+        )
+    }
+
+    let one = [crate::panel::data::MachineSummary {
+        machine: None,
+        summary: summary(&["acme-shop"]),
+    }];
+    let cast = build(&one, &snapshot, &view, &config);
+    assert!(cast.studio.is_some(), "the only live studio shows");
+    assert!(!cast.hint);
+
+    let two = [crate::panel::data::MachineSummary {
+        machine: None,
+        summary: summary(&["acme-shop", "beta-tools"]),
+    }];
+    let cast = build(&two, &snapshot, &view, &config);
+    assert!(cast.studio.is_none(), "two studios need a choice");
+    assert!(cast.hint, "the hint answers for them");
+}

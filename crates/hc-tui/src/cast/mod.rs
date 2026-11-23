@@ -56,22 +56,23 @@ pub(crate) struct CastView<'a> {
     pub(crate) spin: usize,
     /// `true` when `StudioFocus::Studio(_)` owns focus rather than any role.
     pub(crate) studio_focused: bool,
+    /// C1: no studio is current but more than one exists — the body's
+    /// one dim line `select a studio (Enter on it)`.
+    pub(crate) hint: bool,
 }
 
 impl<'a> CastView<'a> {
-    /// Build the frame's cast: the studio `current` points at (or the
-    /// first in the aggregate's order when it does not resolve) — but
-    /// only while `in_studio_workspace`, the focused-terminal latch
-    /// (R3-M6: over `backlot`/`stage`, `bl-hollywood` or a plain
-    /// workspace no studio's people paint as the cast). With no
-    /// studio shown the cast still draws so the `others` row exists.
+    /// Build the frame's cast: the studio `current` points at; with no
+    /// current studio the only live one, so a single-studio lot is
+    /// never blank (C1). With more than one and none current the body
+    /// draws the `select a studio` hint. The cast always draws so the
+    /// `others` row exists.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn build(
         machines: &'a [MachineSummary],
         snapshot: &'a ClientShellSnapshot,
         view: &'a hc_proto::watch::View,
         current: Option<&'a StudioKey>,
-        in_studio_workspace: bool,
         local: Option<&'a str>,
         config: &'a ClientShellConfig,
         others_expanded: bool,
@@ -80,10 +81,19 @@ impl<'a> CastView<'a> {
     ) -> CastView<'a> {
         let studios = crate::panel::data::studios(machines);
         let index = current.and_then(|key| studios.iter().position(|s| &s.key() == key));
-        let (index, studio) = match (in_studio_workspace, index) {
-            (true, Some(index)) => (index, Some(studios[index])),
-            (true, None) if !studios.is_empty() => (0, Some(studios[0])),
-            _ => (0, None),
+        // C1: the cast explains itself. A current studio wins; with no
+        // current studio exactly one live studio shows its cast; more
+        // than one draws the `select a studio` hint.
+        let live: Vec<usize> = studios
+            .iter()
+            .enumerate()
+            .filter(|(_, studio)| studio.studio.state != "finished")
+            .map(|(index, _)| index)
+            .collect();
+        let (index, studio, hint) = match index {
+            Some(index) => (index, Some(studios[index]), false),
+            None if live.len() == 1 => (live[0], Some(studios[live[0]]), false),
+            _ => (0, None, !studios.is_empty()),
         };
         let multi = spans_machines(machines);
         let label = studio.map(|s| studio_label(&s.studio.id, s.machine, local, multi));
@@ -168,6 +178,7 @@ impl<'a> CastView<'a> {
             others_expanded,
             spin,
             studio_focused: false,
+            hint,
         }
     }
 }

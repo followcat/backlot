@@ -31,6 +31,9 @@ pub(crate) enum CastRow<'a> {
     /// `others <n> ▸` — the toggle for agents that are no studio
     /// person.
     Others { count: usize, expanded: bool },
+    /// C1: the one dim line a studio-less selection leaves —
+    /// `select a studio (Enter on it)`.
+    Hint,
     /// An `others` agent drawn with herdr's own rows.
     Agent(&'a AgentRow),
 }
@@ -41,7 +44,7 @@ impl CastRow<'_> {
     pub(crate) fn lines(&self) -> u16 {
         match self {
             CastRow::Person { .. } | CastRow::Shell { .. } => 2,
-            CastRow::Shells | CastRow::Others { .. } => 1,
+            CastRow::Shells | CastRow::Others { .. } | CastRow::Hint => 1,
             CastRow::Agent(row) => row.rows.len().max(1).min(u16::MAX as usize) as u16,
         }
     }
@@ -52,7 +55,7 @@ impl CastRow<'_> {
         match self {
             CastRow::Person { focused, .. } | CastRow::Shell { focused, .. } => *focused,
             CastRow::Agent(row) => row.focused,
-            CastRow::Shells | CastRow::Others { .. } => false,
+            CastRow::Shells | CastRow::Others { .. } | CastRow::Hint => false,
         }
     }
 }
@@ -62,6 +65,9 @@ impl CastRow<'_> {
 /// shell, no gap anywhere.
 pub(crate) fn cast_rows<'a>(view: &'a CastView<'a>) -> Vec<CastRow<'a>> {
     let mut rows = Vec::new();
+    if view.hint {
+        rows.push(CastRow::Hint);
+    }
     for role in view
         .studio
         .map(|studio| studio::cast_order(studio.studio))

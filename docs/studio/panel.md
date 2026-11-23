@@ -227,7 +227,11 @@ no separate `!N flagged` suffix — a `stuck` role shows on its own row and neve
 ## The cast
 
 In studio mode the sidebar's agents section is the current studio's cast instead (see
-[guide.md](guide.md)). Header: `cast · <studio id>` on the left, `<n>/<total>` on the right — the
+[guide.md](guide.md)). The cast never sits blank while studios exist: the current studio's cast
+shows when one is known; with none current but exactly one live studio in the lot, that studio's
+cast shows and the header names it; with more than one live studio and none current the body is
+one dim line, `select a studio (Enter on it)`. Header: `cast · <studio id>` on the left,
+`<n>/<total>` on the right — the
 studio's position in document order. One entry per person, in the summary's order, two rows each:
 mark, name and task with the runner right-aligned; then the terminal's title — falling back to
 `doing`, then the state word — with the model right-aligned in short form. The shown state takes row
