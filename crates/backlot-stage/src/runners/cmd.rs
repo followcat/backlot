@@ -5,14 +5,17 @@
 //! directory — a non-empty cwd without it deadlocks on the trust
 //! dialog the stage never answers), `--skip-onboarding`,
 //! `--no-auto-update`, `-m <model>` and `--add-dir <dir>` — the
-//! studio state directory (for Hollywood, `<base>/studios`) so the
-//! message files the stage sends are inside the workspace and their
-//! reads never prompt; a fresh launch also names
-//! the session after its terminal (`-n`), which stays a resumable
-//! name for `-r`. The first prompt is positional on a fresh launch
-//! only — a resume ignores it, so the stage sends the prompt after
-//! the composer opens, the same rule devin follows. Effort is never
-//! carried: `--effort` writes the global config's
+//! studio state directory (for Hollywood, `<base>/studios`). The
+//! flag only puts the directory into the model's `<workspace>`
+//! context; the tool permission check reads
+//! `permissions.additionalDirectories` from the project settings
+//! file instead, so `prepare` writes the same directory there and
+//! the message files the stage sends never prompt. A fresh launch
+//! also names the session after its terminal (`-n`), which stays a
+//! resumable name for `-r`. The first prompt is positional on a
+//! fresh launch only — a resume ignores it, so the stage sends the
+//! prompt after the composer opens, the same rule devin follows.
+//! Effort is never carried: `--effort` writes the global config's
 //! `reasoningEffort.<model>` — measured — so the adapter emits no
 //! flag at all.
 //!
@@ -57,6 +60,12 @@ pub struct CmdPrep {
     pub settings: PathBuf,
     /// The role's `permissions.allow` rules.
     pub allow: Vec<String>,
+    /// `permissions.additionalDirectories` — the same directory the
+    /// launch passes to `--add-dir`. The flag only feeds the model's
+    /// `<workspace>` context; this settings key is what the tool
+    /// permission check reads, so it is what stops the outside-
+    /// workspace prompt.
+    pub additional_dirs: Vec<String>,
     /// `<HOME>/.commandcode/mcp.json` — the server names are read,
     /// never the values.
     pub global_mcp: PathBuf,
@@ -178,21 +187,25 @@ pub(crate) fn mcp_denies(global_mcp: &Path) -> Result<Vec<String>, String> {
     Ok(names.iter().map(|n| format!("mcp__{n}")).collect())
 }
 
-/// The settings file's bytes: `{"permissions":{"allow":..,"deny":..}}`
+/// The settings file's bytes:
+/// `{"permissions":{"allow":..,"deny":..,"additionalDirectories":..}}`
 /// written fresh, or `permissions` spliced byte-exact into an
 /// existing object — every other member (the role's own settings)
-/// keeps its whitespace and order. `allow` and `deny` entries are
-/// serialized by serde — a rule carrying a quote or backslash never
-/// reaches the file (`allow_rules` drops those), and deny names
-/// come from the JSON server map.
+/// keeps its whitespace and order. `allow`, `deny` and
+/// `additionalDirectories` entries are serialized by serde — a rule
+/// carrying a quote or backslash never reaches the file
+/// (`allow_rules` drops those), and deny names come from the JSON
+/// server map.
 pub(crate) fn settings_content(
     existing: Option<&[u8]>,
     allow: &[String],
     deny: &[String],
+    additional_dirs: &[String],
 ) -> Result<Vec<u8>, String> {
     let permissions = serde_json::to_string(&serde_json::json!({
         "allow": allow,
         "deny": deny,
+        "additionalDirectories": additional_dirs,
     }))
     .unwrap_or_default();
     let fresh = || Ok(format!("{{\"permissions\":{permissions}}}\n").into_bytes());
@@ -220,7 +233,7 @@ pub fn prepare(p: &CmdPrep) -> Result<bool, String> {
     }
     let deny = mcp_denies(&p.global_mcp)?;
     let existing = std::fs::read(&p.settings).ok();
-    let bytes = settings_content(existing.as_deref(), &p.allow, &deny)?;
+    let bytes = settings_content(existing.as_deref(), &p.allow, &deny, &p.additional_dirs)?;
     write600(&p.settings, &bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
     Ok(false)
 }
@@ -314,14 +327,17 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
     // worktree for a role and `hollywood/` for the overseer. A
     // role's message files and prompts live in the studio's state
     // directory; Hollywood reads every studio's under `<base>/studios`,
-    // the sibling of its cwd. Without it those reads prompt and the
-    // stage's guarded send never delivers.
+    // the sibling of its cwd. The flag only feeds the model's
+    // `<workspace>` context — the permission check reads the same
+    // directory from `permissions.additionalDirectories`, which
+    // `prepare` writes — so both carry this one value.
     let add_dir = if ctx.role == "hollywood" {
         let hdir = Path::new(ctx.studio_dir);
         hdir.parent().unwrap_or(hdir).join("studios")
     } else {
         PathBuf::from(ctx.studio_dir)
     };
+    let add_dir = add_dir.to_string_lossy().into_owned();
     argv.extend([
         "-m".into(),
         identity.model.clone(),
@@ -329,7 +345,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         "--skip-onboarding".into(),
         "--no-auto-update".into(),
         "--add-dir".into(),
-        add_dir.to_string_lossy().into_owned(),
+        add_dir.clone(),
     ]);
     if ctx.resume.is_none()
         && let Some(p) = ctx.prompt
@@ -351,6 +367,7 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         prep: Some(Prep::Cmd(CmdPrep {
             settings: Path::new(ctx.cwd).join(".commandcode/settings.json"),
             allow: allow_rules(ctx.role, ctx.checks),
+            additional_dirs: vec![add_dir],
             global_mcp,
         })),
     })

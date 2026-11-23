@@ -9,7 +9,7 @@ use backlot_model::hollywood::HWRole;
 
 use crate::config::HollywoodCfg;
 use crate::hlife::hrole_env;
-use crate::hstage::{HMove, hplan, identity};
+use crate::hstage::{HMove, hplan, identity, resume_session};
 
 fn cfg(runner: &str) -> HollywoodCfg {
     HollywoodCfg {
@@ -166,6 +166,27 @@ fn starts_and_revives() {
     assert_eq!(hplan(Some(&c), &closed, false, 0, 0), vec![HMove::Revive]);
     // …but a stray terminal beside a closed record is still dropped.
     assert_eq!(hplan(Some(&c), &closed, true, 0, 0), vec![HMove::Drop]);
+}
+
+/// A resume may only carry a session recorded under the runner
+/// being launched: the old runner's id belongs to a conversation
+/// that runner minted, and handing it to another is `No session
+/// named …`. With no recorded actor there is nothing to prove, so
+/// no session goes out either.
+#[test]
+fn a_resume_never_carries_another_runners_session() {
+    let mut role = recorded("devin");
+    role.session_id = Some("beaded-harp".into());
+    assert_eq!(resume_session(&role, &identity(&cfg("cmd"))), None);
+    assert_eq!(
+        resume_session(&role, &identity(&cfg("devin"))),
+        Some("beaded-harp")
+    );
+    let bare = HWRole {
+        session_id: Some("beaded-harp".into()),
+        ..Default::default()
+    };
+    assert_eq!(resume_session(&bare, &identity(&cfg("devin"))), None);
 }
 
 /// The identity `[hollywood]` names — runner, model, effort from

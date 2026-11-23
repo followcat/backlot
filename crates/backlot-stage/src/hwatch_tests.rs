@@ -8,6 +8,7 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use backlot_model::EventBy;
+use backlot_model::event::ActorIdentity;
 use backlot_model::hollywood::{
     HOLLYWOOD, HOLLYWOOD_TERMINAL, HollywoodKind, NewHollywoodEvent, RoleMotion,
 };
@@ -207,4 +208,116 @@ async fn stage_hsample_reads_signals_and_summary_publishes_work_and_pending() {
     let hw = view.hollywood.expect("hollywood section");
     assert_eq!(hw.work, Some(Work::Working));
     assert!(hw.pending);
+}
+
+/// A stage whose core answers `hello` and nothing else — `hdiscover`
+/// never calls it.
+async fn quiet_stage() -> Stage {
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(async move {
+        let (read, mut write) = tokio::io::split(core_side);
+        let mut reader = Reader::new(read);
+        let hello = reader.read_line().await.unwrap().unwrap();
+        let request: Value = serde_json::from_slice(&hello).unwrap();
+        assert_eq!(request["method"], "hello");
+        let reply = serde_json::to_vec(&json!({
+            "jsonrpc": "2.0", "id": request["id"],
+            "result": {
+                "generation": 1, "version": "fake-core 0.0",
+                "framed": true,
+                "core": {"id": "core-fake-1", "name": "fake-core"},
+                "methods": [], "features": [],
+            }
+        }))
+        .unwrap();
+        write.write_all(&reply).await.unwrap();
+        write.write_all(b"\n").await.unwrap();
+        while let Ok(Some(_)) = reader.read_frame().await {}
+    });
+    let (read, write) = tokio::io::split(client_side);
+    let client = Client::open(Box::pin(read), Box::pin(write), None)
+        .await
+        .unwrap();
+    Stage::for_test(client)
+}
+
+/// Hollywood on cmd starts with no session — cmd mints it — so the
+/// watch pass finds it under
+/// `~/.commandcode/projects/<slug(hollywood cwd)>/` and records it on
+/// a `role.state started`, exactly as a studio role's discovery does.
+/// The devin conversation the runner change closed must not stand in
+/// the way.
+#[tokio::test]
+async fn stage_hdiscover_records_a_cmd_session_after_a_start() {
+    let tmp = TestDir::new("backlot-hdiscover-cmd");
+    let hdir = store::hollywood_dir(tmp.path());
+    let home = tmp.join("home");
+    let cwd = hdir.to_string_lossy().into_owned();
+
+    let actor = |runner: &str| ActorIdentity {
+        runner: runner.into(),
+        runner_version: None,
+        model: "m".into(),
+        effort: None,
+        permission_profile: "standard".into(),
+    };
+    // devin's conversation, closed on a runner change, then cmd
+    // started without a session.
+    crate::hstage::record_role(
+        &hdir,
+        RoleMotion::Started,
+        Some("t-devin".into()),
+        Some(actor("devin")),
+        Some("beaded-harp".into()),
+        None,
+    )
+    .unwrap();
+    crate::hstage::record_role(
+        &hdir,
+        RoleMotion::Closed,
+        None,
+        None,
+        None,
+        Some("runner changed"),
+    )
+    .unwrap();
+    crate::hstage::record_role(
+        &hdir,
+        RoleMotion::Started,
+        Some("t-cmd".into()),
+        Some(actor("cmd")),
+        None,
+        None,
+    )
+    .unwrap();
+
+    // A fake cmd projects tree: `<slug(cwd)>/<uuid>.jsonl` whose first
+    // line names the cwd.
+    let uuid = "55555555-5555-4555-8555-555555555555";
+    let projects = home.join(".commandcode/projects");
+    let slug_dir = projects.join(crate::runners::cmd::slug(&cwd));
+    fs::create_dir_all(&slug_dir).unwrap();
+    fs::write(
+        slug_dir.join(format!("{uuid}.jsonl")),
+        format!("{{\"type\":\"session\",\"version\":3,\"id\":\"{uuid}\",\"cwd\":\"{cwd}\"}}\n"),
+    )
+    .unwrap();
+
+    let mut stage = quiet_stage().await;
+    stage.base = tmp.path().to_path_buf();
+    stage
+        .env_vars
+        .insert("HOME".into(), home.to_string_lossy().into_owned());
+    stage.hrefresh(&hdir);
+    // The reducer cleared the old runner's id; discovery has room.
+    assert_eq!(stage.hstate.borrow().role.session_id, None);
+
+    let terminals = vec![LiveTerminal {
+        name: HOLLYWOOD_TERMINAL.into(),
+        address: "t-cmd".into(),
+        ..Default::default()
+    }];
+    stage.hdiscover(&hdir, &terminals);
+    let state = store::load_hstate(&hdir).unwrap();
+    assert_eq!(state.role.session_id.as_deref(), Some(uuid));
 }

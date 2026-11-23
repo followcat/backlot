@@ -67,6 +67,17 @@ pub(crate) fn record_role(
     )
 }
 
+/// The session id a resume may hand the runner: only one recorded
+/// under the runner being launched. A `closed` or a session-less
+/// `started` clears the id, but a ledger written before that fix can
+/// still hold another runner's session — never pass it on.
+pub(crate) fn resume_session<'a>(role: &'a HWRole, actor: &ActorIdentity) -> Option<&'a str> {
+    let recorded = role.actor.as_ref()?;
+    role.session_id
+        .as_deref()
+        .filter(|_| recorded.runner == actor.runner)
+}
+
 /// The actor identity `[hollywood]` names — `standard` is the one
 /// permission profile the overseer gets (D17a).
 pub(crate) fn identity(cfg: &HollywoodCfg) -> ActorIdentity {
