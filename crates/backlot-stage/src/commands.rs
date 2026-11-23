@@ -289,6 +289,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::Runners { .. }
         | Cmd::Repos { .. }
         | Cmd::StudioPrune { .. }
+        | Cmd::StudioDelete { .. }
         | Cmd::StudioMigrate { .. }
         | Cmd::StudioList { .. }
         | Cmd::TellHollywood { .. } => {

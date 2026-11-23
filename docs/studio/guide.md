@@ -696,6 +696,14 @@ backlot studio prune --all-finished
 backlot studio prune acme-shop --force
 ```
 
+To retire a studio completely (finish if needed, close its role and shell terminals, prune its
+worktrees and merged branches, and archive its ledger under `archive/<studio>-<stamp>/`):
+
+```sh
+backlot studio delete acme-shop --dry-run
+backlot studio delete acme-shop
+```
+
 A live studio is refused (exit 2) — prune never touches worktrees that may still be in use.
 Without `--force`, a worktree with uncommitted changes is kept and reported, and a
 `backlot/<studio>/*` branch is deleted only through `git branch -d`; a branch git will not

@@ -93,7 +93,10 @@ fn records(
             base.to_path_buf(),
         ),
     };
-    let logs = studio_logs(&base, &names)?;
+    let mut logs = studio_logs(&base, &names)?;
+    if all || common.studio.is_none() {
+        logs.extend(archived_studio_logs(&base)?);
+    }
     let mut recs = backlot_model::records(&logs);
     // `--kind <task_kind>` keeps only that kind's rows (L3).
     if let Some(kind) = kind {
@@ -108,6 +111,29 @@ fn records(
     } else {
         render::records(&recs)
     })
+}
+
+/// Every archived studio's log under `<base>/archive/`, keyed by its
+/// archive directory name (`<id>-<stamp>`) so archived history stays
+/// distinct from any re-created studio with the same id.
+fn archived_studio_logs(base: &Path) -> Result<Vec<backlot_model::StudioLog>, Fail> {
+    let archived = store::archived_studios(base).map_err(|e| Fail::refused(e.to_string()))?;
+    let mut logs = Vec::new();
+    for (name, dir) in archived {
+        let (events, _) = store::load_events(&dir).map_err(|e| {
+            let detail = match e {
+                StoreError::Io(e) => e.to_string(),
+                StoreError::Corrupt(c) => c.to_string(),
+                _ => "unexpected error".to_string(),
+            };
+            Fail::refused(format!("studio '{name}': {detail}"))
+        })?;
+        logs.push(backlot_model::StudioLog {
+            studio: name,
+            events,
+        });
+    }
+    Ok(logs)
 }
 
 /// Every named studio's log for the cross-studio reads — the same
@@ -159,7 +185,8 @@ fn cast_suggest(common: &Common, env: &Env, base: &Path, json: bool) -> Result<S
         )));
     }
     let names = store::studios(&base).map_err(|e| Fail::refused(e.to_string()))?;
-    let logs = studio_logs(&base, &names)?;
+    let mut logs = studio_logs(&base, &names)?;
+    logs.extend(archived_studio_logs(&base)?);
     let recs = backlot_model::records(&logs);
     let history = backlot_model::casting::candidate_history(candidates, &t.task_kind, &recs);
     Ok(if json {

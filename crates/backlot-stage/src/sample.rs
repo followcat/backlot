@@ -140,6 +140,9 @@ impl Stage {
         detail: impl Fn(u64) -> String + 'static,
     ) -> Result<(), Fail> {
         let (dir, role) = (raise.dir, raise.role);
+        if !dir.join("events.jsonl").is_file() {
+            return Err(Fail::refused("studio archived"));
+        }
         let scratch = dir.join("attention").join(format!(".new-{role}"));
         std::fs::create_dir_all(dir.join("attention"))
             .map_err(|e| Fail::refused(format!("attention file: {e}")))?;

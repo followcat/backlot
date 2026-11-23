@@ -1,7 +1,7 @@
 //! Every command's `usage:` line — the parsers pass theirs to
 //! `args::usage`, which appends `args::COMMON`.
 
-pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--mode standard|experimental] [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>] [--mode standard|experimental]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]\n       backlot studio migrate [<studio> | --all] [--dry-run]\n       backlot studio list [--json]";
+pub(crate) const U_STUDIO: &str = "usage: backlot studio new --title <t> --repo <path> --cast <file.toml> [--mode standard|experimental] [--dry-run]\n       backlot studio new --interactive [--title <t>] [--repo <path>] [--cast <file.toml>] [--mode standard|experimental]\n       backlot studio finish [--reason <r>]\n       backlot studio prune [<studio> | --all-finished] [--dry-run] [--force]\n       backlot studio delete [<studio>] [--dry-run] [--force] [--json]\n       backlot studio migrate [<studio> | --all] [--dry-run]\n       backlot studio list [--json]";
 pub(crate) const U_STUDIO_LIST: &str = "usage: backlot studio list [--json]\n       backlot --remote <host> studio list [--json]\n  studio list reads the local state directory (every local core) by default.\n  --remote <host> lists the studios on <host>, for example\n  `backlot --remote host-b studio list`.";
 pub(crate) const U_REQ: &str = "usage: backlot req revise (--file <f> | --stdin) --summary <s>";
 pub(crate) const U_PLAN: &str =

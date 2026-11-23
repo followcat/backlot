@@ -857,3 +857,93 @@ async fn act_records_resumed_with_the_live_address() {
     assert_eq!(role.session_id.as_deref(), Some("sess-1"));
     assert_eq!(role.recovered_seq, Some(2), "the recovered notice is owed");
 }
+
+#[tokio::test]
+async fn deleted_studio_evicts_all_state_and_mid_tick_vanish_never_errors() {
+    let base = tmp();
+    let gone = studio(&base, "acme");
+    let keep = studio(&base, "beta");
+    let mut stage = stage().await;
+    stage.base = base.to_path_buf();
+    let inv = Inventory {
+        terms: Vec::new(),
+        finished: Vec::new(),
+        doing: BTreeMap::new(),
+    };
+
+    stage.tick(&inv).await.unwrap();
+    assert!(stage.cached.contains_key("acme"));
+    assert!(stage.cached.contains_key("beta"));
+    // Seed per-(studio, role) state for `acme` to confirm full eviction.
+    stage.work.borrow_mut().insert(
+        ("acme".into(), "producer".into()),
+        backlot_model::summary::Work::Working,
+    );
+    stage
+        .work
+        .borrow_mut()
+        .insert(crate::hstage::hkey(), backlot_model::summary::Work::Waiting);
+    stage
+        .exchange_cache
+        .borrow_mut()
+        .insert(("acme".into(), 1), "snippet".into());
+    stage
+        .session_warned
+        .borrow_mut()
+        .insert(("acme".into(), "producer".into()));
+
+    // Archive `acme` out from under the running stage.
+    let archive = store::archive_dir(&base).join("acme-20261123T060000Z");
+    fs::create_dir_all(archive.parent().unwrap()).unwrap();
+    fs::rename(&gone, &archive).unwrap();
+
+    stage.tick(&inv).await.unwrap();
+    assert!(!stage.cached.contains_key("acme"));
+    assert!(!stage.seen.contains_key("acme"));
+    assert!(!stage.broken.contains_key("acme"));
+    assert!(!stage.failed.contains_key("acme"));
+    assert!(stage.work.borrow().keys().all(|(s, _)| s != "acme"));
+    assert!(
+        stage.work.borrow().contains_key(&crate::hstage::hkey()),
+        "hollywood key must be preserved across studio eviction"
+    );
+    assert!(
+        stage
+            .exchange_cache
+            .borrow()
+            .keys()
+            .all(|(s, _)| s != "acme")
+    );
+    assert!(
+        stage
+            .session_warned
+            .borrow()
+            .iter()
+            .all(|(s, _)| s != "acme")
+    );
+    assert!(
+        stage.logged.is_empty(),
+        "must not log error: {:?}",
+        stage.logged
+    );
+    assert!(!gone.exists(), "must not recreate deleted studio dir");
+    assert!(keep.exists() && stage.cached.contains_key("beta"));
+
+    // Mid-tick vanish: `studio_pass` returns Ok(()) cleanly if events.jsonl disappears.
+    let mid = studio(&base, "mid");
+    stage.tick(&inv).await.unwrap();
+    assert!(stage.cached.contains_key("mid"));
+    fs::remove_dir_all(&mid).unwrap();
+    let mut slot = true;
+    let res = stage
+        .studio_pass(
+            "mid",
+            &inv,
+            &mut slot,
+            &std::collections::BTreeSet::new(),
+            1_000,
+        )
+        .await;
+    assert!(res.is_ok(), "{res:?}");
+    assert!(!mid.exists());
+}

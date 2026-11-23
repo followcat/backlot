@@ -113,6 +113,33 @@ pub fn studio_dir(base: &Path, name: &str) -> PathBuf {
     base.join("studios").join(name)
 }
 
+/// `<base>/archive` holding archived studio directories (`<id>-<stamp>`).
+pub fn archive_dir(base: &Path) -> PathBuf {
+    base.join("archive")
+}
+
+/// Archived studio directories under `<base>/archive/`, sorted by
+/// directory name.
+pub fn archived_studios(base: &Path) -> io::Result<Vec<(String, PathBuf)>> {
+    let mut out = Vec::new();
+    let dir = archive_dir(base);
+    match fs::read_dir(&dir) {
+        Ok(entries) => {
+            for e in entries {
+                let e = e?;
+                let path = e.path();
+                if e.file_type()?.is_dir() && path.join("events.jsonl").exists() {
+                    out.push((e.file_name().to_string_lossy().into_owned(), path));
+                }
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
+
 /// Hollywood's own ledger directory, `<base>/hollywood/` — beside
 /// `studios/`, never inside it, so `studios()` and every studio rule
 /// pass over it (D13).
