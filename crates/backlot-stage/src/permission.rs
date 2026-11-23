@@ -281,10 +281,20 @@ impl Stage {
         // The bound request: `backlot approve` refuses a key when
         // the last signal is no longer this one.
         let bound = request.and_then(|s| serde_json::to_string(s).ok());
-        let tool = match (request.and_then(|s| s.tool_name.as_deref()), command) {
+        // No signal command: read the wrapped screen so the attention
+        // still names what the prompt asks — a narrow cmd terminal's
+        // command is there, not on a single line.
+        let shown = command
+            .map(String::from)
+            .or_else(|| runners::prompt_detail(runner, text));
+        let tool = match (
+            request.and_then(|s| s.tool_name.as_deref()),
+            shown.as_deref(),
+        ) {
             (Some(name), Some(target)) => format!("{name}: {target}; "),
             (Some(name), None) => format!("{name}; "),
-            _ => String::new(),
+            (None, Some(target)) => format!("{target}; "),
+            (None, None) => String::new(),
         };
         self.raise_attention(
             Raise {

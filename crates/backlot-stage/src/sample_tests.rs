@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use crate::daemon::Stage;
+use crate::prompt_fixtures::{CMD_FULL, CMD_NARROW};
 use crate::reconcile::LiveTerminal;
 use crate::sample::Watched;
 use crate::store::{self, Pending};
@@ -136,12 +137,24 @@ fn term() -> LiveTerminal {
 /// One `sample_work` on the freshest ledger state — the tick's own
 /// reload between samples.
 async fn sample(stage: &Stage, dir: &Path, term: &LiveTerminal, role: &str, now_ms: u64) {
+    sample_runner(stage, dir, term, role, "fake", now_ms).await;
+}
+
+/// [`sample`] for a runner other than `fake`.
+async fn sample_runner(
+    stage: &Stage,
+    dir: &Path,
+    term: &LiveTerminal,
+    role: &str,
+    runner: &str,
+    now_ms: u64,
+) {
     let state = store::load_state(dir).unwrap();
     let watched = Watched {
         dir,
         state: &state,
         role,
-        runner: "fake",
+        runner,
         term,
     };
     stage
@@ -627,6 +640,31 @@ async fn a_signal_bound_prompt_needs_no_screen_block() {
             .join(format!("{}.signal", raised[0].seq))
             .exists()
     );
+}
+
+/// A cmd role on a 21-column terminal still raises `permission
+/// prompt`, and its detail names the whole wrapped command — the
+/// picker and the sentence wrapping must not hide the episode.
+#[tokio::test]
+async fn a_narrow_cmd_prompt_raises_with_the_full_command() {
+    let dir = tmp();
+    studio(&dir);
+    let term = term();
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+    fake.lock().unwrap().screen = CMD_NARROW.into();
+
+    sample_runner(&stage, &dir, &term, "actor-t1-c1", "cmd", t0).await;
+    sample_runner(&stage, &dir, &term, "actor-t1-c1", "cmd", t0 + 2_000).await;
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1);
+    match &raised[0].kind {
+        EventKind::AttentionRaised { reason, detail, .. } => {
+            assert_eq!(reason, PERMISSION_PROMPT);
+            assert!(detail.contains(CMD_FULL), "{detail}");
+        }
+        _ => unreachable!(),
+    }
 }
 
 /// S12d: without a bound signal, a blocked that identifies no prompt

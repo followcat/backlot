@@ -5,6 +5,7 @@
 use backlot_model::summary::Work;
 
 use super::work_state;
+use crate::prompt_fixtures::CMD_NARROW;
 
 /// Claude Code's permission prompt — the working line can still be
 /// on screen above it, so blocked must win.
@@ -284,6 +285,14 @@ fn cmd_blocked() {
     );
     // Nor a cursor alone.
     assert_eq!(work_state("cmd", "❯ 1. Yes\n"), Work::Waiting);
+}
+
+/// The S12a picker on a 21-column terminal: the sentence and the
+/// option texts wrap across lines, and the picker still reads
+/// blocked.
+#[test]
+fn cmd_picker_blocks_at_a_narrow_width() {
+    assert_eq!(work_state("cmd", CMD_NARROW), Work::Blocked);
 }
 
 /// cmd's folder-trust dialog is blocked too — `--trust` should

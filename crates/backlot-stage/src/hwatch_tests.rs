@@ -22,7 +22,8 @@ use tokio::io::{AsyncWriteExt, DuplexStream};
 use crate::config::HollywoodCfg;
 use crate::daemon::Stage;
 use crate::hstage::hkey;
-use crate::hwatch::hsignal_work;
+use crate::hwatch::{hollywood_prompt, hsignal_work};
+use crate::prompt_fixtures::{CMD_FULL, CMD_MEDIUM, CMD_NARROW, CMD_WIDE};
 use crate::reconcile::LiveTerminal;
 use crate::signals::signals_path;
 use crate::store::{self, HPending};
@@ -226,6 +227,20 @@ fn cmd_prompt_screen(command: &str) -> String {
     )
 }
 
+/// The prompt is read through the wrapping: the 21-column capture,
+/// the 60-column re-wrap and the wide screen all name the whole
+/// command, not the fragment under the sentence.
+#[test]
+fn hollywood_prompt_reads_cmd_at_every_width() {
+    for screen in [CMD_NARROW, CMD_MEDIUM, CMD_WIDE] {
+        assert_eq!(
+            hollywood_prompt("cmd", screen, Work::Blocked),
+            Some(CMD_FULL.to_string()),
+            "{screen}"
+        );
+    }
+}
+
 /// A stage over a live Hollywood whose terminal answers `screen`.
 async fn hstage_with_screen(tag: &str, screen: String) -> (Stage, TestDir, std::path::PathBuf) {
     let tmp = TestDir::new(tag);
@@ -382,6 +397,113 @@ async fn serve_prompt(
             .await
             .unwrap();
     }
+}
+
+/// A stage over live Hollywood on cmd whose terminal reports
+/// `kind: permission` / `state: blocked` while its screen says
+/// nothing the prompt classifiers can read.
+async fn hstage_structured_blocked(
+    tag: &str,
+    screen: &str,
+) -> (
+    Stage,
+    TestDir,
+    std::path::PathBuf,
+    Vec<LiveTerminal>,
+    Arc<Mutex<Vec<String>>>,
+) {
+    let tmp = TestDir::new(tag);
+    let hdir = store::hollywood_dir(tmp.path());
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<_, std::convert::Infallible>(HPending {
+            event: NewHollywoodEvent::new(
+                EventBy::role("stage"),
+                HollywoodKind::RoleState {
+                    state: RoleMotion::Started,
+                    terminal: Some("t-hw".into()),
+                    actor: None,
+                    session_id: Some("sid-hw".into()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    let keys = Arc::new(Mutex::new(Vec::new()));
+    tokio::spawn(serve_prompt(
+        core_side,
+        Arc::new(Mutex::new(screen.to_string())),
+        Arc::clone(&keys),
+    ));
+    let (read, write) = tokio::io::split(client_side);
+    let client = Client::open(Box::pin(read), Box::pin(write), None)
+        .await
+        .unwrap();
+    let mut stage = Stage::for_test(client);
+    stage.base = tmp.path().to_path_buf();
+    *stage.hcfg.borrow_mut() = Some(HollywoodCfg {
+        runner: "cmd".into(),
+        model: "model-a".into(),
+        effort: None,
+        key: None,
+        default_cast: None,
+    });
+    stage.hrefresh(&hdir);
+    let term = LiveTerminal {
+        name: HOLLYWOOD_TERMINAL.into(),
+        address: "t-hw".into(),
+        status: Some(
+            serde_json::from_value(json!({"kind": "permission", "state": "blocked"})).unwrap(),
+        ),
+        ..Default::default()
+    };
+    (stage, tmp, hdir, vec![term], keys)
+}
+
+/// The terminal's structured status alone names the prompt: a screen
+/// the classifiers cannot parse still publishes the user-owned row,
+/// with the bare `permission prompt` detail.
+#[tokio::test]
+async fn a_structured_prompt_with_an_unreadable_screen_is_published() {
+    let (stage, _tmp, hdir, terms, _keys) =
+        hstage_structured_blocked("backlot-hw-structured", "> ").await;
+    stage.hsample(&hdir, &terms, "cmd", 5_000).await;
+    let view = stage.summary_view(&BTreeMap::new());
+    let hw = view.hollywood.expect("hollywood section");
+    assert_eq!(hw.work, Some(Work::Blocked));
+    assert!(hw.attention_user);
+    assert_eq!(hw.attention_detail.as_deref(), Some("permission prompt"));
+}
+
+/// A recorded answer reaches that prompt too: `enter` goes out once
+/// and never again on the same approval.
+#[tokio::test]
+async fn a_recorded_allow_answers_a_structured_prompt_once() {
+    let (stage, _tmp, hdir, terms, keys) =
+        hstage_structured_blocked("backlot-hw-structured-answer", "> ").await;
+    stage.hsample(&hdir, &terms, "cmd", 5_000).await;
+    assert!(keys.lock().unwrap().is_empty(), "no key without a decision");
+
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<_, std::convert::Infallible>(HPending {
+            event: NewHollywoodEvent::new(
+                EventBy::role("user"),
+                HollywoodKind::RoleApproval {
+                    decision: ApprovalDecision::Allow,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    stage.hrefresh(&hdir);
+    stage.hsample(&hdir, &terms, "cmd", 6_100).await;
+    assert_eq!(keys.lock().unwrap().as_slice(), &["enter"]);
+
+    stage.hsample(&hdir, &terms, "cmd", 7_200).await;
+    assert_eq!(keys.lock().unwrap().as_slice(), &["enter"]);
 }
 
 /// The user's recorded answer sends the runner's run-once key —

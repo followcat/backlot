@@ -12,6 +12,7 @@ use backlot_model::event::{ApprovalDecision, PERMISSION_PROMPT};
 use backlot_model::state::{ApprovalRecord, Attention, StudioState, actor_task};
 use backlot_model::summary::Work;
 
+use crate::runners::prompt::{joined, phrase_line};
 use crate::runners::work;
 use crate::watch::trust_dialog;
 
@@ -96,11 +97,16 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
     let start = match runner {
         // From the last full-width `─` rule above `Do you want to
         // proceed?` to the end: the tool header, the description,
-        // the command between `╌` rules and the picker.
+        // the command between `╌` rules and the picker. The question
+        // is matched on the joined lines — a narrow terminal wraps
+        // it — and the rule is found above the picker's cursor.
         "claude" => {
+            if !joined(screen).contains("Do you want to proceed?") {
+                return None;
+            }
             let ask = lines
                 .iter()
-                .rposition(|l| l.contains("Do you want to proceed?"))?;
+                .rposition(|l| l.trim_start().starts_with("❯ 1."))?;
             lines[..ask]
                 .iter()
                 .rposition(|l| work::is_full_width_rule(l))?
@@ -113,9 +119,7 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
             .rposition(|l| l.trim_end() == "fake-work: blocked")?,
         // The question line to the end — the command the picker asks
         // about sits under it. Unmeasured, see docs/studio/runners.md.
-        "codex" => lines
-            .iter()
-            .rposition(|l| l.contains("Would you like to"))?,
+        "codex" => phrase_line(&lines, "Would you like to")?,
         // From the last full-width `─` rule above the picker's `→`
         // option-cursor line to the end — the `$ <cmd>` or diff
         // preview, the question and the options. Every approval
@@ -132,28 +136,30 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         }
         // From the last full-width `─` rule above the `❯ 1.`
         // picker to the end — the rule opens the prompt block,
-        // the picker's options sit inside it (S12a). The trust
-        // dialog's rounded box is not a `─` rule, so a trust
-        // screen maps no block and the whole screen is compared.
+        // the picker's options sit inside it (S12a). A narrow
+        // terminal can scroll the rule away: then the block opens
+        // at the `needs to …` sentence, which still carries the
+        // command. The trust dialog's rounded box names neither, so
+        // a trust screen maps no block and the whole screen is
+        // compared.
         "cmd" => {
             let ask = lines
                 .iter()
                 .rposition(|l| l.trim_start().starts_with("❯ 1."))?;
-            lines[..ask]
+            let before = &lines[..ask];
+            before
                 .iter()
-                .rposition(|l| work::is_full_width_rule(l))?
+                .rposition(|l| work::is_full_width_rule(l))
+                .or_else(|| phrase_line(before, "Command Code needs to"))
+                .or_else(|| phrase_line(before, "needs to execute"))
+                .or_else(|| phrase_line(before, "needs to run"))
+                .or_else(|| phrase_line(before, "make this edit to"))?
         }
         // From the last full-width `─` rule above the approval block to
         // the end — the tool name, the command preview and the
-        // `[y] Approve   [n] Deny` line (S14a section 4).
-        "cline" => {
-            let ask = lines
-                .iter()
-                .rposition(|l| l.contains("Cline needs permission"))?;
-            lines[..ask]
-                .iter()
-                .rposition(|l| work::is_full_width_rule(l))?
-        }
+        // `[y] Approve   [n] Deny` line (S14a section 4). A narrow
+        // terminal wraps the banner; the block opens at it either way.
+        "cline" => phrase_line(&lines, "Cline needs permission")?,
         // From the last `●` line above `Approval required` to the
         // end — the `●` block holds the command the picker asks
         // about, and the judge's sentence, the `❭` cursor and the
@@ -161,9 +167,7 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         // cursor or scope that moved under a recorded decision
         // refuses the send instead of answering a shifted picker.
         "devin" => {
-            let ask = lines
-                .iter()
-                .rposition(|l| l.contains("Approval required"))?;
+            let ask = phrase_line(&lines, "Approval required")?;
             lines[..ask]
                 .iter()
                 .rposition(|l| l.trim_start().starts_with('●'))?

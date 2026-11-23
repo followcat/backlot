@@ -8,6 +8,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use backlot_model::hollywood::{HOLLYWOOD, HOLLYWOOD_TERMINAL, RoleMotion};
+use backlot_model::summary::Work;
 use hc_proto::terminal::ReadParams;
 
 use crate::daemon::Stage;
@@ -105,7 +106,7 @@ impl Stage {
         let session = self.hstate.borrow().role.session_id.clone();
         let work = hsignal_work(hdir, session.as_deref(), t, runner, &text);
         self.work.borrow_mut().insert(pair.clone(), work);
-        *self.hprompt.borrow_mut() = hollywood_prompt(runner, &text);
+        *self.hprompt.borrow_mut() = hollywood_prompt(runner, &text, work);
         let prev = self.screens.borrow().get(&pair).cloned();
         self.screens.borrow_mut().insert(
             pair,
@@ -170,38 +171,21 @@ impl Stage {
 
 /// The permission prompt Hollywood's screen shows, as the one line the
 /// band asks about: the command a cmd picker names, else the picker's
-/// question. `None` when the screen is not at a prompt.
-pub(crate) fn hollywood_prompt(runner: &str, screen: &str) -> Option<String> {
-    use backlot_model::summary::Work;
-    if crate::runners::work_state(runner, screen) != Work::Blocked {
+/// question, unwrapped from the terminal's width. `None` when the
+/// combined work is not `blocked` — the structured status, the hook
+/// signal and the screen are all already in it, so a narrow terminal
+/// whose picker the classifier cannot read still counts. A prompt no
+/// channel can name reads `permission prompt`.
+pub(crate) fn hollywood_prompt(runner: &str, screen: &str, work: Work) -> Option<String> {
+    if work != Work::Blocked {
         return None;
     }
-    let lines: Vec<&str> = screen.lines().collect();
-    // cmd's picker (S12a): the `needs to …` sentence, then the command
-    // or path on the line under it.
-    if let Some(i) = lines.iter().position(|l| {
-        l.contains("needs to execute")
-            || l.contains("needs to run")
-            || l.contains("make this edit to")
-    }) {
-        let next = lines[i + 1..].iter().map(|l| l.trim()).find(|l| {
-            !l.is_empty() && !l.starts_with('❯') && !l.starts_with("2.") && !l.starts_with("3.")
-        });
-        return Some(next.unwrap_or_else(|| lines[i].trim()).to_string());
-    }
-    // The other runners' question line, when the picker has one.
-    if let Some(q) = lines.iter().find(|l| {
-        l.contains("Do you want to")
-            || l.contains("Would you like to")
-            || l.contains("Approve tool call")
-    }) {
-        return Some(q.trim().to_string());
-    }
-    // No question the stage can name: its saved prompt block's first
-    // line, else the bare word.
-    crate::permit::prompt_block(runner, screen)
-        .and_then(|block| block.lines().next().map(|l| l.trim().to_string()))
-        .filter(|l| !l.is_empty())
+    runners::prompt_detail(runner, screen)
+        .or_else(|| {
+            crate::permit::prompt_block(runner, screen)
+                .and_then(|block| block.lines().next().map(|l| l.trim().to_string()))
+                .filter(|l| !l.is_empty())
+        })
         .or_else(|| Some("permission prompt".to_string()))
 }
 

@@ -14,6 +14,7 @@ use crate::permit::{
     episode_raised, in_episode, is_actor, needs_user, open_episode, pending_approval, prompt_block,
     touches_env,
 };
+use crate::prompt_fixtures::{CMD_MEDIUM, CMD_NARROW};
 use crate::test_support::TestDir;
 
 fn attn(seq: u64, role: &str, open: bool, ts_ms: u64) -> Attention {
@@ -784,10 +785,19 @@ fn prompt_block_on_cmd() {
         "a different command must be a different block"
     );
     assert_eq!(prompt_block("cmd", "plain output\n"), None);
+    // A narrow terminal scrolls the `─` rule away: the block opens at
+    // the `needs to` sentence and still carries the whole command.
+    let narrow = prompt_block("cmd", CMD_NARROW).expect("a narrow picker has a block");
+    assert!(
+        narrow.contains("backlot setup --help 2>&1 | head -20"),
+        "{narrow}"
+    );
+    assert_eq!(narrow, prompt_block("cmd", CMD_MEDIUM).unwrap());
+    // A screen naming no sentence and no rule has nothing comparable.
     assert_eq!(
-        prompt_block("cmd", "Execute Shell Command\nneeds to execute\n❯ 1. Yes\n"),
+        prompt_block("cmd", "❯ 1. Yes\n 2. Yes, don't ask\n 3. No\n"),
         None,
-        "no full-width rule — nothing comparable"
+        "no sentence — nothing comparable"
     );
 }
 
@@ -1024,11 +1034,11 @@ fn prompt_block_on_cline() {
         "a different command must be a different block"
     );
     assert_eq!(prompt_block("cline", "plain output\n"), None);
-    assert_eq!(
-        prompt_block("cline", "Cline needs permission\nApprove tool call?\n"),
-        None,
-        "no full-width rule — nothing comparable"
-    );
+    // Without the `─` rule the block still opens at the banner, so a
+    // narrow screen's command stays inside it.
+    let no_rule = "Cline needs permission\nApprove tool call?\nrun_commands\n\n  $ ls\n\n [y] Approve   [n] Deny\n";
+    let block = prompt_block("cline", no_rule).expect("a narrow banner has a block");
+    assert!(block.contains("$ ls"), "{block}");
 }
 
 /// cline gets no key, ever: its block only appears when `--yolo`'s
