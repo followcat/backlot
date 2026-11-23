@@ -120,6 +120,7 @@ impl App {
             ns_rx,
             ns_pending_focus: None,
             ns_editor: None,
+            ns_build_editor: None,
             ns_run: None,
             ns_saved_casts: preferences.new_studio_casts.clone(),
             menu: None,

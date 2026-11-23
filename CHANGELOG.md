@@ -12,6 +12,17 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
+  `--ask-file <f>`) queues the person's first message to the new producer as the same
+  `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the
+  producer's terminal as its first `[backlot] user → producer: read <file>` line. An empty ask is
+  refused and records nothing; `--dry-run` restates its first line. The New Studio dialog's step 2
+  gains an optional **What should this studio build?** field — multi-line, `alt+⏎` adds a line,
+  `Ctrl+E` edits it in `$EDITOR`, empty is today's behaviour — whose first line shows on step 4's
+  summary card under `First ask`; a non-empty brief rides the create as `--ask-file`, written to a
+  temp file on the target machine. The producer's prompt now reads a first `tell` from the user as
+  the requirement brief and records it before asking "What would you like us to build?".
+
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on

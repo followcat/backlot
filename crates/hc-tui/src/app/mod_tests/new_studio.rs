@@ -7,7 +7,7 @@
 use super::endpoint_nav::app_multi;
 use super::*;
 use crate::app::input::{MouseButton, MouseEventKind, MouseInput, UiEvent};
-use crate::new_studio::{Probe, RepoKind, Step, Step1Pane};
+use crate::new_studio::{Probe, RepoKind, Step, Step1Pane, Step2Field};
 use crate::sidebar::fixture::{machine, term};
 use hc_proto::watch::{DocKey, Document};
 
@@ -2099,4 +2099,131 @@ async fn step4_at_80x24_keeps_the_checkbox_clear_of_create() {
             .any(|(_, argv, _)| argv.starts_with(&["studio".into(), "new".into()])),
         "the button click ran the create"
     );
+}
+
+// ---------- W6: the build brief on step 2 ----------
+
+/// Walk to step 2 with the build field focused, typing `text` into it.
+async fn type_build(app: &mut App, text: &str) {
+    // Step 1: repo → step 2.
+    if app.new_studio.as_ref().unwrap().pane == Step1Pane::Machines {
+        key(app, hc_vt::Key::Tab);
+    }
+    key(app, hc_vt::Key::Enter);
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::IdTitle);
+    // Fields cycle Id → Title → Mode → Build.
+    key(app, hc_vt::Key::Tab);
+    key(app, hc_vt::Key::Tab);
+    key(app, hc_vt::Key::Tab);
+    assert_eq!(app.new_studio.as_ref().unwrap().field, Step2Field::Build);
+    for c in text.chars() {
+        key(app, hc_vt::Key::Char(c));
+    }
+}
+
+#[tokio::test]
+async fn step2_draws_the_build_field() {
+    let (mut app, _) = dialog_app().await;
+    // Land on step 2.
+    if app.new_studio.as_ref().unwrap().pane == Step1Pane::Machines {
+        key(&mut app, hc_vt::Key::Tab);
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    let text = screen_lines(&draw_to(&mut app, 100, 36)).join("\n");
+    assert!(
+        text.contains("What should this studio build?"),
+        "the build field is drawn:\n{text}"
+    );
+    assert!(text.contains("optional"), "it is optional:\n{text}");
+}
+
+#[tokio::test]
+async fn typing_a_brief_reaches_the_submit_argv() {
+    let (mut app, recorded) = dialog_app().await;
+    type_build(&mut app, "build a cart").await;
+    assert_eq!(
+        app.new_studio.as_ref().unwrap().build_text(),
+        "build a cart",
+        "the field holds the typed brief"
+    );
+    // Step 2 → Cast → Check & Start (the dry run fires).
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    assert_eq!(app.new_studio.as_ref().unwrap().step, Step::Cast);
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    recorded.lock().unwrap().clear();
+    key(&mut app, hc_vt::Key::Enter); // create
+    drain_ns(&mut app).await;
+
+    let calls = recorded.lock().unwrap();
+    let create = calls
+        .iter()
+        .find(|(_, argv, _)| argv.starts_with(&["studio".into(), "new".into()]))
+        .expect("the create call");
+    let argv = &create.1;
+    let at = argv
+        .iter()
+        .position(|a| a == "--ask-file")
+        .expect("--ask-file in the argv");
+    let path = &argv[at + 1];
+    assert!(path.ends_with(".md"), "the ask temp file: {path}");
+    // The temp file was written with the brief, then removed after.
+    assert!(
+        !std::path::Path::new(path).exists(),
+        "the temp file was cleaned up"
+    );
+}
+
+#[tokio::test]
+async fn an_empty_brief_sends_nothing() {
+    let (mut app, recorded) = dialog_app().await;
+    to_step4(&mut app).await;
+    recorded.lock().unwrap().clear();
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    let calls = recorded.lock().unwrap();
+    let create = calls
+        .iter()
+        .find(|(_, argv, _)| argv.starts_with(&["studio".into(), "new".into()]))
+        .expect("the create call");
+    assert!(
+        !create.1.iter().any(|a| a == "--ask-file"),
+        "no brief, no --ask-file: {:?}",
+        create.1
+    );
+}
+
+#[tokio::test]
+async fn the_summary_card_shows_the_briefs_first_line() {
+    let (mut app, _) = dialog_app().await;
+    type_build(&mut app, "build a cart").await;
+    // Continue to the cast, then to the summary.
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    key(&mut app, hc_vt::Key::Enter);
+    drain_ns(&mut app).await;
+    let text = screen_lines(&draw_to(&mut app, 100, 36)).join("\n");
+    assert!(
+        text.contains("First ask") && text.contains("build a cart"),
+        "the summary shows the brief's first line:\n{text}"
+    );
+}
+
+#[tokio::test]
+async fn alt_enter_adds_a_line_to_the_brief() {
+    let (mut app, _) = dialog_app().await;
+    type_build(&mut app, "first").await;
+    key_mods(&mut app, hc_vt::Key::Enter, hc_vt::Mods::ALT);
+    for c in "second".chars() {
+        key(&mut app, hc_vt::Key::Char(c));
+    }
+    let d = app.new_studio.as_ref().unwrap();
+    assert_eq!(
+        d.build.lines.len(),
+        2,
+        "alt+⏎ split the brief into two lines"
+    );
+    assert_eq!(d.build_text(), "first\nsecond");
+    assert_eq!(d.step, Step::IdTitle, "alt+⏎ does not advance the step");
 }

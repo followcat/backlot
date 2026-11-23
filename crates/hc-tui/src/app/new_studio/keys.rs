@@ -247,17 +247,43 @@ impl App {
         d.field = Step2Field::Id;
     }
 
-    /// Step 2: `tab`/`↑↓` between the three fields, `←`/`→`/space
+    /// Step 2: `tab`/`↑↓` between the four fields, `←`/`→`/space
     /// toggles the mode field, `Enter` steps forward when the id
-    /// validates — the error stays drawn under it.
+    /// validates — the error stays drawn under it. The build brief
+    /// takes multi-line text: `alt+⏎` adds a line, `^E` opens
+    /// `$EDITOR`, and a paste lands whole.
     fn ns_key_step2(&mut self, key: &TerminalKey) {
+        // `^E` on the build field edits the brief in `$EDITOR`.
+        if key.input.key == Key::Char('e')
+            && key.input.mods == Mods::CTRL
+            && self
+                .new_studio
+                .as_ref()
+                .is_some_and(|d| d.field == Step2Field::Build)
+        {
+            self.ns_open_build_editor();
+            return;
+        }
+        // `alt+⏎` on the build field adds a line — a plain `⏎` is
+        // the step's continue, owned by the match below.
+        if key.input.key == Key::Enter
+            && key.input.mods.contains(Mods::ALT)
+            && self
+                .new_studio
+                .as_ref()
+                .is_some_and(|d| d.field == Step2Field::Build)
+        {
+            self.new_studio.as_mut().unwrap().build.insert("\n");
+            return;
+        }
         match key.input.key {
             Key::Tab | Key::BackTab | Key::ArrowUp | Key::ArrowDown => {
                 let d = self.new_studio.as_mut().unwrap();
                 d.field = match d.field {
                     Step2Field::Id => Step2Field::Title,
                     Step2Field::Title => Step2Field::Mode,
-                    Step2Field::Mode => Step2Field::Id,
+                    Step2Field::Mode => Step2Field::Build,
+                    Step2Field::Build => Step2Field::Id,
                 };
             }
             Key::Enter => {
@@ -295,9 +321,56 @@ impl App {
                     Step2Field::Title => {
                         d.title.handle_key(key);
                     }
+                    Step2Field::Build => {
+                        let combo = crate::input::terminal_key_of(key);
+                        if let Some(text) = key.text_commit.as_deref().filter(|t| !t.is_empty()) {
+                            d.build.insert(text);
+                        } else {
+                            d.build.key(combo.code, combo.modifiers);
+                        }
+                    }
                 }
             }
         }
+    }
+
+    /// `^E` on step 2's build field: write the brief to a temp file
+    /// and open `$VISUAL`/`$EDITOR` on it in a floating terminal —
+    /// on the editor's exit the file is read back into the field.
+    fn ns_open_build_editor(&mut self) {
+        let Some(d) = &self.new_studio else { return };
+        let text = d.build.text();
+        let file = std::env::temp_dir().join(format!("backlot-ask-{}.md", std::process::id()));
+        if std::fs::write(&file, text).is_err() {
+            self.show_notice("New studio", "cannot write the brief for editing");
+            return;
+        }
+        self.ns_build_editor = Some(file.clone());
+        let line = format!(
+            "${{VISUAL:-${{EDITOR:-vi}}}} {}",
+            sh_quote(&file.to_string_lossy())
+        );
+        self.spawn_ns_editor(line);
+    }
+
+    /// The build brief's editor popup closed — read the file back
+    /// into the field and remove it.
+    pub(crate) fn ns_build_editor_check(&mut self) {
+        let Some(file) = self.ns_build_editor.clone() else {
+            return;
+        };
+        if self.popup.is_some() || self.popup_pending.is_some() {
+            return;
+        }
+        self.ns_build_editor = None;
+        let Some(d) = &mut self.new_studio else {
+            let _ = std::fs::remove_file(&file);
+            return;
+        };
+        if let Ok(text) = std::fs::read_to_string(&file) {
+            d.build = crate::studio_dialog::BodyEditor::new(&text);
+        }
+        let _ = std::fs::remove_file(&file);
     }
 
     /// Step 3: the cast table — `↑↓` rows, `tab`/`←→` the cell,
@@ -588,6 +661,11 @@ impl App {
                         };
                     }
                 }
+                NsHit::BuildField => {
+                    if let Some(d) = &mut self.new_studio {
+                        d.field = Step2Field::Build;
+                    }
+                }
                 NsHit::CastCell { row, col } => {
                     if let Some(d) = &mut self.new_studio {
                         let seat = (*row).min(d.cast.rows.len().saturating_sub(1));
@@ -648,6 +726,6 @@ fn runners_of(d: &new_studio::NewStudio) -> &[new_studio::RunnerRow] {
 
 /// POSIX single-quote escaping — the same rule the wizard line
 /// used for its file arguments.
-fn sh_quote(word: &str) -> String {
+pub(super) fn sh_quote(word: &str) -> String {
     format!("'{}'", word.replace('\'', "'\\''"))
 }

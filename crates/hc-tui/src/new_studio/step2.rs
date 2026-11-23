@@ -170,5 +170,93 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
             &crate::chrome::text::truncate_end(note, body.width as usize),
             dim,
         );
+        y += 2;
+    }
+
+    draw_build(b, body, y, d, p, hits);
+}
+
+/// The optional multi-line "What should this studio build?" brief —
+/// heading, its editable body rows (as many as fit), and the `^E`
+/// hint. Empty is the default: the producer asks first, as before.
+fn draw_build(
+    b: &mut Buffer,
+    body: Rect,
+    mut y: u16,
+    d: &NewStudio,
+    p: &Palette,
+    hits: &mut NsHits,
+) {
+    let label = Style::default().fg(p.text).bg(p.panel_bg);
+    let dim = Style::default().fg(p.overlay0).bg(p.panel_bg);
+    if y >= body.bottom() {
+        return;
+    }
+    put_text(
+        b,
+        body.x,
+        y,
+        body.width,
+        " What should this studio build? (optional)",
+        label,
+    );
+    y += 1;
+    if y >= body.bottom() {
+        return;
+    }
+    // The body rows: as many as fit below the heading, one row
+    // minimum. The focused field shows the surface and the cursor.
+    let rows = body.bottom().saturating_sub(y).clamp(1, 4);
+    let area = Rect::new(body.x, y, body.width, rows);
+    let focused = d.field == Step2Field::Build;
+    let bg = if focused { p.surface0 } else { p.panel_bg };
+    b.set_style(area, Style::default().bg(bg));
+    let scroll = d
+        .build
+        .row
+        .saturating_sub(usize::from(rows).saturating_sub(1));
+    for (n, line_idx) in (scroll..).take(usize::from(rows)).enumerate() {
+        let Some(row) = d.build.lines.get(line_idx) else {
+            break;
+        };
+        let text: String = row.iter().collect();
+        let line_y = y + n as u16;
+        put_text(
+            b,
+            body.x + 1,
+            line_y,
+            body.width.saturating_sub(2),
+            &crate::chrome::text::truncate_end(&text, body.width.saturating_sub(2) as usize),
+            Style::default()
+                .fg(if focused { p.text } else { p.overlay1 })
+                .bg(bg),
+        );
+        if focused && line_idx == d.build.row {
+            let prefix: String = row[..d.build.col.min(row.len())].iter().collect();
+            let room = body.width.saturating_sub(2);
+            let cx = body.x + 1 + (crate::chrome::text::display_width(&prefix) as u16).min(room);
+            hits.cursor = Some(crate::chrome::help::CursorState {
+                x: cx,
+                y: line_y,
+                visible: true,
+            });
+        }
+    }
+    hits.push(area, NsHit::BuildField);
+    y += rows;
+    if y < body.bottom() {
+        let hint = if d.build_text().is_empty() {
+            " empty — the producer will ask; alt+⏎ add a line, ^E editor, tab next"
+        } else {
+            " ^E editor, alt+⏎ add a line, tab next"
+        };
+        put_text(
+            b,
+            body.x,
+            y,
+            body.width,
+            &crate::chrome::text::truncate_end(hint, body.width as usize),
+            dim,
+        );
     }
 }
