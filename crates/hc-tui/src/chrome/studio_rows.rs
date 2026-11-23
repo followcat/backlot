@@ -84,7 +84,11 @@ pub(super) fn render_studio_row(
                 StudioKind::StageDown => ("◌", dim),
                 StudioKind::Live => ("·", Style::default().fg(palette.subtext0)),
             };
-            let tag = (*kind == StudioKind::StageDown).then_some("stage down");
+            // W1b: the name goes first and the tag shortens to `down`, so
+            // a 10-character id fits whole at the default 26-column
+            // sidebar beside the tag (`beta-tools  down`) instead of
+            // truncating to `beta-too…`.
+            let tag = (*kind == StudioKind::StageDown).then_some("down");
             let tag_width = tag.map_or(0, |tag| display_width(tag) + 1);
             let id_area = rect.width.saturating_sub(indent + 2 + tag_width);
             put_text(

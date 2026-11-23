@@ -456,3 +456,43 @@ async fn a_running_stage_keeps_the_cast_blank_not_the_stopped_line() {
         "a live studio's cast draws — {text}"
     );
 }
+
+// ---------- no truncation where it matters ----------
+
+#[tokio::test]
+async fn a_stage_down_row_keeps_a_twelve_character_id_whole_at_the_default_width() {
+    // host-b's ledger lists `beta-tools-2` (12 characters) with its
+    // stage down — the row must show it whole beside the short `down`
+    // tag at the default 26-column sidebar.
+    let mut app = stage_down_host_b();
+    app.studio_index.note_reply(
+        Some("host-b".into()),
+        false,
+        Instant::now(),
+        Ok(r#"{"studios":[{"name":"beta-tools-2","state":"live"}]}"#),
+    );
+    app.reconcile_published_view();
+    app.area = (120, 28);
+    let backend = draw_to(&mut app, 120, 28);
+    let sidebar: String = (0..28)
+        .map(|y| {
+            (0..26)
+                .map(|x| backend.buffer()[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    // The row reads `◌ beta-tools-2    down` — the id whole, no `…`.
+    let row = sidebar
+        .lines()
+        .find(|line| line.contains("beta-tools"))
+        .unwrap_or_else(|| panic!("the stage-down row: {sidebar}"));
+    assert!(
+        row.contains("beta-tools-2"),
+        "the 12-character id is whole — {row:?}"
+    );
+    assert!(!row.contains('…'), "no truncation — {row:?}");
+    assert!(row.contains(" down"), "the short tag — {row:?}");
+}

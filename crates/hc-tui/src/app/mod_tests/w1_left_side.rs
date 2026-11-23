@@ -91,10 +91,10 @@ async fn a_stage_down_machine_lists_its_studios_from_the_ledger() {
     app.area = (120, 28);
     let backend = draw_to(&mut app, 120, 28);
     let sidebar = sidebar_text(&backend);
-    // 26 columns with the scrollbar: the id keeps its head, the tag
-    // keeps its cells.
-    assert!(sidebar.contains("beta-too"), "{sidebar}");
-    assert!(sidebar.contains("stage down"), "{sidebar}");
+    // W1b: the name first and the shortened `down` tag keep a
+    // 10-character id whole at the default 26 columns.
+    assert!(sidebar.contains("beta-tools"), "whole id: {sidebar}");
+    assert!(sidebar.contains(" down"), "short tag: {sidebar}");
     let start = app
         .hit_map
         .studio_rows

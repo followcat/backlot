@@ -32,6 +32,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   machine holds them all) instead of `no studios`, and the cast says `stage stopped — s to start`
   instead of drawing blank.
 
+- **No truncated ids in the tree's stage-down row.** The tree's stage-down row puts the studio
+  name first and shortens its tag to `down`, so a 10–12 character id fits whole at the default
+  sidebar width instead of reading `beta-too…`.
+
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same
   `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the
