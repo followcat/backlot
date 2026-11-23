@@ -544,6 +544,49 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
+        // `recast` is the user's — a role terminal is refused before
+        // the ledger is read, exactly like `card apply`.
+        Cmd::Recast {
+            person,
+            runner,
+            model,
+            effort,
+            permission_profile,
+            reason,
+        } => {
+            // The new runner must launch here: the same supported and
+            // installed check `studio new --dry-run` runs, including
+            // the `[runner_env]` PATH write a runner past the
+            // inherited PATH needs.
+            let named = std::collections::BTreeSet::from([runner.clone()]);
+            crate::draft::check_runners(base, &named, env)?;
+            Ok(Box::new(move |state, _| {
+                let current = state
+                    .fixed_identity(&person)
+                    .cloned()
+                    .ok_or_else(|| Fail::refused(format!("no fixed role '{person}' recorded")))?;
+                let actor = ActorIdentity {
+                    runner,
+                    runner_version: None,
+                    model,
+                    effort,
+                    permission_profile: permission_profile
+                        .unwrap_or_else(|| current.permission_profile.clone()),
+                };
+                backlot_model::recast::check(state, &person, &actor)
+                    .map_err(|e| Fail::refused(e.to_string()))?;
+                Ok(pending(
+                    EventKind::RoleRecast {
+                        role: person,
+                        actor,
+                        reason: (!reason.is_empty()).then_some(reason),
+                        card: None,
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         // `approve` answers an open `permission prompt` attention on
         // the person — the model refuses when none is open (D9: no
         // prompt answered without a recorded decision).

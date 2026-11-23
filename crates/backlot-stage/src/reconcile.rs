@@ -198,6 +198,19 @@ pub fn terminal_name(studio: &str, role_key: &str) -> Option<String> {
     }
 }
 
+/// Whether a `role.recast` asks for a role's terminal to be replaced:
+/// the ledger carries a recast for it, and the identity it was started
+/// under is no longer the one wanted. Without a recast the desired
+/// identity is the cast file's own, and a recorded mismatch (an old
+/// log, an adopted terminal) is left alone.
+fn moved(state: &StudioState, role: &backlot_model::state::RoleState, want: &Start) -> bool {
+    state.recasts.iter().any(|r| r.role == want.role)
+        && role
+            .actor
+            .as_ref()
+            .is_some_and(|actor| !backlot_model::recast::same_identity(actor, &want.actor))
+}
+
 /// The role keys the ledger wants live right now — the nudge pass
 /// clears `owed` attention a role no longer desired still holds.
 pub(crate) fn wanted(studio: &str, state: &StudioState) -> BTreeSet<String> {
@@ -246,7 +259,29 @@ pub fn reconcile(
             match r.lifecycle() {
                 RoleLifecycle::Live => {
                     if wanted_keys.contains(key.as_str()) {
-                        if term.is_none() {
+                        let want = wanted
+                            .iter()
+                            .find(|w| w.role == *key)
+                            .expect("a wanted key has a Start");
+                        if moved(state, r, want) {
+                            // A recast: close the old terminal on
+                            // purpose so it is never counted as a
+                            // loss; the fresh start lands next tick,
+                            // after `role.closed` makes the role
+                            // startable again.
+                            if let Some(address) = term {
+                                recover::closed_records(state, key, &mut records, &mut cleared);
+                                stops.push(Action::Stop {
+                                    role: key.clone(),
+                                    terminal: name,
+                                    address,
+                                    close: true,
+                                    reason: "recast".into(),
+                                });
+                            } else {
+                                recover::lost_records(state, key, &mut records, &mut cleared);
+                            }
+                        } else if term.is_none() {
                             recover::lost_records(state, key, &mut records, &mut cleared);
                         }
                     } else if let Some(address) = term {
@@ -299,15 +334,34 @@ pub fn reconcile(
                             .iter()
                             .find(|w| w.role == *key)
                             .expect("a wanted key has a Start");
-                        recover::lost_actions(
-                            key,
-                            r,
-                            want,
-                            term.as_ref(),
-                            now_ms,
-                            &mut records,
-                            &mut starts,
-                        );
+                        if moved(state, r, want) {
+                            // A recast never resumes the old session:
+                            // it belongs to the runner that left. Free
+                            // a stale terminal on the name, then start
+                            // fresh under the new identity.
+                            if let Some(address) = term {
+                                stops.push(Action::Stop {
+                                    role: key.clone(),
+                                    terminal: name,
+                                    address,
+                                    close: false,
+                                    reason: String::new(),
+                                });
+                            }
+                            let mut fresh = want.clone();
+                            fresh.resume = None;
+                            starts.push(Action::Start(fresh));
+                        } else {
+                            recover::lost_actions(
+                                key,
+                                r,
+                                want,
+                                term.as_ref(),
+                                now_ms,
+                                &mut records,
+                                &mut starts,
+                            );
+                        }
                     }
                 }
             }
@@ -396,6 +450,8 @@ mod budget_tests;
 mod finish_tests;
 #[cfg(test)]
 mod limits_tests;
+#[cfg(test)]
+mod recast_tests;
 #[cfg(test)]
 mod recover_tests;
 #[cfg(test)]

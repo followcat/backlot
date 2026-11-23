@@ -480,6 +480,140 @@ async fn a_second_studio_new_card_is_stale_not_done() {
     assert_eq!(kinds, vec!["studio.created", "message.queued"], "{kinds:?}");
 }
 
+/// A recast card's new identity — a real runner the model rule knows.
+fn recast_actor(model: &str) -> backlot_model::event::ActorIdentity {
+    backlot_model::event::ActorIdentity {
+        runner: "fake".into(),
+        runner_version: None,
+        model: model.into(),
+        effort: Some("high".into()),
+        permission_profile: "standard".into(),
+    }
+}
+
+/// A `recast director` card proposed against the studio's current
+/// director identity (`actor("dir")`).
+fn propose_recast(hdir: &Path, model: &str, why: &str) {
+    happend(
+        hdir,
+        "hollywood",
+        HollywoodKind::CardProposed {
+            action: backlot_model::hollywood::CardAction::Recast {
+                studio: "acme-shop".into(),
+                person: "director".into(),
+                actor: recast_actor(model),
+            },
+            why: why.into(),
+            base: backlot_model::hollywood::CardBase::RoleIdentity {
+                actor: tk::actor("dir"),
+            },
+        },
+    );
+}
+
+/// A recast card lands exactly one `role.recast`, `by: user` with the
+/// card marker, and closes `card.done`; a second pass appends nothing.
+#[tokio::test]
+async fn an_applied_recast_card_runs_once() {
+    let base = tmp();
+    append(&base, "user", tk::studio_kind());
+    let hdir = store::hollywood_dir(&base);
+    propose_recast(&hdir, "new-model", "the runner keeps hitting a quota");
+    happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
+    let mut stage = new_stage().await;
+    stage.base = base.to_path_buf();
+
+    stage.hcards(&hdir).unwrap();
+    let sev = sevents(&base);
+    let recasts: Vec<&Value> = sev.iter().filter(|e| e["kind"] == "role.recast").collect();
+    assert_eq!(recasts.len(), 1, "{sev:?}");
+    let r = recasts[0];
+    assert_eq!(r["by"]["role"], "user", "{r}");
+    assert_eq!(r["role"], "director");
+    assert_eq!(r["actor"]["runner"], "fake");
+    assert_eq!(r["actor"]["model"], "new-model");
+    assert_eq!(r["card"], "c1");
+    let hev = hevents(&hdir);
+    assert_eq!(hev.last().unwrap()["kind"], "card.done", "{:?}", hev.last());
+
+    // The crash window: the action landed but `card.done` did not.
+    let before = sevents(&base).len();
+    stage.hcards(&hdir).unwrap();
+    assert_eq!(sevents(&base).len(), before, "the effect ran twice");
+}
+
+/// A base that moved between the apply and the execution records
+/// `card.stale` and appends nothing.
+#[tokio::test]
+async fn a_recast_card_whose_role_moved_is_stale() {
+    let base = tmp();
+    append(&base, "user", tk::studio_kind());
+    let hdir = store::hollywood_dir(&base);
+    propose_recast(&hdir, "new-model", "quota");
+    happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
+    // Someone recast the director first.
+    append(
+        &base,
+        "user",
+        EventKind::RoleRecast {
+            role: "director".into(),
+            actor: recast_actor("another-model"),
+            reason: Some("user's own".into()),
+            card: None,
+        },
+    );
+    let mut stage = new_stage().await;
+    stage.base = base.to_path_buf();
+
+    stage.hcards(&hdir).unwrap();
+    let last = hevents(&hdir).pop().unwrap();
+    assert_eq!(last["kind"], "card.stale", "{last}");
+    assert_eq!(
+        sevents(&base)
+            .iter()
+            .filter(|e| e["kind"] == "role.recast")
+            .count(),
+        1,
+        "the stale card still recast"
+    );
+}
+
+/// A crash between the append and `card.done`: the recast already in
+/// the ledger is this card's marker, so the next pass closes the card
+/// without a second recast.
+#[tokio::test]
+async fn an_already_landed_recast_card_does_not_repeat() {
+    let base = tmp();
+    append(&base, "user", tk::studio_kind());
+    let hdir = store::hollywood_dir(&base);
+    propose_recast(&hdir, "new-model", "quota");
+    happend(&hdir, "user", HollywoodKind::CardApplied { card: 1 });
+    // As if the first pass appended the recast then died.
+    append(
+        &base,
+        "user",
+        EventKind::RoleRecast {
+            role: "director".into(),
+            actor: recast_actor("new-model"),
+            reason: Some("quota".into()),
+            card: Some("c1".into()),
+        },
+    );
+    let mut stage = new_stage().await;
+    stage.base = base.to_path_buf();
+
+    stage.hcards(&hdir).unwrap();
+    let last = hevents(&hdir).pop().unwrap();
+    assert_eq!(last["kind"], "card.done", "{last}");
+    assert_eq!(
+        sevents(&base)
+            .iter()
+            .filter(|e| e["kind"] == "role.recast")
+            .count(),
+        1
+    );
+}
+
 /// An applied card runs whether or not `[hollywood]` is configured
 /// — the config gates the agent, never the gate.
 #[tokio::test]

@@ -128,6 +128,10 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 None => Err(Refusal::NoRole(role.clone())),
             }
         }
+        // Recasting a fixed role carries the cast file's identity rules
+        // and the studio's seat check — the same rule the CLI and a
+        // card's proposal run.
+        EventKind::RoleRecast { role, actor, .. } => crate::recast::check(state, role, actor),
         // `message.delivered` marks a queued message — or a report
         // sent to a role — as handed to its terminal.
         EventKind::MessageDelivered { target } => {

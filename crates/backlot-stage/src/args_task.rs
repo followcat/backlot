@@ -194,6 +194,58 @@ pub(crate) fn person(
     ))
 }
 
+/// `recast --person <role> --runner <r> --model <m> [--effort <e>]
+/// [--permission-profile standard|worktree] [--reason <r>]` — the
+/// user's recast of a fixed role.
+pub(crate) fn recast(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut person = None;
+    let mut runner = None;
+    let mut model = None;
+    let mut effort = None;
+    let mut permission_profile = None;
+    let mut reason = String::new();
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_RECAST)));
+        }
+        if common_flag(it, common, &arg, U_RECAST)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--person" => person = Some(it.value("--person", U_RECAST)?),
+            _ if eq(&arg, "--person").is_some() => person = eq(&arg, "--person").map(String::from),
+            "--runner" => runner = Some(it.value("--runner", U_RECAST)?),
+            _ if eq(&arg, "--runner").is_some() => runner = eq(&arg, "--runner").map(String::from),
+            "--model" => model = Some(it.value("--model", U_RECAST)?),
+            _ if eq(&arg, "--model").is_some() => model = eq(&arg, "--model").map(String::from),
+            "--effort" => effort = Some(it.value("--effort", U_RECAST)?),
+            _ if eq(&arg, "--effort").is_some() => effort = eq(&arg, "--effort").map(String::from),
+            "--permission-profile" => {
+                permission_profile = Some(it.value("--permission-profile", U_RECAST)?)
+            }
+            _ if eq(&arg, "--permission-profile").is_some() => {
+                permission_profile = eq(&arg, "--permission-profile").map(String::from)
+            }
+            "--reason" => reason = it.value("--reason", U_RECAST)?,
+            _ if eq(&arg, "--reason").is_some() => {
+                reason = eq(&arg, "--reason").unwrap_or_default().to_string()
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_RECAST)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Recast {
+            person: person.ok_or_else(|| usage("missing --person", U_RECAST))?,
+            runner: runner.ok_or_else(|| usage("missing --runner", U_RECAST))?,
+            model: model.ok_or_else(|| usage("missing --model", U_RECAST))?,
+            effort,
+            permission_profile,
+            reason,
+        },
+    ))
+}
+
 /// `priority --level`: the task is the common `--task`.
 pub(crate) fn priority(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut level = None;

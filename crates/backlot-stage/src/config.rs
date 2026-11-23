@@ -148,7 +148,23 @@ pub fn runner_env_for_home(
     runner: &str,
     home: &Path,
 ) -> Result<BTreeMap<String, String>, String> {
-    let files = env_files_in(text)?;
+    runner_env_layered_home(state_dir, text, "", runner, home)
+}
+
+/// The layered launch env, lowest first: `<state_dir>/agent.env` and
+/// the per-core `[env_file]` files, then the user config's
+/// `[runner_env.<runner>]` (never its `[env_file]`), then the
+/// per-core config's own `[runner_env.<runner>]` — which wins on any
+/// key it sets. Both configs report a malformed file the same way:
+/// the position only.
+pub fn runner_env_layered_home(
+    state_dir: &Path,
+    core_text: &str,
+    user_text: &str,
+    runner: &str,
+    home: &Path,
+) -> Result<BTreeMap<String, String>, String> {
+    let files = env_files_in(core_text)?;
     let mut paths = vec![state_dir.join("agent.env")];
     if let Some(d) = files.get("default") {
         paths.push(env_file_path(d, Some(home)));
@@ -164,7 +180,8 @@ pub fn runner_env_for_home(
             Err(e) => return Err(format!("{}: {e}", path.display())),
         }
     }
-    env.extend(runner_env_in(text, runner)?);
+    env.extend(runner_env_in(user_text, runner)?);
+    env.extend(runner_env_in(core_text, runner)?);
     Ok(env)
 }
 
@@ -180,6 +197,21 @@ pub fn runner_env_for(
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/"));
     runner_env_for_home(state_dir, text, runner, &home)
+}
+
+/// [`runner_env_layered_home`] with the process's own `HOME` — the
+/// stage's launch-time path.
+pub fn runner_env_layered(
+    state_dir: &Path,
+    core_text: &str,
+    user_text: &str,
+    runner: &str,
+) -> Result<BTreeMap<String, String>, String> {
+    let home = std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/"));
+    runner_env_layered_home(state_dir, core_text, user_text, runner, &home)
 }
 
 /// Hollywood's `[hollywood]` section: its runner identity, like a
@@ -608,5 +640,58 @@ mod tests {
         let text = "[env_file]\ndefault = \"~/.config/secrets/http-proxy.env\"\n";
         let env = runner_env_for_home(dir.path(), text, "claude", &home).unwrap();
         assert_eq!(env["P"], "from-home");
+    }
+
+    /// The user config's `[runner_env.<runner>]` is a lower layer than
+    /// the per-core one: a PATH written there by `hollywood setup` and
+    /// `studio new`'s wizard reaches the launch even with an empty
+    /// per-core config.
+    #[test]
+    fn user_runner_env_reaches_the_launch_below_the_core_config() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-user-env");
+        let user = "[runner_env.cmd]\nPATH = \"/opt/nvm/bin\"\n";
+        let env = runner_env_layered_home(dir.path(), "", user, "cmd", dir.path()).unwrap();
+        assert_eq!(env["PATH"], "/opt/nvm/bin");
+    }
+
+    /// The per-core config wins on any key both set.
+    #[test]
+    fn core_runner_env_beats_the_user_config() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-core-wins");
+        let user = "[runner_env.cmd]\nPATH = \"/opt/nvm/bin\"\nSHADOWED = \"user\"\n";
+        let core = "[runner_env.cmd]\nPATH = \"/core/bin\"\n";
+        let env = runner_env_layered_home(dir.path(), core, user, "cmd", dir.path()).unwrap();
+        assert_eq!(env["PATH"], "/core/bin");
+        assert_eq!(env["SHADOWED"], "user", "an unshadowed user key survives");
+    }
+
+    /// Only `[runner_env]` comes from the user config — its `[env_file]`
+    /// table is never read, so a user's file layer cannot sneak under
+    /// the per-core one.
+    #[test]
+    fn the_user_configs_env_file_is_ignored() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-user-env-file");
+        let extra = dir.join("user.env");
+        std::fs::write(&extra, "PROXY = user-file\n").unwrap();
+        let user = format!(
+            "[env_file]\ndefault = \"{}\"\n[runner_env.cmd]\nPATH = \"/opt/nvm/bin\"\n",
+            extra.display()
+        );
+        let env = runner_env_layered_home(dir.path(), "", &user, "cmd", dir.path()).unwrap();
+        assert_eq!(env["PATH"], "/opt/nvm/bin");
+        assert!(!env.contains_key("PROXY"), "{env:?}");
+    }
+
+    /// A malformed user config refuses like a malformed per-core one:
+    /// the position only, never a value beside it.
+    #[test]
+    fn a_malformed_user_config_refuses_with_position_only() {
+        let dir = crate::test_support::TestDir::new("backlot-cfg-user-bad");
+        let user = "[runner_env.cmd]\nHTTPS_PROXY = http://user:pw@host\n";
+        let err = runner_env_layered_home(dir.path(), "", user, "cmd", dir.path()).unwrap_err();
+        assert!(err.contains("malformed at line 2"), "{err}");
+        assert!(err.contains("column"), "{err}");
+        assert!(!err.contains("pw"), "{err}");
+        assert!(!err.contains("http"), "{err}");
     }
 }

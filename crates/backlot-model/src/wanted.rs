@@ -57,21 +57,29 @@ pub fn wanted_roles(state: &StudioState) -> Vec<Wanted> {
     };
     let mut out: Vec<Wanted> = Vec::new();
     if state.finished.is_none() {
+        // A fixed role's newest `role.recast` is the identity it is
+        // wanted under; the cast file's identity is the starting one.
+        let fixed = |role: &str, fallback: &ActorIdentity| {
+            state
+                .fixed_identity(role)
+                .cloned()
+                .unwrap_or_else(|| fallback.clone())
+        };
         out.push(Wanted {
             role: "producer".into(),
             task: None,
-            actor: cfg.roles.producer.clone(),
+            actor: fixed("producer", &cfg.roles.producer),
         });
         out.push(Wanted {
             role: "director".into(),
             task: None,
-            actor: cfg.roles.director.clone(),
+            actor: fixed("director", &cfg.roles.director),
         });
         if writer_wanted(state) {
             out.push(Wanted {
                 role: "writer".into(),
                 task: None,
-                actor: cfg.roles.writer.clone(),
+                actor: fixed("writer", &cfg.roles.writer),
             });
         }
         for t in state.tasks.values() {

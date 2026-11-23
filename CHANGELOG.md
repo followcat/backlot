@@ -10,6 +10,37 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Added
+
+- **Recasting a fixed role.** `backlot recast --person producer|director|writer
+  --runner <r> --model <m> [--effort <e>] [--permission-profile
+  standard|worktree] [--reason <r>]` records `role.recast` in the studio's
+  ledger. The reduced state uses the new identity for that role from then on;
+  every earlier event keeps the identity it recorded, so deliveries and reviews
+  stay attributed to whoever made them. The stage closes the old terminal with
+  `role.closed` (reason `recast` — never a loss) and starts a fresh conversation
+  under the same `bl-<studio>-<role>` name, never resuming the old runner's
+  session; queued messages stay queued for the new terminal, and its first
+  prompt says it takes the role over and must read `backlot status` and
+  `backlot records` first. The command reuses `studio new --dry-run`'s runner,
+  effort and cline-model rules and the studio's `[limits]` seat check, and is
+  the user's alone. Hollywood gains a `recast` card (`backlot hollywood propose
+  recast …`): its base is the role's current identity, its text reads `recast
+  director → cmd/deepseek-v4.1-flash`, and its execution records `role.recast`
+  `by: user` with the `c<n>` marker so a restart repeats nothing.
+
+### Fixed
+
+- **A user config's `[runner_env]` now reaches every role's launch.** `hollywood
+  setup` writes the runner's `PATH` into `~/.config/backlot/config.toml`, but the
+  stage read `[runner_env]` only from the per-core `config.toml`, so the next
+  Hollywood launch failed with `cannot start "cmd": No such file or directory`.
+  The stage now reads the user config's `[runner_env.<runner>]` as a lower layer
+  than the per-core one — `agent.env` and `[env_file]` first, then the user
+  config, then the per-core table, which wins on any key it sets. Only
+  `[runner_env]` is read from the user config; its `[env_file]` is ignored, and a
+  malformed user file refuses with the position only, like the per-core one.
+
 ### Changed
 
 - **Stopping the stage moved to the machine's menu.** `Stop stage…` is gone

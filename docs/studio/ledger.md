@@ -59,6 +59,7 @@ prints `already at ledger v1`.
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
 | `role.session` | role, session ID |
+| `role.recast` | role, new actor identity, reason, optional `card` |
 | `role.approval` | role, decision (`allow` or `deny`) |
 | `studio.finished` | reason |
 | `req.version` | version, file, summary |
@@ -83,6 +84,14 @@ prints `already at ledger v1`.
 replacement — so a deliberate stop is never mistaken for a loss, and a closed role keeps its actor
 identity and session ID: it stays resumable while its studio is live. A later `role.started` or
 `role.resumed` clears the closed state.
+
+`role.recast` swaps the identity a fixed role plays from then on. The reduced state uses the newest
+identity for that role; the lifecycle record and every earlier event keep the identity they were
+recorded with, so deliveries and reviews stay attributed to whoever made them. `card` is the `c<n>`
+marker when a card carried the event out, and works like the marker on `task.state` — a stage
+restart that finds it appends nothing twice. The stage carries a recast out by closing the old
+terminal (`role.closed`, reason `recast`) and starting a fresh `role.started` under the new
+identity; it never resumes the old session id, which belongs to the runner that left.
 
 `role.reopen` marks a closed person `held` on its reduced state: the stage wants it back and starts
 it with the session it closed with — the launch lands as `role.resumed` (reason `reopened`), not

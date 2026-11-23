@@ -245,6 +245,15 @@ pub enum CardAction {
     Resume { studio: String, task: String },
     /// Abandon a task that is not terminal.
     Abandon { studio: String, task: String },
+    /// Recast a fixed role onto a new identity (`role.recast`): close
+    /// the old terminal and start a fresh conversation.
+    Recast {
+        studio: String,
+        person: String,
+        /// The full new identity; a proposal fills the permission
+        /// profile from the role's current one when none is given.
+        actor: ActorIdentity,
+    },
 }
 
 impl CardAction {
@@ -257,7 +266,8 @@ impl CardAction {
             | CardAction::Priority { studio, .. }
             | CardAction::Pause { studio, .. }
             | CardAction::Resume { studio, .. }
-            | CardAction::Abandon { studio, .. } => studio,
+            | CardAction::Abandon { studio, .. }
+            | CardAction::Recast { studio, .. } => studio,
         }
     }
 
@@ -273,6 +283,9 @@ impl CardAction {
             CardAction::Pause { task, .. } => format!("pause {task}"),
             CardAction::Resume { task, .. } => format!("resume {task}"),
             CardAction::Abandon { task, .. } => format!("abandon {task}"),
+            CardAction::Recast { person, actor, .. } => {
+                format!("recast {person} → {}", crate::recast::identity_text(actor))
+            }
         }
     }
 }
@@ -297,6 +310,9 @@ pub enum CardBase {
     TaskPriority { was: Priority },
     /// The task had this status.
     TaskStatus { was: TaskStatus },
+    /// The fixed role played this identity — a recast that lands on
+    /// another one, or a finished studio, is stale.
+    RoleIdentity { actor: ActorIdentity },
 }
 
 // ── Staleness ──────────────────────────────────────────────────
@@ -364,6 +380,25 @@ pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>)
                 None => Some(format!("no task '{task}'")),
                 Some(t) if t.status == *was => None,
                 Some(t) => Some(format!("'{task}' is {} now", status_str(t.status))),
+            }
+        }
+        CardBase::RoleIdentity { actor } => {
+            let CardAction::Recast { person, .. } = action else {
+                return Some("base does not match the action".into());
+            };
+            let Some(s) = studio else {
+                return Some(format!("no studio '{name}'"));
+            };
+            if s.finished.is_some() {
+                return Some(format!("studio '{name}' is finished"));
+            }
+            match s.fixed_identity(person) {
+                None => Some(format!("no role '{person}'")),
+                Some(current) if crate::recast::same_identity(current, actor) => None,
+                Some(current) => Some(format!(
+                    "'{person}' is {} now",
+                    crate::recast::identity_text(current)
+                )),
             }
         }
     }

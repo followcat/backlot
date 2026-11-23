@@ -77,6 +77,15 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             )),
         };
     }
+    // Recasting a fixed role is the user's — a card's execution appends
+    // it under `by: user` too, so a role terminal never records one.
+    if let EventKind::RoleRecast { .. } = &new.kind {
+        return if role == "user" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the user"))
+        };
+    }
     if let Some(own) = actor_task(role) {
         return match &new.kind {
             EventKind::TaskDelivered { task, .. } => may_deliver(state, role, task),
@@ -143,6 +152,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::RoleRelease { .. }
         | EventKind::RoleApproval { .. }
         | EventKind::TaskPriority { .. } => "the user or the director",
+        EventKind::RoleRecast { .. } => "the user",
         EventKind::ReqVersion { .. } => "the producer or the user",
         EventKind::PlanPublished { .. } => "the writer",
         EventKind::TaskDelivered { .. } => "the task's current actor or the user",

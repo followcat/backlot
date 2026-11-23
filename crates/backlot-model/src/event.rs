@@ -358,6 +358,22 @@ pub enum EventKind {
     /// the ids adapters choose at launch).
     #[serde(rename = "role.session")]
     RoleSession { role: String, session_id: String },
+    /// Recast a fixed role onto a new identity (the user's, or a
+    /// card's carried out by the stage as the user). The reduced
+    /// state uses the newest identity for that role from then on;
+    /// every earlier event keeps the identity it recorded, so
+    /// deliveries and reviews stay attributed to whoever made them.
+    #[serde(rename = "role.recast")]
+    RoleRecast {
+        role: String,
+        actor: ActorIdentity,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        /// The `c<n>` marker when a card carried the event out — the
+        /// idempotence key on a restart, like `task.state`'s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        card: Option<String>,
+    },
     /// Ask to reopen a closed person (R19): sets `held` so the stage
     /// wants it back, resumed in the session it closed with. Refused
     /// unless the role is closed, has a session id and is not already
@@ -601,6 +617,7 @@ impl EventKind {
             EventKind::RoleResumed { .. } => "role.resumed",
             EventKind::RoleClosed { .. } => "role.closed",
             EventKind::RoleSession { .. } => "role.session",
+            EventKind::RoleRecast { .. } => "role.recast",
             EventKind::RoleReopen { .. } => "role.reopen",
             EventKind::RoleRelease { .. } => "role.release",
             EventKind::ReqVersion { .. } => "req.version",

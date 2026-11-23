@@ -141,6 +141,35 @@ pub enum Refusal {
         role: String,
         why: String,
     },
+    /// `role.recast` names a person that is not one of the three
+    /// fixed roles — an actor is recast through `cast`.
+    NotFixedRole(String),
+    /// `role.recast` names a runner with no adapter.
+    RunnerNotSupported(String),
+    /// `role.recast` sets an effort on a runner that carries none
+    /// (`cursor`, `cmd`).
+    EffortNotAllowed {
+        runner: String,
+    },
+    /// `role.recast` omits the effort a runner's rule requires.
+    EffortRequired {
+        runner: String,
+    },
+    /// `role.recast` gives a cline role a model that names no provider.
+    ModelNotSupported {
+        runner: String,
+        model: String,
+    },
+    /// `role.recast` names an unknown permission profile.
+    ProfileNotSupported(String),
+    /// A `role.recast` would leave a runner cap unable to seat the
+    /// studio's fixed roles.
+    LimitsUnseated {
+        runner: String,
+        cap: u32,
+    },
+    /// A `role.recast` whose new identity equals the current one.
+    RecastUnchanged(String),
 }
 
 impl fmt::Display for Refusal {
@@ -298,6 +327,39 @@ impl fmt::Display for Refusal {
                     f,
                     "the permission prompt on '{role}' is the user's — {why}; the director cannot answer it"
                 )
+            }
+            Refusal::NotFixedRole(role) => write!(
+                f,
+                "'{role}' is not a fixed role; an actor is recast with 'backlot cast --task <task> --actor <name>'"
+            ),
+            Refusal::RunnerNotSupported(runner) => write!(
+                f,
+                "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline, agy)"
+            ),
+            Refusal::EffortNotAllowed { runner } => write!(
+                f,
+                "runner '{runner}' takes no effort — the depth is part of the model id"
+            ),
+            Refusal::EffortRequired { runner } => write!(
+                f,
+                "runner '{runner}' needs an effort — 'cursor', 'devin', 'cmd' and 'opencode' carry none"
+            ),
+            Refusal::ModelNotSupported { runner, model } => write!(
+                f,
+                "runner '{runner}' needs a 'cline-pass/<model>' id, not '{model}'"
+            ),
+            Refusal::ProfileNotSupported(profile) => {
+                write!(
+                    f,
+                    "unknown permission profile '{profile}'; want standard|worktree"
+                )
+            }
+            Refusal::LimitsUnseated { runner, cap } => write!(
+                f,
+                "limits.{runner} = {cap} would leave the studio's fixed roles unseated"
+            ),
+            Refusal::RecastUnchanged(role) => {
+                write!(f, "'{role}' already runs that identity")
             }
         }
     }

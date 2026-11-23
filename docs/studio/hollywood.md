@@ -175,6 +175,7 @@ backlot hollywood propose pause --studio acme-shop --task t1 --why "actor is loo
 backlot hollywood propose abandon --studio acme-shop --task t1 --why "wrong approach" --as hollywood
 backlot hollywood propose priority --studio acme-shop --task t1 --level high --why "blocks t2" --as hollywood
 backlot hollywood propose close --studio acme-shop --person actor-t1-c1 --why "task done" --as hollywood
+backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "director's runner keeps returning a quota error" --as hollywood
 backlot card list
 backlot card apply c1
 backlot card cancel c2 --reason "not now"
@@ -183,9 +184,11 @@ backlot card cancel c2 --reason "not now"
 Each card carries the exact action, a one-line why, and its **base** — the fact about the studio
 that must still be true when you apply it. A `pause` card bases on the task running; a `studio-new`
 card bases on the name being free; `close`/`reopen` base on the person's lifecycle; a `priority`
-card records the level it replaces. `propose` refuses a card born stale — proposing `pause` on a
-task that is not running fails before the card exists — and `card apply` re-checks: a base that
-moved since proposal records `card.stale` with the reason instead of `card.applied`.
+card records the level it replaces; a `recast` card bases on the fixed role's current identity and
+on the studio not being finished. `propose` refuses a card born stale — proposing `pause` on a
+task that is not running fails before the card exists, and a `recast` runs the same validation as
+`backlot recast` — and `card apply` re-checks: a base that moved since proposal records
+`card.stale` with the reason instead of `card.applied`.
 
 The stage carries an applied card out once: it checks the base **again** (a base that moved since
 the apply records `card.stale` and nothing else happens), then records the action in the studio's
@@ -197,9 +200,18 @@ an effect already in the ledger records `card.done` without re-appending, so a r
 action and its record repeats nothing. Cards execute whether or not `[hollywood]` is configured:
 the config gates the agent, never the gate.
 
-Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`.
-Nothing else — in particular, no card answers a permission prompt; those stay yours, answered in
-the studio.
+Card actions (D18): `studio-new`, `close`, `reopen`, `priority`, `pause`, `resume`, `abandon`,
+`recast`. Nothing else — in particular, no card answers a permission prompt; those stay yours,
+answered in the studio.
+
+A `recast` card swaps the agent that plays a fixed role: `producer`, `director` or `writer`. Its
+text reads `recast director → cmd/deepseek-v4.1-flash` (`<runner>/<model>[/<effort>]`), and
+`card show` prints the old and the new identity. Applied, the stage closes the old terminal
+(`role.closed`, reason `recast` — a deliberate stop, never a loss) and starts a fresh conversation
+under the new identity. It never resumes the old session id: that conversation belongs to the
+runner that left. The ledger and the messages already queued for the role stay; the new terminal
+takes over the role's work. A recast while the old role has an open permission prompt still closes
+it. Only you may recast, and only while the studio is not finished.
 
 Every card outcome reaches Hollywood's inbox as a notice: applied, cancelled, done, failed, stale.
 

@@ -527,6 +527,51 @@ fn experimental_mode_appends_the_research_guidance() {
     }
 }
 
+/// A recast start's prompt says it takes the role over and names the
+/// two reads it owes first; a same-identity start gains nothing.
+#[test]
+fn a_recast_start_gets_the_takeover_section() {
+    use backlot_model::state::RoleState;
+    let dir = tmp();
+    let mut state = StudioState {
+        studio: Some(studio_config(Vec::new())),
+        ..StudioState::default()
+    };
+    state.roles.insert(
+        "director".into(),
+        RoleState {
+            live: true,
+            actor: Some(actor()),
+            ..RoleState::default()
+        },
+    );
+    let mut recast = start(RoleKind::Director, "director", None);
+    recast.actor = ActorIdentity {
+        model: "other".into(),
+        ..actor()
+    };
+    state.recasts.push(backlot_model::state::RecastRecord {
+        role: "director".into(),
+        actor: recast.actor.clone(),
+        reason: None,
+        card: None,
+        seq: 1,
+        ts_ms: 0,
+    });
+    let text = fs::read_to_string(prepare(&dir, "acme-shop", &recast, &state).unwrap()).unwrap();
+    assert!(text.contains("Taking over this role"), "{text}");
+    assert!(text.contains("backlot status --studio acme-shop"), "{text}");
+    assert!(
+        text.contains("backlot records --studio acme-shop"),
+        "{text}"
+    );
+
+    // The same identity is not a takeover.
+    let same = start(RoleKind::Director, "director", None);
+    let text = fs::read_to_string(prepare(&dir, "acme-shop", &same, &state).unwrap()).unwrap();
+    assert!(!text.contains("Taking over this role"), "{text}");
+}
+
 /// The first prompt is one line pointing at the rendered file; for
 /// `devin` the line itself lands in a file the argv names.
 #[test]

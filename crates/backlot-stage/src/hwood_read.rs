@@ -447,6 +447,21 @@ pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
             Err(e) => out.push_str(&format!("\nbrief {}: {e}", brief_path.display())),
         }
     }
+    // A recast card shows both identities: the one it replaces (the
+    // card's base) and the one it puts on.
+    if let (
+        backlot_model::hollywood::CardAction::Recast { person, actor, .. },
+        backlot_model::hollywood::CardBase::RoleIdentity { actor: old },
+    ) = (&card.action, &card.base)
+    {
+        out.push_str(&format!(
+            "\n{person}: {} ({}) → {} ({})",
+            backlot_model::recast::identity_text(old),
+            old.permission_profile,
+            backlot_model::recast::identity_text(actor),
+            actor.permission_profile,
+        ));
+    }
     Ok(out)
 }
 

@@ -491,6 +491,22 @@ pub struct CorrectionRecord {
     pub set: BTreeMap<String, String>,
 }
 
+/// A `role.recast` record: the newest identity a fixed role plays
+/// from `seq` on. Earlier deliveries and reviews keep the identity
+/// they were recorded with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecastRecord {
+    pub role: String,
+    pub actor: ActorIdentity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The `c<n>` marker a card's execution carries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<String>,
+    pub seq: u64,
+    pub ts_ms: u64,
+}
+
 /// A whole studio folded from its log.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StudioState {
@@ -515,6 +531,10 @@ pub struct StudioState {
     /// `role.approval` records, in log order.
     #[serde(default)]
     pub approvals: Vec<ApprovalRecord>,
+    /// `role.recast` records, in log order — the newest identity for
+    /// a fixed role wins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recasts: Vec<RecastRecord>,
     /// `studio.finished`; `Some` means the studio ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finished: Option<FinishRecord>,
@@ -562,6 +582,26 @@ impl StudioState {
 
     pub fn open_attention(&self) -> impl Iterator<Item = &Attention> {
         self.attention.iter().filter(|a| a.open)
+    }
+
+    /// The identity a fixed role plays now: the newest `role.recast`
+    /// for it, else the `studio.created` cast. `None` for an actor
+    /// key — actors are recast through `cast`, not `role.recast`.
+    pub fn fixed_identity(&self, role: &str) -> Option<&ActorIdentity> {
+        let cfg = self.studio.as_ref()?;
+        if !matches!(role, "producer" | "director" | "writer") {
+            return None;
+        }
+        self.recasts
+            .iter()
+            .rev()
+            .find(|r| r.role == role)
+            .map(|r| &r.actor)
+            .or(match role {
+                "producer" => Some(&cfg.roles.producer),
+                "director" => Some(&cfg.roles.director),
+                _ => Some(&cfg.roles.writer),
+            })
     }
 }
 

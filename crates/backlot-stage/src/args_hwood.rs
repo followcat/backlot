@@ -4,6 +4,7 @@
 
 use std::path::PathBuf;
 
+use backlot_model::event::ActorIdentity;
 use backlot_model::hollywood::CardAction;
 
 use crate::args::*;
@@ -47,8 +48,9 @@ pub enum CardCmd {
 
 pub(crate) const U_HOLLYWOOD: &str = "usage:
   backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] \
-[--level low|normal|high] [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] --why <line>
-       actions: studio-new | close | reopen | priority | pause | resume | abandon
+[--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] \
+[--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] --why <line>
+       actions: studio-new | close | reopen | priority | pause | resume | abandon | recast
   backlot hollywood report \"<headline>\" [--body <f>]
   backlot hollywood show <seq>
   backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>]";
@@ -107,6 +109,9 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
     let mut repo = None;
     let mut cast = None;
     let mut brief = None;
+    let mut runner = None;
+    let mut model = None;
+    let mut effort = None;
     let mut why = None;
     let mut no_git = false;
     while let Some(arg) = it.next() {
@@ -139,6 +144,12 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
             _ if eq(&arg, "--cast").is_some() => cast = eq(&arg, "--cast").map(PathBuf::from),
             "--brief" => brief = Some(PathBuf::from(it.value("--brief", U_HOLLYWOOD)?)),
             _ if eq(&arg, "--brief").is_some() => brief = eq(&arg, "--brief").map(PathBuf::from),
+            "--runner" => runner = Some(it.value("--runner", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--runner").is_some() => runner = eq(&arg, "--runner").map(String::from),
+            "--model" => model = Some(it.value("--model", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--model").is_some() => model = eq(&arg, "--model").map(String::from),
+            "--effort" => effort = Some(it.value("--effort", U_HOLLYWOOD)?),
+            _ if eq(&arg, "--effort").is_some() => effort = eq(&arg, "--effort").map(String::from),
             "--no-git" => no_git = true,
             "--why" => why = Some(it.value("--why", U_HOLLYWOOD)?),
             _ if eq(&arg, "--why").is_some() => why = eq(&arg, "--why").map(String::from),
@@ -187,6 +198,23 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
                 "pause" => CardAction::Pause { studio, task },
                 "resume" => CardAction::Resume { studio, task },
                 _ => CardAction::Abandon { studio, task },
+            }
+        }
+        "recast" => {
+            let studio = studio("--studio")?;
+            let person = person.ok_or_else(|| usage("missing --person", U_HOLLYWOOD))?;
+            CardAction::Recast {
+                studio,
+                person,
+                actor: ActorIdentity {
+                    runner: runner.ok_or_else(|| usage("missing --runner", U_HOLLYWOOD))?,
+                    runner_version: None,
+                    model: model.ok_or_else(|| usage("missing --model", U_HOLLYWOOD))?,
+                    effort,
+                    // Filled from the role's current identity when the
+                    // card is resolved, before it is stored.
+                    permission_profile: String::new(),
+                },
             }
         }
         other => return Err(usage(format!("unknown card action '{other}'"), U_HOLLYWOOD)),
