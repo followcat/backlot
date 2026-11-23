@@ -135,16 +135,50 @@ fn rules_per_role() {
 #[test]
 fn settings_written_fresh() {
     let allow = vec!["Shell(backlot)".to_string()];
-    let text = String::from_utf8(settings_content(None, &allow, &[]).unwrap()).unwrap();
+    let text = String::from_utf8(settings_content(None, &allow, &[], &[]).unwrap()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
         v["permissions"],
-        serde_json::json!({"allow": ["Shell(backlot)"], "deny": []})
+        serde_json::json!({
+            "allow": ["Shell(backlot)"],
+            "deny": [],
+            "additionalDirectories": [],
+        })
     );
     // Corrupt content is healed, not preserved.
     let healed =
-        String::from_utf8(settings_content(Some(b"not json"), &allow, &[]).unwrap()).unwrap();
+        String::from_utf8(settings_content(Some(b"not json"), &allow, &[], &[]).unwrap()).unwrap();
     assert_eq!(healed, text);
+}
+
+/// `permissions.additionalDirectories` is what the tool permission
+/// check reads — `--add-dir` only feeds the model's `<workspace>`
+/// context — so the stage writes the directory into the file, both
+/// fresh and spliced into an existing one.
+#[test]
+fn settings_carry_additional_directories() {
+    let allow = vec!["Shell(backlot)".to_string()];
+    let dirs = vec!["/home/user/state/studios/acme-shop".to_string()];
+    let fresh = String::from_utf8(settings_content(None, &allow, &[], &dirs).unwrap()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&fresh).unwrap();
+    assert_eq!(
+        v["permissions"]["additionalDirectories"],
+        serde_json::json!(["/home/user/state/studios/acme-shop"])
+    );
+    // An existing file keeps its other keys and replaces the list.
+    let existing = "{\n  \"authInfo\": \"fake-token\",\n  \"permissions\": {\"allow\": [], \"deny\": [], \"additionalDirectories\": [\"/old\"]}\n}\n";
+    let spliced =
+        String::from_utf8(settings_content(Some(existing.as_bytes()), &allow, &[], &dirs).unwrap())
+            .unwrap();
+    assert!(
+        spliced.contains("\"authInfo\": \"fake-token\""),
+        "{spliced}"
+    );
+    let v: serde_json::Value = serde_json::from_str(&spliced).unwrap();
+    assert_eq!(
+        v["permissions"]["additionalDirectories"],
+        serde_json::json!(["/home/user/state/studios/acme-shop"])
+    );
 }
 
 /// An existing settings file keeps every other byte — whitespace
@@ -156,7 +190,7 @@ fn settings_splice_preserves_unrelated_bytes() {
     let allow = vec!["Shell(backlot)".to_string()];
     let deny = vec!["mcp__paid-tools".to_string()];
     let out =
-        String::from_utf8(settings_content(Some(existing.as_bytes()), &allow, &deny).unwrap())
+        String::from_utf8(settings_content(Some(existing.as_bytes()), &allow, &deny, &[]).unwrap())
             .unwrap();
     assert!(
         out.contains("\"authInfo\": {\"k\": \"fake-token\"}"),
@@ -168,7 +202,7 @@ fn settings_splice_preserves_unrelated_bytes() {
     assert_eq!(v["permissions"]["deny"][0], "mcp__paid-tools");
     // No `permissions` key yet — the member is appended.
     let added = String::from_utf8(
-        settings_content(Some(b"{\"authInfo\": \"fake-token\"}"), &allow, &[]).unwrap(),
+        settings_content(Some(b"{\"authInfo\": \"fake-token\"}"), &allow, &[], &[]).unwrap(),
     )
     .unwrap();
     assert!(added.contains("\"authInfo\": \"fake-token\""), "{added}");
@@ -217,6 +251,7 @@ fn prepare_writes_the_settings_file() {
     let prep = CmdPrep {
         settings: cwd.join(".commandcode/settings.json"),
         allow: allow_rules("director", &[check("unit", "cargo test")]),
+        additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
         global_mcp: home.join(".commandcode/mcp.json"),
     };
     assert!(!prepare(&prep).unwrap());
@@ -228,6 +263,10 @@ fn prepare_writes_the_settings_file() {
     assert_eq!(
         v["permissions"]["deny"],
         serde_json::json!(["mcp__paid-tools"])
+    );
+    assert_eq!(
+        v["permissions"]["additionalDirectories"],
+        serde_json::json!(["/home/user/state/studios/acme-shop"])
     );
     // An empty HOME lookup is an error, not a skipped mask.
     let prep = CmdPrep {
@@ -258,6 +297,7 @@ fn prepare_errors_never_carry_content() {
     let prep = CmdPrep {
         settings: cwd.join(".commandcode/settings.json"),
         allow: vec!["Shell(backlot)".into()],
+        additional_dirs: vec!["/state/studios/acme-shop".into()],
         global_mcp: mcp,
     };
     let err = prepare(&prep).unwrap_err();
@@ -389,4 +429,98 @@ fn plan_carries_its_prep() {
     );
     assert!(p.allow.contains(&"Shell(git add:*)".to_string()));
     assert_eq!(p.global_mcp, Path::new("/home/user/.commandcode/mcp.json"));
+    assert_eq!(p.additional_dirs, ["/home/user/state/studios/acme-shop"]);
+}
+
+/// A studio role's prepared settings name its studio state directory
+/// under `permissions.additionalDirectories` — the key the tool
+/// permission check reads, the one that stops the outside-workspace
+/// prompt. `--add-dir` alone does not.
+#[test]
+#[cfg(unix)]
+fn prepare_for_a_studio_role_writes_the_studio_dir() {
+    let dir = tmp("prep-studio");
+    let home = dir.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let cwd = dir.join("work");
+    fs::create_dir_all(&cwd).unwrap();
+    let cwd = cwd.to_string_lossy().into_owned();
+    let studio_dir = "/home/user/state/studios/acme-shop";
+    let env = BTreeMap::from([("HOME".to_string(), home.to_string_lossy().into_owned())]);
+    let ident = ActorIdentity {
+        runner: "cmd".into(),
+        runner_version: None,
+        model: "m".into(),
+        effort: None,
+        permission_profile: "standard".into(),
+    };
+    let ctx = LaunchCtx {
+        terminal: "bl-s-actor-t1-c1",
+        cwd: &cwd,
+        prompt: None,
+        resume: None,
+        studio_dir,
+        stage_env: &env,
+        role: "actor-t1-c1",
+        checks: &[],
+    };
+    let l = plan(&ident, &ctx).unwrap();
+    let Some(Prep::Cmd(p)) = l.prep else {
+        panic!("cmd launch carries its prep")
+    };
+    assert_eq!(p.additional_dirs, [studio_dir]);
+    prepare(&p).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&p.settings).unwrap()).unwrap();
+    assert_eq!(
+        v["permissions"]["additionalDirectories"],
+        serde_json::json!([studio_dir])
+    );
+}
+
+/// Hollywood's prepared settings name `<base>/studios`, the sibling
+/// of its `<base>/hollywood` cwd — the directory its `--add-dir`
+/// passes, so every studio's state files are readable without a
+/// prompt.
+#[test]
+#[cfg(unix)]
+fn prepare_for_hollywood_names_the_studios_dir() {
+    let dir = tmp("prep-hollywood");
+    let home = dir.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let base = dir.join("state");
+    let hdir = base.join("hollywood");
+    fs::create_dir_all(&hdir).unwrap();
+    let cwd = hdir.to_string_lossy().into_owned();
+    let studios = base.join("studios").to_string_lossy().into_owned();
+    let env = BTreeMap::from([("HOME".to_string(), home.to_string_lossy().into_owned())]);
+    let ident = ActorIdentity {
+        runner: "cmd".into(),
+        runner_version: None,
+        model: "m".into(),
+        effort: None,
+        permission_profile: "standard".into(),
+    };
+    let ctx = LaunchCtx {
+        terminal: "bl-hollywood",
+        cwd: &cwd,
+        prompt: None,
+        resume: None,
+        studio_dir: &cwd,
+        stage_env: &env,
+        role: "hollywood",
+        checks: &[],
+    };
+    let l = plan(&ident, &ctx).unwrap();
+    let Some(Prep::Cmd(p)) = l.prep else {
+        panic!("cmd launch carries its prep")
+    };
+    assert_eq!(p.additional_dirs, [studios.as_str()]);
+    prepare(&p).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&p.settings).unwrap()).unwrap();
+    assert_eq!(
+        v["permissions"]["additionalDirectories"],
+        serde_json::json!([studios])
+    );
 }

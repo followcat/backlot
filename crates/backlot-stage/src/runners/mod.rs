@@ -58,7 +58,8 @@ pub enum Prep {
     /// `cli-config.json` permissions and its MCP-off list.
     Cursor(cursor::CursorPrep),
     /// cmd's workdir `.commandcode/settings.json` — the role's
-    /// allow rules and its MCP-server deny mask.
+    /// allow rules, its MCP-server deny mask and the directories the
+    /// permission check may read past the workspace.
     Cmd(cmd::CmdPrep),
     /// cline's work-area hook, its MCP mask file and signals file.
     Cline(cline::ClinePrep),

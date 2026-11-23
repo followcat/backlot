@@ -261,11 +261,16 @@ rewrites the global `reasoningEffort.<model>` key, so a `cmd` cast with `effort`
 `studio new` and the adapter emits nothing.
 
 The launch always passes `--add-dir <dir>` — the studio state directory for a role,
-and `<base>/studios` for Hollywood, the sibling of its `<base>/hollywood` cwd — so the
-stage-sent message files (`<studio dir>/messages/<n>-….md`), prompts and requirement files
-sit inside cmd's workspace and reading them never prompts. A role's cwd is its worktree, so
-without the flag every message read stopped at `Outside the workspace`. The flag is per
-run and rides fresh and resumed launches alike.
+and `<base>/studios` for Hollywood, the sibling of its `<base>/hollywood` cwd. The flag
+only feeds the model's `<workspace>` context: the tool permission check builds its runtime
+without the add-dir list, so the flag alone does **not** stop the
+`Outside the workspace — …` prompt (measured on 1.93). What stops it is
+`permissions.additionalDirectories` in the same project settings file, written with the
+same directory beside `allow` and `deny` (the stage owns those three keys and keeps every
+other member). A role's cwd is its worktree and Hollywood's is `hollywood/`, so without
+it a stage-sent message file (`<studio dir>/messages/<n>-….md`), prompt or requirement
+read stayed at the prompt and the guarded send never delivered. Both the flag and the
+key ride fresh and resumed launches alike.
 
 cmd mints the session uuid itself, so a session is found after launch: the newest
 `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/` created at or after the launch —

@@ -31,6 +31,15 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **A cmd role's extra directory really stops the outside-workspace prompt.**
+  `--add-dir` only feeds the model's `<workspace>` context; the tool permission check
+  builds its runtime without that list and reads
+  `permissions.additionalDirectories` from the project settings file instead. The
+  stage now writes the same directory there — the studio state directory for a role,
+  `<base>/studios` for Hollywood — beside `allow` and `deny`, splicing into an
+  existing file and keeping every other key. So a stage-sent message read no longer
+  stops at `Outside the workspace — …`. The `--add-dir` flag stays: it still gives
+  the model the directory as context.
 - **cmd roles and Hollywood read their state files without a prompt.** A `cmd`
   launch now passes `--add-dir`: the studio's state directory for a studio role,
   and `<base>/studios` for Hollywood, the sibling of its `<base>/hollywood` cwd.
