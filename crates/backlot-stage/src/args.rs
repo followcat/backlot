@@ -152,6 +152,9 @@ pub enum Cmd {
     },
     StudioFinish {
         reason: String,
+        /// `--force`: finish a studio with no requirement and no
+        /// tasks anyway (L5).
+        force: bool,
     },
     /// `studio prune`: remove a finished studio's worktrees and
     /// `backlot/<studio>/*` branches — never its ledger.

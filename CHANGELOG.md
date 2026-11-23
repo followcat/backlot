@@ -184,6 +184,11 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **Finishing an empty studio needs `--force`.** `studio finish` on a studio with no requirement and
+  no tasks refuses (`nothing was built yet (no requirement, no tasks) — add --force to finish
+  anyway`).
+- **Finishing clears stale questions.** A finished studio shows no open `tell user`: the finish is
+  the answering event, so the producer's old `What would you like us to build?` no longer lingers.
 - **`close` is plain, and fixed seats stay open.** `close` on the producer, director or writer now
   refuses with `the <role> is a fixed seat — use restart, or finish the studio`, and on an actor
   that is not held with `the <role> has nothing to close — it closes with its task`. No more

@@ -130,6 +130,8 @@ mod draft_tests;
 #[cfg(test)]
 mod exchange_read_tests;
 #[cfg(test)]
+mod finish_guard_tests;
+#[cfg(test)]
 mod finish_sweep_tests;
 #[cfg(test)]
 mod gitcmd_tests;

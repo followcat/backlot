@@ -767,11 +767,17 @@ When everything is accepted, tell the producer; on your word it records — or y
 backlot studio finish --reason "all tasks accepted" --studio acme-shop --as user
 ```
 
-`studio finish` refuses while any task is open and names them. From then on the stage stops
-scheduling the studio; producer and director close like any released role, and only a person you
-explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --as user`, or Enter
-twice on a closed row — brings the person back into its recorded runner session; a person whose
-session id was never found has nothing to resume into, and the panel says so.
+`studio finish` refuses while any task is open and names them. A studio with no requirement and no
+tasks refuses too — `nothing was built yet (no requirement, no tasks) — add --force to finish
+anyway` — so a just-made studio is not finished by accident; `--force` finishes it. From then on
+the stage stops scheduling the studio; producer and director close like any released role, and
+only a person you explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --as
+user`, or Enter twice on a closed row — brings the person back into its recorded runner session; a
+person whose session id was never found has nothing to resume into, and the panel says so.
+
+Finishing also answers every open question: a role's unanswered `tell user` — the producer's
+`What would you like us to build?` — no longer shows as the studio's last message or as `asks you`
+on its row. The finish is the answering event, so a finished studio shows no open question.
 
 Finishing also clears the studio's windows. A closed role's program is killed, and if the core
 kept its finished terminal record — the leftover `new`, `cast · <id>` and `producer` panes reading

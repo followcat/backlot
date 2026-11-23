@@ -237,6 +237,9 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             if state.finished.is_some() {
                 return Err(Refusal::AlreadyFinished);
             }
+            // `--force` on the command line records a finish over an
+            // empty studio; the guard is the CLI's, and an accidental
+            // finish of a just-made studio is what it is for (L5).
             let mut open: Vec<String> = state
                 .tasks
                 .values()

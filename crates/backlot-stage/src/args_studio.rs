@@ -128,10 +128,13 @@ pub(crate) fn repo_path(repo: &str) -> Result<String, Fail> {
     })
 }
 
-/// `studio finish`: an optional `--reason`, refused while any task
-/// is open — the check is the model's, this only collects the text.
+/// `studio finish [--reason <r>] [--force]`: the reason is optional
+/// and open tasks refuse the finish — the check is the model's.
+/// `--force` finishes a studio with no requirement and no tasks
+/// (L5); the empty-studio guard is the CLI's.
 pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut reason = String::new();
+    let mut force = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -144,10 +147,11 @@ pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common,
             _ if eq(&arg, "--reason").is_some() => {
                 reason = eq(&arg, "--reason").map(String::from).unwrap_or_default()
             }
+            "--force" => force = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
         }
     }
-    Ok((std::mem::take(common), Cmd::StudioFinish { reason }))
+    Ok((std::mem::take(common), Cmd::StudioFinish { reason, force }))
 }
 
 /// `studio prune [<studio> | --all-finished] [--dry-run] [--force]`:
@@ -271,8 +275,8 @@ pub(crate) fn studio_migrate(common: &mut Common, it: &mut It) -> Result<(Common
 
 /// `studio list [--json]` — every studio under every core's state
 /// directory; read-only, so no studio name is required. Its own help
-/// says what the default read covers and how `--remote <host>`
-/// widens it.
+/// says what the default read covers and how `--remote <host>` widens
+/// it.
 pub(crate) fn studio_list(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut json = false;
     while let Some(arg) = it.next() {

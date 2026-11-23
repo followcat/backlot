@@ -109,6 +109,8 @@ pub enum Refusal {
     RestartClosed(String),
     /// `restart` on a finished studio.
     RestartFinished,
+    /// `studio finish` on a studio with no requirement and no tasks.
+    NothingBuilt,
     RoleTerminalTaken {
         role: String,
         other: String,
@@ -307,6 +309,10 @@ impl fmt::Display for Refusal {
             Refusal::RestartFinished => {
                 write!(f, "the studio is finished — reopen or restore it first")
             }
+            Refusal::NothingBuilt => write!(
+                f,
+                "nothing was built yet (no requirement, no tasks) — add --force to finish anyway"
+            ),
             Refusal::RoleTerminalTaken { role, other } => write!(
                 f,
                 "cannot reopen '{role}': live role '{other}' uses its terminal name"

@@ -179,7 +179,7 @@ fn finish_is_for_user_and_producer() {
     studio(&scratch, &env);
     let msg = refused(&env, "studio finish --as director");
     assert!(msg.contains("the user or the producer"), "{msg}");
-    ok(&env, "studio finish --as user");
+    ok(&env, "studio finish --force --as user");
 }
 
 /// `backlot attention clear` resolves a still-open attention by

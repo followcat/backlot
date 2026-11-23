@@ -67,7 +67,7 @@ fn a_studio_on_another_core_resolves_for_reads_and_writes() {
 
     // A write command resolved against core-a lands on core-b's log.
     let (common, cmd) = parse(&argv(
-        "studio finish --studio aiflows --reason done --as user",
+        "studio finish --studio aiflows --reason done --force --as user",
     ))
     .unwrap();
     let out = crate::cli::exec_event(common, cmd, &env, &core_a).unwrap();
