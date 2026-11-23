@@ -264,6 +264,23 @@ fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
     assert!(!line.contains("agent-a"), "{line}");
 }
 
+/// S2: a newer install puts one dim line at the foot of the lot.
+#[test]
+fn a_newer_install_draws_the_restart_line_at_the_foot() {
+    let summary = summary();
+    let mut panel = panel(PanelMode::Expanded);
+    panel.update = Some(crate::panel::UpdateHint {
+        version: "0.3.1".into(),
+    });
+    let area = Rect::new(0, 0, 100, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(
+        text.contains("backlot 0.3.1 installed — restart the client to update (q, then backlot)"),
+        "{text}"
+    );
+}
+
 #[test]
 fn an_attention_adds_a_bang_line_under_the_person() {
     let mut value = summary_json();

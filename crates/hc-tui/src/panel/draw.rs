@@ -464,6 +464,16 @@ pub(crate) fn render(
                     dim,
                 );
             }
+            Row::Update { text } => {
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    &truncate_end(text, rect.width as usize),
+                    dim,
+                );
+            }
         }
         if paints {
             // `▌` over the row's left edge — inside the block border

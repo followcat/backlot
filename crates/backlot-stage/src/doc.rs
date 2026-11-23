@@ -128,6 +128,7 @@ mod tests {
                 .collect(),
             hollywood: None,
             backlot_version: None,
+            backlot_build: None,
         }
     }
 

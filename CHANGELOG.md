@@ -18,6 +18,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   model form. The state word keeps the right edge: the model drops first, then the tag,
   and the name gives cells before either can push the state off the row.
 
+- **"Restart to update".** When the local stage's published `backlot_version` (with its
+  published `backlot_build`, compared once the versions are equal) or an installed
+  `backlot --version` from the six-hour machine probe is newer than the running client,
+  one dim line closes the lot: `backlot <new> installed — restart the client to update
+  (q, then backlot)`. Strict semver decides; an older stage never draws it.
+
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same
   `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the

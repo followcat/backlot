@@ -268,6 +268,13 @@ pub struct Summary {
     /// probing (U6c). Documents an older stage wrote read as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backlot_version: Option<String>,
+    /// The build id the stage was compiled with, when the build
+    /// provided one (`BACKLOT_BUILD_ID`). Two builds of the same
+    /// version still differ in code, so the client's update hint
+    /// compares this once the versions are equal. Absent on loads
+    /// that carried no id — the document then says only its version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlot_build: Option<String>,
 }
 
 impl Summary {
@@ -596,5 +603,6 @@ pub fn summary_with_exchange(
         studios: out,
         hollywood: None,
         backlot_version: None,
+        backlot_build: None,
     }
 }

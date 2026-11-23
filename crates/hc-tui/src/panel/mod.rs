@@ -18,6 +18,7 @@ pub(crate) mod remote;
 mod row_lines;
 mod rows;
 mod rows_fit;
+mod update;
 
 pub(crate) use config::{
     CallSheetStart, PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,
@@ -28,6 +29,7 @@ pub(crate) use remote::RemoteRunner;
 pub(crate) use row_lines::{info_line, owed_text};
 pub(crate) use rows::{Row, Target, rows};
 pub(crate) use rows_fit::{health_of, mark_counts};
+pub(crate) use update::{UpdateHint, newest};
 
 /// How the panel sits on screen. The default is `Expanded`: the
 /// dock opens on its column beside the panes. A window too narrow
@@ -96,6 +98,11 @@ pub(crate) struct Panel {
     /// setup` while no `[hollywood]` table exists (R22). Set by
     /// `set_hollywood` — a client-local flag, never read from a doc.
     pub hollywood_hint: bool,
+    /// S2: a newer installed `backlot` than this client runs — the
+    /// foot of the lot says the client must be relaunched. Derived
+    /// from the local stage's published version and the version probe
+    /// before each draw (`App::update_hint`).
+    pub update: Option<UpdateHint>,
 }
 
 #[cfg(test)]
@@ -125,6 +132,7 @@ impl Panel {
             // The flag stays off until `set_hollywood` reads the
             // config — panel-only construction draws no hint.
             hollywood_hint: false,
+            update: None,
         }
     }
 

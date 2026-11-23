@@ -142,6 +142,14 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
   their configured labels (`alt ↑↓ studio  ←→ role`). Focused: the panel's own keys
   (`↑↓ move  m menu  ? keys  esc` — `esc back` over an overlay). Dropped under 8 rows.
+- **Restart to update:** while a source says a newer `backlot` is installed than the
+  running client, one dim line closes the lot:
+  `backlot <new> installed — restart the client to update (q, then backlot)`. The sources
+  are the local stage's published `backlot_version`/`backlot_build` and any installed
+  `backlot --version` the six-hour machine probe answered. Versions compare as strict
+  semver; equal versions fall back to the published build id when both sides have one.
+  An older version never draws the line, and an unparseable side is ignored rather than
+  guessed at.
 - The collapsed **strip** shows each studio as `● <id·machine>` with its `<done>/<total>`
   or `!<n>` — health first, then attention — and one row per active or blocked role,
   `<mark> <name> <task>`; it is never blank while work is alive.
