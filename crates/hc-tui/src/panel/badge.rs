@@ -1,25 +1,23 @@
 //! A person row's right-hand tail (L4): the dim runner tag before the
 //! state word and, while the line has room, the short model before the
-//! tag. The state word owns the right edge, so neither can push it off;
-//! the model drops first, then the tag, and the name takes what is
-//! left.
+//! tag. The state word owns the right edge, and the badge spends only
+//! cells left over after the whole name and task — the model goes first,
+//! then the tag, before either can cost the name a cell.
 
 use backlot_model::summary::RoleSummary;
 
 use crate::chrome::text::display_width;
 use crate::studio::glyphs::short_model;
 
-/// The fewest cells the name keeps for itself before a tail piece is
-/// dropped — enough for a person's own name plus the cut mark.
-const MIN_NAME: u16 = 6;
-/// The most cells the model may take — [`short_model`] already cuts
-/// to 10, this keeps a hostile document string honest.
+/// The most cells the model may take — [`short_model`] already cuts to
+/// 10, this keeps a hostile document string honest.
 const MAX_MODEL: u16 = 10;
 
 /// What a row can carry beside the name.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct Tail {
-    /// The name column's width once the tail took its cells.
+    /// The name column's width — the full name at least, or all the
+    /// cells that are left when the name alone overflows.
     pub name_width: u16,
     /// The short model, drawn before the runner tag.
     pub model: Option<String>,
@@ -46,16 +44,23 @@ impl Tail {
 }
 
 /// The tail for a `row_width`-wide line whose state word is
-/// `state_width` cells: `│ <mark> <name> [model] [runner] <state> │`.
-/// Every piece keeps one blank cell before it, including the state, so
-/// the tag and model never touch it. The state's cells are reserved
-/// first, then the name's floor; a piece that would eat into the floor
-/// is dropped — the model before the runner.
-pub(crate) fn tail(role: &RoleSummary, state_width: u16, row_width: u16) -> Tail {
+/// `state_width` cells and whose name plus flag need `name_need` cells:
+/// `│ <mark> <name> [model] [runner] <state> │`. Every piece keeps one
+/// blank cell before it, including the state.
+///
+/// The name is reserved first. The runner then takes what is left over;
+/// the model takes what is left after that. So as the row narrows the
+/// model disappears first, then the runner — the name and task lose a
+/// cell only when they alone overflow.
+pub(crate) fn tail(role: &RoleSummary, name_need: u16, state_width: u16, row_width: u16) -> Tail {
     // Cells between the name column (x+4) and the state's first cell,
     // one of which is the blank before the state.
-    let room = row_width.saturating_sub(1 + state_width).saturating_sub(4);
-    let mut avail = room.saturating_sub(1);
+    let before_state = row_width
+        .saturating_sub(1 + state_width)
+        .saturating_sub(4)
+        .saturating_sub(1);
+    let mut spare = before_state.saturating_sub(name_need);
+    let mut used = 0;
     let runner = role
         .runner
         .as_deref()
@@ -63,8 +68,9 @@ pub(crate) fn tail(role: &RoleSummary, state_width: u16, row_width: u16) -> Tail
         .map(str::to_owned)
         .filter(|runner| {
             let width = display_width(runner) as u16;
-            if avail >= width + 1 + MIN_NAME {
-                avail -= width + 1;
+            if spare > width {
+                spare -= width + 1;
+                used += width + 1;
                 true
             } else {
                 false
@@ -77,15 +83,16 @@ pub(crate) fn tail(role: &RoleSummary, state_width: u16, row_width: u16) -> Tail
         .filter(|model| !model.is_empty())
         .filter(|model| {
             let width = (display_width(model) as u16).min(MAX_MODEL);
-            if avail >= width + 1 + MIN_NAME {
-                avail -= width + 1;
+            if spare > width {
+                spare -= width + 1;
+                used += width + 1;
                 true
             } else {
                 false
             }
         });
     Tail {
-        name_width: avail,
+        name_width: before_state.saturating_sub(used),
         model,
         runner,
     }

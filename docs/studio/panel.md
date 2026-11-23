@@ -124,8 +124,9 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   prompt, and the state word right-aligned. Before the state word sit the dim runner tag
   (`claude`, `cmd`, `agy`, `codex`, `devin`, `cursor`, `cline`, `opencode`, `fake`) and,
   while the frame has room, the short model form the cast uses — the same truncation with
-  `…`. The state word keeps the right edge: the model drops first, then the runner tag,
-  and only the name gives cells before either can push the state off the row. A user-owned
+  `…`. The state word keeps the right edge, and the name and task keep their cells: the
+  badge spends only spare space, dropping the model first, then the runner tag. The name
+  truncates only when it alone overflows. A user-owned
   prompt adds a cue line
   `! <attention>  [y/d/p]` — or `! <attention> · answer in its terminal (Enter)` when the runner
   has no approval key (`opencode`, `cline`, `agy`), since `y`/`d` would send nothing; a

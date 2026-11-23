@@ -256,12 +256,10 @@ pub(super) fn draw_person(
     );
     // `name · task ↑` left — the state word keeps the right edge,
     // with the dim runner tag before it and the short model before
-    // that while the line has room (L4).
+    // that only in cells the whole name leaves spare (L4).
     let state = mark.word();
     let badge = matches!(mark, Person::UserPrompt | Person::DirPrompt);
     let state_width = display_width(state) as u16 + u16::from(badge) * 2;
-    let tail = super::badge::tail(role, state_width, rect.width);
-    let name_width = tail.name_width;
     let flag = role.priority.and_then(PriorityMark::of);
     let flag_width = flag.map_or(0, |f| display_width(f.glyph()) + 1) as u16;
     let mut name = role.name.clone();
@@ -269,6 +267,9 @@ pub(super) fn draw_person(
         name.push_str(" · ");
         name.push_str(task);
     }
+    let name_need = display_width(&name) as u16 + flag_width;
+    let tail = super::badge::tail(role, name_need, state_width, rect.width);
+    let name_width = tail.name_width;
     let name_text = truncate_end(&name, name_width.saturating_sub(flag_width) as usize);
     let drawn_name_width = display_width(&name_text) as u16;
     put_text(

@@ -15,8 +15,9 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 - **The lot shows who runs on what.** Every person row in the studio dock now carries a
   dim runner tag before its state word (`claude`, `cmd`, `agy`, `codex`, `devin`,
   `cursor`, `cline`, `opencode`, `fake`) and, while the frame has room, the cast's short
-  model form. The state word keeps the right edge: the model drops first, then the tag,
-  and the name gives cells before either can push the state off the row.
+  model form. The state word keeps the right edge and the name and task keep their cells:
+  the badge uses only spare space, dropping the model first, then the tag, so the name
+  truncates only when it alone overflows.
 
 - **"Restart to update".** When the local stage's published `backlot_version` (with its
   published `backlot_build`, compared once the versions are equal) or an installed

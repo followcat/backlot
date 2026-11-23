@@ -264,6 +264,30 @@ fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
     assert!(!line.contains("agent-a"), "{line}");
 }
 
+/// L4: the badge uses only spare cells — at a 36-column dock a long
+/// task keeps every cell and the runner tag drops.
+#[test]
+fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["task"] = serde_json::json!("task-1234567890");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 36, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.contains("alice · task-1234567890"), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
+    assert!(line.trim_end().ends_with("working│"), "{line}");
+}
+
 /// S2: a newer install puts one dim line at the foot of the lot.
 #[test]
 fn a_newer_install_draws_the_restart_line_at_the_foot() {
