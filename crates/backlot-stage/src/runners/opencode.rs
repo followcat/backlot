@@ -20,12 +20,6 @@ fn new_session_id() -> String {
     id
 }
 
-/// The id a live opencode terminal's argv chose: the value after `-s`.
-pub fn session_in_argv(argv: &[String]) -> Option<String> {
-    let flag = argv.iter().position(|a| a == "-s")?;
-    argv.get(flag + 1).cloned()
-}
-
 /// The `provider/model` ids `opencode models` printed for the
 /// measured account's configured providers — the whole pair is
 /// what `OPENCODE_CONFIG_CONTENT`'s `model` takes. Another
@@ -53,11 +47,6 @@ pub const MODELS: &[&str] = &[
     "longcat/LongCat-2.5-Preview",
     "ollama/qwen2.5:0.5b",
 ];
-
-/// No effort: the argv carries none — `OPENCODE_CONFIG_CONTENT`
-/// gets only `model`, and a provider's own effort knob differs
-/// per provider, so the runner declares none.
-pub const EFFORTS: &[&str] = &[];
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {

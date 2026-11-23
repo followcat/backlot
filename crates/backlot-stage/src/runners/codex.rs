@@ -27,11 +27,6 @@ pub const MODELS: &[&str] = &[
     "gpt-5.6-luna",
 ];
 
-/// `model_reasoning_effort`'s union across the CLI's own model
-/// list — `ultra` only on most models; a per-model refusal is
-/// codex's own to make.
-pub const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
-
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     match identity.permission_profile.as_str() {
         "standard" | "worktree" => {}

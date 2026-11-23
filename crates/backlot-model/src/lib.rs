@@ -15,6 +15,7 @@
 
 pub mod attention;
 pub mod budget;
+pub mod caps;
 pub mod casting;
 pub mod correct;
 pub mod event;

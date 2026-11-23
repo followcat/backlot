@@ -50,12 +50,9 @@ fn draft_text(io: &Io, mode: backlot_model::event::StudioMode) -> Result<String,
             "no supported runner is installed — the wizard cannot draft a cast",
         ));
     };
-    let effort = |runner: &str| {
-        if matches!(runner, "cursor" | "devin" | "cmd" | "opencode") {
-            String::new()
-        } else {
-            "effort = \"medium\"\n".to_string()
-        }
+    let effort = |runner: &str| match backlot_model::caps::get(runner).map(|c| c.effort) {
+        Some(backlot_model::caps::Effort::Required(_)) => "effort = \"medium\"\n".to_string(),
+        _ => String::new(),
     };
     let role = |runner: &str, model: &str| {
         format!(

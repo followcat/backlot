@@ -48,10 +48,6 @@ pub const CMD_PREP_FAILED: &str = "cmd prep failed";
 /// name; another provider's id still goes in as free text.
 pub const MODELS: &[&str] = &["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-pro"];
 
-/// No effort: cmd's `--effort` writes the global config rather
-/// than setting the run's (measured), so the argv carries none.
-pub const EFFORTS: &[&str] = &[];
-
 /// The per-launch filesystem work: the workdir's settings file and
 /// where the user's MCP servers are listed.
 #[derive(Debug, Clone, PartialEq)]
@@ -302,16 +298,6 @@ pub fn session_at(
         }
     }
     best.map(|(_, id)| id)
-}
-
-/// The session id a live cmd terminal's argv carries: the value
-/// after `-r`/`--resume` (an id or a `-n` name — both resume) or
-/// `--session` — how an adopted resumed role recovers its id.
-pub fn session_in_argv(argv: &[String]) -> Option<String> {
-    let flag = argv
-        .iter()
-        .position(|a| a == "-r" || a == "--resume" || a == "--session")?;
-    argv.get(flag + 1).cloned()
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {

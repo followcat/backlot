@@ -48,10 +48,6 @@ pub const MODELS: &[&str] = &[
     "claude-haiku-5-5",
 ];
 
-/// `--effort`'s accepted values, `claude --help` — the whole list,
-/// which an older binary may shorten at launch.
-pub const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
-
 /// `--permission-mode`'s value for the profile.
 fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     match profile {
@@ -131,20 +127,6 @@ pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) 
     rules.join(",")
 }
 
-/// The hook events the per-session settings file registers — every
-/// one a `command` hook running the binary's own `hook` subcommand,
-/// no matcher so all of them fire (S9f).
-const HOOK_EVENTS: &[&str] = &[
-    "UserPromptSubmit",
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "PermissionRequest",
-    "Notification",
-    "Stop",
-    "StopFailure",
-];
-
 /// POSIX single-quoting for the settings file's command line: `'` is
 /// written `'\''`. A studio directory can hold spaces or quotes.
 pub(crate) fn sh_quote(s: &str) -> String {
@@ -173,7 +155,11 @@ pub(crate) fn hook_setup(ctx: &LaunchCtx) -> HookSetup {
         sh_quote(&signals.to_string_lossy())
     );
     let hook = serde_json::json!({"type": "command", "command": command, "timeout": 5});
-    let events: serde_json::Map<String, serde_json::Value> = HOOK_EVENTS
+    // Every event the caps name — a `command` hook running the
+    // binary's own `hook` subcommand, no matcher so all of them fire
+    // (S9f).
+    let events: serde_json::Map<String, serde_json::Value> = backlot_model::caps::CLAUDE
+        .hooks
         .iter()
         .map(|e| {
             (
@@ -212,13 +198,6 @@ pub(crate) fn live_exe(
     };
     let stripped = std::path::PathBuf::from(base);
     if exists(&stripped) { stripped } else { path }
-}
-
-/// The session id a live claude terminal's argv chose: the value
-/// after `--session-id`, or after `-r` when it was a resume.
-pub fn session_in_argv(argv: &[String]) -> Option<String> {
-    let flag = argv.iter().position(|a| a == "--session-id" || a == "-r")?;
-    argv.get(flag + 1).cloned()
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {

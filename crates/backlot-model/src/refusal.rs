@@ -336,14 +336,14 @@ impl fmt::Display for Refusal {
                 f,
                 "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline, agy)"
             ),
-            Refusal::EffortNotAllowed { runner } => write!(
-                f,
-                "runner '{runner}' takes no effort — the depth is part of the model id"
-            ),
-            Refusal::EffortRequired { runner } => write!(
-                f,
-                "runner '{runner}' needs an effort — 'cursor', 'devin', 'cmd' and 'opencode' carry none"
-            ),
+            Refusal::EffortNotAllowed { runner } => f.write_str(&crate::caps::effort_message(
+                runner,
+                crate::caps::EffortProblem::NotAllowed,
+            )),
+            Refusal::EffortRequired { runner } => f.write_str(&crate::caps::effort_message(
+                runner,
+                crate::caps::EffortProblem::Missing,
+            )),
             Refusal::ModelNotSupported { runner, model } => write!(
                 f,
                 "runner '{runner}' needs a 'cline-pass/<model>' id, not '{model}'"

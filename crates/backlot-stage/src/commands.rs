@@ -132,12 +132,11 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
     if let Some((runner, _)) = cast.limits.iter().find(|(_, cap)| **cap == 0) {
         return Err(Fail::usage(format!("limits.{runner} must be at least 1")));
     }
-    // `cursor` and `devin` carry the thinking depth in the model id
-    // — no effort flag exists. `cmd`'s `--effort` writes the global
-    // config (measured), and `opencode`'s argv ignores the value,
-    // so they take none either. A set effort on a runner that
-    // carries none would lie in the ledger; every other runner that
-    // consumes it still needs it declared.
+    // The effort rule is the runner's caps: required (with its
+    // levels), accepted-and-ignored, or absent. A level set on a
+    // runner with no setting would lie in the ledger, so it is
+    // refused; an optional one is carried but the adapter emits no
+    // flag.
     let roles = [
         ("producer", &cast.producer.runner, &cast.producer.effort),
         ("director", &cast.director.runner, &cast.director.effort),
@@ -148,24 +147,10 @@ pub(crate) fn read_cast(path: &Path) -> Result<CastFile, Fail> {
             .iter()
             .map(|c| (c.name.as_str(), &c.runner, &c.effort)),
     ) {
-        let effort = effort.as_deref().unwrap_or_default();
-        if runner.as_str() == "cursor" && !effort.is_empty() {
+        if let Err(problem) = backlot_model::caps::check_effort(runner, effort.as_deref()) {
             return Err(Fail::usage(format!(
-                "{who}: runner 'cursor' has no effort flag — \
-                 the depth is part of the model id"
-            )));
-        }
-        if runner.as_str() == "cmd" && !effort.is_empty() {
-            return Err(Fail::usage(format!(
-                "{who}: runner 'cmd' cannot take an effort — \
-                 `--effort` writes the global config"
-            )));
-        }
-        if !matches!(runner.as_str(), "cursor" | "devin" | "cmd" | "opencode") && effort.is_empty()
-        {
-            return Err(Fail::usage(format!(
-                "{who}: runner '{runner}' needs an effort — 'cursor', 'devin', 'cmd' and \
-                 'opencode' carry none"
+                "{who}: {}",
+                backlot_model::caps::effort_message(runner, problem)
             )));
         }
     }

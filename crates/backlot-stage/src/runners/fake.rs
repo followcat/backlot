@@ -15,10 +15,6 @@ use super::{Launch, LaunchCtx, PlanError, Session, probe};
 /// dialog, anything else a plain run — `m` is the draft's.
 pub const MODELS: &[&str] = &["m", "trust"];
 
-/// The test double accepts any effort and ignores it — the names
-/// exist so cast checks and pickers have a list to exercise.
-pub const EFFORTS: &[&str] = &["low", "medium", "high"];
-
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {
     let _ = ctx.resume; // the script stays the same; the id re-derives.
     let mut env = std::collections::BTreeMap::new();
