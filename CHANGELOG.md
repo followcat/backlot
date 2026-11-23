@@ -82,6 +82,20 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **A permission prompt is found and named whatever the terminal's width.** A
+  `bl-hollywood` resized to 21 columns, with cmd's picker on screen and its
+  structured status `kind: permission` / `state: blocked`, published `work:
+  blocked` but no prompt row: `hollywood_prompt` still gated on the
+  width-sensitive screen classifier, and its detail took only the line under the
+  sentence — a middle fragment of a wrapped command. The prompt now stands
+  whenever the combined signal says blocked (structured status, hook signal or
+  screen), the detail is unwrapped from the title or `needs to` sentence down to
+  `Press [ctrl+e]` or the picker (cmd's whole command, the other runners'
+  question), and a prompt no channel names publishes `permission prompt`. Picker
+  detection joins the screen's lines first — cmd's wrapped `❯ 1. Yes` /
+  `2. Yes, don't ask` / `3. No` is enough — for roles and Hollywood alike; cmd's
+  and cline's prompt blocks also open at their sentence/banner when a narrow
+  screen has scrolled the `─` rule away.
 - **An agy role's session is found again on agy 1.5.14.** The conversation db no longer always
   embeds the workspace's `file://` URI, so the byte scan found nothing and the role raised
   `session not found` after 60 s. The stage now reads agy's own
