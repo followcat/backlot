@@ -39,12 +39,10 @@ pub(crate) fn fake_runner_override(stage_value: Option<&str>) -> Option<String> 
 }
 
 /// Every runner name `plan` has an adapter for — the dry-run's
-/// "runner supported" check without building a launch.
+/// "runner supported" check without building a launch. The caps are
+/// the list.
 pub fn supported(runner: &str) -> bool {
-    matches!(
-        runner,
-        "fake" | "claude" | "codex" | "devin" | "opencode" | "cursor" | "cmd" | "cline" | "agy"
-    )
+    backlot_model::caps::get(runner).is_some()
 }
 
 /// The program the runner's argv leads with — `None` for `fake`,

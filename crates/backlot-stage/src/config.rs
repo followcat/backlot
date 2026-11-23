@@ -302,18 +302,12 @@ fn hollywood_in(text: &str) -> Result<Option<HollywoodCfg>, String> {
     }))
 }
 
-/// The cast file's effort rule applied to Hollywood's own runner:
-/// `cursor`, `devin`, `cmd` and `opencode` carry no effort flag;
-/// every other runner needs one declared. `hollywood setup`
-/// refuses on the same rule `hollywood_in` rejects with.
+/// The cast file's effort rule applied to Hollywood's own runner —
+/// the same caps the cast reads. `hollywood setup` refuses on the
+/// same rule `hollywood_in` rejects with.
 pub(crate) fn effort_rule(runner: &str, effort: Option<&str>) -> Result<(), String> {
-    if matches!(runner, "cursor" | "cmd") && effort.is_some() {
-        return Err(format!("hollywood.runner '{runner}' takes no effort"));
-    }
-    if !matches!(runner, "cursor" | "devin" | "cmd" | "opencode") && effort.is_none() {
-        return Err(format!("hollywood.runner '{runner}' needs an effort"));
-    }
-    Ok(())
+    backlot_model::caps::check_effort(runner, effort)
+        .map_err(|problem| backlot_model::caps::effort_message(runner, problem))
 }
 
 /// Read `[hollywood]` from the user config; a missing file or section
@@ -502,9 +496,9 @@ mod tests {
         let err =
             hollywood_in("[hollywood]\nrunner = \"cursor\"\nmodel = \"m\"\neffort = \"high\"\n")
                 .unwrap_err();
-        assert!(err.contains("takes no effort"), "{err}");
+        assert!(err.contains("has no effort setting"), "{err}");
         let err = hollywood_in("[hollywood]\nrunner = \"fake\"\nmodel = \"m\"\n").unwrap_err();
-        assert!(err.contains("needs an effort"), "{err}");
+        assert!(err.contains("takes an effort"), "{err}");
         let cfg = hollywood_in("[hollywood]\nrunner = \"devin\"\nmodel = \"m\"\n")
             .unwrap()
             .unwrap();

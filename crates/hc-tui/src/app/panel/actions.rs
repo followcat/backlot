@@ -75,7 +75,7 @@ impl App {
         self.open_peek(terminal);
         if let Some(peek) = self.peek.as_mut() {
             peek.studio_title = Some(studio_title);
-            if role.attention_user {
+            if role.attention_user && role.can_answer_prompt {
                 peek.prompt = Some((key.clone(), role.role.clone()));
             }
         }
@@ -105,6 +105,12 @@ impl App {
         else {
             return;
         };
+        // A prompt on a runner that cannot answer sends nothing for the
+        // key — the row's own `answer in its terminal (Enter)` says so,
+        // and `y`/`d` record no decision here.
+        if !role.can_answer_prompt {
+            return;
+        }
         if role.attention_user {
             self.run_action(studio_cmds::decide(&key, &role.role, allow));
         } else if role.attention_seq.is_some() {

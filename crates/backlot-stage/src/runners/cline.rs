@@ -34,10 +34,6 @@ pub const MODEL_NOT_SUPPORTED: &str = "model not supported";
 /// The cast effort is not one cline's `--thinking` takes.
 pub const EFFORT_NOT_SUPPORTED: &str = "effort not supported";
 
-/// The effort levels `--thinking` takes, lowest first. `xhigh` is
-/// the top — cline has no `max`.
-pub const EFFORTS: &[&str] = &["none", "low", "medium", "high", "xhigh"];
-
 /// The `cline-pass/<model>` ids the ClinePass provider listed for
 /// the measured account — the only ones [`provider`] accepts; any
 /// other provider's id is a plan refusal, not a catalog entry.
@@ -71,15 +67,16 @@ pub fn provider(model: &str) -> Option<&'static str> {
     (head == "cline-pass" && !rest.is_empty()).then_some("cline-pass")
 }
 
-/// The `--thinking` value for a cast effort: one of [`EFFORTS`], or
-/// nothing when the cast declares none. Anything else is a refusal
-/// naming the effort — the flag would be rejected by cline, or worse,
-/// read as something else.
+/// The `--thinking` value for a cast effort: one of the runner's caps'
+/// levels, or nothing when the cast declares none. Anything else is a
+/// refusal naming the effort — the flag would be rejected by cline, or
+/// worse, read as something else.
 pub fn thinking(effort: Option<&str>) -> Result<Option<&'static str>, PlanError> {
     let Some(effort) = effort else {
         return Ok(None);
     };
-    EFFORTS
+    let levels = backlot_model::caps::CLINE.effort.levels();
+    levels
         .iter()
         .find(|e| **e == effort)
         .copied()
@@ -88,7 +85,7 @@ pub fn thinking(effort: Option<&str>) -> Result<Option<&'static str>, PlanError>
             reason: EFFORT_NOT_SUPPORTED,
             detail: format!(
                 "effort '{effort}' is not one cline's --thinking takes ({})",
-                EFFORTS.join(", ")
+                levels.join(", ")
             ),
         })
 }
@@ -195,13 +192,6 @@ pub fn session_at(
         }
     }
     best.map(|(_, id)| id)
-}
-
-/// The session id a live cline terminal's argv carries: the value
-/// after `--id` — how an adopted resumed role recovers its id.
-pub fn session_in_argv(argv: &[String]) -> Option<String> {
-    let at = argv.iter().position(|a| a == "--id")?;
-    argv.get(at + 1).cloned()
 }
 
 /// The per-launch filesystem work: the permission hook in the work

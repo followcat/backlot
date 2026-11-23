@@ -20,9 +20,14 @@ impl App {
         allow: bool,
     ) {
         let machines = self.panel_summaries();
-        let owned = crate::panel::data::studio(&machines, studio)
-            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role))
-            .is_some_and(|r| r.attention_user);
+        let found = crate::panel::data::studio(&machines, studio)
+            .and_then(|s| s.studio.roles.iter().find(|r| r.role == role));
+        // A runner that cannot answer sends nothing: the key records no
+        // decision and the row already says to answer in the terminal.
+        if found.is_some_and(|r| !r.can_answer_prompt) {
+            return;
+        }
+        let owned = found.is_some_and(|r| r.attention_user);
         if owned {
             self.run_action(studio_cmds::decide(studio, role, allow));
         } else {
@@ -58,11 +63,13 @@ impl App {
     fn hollywood_peek(&mut self, studio: &StudioKey, role: &str) {
         let machines = self.panel_summaries();
         let found = crate::panel::data::studio(&machines, studio).and_then(|s| {
-            s.studio
-                .roles
-                .iter()
-                .find(|r| r.role == role)
-                .map(|r| (r.terminal.clone(), r.attention_user, r.name.clone()))
+            s.studio.roles.iter().find(|r| r.role == role).map(|r| {
+                (
+                    r.terminal.clone(),
+                    r.attention_user && r.can_answer_prompt,
+                    r.name.clone(),
+                )
+            })
         });
         match found {
             Some((Some(terminal), attention_user, role_name)) => {

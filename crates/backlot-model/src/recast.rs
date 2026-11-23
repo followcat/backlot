@@ -42,24 +42,19 @@ pub fn identity_text(actor: &ActorIdentity) -> String {
     }
 }
 
-/// The cast file's effort rule, as `studio new` applies it.
+/// The cast file's effort rule, as `studio new` applies it — the
+/// runner's caps decide.
 fn check_effort(actor: &ActorIdentity) -> Result<(), Refusal> {
-    let effort = actor.effort.as_deref().filter(|e| !e.is_empty());
-    if matches!(actor.runner.as_str(), "cursor" | "cmd") && effort.is_some() {
-        return Err(Refusal::EffortNotAllowed {
+    use crate::caps::{self, EffortProblem};
+    match caps::check_effort(&actor.runner, actor.effort.as_deref()) {
+        Ok(()) => Ok(()),
+        Err(EffortProblem::Missing) => Err(Refusal::EffortRequired {
             runner: actor.runner.clone(),
-        });
-    }
-    if !matches!(
-        actor.runner.as_str(),
-        "cursor" | "devin" | "cmd" | "opencode"
-    ) && effort.is_none()
-    {
-        return Err(Refusal::EffortRequired {
+        }),
+        Err(EffortProblem::NotAllowed) => Err(Refusal::EffortNotAllowed {
             runner: actor.runner.clone(),
-        });
+        }),
     }
-    Ok(())
 }
 
 /// A cline model is a `cline-pass/<model>` id; any other names no

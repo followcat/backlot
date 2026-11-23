@@ -6,6 +6,8 @@
 //! tick ([`decide_start`]); `fake` is exempt.
 
 pub mod agy;
+#[cfg(test)]
+pub(crate) mod caps_doc;
 pub mod claude;
 pub mod cline;
 mod cline_hook;
@@ -224,10 +226,7 @@ pub enum StartDecision {
 /// (`Session::PostLaunch` on a `Launch`; this answers the same
 /// question for a live role that only has its actor identity).
 pub fn post_launch_session(runner: &str) -> bool {
-    matches!(
-        runner,
-        "codex" | "devin" | "cursor" | "cmd" | "cline" | "agy"
-    )
+    backlot_model::caps::get(runner).is_some_and(|c| c.post_launch_session())
 }
 
 /// The tick's decision for one pending start. Plan and config errors
@@ -288,8 +287,8 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
 
 /// The session id derivable without the terminal: `fake` from the
 /// name. Chosen-at-launch ids (claude, opencode) sit in the terminal's
-/// argv — [`claude::session_in_argv`], [`opencode::session_in_argv`]
-/// find them there; codex and devin ids are found after launch.
+/// argv — [`session_in_argv`] finds them there; codex and devin ids
+/// are found after launch.
 pub fn session_id(identity: &ActorIdentity, terminal: &str) -> Option<String> {
     match identity.runner.as_str() {
         "fake" => Some(format!("fake-{terminal}")),
@@ -298,21 +297,17 @@ pub fn session_id(identity: &ActorIdentity, terminal: &str) -> Option<String> {
 }
 
 /// The session id a runner chose at launch, read back from a live
-/// terminal's argv — how an adopted claude or opencode role recovers
-/// its id without a `role.started` to carry it.
+/// terminal's argv — how an adopted claude, opencode, cmd, cline or
+/// agy role recovers its id without a `role.started` to carry it.
+/// The flags are the runner's caps' [`backlot_model::caps::Resume::Argv`];
+/// a runner whose resume flag the stage does not read back (devin,
+/// cursor) and codex's `resume <id>` subcommand answer `None`.
 pub fn session_in_argv(runner: &str, argv: &[String]) -> Option<String> {
-    match runner {
-        "claude" => claude::session_in_argv(argv),
-        "opencode" => opencode::session_in_argv(argv),
-        // `-r` takes the resumed id or the `-n` name alike.
-        "cmd" => cmd::session_in_argv(argv),
-        // `--id` names a resumed session; a fresh launch's id is the
-        // manifest's.
-        "cline" => cline::session_in_argv(argv),
-        // `--conversation <id>` resumes; `-c`/`--continue` carry none.
-        "agy" => agy::session_in_argv(argv),
-        _ => None,
-    }
+    let backlot_model::caps::Resume::Argv(flags) = backlot_model::caps::get(runner)?.resume else {
+        return None;
+    };
+    let at = argv.iter().position(|a| flags.contains(&a.as_str()))?;
+    argv.get(at + 1).cloned()
 }
 
 /// The workspace's `tools/` directory, resolved at build time from
@@ -399,6 +394,8 @@ mod agy_session_tests;
 mod agy_tests;
 #[cfg(test)]
 mod argv_tests;
+#[cfg(test)]
+mod caps_tests;
 #[cfg(test)]
 mod cline_hook_json_tests;
 #[cfg(test)]

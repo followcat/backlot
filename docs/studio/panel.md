@@ -120,7 +120,9 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
   prompt, and the state word right-aligned. A user-owned prompt adds a cue line
-  `! <attention>  [y/d/p]`; a director-owned one reads `! prompt · director reviewing`. A
+  `! <attention>  [y/d/p]` — or `! <attention> · answer in its terminal (Enter)` when the runner
+  has no approval key (`opencode`, `cline`, `agy`), since `y`/`d` would send nothing; a
+  director-owned one reads `! prompt · director reviewing`. A
   needs-you attention, an unanswered question or a stuck episode adds its own
   `needs you · …` / `asks you · …` / `stuck · …` line; an `info` attention adds none and shows
   only in the drawer and the sheet, dimmed.

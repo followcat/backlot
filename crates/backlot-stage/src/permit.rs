@@ -45,43 +45,18 @@ pub fn episode_due(in_episode: bool, since: Option<u64>, now_ms: u64) -> (Option
     (Some(since), now_ms.saturating_sub(since) >= EPISODE_MIN_MS)
 }
 
-/// The key a recorded decision sends while the prompt still shows:
-/// `enter` takes the highlighted allow option, `esc` dismisses. That
-/// is measured on `fake` (the byte stream is asserted in tests) and
-/// observed on `devin` 3000.12.32; `claude` and `codex` are mapped
-/// from their pickers and still to be measured in S5b. Any other
-/// runner is unmeasured and answers nothing — the open attention
-/// stays for the user. docs/studio/runners.md says which are
-/// measured.
+/// The key a recorded decision sends while the prompt still shows,
+/// read from the runner's caps: `enter` takes the highlighted allow
+/// option, `esc` dismisses, `y` takes cursor's picker. A runner with
+/// no key for the decision (`opencode`, `cline`, `agy`, cursor's
+/// deny) answers nothing — the open attention stays for the user.
+/// docs/studio/runners.md's approval table is generated from the
+/// same caps.
 pub fn approval_keys(runner: &str, decision: ApprovalDecision) -> Option<&'static str> {
-    match runner {
-        "fake" | "claude" | "codex" | "devin" => Some(match decision {
-            ApprovalDecision::Allow => "enter",
-            ApprovalDecision::Deny => "esc",
-        }),
-        // cursor's allow is `y` on its picker; a deny gets no key —
-        // the runner retries a rejected command, so the attention
-        // stays open for the user either way (S11a).
-        "cursor" => match decision {
-            ApprovalDecision::Allow => Some("y"),
-            ApprovalDecision::Deny => None,
-        },
-        // cmd's picker highlights `1. Yes` (run-once) — `enter`
-        // takes it; `esc` denies and ENDS the turn — the agent
-        // does not retry a denied command (S12a). Option `2` —
-        // "don't ask again" — is never sent: it would write a
-        // project allow rule.
-        "cmd" => match decision {
-            ApprovalDecision::Allow => Some("enter"),
-            ApprovalDecision::Deny => Some("esc"),
-        },
-        // cline presses nothing: its approval block only appears when
-        // `--yolo`'s auto-approve was switched off by hand, and both
-        // keys (`y`, `n`) would be the stage guessing at a mode it
-        // must not change (S14a section 4) — the attention stays for
-        // the user.
-        "cline" => None,
-        _ => None,
+    let caps = backlot_model::caps::get(runner)?;
+    match decision {
+        ApprovalDecision::Allow => caps.approval_allow,
+        ApprovalDecision::Deny => caps.approval_deny,
     }
 }
 

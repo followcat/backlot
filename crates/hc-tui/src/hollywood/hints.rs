@@ -65,8 +65,18 @@ fn slots(
             )
         })
     };
+    // A prompt row's `y/d` lights only while the runner can answer it;
+    // otherwise the row is Enter and `p` only.
+    let prompt_answers = |target: &Target| {
+        waits
+            .iter()
+            .find(|w| &w.target() == target)
+            .is_some_and(|w| w.can_answer())
+    };
     match selected {
-        Some(Target::Prompt(..)) => [true, false, false, false, true, agent],
+        Some(target @ Target::Prompt(..)) => {
+            [prompt_answers(target), false, false, false, true, agent]
+        }
         Some(Target::Card(_)) => [false, true, false, false, false, agent],
         Some(Target::Stage(_, offline)) => [false, false, false, !offline, false, agent],
         // R3-N5: a READY row has no peek of its own — `p` stays on

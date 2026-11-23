@@ -149,6 +149,41 @@ fn a_hollywood_prompt_is_an_asks_row() {
     assert_eq!(keys, ["y", "d", "p", "↵"]);
 }
 
+/// A prompt on a runner that cannot answer offers only peek and
+/// Enter — no `allow y`, no `deny d` — and its detail says where to
+/// answer.
+#[test]
+fn a_prompt_the_runner_cannot_answer_names_no_y_or_d() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    let mut summary: Summary = serde_json::from_value(value).unwrap();
+    let role = summary.studios[0]
+        .roles
+        .iter_mut()
+        .find(|r| r.role == "actor-alice")
+        .expect("alice");
+    role.attention_user = true;
+    role.attention_seq = Some(7);
+    role.attention_detail = Some("may I run the tests?".into());
+    role.can_answer_prompt = false;
+    let list = machines(Some(&summary));
+    let (waits, _) = band_rows(&list, &all_live, true);
+    let prompt = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Prompt(_)))
+        .expect("the prompt row");
+    assert!(!prompt.can_answer());
+    let keys: Vec<&str> = crate::hollywood::items::chips_of(prompt)
+        .iter()
+        .map(|c| c.key)
+        .collect();
+    assert_eq!(keys, ["p", "↵"]);
+    assert_eq!(
+        crate::hollywood::items::detail_text(prompt).as_deref(),
+        Some("may I run the tests? · answer in its terminal (Enter)")
+    );
+}
+
 /// A stage-bookkeeping attention alone leaves the bar calm: the
 /// person can do nothing about it.
 #[test]

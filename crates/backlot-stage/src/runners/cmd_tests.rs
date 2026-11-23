@@ -11,10 +11,8 @@ use std::path::{Path, PathBuf};
 
 use backlot_model::event::CheckDecl;
 
-use super::cmd::{
-    CmdPrep, allow_rules, mcp_denies, prepare, session_at, session_in_argv, settings_content, slug,
-};
-use super::{ActorIdentity, LaunchCtx, Prep, plan};
+use super::cmd::{CmdPrep, allow_rules, mcp_denies, prepare, session_at, settings_content, slug};
+use super::{ActorIdentity, LaunchCtx, Prep, plan, session_in_argv};
 use crate::test_support::TestDir;
 
 fn tmp(tag: &str) -> TestDir {
@@ -394,19 +392,19 @@ fn session_at_skips_the_malformed() {
 #[test]
 fn argv_reads_back_the_resumed_id() {
     assert_eq!(
-        session_in_argv(&["cmd".into(), "-r".into(), "id-9".into()]).as_deref(),
+        session_in_argv("cmd", &["cmd".into(), "-r".into(), "id-9".into()]).as_deref(),
         Some("id-9")
     );
     assert_eq!(
-        session_in_argv(&["cmd".into(), "--resume".into(), "named".into()]).as_deref(),
+        session_in_argv("cmd", &["cmd".into(), "--resume".into(), "named".into()]).as_deref(),
         Some("named")
     );
     assert_eq!(
-        session_in_argv(&["cmd".into(), "--session".into(), "ab12".into()]).as_deref(),
+        session_in_argv("cmd", &["cmd".into(), "--session".into(), "ab12".into()]).as_deref(),
         Some("ab12")
     );
     assert_eq!(
-        session_in_argv(&["cmd".into(), "-m".into(), "m".into()]),
+        session_in_argv("cmd", &["cmd".into(), "-m".into(), "m".into()]),
         None
     );
 }

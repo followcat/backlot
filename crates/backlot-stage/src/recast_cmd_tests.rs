@@ -74,6 +74,19 @@ fn an_unsupported_runner_refuses_before_the_append() {
     assert!(msg.contains("runner 'runner-x' is not supported"), "{msg}");
 }
 
+/// The effort refusal reads in plain words from the caps: a required
+/// runner names its levels and the flag to add.
+#[test]
+fn the_effort_refusal_reads_in_plain_words() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    let missing = refused(&env, "recast --person director --runner fake --model m");
+    assert!(
+        missing.contains("fake takes an effort (low, medium, high); add --effort"),
+        "{missing}"
+    );
+}
+
 /// A Hollywood recast card reads `recast <role> → <runner>/<model>`
 /// and `card show` names both identities.
 #[test]

@@ -123,6 +123,32 @@ fn a_finished_studio_refuses_a_recast() {
     assert_eq!(err, Refusal::AlreadyFinished);
 }
 
+/// The effort refusals read in plain words from the caps: a runner
+/// with no effort setting says to drop it, a required runner names
+/// its levels and the flag to add.
+#[test]
+fn the_effort_refusals_read_in_plain_words() {
+    let state = replay(&base_events());
+    let mut a = cmd("d");
+    a.runner = "cursor".into();
+    a.effort = Some("high".into());
+    assert_eq!(
+        recast::check(&state, "director", &a)
+            .unwrap_err()
+            .to_string(),
+        "cursor has no effort setting; drop --effort"
+    );
+    let mut a = cmd("d");
+    a.runner = "claude".into();
+    a.effort = None;
+    assert_eq!(
+        recast::check(&state, "director", &a)
+            .unwrap_err()
+            .to_string(),
+        "claude takes an effort (low, medium, high, xhigh, max); add --effort"
+    );
+}
+
 /// A runner with no adapter, an effort the runner does not take (or
 /// needs), a cline model, and an unknown profile each refuse with
 /// their own line.

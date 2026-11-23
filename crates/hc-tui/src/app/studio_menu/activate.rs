@@ -295,7 +295,10 @@ impl App {
         self.open_peek(terminal);
         if let Some(peek) = self.peek.as_mut() {
             peek.studio_title = studio_title;
+            // A prompt the runner cannot answer is not answered by the
+            // peek's `y`/`d` either: the terminal is where it is.
             if role.attention_user
+                && role.can_answer_prompt
                 && let Some(key) = menu.studio.as_ref()
             {
                 peek.prompt = Some((key.clone(), role.role.clone()));

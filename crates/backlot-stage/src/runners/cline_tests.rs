@@ -7,8 +7,8 @@
 
 use std::collections::BTreeMap;
 
-use super::cline::{EFFORTS, provider, session_in_argv, thinking};
-use super::{ActorIdentity, LaunchCtx, PlanError, plan};
+use super::cline::{provider, thinking};
+use super::{ActorIdentity, LaunchCtx, PlanError, plan, session_in_argv};
 use crate::test_support::TestDir;
 
 pub(super) const MODEL: &str = "cline-pass/deepseek-v4.1-flash-1017";
@@ -135,7 +135,7 @@ fn resume_argv_has_no_prompt() {
 #[test]
 fn every_argv_carries_yolo() {
     let env = BTreeMap::new();
-    for effort in EFFORTS {
+    for effort in backlot_model::caps::CLINE.effort.levels() {
         for profile in ["standard", "worktree"] {
             for (prompt, resume) in [
                 (None, None),
@@ -194,8 +194,9 @@ fn never_flags() {
 /// `xhigh` is the top level — there is no `max`.
 #[test]
 fn effort_levels_map() {
-    assert_eq!(EFFORTS, ["none", "low", "medium", "high", "xhigh"]);
-    for e in EFFORTS {
+    let levels = backlot_model::caps::CLINE.effort.levels();
+    assert_eq!(levels, ["none", "low", "medium", "high", "xhigh"]);
+    for e in levels {
         assert_eq!(thinking(Some(e)).unwrap(), Some(*e));
     }
     assert_eq!(thinking(None).unwrap(), None, "no declared effort, no flag");
@@ -264,12 +265,15 @@ fn argv_reads_back_the_resumed_id() {
     )
     .unwrap();
     assert_eq!(
-        session_in_argv(&l.argv).as_deref(),
+        session_in_argv("cline", &l.argv).as_deref(),
         Some("1794894104593_rurer")
     );
-    assert_eq!(session_in_argv(&["cline".into(), "-i".into()]), None);
     assert_eq!(
-        session_in_argv(&["cline".into(), "--id".into()]),
+        session_in_argv("cline", &["cline".into(), "-i".into()]),
+        None
+    );
+    assert_eq!(
+        session_in_argv("cline", &["cline".into(), "--id".into()]),
         None,
         "a flag with no value names nothing"
     );

@@ -152,8 +152,8 @@ fn setup_refuses_every_bad_input_without_touching_the_file() {
         &env,
         &["hollywood", "setup", "--runner", "fake", "--model", "m"],
     );
-    assert!(msg.contains("needs an effort"), "{msg}");
-    // `cursor` takes no effort — it needs `cursor-agent` installed
+    assert!(msg.contains("takes an effort"), "{msg}");
+    // `cursor` has no effort setting — it needs `cursor-agent` installed
     // first, so the scratch PATH gets a stub that answers the probe.
     let stub = scratch.files.join("cursor-agent");
     fs::write(&stub, "#!/bin/sh\n").unwrap();
@@ -175,7 +175,7 @@ fn setup_refuses_every_bad_input_without_touching_the_file() {
             "high",
         ],
     );
-    assert!(msg.contains("takes no effort"), "{msg}");
+    assert!(msg.contains("has no effort setting"), "{msg}");
     // A bare `--key` cannot type into programs — it needs a modifier
     // or the `prefix+` form.
     let msg = usage_err(

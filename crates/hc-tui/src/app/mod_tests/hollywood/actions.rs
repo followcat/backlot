@@ -332,6 +332,49 @@ async fn y_on_the_hollywood_prompt_row_sends_the_one_time_allow() {
     );
 }
 
+/// A prompt on a runner that cannot answer (opencode, cline, agy):
+/// the row keeps its needs-you entry but `y` and `d` record no
+/// decision — the person answers in the terminal instead.
+#[tokio::test]
+async fn a_prompt_the_runner_cannot_answer_sends_nothing() {
+    let mut app = app_with_prompt();
+    let mut value = summary_json();
+    value["studios"][0]["roles"][0]["attention_user"] = true.into();
+    value["studios"][0]["roles"][0]["attention_seq"] = 7.into();
+    value["studios"][0]["roles"][0]["attention_detail"] = "may I run the tests?".into();
+    value["studios"][0]["roles"][0]["can_answer_prompt"] = false.into();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    app.area = (120, 24);
+    alt_y(&mut app);
+    // The row is still in the needs-you list.
+    let targets = app.hollywood_targets();
+    assert!(
+        targets
+            .iter()
+            .any(|t| matches!(t, Target::Prompt(_, role) if role == "producer")),
+        "the needs-you entry stays: {targets:?}"
+    );
+    app.hollywood.selected = Some(Target::Prompt("acme-shop".into(), "producer".into()));
+    key(&mut app, hc_vt::Key::Char('y'));
+    key(&mut app, hc_vt::Key::Char('d'));
+    assert!(
+        recorded.lock().unwrap().is_empty(),
+        "y and d send nothing: {:?}",
+        recorded.lock().unwrap()
+    );
+    assert!(app.studio_dialog.is_none(), "no override dialog either");
+}
+
 #[tokio::test]
 async fn a_frame_peek_opens_the_on_set_role_without_a_phantom_prompt() {
     // The footer's `p peek` is live on studio frames too: it opens the

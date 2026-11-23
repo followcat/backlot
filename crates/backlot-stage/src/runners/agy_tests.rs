@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use super::agy::{AgyPrep, prepare, session_in_argv, settings_content};
-use super::{ActorIdentity, LaunchCtx, Prep, plan};
+use super::agy::{AgyPrep, prepare, settings_content};
+use super::{ActorIdentity, LaunchCtx, Prep, plan, session_in_argv};
 use crate::test_support::TestDir;
 
 fn tmp(tag: &str) -> TestDir {
@@ -188,9 +188,9 @@ fn prepare_writes_the_session_settings() {
 fn the_resumed_argv_names_its_session() {
     let argv = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     assert_eq!(
-        session_in_argv(&argv(&["agy", "--conversation", "abc-1", "-i", "p"])),
+        session_in_argv("agy", &argv(&["agy", "--conversation", "abc-1", "-i", "p"])),
         Some("abc-1".to_string())
     );
-    assert_eq!(session_in_argv(&argv(&["agy", "-c"])), None);
-    assert_eq!(session_in_argv(&argv(&["agy", "--continue"])), None);
+    assert_eq!(session_in_argv("agy", &argv(&["agy", "-c"])), None);
+    assert_eq!(session_in_argv("agy", &argv(&["agy", "--continue"])), None);
 }

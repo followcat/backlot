@@ -69,9 +69,6 @@ pub const MODELS: &[&str] = &[
     "gpt-oss-120b-medium",
 ];
 
-/// `--effort`'s accepted values, `agy --help`.
-pub const EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
-
 /// The per-launch filesystem work: the workdir's session-scoped
 /// settings file.
 #[derive(Debug, Clone, PartialEq)]
@@ -225,14 +222,6 @@ pub fn session_at(
         }
     }
     best.map(|(_, id)| id)
-}
-
-/// The session id a resumed terminal's argv carries: the value
-/// after `--conversation`. `-c`/`--continue` are booleans —
-/// continue the most recent — and name no id.
-pub fn session_in_argv(argv: &[String]) -> Option<String> {
-    let flag = argv.iter().position(|a| a == "--conversation")?;
-    argv.get(flag + 1).cloned()
 }
 
 pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanError> {

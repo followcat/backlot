@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::event::{Event, EventKind, Priority, Verdict};
+use crate::event::{ActorIdentity, Event, EventKind, Priority, Verdict};
 use crate::state::{StudioState, replay};
 use crate::summary::*;
 use crate::testkit::*;
@@ -412,6 +412,69 @@ fn closed_actors(events: &mut Vec<Event>, tag: &str, n: usize) {
         seq += 1;
         events.push(ev(seq, "stage", closed(&role)));
     }
+}
+
+/// `can_answer_prompt` follows the runner's caps: false for a runner
+/// with no approval key (opencode, cline, agy), true for cmd and
+/// claude. A document an older stage wrote has no field and reads
+/// `true`.
+#[test]
+fn can_answer_prompt_follows_the_runner_caps() {
+    let state_for = |runner: &str| {
+        state_with(
+            &base_events(),
+            vec![(
+                "stage",
+                EventKind::RoleStarted {
+                    role: "producer".into(),
+                    terminal: Some("t1".into()),
+                    actor: Some(ActorIdentity {
+                        runner: runner.into(),
+                        runner_version: None,
+                        model: "m".into(),
+                        effort: Some("high".into()),
+                        permission_profile: "standard".into(),
+                    }),
+                    session_id: Some("s1".into()),
+                    reason: None,
+                },
+            )],
+        )
+    };
+    let answers = |runner: &str| {
+        let s = summary(
+            &[("acme-shop".into(), state_for(runner))],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            1,
+        );
+        s.studios[0]
+            .roles
+            .iter()
+            .find(|r| r.role == "producer")
+            .unwrap()
+            .can_answer_prompt
+    };
+    for runner in ["opencode", "cline", "agy"] {
+        assert!(!answers(runner), "{runner} cannot answer");
+    }
+    for runner in ["cmd", "claude"] {
+        assert!(answers(runner), "{runner} can answer");
+    }
+
+    // An old document without the field reads `true`.
+    let role: RoleSummary = serde_json::from_value(serde_json::json!({
+        "role": "producer", "name": "producer", "state": "live"
+    }))
+    .unwrap();
+    assert!(role.can_answer_prompt, "a legacy document keeps y/d");
+    // And `false` round-trips through serde.
+    let mut off = role.clone();
+    off.can_answer_prompt = false;
+    let back: RoleSummary = serde_json::from_value(serde_json::to_value(&off).unwrap()).unwrap();
+    assert!(!back.can_answer_prompt);
 }
 
 /// Fixed roles lead the panel list and every recorded person is in

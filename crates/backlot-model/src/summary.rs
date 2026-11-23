@@ -234,6 +234,21 @@ pub struct RoleSummary {
     /// line. Not an attention: nothing here feeds `!N` or digests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage_answer_ms: Option<u64>,
+    /// Whether the runner can answer its own prompt — at least one
+    /// approval key exists. `false` means `y`/`d` would record a
+    /// decision and send nothing, so the client offers `answer in its
+    /// terminal (Enter)` instead. Absent on documents an older stage
+    /// wrote, which keeps today's `y`/`d` behaviour.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub can_answer_prompt: bool,
+}
+
+pub(crate) fn default_true() -> bool {
+    true
+}
+
+pub(crate) fn is_true(b: &bool) -> bool {
+    *b
 }
 
 /// The whole document body.
@@ -494,6 +509,7 @@ pub fn summary_with_exchange(
                 attention_seq: None,
                 attention_detail: None,
                 stage_answer_ms: None,
+                can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
             });
         }
         let studio_snippets: BTreeMap<u64, String> = snippets
