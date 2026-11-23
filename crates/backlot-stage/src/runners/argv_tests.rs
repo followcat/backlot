@@ -626,11 +626,13 @@ fn cursor_argv_and_env() {
 
 /// cmd's fresh and resume argv — `-n <terminal>` names a fresh
 /// session (resumable by name), `-r <id>` resumes, `-m` carries the
-/// model, and the measured flag trio always rides. The prompt is
-/// positional on a fresh launch only — a resume ignores it, so the
-/// stage sends it after the composer opens (like devin).
-/// `NODE_USE_ENV_PROXY=1` is always in the env — measured: without
-/// it the model traffic bypasses the company proxy (S12a).
+/// model, `--add-dir` puts the studio's state directory inside the
+/// workspace (a role's cwd is a worktree), and the measured flag
+/// trio always rides. The prompt is positional on a fresh launch
+/// only — a resume ignores it, so the stage sends it after the
+/// composer opens (like devin). `NODE_USE_ENV_PROXY=1` is always in
+/// the env — measured: without it the model traffic bypasses the
+/// company proxy (S12a).
 #[test]
 fn cmd_argv_and_env() {
     let env = BTreeMap::new();
@@ -646,7 +648,9 @@ fn cmd_argv_and_env() {
                 "m",
                 "--trust",
                 "--skip-onboarding",
-                "--no-auto-update"
+                "--no-auto-update",
+                "--add-dir",
+                "/home/user/state/studios/acme-shop"
             ]
         );
         assert_eq!(l.session, Session::PostLaunch);
@@ -669,7 +673,9 @@ fn cmd_argv_and_env() {
                 "m",
                 "--trust",
                 "--skip-onboarding",
-                "--no-auto-update"
+                "--no-auto-update",
+                "--add-dir",
+                "/home/user/state/studios/acme-shop"
             ]
         );
         assert!(!l.argv.iter().any(|a| a == "more"), "{:?}", l.argv);
@@ -694,6 +700,54 @@ fn cmd_argv_and_env() {
         ] {
             assert!(!l.argv.iter().any(|a| a == flag), "{flag}");
         }
+    }
+}
+
+/// cmd's `--add-dir` reaches the studio state directory so the
+/// stage-sent message files (and prompts) are inside the workspace
+/// — a role's cwd is its worktree, so without it every read prompts.
+/// It rides fresh and resumed alike.
+#[test]
+fn cmd_add_dir_is_the_studio_dir() {
+    let env = BTreeMap::new();
+    for resume in [None, Some("sess-9")] {
+        for role in ["producer", "director", "writer", "actor-t1-c1"] {
+            let l = plan(
+                &actor("cmd", "standard"),
+                &role_ctx(&env, role, None, resume, &[]),
+            )
+            .unwrap();
+            let at: Vec<usize> = l
+                .argv
+                .iter()
+                .enumerate()
+                .filter_map(|(i, a)| (a == "--add-dir").then_some(i))
+                .collect();
+            assert_eq!(at.len(), 1, "{role}: {:?}", l.argv);
+            assert_eq!(
+                l.argv[at[0] + 1],
+                "/home/user/state/studios/acme-shop",
+                "{role}"
+            );
+        }
+    }
+}
+
+/// Hollywood runs in `<base>/hollywood` and reads every studio's
+/// state under `<base>/studios`, its cwd's sibling — so its
+/// `--add-dir` is the `studios` directory, not its own.
+#[test]
+fn cmd_hollywood_add_dir_is_the_studios_dir() {
+    let env = BTreeMap::new();
+    for resume in [None, Some("sess-9")] {
+        let c = LaunchCtx {
+            cwd: "/home/user/state/hollywood",
+            studio_dir: "/home/user/state/hollywood",
+            ..role_ctx(&env, "hollywood", None, resume, &[])
+        };
+        let l = plan(&actor("cmd", "standard"), &c).unwrap();
+        let at = l.argv.iter().position(|a| a == "--add-dir").unwrap();
+        assert_eq!(l.argv[at + 1], "/home/user/state/studios", "{:?}", l.argv);
     }
 }
 

@@ -260,6 +260,13 @@ user server (measured). Nothing broader is written — no `Shell(*)`, no `--yolo
 rewrites the global `reasoningEffort.<model>` key, so a `cmd` cast with `effort` is refused at
 `studio new` and the adapter emits nothing.
 
+The launch always passes `--add-dir <dir>` — the studio state directory for a role,
+and `<base>/studios` for Hollywood, the sibling of its `<base>/hollywood` cwd — so the
+stage-sent message files (`<studio dir>/messages/<n>-….md`), prompts and requirement files
+sit inside cmd's workspace and reading them never prompts. A role's cwd is its worktree, so
+without the flag every message read stopped at `Outside the workspace`. The flag is per
+run and rides fresh and resumed launches alike.
+
 cmd mints the session uuid itself, so a session is found after launch: the newest
 `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/` created at or after the launch —
 line 1 `{"type":"session","version":3,"id","cwd",...}` is authoritative; `.checkpoints.jsonl`
