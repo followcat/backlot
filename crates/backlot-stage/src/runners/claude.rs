@@ -57,18 +57,6 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     }
 }
 
-/// The per-session `--allowedTools` value: `backlot` commands and
-/// reads under the studio's state directory, where the prompts,
-/// messages and requirement files live — plus, per role, the
-/// commands its job needs. An actor gets the six git commands its
-/// loop drives, bare and with arguments, and every declared check's
-/// `run` verbatim; the director reads what it reviews, merges and
-/// runs the same checks — never `git branch`, which would also allow
-/// the deleting `git branch -D`.
-/// Nothing is written to settings: the rules live only in this
-/// argv. `//` is Claude Code's rule syntax for an absolute path; a
-/// single leading `/` would anchor at the working directory and
-/// match nothing.
 /// The commands a Hollywood launch pre-allows — one list, so the
 /// generated CLI reference and the launch argv can never disagree.
 pub fn hollywood_commands() -> &'static [&'static str] {
@@ -86,6 +74,18 @@ pub fn hollywood_commands() -> &'static [&'static str] {
     ]
 }
 
+/// The per-session `--allowedTools` value: `backlot` commands and
+/// reads under the studio's state directory, where the prompts,
+/// messages and requirement files live — plus, per role, the
+/// commands its job needs. An actor gets the six git commands its
+/// loop drives, bare and with arguments, and every declared check's
+/// `run` verbatim; the director reads what it reviews, merges and
+/// runs the same checks — never `git branch`, which would also allow
+/// the deleting `git branch -D`.
+/// Nothing is written to settings: the rules live only in this
+/// argv. `//` is Claude Code's rule syntax for an absolute path; a
+/// single leading `/` would anchor at the working directory and
+/// match nothing.
 pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) -> String {
     let dir = studio_dir.strip_prefix('/').unwrap_or(studio_dir);
     // One command in both forms Claude's rule syntax takes: bare and
