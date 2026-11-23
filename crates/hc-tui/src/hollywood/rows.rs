@@ -40,6 +40,9 @@ pub(crate) enum Target {
     Card(String),
     /// A ready-to-finish studio — `f` finishes, Enter focuses it.
     Ready(StudioKey),
+    /// The live row under the newest `user ›` line — `y`/`d` answer a
+    /// prompt, `p` peeks, Enter focuses `bl-hollywood`.
+    Hollywood,
     /// The calm row — shown, not actionable.
     Calm,
     /// The input line — `i`/Enter opens it for editing.
@@ -81,6 +84,18 @@ pub(crate) fn frames(machines: &[MachineSummary]) -> Vec<Frame<'_>> {
     out
 }
 
+/// The live line under the newest `user ›` line: what Hollywood is
+/// doing with it — the same activity a role's row carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Live<'a> {
+    /// The line still sits in the outbox behind the send gate.
+    Pending,
+    /// Hollywood is working; its terminal's `doing`, when reported.
+    Working(Option<&'a str>),
+    /// A user-owned permission prompt stands on its screen.
+    Prompt(&'a str),
+}
+
 /// One band row, borrowing its data from the documents.
 pub(crate) enum Row<'a> {
     /// The newest `hollywood.reported` headline.
@@ -94,6 +109,9 @@ pub(crate) enum Row<'a> {
     /// A line of the user's exchange with Hollywood — the dialog's
     /// half drawn above the input (D21).
     Talk(&'a Exchange),
+    /// Hollywood's live progress under the newest unanswered `user ›`
+    /// line — pending, working, or a user-owned prompt.
+    Live(Live<'a>),
     /// `› <input>` — the `tell hollywood` line.
     Input,
     /// `✦ an agent can watch every studio …` — the bar without an
@@ -106,6 +124,7 @@ impl Row<'_> {
         match self {
             Row::Headline(_) => Target::Headline,
             Row::Talk(line) => Target::Talk(line.seq),
+            Row::Live(_) => Target::Hollywood,
             Row::Wait(i) => waits[*i].target(),
             Row::Calm { .. } => Target::Calm,
             Row::Input => Target::Input,
@@ -160,16 +179,64 @@ pub(crate) fn band_rows<'a>(
         out.extend((0..waits.len()).map(Row::Wait));
     }
     // The dialog's visible half: the newest exchange lines, oldest
-    // first, right above the input they continue into.
+    // first, right above the input they continue into. Hollywood's
+    // live row follows the newest `user ›` line while that line has
+    // no reply after it.
     if agent {
         let talk = summary
             .and_then(|s| s.hollywood.as_ref())
             .map(|h| h.exchange.as_slice())
             .unwrap_or(&[]);
-        out.extend(talk.iter().map(Row::Talk));
+        let live = hollywood_live(machines);
+        for (i, line) in talk.iter().enumerate() {
+            out.push(Row::Talk(line));
+            if let Some((index, live)) = live
+                && index == i
+            {
+                out.push(Row::Live(live));
+            }
+        }
     }
     out.push(if agent { Row::Input } else { Row::Setup });
     (waits, out)
+}
+
+/// The live row and the exchange index it follows: the newest `user ›`
+/// line with no Hollywood reply after it. A prompt wins over a pending
+/// line (it is what blocks the delivery the person must clear), which
+/// wins over `working`; a calm Hollywood shows nothing.
+pub(crate) fn hollywood_live(machines: &[MachineSummary]) -> Option<(usize, Live<'_>)> {
+    let hw = local_summary(machines)?.hollywood.as_ref()?;
+    let newest_user = hw.exchange.iter().rposition(|e| e.who == "user")?;
+    if hw.exchange[newest_user + 1..]
+        .iter()
+        .any(|e| e.who == "hollywood")
+    {
+        return None;
+    }
+    let live = if hw.attention_user {
+        Live::Prompt(
+            hw.attention_detail
+                .as_deref()
+                .or(hw.attention.as_deref())
+                .unwrap_or("permission prompt"),
+        )
+    } else if hw.pending {
+        Live::Pending
+    } else if hw.work == Some(Work::Working) {
+        Live::Working(hw.doing.as_deref())
+    } else {
+        return None;
+    };
+    Some((newest_user, live))
+}
+
+/// Whether Hollywood owns a prompt — the one thing its live row's
+/// `y`/`d` answer and the footer names.
+pub(crate) fn hollywood_asking(machines: &[MachineSummary]) -> bool {
+    local_summary(machines)
+        .and_then(|s| s.hollywood.as_ref())
+        .is_some_and(|h| h.attention_user)
 }
 
 /// The setup line a bar without an agent shows: what an agent would

@@ -284,6 +284,54 @@ async fn a_prompt_peek_answers_y_and_d() {
     assert!(app.peek.is_none(), "the answer closes the peek");
 }
 
+/// The doc with one unanswered `user ›` line and a permission prompt
+/// on Hollywood's own screen.
+fn app_with_hollywood_prompt() -> App {
+    let mut app = app_with_hollywood();
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "recast the producer" }]);
+    value["hollywood"]["work"] = "blocked".into();
+    value["hollywood"]["attention_user"] = true.into();
+    value["hollywood"]["attention_detail"] = "backlot --help".into();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app
+}
+
+#[tokio::test]
+async fn y_on_the_hollywood_prompt_row_sends_the_one_time_allow() {
+    // The same `approve --decision allow` a role's prompt row sends,
+    // on Hollywood's own ledger: the stage turns it into the runner's
+    // run-once key, never "don't ask again".
+    let mut app = app_with_hollywood_prompt();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    app.area = (120, 24);
+    alt_y(&mut app);
+    app.hollywood.selected = Some(Target::Hollywood);
+    key(&mut app, hc_vt::Key::Char('y'));
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec![
+            "approve",
+            "--person",
+            "hollywood",
+            "--decision",
+            "allow",
+            "--as",
+            "user"
+        ]]
+    );
+}
+
 #[tokio::test]
 async fn a_frame_peek_opens_the_on_set_role_without_a_phantom_prompt() {
     // The footer's `p peek` is live on studio frames too: it opens the

@@ -34,13 +34,19 @@ const SLOTS: [(&str, &str); 6] = [
 ];
 
 /// Which slots the selected row answers, in `SLOTS`' order: `y/d` on
-/// a prompt, `a/x` on a card, `f` on a ready studio (its frame
-/// included), `s` on a stage row whose machine can start — or on a
-/// studio frame while its machine's stage is down — `p` on prompts
-/// and studio frames, and `i` while an agent is configured — the
+/// a prompt (Hollywood's own only while `hollywood_asking`), `a/x` on
+/// a card, `f` on a ready studio (its frame included), `s` on a stage
+/// row whose machine can start — or on a studio frame while its
+/// machine's stage is down — `p` on prompts, studio frames and
+/// Hollywood's live row, and `i` while an agent is configured — the
 /// tell line is the sheet's own, and the key dies without one.
 /// Every lit slot is one the row's dispatch would actually run.
-fn slots(selected: Option<&Target>, waits: &[Wait<'_>], agent: bool) -> [bool; 6] {
+fn slots(
+    selected: Option<&Target>,
+    waits: &[Wait<'_>],
+    agent: bool,
+    hollywood_asking: bool,
+) -> [bool; 6] {
     // A frame's `f` follows its studio: the READY row's wait is the
     // marker both read.
     let ready = |key: &StudioKey| {
@@ -67,6 +73,9 @@ fn slots(selected: Option<&Target>, waits: &[Wait<'_>], agent: bool) -> [bool; 6
         // prompt rows and studio frames only.
         Some(Target::Ready(key)) => [false, false, ready(key), false, false, agent],
         Some(Target::Studio(key)) => [false, false, ready(key), stage_down(key), true, agent],
+        // Hollywood's live row answers only while its prompt stands;
+        // `p` and the tell line are always live.
+        Some(Target::Hollywood) => [hollywood_asking, false, false, false, true, agent],
         _ => [false, false, false, false, false, agent],
     }
 }
@@ -82,6 +91,7 @@ pub(crate) fn for_row(
     editing: bool,
     waits: &[Wait<'_>],
     agent: bool,
+    hollywood_asking: bool,
     width: usize,
 ) -> String {
     if editing && matches!(selected, Some(Target::Input)) {
@@ -91,7 +101,7 @@ pub(crate) fn for_row(
             .unwrap_or_default()
             .to_owned();
     }
-    let mask = slots(selected, waits, agent);
+    let mask = slots(selected, waits, agent, hollywood_asking);
     let mut full = String::new();
     let mut compact = String::new();
     for (i, lit) in mask.iter().enumerate() {
@@ -166,7 +176,7 @@ mod tests {
         let waits = waits_of(&list);
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
         assert_eq!(
-            for_row(Some(&selected), false, &waits, true, 200),
+            for_row(Some(&selected), false, &waits, true, false, 200),
             "y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -180,13 +190,13 @@ mod tests {
         let with_tell = "i tell   ↑↓ ⏎   m menu   ? help   esc";
         for selected in [Target::Calm, Target::Input] {
             assert_eq!(
-                for_row(Some(&selected), false, &waits, true, 200),
+                for_row(Some(&selected), false, &waits, true, false, 200),
                 with_tell,
                 "{selected:?}"
             );
         }
         assert_eq!(
-            for_row(None, false, &waits, true, 200),
+            for_row(None, false, &waits, true, false, 200),
             with_tell,
             "no selection"
         );
@@ -195,7 +205,7 @@ mod tests {
         let with_read = "i tell   ↑↓ ⏎ read   m menu   ? help   esc";
         for selected in [Target::Headline, Target::Talk(7)] {
             assert_eq!(
-                for_row(Some(&selected), false, &waits, true, 200),
+                for_row(Some(&selected), false, &waits, true, false, 200),
                 with_read,
                 "{selected:?}"
             );
@@ -205,17 +215,17 @@ mod tests {
         let bare = "↑↓ ⏎   m menu   ? help   esc";
         for selected in [Target::Calm, Target::Input, Target::Setup] {
             assert_eq!(
-                for_row(Some(&selected), false, &waits, false, 200),
+                for_row(Some(&selected), false, &waits, false, false, 200),
                 bare,
                 "{selected:?}"
             );
         }
         assert_eq!(
-            for_row(Some(&Target::Headline), false, &waits, false, 200),
+            for_row(Some(&Target::Headline), false, &waits, false, false, 200),
             "↑↓ ⏎ read   m menu   ? help   esc"
         );
         assert_eq!(
-            for_row(None, false, &waits, false, 200),
+            for_row(None, false, &waits, false, false, 200),
             bare,
             "no selection"
         );
@@ -227,7 +237,7 @@ mod tests {
         let waits = waits_of(&list);
         let selected = Target::Card("c3".into());
         assert_eq!(
-            for_row(Some(&selected), false, &waits, true, 200),
+            for_row(Some(&selected), false, &waits, true, false, 200),
             "a/x card   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -238,12 +248,12 @@ mod tests {
         let waits = waits_stage_down(&list);
         let down = Target::Stage(None, false);
         assert_eq!(
-            for_row(Some(&down), false, &waits, true, 200),
+            for_row(Some(&down), false, &waits, true, false, 200),
             "s start   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
         let offline = Target::Stage(Some("host-b".into()), true);
         assert_eq!(
-            for_row(Some(&offline), false, &waits, true, 200),
+            for_row(Some(&offline), false, &waits, true, false, 200),
             "i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -258,11 +268,18 @@ mod tests {
         // The READY row's own keys are `f` and the sheet's `i` — no
         // `p peek` on it (R3-N5); the studio frame still names it.
         assert_eq!(
-            for_row(Some(&Target::Ready(key.clone())), false, &waits, true, 200),
+            for_row(
+                Some(&Target::Ready(key.clone())),
+                false,
+                &waits,
+                true,
+                false,
+                200
+            ),
             "f finish   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
         assert_eq!(
-            for_row(Some(&Target::Studio(key)), false, &waits, true, 200),
+            for_row(Some(&Target::Studio(key)), false, &waits, true, false, 200),
             "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -273,7 +290,7 @@ mod tests {
         let waits = waits_of(&list);
         let selected = Target::Studio(StudioKey::local("acme-shop"));
         assert_eq!(
-            for_row(Some(&selected), false, &waits, true, 200),
+            for_row(Some(&selected), false, &waits, true, false, 200),
             "p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
         );
     }
@@ -288,12 +305,15 @@ mod tests {
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
         // The compact tier keeps the row's keys and the menu hint.
         assert_eq!(
-            for_row(Some(&selected), false, &waits, true, 36),
+            for_row(Some(&selected), false, &waits, true, false, 36),
             "y/d p i   ↑↓ ⏎   m menu   esc"
         );
         // The floor is the bare block — the old bare all-keys tier is
         // gone, and past it the footer is empty.
-        assert_eq!(for_row(Some(&selected), false, &waits, true, 8), "↑↓ ⏎ esc");
-        assert_eq!(for_row(Some(&selected), false, &waits, true, 7), "");
+        assert_eq!(
+            for_row(Some(&selected), false, &waits, true, false, 8),
+            "↑↓ ⏎ esc"
+        );
+        assert_eq!(for_row(Some(&selected), false, &waits, true, false, 7), "");
     }
 }

@@ -8,7 +8,7 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use backlot_model::EventBy;
-use backlot_model::event::ActorIdentity;
+use backlot_model::event::{ActorIdentity, ApprovalDecision};
 use backlot_model::hollywood::{
     HOLLYWOOD, HOLLYWOOD_TERMINAL, HollywoodKind, NewHollywoodEvent, RoleMotion,
 };
@@ -208,6 +208,256 @@ async fn stage_hsample_reads_signals_and_summary_publishes_work_and_pending() {
     let hw = view.hollywood.expect("hollywood section");
     assert_eq!(hw.work, Some(Work::Working));
     assert!(hw.pending);
+}
+
+/// A neutral cmd permission prompt (the S12a capture): the
+/// `Execute Shell Command` title, the `needs to execute` sentence and
+/// the numbered picker under a full-width rule.
+fn cmd_prompt_screen(command: &str) -> String {
+    format!(
+        "◇ Conjuring… esc to interrupt • 5s • ↓ 219\n\
+         ─────────────────────────────────────────\n\
+         Execute Shell Command\n\
+         Command Code needs to execute this shell command:\n\
+         \x20 {command}\n\
+         ❯ 1. Yes\n\
+         \x20 2. Yes, don't ask again for `cmd` commands in this project\n\
+         \x20 3. No, tell Command Code what to do differently\n"
+    )
+}
+
+/// A stage over a live Hollywood whose terminal answers `screen`.
+async fn hstage_with_screen(tag: &str, screen: String) -> (Stage, TestDir, std::path::PathBuf) {
+    let tmp = TestDir::new(tag);
+    let hdir = store::hollywood_dir(tmp.path());
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<HPending, std::convert::Infallible>(HPending {
+            event: NewHollywoodEvent::new(
+                EventBy::role("stage"),
+                HollywoodKind::RoleState {
+                    state: RoleMotion::Started,
+                    terminal: Some("t-hw".into()),
+                    actor: None,
+                    session_id: Some("sid-hw".into()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    let screen = Arc::new(Mutex::new(screen));
+    tokio::spawn(serve_read(core_side, screen));
+    let (read, write) = tokio::io::split(client_side);
+    let client = Client::open(Box::pin(read), Box::pin(write), None)
+        .await
+        .unwrap();
+    let mut stage = Stage::for_test(client);
+    stage.base = tmp.path().to_path_buf();
+    *stage.hcfg.borrow_mut() = Some(HollywoodCfg {
+        runner: "cmd".into(),
+        model: "model-a".into(),
+        effort: None,
+        key: None,
+        default_cast: None,
+    });
+    stage.hrefresh(&hdir);
+    (stage, tmp, hdir)
+}
+
+/// A live, working Hollywood publishes `doing`, the terminal's own
+/// reported status read exactly as a role's is.
+#[tokio::test]
+async fn a_live_working_hollywood_publishes_doing() {
+    let (stage, _tmp, hdir) = hstage_with_screen(
+        "backlot-hw-doing",
+        "◇ Conjuring… esc to interrupt • 5s\n".into(),
+    )
+    .await;
+    let terminals = vec![LiveTerminal {
+        name: HOLLYWOOD_TERMINAL.into(),
+        address: "t-hw".into(),
+        ..Default::default()
+    }];
+    stage.hsample(&hdir, &terminals, "cmd", 5_000).await;
+    let doing = BTreeMap::from([("t-hw".to_string(), "reading the ledgers".to_string())]);
+    let view = stage.summary_view(&doing);
+    let hw = view.hollywood.expect("hollywood section");
+    assert_eq!(hw.work, Some(Work::Working));
+    assert_eq!(hw.doing.as_deref(), Some("reading the ledgers"));
+    assert!(!hw.attention_user);
+    assert_eq!(hw.attention_detail, None);
+}
+
+/// A cmd permission prompt on Hollywood's screen publishes the
+/// user-owned prompt — the same fields a role's `attention` carries.
+#[tokio::test]
+async fn a_cmd_prompt_on_hollywood_publishes_a_user_owned_prompt() {
+    let (stage, _tmp, hdir) =
+        hstage_with_screen("backlot-hw-prompt", cmd_prompt_screen("backlot --help")).await;
+    let terminals = vec![LiveTerminal {
+        name: HOLLYWOOD_TERMINAL.into(),
+        address: "t-hw".into(),
+        ..Default::default()
+    }];
+    stage.hsample(&hdir, &terminals, "cmd", 5_000).await;
+    let view = stage.summary_view(&BTreeMap::new());
+    let hw = view.hollywood.expect("hollywood section");
+    assert_eq!(hw.work, Some(Work::Blocked));
+    assert!(hw.attention_user);
+    assert_eq!(
+        hw.attention.as_deref(),
+        Some("permission prompt — needs the user")
+    );
+    assert_eq!(hw.attention_detail.as_deref(), Some("backlot --help"));
+    // Waiting after a reply publishes no prompt: a calm screen
+    // clears it.
+    let (stage, _tmp, hdir) = hstage_with_screen("backlot-hw-calm", "> ".into()).await;
+    stage.hsample(&hdir, &terminals, "cmd", 5_000).await;
+    let view = stage.summary_view(&BTreeMap::new());
+    let hw = view.hollywood.expect("hollywood section");
+    assert!(!hw.attention_user);
+    assert_eq!(hw.attention_detail, None);
+}
+
+/// A core that answers `terminal.read` from `screen` and records
+/// every `terminal.keys` key.
+async fn serve_prompt(
+    stream: DuplexStream,
+    screen: Arc<Mutex<String>>,
+    keys: Arc<Mutex<Vec<String>>>,
+) {
+    let (read, mut write) = tokio::io::split(stream);
+    let mut reader = Reader::new(read);
+    let hello = reader.read_line().await.unwrap().unwrap();
+    let req: Value = serde_json::from_slice(&hello).unwrap();
+    assert_eq!(req["method"], "hello");
+    let hello = json!({
+        "jsonrpc": "2.0", "id": 0,
+        "result": {
+            "generation": 1, "version": "fake-core 0.0",
+            "framed": true,
+            "core": {"id": "core-fake-1", "name": "fake-core"},
+            "methods": ["terminal.read", "terminal.keys"],
+            "features": [],
+        }
+    });
+    write
+        .write_all(serde_json::to_string(&hello).unwrap().as_bytes())
+        .await
+        .unwrap();
+    write.write_all(b"\n").await.unwrap();
+    while let Ok(Some(frame)) = reader.read_frame().await {
+        if frame.channel != 0 || frame.kind != Kind::Data {
+            continue;
+        }
+        let req: Value = serde_json::from_slice(&frame.payload).unwrap();
+        let reply = match req["method"].as_str() {
+            Some("terminal.read") => json!({
+                "jsonrpc": "2.0",
+                "id": req["id"],
+                "result": {
+                    "text": screen.lock().unwrap().clone(),
+                    "complete": true,
+                    "how": "screen",
+                }
+            }),
+            Some("terminal.keys") => {
+                for key in req["params"]["keys"].as_array().into_iter().flatten() {
+                    keys.lock()
+                        .unwrap()
+                        .push(key.as_str().unwrap_or_default().to_string());
+                }
+                json!({"jsonrpc": "2.0", "id": req["id"], "result": {}})
+            }
+            _ => json!({
+                "jsonrpc": "2.0",
+                "id": req["id"],
+                "error": {"code": -32601, "message": "not offered"},
+            }),
+        };
+        write
+            .write_all(&Frame::data(0, serde_json::to_vec(&reply).unwrap()).encode())
+            .await
+            .unwrap();
+    }
+}
+
+/// The user's recorded answer sends the runner's run-once key —
+/// `enter` on cmd's `❯ 1. Yes`, never option 2 — and only once.
+#[tokio::test]
+async fn hollywood_answers_its_prompt_with_the_one_time_key() {
+    let tmp = TestDir::new("backlot-hw-answer");
+    let hdir = store::hollywood_dir(tmp.path());
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<HPending, std::convert::Infallible>(HPending {
+            event: NewHollywoodEvent::new(
+                EventBy::role("stage"),
+                HollywoodKind::RoleState {
+                    state: RoleMotion::Started,
+                    terminal: Some("t-hw".into()),
+                    actor: None,
+                    session_id: Some("sid-hw".into()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let (core_side, client_side) = tokio::io::duplex(64 * 1024);
+    let keys = Arc::new(Mutex::new(Vec::new()));
+    tokio::spawn(serve_prompt(
+        core_side,
+        Arc::new(Mutex::new(cmd_prompt_screen("backlot --help"))),
+        Arc::clone(&keys),
+    ));
+    let (read, write) = tokio::io::split(client_side);
+    let client = Client::open(Box::pin(read), Box::pin(write), None)
+        .await
+        .unwrap();
+    let mut stage = Stage::for_test(client);
+    stage.base = tmp.path().to_path_buf();
+    *stage.hcfg.borrow_mut() = Some(HollywoodCfg {
+        runner: "cmd".into(),
+        model: "model-a".into(),
+        effort: None,
+        key: None,
+        default_cast: None,
+    });
+    stage.hrefresh(&hdir);
+    let terminals = vec![LiveTerminal {
+        name: HOLLYWOOD_TERMINAL.into(),
+        address: "t-hw".into(),
+        ..Default::default()
+    }];
+
+    // The prompt shows; no decision yet — nothing goes out.
+    stage.hsample(&hdir, &terminals, "cmd", 5_000).await;
+    assert!(keys.lock().unwrap().is_empty(), "no key without a decision");
+
+    // The user answers from the bar: the approval lands after the
+    // prompt's first sighting.
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<HPending, std::convert::Infallible>(HPending {
+            event: NewHollywoodEvent::new(
+                EventBy::role("user"),
+                HollywoodKind::RoleApproval {
+                    decision: ApprovalDecision::Allow,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    stage.hrefresh(&hdir);
+    stage.hsample(&hdir, &terminals, "cmd", 6_100).await;
+    assert_eq!(keys.lock().unwrap().as_slice(), &["enter"]);
+
+    // A slow screen never sends the same approval twice.
+    stage.hsample(&hdir, &terminals, "cmd", 7_200).await;
+    assert_eq!(keys.lock().unwrap().as_slice(), &["enter"]);
 }
 
 /// A stage whose core answers `hello` and nothing else — `hdiscover`

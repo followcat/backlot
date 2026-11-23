@@ -5,8 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::event::PERMISSION_PROMPT;
 use crate::hollywood_state::HollywoodState;
-use crate::summary::{Work, cap};
+use crate::summary::{Work, cap, steady};
 
 /// The headline's character cap in the document.
 pub const HEADLINE_CHARS: usize = 200;
@@ -39,6 +40,22 @@ pub struct HollywoodSummary {
     /// hollywood`) sits in Hollywood's outbox behind the send gate.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pending: bool,
+    /// What `bl-hollywood` is doing now — the terminal's reported
+    /// status, the same read a role's `doing` makes. Published only
+    /// while live.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doing: Option<String>,
+    /// A permission prompt on Hollywood's screen: the reason a role's
+    /// open attention carries. Only the user may answer this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention: Option<String>,
+    /// True while `attention` is that user-owned prompt.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub attention_user: bool,
+    /// The prompt's one-line detail — the command its picker asks
+    /// about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention_detail: Option<String>,
     /// The newest `hollywood.reported` headline (≤ [`HEADLINE_CHARS`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headline: Option<String>,
@@ -111,16 +128,48 @@ pub fn hollywood_section_with_work(
     effort: Option<&str>,
     work: Option<Work>,
 ) -> HollywoodSummary {
+    hollywood_section_with_activity(state, role_state, runner, model, effort, work, None, None)
+}
+
+/// [`hollywood_section_with_work`] plus the live activity the band
+/// shows under the newest `user ›` line: what `bl-hollywood` is doing
+/// (`doing`, read and capped like a role's) and a permission prompt on
+/// its screen (`prompt`, the picker's one-line ask). Both publish only
+/// while `role_state == "live"`.
+#[allow(clippy::too_many_arguments)]
+pub fn hollywood_section_with_activity(
+    state: &HollywoodState,
+    role_state: &str,
+    runner: Option<&str>,
+    model: Option<&str>,
+    effort: Option<&str>,
+    work: Option<Work>,
+    doing: Option<&str>,
+    prompt: Option<&str>,
+) -> HollywoodSummary {
+    let live = role_state == "live";
+    let doing = live
+        .then(|| doing.map(steady))
+        .flatten()
+        .filter(|d| !d.is_empty())
+        .map(|d| cap(&d));
+    let prompt = live.then_some(prompt).flatten().map(cap);
     HollywoodSummary {
         state: cap(role_state),
         runner: runner.map(cap),
         model: model.map(cap),
         effort: effort.map(cap),
-        work: (role_state == "live").then_some(work).flatten(),
+        work: live.then_some(work).flatten(),
         pending: state
             .messages
             .iter()
             .any(|m| m.to == "hollywood" && !m.delivered && !m.dropped),
+        doing,
+        attention: prompt
+            .is_some()
+            .then(|| format!("{PERMISSION_PROMPT} — needs the user")),
+        attention_user: prompt.is_some(),
+        attention_detail: prompt,
         headline: state.last_headline().map(cap_headline),
         headline_seq: state.reports.last().map(|r| r.seq),
         cards: state

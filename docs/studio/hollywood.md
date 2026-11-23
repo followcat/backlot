@@ -97,6 +97,18 @@ The input line (`i` or a click) is one line sent with `backlot tell hollywood "<
 user — never written into Hollywood's terminal. Empty sends nothing; `Esc` leaves the line;
 Enter sends and leaves it.
 
+Under the newest `user ›` line the band shows what Hollywood is doing with it, for as long as
+that line has no `hollywood` reply after it: `… sending to hollywood` while the line is still in
+the outbox, `⠶ hollywood: <doing>` while its terminal works (or `⠶ hollywood is working` when it
+reports no detail), and `⚠ hollywood asks: <prompt>` when a permission prompt stands on its
+screen. The prompt row takes the studio prompt row's keys: `y` answers `allow` and `d` `deny`
+(`backlot approve --person hollywood --decision …` on Hollywood's own ledger), `p` peeks at its
+screen read-only, and `Enter` focuses `bl-hollywood`. The `allow` is the runner's **one-time**
+key — cmd's `❯ 1. Yes` — never "don't ask again", which would allow every `backlot` command,
+deletes included. Once a reply lands the row leaves; a `waiting` Hollywood after a reply shows
+nothing, and the calm row and headline carry on as before. The stage sends the key only while
+the prompt the decision was made on still shows.
+
 Everything the bar draws comes from the published `backlot` summary documents plus the
 watcher's machine and stage state — never scraped terminal output — so the frames show even
 while Hollywood's own agent is down (a `closed` or `lost` role state colours the title's
@@ -291,9 +303,11 @@ was yours. `--as user` in a role terminal is refused — it disagrees with the `
 but a role terminal that unsets `BACKLOT_ROLE` looks like yours, and that is what could run
 `card apply`. What holds in practice is the pair of rules above plus the runner's own permission
 prompt: Hollywood's launch pre-allows exactly `backlot status`, `backlot records`,
-`backlot tell <studio> producer`, `backlot hollywood propose`, `backlot hollywood report` and
-`backlot studio new --dry-run`, so anything else it types stops at a prompt you see. That prompt
-is yours — the stage never answers a prompt in Hollywood's terminal.
+`backlot tell <studio> producer`, `backlot hollywood propose`, `backlot hollywood report`,
+`backlot studio new --dry-run`, and the read-only `backlot --help` / `backlot help`, so anything
+else it types stops at a prompt you see. That prompt is yours: the stage sends a key only for a
+decision you recorded — `y`/`d` on the bar's Hollywood prompt row — and only while the prompt
+that decision answered still shows.
 
 The pre-allow list is per-runner: `claude`, `cursor` and `cmd` wire it into the launch argv.
 `devin`, `codex` and `opencode` take no command list — there the runner's own permission mode

@@ -421,6 +421,67 @@ fn a_prompt_row_footer_names_y_d_answer() {
     );
 }
 
+/// The live row draws right under the newest `user ›` line: the
+/// spinner mark and Hollywood's own `doing`.
+#[test]
+fn the_live_row_draws_under_the_user_line() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "recast the producer" }]);
+    value["hollywood"]["work"] = "working".into();
+    value["hollywood"]["doing"] = "reading the ledgers".into();
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let rows = lines(&buf, area);
+    let at = rows
+        .iter()
+        .position(|l| l.contains("recast the producer"))
+        .expect("the user line");
+    assert!(rows[at].contains("user › recast the producer"), "{rows:?}");
+    assert!(
+        rows[at + 1].contains("⠶ hollywood: reading the ledgers"),
+        "{rows:?}"
+    );
+}
+
+/// A selected Hollywood prompt row names the answers it takes — the
+/// same `y/d answer` and `p peek` a studio prompt rows carries.
+#[test]
+fn a_selected_hollywood_prompt_names_its_answers() {
+    let mut value = summary_json();
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "recast the producer" }]);
+    value["hollywood"]["work"] = "blocked".into();
+    value["hollywood"]["attention_user"] = true.into();
+    value["hollywood"]["attention_detail"] = "backlot --help".into();
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, Target::Hollywood),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(text.contains("⚠ hollywood asks: backlot --help"), "{text}");
+    assert!(
+        text.contains("y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        "{text}"
+    );
+}
+
 #[test]
 fn a_row_without_answers_never_names_their_keys() {
     // The calm row and the tell line run no row keys — their footers

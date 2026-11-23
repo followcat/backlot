@@ -32,6 +32,24 @@ impl App {
         }
     }
 
+    /// Whether Hollywood's live row owns a prompt — the only state
+    /// its `y`/`d` answer.
+    fn hollywood_asking(&self) -> bool {
+        let machines = self.panel_summaries();
+        crate::hollywood::hollywood_asking(&machines)
+    }
+
+    /// `p` on the live row: Hollywood's own screen, read-only.
+    fn hollywood_peek_live(&mut self) {
+        match self.hollywood_terminal() {
+            Some(terminal) => self.open_peek(terminal),
+            None => self.show_notice(
+                "Hollywood",
+                "bl-hollywood is not running — the stage starts it",
+            ),
+        }
+    }
+
     /// `p` on a prompt row or a frame's on-set role: the role's live
     /// screen, read-only — machine-qualified for a remote studio. The
     /// peek carries the prompt only while the role actually owns one:
@@ -133,6 +151,16 @@ impl App {
             (Some(Target::Prompt(studio, role)), KeyCode::Char('p')) => {
                 self.hollywood_peek(&studio, &role);
             }
+            // The live row answers only while Hollywood's own prompt
+            // stands: the same `approve` a role's prompt sends, on
+            // Hollywood's ledger, and option 1's run-once allow.
+            (Some(Target::Hollywood), KeyCode::Char('y')) if self.hollywood_asking() => {
+                self.run_action(studio_cmds::hollywood_approve(true));
+            }
+            (Some(Target::Hollywood), KeyCode::Char('d')) if self.hollywood_asking() => {
+                self.run_action(studio_cmds::hollywood_approve(false));
+            }
+            (Some(Target::Hollywood), KeyCode::Char('p')) => self.hollywood_peek_live(),
             // A studio frame's `p`: peek the role on set — the live
             // worker the frame already names, else the producer. The
             // footer's `p peek` is no longer dead weight off prompt

@@ -243,6 +243,14 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
             }
             Ok(())
         }
+        // A prompt on Hollywood's own screen is the user's (D9): only
+        // the user records the answer the stage then sends.
+        HollywoodKind::RoleApproval { .. } => {
+            if role != "user" {
+                return Err(role_bound(role, "the user"));
+            }
+            Ok(())
+        }
         HollywoodKind::MessageDelivered { target }
         | HollywoodKind::MessageDropped { target, .. } => {
             if role != "stage" {

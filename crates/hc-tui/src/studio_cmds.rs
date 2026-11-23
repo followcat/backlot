@@ -318,6 +318,28 @@ pub(crate) fn hw_setup(cfg: &backlot_stage::config::HollywoodCfg) -> Action {
     }
 }
 
+/// `approve --person hollywood --decision allow|deny` — the answer to
+/// a prompt on Hollywood's own screen; no `--studio`, its own ledger.
+pub(crate) fn hollywood_approve(allow: bool) -> Action {
+    let word = if allow { "allow" } else { "deny" };
+    Action {
+        label: format!("{word}ing hollywood"),
+        done: format!("{word}ed hollywood"),
+        name: format!("{word} hollywood"),
+        mark: mark::hollywood(),
+        argv: plain_argv(&[
+            "approve".into(),
+            "--person".into(),
+            "hollywood".into(),
+            "--decision".into(),
+            word.into(),
+        ]),
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
 /// `tell hollywood "<text>"` — the headline's own line (D20).
 pub(crate) fn tell_hollywood(text: &str) -> Action {
     Action {

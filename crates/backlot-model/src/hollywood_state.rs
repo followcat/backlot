@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::event::ActorIdentity;
+use crate::event::{ActorIdentity, ApprovalDecision};
 use crate::hollywood::{
     CardAction, CardBase, HEADLINE_CAP, HollywoodEvent, HollywoodKind, RoleMotion,
 };
@@ -131,6 +131,14 @@ impl HWRole {
     }
 }
 
+/// The user's answer to a permission prompt on Hollywood's screen.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HApproval {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub decision: ApprovalDecision,
+}
+
 /// The reduced view of Hollywood's ledger.
 #[derive(Debug, Default, PartialEq)]
 pub struct HollywoodState {
@@ -140,6 +148,9 @@ pub struct HollywoodState {
     pub reports: Vec<HReport>,
     /// Every `message.sent`, in seq order.
     pub messages: Vec<HMessage>,
+    /// Every `role.approval`, in seq order — the user's answers to
+    /// Hollywood's own prompts.
+    pub approvals: Vec<HApproval>,
     /// Hollywood's own terminal record — nothing before the first
     /// `role.state`.
     pub role: HWRole,
@@ -156,6 +167,12 @@ impl HollywoodState {
     /// The newest headline, if any.
     pub fn last_headline(&self) -> Option<&str> {
         self.reports.last().map(|r| r.headline.as_str())
+    }
+
+    /// The newest approval recorded after `seq` — the answer to a
+    /// prompt that appeared when the ledger was at `seq`.
+    pub fn approval_after(&self, seq: u64) -> Option<&HApproval> {
+        self.approvals.iter().rev().find(|a| a.seq > seq)
     }
 }
 
@@ -292,6 +309,11 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 r.losses.clear();
             }
         },
+        HollywoodKind::RoleApproval { decision } => state.approvals.push(HApproval {
+            seq: e.seq,
+            ts_ms: e.ts_ms,
+            decision: *decision,
+        }),
         HollywoodKind::MessageDelivered { target } => {
             if let Some(m) = state.messages.iter_mut().find(|m| m.seq == *target) {
                 m.delivered = true;

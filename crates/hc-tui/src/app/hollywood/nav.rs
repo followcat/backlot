@@ -179,6 +179,7 @@ impl App {
             }
             Some(Target::NewStudio) => self.hollywood_new_studio(),
             Some(Target::Prompt(studio, role)) => self.hollywood_prompt_open(&studio, &role),
+            Some(Target::Hollywood) => self.hollywood_focus_terminal(),
             Some(Target::Stage(machine, offline)) => {
                 if offline {
                     self.hollywood_check_machine(machine.as_deref());
@@ -296,11 +297,10 @@ impl App {
         self.opening_new_studio();
     }
 
-    /// Focus the `bl-hollywood` terminal — same read `reap` and
-    /// `stage_running` make of the inventory: the terminal named so.
-    pub(crate) fn hollywood_focus_terminal(&mut self) {
-        let terminal = self
-            .view
+    /// The live `bl-hollywood` terminal's address — the same read
+    /// `reap` and `stage_running` make of the inventory.
+    pub(super) fn hollywood_terminal(&self) -> Option<String> {
+        self.view
             .inventory
             .terminals()
             .values()
@@ -309,8 +309,12 @@ impl App {
                     && !t.address.contains('/')
                     && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
             })
-            .map(|t| t.address.clone());
-        match terminal {
+            .map(|t| t.address.clone())
+    }
+
+    /// Focus the `bl-hollywood` terminal.
+    pub(crate) fn hollywood_focus_terminal(&mut self) {
+        match self.hollywood_terminal() {
             Some(id) => {
                 self.focus_pane(id);
                 self.hollywood_leave();

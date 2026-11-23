@@ -12,6 +12,21 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
+  The summary's `hollywood` object now carries `doing` (the terminal's reported
+  status, read and capped like a role's), and — while a permission prompt stands on
+  `bl-hollywood`'s screen — `attention`, `attention_user` and `attention_detail`
+  (the command the picker asks about). The expanded Call Sheet draws one live row
+  under the newest `user ›` line while that line has no reply after it: `… sending
+  to hollywood` while the message is still in the outbox, `⠶ hollywood: <doing>` (or
+  `⠶ hollywood is working`) while it works, and `⚠ hollywood asks: <prompt>` at a
+  prompt. The prompt row takes `y` allow once, `d` deny, `p` peek and Enter to focus
+  `bl-hollywood`; `y`/`d` run `backlot approve --person hollywood --decision …`,
+  which records `role.approval` in Hollywood's own ledger. The stage sends the
+  runner's one-time key (`enter` on cmd's `❯ 1. Yes`), never "don't ask again", and
+  only while the prompt the decision answered still shows. Hollywood's cmd launch
+  also pre-allows the read-only `backlot --help` and `backlot help`, so it can read
+  its own CLI without a prompt.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

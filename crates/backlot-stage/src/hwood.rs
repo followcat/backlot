@@ -9,6 +9,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use backlot_model::EventBy;
+use backlot_model::event::ApprovalDecision;
 use backlot_model::hollywood::{self, CardAction, HollywoodKind, NewHollywoodEvent};
 use backlot_model::state::StudioState;
 
@@ -207,6 +208,37 @@ fn tell_hollywood(common: &Common, env: &Env, text: &str) -> Result<String, Fail
     .map_err(store_fail)?;
     Ok(format!(
         "{} — delivery to its terminal is the stage's job (H3)",
+        hrender::hconfirm(&event)
+    ))
+}
+
+/// `approve --person hollywood --decision allow|deny`: the user's
+/// answer to a permission prompt on Hollywood's own screen, recorded
+/// in its ledger. The stage sends the runner's one-time key (H3); no
+/// card ever answers a prompt (D18).
+pub(crate) fn approve(
+    common: &Common,
+    env: &Env,
+    decision: ApprovalDecision,
+) -> Result<String, Fail> {
+    let r = role(common, env);
+    if r != "user" {
+        return Err(Fail::refused(format!(
+            "role '{r}' cannot do this; the user can"
+        )));
+    }
+    let base = base_of(common, env)?;
+    let hdir = store::hollywood_dir(&base);
+    let by = by_for(common, env);
+    let event = store::append_hollywood(&hdir, |_, _| {
+        Ok::<HPending, Fail>(HPending {
+            event: NewHollywoodEvent::new(by, HollywoodKind::RoleApproval { decision }),
+            files: Vec::new(),
+        })
+    })
+    .map_err(store_fail)?;
+    Ok(format!(
+        "{} — the stage answers the prompt",
         hrender::hconfirm(&event)
     ))
 }

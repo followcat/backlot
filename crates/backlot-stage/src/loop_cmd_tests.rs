@@ -74,6 +74,32 @@ fn approve_records_the_decision() {
     assert_eq!(decisions, ["allow", "deny"], "{json}");
 }
 
+/// `approve --person hollywood` is the user's answer to a prompt on
+/// Hollywood's own screen: it lands in Hollywood's ledger, never a
+/// studio's, and no role may record it.
+#[test]
+fn approve_hollywood_records_in_its_own_ledger() {
+    let (scratch, env) = scratch();
+    studio(&scratch, &env);
+    let out = ok(
+        &env,
+        "approve --person hollywood --decision allow --as user",
+    );
+    assert!(out.contains("role.approval"), "{out}");
+    let hdir = store::hollywood_dir(Path::new(env.get("BACKLOT_STATE_DIR").unwrap()));
+    let state = store::load_hstate(&hdir).unwrap();
+    assert_eq!(state.approvals.len(), 1);
+    assert_eq!(
+        state.approvals[0].decision,
+        backlot_model::event::ApprovalDecision::Allow
+    );
+    let msg = refused(
+        &env,
+        "approve --person hollywood --decision allow --as hollywood",
+    );
+    assert!(msg.contains("the user can"), "{msg}");
+}
+
 #[test]
 fn approve_needs_an_open_permission_prompt() {
     let (scratch, env) = scratch();
