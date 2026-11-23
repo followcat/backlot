@@ -6,6 +6,8 @@
 //! tick ([`decide_start`]); `fake` is exempt.
 
 pub mod agy;
+#[cfg(test)]
+pub(crate) mod caps_doc;
 pub mod claude;
 pub mod cline;
 mod cline_hook;

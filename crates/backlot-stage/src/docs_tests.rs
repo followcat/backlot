@@ -229,6 +229,59 @@ fn guide_cast_file_parses_through_studio_new() {
     ));
 }
 
+/// `docs/studio/runners.md`'s generated spans — the capability table
+/// and the approval-keys table — are rendered from the runner caps.
+/// The test regenerates each span and fails when the file has drifted;
+/// `BACKLOT_UPDATE_DOCS=1 cargo test runner_caps_docs` rewrites it.
+#[test]
+fn runner_caps_docs_are_generated_from_the_caps() {
+    use crate::runners::caps_doc;
+
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/studio/runners.md");
+    let text = fs::read_to_string(&path).expect("runners.md");
+    let rendered = caps_doc::replace_generated(
+        &text,
+        caps_doc::CAPS_BEGIN,
+        caps_doc::CAPS_END,
+        &caps_doc::capabilities_table(),
+    )
+    .and_then(|text| {
+        caps_doc::replace_generated(
+            &text,
+            caps_doc::APPROVAL_BEGIN,
+            caps_doc::APPROVAL_END,
+            &caps_doc::approval_table(),
+        )
+    })
+    .expect("runners.md carries both generated spans");
+    if std::env::var_os("BACKLOT_UPDATE_DOCS").is_some() {
+        fs::write(&path, &rendered).expect("write runners.md");
+        return;
+    }
+    assert_eq!(
+        rendered, text,
+        "docs/studio/runners.md's generated tables drifted from the caps; run \
+         BACKLOT_UPDATE_DOCS=1 cargo test runner_caps_docs_are_generated_from_the_caps"
+    );
+    // Every runner has a signal-matrix row and a work-state row, agy
+    // included; the rows name the runner the way the prose does.
+    for heading in ["## Signal matrix", "## Work states"] {
+        let table = section(&text, heading);
+        for caps in backlot_model::caps::ALL {
+            let label = caps.label.trim_matches('`');
+            assert!(
+                table.lines().any(|l| {
+                    l.trim_start_matches('|')
+                        .trim_start()
+                        .trim_start_matches('`')
+                        .starts_with(label)
+                }),
+                "{heading} misses {label}"
+            );
+        }
+    }
+}
+
 /// Every attention reason the stage can raise is in the guide's table.
 #[test]
 fn every_attention_reason_is_documented() {
