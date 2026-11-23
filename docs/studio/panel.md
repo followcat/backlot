@@ -34,6 +34,7 @@ tail still wins while the panel is closed or unfocused.
 | `j`/`k`, `↑`/`↓` | Move the selection one row |
 | `PageUp`/`PageDown` | Move one viewport |
 | `Enter` | Live person: focus their terminal. Studio row: make that studio current (focus its remembered person or producer). Closed person: reopens a resumable or fixed seat through the action tracker; other roles get a notice. |
+| `t` | Open the selected studio's `›` line — the producer tell input. |
 | `Space` | Open or close the three-line drawer under a person or task; on a studio header it folds the whole block |
 | `o` | Reopen a closed resumable person (`backlot reopen … --as user`) |
 | `v` | Open the Task & Delivery Sheet for the selected studio or task |
@@ -111,6 +112,11 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - The **owed-step** line under it says where the next step is owed in role names —
   `→ deliver t1 · actor-a` — never a raw `actor-t1-c1` ledger key; the stage-down and
   machine-offline forms say so instead.
+- The **next-step** line under that one comes from the studio's own state:
+  `· next: tell the producer what to build` (no requirement recorded; Enter on the studio row or
+  `t` opens the producer tell input), `· next: director reviewing` (tasks in review), or
+  `· next: finish (f)` (every task accepted). Any other state draws nothing. The Hollywood frame
+  carries the same line on its blank row.
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
   prompt, and the state word right-aligned. A user-owned prompt adds a cue line

@@ -34,7 +34,9 @@ layout, so toggling it resizes nothing.
   machine-qualified id in the top edge (accent on `selection_bg` when selected), its own
   machine's `■ live` / `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
   task counts, the role on set, what it is doing (a broken ledger's error in red), and one
-  `◆` per cast member coloured by its state. The last frame is always the dashed
+  `◆` per cast member coloured by its state. A frame whose studio has a plain next step carries
+  `· next: tell the producer what to build`, `· next: director reviewing` or `· next: finish (f)`
+  on its blank row. The last frame is always the dashed
   **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`, a narrow screen
   puts two per row. Under them the band lists the **waiting items** — the one needs-you list,
   everything that waits on the user across every machine, sorted by urgency: user-owned prompts

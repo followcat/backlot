@@ -1,7 +1,9 @@
 //! Reading `backlot` out of the view: soft failures only, the
 //! per-machine aggregate and the stage's live check.
 use super::summary_json;
-use crate::panel::data::{local_summary, report_pending, stage_running, studio_label, summaries};
+use crate::panel::data::{
+    local_summary, next_step, report_pending, stage_running, studio_label, summaries,
+};
 use hc_proto::watch::{DocKey, Document, View};
 
 fn view_with_document(value: serde_json::Value) -> View {
@@ -188,4 +190,25 @@ fn a_remote_studio_names_its_machine_even_on_a_single_machine_lot() {
     assert_eq!(local.full, "acme-shop");
     let spanned = studio_label("acme-shop", None, Some("Local"), true);
     assert_eq!(spanned.full, "acme-shop · Local");
+}
+
+/// The studio's own next step: no requirement, tasks in review, all
+/// accepted, nothing otherwise, and never on a finished studio.
+#[test]
+fn the_next_step_reads_the_studios_state() {
+    let value = summary_json();
+    let mut studio: backlot_model::summary::StudioSummary =
+        serde_json::from_value(value["studios"][0].clone()).unwrap();
+    assert_eq!(next_step(&studio), None);
+    studio.requirement_version = 0;
+    assert_eq!(next_step(&studio), Some("tell the producer what to build"));
+    studio.requirement_version = 1;
+    studio.open_reviews = 1;
+    assert_eq!(next_step(&studio), Some("director reviewing"));
+    studio.open_reviews = 0;
+    studio.tasks_total = 2;
+    studio.tasks_done = 2;
+    assert_eq!(next_step(&studio), Some("finish (f)"));
+    studio.state = "finished".into();
+    assert_eq!(next_step(&studio), None);
 }

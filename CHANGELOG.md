@@ -54,6 +54,11 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   Sheet's rows, the lot pill's urgent count and the band's calm row read it, so
   `✓ nothing waiting on you` shows only when the list is empty; the misleading `!N flagged`
   suffix is gone, and a `stuck` role shows on its own row.
+- **Every studio shows its next step.** The dock's studio row and the Hollywood frame carry one
+  `next:` line from the studio's own state: `tell the producer what to build` when no requirement
+  is recorded (Enter on the studio row or `t` opens the producer tell input), `director reviewing`
+  while tasks are in review, and `finish (f)` once every task is accepted. Any other state draws
+  nothing.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

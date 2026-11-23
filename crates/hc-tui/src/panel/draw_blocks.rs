@@ -177,6 +177,7 @@ pub(super) fn draw_owed(
     draw_inner(buf, rect, frame);
     let (mark, style) = match kind {
         Owed::Step | Owed::Finish => ("→", Style::default().fg(palette.subtext0)),
+        Owed::Next => ("·", Style::default().fg(palette.subtext0)),
         Owed::ReportPending => ("·", Style::default().fg(palette.overlay0)),
         Owed::StageDown => ("◌", Style::default().fg(palette.peach)),
         Owed::Offline => ("×", Style::default().fg(palette.red)),

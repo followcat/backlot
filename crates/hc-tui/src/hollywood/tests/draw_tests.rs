@@ -1180,3 +1180,43 @@ fn the_label_fits_through_the_machine_truncation_steps() {
     let local = crate::panel::data::studio_label("acme-shop", None, Some("Local"), false);
     assert_eq!(local.fit(6), "acme-…");
 }
+
+/// A studio frame carries the studio's own next step on its blank
+/// row — `next: director reviewing` while reviews wait — and a calm
+/// studio leaves the row blank.
+#[test]
+fn a_studio_frame_shows_its_next_step() {
+    let mut value = summary_json();
+    value["studios"][0]["open_reviews"] = serde_json::json!(2);
+    let reviewing: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let (buf, hits) = draw(
+        area,
+        Some(&reviewing),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let frame = frame_hit(&hits, &Target::Studio("acme-shop".into())).expect("acme-shop");
+    let next: String = (frame.x..frame.x + frame.width)
+        .map(|x| buf[(x, frame.y + 4)].symbol())
+        .collect();
+    assert!(next.contains("next: director reviewing"), "{next}");
+
+    let calm = summary();
+    let (buf, hits) = draw(
+        area,
+        Some(&calm),
+        true,
+        &layer(LayerMode::Expanded),
+        false,
+        &palette,
+    );
+    let frame = frame_hit(&hits, &Target::Studio("acme-shop".into())).expect("acme-shop");
+    let calm_row: String = (frame.x..frame.x + frame.width)
+        .map(|x| buf[(x, frame.y + 4)].symbol())
+        .collect();
+    assert!(!calm_row.contains("next:"), "{calm_row}");
+}
