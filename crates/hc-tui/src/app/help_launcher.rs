@@ -115,7 +115,20 @@ impl App {
                         launch: Launch::Surface(Surface::CallSheet),
                     });
                 }
-                Wait::Hollywood => rows.push(HelpRow {
+                Wait::Hollywood(hollywood) if hollywood.attention_user => rows.push(HelpRow {
+                    label: format!(
+                        "Hollywood asks: {}",
+                        hollywood
+                            .attention_detail
+                            .as_deref()
+                            .or(hollywood.attention.as_deref())
+                            .unwrap_or("permission prompt")
+                    ),
+                    hint: self.sheet_hint("↵"),
+                    glyph: "⚠",
+                    launch: Launch::Surface(Surface::CallSheet),
+                }),
+                Wait::Hollywood(_) => rows.push(HelpRow {
                     label: "Hollywood is blocked".to_string(),
                     hint: self.sheet_hint("↵"),
                     glyph: "!",

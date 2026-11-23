@@ -1,9 +1,7 @@
 //! The bar's model: the frames and the band rows — all pure reads
 //! of the document.
 use super::*;
-use crate::hollywood::rows::{
-    Frame, Live, Row, Target, band_rows, frames, hollywood_live, on_set,
-};
+use crate::hollywood::rows::{Frame, Live, Row, Target, band_rows, frames, hollywood_live, on_set};
 use crate::hollywood::sheet::{Conn, Status, Wait};
 use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
@@ -110,12 +108,45 @@ fn a_blocked_hollywood_is_not_calm() {
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    assert!(
-        waits.iter().any(|w| matches!(w, Wait::Hollywood)),
-        "{:?}",
-        waits.iter().map(|w| w.target()).collect::<Vec<_>>()
+    let hollywood = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Hollywood(_)))
+        .expect("Hollywood is listed");
+    assert_eq!(
+        crate::hollywood::items::wait_head(hollywood, "Local", false).0,
+        "HOLLYWOOD blocked"
     );
     assert!(!rows.iter().any(|r| matches!(r, Row::Calm { .. })));
+}
+
+/// A Hollywood permission prompt is the asks row: the same `y` allow
+/// once / `d` deny / `p` peek / Enter the #109 live row takes, on the
+/// same target.
+#[test]
+fn a_hollywood_prompt_is_an_asks_row() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["hollywood"]["work"] = serde_json::json!("blocked");
+    value["hollywood"]["attention_user"] = serde_json::json!(true);
+    value["hollywood"]["attention"] = serde_json::json!("permission prompt");
+    value["hollywood"]["attention_detail"] = serde_json::json!("may I run cargo?");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, _) = band_rows(&list, &all_live, true);
+    let hollywood = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Hollywood(_)))
+        .expect("Hollywood is listed");
+    assert_eq!(
+        crate::hollywood::items::wait_head(hollywood, "Local", false),
+        ("HOLLYWOOD asks: may I run cargo?".into(), "⚠")
+    );
+    assert_eq!(hollywood.target(), Target::Hollywood);
+    let keys: Vec<&str> = crate::hollywood::items::chips_of(hollywood)
+        .iter()
+        .map(|c| c.key)
+        .collect();
+    assert_eq!(keys, ["y", "d", "p", "↵"]);
 }
 
 /// A stage-bookkeeping attention alone leaves the bar calm: the

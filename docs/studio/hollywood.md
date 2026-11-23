@@ -41,10 +41,12 @@ layout, so toggling it resizes nothing.
   puts two per row. Under them the band lists the **waiting items** — the one needs-you list,
   everything that waits on the user across every machine, sorted by urgency: user-owned prompts
   first (a director-owned prompt never lists), then roles with a needs-you attention or an
-  unanswered question, blocked Hollywood, studios with no requirement, stopped stages and
-  offline machines that have live studios, then the local core's open cards, then studios ready
-  to finish. Each row carries its action chips and a detail line; only when the list is empty does
-  a calm `✓` row say `nothing waiting on you`. The
+  unanswered question, Hollywood itself — `HOLLYWOOD asks: <prompt>`, which takes the same
+  `y` allow once / `d` deny / `p` peek / Enter as its live row, or `HOLLYWOOD blocked` without a
+  prompt — studios with no requirement, stopped stages and offline machines that have live
+  studios, then the local core's open cards, then studios ready to finish. Each row carries its
+  action chips and a detail line; only when the list is empty does a calm `✓` row say
+  `nothing waiting on you`. The
   `tell hollywood` line ends the band — or, without a `[hollywood]` table, the `⏎ hollywood setup`
   line that opens the setup dialog. Waiting items and the `tell` line are never dropped: the height
   ladder drops the blanks first, then the unselected details, then the 7-row frames fold into

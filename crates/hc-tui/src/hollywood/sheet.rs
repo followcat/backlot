@@ -97,7 +97,9 @@ pub(crate) struct StudioItem<'a> {
 pub(crate) enum Wait<'a> {
     Prompt(PromptItem<'a>),
     Role(RoleItem<'a>),
-    Hollywood,
+    /// Hollywood itself: a user-owned prompt (`attention_user`) or a
+    /// blocked screen with no prompt.
+    Hollywood(&'a backlot_model::summary::HollywoodSummary),
     NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
     Card(&'a CardSummary),
@@ -122,7 +124,7 @@ impl Wait<'_> {
                 },
                 item.role.role.clone(),
             ),
-            Wait::Hollywood => super::Target::Hollywood,
+            Wait::Hollywood(_) => super::Target::Hollywood,
             Wait::NoRequirement(item) => super::Target::Tell(StudioKey {
                 machine: item.machine.map(str::to_string),
                 id: item.studio.id.clone(),
@@ -146,7 +148,7 @@ impl Wait<'_> {
         match self {
             Wait::Prompt(_)
             | Wait::Role(_)
-            | Wait::Hollywood
+            | Wait::Hollywood(_)
             | Wait::Card(_)
             | Wait::NoRequirement(_) => true,
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
@@ -199,14 +201,13 @@ pub(crate) fn waiting_items<'a>(
             }
         }
     }
-    // Hollywood's own state is this core's: a blocked screen waits on
-    // a person, and a prompt field once slice A publishes one joins
-    // here.
+    // Hollywood's own state is this core's: a user-owned prompt or a
+    // blocked screen waits on a person.
     if let Some(hw) = super::rows::local_summary(machines).and_then(|s| s.hollywood.as_ref())
         && hw.state == "live"
-        && hw.work == Some(backlot_model::summary::Work::Blocked)
+        && (hw.attention_user || hw.work == Some(backlot_model::summary::Work::Blocked))
     {
-        out.push(Wait::Hollywood);
+        out.push(Wait::Hollywood(hw));
     }
     for m in machines {
         for studio in &m.summary.studios {
