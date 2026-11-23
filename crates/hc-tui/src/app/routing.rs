@@ -22,12 +22,13 @@ impl App {
         // fall back to the projection's first pane (navigation order) —
         // never the client's own host, whose attach the core refuses.
         if self.mode == Mode::Normal && self.focused.is_none() {
+            // S1: never the stage log — its keys are dropped.
             self.focused = self
                 .projection
                 .snapshot
                 .panes
                 .iter()
-                .find(|p| !self.is_own_pane(&p.pane_id))
+                .find(|p| !self.is_own_pane(&p.pane_id) && !self.is_stage_terminal(&p.pane_id))
                 .map(|p| p.pane_id.clone());
         }
         // Retargeting keeps held presses bound to their original wire:

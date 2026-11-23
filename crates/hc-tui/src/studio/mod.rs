@@ -84,6 +84,9 @@ pub(crate) struct Studio {
     pub remembered: BTreeMap<StudioKey, String>,
     /// The cast's `others` row, expanded in place.
     pub others_expanded: bool,
+    /// W1: the machines whose `finished (n)` group is unfolded — keyed
+    /// by machine (`None` is this core).
+    pub finished_open: std::collections::BTreeSet<Option<String>>,
     /// The cast section's scroll offset — its own, so the agents
     /// list's scroll survives a mode flip either way.
     pub(crate) cast_scroll: usize,

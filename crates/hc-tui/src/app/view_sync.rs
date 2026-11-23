@@ -107,16 +107,27 @@ impl App {
                 Some(p) => &p.snapshot.panes,
                 None => &self.projection.snapshot.panes,
             };
+            // S1: the fallback never lands on the stage log — its keys
+            // are dropped, so it cannot be where input belongs.
             let fallback = panes
                 .iter()
-                .find(|p| previous_tab.as_ref() == Some(&p.tab_id) && !self.is_own_pane(&p.pane_id))
+                .find(|p| {
+                    previous_tab.as_ref() == Some(&p.tab_id)
+                        && !self.is_own_pane(&p.pane_id)
+                        && !self.is_stage_terminal(&p.pane_id)
+                })
                 .or_else(|| {
                     panes.iter().find(|p| {
                         previous_workspace.as_ref() == Some(&p.workspace_id)
                             && !self.is_own_pane(&p.pane_id)
+                            && !self.is_stage_terminal(&p.pane_id)
                     })
                 })
-                .or_else(|| panes.iter().find(|p| !self.is_own_pane(&p.pane_id)))
+                .or_else(|| {
+                    panes.iter().find(|p| {
+                        !self.is_own_pane(&p.pane_id) && !self.is_stage_terminal(&p.pane_id)
+                    })
+                })
                 .map(|p| p.pane_id.clone());
             if fallback != self.focused {
                 self.focused = fallback;
@@ -130,6 +141,13 @@ impl App {
         // probe — doc answers, reconnects and the 6h throttle all
         // live in `machine_versions`.
         self.sync_machine_versions();
+        // W1: a stage down (or a missing document) asks the machine
+        // for its ledger's studios — cached, refreshed at most every
+        // 30 s and on every stage change.
+        self.sync_studio_index();
+        // S1: a stage start's focus is owed — keep the remembered
+        // focus or move off the opening page, never the stage log.
+        self.land_after_stage_start();
         // Focusing marks the active tab's panes seen — an idle agent
         // reports `Done` only while its workspace stayed background.
         self.mark_active_seen();

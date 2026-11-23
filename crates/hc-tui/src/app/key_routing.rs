@@ -487,6 +487,9 @@ impl App {
                         None
                     }
                     Decision::Held => None,
+                    // S1: the stage log is read-only — no key ever
+                    // reaches the stage process (Ctrl+C included).
+                    Decision::ToTerm(_) if self.stage_terminal_focused() => None,
                     Decision::ToTerm(forwarded)
                         if matches!(forwarded.input.key, Key::Functional(_)) =>
                     {
@@ -523,7 +526,10 @@ impl App {
                     .forwarded_for(&lease_key)
                     .map(|lease| self.lease_route(lease))
                     .unwrap_or(target);
-                if self.pane.accepts_route(route) && !self.pane_page_scroll(&key) {
+                if self.pane.accepts_route(route)
+                    && !self.stage_terminal_focused()
+                    && !self.pane_page_scroll(&key)
+                {
                     self.reset_displayed_scroll();
                     self.pane.key(&key);
                 }

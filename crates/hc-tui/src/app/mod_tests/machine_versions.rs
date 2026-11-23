@@ -223,6 +223,7 @@ async fn the_machine_menu_offers_its_valid_actions() {
             upgrade.as_str(),
             "Restart the stage",
             "Stop the stage…",
+            "Stage log",
             "New studio here",
             "Connect machine",
             "Rename machine",
@@ -233,7 +234,8 @@ async fn the_machine_menu_offers_its_valid_actions() {
     assert_eq!(items[0].act, StudioAct::MachineInstall);
     assert_eq!(items[1].act, StudioAct::StageRestart);
     assert_eq!(items[2].act, StudioAct::StageStop);
-    assert_eq!(items[3].act, StudioAct::NewStudio);
+    assert_eq!(items[3].act, StudioAct::StageLog);
+    assert_eq!(items[4].act, StudioAct::NewStudio);
     assert!(
         items.iter().all(|it| it.dim.is_none()),
         "online — {items:?}"
@@ -291,8 +293,11 @@ async fn an_offline_machine_dims_its_command_rows() {
     assert!(menu.offline);
     let items = menu.items();
     for it in &items {
-        if matches!(it.act, StudioAct::MachineRename | StudioAct::MachineRemove) {
-            assert!(it.dim.is_none(), "endpoint ops stay live — {it:?}");
+        if matches!(
+            it.act,
+            StudioAct::MachineRename | StudioAct::MachineRemove | StudioAct::StageLog
+        ) {
+            assert!(it.dim.is_none(), "reads/repairs stay live — {it:?}");
         } else {
             assert_eq!(it.dim.as_deref(), Some("unreachable"), "{it:?}");
         }

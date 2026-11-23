@@ -49,7 +49,8 @@ impl StudioMenu {
                     | StudioAct::CardShow
                     | StudioAct::MachineRename
                     | StudioAct::MachineRemove
-                    | StudioAct::MachineAdd => {}
+                    | StudioAct::MachineAdd
+                    | StudioAct::StageLog => {}
                     _ => {
                         it.dim.get_or_insert_with(|| "unreachable".to_owned());
                     }

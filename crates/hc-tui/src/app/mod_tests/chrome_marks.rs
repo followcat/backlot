@@ -139,12 +139,12 @@ async fn the_pill_keeps_the_tab_bars_right_end_outside_a_studio_workspace() {
     }
 }
 
-/// R3-M6: over a non-studio workspace (`backlot`'s stray agent) the
+/// R3-M6/C1: over a non-studio workspace (`backlot`'s stray agent) the
 /// remembered current studio stops painting as active — the dock
-/// block loses its `▸` and the lower sidebar no longer casts its
-/// people — while `studio.current` stays remembered for re-entry.
+/// block loses its `▸` — while the cast still names it and
+/// `studio.current` stays remembered for re-entry.
 #[tokio::test]
-async fn a_non_studio_workspace_clears_the_dock_mark_and_the_cast() {
+async fn a_non_studio_workspace_clears_the_dock_mark_but_keeps_the_cast() {
     fn regions(app: &mut App, w: u16, h: u16) -> (String, String) {
         let backend = draw_to(app, w, h);
         let buf = backend.buffer();
@@ -180,7 +180,8 @@ async fn a_non_studio_workspace_clears_the_dock_mark_and_the_cast() {
     assert!(sidebar.contains("producer"), "cast row: {sidebar}");
 
     // The stray `backlot` agent is no studio workspace: the blocks
-    // stay, `▸` and the cast go.
+    // stay, `▸` goes — and the cast keeps naming the remembered
+    // current studio (C1: the left side explains itself).
     app.focused = Some("t50".into());
     app.reconcile_published_view();
     assert!(!app.studio.lot.studio_workspace);
@@ -192,9 +193,8 @@ async fn a_non_studio_workspace_clears_the_dock_mark_and_the_cast() {
     assert!(!dock.contains('▸'), "mark cleared: {dock}");
     assert!(dock.contains("acme-shop"), "the blocks stay: {dock}");
     assert!(
-        !sidebar.contains("acme-shop · Local"),
-        "cast cleared: {sidebar}"
+        sidebar.contains("acme-shop · Local"),
+        "the remembered current studio's cast stays: {sidebar}"
     );
-    assert!(!sidebar.contains("producer"), "cast row gone: {sidebar}");
-    assert!(sidebar.contains("cast"), "the bare cast head: {sidebar}");
+    assert!(sidebar.contains("producer"), "cast row stays: {sidebar}");
 }

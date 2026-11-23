@@ -29,6 +29,12 @@ impl App {
             .and_then(|focused| self.shell_studio_key(focused, &machines));
         self.studio
             .sync_with_shell(&machines, self.focused.as_deref(), shell_key);
+        // W1/M4: a new current studio scrolls its machine row into the
+        // machines tree — the row never falls out of a short sidebar.
+        if self.studio.current != self.last_current_studio {
+            self.last_current_studio = self.studio.current.clone();
+            self.shell_state.reveal_studio_row = true;
+        }
         self.sync_lot(&machines);
         if self.studio.active != was && !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
@@ -202,6 +208,9 @@ impl App {
                 self.focus_pane(next.clone());
             }
         }
+        // M4: the machines tree follows the selection, never dropping
+        // the studio's machine row out of a short sidebar.
+        self.shell_state.reveal_studio_row = true;
     }
 
     /// Make `key` the current studio and focus its remembered member

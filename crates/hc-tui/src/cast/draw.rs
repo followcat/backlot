@@ -167,6 +167,19 @@ pub(crate) fn render_cast(
                 hits.cast_others = rect;
                 super::simple::draw_others(buffer, rect, *count, *expanded, palette);
             }
+            CastRow::Hint => {
+                put_text(
+                    buffer,
+                    rect.x.saturating_add(1),
+                    rect.y,
+                    rect.width.saturating_sub(1),
+                    &truncate_end(
+                        "select a studio (Enter on it)",
+                        rect.width.saturating_sub(1) as usize,
+                    ),
+                    Style::default().fg(palette.overlay0),
+                );
+            }
             CastRow::Agent(agent) => {
                 hits.agents.push((rect, agent.pane_id.clone()));
                 crate::chrome::agents::render_agent_row(buffer, rect, agent, config);

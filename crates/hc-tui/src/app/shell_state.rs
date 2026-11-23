@@ -23,6 +23,9 @@ pub(crate) struct ShellState {
     /// Expanded sidebar's spaces:agents split, `0.0..=1.0`.
     pub sidebar_section_split: f32,
     pub reveal_navigation_workspace: bool,
+    /// W1: scroll the machines tree to the current studio's machine row
+    /// (M4 — the row never falls out of a short sidebar).
+    pub reveal_studio_row: bool,
     /// Mobile switcher viewport scroll (Navigate mode under
     /// `mobile_width_threshold` — the switcher is the mobile picker).
     pub mobile_switcher_scroll: usize,

@@ -19,6 +19,7 @@ use super::sidebar_render::{
 };
 use super::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
+use super::studio_rows::endpoint_is_machine;
 use super::workspace::WorkspaceEntry;
 
 enum Row {
@@ -26,6 +27,12 @@ enum Row {
     Workspace {
         endpoint: usize,
         entry: WorkspaceEntry,
+    },
+    /// W1: an extra studio row under a machine — a ledger studio with
+    /// no space, the `finished (n)` group, or an `unreachable` line.
+    Studio {
+        endpoint: usize,
+        row: crate::chrome::studio_tree::Row,
     },
 }
 
@@ -62,6 +69,17 @@ pub(crate) fn render_expanded(
                     .map(|entry| Row::Workspace {
                         endpoint: endpoint_index,
                         entry,
+                    }),
+            );
+        }
+        if let Some(tree) = state.studio_tree {
+            rows.extend(
+                tree.get(&endpoint.endpoint_id)
+                    .iter()
+                    .cloned()
+                    .map(|row| Row::Studio {
+                        endpoint: endpoint_index,
+                        row,
                     }),
             );
         }
@@ -103,6 +121,7 @@ pub(crate) fn render_expanded(
                     })
                     .unwrap_or(1)
             }
+            Row::Studio { .. } => 1,
         })
         .collect::<Vec<_>>();
     let gaps = rows
@@ -196,7 +215,7 @@ pub(crate) fn render_expanded(
                         }
                     })
             }
-            Row::Endpoint(_) => false,
+            Row::Endpoint(_) | Row::Studio { .. } => false,
         });
         if let Some(selected_row) = selected_row {
             *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
@@ -207,6 +226,28 @@ pub(crate) fn render_expanded(
                 selected_row,
             );
         }
+    }
+    // W1/M4: the current studio's machine row never falls out of a
+    // short sidebar — the section scrolls to that machine instead of
+    // dropping it. A stage-down or finished studio has no focused
+    // terminal to reveal, so its own row cannot move the list.
+    if !body.is_empty()
+        && std::mem::take(state.reveal_studio_row)
+        && let Some(key) = state.current_studio
+        && let Some(machine_row) = rows.iter().position(|row| match row {
+            Row::Endpoint(index) => {
+                endpoint_is_machine(&state.endpoints[*index].endpoint_id, key.machine.as_deref())
+            }
+            _ => false,
+        })
+    {
+        let metrics = super::scroll::list_scroll_metrics(
+            &row_heights,
+            &gaps,
+            body.height,
+            *state.workspace_scroll,
+        );
+        *state.workspace_scroll = machine_row.min(metrics.max_offset_from_bottom);
     }
     let metrics = super::scroll::list_scroll_metrics(
         &row_heights,
@@ -360,6 +401,23 @@ pub(crate) fn render_expanded(
                 y = y
                     .saturating_add(height)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
+            }
+            Row::Studio { endpoint, row } => {
+                if y >= body.bottom() {
+                    break;
+                }
+                let endpoint = &state.endpoints[*endpoint];
+                let rect = Rect::new(body.x, y, content_width, 1);
+                super::studio_rows::render_studio_row(
+                    buffer,
+                    rect,
+                    palette,
+                    endpoint,
+                    state.current_studio,
+                    row,
+                    hits,
+                );
+                y = y.saturating_add(1);
             }
         }
     }

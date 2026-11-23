@@ -525,9 +525,23 @@ first, and the same studio id on two machines is two studios.
 
 While studios come from one machine nothing looks different. Once they span machines, a studio's
 header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-b` is never
-confused with the local `acme-shop`. A machine that does not serve the document — no `backlot`
-installed, a foreign schema, a core that does not answer — simply contributes nothing: its slot
-stays blank, never an error.
+confused with the local `acme-shop`.
+
+The **left machines tree** lists every machine's studios even when its document cannot answer.
+A machine whose stage is down — or that published no document — is asked for
+`backlot studio list --json` (locally, or over `terminal.run` for a remote), and the answer is
+cached and refreshed when the stage state changes or every 30 s at most. Its studios draw dim
+under the machine row, tagged `stage down`; Enter or a click on one starts that machine's stage.
+Each machine also carries a folded `finished (n)` row under its live studios — Enter or Space
+unfolds it (the machine menu's `Unfold finished studios (n)` does the same from the keyboard),
+and a finished row opens the existing finished-studio menu (reopen producer, sheet, requirement,
+records, delete).
+A machine that cannot be reached at all shows one `unreachable` line, never an empty tree. Rows
+never drop out of a short sidebar: the section scrolls to the machine row of the studio the
+selection landed on, so `Alt+Down` into a studio deeper down brings its machine into view instead
+of hiding it. A machine that does not serve the document — no `backlot` installed, a foreign
+schema, a core that does not answer — simply contributes nothing beyond that line: its slot stays
+blank, never an error.
 
 Acting on a studio runs on the machine that owns it. A local studio's keys spawn `backlot` here
 exactly as before; a remote studio's keys send `terminal.run` to that machine's core, where the
@@ -550,8 +564,13 @@ the newest release, `no backlot` when there is none.
 
 Right-click a machine row (or find it under `Ctrl+B ?`'s `machines` group) for its own menu —
 only what is valid there: `Install backlot`, `Upgrade backlot to v<latest>`,
-`Start the stage` when it is down, `Restart the stage` and `Stop the stage…` while it runs,
-`New studio here`, and the endpoint ops. The stage serves its whole machine, so its stop sits
+`Start the stage` when it is down, `Restart the stage`, `Stop the stage…` and `Stage log` while
+it runs, `New studio here`, and the endpoint ops. `Stage log` opens the stage's own terminal as
+the observe-only peek: its output is readable, and no key reaches the stage process from there.
+Starting the stage from any entry keeps the focus where it was; from the opening page the client
+lands on a studio's view, or on the lot when there is none, and never on the stage tab. When the
+stage's terminal does hold the focus its frame is read-only, with `stage log — read only` on the
+bar, so typed keys and a stray `Ctrl+C` cannot reach it. The stage serves its whole machine, so its stop sits
 here rather than in any one studio's menu: every studio on that machine stops advancing until
 the stage starts again, while running roles and the ledger keep going. Install and upgrade open
 a terminal on that machine running the official installer with `BACKLOT_SKIP_CORE=1` — hc is

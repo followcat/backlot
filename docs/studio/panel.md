@@ -229,7 +229,11 @@ no separate `!N flagged` suffix — a `stuck` role shows on its own row and neve
 ## The cast
 
 In studio mode the sidebar's agents section is the current studio's cast instead (see
-[guide.md](guide.md)). Header: `cast · <studio id>` on the left, `<n>/<total>` on the right — the
+[guide.md](guide.md)). The cast never sits blank while studios exist: the current studio's cast
+shows when one is known; with none current but exactly one live studio in the lot, that studio's
+cast shows and the header names it; with more than one live studio and none current the body is
+one dim line, `select a studio (Enter on it)`. Header: `cast · <studio id>` on the left,
+`<n>/<total>` on the right — the
 studio's position in document order. One entry per person, in the summary's order, two rows each:
 mark, name and task with the runner right-aligned; then the terminal's title — falling back to
 `doing`, then the state word — with the model right-aligned in short form. The shown state takes row
@@ -305,6 +309,15 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
 - The document is the local `backlot` summary, schema `backlot/1`. A missing, malformed or
   foreign-schema document reads as `no studios`, never an error. Without a live `backlot-stage`
   terminal the panel shows `stage stopped` and keeps the last document.
+- The left machines tree is not only spaces: under each machine it also draws the studios its
+  ledger lists when the document cannot speak for them (`stage down`, dim, Enter starts the
+  stage), the machine's folded `finished (n)` group, and one `unreachable` line for a machine
+  that cannot be reached at all. The ledger
+  list comes from `backlot studio list --json`, run locally or over `terminal.run` for a remote,
+  cached and refreshed on a stage change or every 30 s at most. The tree scrolls to the machine
+  row of the studio the selection lands on.
+- The stage log is read-only: when its terminal holds the focus, typed keys are dropped and the
+  mode bar reads `stage log — read only`. A stage start never moves the focus to it.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the
   injected runner (`std::env::current_exe()` in production, a recorder in tests); a failure
   shows its first stderr line.

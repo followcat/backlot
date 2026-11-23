@@ -65,6 +65,7 @@ pub(super) fn render_overlays_and_cursor(
             None,
             app.update_ready_version().is_some(),
             app.restart_ready.is_some(),
+            !app.plain && app.stage_terminal_focused(),
             &app.live,
             &app.shell.palette,
         )

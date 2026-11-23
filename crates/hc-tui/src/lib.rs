@@ -75,4 +75,5 @@ pub mod structure;
 mod studio;
 mod studio_cmds;
 mod studio_dialog;
+mod studio_index;
 mod studio_menu;

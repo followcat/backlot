@@ -40,6 +40,14 @@ pub(crate) enum NsReply {
         epoch: u64,
         out: Result<String, String>,
     },
+    /// W1: `studio list --json` for a machine whose stage is down (or
+    /// whose document is missing) — no dialog, no generation; the
+    /// ledger cache keys it by machine and stage state.
+    StudioList {
+        machine: Option<String>,
+        stage_running: bool,
+        out: Result<String, String>,
+    },
     Dry {
         epoch: u64,
         out: Result<String, String>,
@@ -579,6 +587,11 @@ impl App {
     /// dialog still match the request.
     pub(crate) fn on_ns_reply(&mut self, reply: NsReply) {
         match reply {
+            NsReply::StudioList {
+                machine,
+                stage_running,
+                out,
+            } => self.on_studio_list(machine, stage_running, out),
             NsReply::Version {
                 epoch,
                 machine,
