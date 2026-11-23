@@ -34,6 +34,14 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   `inherited XDG_CONFIG_HOME` and `cursor dir was open` are stage bookkeeping. An unrecognised
   reason is `needs you`, so nothing important is hidden. The role summary carries the class as
   `attention_class`, and `docs/studio/panel.md` holds the full table.
+- **One honest state per person, in plain words.** A person row now shows exactly one state, in
+  this priority: `needs you · <what>`, `asks you · <question>`, `stuck · <reason>`,
+  `working · <doing>`, `waiting`, `ready`. `info` attentions — the stage's own bookkeeping such as
+  `session id not found` — never change the state; they show only in the role's drawer and the
+  sheet's overview, dimmed. The old `stalled` label is gone: a `stuck` episode reads `stuck …`,
+  peach, and a needs-you attention that is not a prompt reads `needs you · …`, red. A live
+  producer with `work: waiting`, `doing: idle` and an open `session id not found` now reads
+  `ready`, not `! stalled`.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

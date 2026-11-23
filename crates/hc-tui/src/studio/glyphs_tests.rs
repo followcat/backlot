@@ -12,10 +12,13 @@ fn every_glyph_is_single_width() {
         for person in [
             Person::Working,
             Person::Idle,
+            Person::Ready,
             Person::Slot,
             Person::UserPrompt,
             Person::DirPrompt,
-            Person::Stalled,
+            Person::NeedsYou,
+            Person::Asks,
+            Person::Stuck,
             Person::Failed,
             Person::Lost,
             Person::Resumable,
@@ -60,10 +63,13 @@ fn every_glyph_is_single_width() {
 fn only_working_animates() {
     let states = [
         Person::Idle,
+        Person::Ready,
         Person::Slot,
         Person::UserPrompt,
         Person::DirPrompt,
-        Person::Stalled,
+        Person::NeedsYou,
+        Person::Asks,
+        Person::Stuck,
         Person::Failed,
         Person::Lost,
         Person::Resumable,
@@ -86,10 +92,13 @@ fn person_glyphs_and_tokens() {
     let palette = Palette::from_name("backlot").unwrap();
     let cases = [
         (Person::Idle, "○", palette.overlay1),
+        (Person::Ready, "◦", palette.overlay1),
         (Person::Slot, "◌", palette.peach),
         (Person::UserPrompt, "×", palette.red),
         (Person::DirPrompt, "×", palette.peach),
-        (Person::Stalled, "!", palette.peach),
+        (Person::NeedsYou, "■", palette.red),
+        (Person::Asks, "?", palette.peach),
+        (Person::Stuck, "!", palette.peach),
         (Person::Failed, "!", palette.red),
         (Person::Lost, "!", palette.red),
         (Person::Resumable, "✓", palette.teal),
@@ -105,10 +114,12 @@ fn person_glyphs_and_tokens() {
     assert_eq!(Person::Working.color(&palette), palette.yellow);
 }
 
-/// `Person::of` precedence: closed/lost/held first, then attention,
-/// failure, then the sampled screen.
+/// `Person::of` precedence: closed/lost/held first, then the
+/// attention class in priority order, an unanswered question, a
+/// failure, the sample, and finally waiting or ready.
 #[test]
 fn person_of_reads_a_role() {
+    use backlot_model::attention::AttentionClass;
     let role = |state: &str| RoleSummary {
         role: "actor-t1-c1".into(),
         name: "actor-a".into(),
@@ -159,6 +170,7 @@ fn person_of_reads_a_role() {
     prompted.work = Some(Work::Working);
     prompted.failed = Some("rate_limit".into());
     prompted.attention = Some("permission prompt".into());
+    prompted.attention_class = Some(AttentionClass::NeedsYou);
     assert_eq!(Person::of(&prompted), Person::DirPrompt);
     prompted.attention_user = true;
     assert_eq!(Person::of(&prompted), Person::UserPrompt);
@@ -166,12 +178,100 @@ fn person_of_reads_a_role() {
     prompted.attention_user = false;
     prompted.attention = Some("permission prompt — needs the user".into());
     assert_eq!(Person::of(&prompted), Person::UserPrompt);
+
+    // A needs-you attention that is not a prompt, a stuck one, and an
+    // info one that never decides the state.
+    prompted.attention = Some("cannot resume".into());
+    prompted.attention_class = Some(AttentionClass::NeedsYou);
+    assert_eq!(Person::of(&prompted), Person::NeedsYou);
     prompted.attention = Some("stalled".into());
-    assert_eq!(Person::of(&prompted), Person::Stalled);
+    prompted.attention_class = Some(AttentionClass::Stuck);
+    assert_eq!(Person::of(&prompted), Person::Stuck);
+    prompted.failed = None;
+    prompted.attention = Some("session id not found".into());
+    prompted.attention_class = Some(AttentionClass::Info);
+    assert_eq!(Person::of(&prompted), Person::Working);
+
+    // An unanswered question outranks the sample; the info attention
+    // did not hide it.
+    prompted.asks = Some("which shop?".into());
+    assert_eq!(Person::of(&prompted), Person::Asks);
 
     let mut failed = role("live");
     failed.failed = Some("overloaded".into());
     assert_eq!(Person::of(&failed), Person::Failed);
+}
+
+/// The real case: a live producer whose work reads waiting and whose
+/// `doing` reads idle, carrying an open `session id not found`
+/// attention, is `ready` — not stalled and not flagged.
+#[test]
+fn an_info_attention_leaves_a_live_producer_ready() {
+    use backlot_model::attention::AttentionClass;
+    let producer: RoleSummary = serde_json::from_value(serde_json::json!({
+        "role": "producer",
+        "name": "producer",
+        "state": "live",
+        "work": "waiting",
+        "doing": "idle",
+        "attention": "session id not found",
+        "attention_class": "info",
+        "attention_detail": "session id not found",
+        "attention_seq": 7
+    }))
+    .unwrap();
+    assert_eq!(
+        Person::attention_class(&producer),
+        Some(AttentionClass::Info)
+    );
+    assert_eq!(Person::of(&producer), Person::Ready);
+    assert_eq!(Person::of(&producer).word(), "ready");
+    assert_eq!(Person::state_text(&producer), "ready");
+}
+
+/// The shown state's plain words for each priority.
+#[test]
+fn state_text_uses_the_priority_words() {
+    use backlot_model::attention::AttentionClass;
+    let mut role: RoleSummary = serde_json::from_value(serde_json::json!({
+        "role": "producer",
+        "name": "producer",
+        "state": "live",
+        "doing": "900 tokens",
+        "work": "working"
+    }))
+    .unwrap();
+    assert_eq!(Person::state_text(&role), "working · 900 tokens");
+    role.work = Some(Work::Waiting);
+    assert_eq!(Person::state_text(&role), "waiting · 900 tokens");
+
+    role.work = None;
+    role.doing = None;
+    role.attention = Some("cannot resume".into());
+    role.attention_class = Some(AttentionClass::NeedsYou);
+    role.attention_detail = Some("no session id to resume".into());
+    assert_eq!(
+        Person::state_text(&role),
+        "needs you · no session id to resume"
+    );
+
+    role.asks = Some("which shop?".into());
+    assert_eq!(
+        Person::state_text(&role),
+        "needs you · no session id to resume"
+    );
+    role.attention = None;
+    role.attention_class = None;
+    assert_eq!(Person::state_text(&role), "asks you · which shop?");
+
+    role.asks = None;
+    role.attention = Some("rate limited".into());
+    role.attention_class = Some(AttentionClass::Stuck);
+    role.attention_detail = Some("rate limited; auto-retry after the reset".into());
+    assert_eq!(
+        Person::state_text(&role),
+        "stuck · rate limited; auto-retry after the reset"
+    );
 }
 
 /// Every ledger task status maps to its spec glyph and token.

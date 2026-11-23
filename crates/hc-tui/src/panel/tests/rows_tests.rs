@@ -215,7 +215,7 @@ fn mark_counts_follow_the_mark_order() {
             (Person::DirPrompt, 1),
             (Person::Lost, 1),
             (Person::Working, 3),
-            (Person::Idle, 2),
+            (Person::Ready, 2),
             (Person::Resumable, 1),
         ]
     );

@@ -659,7 +659,7 @@ async fn manual_c_strip_at_120x40_shows_calm_summary_for_idle_studio() {
     assert_eq!(app.panel_width(120), 16);
     let drawn = draw_to(&mut app, 120, 40);
     let text = screen_lines(&drawn).join("\n");
-    assert!(text.contains("○2 ✓1"), "{text}");
+    assert!(text.contains("◦2 ✓1"), "{text}");
 }
 
 #[tokio::test]

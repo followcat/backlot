@@ -17,11 +17,11 @@ use crate::chrome::scroll::{list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::{display_width, truncate_end};
 use crate::studio::glyphs::Person;
 
-/// A person's second row's state word — the shared vocabulary's own
-/// word (`working`, `idle`, `slot`, `USER`, `dir`, `stalled`,
-/// `failed`, `lost`, `closed`).
-fn state_word(role: &RoleSummary) -> &'static str {
-    Person::of(role).word()
+/// A person's second row's state — the shared vocabulary's own
+/// `needs you · <what>` / `asks you · <question>` / `stuck · …` /
+/// `working · …` / `waiting` / `ready` text.
+fn state_word(role: &RoleSummary) -> String {
+    Person::state_text(role)
 }
 
 /// The short model form: drop a `<provider>/` prefix and a leading
@@ -253,11 +253,17 @@ fn draw_person(
         );
     }
 
-    // Row 2: `! <attention>` wins, then `last turn failed`, else the
-    // title → doing → state-word fallback with the model at the right
-    // edge. An alert takes the whole row: beside a model it was cut to
-    // a word at the default width.
-    let alert = role.attention.is_some() || role.failed.is_some();
+    // Row 2: the one shown state — `needs you`, `asks you`, `stuck`
+    // take the whole row, so beside a model it was cut to a word at
+    // the default width. A `failed` turn and the title/doing/state
+    // fallback follow. `info` attentions never reach this row.
+    let info_only = matches!(
+        Person::attention_class(role),
+        Some(backlot_model::attention::AttentionClass::Info)
+    );
+    let attention_shown = role.attention.is_some() && !info_only;
+    let failed = role.failed.is_some() && !attention_shown && role.asks.is_none();
+    let alert = attention_shown || role.asks.is_some() || failed;
     let model = role
         .model
         .as_deref()
@@ -271,20 +277,20 @@ fn draw_person(
     let left_width = rect
         .width
         .saturating_sub(3 + model_width + u16::from(model_width > 0));
-    let (text, style) = if let Some(attention) = &role.attention {
-        (format!("! {attention}"), Style::default().fg(palette.red))
-    } else if role.failed.is_some() {
+    let (text, style) = if failed {
         (
             "last turn failed".to_string(),
-            Style::default().fg(palette.peach),
+            Person::Failed.style(palette),
         )
+    } else if alert {
+        (state_word(role), mark.style(palette))
     } else {
         let title = role
             .terminal
             .as_deref()
             .and_then(|t| view.titles.get(t).and_then(|title| title.clone()))
             .or_else(|| role.doing.clone())
-            .unwrap_or_else(|| state_word(role).to_string());
+            .unwrap_or_else(|| mark.word().to_string());
         (title, Style::default().fg(text_fg(palette.subtext0)))
     };
     put_text(

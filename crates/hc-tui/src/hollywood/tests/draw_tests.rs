@@ -788,10 +788,10 @@ fn the_frame_names_its_state_and_the_role_on_set() {
     assert!(what.contains("review delivery 1"), "{what}");
     // The cast line: one mark each, coloured by role state.
     let cast = row_of(&buf, area, frame.y + 5);
-    assert!(cast.contains("◐ ! ! ○"), "{cast}");
+    assert!(cast.contains("◐ ! ! ◦"), "{cast}");
     assert!(cast.contains("4 cast"), "{cast}");
     let marks: Vec<Color> = (frame.x..frame.x + frame.width)
-        .filter(|x| matches!(buf[(*x, frame.y + 5)].symbol(), "◐" | "!" | "○"))
+        .filter(|x| matches!(buf[(*x, frame.y + 5)].symbol(), "◐" | "!" | "○" | "◦"))
         .map(|x| buf[(x, frame.y + 5)].fg)
         .collect();
     assert_eq!(

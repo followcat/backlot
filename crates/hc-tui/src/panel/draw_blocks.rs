@@ -452,11 +452,11 @@ pub(super) fn draw_talk(
     }
 }
 
-/// A person's extra line at the name column. The cue is the
-/// attention's trimmed detail — `! env -i cargo…  [y/d/p]` for a
-/// user-owned prompt, `! prompt · director reviewing` for a
-/// director-owned one (D9), `! <attention>` otherwise. `Failed`
-/// shows the last turn's error.
+/// A person's extra line at the name column: the one shown state's
+/// detail. A user-owned prompt keeps `[y/d/p]`, a director's prompt
+/// reads `! prompt · director reviewing`, and a needs-you attention,
+/// an unanswered question or a stuck episode reads its plain words.
+/// `Failed` shows the last turn's error.
 pub(super) fn draw_person_line(
     buf: &mut Buffer,
     rect: Rect,
@@ -468,23 +468,24 @@ pub(super) fn draw_person_line(
     draw_inner(buf, rect, frame);
     let (text, style) = match kind {
         PersonLine::Cue => {
-            let detail = role
-                .attention_detail
-                .as_deref()
-                .or(role.attention.as_deref())
-                .unwrap_or_default();
-            if Person::of(role) == Person::DirPrompt {
-                (
+            let mark = Person::of(role);
+            match mark {
+                Person::DirPrompt => (
                     "! prompt · director reviewing".to_string(),
                     Style::default().fg(palette.overlay0),
-                )
-            } else if role.attention_user {
-                (
-                    format!("! {detail} [y/d/p]"),
-                    Person::UserPrompt.style(palette),
-                )
-            } else {
-                (format!("! {detail}"), Person::of(role).style(palette))
+                ),
+                Person::UserPrompt => {
+                    let detail = role
+                        .attention_detail
+                        .as_deref()
+                        .or(role.attention.as_deref())
+                        .unwrap_or_default();
+                    (
+                        format!("! {detail} [y/d/p]"),
+                        Person::UserPrompt.style(palette),
+                    )
+                }
+                _ => (Person::state_text(role), mark.style(palette)),
             }
         }
         PersonLine::Failed => (

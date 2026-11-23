@@ -157,9 +157,9 @@ fn cast_marks_follow_the_role_state() {
         marks,
         vec![
             Person::Working, // producer, working
-            Person::Stalled, // alice, an attention
+            Person::Stuck,   // alice, a stalled screen
             Person::Lost,    // bob, lost
-            Person::Idle,    // carol, waiting
+            Person::Ready,   // carol, live and nothing assigned
         ]
     );
 }

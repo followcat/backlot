@@ -24,7 +24,7 @@ pub(crate) use config::{
 pub(crate) use data::{key as document_key, stage_running};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use remote::RemoteRunner;
-pub(crate) use row_lines::owed_text;
+pub(crate) use row_lines::{info_line, owed_text};
 pub(crate) use rows::{Row, Target, rows};
 pub(crate) use rows_fit::{health_of, mark_counts};
 

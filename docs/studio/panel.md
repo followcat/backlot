@@ -114,7 +114,10 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
   prompt, and the state word right-aligned. A user-owned prompt adds a cue line
-  `! <attention>  [y/d/p]`; a director-owned one gets no cue.
+  `! <attention>  [y/d/p]`; a director-owned one reads `! prompt · director reviewing`. A
+  needs-you attention, an unanswered question or a stuck episode adds its own
+  `needs you · …` / `asks you · …` / `stuck · …` line; an `info` attention adds none and shows
+  only in the drawer and the sheet, dimmed.
 - **Task rows** list work no live actor carries — uncast, dependency-gated (`waits t0`),
   paused (`=`), blocked or at rework cap, and accepted (`✓`) — each as `· <task> <title>`.
   Six or more accepted tasks fold into `✓ <n> accepted` and unfold with `Space` on the
@@ -184,15 +187,31 @@ or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs
 the table does not list is `needs you`, so nothing important is hidden. Stage bookkeeping never
 changes a person's state and never counts as flagged.
 
+A person shows exactly one state, in this priority:
+
+1. `needs you · <what>` — a user or director prompt as before (the prompt row keeps `y`/`d`/`p`
+   and a non-actor's word is `USER`), or a `needs you` attention that is not a prompt (`■` red).
+2. `asks you · <question>` — the role's newest `tell user` that the user has not answered with a
+   `tell` back to that role (`?` peach).
+3. `stuck · <plain reason>` — a `stuck` attention (`!` peach).
+4. `working · <doing>` — the watch pass reads the screen working.
+5. `waiting` — anything else that is live and not doing work; a held role reads its
+   `waiting for a <runner> slot` detail.
+6. `ready` — live, idle and nothing assigned (`◦`).
+
+An `info` attention never appears in this list; it shows only in the role's details (the `Space`
+drawer and the sheet's studio overview), dimmed.
+
 ## The cast
 
 In studio mode the sidebar's agents section is the current studio's cast instead (see
 [guide.md](guide.md)). Header: `cast · <studio id>` on the left, `<n>/<total>` on the right — the
 studio's position in document order. One entry per person, in the summary's order, two rows each:
 mark, name and task with the runner right-aligned; then the terminal's title — falling back to
-`doing`, then the state word — with the model right-aligned in short form. An attention turns row
-two into `! <attention>` in the blocked colour; a failed turn says `last turn failed`. Either takes
-the whole row, model included, so it stays readable at the default width. The person
+`doing`, then the state word — with the model right-aligned in short form. The shown state takes row
+two in the blocked colour (`needs you · …`, `asks you · …`, `stuck · …`); a failed turn with no
+attention says `last turn failed`. Either takes the whole row, model included, so it stays
+readable at the default width. An `info` attention never takes the row. The person
 whose terminal is focused gets the active-row background on both rows and an accent `▌` in the
 first column. Closed people stay listed, dimmed, after the live ones.
 
@@ -251,8 +270,9 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
 
 ## Behaviour notes
 
-- The five marks — working (animated), waiting, blocked, lost, closed — pair a distinct symbol
-  with a `chrome/status.rs` colour; an unknown `work` reads as waiting.
+- The marks — working (animated), waiting, ready, held, needs you, asks, stuck, failed, lost,
+  closed — pair a distinct symbol with a `chrome/status.rs` colour; an unknown `work` reads as
+  waiting.
 - Working marks spin about every 120 ms through a one-shot deadline that arms only while a
   working mark is actually drawn; an idle or closed panel wakes nothing.
 - Beside the panes only while the pane surface keeps at least 44 columns after the sidebar

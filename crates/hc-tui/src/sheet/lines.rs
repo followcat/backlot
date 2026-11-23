@@ -179,6 +179,13 @@ fn studio_overview(
                 Row::Text,
             ));
         }
+        // A stage-bookkeeping attention never reaches a person row;
+        // the role's details carry it, dimmed.
+        for role in &studio.roles {
+            if let Some(info) = crate::panel::info_line(role) {
+                out.push(line(format!("{} {}", role.name, info), Row::Dim));
+            }
+        }
     }
     let Some(state) = state else {
         out.push(line("loading ledger details…", Row::Dim));

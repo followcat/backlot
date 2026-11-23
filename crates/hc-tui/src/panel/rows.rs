@@ -320,7 +320,16 @@ fn block_rows<'a>(
     let emit_person = |out: &mut Vec<Row<'a>>, role: &'a RoleSummary| {
         let key = studio.key();
         out.push(Row::Person { studio, role });
-        if role.attention.is_some() {
+        // The state's own detail line: a prompt's cue, a needs-you
+        // attention, an unanswered question or a stuck episode. An
+        // `info` attention has no line here — it lives in the details,
+        // and a blocked screen with no attention row keeps its old
+        // one-line row.
+        let cue = role.asks.is_some()
+            || (role.attention.is_some()
+                && crate::studio::glyphs::Person::attention_class(role)
+                    != Some(backlot_model::attention::AttentionClass::Info));
+        if cue {
             out.push(Row::PersonLine {
                 studio,
                 role,

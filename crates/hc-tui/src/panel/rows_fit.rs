@@ -15,15 +15,18 @@ use crate::studio::glyphs::Person;
 
 /// The order a stacked block's mark counts follow — the urgents
 /// first, then the working and quiet states.
-const MARK_ORDER: [Person; 10] = [
+const MARK_ORDER: [Person; 13] = [
     Person::UserPrompt,
     Person::DirPrompt,
-    Person::Stalled,
+    Person::NeedsYou,
+    Person::Asks,
+    Person::Stuck,
     Person::Failed,
     Person::Lost,
     Person::Working,
     Person::Slot,
     Person::Idle,
+    Person::Ready,
     Person::Resumable,
     Person::Closed,
 ];

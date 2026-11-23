@@ -77,10 +77,13 @@ fn every_state_has_its_own_mark_and_color() {
     let marks = [
         Person::Working,
         Person::Idle,
+        Person::Ready,
         Person::Slot,
         Person::UserPrompt,
         Person::DirPrompt,
-        Person::Stalled,
+        Person::NeedsYou,
+        Person::Asks,
+        Person::Stuck,
         Person::Failed,
         Person::Resumable,
         Person::Closed,
@@ -255,7 +258,7 @@ fn an_attention_adds_a_bang_line_under_the_person() {
     let line = (area.x..area.x + area.width)
         .map(|x| buf[(x, alice.y + 1)].symbol())
         .collect::<String>();
-    assert!(line.contains("! needs permission"), "{line}");
+    assert!(line.contains("needs you · needs permission"), "{line}");
 }
 
 #[test]
@@ -663,7 +666,7 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
     let area = Rect::new(0, 0, 16, 12);
     let (buf, _) = draw(area, Some(&summary), &panel, None);
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("○2 ✓1"), "calm role counts render: {text}");
+    assert!(text.contains("◦2 ✓1"), "calm role counts render: {text}");
 
     // Stage down renders a concise stage cue instead of blank space.
     let mut down_buf = Buffer::empty(area);

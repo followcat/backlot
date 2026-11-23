@@ -3,6 +3,7 @@
 //! pill, the Hollywood frames, the studio dock and the sidebar cast.
 //! Only single-width codepoints; only `working` animates.
 
+use backlot_model::attention::AttentionClass;
 use backlot_model::event::{PERMISSION_PROMPT, Priority};
 use backlot_model::state::TaskStatus;
 use backlot_model::summary::{RoleSummary, Work};
@@ -27,7 +28,9 @@ pub(crate) const SELECTION_BAR: &str = "▌";
 pub(crate) const FOCUSED_STUDIO: &str = "▸";
 
 /// A person's state as the whole interaction layer shows it — the
-/// same role reads the same on every surface (A11.1).
+/// same role reads the same on every surface (A11.1). Exactly one
+/// state shows, in this priority: needs you, asks you, stuck,
+/// working, waiting, ready.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Person {
     /// Actively producing — the only animated glyph (`⠋`..`⠏`,
@@ -35,14 +38,20 @@ pub(crate) enum Person {
     Working,
     /// Live and quiet — `○` `overlay1`, never green.
     Idle,
+    /// Live, idle, nothing assigned — `○` `overlay1`.
+    Ready,
     /// Wanted but held for a runner slot — `◌` `peach`.
     Slot,
     /// A prompt only the user may answer — `×` `red` `BOLD`.
     UserPrompt,
     /// A prompt the director answers — `×` `peach`.
     DirPrompt,
-    /// Screen stalled or a step overdue — `!` `peach`.
-    Stalled,
+    /// A `needs_you` attention that is not a prompt — `×` `red`.
+    NeedsYou,
+    /// The role's unanswered `tell user` — `?` `peach`.
+    Asks,
+    /// Something wrong while the stage still retries — `!` `peach`.
+    Stuck,
     /// A recorded `StopFailure` — `!` `red` `BOLD`.
     Failed,
     /// The terminal vanished — `!` `red` `BOLD`.
@@ -54,9 +63,20 @@ pub(crate) enum Person {
 }
 
 impl Person {
+    /// The open attention's class: the document's own field when the
+    /// stage wrote one, else the shared rule over the reason.
+    pub(crate) fn attention_class(role: &RoleSummary) -> Option<AttentionClass> {
+        role.attention_class.or_else(|| {
+            role.attention
+                .as_deref()
+                .map(|reason| AttentionClass::of(reason, role.attention_user))
+        })
+    }
+
     /// A role row → its glyph state. `closed`/`lost`/held override the
-    /// sampled screen; an open attention then a recorded failure then
-    /// the sample decide the rest.
+    /// sampled screen; a needs-you attention and an unanswered
+    /// question then outrank a stuck one, a failure, and the sample.
+    /// `info` attentions never decide a state.
     pub(crate) fn of(role: &RoleSummary) -> Person {
         match role.state.as_str() {
             "closed" => {
@@ -71,14 +91,29 @@ impl Person {
             _ => {}
         }
         if let Some(attention) = role.attention.as_deref() {
-            return if role.attention_user || attention.ends_with("needs the user") {
-                Person::UserPrompt
-            } else if attention.starts_with(PERMISSION_PROMPT) {
-                Person::DirPrompt
-            } else {
-                // `stalled`, `cannot resume` — something owes a nudge.
-                Person::Stalled
-            };
+            match Self::attention_class(role) {
+                Some(AttentionClass::Info) => {}
+                Some(AttentionClass::NeedsYou) => {
+                    let user_marked = role.attention_user || attention.ends_with("needs the user");
+                    return if attention.starts_with(PERMISSION_PROMPT) {
+                        let non_actor = role.task.is_none() && !role.role.starts_with("actor-");
+                        if user_marked || non_actor {
+                            Person::UserPrompt
+                        } else {
+                            Person::DirPrompt
+                        }
+                    } else if user_marked {
+                        Person::UserPrompt
+                    } else {
+                        Person::NeedsYou
+                    };
+                }
+                Some(AttentionClass::Stuck) => return Person::Stuck,
+                None => {}
+            }
+        }
+        if role.asks.is_some() {
+            return Person::Asks;
         }
         if role.failed.is_some() {
             return Person::Failed;
@@ -94,6 +129,9 @@ impl Person {
                     Person::UserPrompt
                 }
             }
+            _ if role.task.is_none() && role.doing.as_deref().is_none_or(|d| d == "idle") => {
+                Person::Ready
+            }
             _ => Person::Idle,
         }
     }
@@ -103,9 +141,12 @@ impl Person {
         match self {
             Person::Working => SPINNER[spin % SPINNER.len()],
             Person::Idle => "○",
+            Person::Ready => "◦",
             Person::Slot => "◌",
             Person::UserPrompt | Person::DirPrompt => "×",
-            Person::Stalled | Person::Failed | Person::Lost => "!",
+            Person::NeedsYou => "■",
+            Person::Asks => "?",
+            Person::Stuck | Person::Failed | Person::Lost => "!",
             Person::Resumable | Person::Closed => "✓",
         }
     }
@@ -123,9 +164,9 @@ impl Person {
     pub(crate) fn color(self, palette: &Palette) -> Color {
         match self {
             Person::Working => palette.yellow,
-            Person::Idle => palette.overlay1,
-            Person::Slot | Person::DirPrompt | Person::Stalled => palette.peach,
-            Person::UserPrompt | Person::Failed | Person::Lost => palette.red,
+            Person::Idle | Person::Ready => palette.overlay1,
+            Person::Slot | Person::DirPrompt | Person::Asks | Person::Stuck => palette.peach,
+            Person::UserPrompt | Person::NeedsYou | Person::Failed | Person::Lost => palette.red,
             Person::Resumable => palette.teal,
             Person::Closed => palette.overlay0,
         }
@@ -136,25 +177,65 @@ impl Person {
     pub(crate) fn style(self, palette: &Palette) -> Style {
         let style = Style::default().fg(self.color(palette));
         match self {
-            Person::UserPrompt | Person::Failed | Person::Lost => {
+            Person::UserPrompt | Person::NeedsYou | Person::Failed | Person::Lost => {
                 style.add_modifier(Modifier::BOLD)
             }
             _ => style,
         }
     }
 
-    /// The state word shown at a row's right edge.
+    /// The short state word shown at a row's right edge.
     pub(crate) fn word(self) -> &'static str {
         match self {
             Person::Working => "working",
-            Person::Idle => "idle",
-            Person::Slot => "slot",
+            Person::Idle | Person::Slot => "waiting",
+            Person::Ready => "ready",
             Person::UserPrompt => "USER",
             Person::DirPrompt => "dir",
-            Person::Stalled => "stalled",
+            Person::NeedsYou => "needs you",
+            Person::Asks => "asks",
+            Person::Stuck => "stuck",
             Person::Failed => "failed",
             Person::Lost => "lost",
             Person::Resumable | Person::Closed => "closed",
+        }
+    }
+
+    /// The one state the person's row reads, in plain words — the
+    /// same priority [`Person::of`] uses: `needs you · <what>`,
+    /// `asks you · <question>`, `stuck · <reason>`, `working · <doing>`,
+    /// `waiting`, `ready`, then the terminal states.
+    pub(crate) fn state_text(role: &RoleSummary) -> String {
+        let detail = || {
+            role.attention_detail
+                .as_deref()
+                .or(role.attention.as_deref())
+                .unwrap_or("a prompt")
+        };
+        match Person::of(role) {
+            Person::UserPrompt | Person::DirPrompt | Person::NeedsYou => {
+                format!("needs you · {}", detail())
+            }
+            Person::Asks => role
+                .asks
+                .as_deref()
+                .map(|q| format!("asks you · {q}"))
+                .unwrap_or_else(|| "asks you".into()),
+            Person::Stuck => format!("stuck · {}", detail()),
+            Person::Working => match role.doing.as_deref().filter(|d| *d != "idle") {
+                Some(doing) => format!("working · {doing}"),
+                None => "working".into(),
+            },
+            Person::Idle => match role.doing.as_deref().filter(|d| *d != "idle") {
+                Some(doing) => format!("waiting · {doing}"),
+                None => "waiting".into(),
+            },
+            Person::Slot => role
+                .doing
+                .clone()
+                .unwrap_or_else(|| "waiting for a slot".into()),
+            Person::Ready => "ready".into(),
+            other => other.word().into(),
         }
     }
 }

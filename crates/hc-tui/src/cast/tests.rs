@@ -213,7 +213,7 @@ fn attention_wins_over_failed_and_both_replace_the_title() {
     let view = cast_view(&summary, vec![], false, None);
     let (buf, ..) = draw(&view, 40, 20);
     let text = lines(&buf, Rect::new(0, 0, 40, 20)).join("\n");
-    assert!(text.contains("! needs permission"), "{text}");
+    assert!(text.contains("needs you · needs permission"), "{text}");
     assert!(text.contains("last turn failed"), "{text}");
     // The attention row hides both the title and the failure line on
     // alice's entry — only bob's failed line shows the words.
@@ -222,7 +222,7 @@ fn attention_wins_over_failed_and_both_replace_the_title() {
         .position(|l| l.contains("alice"))
         .unwrap();
     let row2 = &lines(&buf, Rect::new(0, 0, 40, 20))[alice + 1];
-    assert!(row2.contains("! needs permission"), "{row2}");
+    assert!(row2.contains("needs you · needs permission"), "{row2}");
     assert!(!row2.contains("feature"), "{row2}");
 }
 
@@ -239,7 +239,7 @@ fn an_alert_takes_the_whole_second_row_at_the_default_width() {
     let rows = lines(&buf, Rect::new(0, 0, 26, 20));
     let below = |name: &str| rows[rows.iter().position(|l| l.contains(name)).unwrap() + 1].clone();
     let alice = below("alice");
-    assert!(alice.contains("! permission prompt"), "{alice}");
+    assert!(alice.contains("needs you"), "{alice}");
     assert!(!alice.contains("sonnet"), "{alice}");
     let producer = below("producer");
     assert!(producer.contains("last turn failed"), "{producer}");
