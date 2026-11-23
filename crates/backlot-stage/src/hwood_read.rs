@@ -36,6 +36,7 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             cast_file,
             init,
             no_git,
+            ask,
             ..
         } => Some(dry_run(
             common,
@@ -45,6 +46,7 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
             &repo.clone().unwrap_or_default(),
             &cast_file.clone().unwrap_or_default(),
             (*init, *no_git),
+            ask.as_ref(),
         )),
         _ => None,
     }
@@ -310,7 +312,9 @@ pub(crate) fn report_relpath(file: &Path) -> Result<std::path::PathBuf, Fail> {
 }
 
 /// `studio new --dry-run`: every `studio new` check plus the draft's
-/// own (D19) — nothing recorded, nothing created.
+/// own (D19) — nothing recorded, nothing created. A `--ask`/`--ask-file`
+/// is checked non-empty and restated in the plan, but not queued.
+#[allow(clippy::too_many_arguments)]
 fn dry_run(
     common: &Common,
     env: &Env,
@@ -319,12 +323,33 @@ fn dry_run(
     repo: &str,
     cast_file: &Path,
     flags: (bool, bool),
+    ask: Option<&crate::args::TextSource>,
 ) -> Result<String, Fail> {
     let name = crate::cli::studio_name(common, env)?;
     crate::draft::check(base, &name, repo, cast_file, env, flags.0, flags.1)?;
-    Ok(format!(
-        "dry run: studio '{name}' ('{title}', repo {repo}) is valid — nothing recorded"
-    ))
+    let mut out =
+        format!("dry run: studio '{name}' ('{title}', repo {repo}) is valid — nothing recorded");
+    if let Some(ask) = ask {
+        // The dry run precedes `materialize`, so `--ask`'s text is
+        // still inline here; `--ask-file` names a file.
+        let body = match ask {
+            crate::args::TextSource::Text(text) => text.clone(),
+            crate::args::TextSource::File(path) => std::fs::read_to_string(path)
+                .map_err(|e| Fail::refused(format!("--ask-file {}: {e}", path.display())))?,
+            crate::args::TextSource::Stdin => String::new(),
+        };
+        if body.trim().is_empty() {
+            return Err(Fail::refused("the ask is empty"));
+        }
+        let line = body
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or_default()
+            .trim();
+        let line: String = line.chars().take(60).collect();
+        out.push_str(&format!("\nfirst message to the producer: {line}"));
+    }
+    Ok(out)
 }
 
 /// `card list` — every card Hollywood has proposed, open first.

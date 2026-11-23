@@ -303,6 +303,7 @@ pub(crate) fn run_io(
                 mode: Some(mode),
                 init,
                 no_git: false,
+                ask: None,
             },
             env,
             &base,

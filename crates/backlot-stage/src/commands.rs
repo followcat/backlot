@@ -47,7 +47,7 @@ fn person_gate(caller: &Caller) -> Result<(), Fail> {
 }
 
 /// `seq`-prefixed copy name under a content dir.
-fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -> PendingFile {
+pub(crate) fn copy_to(subdir: &str, seq: u64, src: &Path, label: Option<&str>) -> PendingFile {
     let base = src
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -256,6 +256,27 @@ fn message_cmd(
     }))
 }
 
+/// `studio new --ask`: the person's first message to the producer —
+/// exactly what `backlot tell producer --as user` records, so the
+/// stage delivers it by the same rules. `by` is the studio-new
+/// caller (`user` by default).
+pub(crate) fn ask_cmd(by: EventBy, file: PathBuf) -> Result<PendingBuilder, Fail> {
+    must_exist(&file, "--ask-file")?;
+    Ok(Box::new(move |_, seq| {
+        let pf = copy_to("messages", seq, &file, None);
+        Ok(pending(
+            EventKind::MessageQueued {
+                to: "producer".into(),
+                file: Some(pf.dest.clone()),
+                purpose: None,
+                source_seq: None,
+            },
+            by,
+            vec![pf],
+        ))
+    }))
+}
+
 /// Parse and pre-check the command; the returned closure runs under
 /// the append lock with the replayed state and the seq it will get.
 /// `env` and `base` serve `studio new`'s `[runner_env]` PATH write.
@@ -292,6 +313,9 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             mode,
             init,
             no_git,
+            // The first message is `exec_event`'s own second append —
+            // `build` records only `studio.created`.
+            ask: _,
         } => {
             debug_assert!(!dry_run, "dry-run is answered in cli::run");
             debug_assert!(!interactive, "--interactive is answered by the wizard");

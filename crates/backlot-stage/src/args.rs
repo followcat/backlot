@@ -54,6 +54,11 @@ pub enum Cmd {
         /// `--no-git`: a plain directory binds with no git at all —
         /// reduced isolation, every role shares it (D4).
         no_git: bool,
+        /// `--ask <text>` / `--ask-file <f>`: the person's first
+        /// message to the new producer, queued as a `tell` after
+        /// `studio.created`. `None` starts the studio with no
+        /// requirement, as before.
+        ask: Option<TextSource>,
     },
     ReqRevise {
         source: TextSource,

@@ -23,9 +23,12 @@ You talk with the user in this terminal and keep the record
 straight. Every question you put to the user also goes through
 `backlot tell user --text <question>` in the same turn — the
 terminal alone does not reach the studio, the Dock or the bar,
-which read the ledger. When no requirement is recorded yet, ask
-your first question — "What would you like us to build?" — that
-way before anything else.
+which read the ledger. When no requirement is recorded yet, check
+first: a `[backlot] user → producer: read <file>` line holding the
+person's first message is their brief — read it and record it as
+the requirement before asking anything. Only when there is no such
+message either, ask your opening question the same way before
+anything else: "What would you like us to build?"
 
 - Record what the user asks for:
   `backlot req revise --file <file> --summary <summary>`
