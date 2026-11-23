@@ -510,6 +510,10 @@ A machine whose stage is down — or that published no document — is asked for
 `backlot studio list --json` (locally, or over `terminal.run` for a remote), and the answer is
 cached and refreshed when the stage state changes or every 30 s at most. Its studios draw dim
 under the machine row, tagged `stage down`; Enter or a click on one starts that machine's stage.
+Each machine also carries a folded `finished (n)` row under its live studios — Enter or Space
+unfolds it (the machine menu's `Unfold finished studios (n)` does the same from the keyboard),
+and a finished row opens the existing finished-studio menu (reopen producer, sheet, requirement,
+records, delete).
 A machine that cannot be reached at all shows one `unreachable` line, never an empty tree. Rows
 never drop out of a short sidebar: the section scrolls to the machine row of the studio the
 selection landed on, so `Alt+Down` into a studio deeper down brings its machine into view instead

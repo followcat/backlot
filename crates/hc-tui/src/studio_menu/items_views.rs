@@ -94,6 +94,17 @@ impl StudioMenu {
                 StudioAct::StageStop,
             ));
         }
+        if self.finished_count > 0 {
+            out.push(item(
+                format!(
+                    "{} finished studios ({})",
+                    if self.finished_open { "Fold" } else { "Unfold" },
+                    self.finished_count
+                ),
+                Some('f'),
+                StudioAct::ToggleFinishedGroup,
+            ));
+        }
         if installed.is_some() {
             out.push(item(
                 "New studio here".to_owned(),

@@ -1,17 +1,20 @@
-//! W1's left side: the studios a machine's ledger lists when its stage
-//! is down, the `unreachable` line, and the tree that scrolls with the
-//! selection. Neutral fixtures only.
+//! W1's left side: every machine's studios from the ledger, the
+//! finished group and the tree that scrolls with the selection.
+//! Neutral fixtures only.
 
 use std::time::Instant;
 
 use super::studio_machines::two_machine_studio_app;
 use super::*;
-use crate::app::input::{MouseButton, MouseEventKind};
+use crate::app::input::MouseButton;
+use crate::app::input::MouseEventKind;
 use crate::chrome::render::StudioRowAct;
 use crate::panel::StudioNav;
 use crate::sidebar::fixture::machine;
-use hc_proto::watch::DocKey;
+use crate::studio_menu::StudioAct;
+use hc_proto::watch::{DocKey, Document};
 use hc_vt::Mods;
+use serde_json::json;
 
 const HOST_B_LIST: &str = r#"{
     "pinned": true,
@@ -97,7 +100,7 @@ async fn a_stage_down_machine_lists_its_studios_from_the_ledger() {
         .find(|hit| hit.act == StudioRowAct::StartStage)
         .expect("the stage-down studio row")
         .rect;
-    // A click is the row's `s`: it starts that machine's stage.
+    // Enter / a click is the row's `s`: it starts that machine's stage.
     click(&mut app, start);
     assert_eq!(
         app.actions.pending.len(),
@@ -123,10 +126,106 @@ async fn an_unreachable_machine_is_one_line_not_an_empty_tree() {
     assert!(!sidebar.contains("beta-tools"), "{sidebar}");
 }
 
+fn with_finished_local_studio() -> App {
+    let mut app = two_machine_studio_app();
+    let key = doc_key(None);
+    let mut value = app.view.documents.get(&key).unwrap().value.clone();
+    value["studios"].as_array_mut().unwrap().push(json!({
+        "id": "old-shop", "title": "Old shop", "state": "finished",
+        "requirement_version": 1, "mode": "standard",
+        "open_reviews": 0, "waiting": 0, "roles": []
+    }));
+    app.view.documents_mut().insert(
+        key,
+        Arc::new(Document {
+            value,
+            ..Document::default()
+        }),
+    );
+    app.reconcile_published_view();
+    app
+}
+
+#[tokio::test]
+async fn the_finished_group_counts_unfolds_and_opens_the_finished_menu() {
+    let mut app = with_finished_local_studio();
+    app.area = (120, 32);
+    let backend = draw_to(&mut app, 120, 32);
+    let sidebar = sidebar_text(&backend);
+    assert!(sidebar.contains("finished (1)"), "{sidebar}");
+    assert!(!sidebar.contains("old-shop"), "folded: {sidebar}");
+
+    let fold = app
+        .hit_map
+        .studio_rows
+        .iter()
+        .find(|hit| hit.act == StudioRowAct::ToggleFinished)
+        .expect("the finished fold row")
+        .rect;
+    click(&mut app, fold);
+    assert!(app.studio.finished_open.contains(&None));
+    let backend = draw_to(&mut app, 120, 32);
+    let sidebar = sidebar_text(&backend);
+    assert!(sidebar.contains("old-shop"), "unfolded: {sidebar}");
+
+    let studio = app
+        .hit_map
+        .studio_rows
+        .iter()
+        .find(|hit| matches!(hit.act, StudioRowAct::OpenFinished { .. }))
+        .expect("the finished studio row")
+        .rect;
+    click(&mut app, studio);
+    let Some(menu) = &app.menu else {
+        panic!("the finished studio menu opened");
+    };
+    let crate::chrome::menu::ContextMenuTarget::Studio(menu) = &menu.target else {
+        panic!("a studio menu — {:?}", menu.target);
+    };
+    assert!(menu.finished, "the finished list");
+    let labels: Vec<String> = menu.items().into_iter().map(|item| item.label).collect();
+    assert!(
+        labels.iter().any(|l| l == "Reopen producer (o)"),
+        "{labels:?}"
+    );
+    assert!(labels.iter().any(|l| l.contains("sheet")), "{labels:?}");
+    assert!(
+        labels.iter().any(|l| l.contains("requirement")),
+        "{labels:?}"
+    );
+    assert!(labels.iter().any(|l| l.contains("records")), "{labels:?}");
+    assert!(
+        labels.iter().any(|l| l.contains("Delete studio")),
+        "{labels:?}"
+    );
+}
+
+#[tokio::test]
+async fn the_machine_menu_folds_and_unfolds_the_finished_group() {
+    let mut app = with_finished_local_studio();
+    let menu = app.machine_menu(&crate::chrome::snapshot::ClientEndpointId::Local);
+    let unfold = menu
+        .items()
+        .into_iter()
+        .find(|item| item.act == StudioAct::ToggleFinishedGroup)
+        .expect("the finished fold row");
+    assert_eq!(unfold.label, "Unfold finished studios (1)");
+    app.run_studio_act(&menu, unfold.act);
+    assert!(app.studio.finished_open.contains(&None), "unfolded");
+    let menu = app.machine_menu(&crate::chrome::snapshot::ClientEndpointId::Local);
+    let fold = menu
+        .items()
+        .into_iter()
+        .find(|item| item.act == StudioAct::ToggleFinishedGroup)
+        .expect("the fold row again");
+    assert_eq!(fold.label, "Fold finished studios (1)");
+}
+
 #[tokio::test]
 async fn a_short_sidebar_scrolls_to_the_selected_machines_row() {
     let mut app = two_machine_studio_app();
     app.area = (120, 20);
+    // Give the machine rows enough workspaces that the section scrolls.
     app.shell_state.workspace_scroll = 0;
     let first = draw_to(&mut app, 120, 20);
     assert!(sidebar_text(&first).contains("acme-shop"), "fixture");

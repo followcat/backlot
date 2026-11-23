@@ -155,6 +155,8 @@ impl App {
             Backlot::Missing => MenuBacklot::Missing,
             _ => MenuBacklot::Unknown,
         };
+        let finished = self.machine_finished_ids(machine.as_deref()).len();
+        let open = self.studio.finished_open.contains(&machine);
         StudioMenu::machine_row(
             machine.clone(),
             backlot,
@@ -162,6 +164,7 @@ impl App {
             !self.machine_reachable(machine.as_deref()),
             self.latest_release(),
         )
+        .with_finished(finished, open)
     }
 
     // ---------- probing ----------

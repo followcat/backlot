@@ -154,6 +154,10 @@ impl App {
                 let machine = menu.machine().map(str::to_owned);
                 self.run_action(studio_cmds::stage_start(machine));
             }
+            StudioAct::ToggleFinishedGroup => {
+                let machine = menu.machine().map(str::to_owned);
+                self.toggle_finished_group(machine);
+            }
             StudioAct::StageStop => {
                 let machine = menu.machine().map(str::to_owned);
                 self.studio_dialog = Some(StudioDialog::confirm(

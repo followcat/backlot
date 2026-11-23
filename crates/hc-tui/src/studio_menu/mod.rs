@@ -186,6 +186,10 @@ pub(crate) enum StudioAct {
     /// `stage stop` (G1) through the confirm dialog — a machine-wide
     /// action, so only the machine row's menu offers it.
     StageStop,
+    /// W1: fold or unfold the machine's `finished (n)` group in the
+    /// machines tree — the keyboard path the tree's own row gives the
+    /// mouse.
+    ToggleFinishedGroup,
     /// `studio finish` through the reason dialog (reason optional).
     Finish,
     /// `studio finish` (if live) + `studio prune` through confirmation.
@@ -296,6 +300,11 @@ pub(crate) struct StudioMenu {
     /// Clamp horizontally left of any beside-Dock when opened outside
     /// the Dock (`R3-M12`: Lot Pill, Call Sheet, Sidebar, `Ctrl+B m`).
     pub clamp_outside_dock: bool,
+    /// W1: the machine's finished studios the tree folds — a Machine
+    /// row offers `Finished studios (n)` only while above zero.
+    pub finished_count: usize,
+    /// That group is unfolded for the machine.
+    pub finished_open: bool,
 }
 
 impl StudioMenu {
@@ -349,6 +358,8 @@ impl StudioMenu {
             latest: None,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 
@@ -380,6 +391,8 @@ impl StudioMenu {
             latest: None,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 
@@ -402,6 +415,8 @@ impl StudioMenu {
             latest: None,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 
@@ -424,6 +439,8 @@ impl StudioMenu {
             latest: None,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 
@@ -447,6 +464,8 @@ impl StudioMenu {
             latest: None,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 
@@ -477,6 +496,52 @@ impl StudioMenu {
             latest,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
+        }
+    }
+
+    /// W1: record the machine's finished studios so the Machine menu
+    /// offers the fold its tree row gives the mouse.
+    pub(crate) fn with_finished(mut self, count: usize, open: bool) -> StudioMenu {
+        self.finished_count = count;
+        self.finished_open = open;
+        self
+    }
+
+    /// A finished studio the document no longer lists — the ledger's
+    /// `studio list --json` named it. The menu is the finished list
+    /// with a closed fixed producer seat, so `Reopen producer` works;
+    /// the requirement items stay (an unknown version reads as none).
+    pub(crate) fn finished_unknown(key: &StudioKey, stage_down: bool, offline: bool) -> StudioMenu {
+        StudioMenu {
+            kind: MenuKind::Studio,
+            studio: Some(key.clone()),
+            role: Some(MenuRole {
+                role: "producer".into(),
+                name: "producer".into(),
+                state: "closed".into(),
+                resumable: true,
+                task: None,
+                terminal: None,
+                attention_seq: None,
+                attention_user: false,
+            }),
+            task: None,
+            card: None,
+            stage_down,
+            offline,
+            finished: true,
+            ready: false,
+            req_version: 0,
+            req_file: None,
+            machine: None,
+            backlot: None,
+            latest: None,
+            talk_file: None,
+            clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 
@@ -499,6 +564,8 @@ impl StudioMenu {
             latest: None,
             talk_file: None,
             clamp_outside_dock: true,
+            finished_count: 0,
+            finished_open: false,
         }
     }
 

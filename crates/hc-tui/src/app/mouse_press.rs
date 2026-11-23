@@ -119,14 +119,15 @@ impl App {
             return;
         }
         // W1: a studio-mode machines-tree row that is not a space — a
-        // `stage down` studio starts its machine's stage.
+        // `stage down` studio starts the stage, the `finished (n)` group
+        // folds, a finished studio opens its menu.
         if let Some(hit) = hits
             .studio_rows
             .iter()
             .find(|h| contains(h.rect, point))
             .cloned()
         {
-            self.studio_row_activated(&hit);
+            self.studio_row_activated(&hit, point);
             return;
         }
         // Machine rows: collapse toggle (or the active endpoint's row)

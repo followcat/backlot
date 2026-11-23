@@ -19,6 +19,7 @@ use super::sidebar_render::{
 };
 use super::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
+use super::studio_rows::endpoint_is_machine;
 use super::workspace::WorkspaceEntry;
 
 enum Row {
@@ -407,7 +408,7 @@ pub(crate) fn render_expanded(
                 }
                 let endpoint = &state.endpoints[*endpoint];
                 let rect = Rect::new(body.x, y, content_width, 1);
-                render_studio_row(
+                super::studio_rows::render_studio_row(
                     buffer,
                     rect,
                     palette,
@@ -509,97 +510,4 @@ pub(crate) fn render_expanded(
         "«",
         Style::default().fg(palette.overlay0),
     );
-}
-
-/// Whether the endpoint is `machine` — `None` is this core.
-fn endpoint_is_machine(endpoint: &ClientEndpointId, machine: Option<&str>) -> bool {
-    match (endpoint, machine) {
-        (ClientEndpointId::Local, None) => true,
-        (ClientEndpointId::Remote(name), Some(machine)) => name == machine,
-        _ => false,
-    }
-}
-
-/// One W1 machines-tree row: a ledger studio (`stage down` tag), the
-/// `finished (n)` group, or the machine's one `unreachable` line.
-fn render_studio_row(
-    buffer: &mut Buffer,
-    rect: Rect,
-    palette: &super::palette::Palette,
-    endpoint: &super::snapshot::ClientShellEndpoint,
-    current: Option<&crate::studio::StudioKey>,
-    row: &crate::chrome::studio_tree::Row,
-    hits: &mut ShellHitMap,
-) {
-    use crate::chrome::studio_tree::{Row as StudioRow, StudioKind};
-    let dim = Style::default().fg(palette.overlay0);
-    let current_here = |id: &str| {
-        current.is_some_and(|key| {
-            endpoint_is_machine(&endpoint.endpoint_id, key.machine.as_deref()) && key.id == id
-        })
-    };
-    let highlight = |buffer: &mut Buffer, id: &str| {
-        if current_here(id) && !rect.is_empty() {
-            buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
-            put_text(
-                buffer,
-                rect.x,
-                rect.y,
-                1,
-                "▌",
-                Style::default().fg(palette.accent),
-            );
-        }
-    };
-    let indent = 3u16;
-    match row {
-        StudioRow::Unreachable => put_text(
-            buffer,
-            rect.x.saturating_add(indent),
-            rect.y,
-            rect.width.saturating_sub(indent),
-            "× unreachable",
-            dim,
-        ),
-        StudioRow::Studio { id, kind } => {
-            highlight(buffer, id);
-            let (glyph, style) = match kind {
-                StudioKind::StageDown => ("◌", dim),
-                StudioKind::Live => ("·", Style::default().fg(palette.subtext0)),
-            };
-            let tag = (*kind == StudioKind::StageDown).then_some("stage down");
-            let tag_width = tag.map_or(0, |tag| display_width(tag) + 1);
-            let id_area = rect.width.saturating_sub(indent + 2 + tag_width);
-            put_text(
-                buffer,
-                rect.x.saturating_add(indent),
-                rect.y,
-                1,
-                glyph,
-                style,
-            );
-            put_text(
-                buffer,
-                rect.x.saturating_add(indent + 2),
-                rect.y,
-                id_area,
-                &super::text::truncate_end(id, id_area as usize),
-                if *kind == StudioKind::Live {
-                    Style::default().fg(palette.text)
-                } else {
-                    dim
-                },
-            );
-            if let Some(tag) = tag {
-                put_right_text(buffer, rect, rect.y, tag, dim);
-            }
-            if *kind == StudioKind::StageDown {
-                hits.studio_rows.push(super::render::StudioRowHit {
-                    rect,
-                    endpoint_id: endpoint.endpoint_id.clone(),
-                    act: super::render::StudioRowAct::StartStage,
-                });
-            }
-        }
-    }
 }

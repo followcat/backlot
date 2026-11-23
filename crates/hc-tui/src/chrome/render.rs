@@ -93,6 +93,10 @@ pub(crate) struct MachineHit {
 pub(crate) enum StudioRowAct {
     /// A ledger studio whose machine's stage is down — start it.
     StartStage,
+    /// The `finished (n)` group — fold or unfold it.
+    ToggleFinished,
+    /// One finished studio — open its finished-studio menu.
+    OpenFinished { id: String },
 }
 
 /// A studio-mode machines-tree row's hit area.
