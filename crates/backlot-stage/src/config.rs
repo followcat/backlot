@@ -496,9 +496,9 @@ mod tests {
         let err =
             hollywood_in("[hollywood]\nrunner = \"cursor\"\nmodel = \"m\"\neffort = \"high\"\n")
                 .unwrap_err();
-        assert!(err.contains("takes no effort"), "{err}");
+        assert!(err.contains("has no effort setting"), "{err}");
         let err = hollywood_in("[hollywood]\nrunner = \"fake\"\nmodel = \"m\"\n").unwrap_err();
-        assert!(err.contains("needs an effort"), "{err}");
+        assert!(err.contains("takes an effort"), "{err}");
         let cfg = hollywood_in("[hollywood]\nrunner = \"devin\"\nmodel = \"m\"\n")
             .unwrap()
             .unwrap();

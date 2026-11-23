@@ -39,13 +39,23 @@ pub enum EffortProblem {
     NotAllowed,
 }
 
-/// The refusal line for an effort that does not fit — the recast,
-/// cast and Hollywood config errors all read it.
+/// The one plain-words line for an effort that does not fit — the
+/// recast, cast and Hollywood config errors all read it.
 pub fn effort_message(runner: &str, problem: EffortProblem) -> String {
     match problem {
-        EffortProblem::Missing => format!("runner '{runner}' needs an effort"),
+        EffortProblem::Missing => {
+            let levels = get(runner).map(|c| c.effort.levels()).unwrap_or(&[]);
+            if levels.is_empty() {
+                format!("{runner} takes an effort; add --effort")
+            } else {
+                format!(
+                    "{runner} takes an effort ({}); add --effort",
+                    levels.join(", ")
+                )
+            }
+        }
         EffortProblem::NotAllowed => {
-            format!("runner '{runner}' takes no effort — the depth is part of the model id")
+            format!("{runner} has no effort setting; drop --effort")
         }
     }
 }
@@ -459,6 +469,18 @@ mod tests {
         );
         assert_eq!(check_effort("devin", Some("high")), Ok(()));
         assert_eq!(check_effort("cline", Some("high")), Ok(()));
+    }
+
+    #[test]
+    fn effort_messages_read_in_plain_words() {
+        assert_eq!(
+            effort_message("cursor", EffortProblem::NotAllowed),
+            "cursor has no effort setting; drop --effort"
+        );
+        assert_eq!(
+            effort_message("claude", EffortProblem::Missing),
+            "claude takes an effort (low, medium, high, xhigh, max); add --effort"
+        );
     }
 
     #[test]
