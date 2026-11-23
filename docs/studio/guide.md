@@ -565,7 +565,11 @@ the newest release, `no backlot` when there is none.
 Right-click a machine row (or find it under `Ctrl+B ?`'s `machines` group) for its own menu —
 only what is valid there: `Install backlot`, `Upgrade backlot to v<latest>`,
 `Start the stage` when it is down, `Restart the stage`, `Stop the stage…` and `Stage log` while
-it runs, `New studio here`, and the endpoint ops. `Stage log` opens the stage's own terminal as
+it runs, `Unfold finished studios (n)`, `New studio here`, and the endpoint ops. The launcher's
+`machines` group carries the same rows per machine — `Stage log · <machine>`,
+`Unfold finished studios (n) · <machine>` (or `Fold …`), and `Machine menu · <machine>`, which
+opens this very menu — so the tree's surfaces are all reachable from the keyboard and filter by
+machine name (`/host-b`). `Stage log` opens the stage's own terminal as
 the observe-only peek: its output is readable, and no key reaches the stage process from there.
 Starting the stage from any entry keeps the focus where it was; from the opening page the client
 lands on a studio's view, or on the lot when there is none, and never on the stage tab. When the

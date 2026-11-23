@@ -66,6 +66,7 @@ mod update_source;
 mod version_badge;
 mod view_sync;
 mod w1_left_side;
+mod w1b_left_keys;
 mod waiting;
 
 use super::*;

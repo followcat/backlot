@@ -77,8 +77,25 @@ impl App {
                 self.help = false;
                 self.studio_nav(nav);
             }
+            Launch::Menu(menu) => {
+                let point = self.help_row_point(self.help_state.selected);
+                self.help = false;
+                self.open_studio_menu(*menu, point);
+            }
             Launch::Close => self.help = false,
         }
+    }
+
+    /// Where a launcher row's menu opens — its drawn row's corner when
+    /// the last frame had it, else the launcher's top edge. The menu
+    /// clamps itself into the frame either way.
+    fn help_row_point(&self, index: usize) -> (u16, u16) {
+        self.help_hits
+            .rows
+            .iter()
+            .find(|(_, row)| *row == index)
+            .map(|(rect, _)| (rect.x + 1, rect.y + 1))
+            .unwrap_or((self.area.0 / 2, self.area.1 / 2))
     }
 
     /// A surface row's focus: the Call Sheet expanded (its keys), the

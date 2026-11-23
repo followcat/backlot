@@ -25,6 +25,9 @@ pub(crate) enum Launch {
     Pick(Pick),
     /// A studio key's own navigation — Enter runs `studio_nav`.
     Nav(crate::panel::StudioNav),
+    /// Open a target's own context menu — the same list a right-click
+    /// opens (`Machine menu · <machine>`).
+    Menu(Box<StudioMenu>),
     /// Herdr's own keybind rows and the legend — Enter just closes.
     Close,
 }
