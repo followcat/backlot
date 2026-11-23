@@ -6,6 +6,7 @@ mod cases_1;
 mod cases_2;
 mod chrome_marks;
 mod closing;
+mod delete_studio;
 mod endpoint_nav;
 mod endpoint_nav_b;
 mod float_draw;

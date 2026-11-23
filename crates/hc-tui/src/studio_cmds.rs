@@ -380,18 +380,18 @@ pub(crate) fn report_show(key: &StudioKey, seq: u64, file: &str) -> Action {
     a
 }
 
-pub(crate) fn prune(key: &StudioKey, force: bool) -> Action {
-    let mut command = vec!["studio".into(), "prune".into(), key.id.clone()];
-    if force {
-        command.push("--force".into());
-    }
+pub(crate) fn delete_studio(key: &StudioKey, force: bool) -> Action {
     let mut a = action(
-        format!("pruning {}", key.id),
+        format!("deleting {}", key.id),
         format!("deleted studio {}", key.id),
-        "prune studio".into(),
+        format!("delete studio {}", key.id),
         key,
         mark::studio(key),
     );
-    a.argv = plain_argv(&command);
+    a.argv = ["studio", "delete", &key.id, "--json", "--as", "user"]
+        .into_iter()
+        .chain(force.then_some("--force"))
+        .map(str::to_owned)
+        .collect();
     a
 }

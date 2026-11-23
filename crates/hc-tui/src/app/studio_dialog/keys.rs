@@ -42,6 +42,12 @@ impl App {
                 };
             }
             Some(StudioDialog::Confirm(d)) => {
+                if d.loading {
+                    if combo.code != KeyCode::Esc {
+                        self.studio_dialog = Some(StudioDialog::Confirm(d));
+                    }
+                    return;
+                }
                 self.studio_dialog = None;
                 match combo.code {
                     KeyCode::Enter | KeyCode::Char('y') if combo.modifiers.is_empty() => {
@@ -94,12 +100,8 @@ impl App {
             ConfirmFor::DirOverride { key, role, allow } => {
                 self.run_action(studio_cmds::decide(key, role, *allow));
             }
-            ConfirmFor::DeleteStudio {
-                key,
-                finished,
-                force,
-            } => {
-                self.delete_studio_run(key, *finished, *force);
+            ConfirmFor::DeleteStudio { key, force } => {
+                self.run_action(studio_cmds::delete_studio(key, *force));
             }
         }
     }
@@ -276,7 +278,13 @@ impl App {
                         self.reason_submit(&d.for_, reason);
                     }
                 }
-                Some(StudioDialog::Confirm(d)) => self.confirm_submit(&d.for_),
+                Some(StudioDialog::Confirm(d)) => {
+                    if d.loading {
+                        self.studio_dialog = Some(StudioDialog::Confirm(d));
+                    } else {
+                        self.confirm_submit(&d.for_);
+                    }
+                }
                 Some(StudioDialog::Tell(d)) => {
                     self.studio_dialog = self.tell_submit(d);
                 }

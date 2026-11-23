@@ -45,13 +45,9 @@ pub(crate) enum ConfirmFor {
         role: String,
         allow: bool,
     },
-    /// `studio finish` (if live) + `studio prune [--force]` — deletes a
-    /// studio's worktrees and task branches on confirmation.
-    DeleteStudio {
-        key: StudioKey,
-        finished: bool,
-        force: bool,
-    },
+    /// `studio delete <id> [--force] --json --as user` — finishes if
+    /// live, closes terminals, prunes safely, and archives the ledger.
+    DeleteStudio { key: StudioKey, force: bool },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -116,6 +112,8 @@ pub(crate) struct ConfirmDialog {
     pub(crate) title: String,
     /// The explanation the spec sets per kind.
     pub(crate) body: String,
+    /// When true, the Confirm key/button is disabled while a dry-run loads.
+    pub(crate) loading: bool,
     pub(crate) for_: ConfirmFor,
 }
 
@@ -142,7 +140,12 @@ impl StudioDialog {
 
     /// The confirm card — its body is the spec's wording per kind.
     pub(crate) fn confirm(title: String, body: String, for_: ConfirmFor) -> StudioDialog {
-        StudioDialog::Confirm(ConfirmDialog { title, body, for_ })
+        StudioDialog::Confirm(ConfirmDialog {
+            title,
+            body,
+            loading: false,
+            for_,
+        })
     }
 
     /// The machine suffix every §2 title shares: `· host-b`, or `·
@@ -162,6 +165,7 @@ impl StudioDialog {
                  with it.",
                 if allow { "allow" } else { "deny" }
             ),
+            loading: false,
             for_: ConfirmFor::DirOverride {
                 key: key.clone(),
                 role: role.to_owned(),
@@ -170,49 +174,37 @@ impl StudioDialog {
         })
     }
 
-    /// First confirmation before `studio finish` + `studio prune`.
-    pub(crate) fn delete_studio(key: &StudioKey, finished: bool) -> StudioDialog {
+    /// First confirmation for `studio delete`, opened immediately while
+    /// `--dry-run --json` inspects the studio.
+    pub(crate) fn delete_studio_loading(key: &StudioKey) -> StudioDialog {
         StudioDialog::Confirm(ConfirmDialog {
             title: format!("Delete studio · {}", Self::place(key)),
-            body: "Removes the studio's roles and terminals, its worktrees and \
-                   task branches, and its ledger. The integration branch and your \
-                   repository are never deleted."
-                .to_owned(),
+            body: "Inspecting studio…".to_owned(),
+            loading: true,
             for_: ConfirmFor::DeleteStudio {
                 key: key.clone(),
-                finished,
                 force: false,
             },
         })
     }
 
-    /// Second confirmation after `studio prune` kept dirty worktrees or
-    /// unmerged task branches.
+    /// Second confirmation after `studio delete` kept dirty worktrees or
+    /// unmerged branches.
     pub(crate) fn delete_studio_force(key: &StudioKey, kept: &[String]) -> StudioDialog {
         StudioDialog::Confirm(ConfirmDialog {
             title: format!("Force delete studio? · {}", Self::place(key)),
             body: format!(
-                "Kept: {}. Pass --force to discard dirty worktrees and unmerged task \
-                 branches? The integration branch and your repository are never deleted.",
+                "Kept: {}. Pass --force to discard dirty worktrees and unmerged \
+                 branches and archive the ledger? Your repository is not touched.",
                 kept.join("; ")
             ),
+            loading: false,
             for_: ConfirmFor::DeleteStudio {
                 key: key.clone(),
-                finished: true,
                 force: true,
             },
         })
     }
-}
-
-/// Kept dirty worktrees or unmerged task branches reported by `studio prune`.
-pub(crate) fn kept_from_prune(stdout: &str) -> Vec<String> {
-    stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("kept worktree ") || line.starts_with("kept branch "))
-        .map(str::to_owned)
-        .collect()
 }
 
 /// The 4-row editor the Tell and Revise bodies share (§2.3/§2.4):
