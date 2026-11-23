@@ -529,6 +529,7 @@ impl StudioMenu {
                 terminal: None,
                 attention_seq: None,
                 attention_user: false,
+                can_answer_prompt: true,
             }),
             task: None,
             card: None,
