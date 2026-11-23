@@ -357,9 +357,10 @@ pub(crate) fn hrole_env(
     env
 }
 
-/// The folder's durable files: `AGENTS.md` (rewritten every start),
-/// `prompts/hollywood.first.txt` when `devin` starts fresh, and
-/// `memory.md` (created once and never overwritten).
+/// The folder's durable files: `AGENTS.md` (rewritten every start, the
+/// generated CLI reference in place), `prompts/hollywood.first.txt` when
+/// `devin` starts fresh, and `memory.md` (created once and never
+/// overwritten).
 pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -> Result<(), Fail> {
     for sub in [
         "messages",
@@ -373,7 +374,7 @@ pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -
             .map_err(|e| Fail::refused(format!("hollywood dir: {e}")))?;
     }
     let agents = hdir.join("AGENTS.md");
-    std::fs::write(&agents, crate::prompts::HOLLYWOOD)
+    std::fs::write(&agents, crate::hwcli::agents_md())
         .map_err(|e| Fail::refused(format!("AGENTS.md: {e}")))?;
     if resume.is_none() && runner == "devin" {
         let line = crate::prompts::first_line(&agents);

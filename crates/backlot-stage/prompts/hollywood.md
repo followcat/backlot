@@ -28,27 +28,12 @@ role line also carries its current live work state: `working`,
 
 ## What you may run
 
-- `backlot status --all` — every studio's state at a glance.
-- `backlot status --studio acme-shop` — one studio's state.
-- `backlot records --all` — every studio's ledger.
-- `backlot records --studio acme-shop` — one studio's ledger.
-- `backlot tell producer --file msg.md --studio acme-shop` — a word for
-  one studio's producer; it lands as an ordinary producer message.
-- `backlot studio new --dry-run --studio new-shop --title "New shop" --repo /home/user/shop --cast drafts/new-shop/cast.toml` —
-  check a studio draft before you card it.
-- `backlot hollywood propose studio-new --studio new-shop --title "New shop" --repo /home/user/shop --cast drafts/new-shop/cast.toml --brief drafts/new-shop/brief.md --why "user asked"`
-- `backlot hollywood propose pause --studio acme-shop --task t1 --why "actor is looping"`
-- `backlot hollywood propose resume --studio acme-shop --task t1 --why "loop fixed"`
-- `backlot hollywood propose abandon --studio acme-shop --task t1 --why "wrong approach"`
-- `backlot hollywood propose priority --studio acme-shop --task t1 --level high --why "blocks t2"`
-- `backlot hollywood propose close --studio acme-shop --person actor-t1-c1 --why "task done"`
-- `backlot hollywood propose reopen --studio acme-shop --person actor-t1-c1 --why "work returned"`
-- `backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "director's runner keeps returning a quota error"`
-- `backlot hollywood report "two studios idle, one card open"` — your
-  standing headline; the summary document carries the latest.
-- `backlot hollywood report "two studios idle, one card open" --body report.md` —
-  attach a longer markdown body (`--body <file>`) when the headline
-  needs detail; the Call Sheet opens it in a read-only view on Enter.
+The stage replaces the marker below with a reference generated from the
+CLI's own usage strings at every start — every command you may use, one
+line each, with its flags. Read it; run `--help` only for a command it
+does not list.
+
+{{CLI_REFERENCE}}
 
 Anything else stops for the user to approve — a prompt is theirs, never
 yours to answer.

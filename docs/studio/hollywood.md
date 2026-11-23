@@ -195,6 +195,18 @@ The stage owns the folder: `AGENTS.md` (the role prompt, rewritten every start),
 (made once, never overwritten), `drafts/<studio>/` for studio-new work, plus `messages/`,
 `reports/` and `roles/hollywood/`. Hollywood owes no steps and is never nudged.
 
+### Its CLI reference, generated
+
+Hollywood's `AGENTS.md` carries a **command reference generated from the CLI's own usage
+strings** — every command it may run, one line each, with its flags — at a stable place, never
+hand-copied. The stage regenerates it from `args_usage.rs` and `args_hwood.rs`
+(`hwcli::generate`) into `prompts/hollywood-cli.md` and substitutes it for `{{CLI_REFERENCE}}` in
+the prompt at every start. A usage string that gains or loses a flag fails the drift test until
+the checked-in copy is refreshed (`BLESS=1 cargo test -p backlot-stage hwcli`). The reference
+lists exactly the overseer set the launch pre-allows; the prompt says to use it and to run
+`--help` only for a command it does not list, so Hollywood never probes its own CLI and never
+blocks on a prompt for it (H2, P5).
+
 ## Cards
 
 A card is Hollywood's only way to change anything. `backlot hollywood propose` records it in

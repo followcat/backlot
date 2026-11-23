@@ -37,6 +37,14 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
   `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
 
+- **Hollywood's AGENTS.md carries a generated CLI reference.** The stage writes one line per
+  command Hollywood may run, with its flags, sliced from the CLI's own usage strings
+  (`args_usage.rs`, `args_hwood.rs`) at every start, and substitutes it for `{{CLI_REFERENCE}}`
+  in the prompt. A drift test regenerates the checked-in copy (`prompts/hollywood-cli.md`) and
+  fails when a usage string changes without it. The prompt says to use the reference and run
+  `--help` only for a command it does not list, so Hollywood never probes its own CLI or blocks
+  on a prompt for it (H2, P5).
+
 - **Hollywood is fed facts, not snapshots.** Every attention Hollywood can read — in
   `backlot status`, in a notice body, in the status commands it runs — now carries its class
   (`needs you` / `stuck` / `info`), its age (`raised 2h ago`) and, for a screen snapshot, when the

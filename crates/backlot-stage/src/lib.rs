@@ -38,6 +38,7 @@ mod hrender;
 mod hsetup;
 mod hstage;
 mod hwatch;
+mod hwcli;
 mod hwood;
 mod hwood_base;
 mod hwood_read;
