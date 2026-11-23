@@ -475,6 +475,19 @@ pub(super) fn draw_person_line(
                     "! prompt · director reviewing".to_string(),
                     Style::default().fg(palette.overlay0),
                 ),
+                // A runner that cannot answer its own prompt sends
+                // nothing for `y`/`d`, so the cue offers Enter instead.
+                Person::UserPrompt if !role.can_answer_prompt => {
+                    let detail = role
+                        .attention_detail
+                        .as_deref()
+                        .or(role.attention.as_deref())
+                        .unwrap_or_default();
+                    (
+                        format!("! {detail} · answer in its terminal (Enter)"),
+                        Person::UserPrompt.style(palette),
+                    )
+                }
                 Person::UserPrompt => {
                     let detail = role
                         .attention_detail

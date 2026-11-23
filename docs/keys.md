@@ -119,7 +119,7 @@ or `expanded`. While the band is expanded it owns these keys:
 | `↓`/`↑`, `j`/`k` | Move between the waiting rows, and back to the frames |
 | `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
 | `Enter` | Activate the selection — a frame opens it, a prompt opens the role, a card shows it, an offline machine reports its last read, the setup line opens the Hollywood setup dialog |
-| `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine |
+| `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine — only when the runner can answer (a runner with no approval key shows `answer in its terminal` and these keys do nothing there) |
 | `p` | On a prompt row: peek at the role's live screen, read-only |
 | `s` | On a stage row or a stopped-stage frame: `backlot stage start` on that machine |
 | `a` / `x` / `s` | On a card row: `backlot card apply` / `cancel` / `show` |

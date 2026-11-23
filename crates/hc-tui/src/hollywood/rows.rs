@@ -223,12 +223,14 @@ pub(crate) fn hollywood_live(machines: &[MachineSummary]) -> Option<(usize, Live
     Some((newest_user, live))
 }
 
-/// Whether Hollywood owns a prompt — the one thing its live row's
-/// `y`/`d` answer and the footer names.
+/// Whether Hollywood owns a prompt its `y`/`d` can answer — the one
+/// thing the live row's keys and the footer name. A prompt on a runner
+/// with no approval key (`can_answer_prompt` false) stays on the row
+/// but is answered in its terminal, so this is false for it.
 pub(crate) fn hollywood_asking(machines: &[MachineSummary]) -> bool {
     local_summary(machines)
         .and_then(|s| s.hollywood.as_ref())
-        .is_some_and(|h| h.attention_user)
+        .is_some_and(|h| h.attention_user && h.can_answer_prompt)
 }
 
 /// The setup line a bar without an agent shows: what an agent would

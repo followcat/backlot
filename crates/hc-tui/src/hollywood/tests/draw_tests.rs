@@ -421,6 +421,47 @@ fn a_prompt_row_footer_names_y_d_answer() {
     );
 }
 
+/// A prompt row on a runner that cannot answer: the footer names no
+/// `y/d answer`, and the row carries no `allow` chip — Enter and `p`
+/// stay.
+#[test]
+fn a_prompt_the_runner_cannot_answer_names_neither_y_nor_d() {
+    let mut value = summary_json();
+    for s in value["studios"].as_array_mut().unwrap() {
+        if s["id"] == "acme-shop" {
+            for r in s["roles"].as_array_mut().unwrap() {
+                if r["role"] == "actor-alice" {
+                    r["attention_user"] = true.into();
+                    r["attention_seq"] = 7.into();
+                    r["attention_detail"] = "may I run the tests?".into();
+                    r["can_answer_prompt"] = false.into();
+                }
+            }
+        }
+    }
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let palette = palettes()[0].clone();
+    let area = Rect::new(0, 0, 160, 45);
+    let selected = Target::Prompt(
+        crate::studio::StudioKey::local("acme-shop"),
+        "actor-alice".into(),
+    );
+    let (buf, _) = draw(
+        area,
+        Some(&summary),
+        true,
+        &selecting(LayerMode::Expanded, selected),
+        false,
+        &palette,
+    );
+    let text = lines(&buf, area).join("\n");
+    assert!(!text.contains("y/d answer"), "{text}");
+    assert!(!text.contains("allow y"), "{text}");
+    assert!(!text.contains("deny d"), "{text}");
+    assert!(text.contains("answer in its terminal (Enter)"), "{text}");
+    assert!(text.contains("p peek"), "{text}");
+}
+
 /// The live row draws right under the newest `user ›` line: the
 /// spinner mark and Hollywood's own `doing`.
 #[test]

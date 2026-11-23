@@ -58,16 +58,24 @@ impl App {
                         StudioMenu::role(&key, item.role, !self.machine_reachable(item.machine));
                     let seq = item.role.attention_seq.unwrap_or(0);
                     let place = help_place(&key, local, multi);
-                    for (word, allow, k) in [("Allow", true, "y"), ("Deny", false, "d")] {
-                        rows.push(HelpRow {
-                            label: format!("{word} prompt #{seq} · {place} · {}", item.role.name),
-                            hint: self.sheet_hint(k),
-                            glyph: "×",
-                            launch: Launch::Act {
-                                menu: Box::new(menu.clone()),
-                                act: StudioAct::Decide(allow),
-                            },
-                        });
+                    // A runner that cannot answer its own prompt offers
+                    // no Allow/Deny row here — the sheet row says to
+                    // answer in its terminal.
+                    if item.role.can_answer_prompt {
+                        for (word, allow, k) in [("Allow", true, "y"), ("Deny", false, "d")] {
+                            rows.push(HelpRow {
+                                label: format!(
+                                    "{word} prompt #{seq} · {place} · {}",
+                                    item.role.name
+                                ),
+                                hint: self.sheet_hint(k),
+                                glyph: "×",
+                                launch: Launch::Act {
+                                    menu: Box::new(menu.clone()),
+                                    act: StudioAct::Decide(allow),
+                                },
+                            });
+                        }
                     }
                 }
                 Wait::Stage(item) => {

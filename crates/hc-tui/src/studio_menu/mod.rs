@@ -32,6 +32,7 @@ fn producer_role(summary: &StudioSummary) -> Option<MenuRole> {
         terminal: None,
         attention_seq: None,
         attention_user: false,
+        can_answer_prompt: true,
     })
 }
 
@@ -55,6 +56,9 @@ pub(crate) struct MenuRole {
     pub attention_seq: Option<u64>,
     /// A user-owned prompt (`y`/`d`); `false` is director-routed (D9).
     pub attention_user: bool,
+    /// Whether the runner can answer its own prompt — `false` hides the
+    /// `Allow`/`Deny` items, which would send nothing.
+    pub can_answer_prompt: bool,
 }
 
 impl From<&RoleSummary> for MenuRole {
@@ -68,6 +72,7 @@ impl From<&RoleSummary> for MenuRole {
             terminal: role.terminal.clone(),
             attention_seq: role.attention_seq,
             attention_user: role.attention_user,
+            can_answer_prompt: role.can_answer_prompt,
         }
     }
 }

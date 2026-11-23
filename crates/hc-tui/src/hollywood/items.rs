@@ -26,6 +26,20 @@ pub(crate) fn chip_text(chip: &Chip, compact: bool) -> String {
 /// The waiting row's chips: full ` label key ` or compact `[k]`.
 pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
     match wait {
+        // A prompt row only promises the keys that work: a runner with
+        // no approval key offers peek and Enter, never `allow y`.
+        Wait::Prompt(_) if !wait.can_answer() => vec![
+            Chip {
+                label: "peek",
+                key: "p",
+                primary: true,
+            },
+            Chip {
+                label: "open",
+                key: "↵",
+                primary: false,
+            },
+        ],
         Wait::Prompt(_) => vec![
             Chip {
                 label: "allow",
@@ -57,6 +71,18 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             Chip {
                 label: "peek",
                 key: "p",
+                primary: false,
+            },
+        ],
+        Wait::Hollywood(_) if !wait.can_answer() => vec![
+            Chip {
+                label: "peek",
+                key: "p",
+                primary: true,
+            },
+            Chip {
+                label: "open",
+                key: "↵",
                 primary: false,
             },
         ],
@@ -274,6 +300,15 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
 /// question, Hollywood's block, a new studio's next step.
 pub(crate) fn detail_text(wait: &Wait<'_>) -> Option<String> {
     match wait {
+        // A prompt row whose runner cannot answer says where to answer
+        // instead of naming keys that would send nothing; the command
+        // the picker asks about stays the detail.
+        Wait::Prompt(item) if !item.role.can_answer_prompt => {
+            Some(match item.role.attention_detail.as_deref() {
+                Some(ask) => format!("{ask} · answer in its terminal (Enter)"),
+                None => "answer in its terminal (Enter)".into(),
+            })
+        }
         Wait::Role(item) if item.asks => Some(
             item.role
                 .asks
@@ -288,6 +323,9 @@ pub(crate) fn detail_text(wait: &Wait<'_>) -> Option<String> {
                 .unwrap_or("needs you")
                 .to_string(),
         ),
+        // A runner with no approval key cannot take the decision here:
+        // the row says where to answer instead of naming `y`/`d`.
+        Wait::Hollywood(_) if !wait.can_answer() => Some("answer in its terminal (Enter)".into()),
         Wait::Hollywood(hollywood) if hollywood.attention_user => {
             Some("allow once with y, deny with d, peek with p, open with Enter".into())
         }

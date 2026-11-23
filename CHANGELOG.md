@@ -82,6 +82,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **A prompt row promises only the keys that work.** A user prompt on a runner with no approval
+  key (`opencode`, `cline`, `agy`) used to show the same `y`/`d` cue as cmd or claude, so the
+  person answered and nothing went out. Those rows now read
+  `answer in its terminal (Enter)` instead — their `y`/`d` record no decision, the Call Sheet's
+  chips, footer and the role menu offer no Allow/Deny, and `p` (peek) and Enter (focus) stay. The
+  needs-you list entry is kept. Driven by `can_answer_prompt` from the previous commit.
 - **A permission prompt is found and named whatever the terminal's width.** A
   `bl-hollywood` resized to 21 columns, with cmd's picker on screen and its
   structured status `kind: permission` / `state: blocked`, published `work:

@@ -107,6 +107,17 @@ pub(crate) enum Wait<'a> {
 }
 
 impl Wait<'_> {
+    /// Whether this prompt row's recorded decision would actually reach
+    /// the runner — `can_answer_prompt` on the role or Hollywood. A
+    /// row that cannot answer offers only Enter and `p`.
+    pub fn can_answer(&self) -> bool {
+        match self {
+            Wait::Prompt(item) => item.role.can_answer_prompt,
+            Wait::Hollywood(hollywood) => hollywood.can_answer_prompt,
+            _ => false,
+        }
+    }
+
     /// The row's stable identity across publishes.
     pub fn target(&self) -> super::Target {
         match self {

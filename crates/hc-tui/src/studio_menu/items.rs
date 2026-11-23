@@ -225,24 +225,37 @@ impl StudioMenu {
         item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
     ) -> Vec<StudioItem> {
         let role = self.role.as_ref().expect("a prompt row's menu");
-        let mut out = vec![
-            item(
-                "Allow prompt (y)".to_owned(),
-                Some('y'),
-                StudioAct::Decide(true),
-            ),
-            item(
-                "Deny prompt (d)".to_owned(),
-                Some('d'),
-                StudioAct::Decide(false),
-            ),
-            item("Peek screen (p)".to_owned(), Some('p'), StudioAct::Peek),
-            item(
-                "Focus terminal".to_owned(),
-                Some('\r'),
-                StudioAct::FocusTerminal,
-            ),
-        ];
+        // A runner that cannot answer its own prompt sends nothing for
+        // `y`/`d`, so its menu never offers them — peek and focus stay.
+        let mut out = if !role.can_answer_prompt {
+            vec![
+                item("Peek screen (p)".to_owned(), Some('p'), StudioAct::Peek),
+                item(
+                    "Focus terminal".to_owned(),
+                    Some('\r'),
+                    StudioAct::FocusTerminal,
+                ),
+            ]
+        } else {
+            vec![
+                item(
+                    "Allow prompt (y)".to_owned(),
+                    Some('y'),
+                    StudioAct::Decide(true),
+                ),
+                item(
+                    "Deny prompt (d)".to_owned(),
+                    Some('d'),
+                    StudioAct::Decide(false),
+                ),
+                item("Peek screen (p)".to_owned(), Some('p'), StudioAct::Peek),
+                item(
+                    "Focus terminal".to_owned(),
+                    Some('\r'),
+                    StudioAct::FocusTerminal,
+                ),
+            ]
+        };
         out.extend(self.attention_items(item, role));
         out
     }

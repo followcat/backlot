@@ -112,7 +112,9 @@ the outbox, `⠶ hollywood: <doing>` while its terminal works (or `⠶ hollywood
 reports no detail), and `⚠ hollywood asks: <prompt>` when a permission prompt stands on its
 screen. The prompt row takes the studio prompt row's keys: `y` answers `allow` and `d` `deny`
 (`backlot approve --person hollywood --decision …` on Hollywood's own ledger), `p` peeks at its
-screen read-only, and `Enter` focuses `bl-hollywood`. The `allow` is the runner's **one-time**
+screen read-only, and `Enter` focuses `bl-hollywood`. When Hollywood's runner has no approval key
+(`can_answer_prompt` false — `opencode`, `cline`, `agy`) the row keeps its needs-you entry but the
+detail reads `answer in its terminal (Enter)`, and `y`/`d` send nothing. The `allow` is the runner's **one-time**
 key — cmd's `❯ 1. Yes` — never "don't ask again", which would allow every `backlot` command,
 deletes included. Once a reply lands the row leaves; a `waiting` Hollywood after a reply shows
 nothing, and the calm row and headline carry on as before. The stage sends the key only while
