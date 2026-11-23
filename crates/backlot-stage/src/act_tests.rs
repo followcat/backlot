@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use backlot_model::event::ActorIdentity;
 use backlot_model::state::{Attention, StudioState};
 
-use crate::act::{attention_open, labels, role_env, start_event};
+use crate::act::{attention_open, labels, role_env, start_event, work_area_cleared_events};
 use crate::reconcile::{RoleKind, Start};
 use crate::runners::{Launch, Session};
 
@@ -215,5 +215,56 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
             assert_eq!(reason, None);
         }
         other => panic!("a fresh start must record role.started, got {other:?}"),
+    }
+}
+
+/// When `workareas::ensure` succeeds on a later tick, any open
+/// `work area failed` or `not a git repository` attention for that role
+/// clears while unrelated roles or reasons stay open.
+#[test]
+fn work_area_cleared_events_clears_matching_open_attention() {
+    let state = StudioState {
+        attention: vec![
+            Attention {
+                seq: 3,
+                role: "actor-t1-c1".into(),
+                reason: crate::reasons::WORK_AREA_FAILED.into(),
+                detail: "already exists".into(),
+                open: true,
+                ts_ms: 0,
+                needs_user: false,
+                cleared_reason: None,
+            },
+            Attention {
+                seq: 4,
+                role: "actor-t1-c1".into(),
+                reason: "launch refused".into(),
+                detail: "taken".into(),
+                open: true,
+                ts_ms: 0,
+                needs_user: false,
+                cleared_reason: None,
+            },
+            Attention {
+                seq: 5,
+                role: "actor-t2-c1".into(),
+                reason: crate::reasons::WORK_AREA_FAILED.into(),
+                detail: "other role".into(),
+                open: true,
+                ts_ms: 0,
+                needs_user: false,
+                cleared_reason: None,
+            },
+        ],
+        ..StudioState::default()
+    };
+    let events = work_area_cleared_events(&state, "actor-t1-c1");
+    assert_eq!(events.len(), 1);
+    match &events[0] {
+        backlot_model::EventKind::AttentionCleared { target, reason } => {
+            assert_eq!(*target, 3);
+            assert_eq!(reason.as_deref(), Some("work area ready"));
+        }
+        other => panic!("unexpected event {other:?}"),
     }
 }

@@ -302,3 +302,31 @@ fn repos_sorts_git_then_workspace_then_plain() {
         serde_json::json!(["member"])
     );
 }
+
+/// Explicit reproduction check for the linked-worktree workspace shape
+/// (`acme-suite/core` + `acme-suite/core-wt1`): `members` lists `core` once.
+#[test]
+fn acme_suite_linked_worktree_dedup_members() {
+    let (_scratch, env, home) = home_env();
+    let suite = home.join("acme-suite");
+    let core = suite.join("core");
+    repo(&core, true);
+    crate::cli_testkit::git(
+        &core,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "wt1",
+            &suite.join("core-wt1").to_string_lossy(),
+        ],
+    );
+    let doc = json(&env, &format!("repos --json --from {}", home.display()));
+    let members: Vec<&str> = entry(&doc, "acme-suite")["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m.as_str().unwrap())
+        .collect();
+    assert_eq!(members, ["core"]);
+}
