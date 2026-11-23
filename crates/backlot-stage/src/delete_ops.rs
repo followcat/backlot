@@ -230,7 +230,8 @@ pub(crate) fn rename_noreplace(src: &Path, dst: &Path) -> Result<(), Fail> {
         let dst_c = CString::new(dst.as_os_str().as_bytes())
             .map_err(|_| Fail::refused("invalid destination path for rename"))?;
         let rc = unsafe {
-            libc::renameat2(
+            libc::syscall(
+                libc::SYS_renameat2,
                 libc::AT_FDCWD,
                 src_c.as_ptr(),
                 libc::AT_FDCWD,
