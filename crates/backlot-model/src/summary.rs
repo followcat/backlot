@@ -21,7 +21,7 @@ pub use crate::summary_build::role_name;
 // `summary::` path keeps them all.
 pub use crate::hollywood_summary::{
     CardSummary, Exchange, HEADLINE_CHARS, HollywoodSummary, MAX_EXCHANGE, MAX_OPEN_CARDS,
-    hollywood_section, hollywood_section_with_work,
+    hollywood_section, hollywood_section_with_activity, hollywood_section_with_work,
 };
 pub use crate::studio_exchange::{
     MAX_STUDIO_EXCHANGE, StudioExchange, studio_exchange, studio_exchange_files,

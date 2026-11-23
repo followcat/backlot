@@ -252,6 +252,17 @@ pub(crate) struct Stage {
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
+    /// The permission prompt on `bl-hollywood`'s screen, read by the
+    /// last work sample — the summary publishes it as a user-owned
+    /// prompt and the band offers the answer.
+    pub(crate) hprompt: std::cell::RefCell<Option<String>>,
+    /// The prompt whose episode Hollywood's answer belongs to, with
+    /// the ledger `seq` when it first appeared — an approval recorded
+    /// before that is somebody else's.
+    pub(crate) hprompt_base: std::cell::RefCell<Option<(String, u64)>>,
+    /// Approval seqs already answered on Hollywood's terminal, so a
+    /// slow screen never sends the same key twice.
+    pub(crate) hanswered: std::cell::RefCell<BTreeSet<u64>>,
     /// Cached `(studio, seq) -> snippet` lines for `StudioSummary.exchange`
     /// so immutable message/report files are read from disk at most once.
     pub(crate) exchange_cache: std::cell::RefCell<BTreeMap<(String, u64), String>>,
@@ -720,13 +731,23 @@ impl Stage {
                 "lost"
             };
             let hwork = self.work.borrow().get(&crate::hstage::hkey()).copied();
-            s.hollywood = Some(backlot_model::summary::hollywood_section_with_work(
+            // `doing` is the same read a role's takes: the terminal's
+            // reported status, keyed by its address.
+            let hdoing = hs
+                .role
+                .terminal
+                .as_ref()
+                .and_then(|t| doing.get(t))
+                .map(String::as_str);
+            s.hollywood = Some(backlot_model::summary::hollywood_section_with_activity(
                 &hs,
                 state,
                 Some(&cfg.runner),
                 Some(&cfg.model),
                 cfg.effort.as_deref(),
                 hwork,
+                hdoing,
+                self.hprompt.borrow().as_deref(),
             ));
         }
         s
@@ -777,6 +798,9 @@ impl Stage {
             hcfg: std::cell::RefCell::new(None),
             stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
+            hprompt: std::cell::RefCell::new(None),
+            hprompt_base: std::cell::RefCell::new(None),
+            hanswered: std::cell::RefCell::new(BTreeSet::new()),
             exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             // A test stage is conservative: born at 0, it never reads
@@ -868,6 +892,9 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hcfg: std::cell::RefCell::new(None),
         stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
+        hprompt: std::cell::RefCell::new(None),
+        hprompt_base: std::cell::RefCell::new(None),
+        hanswered: std::cell::RefCell::new(BTreeSet::new()),
         exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         started_ms: SystemTime::now()

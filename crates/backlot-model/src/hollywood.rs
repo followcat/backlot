@@ -14,7 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::event::{ActorIdentity, EventBy, Priority};
+use crate::event::{ActorIdentity, ApprovalDecision, EventBy, Priority};
 use crate::state::{RoleLifecycle, StudioState, TaskStatus};
 
 // The reduced state and the append rules live in the two sibling
@@ -158,6 +158,12 @@ pub enum HollywoodKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// The user's answer to a permission prompt on Hollywood's own
+    /// screen — the same decision a studio role's prompt records. The
+    /// stage sends the runner's one-time allow key, never "don't ask
+    /// again".
+    #[serde(rename = "role.approval")]
+    RoleApproval { decision: ApprovalDecision },
     /// The stage's guarded send handed the message to the terminal.
     #[serde(rename = "message.delivered")]
     MessageDelivered { target: u64 },
@@ -202,6 +208,7 @@ impl HollywoodKind {
             HollywoodKind::Reported { .. } => "hollywood.reported",
             HollywoodKind::MessageSent { .. } => "message.sent",
             HollywoodKind::RoleState { .. } => "role.state",
+            HollywoodKind::RoleApproval { .. } => "role.approval",
             HollywoodKind::MessageDelivered { .. } => "message.delivered",
             HollywoodKind::MessageDropped { .. } => "message.dropped",
         }
