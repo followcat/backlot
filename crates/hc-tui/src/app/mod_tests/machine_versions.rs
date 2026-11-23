@@ -291,8 +291,8 @@ async fn an_offline_machine_dims_its_command_rows() {
     assert!(menu.offline);
     let items = menu.items();
     for it in &items {
-        if matches!(it.act, StudioAct::MachineRename | StudioAct::MachineRemove) {
-            assert!(it.dim.is_none(), "endpoint ops stay live — {it:?}");
+        if matches!(it.act, StudioAct::MachineRemove | StudioAct::MachineRename) {
+            assert!(it.dim.is_none(), "reads/repairs stay live — {it:?}");
         } else {
             assert_eq!(it.dim.as_deref(), Some("unreachable"), "{it:?}");
         }

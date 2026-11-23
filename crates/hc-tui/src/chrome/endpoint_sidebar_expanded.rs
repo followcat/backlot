@@ -27,6 +27,12 @@ enum Row {
         endpoint: usize,
         entry: WorkspaceEntry,
     },
+    /// W1: an extra studio row under a machine — a ledger studio with
+    /// no space, the `finished (n)` group, or an `unreachable` line.
+    Studio {
+        endpoint: usize,
+        row: crate::chrome::studio_tree::Row,
+    },
 }
 
 pub(crate) fn render_expanded(
@@ -62,6 +68,17 @@ pub(crate) fn render_expanded(
                     .map(|entry| Row::Workspace {
                         endpoint: endpoint_index,
                         entry,
+                    }),
+            );
+        }
+        if let Some(tree) = state.studio_tree {
+            rows.extend(
+                tree.get(&endpoint.endpoint_id)
+                    .iter()
+                    .cloned()
+                    .map(|row| Row::Studio {
+                        endpoint: endpoint_index,
+                        row,
                     }),
             );
         }
@@ -103,6 +120,7 @@ pub(crate) fn render_expanded(
                     })
                     .unwrap_or(1)
             }
+            Row::Studio { .. } => 1,
         })
         .collect::<Vec<_>>();
     let gaps = rows
@@ -196,7 +214,7 @@ pub(crate) fn render_expanded(
                         }
                     })
             }
-            Row::Endpoint(_) => false,
+            Row::Endpoint(_) | Row::Studio { .. } => false,
         });
         if let Some(selected_row) = selected_row {
             *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
@@ -207,6 +225,28 @@ pub(crate) fn render_expanded(
                 selected_row,
             );
         }
+    }
+    // W1/M4: the current studio's machine row never falls out of a
+    // short sidebar — the section scrolls to that machine instead of
+    // dropping it. A stage-down or finished studio has no focused
+    // terminal to reveal, so its own row cannot move the list.
+    if !body.is_empty()
+        && std::mem::take(state.reveal_studio_row)
+        && let Some(key) = state.current_studio
+        && let Some(machine_row) = rows.iter().position(|row| match row {
+            Row::Endpoint(index) => {
+                endpoint_is_machine(&state.endpoints[*index].endpoint_id, key.machine.as_deref())
+            }
+            _ => false,
+        })
+    {
+        let metrics = super::scroll::list_scroll_metrics(
+            &row_heights,
+            &gaps,
+            body.height,
+            *state.workspace_scroll,
+        );
+        *state.workspace_scroll = machine_row.min(metrics.max_offset_from_bottom);
     }
     let metrics = super::scroll::list_scroll_metrics(
         &row_heights,
@@ -361,6 +401,23 @@ pub(crate) fn render_expanded(
                     .saturating_add(height)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
             }
+            Row::Studio { endpoint, row } => {
+                if y >= body.bottom() {
+                    break;
+                }
+                let endpoint = &state.endpoints[*endpoint];
+                let rect = Rect::new(body.x, y, content_width, 1);
+                render_studio_row(
+                    buffer,
+                    rect,
+                    palette,
+                    endpoint,
+                    state.current_studio,
+                    row,
+                    hits,
+                );
+                y = y.saturating_add(1);
+            }
         }
     }
     if show_scrollbar {
@@ -452,4 +509,97 @@ pub(crate) fn render_expanded(
         "«",
         Style::default().fg(palette.overlay0),
     );
+}
+
+/// Whether the endpoint is `machine` — `None` is this core.
+fn endpoint_is_machine(endpoint: &ClientEndpointId, machine: Option<&str>) -> bool {
+    match (endpoint, machine) {
+        (ClientEndpointId::Local, None) => true,
+        (ClientEndpointId::Remote(name), Some(machine)) => name == machine,
+        _ => false,
+    }
+}
+
+/// One W1 machines-tree row: a ledger studio (`stage down` tag), the
+/// `finished (n)` group, or the machine's one `unreachable` line.
+fn render_studio_row(
+    buffer: &mut Buffer,
+    rect: Rect,
+    palette: &super::palette::Palette,
+    endpoint: &super::snapshot::ClientShellEndpoint,
+    current: Option<&crate::studio::StudioKey>,
+    row: &crate::chrome::studio_tree::Row,
+    hits: &mut ShellHitMap,
+) {
+    use crate::chrome::studio_tree::{Row as StudioRow, StudioKind};
+    let dim = Style::default().fg(palette.overlay0);
+    let current_here = |id: &str| {
+        current.is_some_and(|key| {
+            endpoint_is_machine(&endpoint.endpoint_id, key.machine.as_deref()) && key.id == id
+        })
+    };
+    let highlight = |buffer: &mut Buffer, id: &str| {
+        if current_here(id) && !rect.is_empty() {
+            buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
+            put_text(
+                buffer,
+                rect.x,
+                rect.y,
+                1,
+                "▌",
+                Style::default().fg(palette.accent),
+            );
+        }
+    };
+    let indent = 3u16;
+    match row {
+        StudioRow::Unreachable => put_text(
+            buffer,
+            rect.x.saturating_add(indent),
+            rect.y,
+            rect.width.saturating_sub(indent),
+            "× unreachable",
+            dim,
+        ),
+        StudioRow::Studio { id, kind } => {
+            highlight(buffer, id);
+            let (glyph, style) = match kind {
+                StudioKind::StageDown => ("◌", dim),
+                StudioKind::Live => ("·", Style::default().fg(palette.subtext0)),
+            };
+            let tag = (*kind == StudioKind::StageDown).then_some("stage down");
+            let tag_width = tag.map_or(0, |tag| display_width(tag) + 1);
+            let id_area = rect.width.saturating_sub(indent + 2 + tag_width);
+            put_text(
+                buffer,
+                rect.x.saturating_add(indent),
+                rect.y,
+                1,
+                glyph,
+                style,
+            );
+            put_text(
+                buffer,
+                rect.x.saturating_add(indent + 2),
+                rect.y,
+                id_area,
+                &super::text::truncate_end(id, id_area as usize),
+                if *kind == StudioKind::Live {
+                    Style::default().fg(palette.text)
+                } else {
+                    dim
+                },
+            );
+            if let Some(tag) = tag {
+                put_right_text(buffer, rect, rect.y, tag, dim);
+            }
+            if *kind == StudioKind::StageDown {
+                hits.studio_rows.push(super::render::StudioRowHit {
+                    rect,
+                    endpoint_id: endpoint.endpoint_id.clone(),
+                    act: super::render::StudioRowAct::StartStage,
+                });
+            }
+        }
+    }
 }

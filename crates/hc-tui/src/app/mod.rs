@@ -73,6 +73,7 @@ mod studio;
 mod studio_dialog;
 mod studio_menu;
 mod studio_shell;
+mod studio_tree;
 mod synthesize;
 mod tab_status;
 pub(crate) mod update_flow;
@@ -297,6 +298,13 @@ pub struct App {
     /// Machines whose `stage stop` is a restart's first half — the
     /// `Ok` reply chains `stage start`.
     stage_restart_pending: std::collections::BTreeSet<Option<String>>,
+    /// W1: each machine's cached `backlot studio list --json` — the
+    /// left machines tree lists studios whose stage is down (or whose
+    /// document is missing).
+    studio_index: crate::studio_index::StudioIndex,
+    /// W1/M4: the last studio the machines tree highlighted, so a
+    /// change scrolls its machine row into view.
+    last_current_studio: Option<crate::studio::StudioKey>,
     /// The Task & Delivery Sheet (`v` on the dock) — `Some` while the
     /// modal is open; it owns the keys like the other dialogs.
     sheet: Option<crate::sheet::Sheet>,

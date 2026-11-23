@@ -239,13 +239,16 @@ impl App {
                     StudioAct::MachineInstall,
                 ),
                 Some(crate::studio_menu::MenuBacklot::Installed(_))
-                    if !menu.stage_down && !menu.offline =>
+                    if menu.stage_down && !menu.offline =>
                 {
-                    (
-                        format!("Restart the stage · {name}"),
-                        StudioAct::StageRestart,
-                    )
+                    // W1: a stage-down machine's own start, so its
+                    // ledger studios are reachable from the keyboard.
+                    (format!("Start the stage · {name}"), StudioAct::StageStart)
                 }
+                Some(crate::studio_menu::MenuBacklot::Installed(_)) if !menu.offline => (
+                    format!("Restart the stage · {name}"),
+                    StudioAct::StageRestart,
+                ),
                 _ => continue,
             };
             rows.push(HelpRow {

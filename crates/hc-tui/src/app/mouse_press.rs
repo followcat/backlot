@@ -118,6 +118,17 @@ impl App {
             self.help_state = crate::chrome::help::HelpState::default();
             return;
         }
+        // W1: a studio-mode machines-tree row that is not a space — a
+        // `stage down` studio starts its machine's stage.
+        if let Some(hit) = hits
+            .studio_rows
+            .iter()
+            .find(|h| contains(h.rect, point))
+            .cloned()
+        {
+            self.studio_row_activated(&hit);
+            return;
+        }
         // Machine rows: collapse toggle (or the active endpoint's row)
         // toggles the endpoint section; other online rows would activate
         // the endpoint — hc-tui is single-endpoint, so the toggle case

@@ -88,10 +88,27 @@ pub(crate) struct MachineHit {
     pub endpoint_id: ClientEndpointId,
 }
 
+/// What a click on a studio-mode machines-tree row does (W1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum StudioRowAct {
+    /// A ledger studio whose machine's stage is down — start it.
+    StartStage,
+}
+
+/// A studio-mode machines-tree row's hit area.
+#[derive(Clone)]
+pub(crate) struct StudioRowHit {
+    pub rect: Rect,
+    pub endpoint_id: ClientEndpointId,
+    pub act: StudioRowAct,
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct ShellHitMap {
     pub machines: Vec<MachineHit>,
     pub workspaces: Vec<WorkspaceHit>,
+    /// Studio-mode machines-tree rows that are not spaces (W1).
+    pub studio_rows: Vec<StudioRowHit>,
     pub workspace_body: Rect,
     pub workspace_scrollbar: Rect,
     pub workspace_scroll_metrics: Option<ScrollMetrics>,
@@ -198,6 +215,15 @@ pub(crate) struct ShellRenderState<'a> {
     pub hide_stage_space: bool,
     /// Studio currently owning `StudioFocus::Studio(key)`, highlighted in the sidebar.
     pub focused_studio: Option<&'a crate::studio::StudioKey>,
+    /// W1: the extra studio rows under each machine in studio mode —
+    /// `None` in plain mode, where herdr's tree is untouched.
+    pub studio_tree: Option<&'a crate::chrome::studio_tree::Tree>,
+    /// The current studio — the machines tree highlights its row and
+    /// keeps its machine in view.
+    pub current_studio: Option<&'a crate::studio::StudioKey>,
+    /// The machines tree must scroll to the current studio's machine
+    /// row this frame (W1, M4).
+    pub reveal_studio_row: &'a mut bool,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {

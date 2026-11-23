@@ -65,6 +65,7 @@ mod update_card;
 mod update_source;
 mod version_badge;
 mod view_sync;
+mod w1_left_side;
 mod waiting;
 
 use super::*;

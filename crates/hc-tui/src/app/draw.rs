@@ -111,6 +111,11 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     if let Some(view) = cast.as_mut() {
         view.studio_focused = studio_focused;
     }
+    // W1: the extra studio rows under each machine, and the current
+    // studio the tree highlights and keeps in view — owned before the
+    // `shell_state`/`studio` mutable borrows below.
+    let studio_tree = app.studio.active.then(|| app.studio_sidebar_tree());
+    let current_studio = app.studio.current.clone();
     let lot = (app.studio.lot.pill || app.studio.lot.header.is_some()).then_some(
         crate::chrome::lot::LotFrame {
             counts: app.studio.lot.counts,
@@ -163,6 +168,9 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         machine_lines: machine_lines.as_ref(),
         hide_stage_space: !app.plain,
         focused_studio: focused_studio.as_ref(),
+        studio_tree: studio_tree.as_ref(),
+        current_studio: current_studio.as_ref(),
+        reveal_studio_row: &mut app.shell_state.reveal_studio_row,
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

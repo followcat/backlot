@@ -130,6 +130,10 @@ impl App {
         // probe — doc answers, reconnects and the 6h throttle all
         // live in `machine_versions`.
         self.sync_machine_versions();
+        // W1: a stage down (or a missing document) asks the machine
+        // for its ledger's studios — cached, refreshed at most every
+        // 30 s and on every stage change.
+        self.sync_studio_index();
         // Focusing marks the active tab's panes seen — an idle agent
         // reports `Done` only while its workspace stayed background.
         self.mark_active_seen();

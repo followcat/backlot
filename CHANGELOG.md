@@ -12,6 +12,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Every machine's studios in the left machines tree.** A machine whose stage is down — or that
+  published no document — now lists its studios from `backlot studio list --json` (run locally or
+  over `RemoteRunner`, cached and refreshed on a stage change or every 30 s at most), dimmed with
+  a `stage down` tag; Enter or a click on one starts that machine's stage. A machine that cannot
+  be reached shows one `unreachable` line instead of an empty tree, and the tree scrolls to the
+  machine row of the studio the selection lands on, so a row never drops out of a short sidebar.
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on

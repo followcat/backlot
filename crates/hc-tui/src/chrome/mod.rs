@@ -40,6 +40,7 @@ pub mod snapshot;
 pub mod spans;
 pub mod status;
 pub(crate) mod studio_dialogs;
+pub(crate) mod studio_tree;
 pub mod tabs;
 pub mod text;
 pub(crate) mod text_editor;
