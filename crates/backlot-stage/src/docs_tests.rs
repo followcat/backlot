@@ -217,6 +217,7 @@ fn guide_cast_file_parses_through_studio_new() {
             mode: None,
             init: false,
             no_git: false,
+            ask: None,
         },
         &env,
         dir.as_ref(),

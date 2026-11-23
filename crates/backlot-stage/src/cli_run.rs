@@ -166,6 +166,20 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
         _ => {}
     }
     let base = base(env, &common)?;
+    // The first message's body must not be empty, whatever its source
+    // — the same rule `--text` and `--stdin` carry. Checked before the
+    // dry run's read so both paths refuse alike.
+    if let Cmd::StudioNew {
+        ask: Some(crate::args::TextSource::File(file)),
+        ..
+    } = &cmd
+    {
+        let body = std::fs::read_to_string(file)
+            .map_err(|e| Fail::refused(format!("--ask-file {}: {e}", file.display())))?;
+        if body.trim().is_empty() {
+            return Err(Fail::refused("the ask is empty"));
+        }
+    }
     // The reads — including the cross-studio `--all` forms and the
     // `studio new` dry run — append nothing (R24, D19).
     if let Some(out) = crate::hwood_read::read(&common, &cmd, env, &base) {
@@ -184,10 +198,15 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
 /// `--text`/`--stdin` materialization (G2): the body a `--file`
 /// command copies lands in a temp file the caller removes after the
 /// append. An empty body is refused before any file is written.
+/// `studio new --ask` rides the same seam — its text becomes an
+/// `--ask-file` the build copies into `messages/`.
 fn materialize(cmd: &mut Cmd, stdin: Option<&str>) -> Result<Option<PathBuf>, Fail> {
     use crate::args::TextSource;
     let source = match cmd {
         Cmd::Tell { source, .. } | Cmd::ReqRevise { source, .. } => source,
+        Cmd::StudioNew {
+            ask: Some(source), ..
+        } => source,
         _ => return Ok(None),
     };
     let body = match source {

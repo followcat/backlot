@@ -17,6 +17,10 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
     let mut interactive = false;
     let mut init = false;
     let mut no_git = false;
+    // `--ask <text>` / `--ask-file <f>` — the wizard's first message
+    // to the producer; one source only.
+    let mut ask_text = None;
+    let mut ask_file = None;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -35,6 +39,12 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             _ if eq(&arg, "--mode").is_some() => {
                 mode = Some(parse_mode(eq(&arg, "--mode").unwrap())?)
             }
+            "--ask" => ask_text = Some(it.value("--ask", U_STUDIO)?),
+            _ if eq(&arg, "--ask").is_some() => ask_text = eq(&arg, "--ask").map(String::from),
+            "--ask-file" => ask_file = Some(PathBuf::from(it.value("--ask-file", U_STUDIO)?)),
+            _ if eq(&arg, "--ask-file").is_some() => {
+                ask_file = eq(&arg, "--ask-file").map(PathBuf::from)
+            }
             "--dry-run" => dry_run = true,
             "--interactive" => interactive = true,
             "--init" => init = true,
@@ -42,6 +52,21 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
         }
     }
+    // The first message: `--ask` and `--ask-file` never combine, and
+    // an empty `--ask` is refused now, as an empty `--text` is.
+    if ask_text.is_some() && ask_file.is_some() {
+        return Err(usage("pick one of --ask or --ask-file", U_STUDIO));
+    }
+    if let Some(text) = &ask_text
+        && text.trim().is_empty()
+    {
+        return Err(usage("--ask must not be empty", U_STUDIO));
+    }
+    let ask = match (ask_text, ask_file) {
+        (Some(text), None) => Some(TextSource::Text(text)),
+        (None, Some(file)) => Some(TextSource::File(file)),
+        _ => None,
+    };
     let cmd = match interactive {
         // The wizard resolves whatever the flags left unset — the
         // only pre-checks here are the ones that always hold.
@@ -54,6 +79,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             mode,
             init,
             no_git,
+            ask,
         },
         false => Cmd::StudioNew {
             title: Some(title.ok_or_else(|| usage("missing --title", U_STUDIO))?),
@@ -66,6 +92,7 @@ pub(crate) fn studio_new(common: &mut Common, it: &mut It) -> Result<(Common, Cm
             mode,
             init,
             no_git,
+            ask,
         },
     };
     Ok((std::mem::take(common), cmd))
