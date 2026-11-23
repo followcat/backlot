@@ -1,14 +1,13 @@
 //! The agy adapter's pieces: the launch argv (`--mode`,
-//! `--effort`, `--model`, `--settings`, `-i` fresh only), the
-//! per-session settings file's `toolPermission` splice, and the
-//! `conversations/<uuid>.db` session lookup — a byte match on the
-//! workspace's `file://` URI, no sqlite read.
+//! `--effort`, `--model`, `--settings`, `-i` fresh only) and the
+//! per-session settings file's `toolPermission` splice. The session
+//! lookup lives in `agy_session_tests`.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use super::agy::{AgyPrep, prepare, session_at, session_in_argv, settings_content};
+use super::agy::{AgyPrep, prepare, session_in_argv, settings_content};
 use super::{ActorIdentity, LaunchCtx, Prep, plan};
 use crate::test_support::TestDir;
 
@@ -183,75 +182,6 @@ fn prepare_writes_the_session_settings() {
     }
 }
 
-/// The session id a live agy role's launch minted: the newest
-/// `<uuid>.db` under `conversations/` created at or after the
-/// role's start whose bytes name `file://<cwd>` — no other role's
-/// id, nothing older, nothing from another workdir.
-#[test]
-fn session_at_finds_the_roles_conversation_db() {
-    let dir = tmp("sessions");
-    let conv = dir.join("conversations");
-    fs::create_dir_all(&conv).unwrap();
-    let started_ms = 1_000_000;
-    let db = |name: &str, cwd: &str| {
-        let p = conv.join(format!("{name}.db"));
-        fs::write(&p, format!("sqlite-ish file://{cwd}/ blob")).unwrap();
-        p
-    };
-    // A db for the role's cwd, minted at start — the hit.
-    let mine = db(
-        "aaaaaaaa-0000-0000-0000-000000000001",
-        "/home/user/acme-shop",
-    );
-    // Another workdir's db and an untagged one are skipped.
-    db("bbbbbbbb-0000-0000-0000-000000000002", "/home/user/other");
-    fs::write(
-        conv.join("cccccccc-0000-0000-0000-000000000003.db"),
-        "no uri",
-    )
-    .unwrap();
-    // A non-db file is skipped.
-    fs::write(conv.join("notes.txt"), "file:///home/user/acme-shop").unwrap();
-    let id = session_at(&conv, "/home/user/acme-shop", started_ms, &BTreeSet::new()).unwrap();
-    assert_eq!(id, "aaaaaaaa-0000-0000-0000-000000000001");
-    // Already claimed by another role — none left.
-    let taken = BTreeSet::from([id.clone()]);
-    assert_eq!(
-        session_at(&conv, "/home/user/acme-shop", started_ms, &taken),
-        None
-    );
-    // A far-future start finds nothing.
-    let far = file_time(&mine) + 10_000_000;
-    assert_eq!(
-        session_at(&conv, "/home/user/acme-shop", far, &BTreeSet::new()),
-        None
-    );
-    // A different cwd finds its own.
-    assert_eq!(
-        session_at(&conv, "/home/user/other", started_ms, &BTreeSet::new()),
-        Some("bbbbbbbb-0000-0000-0000-000000000002".to_string())
-    );
-}
-
-/// `file://` URIs percent-encode what a path cannot hold: a cwd
-/// with a space must still match — the db writes `%20`, the match
-/// encodes the cwd the same way.
-#[test]
-fn session_at_matches_an_encoded_uri() {
-    let dir = tmp("sessions-pct");
-    let conv = dir.join("conversations");
-    fs::create_dir_all(&conv).unwrap();
-    fs::write(
-        conv.join("dddddddd-0000-0000-0000-000000000004.db"),
-        "blob file:///home/user/acme%20shop/blob",
-    )
-    .unwrap();
-    assert_eq!(
-        session_at(&conv, "/home/user/acme shop", 0, &BTreeSet::new()),
-        Some("dddddddd-0000-0000-0000-000000000004".to_string())
-    );
-}
-
 /// The resumed terminal's id sits after `--conversation`; `-c` is
 /// a boolean (continue the most recent) and carries none.
 #[test]
@@ -263,14 +193,4 @@ fn the_resumed_argv_names_its_session() {
     );
     assert_eq!(session_in_argv(&argv(&["agy", "-c"])), None);
     assert_eq!(session_in_argv(&argv(&["agy", "--continue"])), None);
-}
-
-/// A file's birth time, or its mtime where birth time is
-/// unsupported — the same clock `session_at` reads.
-fn file_time(path: &Path) -> u64 {
-    let md = fs::metadata(path).unwrap();
-    let t = md.created().or_else(|_| md.modified()).unwrap();
-    t.duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
 }

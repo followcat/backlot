@@ -381,9 +381,14 @@ unmeasured for agy.
   take `accept-edits`, the mode that does the work without stopping for plan or prompt review.
 - The session store is `~/.gemini/antigravity-cli/conversations/<uuid>.db` — one sqlite file per
   conversation whose bytes embed the workspace's `file://` URIs verbatim (percent-encoded when the
-  path needs it). The stage finds the newest `.db` at or after the role's start whose bytes carry
-  the role cwd's URI — a plain byte scan, no sqlite dependency. `--conversation <id>` resumes; `-i`
-  is not passed on a resume (the devin and cmd rule).
+  path needs it). On agy 1.5.14 the db does not always carry the workspace URI: agy keeps
+  `~/.gemini/antigravity-cli/cache/last_conversations.json`, a JSON object mapping an absolute cwd
+  to the id of the last conversation started there, so the stage first takes the id that file names
+  for the role's exact cwd when `conversations/<id>.db` exists, is born at or after the role's start
+  and no other role claims it. A missing, unreadable or malformed file — and an id that fails any of
+  those checks — falls through to the byte scan below, which finds the newest `.db` at or after the
+  role's start whose bytes carry the role cwd's URI — a plain scan, no sqlite dependency.
+  `--conversation <id>` resumes; `-i` is not passed on a resume (the devin and cmd rule).
 - The workdir's `.agy-settings.json` is the per-session boundary like cmd's project file:
   `{"toolPermission":"always-proceed"}`, written before every start and resume — agy reads it once
   at startup, so tools proceed without the prompts a role cannot answer while the user's global
