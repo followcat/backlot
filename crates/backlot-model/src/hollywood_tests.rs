@@ -1,6 +1,7 @@
 //! Hollywood ledger tests: the event envelope's wire shape and the
 //! replay-equals-apply promise the studio ledger makes too.
 
+use crate::event::ActorIdentity;
 use crate::hollywood::*;
 use crate::testkit::*;
 
@@ -170,4 +171,78 @@ fn a_close_stamps_since_and_ends_the_loss_count() {
         hev(5, "stage", role_state(RoleMotion::Lost, None)),
     ]);
     assert_eq!(state.role.losses, vec![5000]);
+}
+
+/// A close ends the conversation, and a start begins a fresh one: a
+/// session id recorded under the old runner never survives either.
+/// Otherwise a new runner's resume would be handed a session it never
+/// minted — `cmd -r <devin id>` is `No session named …`.
+#[test]
+fn a_close_or_a_session_less_start_clears_the_old_session() {
+    let actor = |runner: &str| ActorIdentity {
+        runner: runner.into(),
+        runner_version: None,
+        model: "m".into(),
+        effort: None,
+        permission_profile: "standard".into(),
+    };
+    let role_state =
+        |state: RoleMotion, actor: Option<ActorIdentity>, session: Option<&str>| -> HollywoodKind {
+            HollywoodKind::RoleState {
+                state,
+                terminal: None,
+                actor,
+                session_id: session.map(String::from),
+                reason: None,
+            }
+        };
+    // devin started → closed ("runner changed") → cmd started, no
+    // session yet: the devin id is gone.
+    let state = replay(&[
+        hev(
+            1,
+            "stage",
+            role_state(
+                RoleMotion::Started,
+                Some(actor("devin")),
+                Some("beaded-harp"),
+            ),
+        ),
+        hev(2, "stage", role_state(RoleMotion::Closed, None, None)),
+        hev(
+            3,
+            "stage",
+            role_state(RoleMotion::Started, Some(actor("cmd")), None),
+        ),
+    ]);
+    assert_eq!(state.role.session_id, None);
+    assert_eq!(state.role.actor.as_ref().unwrap().runner, "cmd");
+    // A close alone clears it too.
+    let state = replay(&[
+        hev(
+            1,
+            "stage",
+            role_state(
+                RoleMotion::Started,
+                Some(actor("devin")),
+                Some("beaded-harp"),
+            ),
+        ),
+        hev(2, "stage", role_state(RoleMotion::Closed, None, None)),
+    ]);
+    assert_eq!(state.role.session_id, None);
+    // A resumed record that carries no id keeps the one it had.
+    let state = replay(&[
+        hev(
+            1,
+            "stage",
+            role_state(
+                RoleMotion::Started,
+                Some(actor("devin")),
+                Some("beaded-harp"),
+            ),
+        ),
+        hev(2, "stage", role_state(RoleMotion::Resumed, None, None)),
+    ]);
+    assert_eq!(state.role.session_id.as_deref(), Some("beaded-harp"));
 }

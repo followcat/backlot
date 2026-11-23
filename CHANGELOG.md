@@ -40,6 +40,16 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   existing file and keeping every other key. So a stage-sent message read no longer
   stops at `Outside the workspace — …`. The `--add-dir` flag stays: it still gives
   the model the directory as context.
+- **Hollywood never resumes with another runner's session, and records its own
+  cmd session.** A `role.state closed`, or a `started` that carries no session, now
+  clears the recorded session id — after a runner change to `cmd`, the old Devin id
+  no longer survived to `cmd -r <devin id>`, which answers `No session named …`. A
+  resume also refuses any id whose recorded runner differs from the one being
+  launched. Hollywood's post-launch discovery already ran for studio roles; with the
+  stale id gone it now records `cmd`'s session from
+  `~/.commandcode/projects/<slug(hollywood cwd)>/` on a `role.state started`, so a
+  lost Hollywood resumes its own conversation, and falls back to the existing rule
+  when discovery finds nothing.
 - **cmd roles and Hollywood read their state files without a prompt.** A `cmd`
   launch now passes `--add-dir`: the studio's state directory for a studio role,
   and `<base>/studios` for Hollywood, the sibling of its `<base>/hollywood` cwd.

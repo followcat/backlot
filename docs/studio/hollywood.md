@@ -155,8 +155,11 @@ With a valid section the stage runs **one terminal named `bl-hollywood`** — la
 `BACKLOT_ROLE=hollywood`, the state dir, and no `BACKLOT_STUDIO`. It is started, adopted after a
 stage restart, and resumed after a loss the way a producer is (three losses in ten minutes is its
 `cannot resume` — that give-up holds while the same stage process lives; restarting the stage is
-the way back, and the loss count starts over). Changing the runner starts a new conversation;
-removing the section closes it.
+the way back, and the loss count starts over). A runner that mints its session id after launch —
+`cmd`, `codex`, `devin`, `cursor`, `cline`, `agy` — is discovered the same way a studio role's
+is, so a lost Hollywood resumes its own conversation; a resume never carries a session id
+recorded under another runner, and a `closed` or a session-less `started` clears the old one.
+Changing the runner starts a new conversation; removing the section closes it.
 Its lifecycle lands in Hollywood's own ledger as `role.state` events — the studios' four role
 events folded into one.
 

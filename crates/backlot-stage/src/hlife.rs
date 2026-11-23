@@ -177,8 +177,12 @@ impl Stage {
                     let mut actor = role.actor.clone().unwrap_or_else(|| {
                         hstage::identity(cfg.expect("a resume needs the config"))
                     });
+                    // Only a session recorded under this runner: a
+                    // ledger from before the clear can still hold the
+                    // previous runner's id.
+                    let resume = hstage::resume_session(&role, &actor).map(str::to_string);
                     match self
-                        .hrun(hdir, &mut actor, role.session_id.as_deref(), real_slot_free)
+                        .hrun(hdir, &mut actor, resume.as_deref(), real_slot_free)
                         .await?
                     {
                         HRun::Up { address, session } => {
@@ -187,7 +191,7 @@ impl Stage {
                                 RoleMotion::Resumed,
                                 Some(address),
                                 Some(actor),
-                                session.or_else(|| role.session_id.clone()),
+                                session.or(resume),
                                 Some("recovered"),
                             )?;
                             crate::stagelog::stage_log!("resumed {HOLLYWOOD_TERMINAL}");

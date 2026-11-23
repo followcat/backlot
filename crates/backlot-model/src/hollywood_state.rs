@@ -233,7 +233,29 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
             session_id,
             reason,
         } => match motion {
-            RoleMotion::Started | RoleMotion::Resumed => {
+            // A start begins a fresh conversation: the session id it
+            // carries is the whole truth, so a start without one —
+            // a new runner's first start, or an adoption — clears the
+            // id the previous runner recorded. Otherwise a resume
+            // would hand that id to a runner that never minted it.
+            RoleMotion::Started => {
+                let r = &mut state.role;
+                r.live = true;
+                r.closed = false;
+                r.closed_reason = None;
+                r.since_ms = e.ts_ms;
+                if terminal.is_some() {
+                    r.terminal = terminal.clone();
+                }
+                if actor.is_some() {
+                    r.actor = actor.clone();
+                }
+                r.session_id = session_id.clone();
+                r.recovered_seq = None;
+            }
+            // A resume continues the recorded conversation: keep the
+            // old id when the record carries none.
+            RoleMotion::Resumed => {
                 let r = &mut state.role;
                 r.live = true;
                 r.closed = false;
@@ -248,9 +270,7 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 if session_id.is_some() {
                     r.session_id = session_id.clone();
                 }
-                r.recovered_seq = (*motion == RoleMotion::Resumed
-                    && reason.as_deref() == Some("recovered"))
-                .then_some(e.seq);
+                r.recovered_seq = (reason.as_deref() == Some("recovered")).then_some(e.seq);
             }
             RoleMotion::Lost => {
                 state.role.live = false;
@@ -262,6 +282,9 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 r.live = false;
                 r.closed = true;
                 r.closed_reason = reason.clone();
+                // A close ends the conversation: no later resume may
+                // hand this id to whichever runner starts next.
+                r.session_id = None;
                 // The close's own ts: a stage process born after it
                 // may revive a `cannot resume` give-up (R1-4), and the
                 // crash history ends with the lifecycle it counted.
