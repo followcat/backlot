@@ -11,7 +11,7 @@ use crate::panel::data::MachineSummary;
 
 use crate::chrome::lot::{HeaderKind, Lot, LotCounts, StudioHeader};
 use crate::hollywood::LayerMode;
-use crate::panel::{CallSheetStart, data, stage_running};
+use crate::panel::{CallSheetStart, data};
 use crate::project::LOCAL_LABEL;
 use crate::studio::StudioKey;
 use crate::studio::glyphs::{Person, PriorityMark};
@@ -65,8 +65,10 @@ impl super::App {
         }
     }
 
-    /// U = prompts the user owns + stopped stages + ledger errors.
-    /// C = open Hollywood cards + studios ready to finish.
+    /// U = the one needs-you list's length — prompts, roles that need
+    /// the user, blocked Hollywood, new studios, stage issues, cards
+    /// and ready studios. The list is the count, so the pill cannot
+    /// disagree with the sheet or the calm row.
     fn lot_counts(&self, machines: &[MachineSummary], counts: &mut LotCounts) {
         let studios = data::studios(machines);
         counts.studios = studios.len();
@@ -80,28 +82,9 @@ impl super::App {
             let hw = crate::hollywood::local_summary(machines).and_then(|s| s.hollywood.as_ref());
             counts.unread = crate::hollywood::hollywood_unread_count(hw, seen);
         }
-        for m in machines {
-            if !m.summary.studios.is_empty() && !stage_running(&self.view, m.machine.as_deref()) {
-                counts.urgent += 1;
-            }
-            if let Some(h) = &m.summary.hollywood {
-                counts.cards += h.cards.len();
-            }
-        }
-        for s in studios {
-            let studio = s.studio;
-            if studio.error.is_some() {
-                counts.urgent += 1;
-            }
-            if studio.ready_to_finish {
-                counts.cards += 1;
-            }
-            for role in &studio.roles {
-                if Person::of(role) == Person::UserPrompt {
-                    counts.urgent += 1;
-                }
-            }
-        }
+        // The calm row, the sheet and the pill read the same list.
+        let status = crate::hollywood::status_of(&self.view);
+        counts.urgent = crate::hollywood::waiting_items(machines, &status).len();
     }
 
     /// The start policy, applied once the first summary lands, plus

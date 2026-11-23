@@ -41,6 +41,10 @@ fn prompts_sort_before_stage_cards_and_ready() {
         .iter()
         .map(|w| match w {
             Wait::Prompt(_) => "prompt",
+            Wait::Role(item) if item.asks => "asks",
+            Wait::Role(_) => "role",
+            Wait::Hollywood => "hollywood",
+            Wait::NoRequirement(_) => "new",
             Wait::Stage(_) => "stage",
             Wait::Card(_) => "card",
             Wait::Ready(_) => "ready",

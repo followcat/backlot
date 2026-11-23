@@ -203,6 +203,15 @@ A person shows exactly one state, in this priority:
 An `info` attention never appears in this list; it shows only in the role's details (the `Space`
 drawer and the sheet's studio overview), dimmed.
 
+## The needs-you list
+
+One function builds the list from every machine's document, in this order: user-owned prompts;
+roles with a `needs you` attention or an unanswered question; a blocked Hollywood; studios with
+no requirement; stopped stages and unreachable machines with live studios; open cards; studios
+ready to finish. The Call Sheet's waiting rows, the lot pill's urgent count and the band's calm
+row all read this one list. `✓ nothing waiting on you` shows only while it is empty; there is no
+separate `!N flagged` suffix — a `stuck` role shows on its own row and never counts here.
+
 ## The cast
 
 In studio mode the sidebar's agents section is the current studio's cast instead (see

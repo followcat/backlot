@@ -153,7 +153,8 @@ impl App {
             }
             // The live row answers only while Hollywood's own prompt
             // stands: the same `approve` a role's prompt sends, on
-            // Hollywood's ledger, and option 1's run-once allow.
+            // Hollywood's ledger, and option 1's run-once allow. The
+            // needs-you list's HOLLYWOOD row shares this target.
             (Some(Target::Hollywood), KeyCode::Char('y')) if self.hollywood_asking() => {
                 self.run_action(studio_cmds::hollywood_approve(true));
             }
@@ -161,6 +162,14 @@ impl App {
                 self.run_action(studio_cmds::hollywood_approve(false));
             }
             (Some(Target::Hollywood), KeyCode::Char('p')) => self.hollywood_peek_live(),
+            // A role's needs-you or asks row peeks the role itself; a
+            // no-requirement studio peeks its producer.
+            (Some(Target::Role(studio, role)), KeyCode::Char('p')) => {
+                self.hollywood_peek(&studio, &role);
+            }
+            (Some(Target::Tell(key)), KeyCode::Char('p')) => {
+                self.hollywood_peek(&key, "producer");
+            }
             // A studio frame's `p`: peek the role on set — the live
             // worker the frame already names, else the producer. The
             // footer's `p peek` is no longer dead weight off prompt

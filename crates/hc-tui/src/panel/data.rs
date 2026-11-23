@@ -161,6 +161,24 @@ pub(crate) fn report_pending(studio: &backlot_model::summary::StudioSummary) -> 
             .is_some_and(|next| next.starts_with("node report"))
 }
 
+/// The studio's own next step, in plain words: no requirement yet,
+/// tasks in review, or every task accepted. Everything else is calm
+/// and has none.
+pub(crate) fn next_step(studio: &StudioSummary) -> Option<&'static str> {
+    if studio.state == "finished" {
+        return None;
+    }
+    if studio.requirement_version == 0 {
+        Some("tell the producer what to build")
+    } else if studio.open_reviews > 0 {
+        Some("director reviewing")
+    } else if studio.tasks_total > 0 && studio.tasks_done == studio.tasks_total {
+        Some("finish (f)")
+    } else {
+        None
+    }
+}
+
 /// Whether studios come from more than one machine — headers name
 /// the machine only then; one machine draws exactly like before.
 pub(crate) fn spans_machines(machines: &[MachineSummary]) -> bool {

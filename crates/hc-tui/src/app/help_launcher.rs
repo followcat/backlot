@@ -98,6 +98,35 @@ impl App {
                         });
                     }
                 }
+                Wait::Role(item) => {
+                    let place = format!(
+                        "{} · {}",
+                        item.studio.id,
+                        hollywood::machine_label(item.machine, local, multi)
+                    );
+                    rows.push(HelpRow {
+                        label: format!(
+                            "{} · {place} · {}",
+                            if item.asks { "Question" } else { "Needs you" },
+                            item.role.name
+                        ),
+                        hint: self.sheet_hint("↵"),
+                        glyph: if item.asks { "?" } else { "×" },
+                        launch: Launch::Surface(Surface::CallSheet),
+                    });
+                }
+                Wait::Hollywood => rows.push(HelpRow {
+                    label: "Hollywood is blocked".to_string(),
+                    hint: self.sheet_hint("↵"),
+                    glyph: "!",
+                    launch: Launch::Surface(Surface::CallSheet),
+                }),
+                Wait::NoRequirement(item) => rows.push(HelpRow {
+                    label: format!("New studio {} · tell the producer", item.studio.id),
+                    hint: self.sheet_hint("↵"),
+                    glyph: "✦",
+                    launch: Launch::Surface(Surface::CallSheet),
+                }),
                 Wait::Card(card) => {
                     let menu = StudioMenu::card(&card.id);
                     rows.push(HelpRow {

@@ -33,6 +33,12 @@ pub(crate) enum Target {
     /// A user-owned prompt row (studio, role) — `y`/`d` decide, `p`
     /// peeks, Enter focuses the role's terminal.
     Prompt(StudioKey, String),
+    /// A needs-you attention or an unanswered question on (studio,
+    /// role) — Enter focuses the role's terminal, `p` peeks.
+    Role(StudioKey, String),
+    /// A studio with no requirement — Enter focuses its producer, so
+    /// the person can tell it what to build.
+    Tell(StudioKey),
     /// A machine whose stage is down (`offline == false`) or that is
     /// unreachable — `r` restarts the stage.
     Stage(Option<String>, bool),
@@ -102,10 +108,9 @@ pub(crate) enum Row<'a> {
     Headline(&'a str),
     /// A waiting item — an index into the sheet's `waits`.
     Wait(usize),
-    /// `✓ nothing waiting on you across <S> studios` — the calm row;
-    /// `flags` is the open attention the sheet does not list (it is
-    /// not the user's), so a `!N` chip never contradicts the row.
-    Calm { studios: usize, flags: usize },
+    /// `✓ nothing waiting on you across <S> studios` — the calm row,
+    /// shown only while the needs-you list is empty.
+    Calm { studios: usize },
     /// A line of the user's exchange with Hollywood — the dialog's
     /// half drawn above the input (D21).
     Talk(&'a Exchange),
@@ -159,21 +164,8 @@ pub(crate) fn band_rows<'a>(
     }
     let waits = waiting_items(machines, status);
     if waits.is_empty() {
-        // Open attention no sheet row lists (each `attention_user`
-        // role accounts for one record — the rest is the stage's or
-        // a role's own flag): the chips still show it, so the calm
-        // row does too.
-        let flags: usize = machines
-            .iter()
-            .flat_map(|m| m.summary.studios.iter())
-            .map(|s| {
-                let mine = s.roles.iter().filter(|r| r.attention_user).count();
-                (s.waiting as usize).saturating_sub(mine)
-            })
-            .sum();
         out.push(Row::Calm {
             studios: crate::panel::data::studio_count(machines),
-            flags,
         });
     } else {
         out.extend((0..waits.len()).map(Row::Wait));

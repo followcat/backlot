@@ -75,9 +75,30 @@ pub(crate) struct ReadyItem<'a> {
     pub studio: &'a StudioSummary,
 }
 
+/// A role that needs the user beyond a D9 prompt: a needs-you
+/// attention or an unanswered question.
+pub(crate) struct RoleItem<'a> {
+    pub machine: Option<&'a str>,
+    pub studio: &'a StudioSummary,
+    pub role: &'a RoleSummary,
+    /// `true` for the role's unanswered `tell user`; `false` for a
+    /// needs-you attention.
+    pub asks: bool,
+}
+
+/// A studio with no recorded requirement — the next step is telling
+/// the producer what to build.
+pub(crate) struct StudioItem<'a> {
+    pub machine: Option<&'a str>,
+    pub studio: &'a StudioSummary,
+}
+
 /// One waiting item in sort order.
 pub(crate) enum Wait<'a> {
     Prompt(PromptItem<'a>),
+    Role(RoleItem<'a>),
+    Hollywood,
+    NoRequirement(StudioItem<'a>),
     Stage(StageItem<'a>),
     Card(&'a CardSummary),
     Ready(ReadyItem<'a>),
@@ -94,6 +115,18 @@ impl Wait<'_> {
                 },
                 item.role.role.clone(),
             ),
+            Wait::Role(item) => super::Target::Role(
+                StudioKey {
+                    machine: item.machine.map(str::to_string),
+                    id: item.studio.id.clone(),
+                },
+                item.role.role.clone(),
+            ),
+            Wait::Hollywood => super::Target::Hollywood,
+            Wait::NoRequirement(item) => super::Target::Tell(StudioKey {
+                machine: item.machine.map(str::to_string),
+                id: item.studio.id.clone(),
+            }),
             Wait::Stage(item) => {
                 super::Target::Stage(item.machine.map(str::to_string), item.offline)
             }
@@ -105,13 +138,17 @@ impl Wait<'_> {
         }
     }
 
-    /// Whether the row can offer a detail line — prompts and cards
-    /// always can; a ready row gets one while the wrap report is
-    /// still owed (R3-3's dim `report pending`); stage rows are one
-    /// line each.
+    /// Whether the row can offer a detail line — prompts, roles,
+    /// Hollywood and cards always can; a ready row gets one while the
+    /// wrap report is still owed (R3-3's dim `report pending`); stage
+    /// and no-requirement rows are one line each.
     pub fn detailable(&self) -> bool {
         match self {
-            Wait::Prompt(_) | Wait::Card(_) => true,
+            Wait::Prompt(_)
+            | Wait::Role(_)
+            | Wait::Hollywood
+            | Wait::Card(_)
+            | Wait::NoRequirement(_) => true,
             Wait::Ready(item) => crate::panel::data::report_pending(item.studio),
             Wait::Stage(_) => false,
         }
@@ -119,8 +156,11 @@ impl Wait<'_> {
 }
 
 /// Every waiting item across every machine, in the sheet's order:
-/// prompts, stage issues, cards, ready studios — each group in
-/// machine order, then document order.
+/// user prompts, roles that need the user, Hollywood when it is
+/// blocked, studios with no requirement, stage issues, cards, and
+/// ready studios — each group in machine order, then document order.
+/// This is the one "needs you" list the calm row, the lot pill and
+/// the sheet read.
 pub(crate) fn waiting_items<'a>(
     machines: &'a [MachineSummary],
     status: &Status<'a>,
@@ -136,6 +176,45 @@ pub(crate) fn waiting_items<'a>(
                         role,
                     }));
                 }
+            }
+        }
+    }
+    for m in machines {
+        for studio in &m.summary.studios {
+            for role in &studio.roles {
+                if role.attention_user {
+                    continue;
+                }
+                let asks = match crate::studio::glyphs::Person::of(role) {
+                    crate::studio::glyphs::Person::NeedsYou => false,
+                    crate::studio::glyphs::Person::Asks => true,
+                    _ => continue,
+                };
+                out.push(Wait::Role(RoleItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                    role,
+                    asks,
+                }));
+            }
+        }
+    }
+    // Hollywood's own state is this core's: a blocked screen waits on
+    // a person, and a prompt field once slice A publishes one joins
+    // here.
+    if let Some(hw) = super::rows::local_summary(machines).and_then(|s| s.hollywood.as_ref())
+        && hw.state == "live"
+        && hw.work == Some(backlot_model::summary::Work::Blocked)
+    {
+        out.push(Wait::Hollywood);
+    }
+    for m in machines {
+        for studio in &m.summary.studios {
+            if studio.requirement_version == 0 && studio.state != "finished" {
+                out.push(Wait::NoRequirement(StudioItem {
+                    machine: m.machine.as_deref(),
+                    studio,
+                }));
             }
         }
     }

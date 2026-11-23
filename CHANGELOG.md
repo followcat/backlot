@@ -48,6 +48,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   conversation. The role summary carries the newest unanswered `tell user` as `asks`, which the
   person row shows as `asks you · <question>`; a user `tell` back to that role answers it.
   `backlot tell user` is covered by every runner's pre-allow list.
+- **One needs-you list everywhere.** One function builds it from every machine's `backlot`
+  document — user prompts, roles with a needs-you attention or an unanswered question, blocked
+  Hollywood, studios with no requirement, stopped stages, open cards and ready studios. The Call
+  Sheet's rows, the lot pill's urgent count and the band's calm row read it, so
+  `✓ nothing waiting on you` shows only when the list is empty; the misleading `!N flagged`
+  suffix is gone, and a `stuck` role shows on its own row.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

@@ -1,8 +1,10 @@
 //! The bar's model: the frames and the band rows — all pure reads
 //! of the document.
 use super::*;
-use crate::hollywood::rows::{Frame, Live, Row, Target, band_rows, frames, hollywood_live, on_set};
-use crate::hollywood::sheet::{Conn, Status};
+use crate::hollywood::rows::{
+    Frame, Live, Row, Target, band_rows, frames, hollywood_live, on_set,
+};
+use crate::hollywood::sheet::{Conn, Status, Wait};
 use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
 
@@ -93,47 +95,73 @@ fn a_calm_band_still_ends_in_the_input_line() {
     let (waits, rows) = band_rows(&list, &all_live, true);
     assert!(waits.is_empty());
     assert_eq!(rows.len(), 3); // headline, calm, input
-    // acme-shop's two open flags are not `attention_user`, so the
-    // sheet lists nothing yet the calm row still names them.
-    assert!(matches!(
-        rows[1],
-        Row::Calm {
-            studios: 3,
-            flags: 2
-        }
-    ));
+    // acme-shop's screen is stalled (stuck, not the user's), so the
+    // sheet lists nothing and the calm row names all three studios.
+    assert!(matches!(rows[1], Row::Calm { studios: 3 }));
 }
 
+/// A blocked Hollywood is on the needs-you list — the bar is never
+/// calm while it waits on a person.
 #[test]
-fn the_calm_row_reports_the_attention_it_does_not_list() {
-    // A `waiting` record that is not `attention_user` never gets a
-    // sheet row, but the studio chip still shows `!N` — the calm row
-    // names it instead of pretending nothing is open.
+fn a_blocked_hollywood_is_not_calm() {
     let mut value = summary_json();
     value["hollywood"]["cards"] = serde_json::json!([]);
-    value["studios"][0]["waiting"] = serde_json::json!(2);
-    value["studios"][1]["waiting"] = serde_json::json!(1);
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    let list = machines(Some(&summary));
-    let (_, rows) = band_rows(&list, &all_live, true);
-    assert!(matches!(
-        rows[1],
-        Row::Calm {
-            studios: 3,
-            flags: 3
-        }
-    ));
-    // An `attention_user` role already lists its record as a prompt
-    // row — it must not count toward the flags.
-    let mut value = summary_json();
-    value["hollywood"]["cards"] = serde_json::json!([]);
-    value["studios"][0]["waiting"] = serde_json::json!(1);
-    value["studios"][0]["roles"][0]["attention_user"] = serde_json::json!(true);
+    value["hollywood"]["work"] = serde_json::json!("blocked");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    assert_eq!(waits.len(), 1); // the prompt, so no calm row
-    assert!(matches!(rows[1], Row::Wait(0)));
+    assert!(
+        waits.iter().any(|w| matches!(w, Wait::Hollywood)),
+        "{:?}",
+        waits.iter().map(|w| w.target()).collect::<Vec<_>>()
+    );
+    assert!(!rows.iter().any(|r| matches!(r, Row::Calm { .. })));
+}
+
+/// A stage-bookkeeping attention alone leaves the bar calm: the
+/// person can do nothing about it.
+#[test]
+fn an_info_attention_alone_stays_calm() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["roles"][1]["attention"] = serde_json::json!("session id not found");
+    value["studios"][0]["roles"][1]["attention_class"] = serde_json::json!("info");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        waits.is_empty(),
+        "{:?}",
+        waits.iter().map(|w| w.target()).collect::<Vec<_>>()
+    );
+    assert!(matches!(rows[1], Row::Calm { studios: 3 }));
+}
+
+/// A studio with no requirement is listed with its next step.
+#[test]
+fn a_studio_with_no_requirement_is_listed_with_its_next_step() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["requirement_version"] = serde_json::json!(0);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, _) = band_rows(&list, &all_live, true);
+    let found = waits
+        .iter()
+        .find(|w| matches!(w, Wait::NoRequirement(_)))
+        .expect("the new studio lists");
+    assert_eq!(
+        found.target(),
+        Target::Tell(crate::studio::StudioKey::local("acme-shop"))
+    );
+    assert_eq!(
+        crate::hollywood::items::detail_text(found).as_deref(),
+        Some("next: tell the producer what to build")
+    );
+    let Wait::NoRequirement(item) = found else {
+        unreachable!()
+    };
+    assert_eq!(item.studio.id, "acme-shop");
 }
 
 #[test]
