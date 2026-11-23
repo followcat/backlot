@@ -100,8 +100,12 @@ impl App {
             ConfirmFor::DirOverride { key, role, allow } => {
                 self.run_action(studio_cmds::decide(key, role, *allow));
             }
-            ConfirmFor::DeleteStudio { key, force } => {
-                self.run_action(studio_cmds::delete_studio(key, *force));
+            ConfirmFor::DeleteStudio { key, force, kept } => {
+                if !*force && !kept.is_empty() {
+                    self.studio_dialog = Some(StudioDialog::delete_studio_force(key, kept));
+                } else {
+                    self.run_action(studio_cmds::delete_studio(key, *force));
+                }
             }
         }
     }

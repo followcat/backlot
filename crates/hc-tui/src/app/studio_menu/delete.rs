@@ -46,7 +46,9 @@ impl App {
             return;
         };
         let key = match &d.for_ {
-            crate::studio_dialog::ConfirmFor::DeleteStudio { key, force: false } => key.clone(),
+            crate::studio_dialog::ConfirmFor::DeleteStudio {
+                key, force: false, ..
+            } => key.clone(),
             _ => return,
         };
         match result {
@@ -54,6 +56,10 @@ impl App {
                 Some(report) => {
                     d.loading = false;
                     d.body = format_delete_confirm(&report);
+                    if let crate::studio_dialog::ConfirmFor::DeleteStudio { kept, .. } = &mut d.for_
+                    {
+                        *kept = report.kept;
+                    }
                 }
                 None => {
                     self.studio_dialog = None;

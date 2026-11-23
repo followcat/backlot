@@ -29,7 +29,7 @@ pub(super) fn report_json(
     .to_string()
 }
 
-async fn drain_dialog_fetch(app: &mut App) {
+pub(super) async fn drain_dialog_fetch(app: &mut App) {
     for _ in 0..20 {
         tokio::task::yield_now().await;
         while let Ok(reply) = app.dialog_fetch_rx.try_recv() {
@@ -182,7 +182,7 @@ async fn delete_success_evicts_studio_from_sidebar_dock_call_sheet_and_advances_
     assert!(crate::panel::data::studios(&app.panel_summaries()).is_empty());
 }
 
-fn press(app: &mut App, k: hc_vt::Key, mods: hc_vt::Mods) {
+pub(super) fn press(app: &mut App, k: hc_vt::Key, mods: hc_vt::Mods) {
     app.on_input(
         crate::app::input::UiEvent::Key(term_key(k, mods, hc_vt::Action::Press)),
         app.area.0,

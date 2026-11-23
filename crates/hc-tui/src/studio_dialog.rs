@@ -47,7 +47,11 @@ pub(crate) enum ConfirmFor {
     },
     /// `studio delete <id> [--force] --json --as user` — finishes if
     /// live, closes terminals, prunes safely, and archives the ledger.
-    DeleteStudio { key: StudioKey, force: bool },
+    DeleteStudio {
+        key: StudioKey,
+        force: bool,
+        kept: Vec<String>,
+    },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -184,6 +188,7 @@ impl StudioDialog {
             for_: ConfirmFor::DeleteStudio {
                 key: key.clone(),
                 force: false,
+                kept: Vec::new(),
             },
         })
     }
@@ -202,6 +207,7 @@ impl StudioDialog {
             for_: ConfirmFor::DeleteStudio {
                 key: key.clone(),
                 force: true,
+                kept: Vec::new(),
             },
         })
     }
