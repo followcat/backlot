@@ -114,6 +114,7 @@ pub enum Refusal {
     NoPermissionPrompt(String),
     UnfinishedTasks(Vec<String>),
     AlreadyFinished,
+    NotFinished,
     NoCorrectionTarget(u64),
     BadCorrectionKey {
         target: u64,
@@ -275,6 +276,7 @@ impl fmt::Display for Refusal {
                 write!(f, "cannot finish; open tasks: {}", tasks.join(", "))
             }
             Refusal::AlreadyFinished => write!(f, "studio is already finished"),
+            Refusal::NotFinished => write!(f, "studio is not finished; finish it first"),
             Refusal::NoCorrectionTarget(seq) => {
                 write!(f, "no correctable event at seq {seq}")
             }

@@ -491,6 +491,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 ts_ms: ts,
             });
         }
+        EventKind::StudioDeleted { .. } => {
+            for entry in state.roles.values_mut() {
+                entry.live = false;
+                entry.closed = true;
+                entry.held = false;
+                entry.since_ms = ts;
+            }
+            state.targets.insert(seq, SeqTarget::Studio);
+        }
         EventKind::Correction {
             target,
             reason,
