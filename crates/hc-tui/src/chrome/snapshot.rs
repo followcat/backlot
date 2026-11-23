@@ -75,6 +75,12 @@ pub struct ClientShellWorkspace {
     pub agent_status: AgentStatus,
 }
 
+/// Whether `workspace` is the internal `backlot` stage/hollywood space
+/// that studio mode hides from the sidebar machine tree and cycling.
+pub(crate) fn is_backlot_stage_space(workspace: &ClientShellWorkspace) -> bool {
+    workspace.label == "backlot"
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientShellWorktree {
     pub key: String,

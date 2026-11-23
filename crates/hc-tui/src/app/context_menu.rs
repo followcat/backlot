@@ -192,6 +192,11 @@ impl App {
     /// reference's `context_menu_key`.
     pub(super) fn menu_key(&mut self, key: &TerminalKey) {
         let combo = crate::input::terminal_key_of(key);
+        if self.live.matches_prefix(&combo) {
+            self.menu = None;
+            let _ = self.prefix.feed(key, &self.live);
+            return;
+        }
         let Some(menu) = &mut self.menu else {
             return;
         };

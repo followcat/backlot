@@ -136,6 +136,25 @@ pub(crate) fn attention_open(state: &StudioState, role: &str, reason: &str) -> b
         .any(|a| a.role == role && a.reason == reason)
 }
 
+/// Clear any open work-area attention for `role` once `workareas::ensure`
+/// succeeds on a later tick.
+pub(crate) fn work_area_cleared_events(state: &StudioState, role: &str) -> Vec<EventKind> {
+    state
+        .open_attention()
+        .filter(|a| {
+            a.role == role
+                && matches!(
+                    a.reason.as_str(),
+                    reasons::WORK_AREA_FAILED | reasons::NOT_A_GIT_REPO
+                )
+        })
+        .map(|a| EventKind::AttentionCleared {
+            target: a.seq,
+            reason: Some("work area ready".into()),
+        })
+        .collect()
+}
+
 /// The lifecycle event a successful `terminal.run` appends:
 /// `role.resumed` with the start's reason — `reopened` for a held
 /// person's reopen, `recovered` for a lost role — its session the
@@ -491,7 +510,12 @@ impl Stage {
                     dir,
                     &area,
                 ) {
-                    Ok(cwd) => cwd.to_string_lossy().into_owned(),
+                    Ok(cwd) => {
+                        for kind in work_area_cleared_events(state, &start.role) {
+                            record(dir, kind)?;
+                        }
+                        cwd.to_string_lossy().into_owned()
+                    }
                     Err(fail) => {
                         let (reason, detail) = match fail {
                             AreaFail::NotGit => (

@@ -63,7 +63,7 @@ fn add_terminals(app: &mut App, extra: Vec<Terminal>) {
 /// The two-studios-plus-ghost document, plus two `acme-shop` shells,
 /// a `ghost` shell, a two-tab user workspace and the Hollywood
 /// terminal. Focus starts on acme's producer `t1`.
-fn alt_app() -> App {
+pub(super) fn alt_app() -> App {
     let mut app = two_studio_app();
     add_terminals(
         &mut app,
@@ -109,9 +109,17 @@ async fn a_studio_switch_leaves_the_focused_dock() {
     app.panel.focused = true;
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "night-owl"
+        )))
+    );
+    assert_eq!(app.focused.as_deref(), Some("t1"));
     assert!(!app.panel_focused(), "the dock handed the keys back");
-    assert!(typed_reaches_pane(&mut app), "typing reaches t7");
+    assert!(typed_reaches_pane(&mut app), "typing reaches t1");
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.focused.as_deref(), Some("t7"));
 }
 
 #[tokio::test]
@@ -129,7 +137,7 @@ async fn a_studio_switch_leaves_the_docks_input_line() {
         !app.panel_editing(),
         "the old studio's › line lost the keys"
     );
-    assert!(typed_reaches_pane(&mut app), "typing reaches the new pane");
+    assert!(typed_reaches_pane(&mut app), "typing reaches the pane");
 }
 
 #[tokio::test]
@@ -138,12 +146,12 @@ async fn a_studio_switch_collapses_the_call_sheet() {
     app.hollywood.mode = LayerMode::Expanded;
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    assert_eq!(app.focused.as_deref(), Some("t1"));
     assert!(
         !app.hollywood.expanded(),
         "the sheet no longer owns the keys"
     );
-    assert!(typed_reaches_pane(&mut app), "typing reaches t7");
+    assert!(typed_reaches_pane(&mut app), "typing reaches t1");
 }
 
 #[tokio::test]
@@ -152,7 +160,8 @@ async fn a_studio_switch_leaves_the_call_sheets_input() {
     app.hollywood.mode = LayerMode::Expanded;
     app.hollywood.editing = true;
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    assert_eq!(app.studio.current, Some("night-owl".into()));
+    assert_eq!(app.focused.as_deref(), Some("t1"));
     assert!(!app.hollywood.editing, "the tell line lost the keys");
     assert!(typed_reaches_pane(&mut app));
 }
@@ -167,27 +176,24 @@ async fn a_studio_switch_closes_an_open_cardview() {
         scroll: 0,
     });
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    assert_eq!(app.studio.current, Some("night-owl".into()));
+    assert_eq!(app.focused.as_deref(), Some("t1"));
     assert!(
         app.hollywood.view.is_none(),
-        "no read-only card floats over the new pane"
+        "no read-only card floats over the pane"
     );
     assert!(typed_reaches_pane(&mut app));
 }
 
 #[tokio::test]
-async fn a_modal_surface_still_owns_the_studio_keys() {
-    // §0.3 tier 1: an open `?` launcher (like a menu, sheet or
-    // dialog) owns every key — the nav keys stay dead inside it.
+async fn non_text_modal_overlays_dismiss_on_studio_nav() {
+    // Non-text-entry overlays (`help`, `menu`, `sheet`, `navigator`, `peek`)
+    // dismiss on `Alt+arrows` so navigation works from any non-input surface.
     let mut app = alt_app();
     app.help = true;
     alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(
-        app.studio.current,
-        Some("acme-shop".into()),
-        "the modal owned the key"
-    );
-    assert_eq!(app.focused.as_deref(), Some("t1"));
+    assert!(!app.help, "help dismissed");
+    assert_eq!(app.studio.current, Some("night-owl".into()));
 }
 
 // ---------- studio shells ----------
@@ -245,6 +251,7 @@ async fn a_studio_with_only_live_shells_focuses_one() {
     app.focus_pane("t7".into());
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("ghost".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.focused.as_deref(),
         Some("t41"),
@@ -263,13 +270,20 @@ async fn alt_down_from_the_stage_workspace_enters_the_current_studio() {
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert_eq!(
-        app.focused.as_deref(),
-        Some("t1"),
-        "the first press enters the current studio, it does not skip it"
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "acme-shop"
+        )))
     );
-    // The next press steps — the entry is a one-time landing.
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t9"),
+        "first press focuses the studio row without detaching pane"
+    );
+    // The next press steps studios.
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t7"));
 }
 
@@ -280,6 +294,13 @@ async fn alt_down_from_the_hollywood_terminal_enters_the_current_studio() {
     assert!(!app.studio.lot.studio_workspace);
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "acme-shop"
+        )))
+    );
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
@@ -289,13 +310,20 @@ async fn alt_down_from_a_user_workspace_enters_the_current_studio() {
     app.focus_pane("t20".into());
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "acme-shop"
+        )))
+    );
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
 #[tokio::test]
-async fn the_role_keys_stay_herdrs_outside_a_studio_workspace() {
-    // `previous_tab`/`next_tab` bound to the alt+arrows — the notes
-    // workspace is not a studio, so herdr's binding owns the keys.
+async fn the_role_keys_own_outside_studio_workspace_whenever_studios_exist() {
+    // Even if herdr binds `next_tab = alt+right`, in studio mode with studios
+    // present Backlot owns all four Alt+arrow keys from every focus.
     let config: crate::config::Config =
         toml::from_str("[keys]\nprevious_tab = 'alt+left'\nnext_tab = 'alt+right'\n").unwrap();
     let mut app = alt_app();
@@ -304,11 +332,9 @@ async fn the_role_keys_stay_herdrs_outside_a_studio_workspace() {
     alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.focused.as_deref(),
-        Some("t21"),
-        "next_tab ran — the studio key fell through"
+        Some("t1"),
+        "Alt+Right entered the current studio's role from plain workspace"
     );
-    alt(&mut app, hc_vt::Key::ArrowLeft);
-    assert_eq!(app.focused.as_deref(), Some("t20"));
 }
 
 // ---------- remote studios ----------
@@ -332,9 +358,11 @@ async fn alt_down_reaches_the_remote_studio_in_aggregate_order() {
             id: "beta-tools".into()
         })
     );
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("host-b/t1"));
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()), "wrapped");
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
@@ -380,6 +408,7 @@ async fn the_header_follows_the_switch_wide_and_mobile() {
     let mut app = alt_app();
     app.area = (120, 24);
     alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t7"));
     let backend = draw_to(&mut app, 120, 24);
     let text = screen_lines(&backend).join("\n");

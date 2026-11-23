@@ -76,10 +76,11 @@ fn publish(app: &mut App, value: serde_json::Value) {
 async fn an_unseated_studio_on_a_live_stage_queues_its_focus() {
     let mut app = two_studio_app();
     publish(&mut app, doc_with_beta_api(None));
-    // The stage is live (t9) but beta-api's producer has no terminal
-    // yet — Alt+Down selects the studio and waits, it does not fail.
+    // Alt+Down selects beta-api's studio row; Alt+Right tries to enter
+    // its cast and queues focus on the live stage.
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("beta-api".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.ns_pending_focus,
         Some(StudioKey::local("beta-api")),
@@ -111,6 +112,7 @@ async fn a_queued_focus_leaves_the_overlays_when_it_lands() {
     app.area = (120, 24);
     publish(&mut app, doc_with_beta_api(None));
     alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.ns_pending_focus, Some(StudioKey::local("beta-api")));
     // The seat arrives while the Call Sheet is up — the landing
     // still hands the keys to the new pane.
@@ -144,12 +146,13 @@ async fn a_queued_focus_leaves_the_overlays_when_it_lands() {
 
 #[tokio::test]
 async fn a_dead_studio_still_reports_no_live_terminal() {
-    // ghost's only role is closed and it has no shell — a live stage
-    // cannot re-seat a closed role, so the notice stands.
+    // ghost's only role is closed and it has no shell — entering its roles
+    // from its studio focus reports no live terminal.
     let mut app = two_studio_app();
     alt(&mut app, hc_vt::Key::ArrowDown);
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("ghost".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.ns_pending_focus, None, "nothing to seat — no queue");
     assert!(app.notice.is_some(), "the notice says so");
 }
@@ -212,7 +215,13 @@ async fn enter_on_a_studio_key_row_runs_the_nav_and_closes() {
     app.help_launcher_activate();
     assert!(!app.help, "the launcher closed");
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "night-owl"
+        )))
+    );
+    assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
 #[tokio::test]
@@ -354,4 +363,30 @@ async fn plain_mode_herdr_binding_on_the_same_key_wins() {
         Some("t2"),
         "herdr's next_tab ran — zero studio interception"
     );
+}
+
+#[test]
+fn raw_events_decode_csi_and_esc_alt_arrows() {
+    for (bytes, expected) in [
+        (&b"\x1b[1;3A"[..], hc_vt::Key::ArrowUp),
+        (&b"\x1b[1;3B"[..], hc_vt::Key::ArrowDown),
+        (&b"\x1b[1;3C"[..], hc_vt::Key::ArrowRight),
+        (&b"\x1b[1;3D"[..], hc_vt::Key::ArrowLeft),
+        (&b"\x1b\x1b[A"[..], hc_vt::Key::ArrowUp),
+        (&b"\x1b\x1b[B"[..], hc_vt::Key::ArrowDown),
+        (&b"\x1b\x1b[C"[..], hc_vt::Key::ArrowRight),
+        (&b"\x1b\x1b[D"[..], hc_vt::Key::ArrowLeft),
+    ] {
+        let decoded = crate::raw_events::extract_one_event(bytes);
+        assert!(
+            matches!(
+                decoded,
+                Some((
+                    crate::raw_events::Decoded::Ui(crate::app::input::UiEvent::Key(ref k)),
+                    _
+                )) if k.input.key == expected && k.input.mods.contains(hc_vt::Mods::ALT)
+            ),
+            "bytes {bytes:?} decoded as {decoded:?}"
+        );
+    }
 }

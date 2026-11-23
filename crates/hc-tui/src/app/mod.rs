@@ -297,6 +297,9 @@ pub struct App {
     /// Machines whose `stage stop` is a restart's first half — the
     /// `Ok` reply chains `stage start`.
     stage_restart_pending: std::collections::BTreeSet<Option<String>>,
+    /// Studios whose `studio finish` is the first half of `Delete studio…`
+    /// (`Ok` reply chains `studio prune`).
+    delete_finish_pending: std::collections::BTreeMap<String, crate::studio::StudioKey>,
     /// The Task & Delivery Sheet (`v` on the dock) — `Some` while the
     /// modal is open; it owns the keys like the other dialogs.
     sheet: Option<crate::sheet::Sheet>,

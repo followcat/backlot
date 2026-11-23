@@ -118,6 +118,28 @@ impl App {
                         .unwrap_or(0);
                     self.panel.selected = Some(target.clone());
                     self.panel.selected_row = Some(1 + start + pos);
+                    match &target {
+                        crate::panel::Target::Studio(key)
+                        | crate::panel::Target::Block(key)
+                        | crate::panel::Target::Strip(key)
+                        | crate::panel::Target::Fold(key)
+                        | crate::panel::Target::Input(key)
+                        | crate::panel::Target::ReopenProducer(key) => {
+                            self.studio.set_studio_focus(key.clone());
+                        }
+                        crate::panel::Target::Person(key, role_name) => {
+                            let machines = self.panel_summaries();
+                            if let Some(term) = crate::panel::data::studio(&machines, key)
+                                .and_then(|s| s.studio.roles.iter().find(|r| r.role == *role_name))
+                                .and_then(|r| r.terminal.clone())
+                            {
+                                self.studio.current = Some(key.clone());
+                                self.studio.focus =
+                                    Some(crate::studio::StudioFocus::Role(key.clone(), term));
+                            }
+                        }
+                        _ => {}
+                    }
                     self.panel_menu(&target, point);
                 }
             }

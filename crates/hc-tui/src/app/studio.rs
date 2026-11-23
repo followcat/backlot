@@ -23,16 +23,12 @@ impl App {
         let was = self.studio.active;
         self.studio.active = !self.plain;
         let machines = self.panel_summaries();
-        self.studio.sync(&machines, self.focused.as_deref());
-        // A focused studio shell moves `current` and the remembered
-        // member exactly like a role's terminal — the summary only
-        // knows the roles; a shell's membership lives in its labels.
-        if let Some(focused) = self.focused.clone()
-            && let Some(key) = self.shell_studio_key(&focused, &machines)
-        {
-            self.studio.current = Some(key.clone());
-            self.studio.remembered.insert(key, focused);
-        }
+        let shell_key = self
+            .focused
+            .as_deref()
+            .and_then(|focused| self.shell_studio_key(focused, &machines));
+        self.studio
+            .sync_with_shell(&machines, self.focused.as_deref(), shell_key);
         self.sync_lot(&machines);
         if self.studio.active != was && !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
@@ -76,7 +72,7 @@ impl App {
     /// The focused terminal's studio when it is a studio shell —
     /// its `backlot.studio`/`backlot.shell` labels name it — and that
     /// studio is still in the aggregate.
-    fn shell_studio_key(
+    pub(in crate::app) fn shell_studio_key(
         &self,
         terminal: &str,
         machines: &[crate::panel::data::MachineSummary],
@@ -93,6 +89,32 @@ impl App {
             .iter()
             .any(|s| s.key() == key)
             .then_some(key)
+    }
+
+    pub(crate) fn studio_for_workspace(
+        &self,
+        endpoint_id: &crate::chrome::snapshot::ClientEndpointId,
+        workspace_id: &str,
+    ) -> Option<StudioKey> {
+        let endpoint = self
+            .projection
+            .endpoints
+            .iter()
+            .find(|e| &e.endpoint_id == endpoint_id)?;
+        let snapshot = endpoint.snapshot.as_deref()?;
+        let ws = snapshot
+            .workspaces
+            .iter()
+            .find(|w| w.workspace_id == workspace_id)?;
+        let machine = match endpoint_id {
+            crate::chrome::snapshot::ClientEndpointId::Local => None,
+            crate::chrome::snapshot::ClientEndpointId::Remote(m) => Some(m.as_str()),
+        };
+        let machines = self.panel_summaries();
+        crate::panel::data::studios(&machines)
+            .into_iter()
+            .find(|s| s.machine == machine && s.studio.id == ws.label)
+            .map(|s| s.key())
     }
 
     /// A switch hands the keys to the pane it lands on: a focused or
@@ -124,16 +146,21 @@ impl App {
                     -1
                 };
                 let len = studios.len() as isize;
-                // Outside a studio workspace the first press enters
-                // the current studio — it does not step past it.
-                let index = if self.studio.lot.studio_workspace {
-                    let current = self.studio.current_index(&machines).unwrap_or(0) as isize;
-                    (current + dir).rem_euclid(len) as usize
-                } else {
-                    self.studio.current_index(&machines).unwrap_or(0)
+                // Entering from outside a studio lands on the current
+                // studio without stepping past it; from inside a studio or
+                // studio row, steps in aggregate order.
+                let anchor = match &self.studio.focus {
+                    Some(studio::StudioFocus::Studio(key))
+                    | Some(studio::StudioFocus::Role(key, _)) => studios
+                        .iter()
+                        .position(|s| &s.key() == key)
+                        .map(|i| (i as isize + dir).rem_euclid(len) as usize)
+                        .unwrap_or_else(|| self.studio.current_index(&machines).unwrap_or(0)),
+                    None => self.studio.current_index(&machines).unwrap_or(0),
                 };
-                let next = studios[index].key();
-                self.focus_studio(&next);
+                let next = studios[anchor].key();
+                self.studio.set_studio_focus(next);
+                self.sync_lot(&machines);
             }
             StudioNav::PreviousRole | StudioNav::NextRole => {
                 let dir: isize = if matches!(nav, StudioNav::NextRole) {
@@ -141,37 +168,36 @@ impl App {
                 } else {
                     -1
                 };
-                let Some(index) = self.studio.current_index(&machines) else {
+                let target_key = match &self.studio.focus {
+                    Some(studio::StudioFocus::Studio(key))
+                    | Some(studio::StudioFocus::Role(key, _)) => key.clone(),
+                    None => match self.studio.current_index(&machines) {
+                        Some(idx) => studios[idx].key(),
+                        None => return,
+                    },
+                };
+                let Some(studio) = crate::panel::data::studio(&machines, &target_key) else {
                     return;
                 };
-                let studio = studios[index];
-                // The cycle: the live people in cast order, then the
-                // studio's shells in shell-number order — a remote
-                // studio's terminals arrive machine-qualified, so the
-                // focus addresses match the inventory's.
                 let cycle: Vec<String> = studio::cast_order(studio.studio)
                     .into_iter()
                     .filter_map(|role| studio::live_terminal(role).map(str::to_owned))
-                    .chain(self.focused_studio_shells())
+                    .chain(self.studio_shells_live(&target_key))
                     .collect();
-                // A first press while the focus is outside the current
-                // studio lands on its remembered person.
-                let inside = self
-                    .focused
-                    .as_deref()
-                    .is_some_and(|terminal| cycle.iter().any(|t| t == terminal));
-                if !inside {
-                    let key = studio.key();
-                    self.focus_studio(&key);
+                let current_role_term = match &self.studio.focus {
+                    Some(studio::StudioFocus::Role(key, term)) if key == &target_key => {
+                        cycle.iter().find(|t| *t == term).cloned()
+                    }
+                    _ => None,
+                };
+                let Some(current_term) = current_role_term else {
+                    self.focus_studio(&target_key);
                     return;
-                }
+                };
                 if cycle.is_empty() {
                     return;
                 }
-                let position = cycle
-                    .iter()
-                    .position(|t| Some(t.as_str()) == self.focused.as_deref())
-                    .unwrap_or(0) as isize;
+                let position = cycle.iter().position(|t| t == &current_term).unwrap_or(0) as isize;
                 let next = &cycle[(position + dir).rem_euclid(cycle.len() as isize) as usize];
                 self.focus_pane(next.clone());
             }

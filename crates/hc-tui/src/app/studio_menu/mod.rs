@@ -46,6 +46,19 @@ impl App {
         if let Some(terminal) = terminal {
             return self.cast_menu(&terminal, point);
         }
+        let ws = self
+            .hit_map
+            .workspaces
+            .iter()
+            .find(|h| h.rect.contains(pos))
+            .map(|h| (h.endpoint_id.clone(), h.workspace_id.clone()));
+        if let Some((endpoint_id, workspace_id)) = ws
+            && let Some(key) = self.studio_for_workspace(&endpoint_id, &workspace_id)
+        {
+            self.studio.set_studio_focus(key.clone());
+            self.studio_header_menu(&key, point);
+            return true;
+        }
         false
     }
 
@@ -103,35 +116,67 @@ impl App {
         }
         let machines = self.panel_summaries();
         let point = self.pane_menu_point();
-        // A role terminal's own menu — terminals are machine
-        // qualified in the summary, so `t7`/`host-b/t7` compares
-        // against the focused address directly.
-        if let Some(terminal) = self.focused.clone() {
-            for studio in crate::panel::data::studios(&machines) {
-                if let Some(role) = studio
-                    .studio
-                    .roles
-                    .iter()
-                    .find(|r| r.terminal.as_deref() == Some(terminal.as_str()))
-                {
-                    let key = studio.key();
-                    let offline = !self.machine_reachable(studio.machine);
-                    self.open_studio_menu(StudioMenu::role(&key, role, offline), point);
-                    return;
+        match self.studio.focus.clone() {
+            Some(crate::studio::StudioFocus::Studio(key)) => {
+                if let Some(studio) = crate::panel::data::studio(&machines, &key) {
+                    let menu = StudioMenu::studio(
+                        &key,
+                        studio.studio,
+                        !self.machine_stage_running(studio.machine),
+                        !self.machine_reachable(studio.machine),
+                    );
+                    self.open_studio_menu(menu, point);
                 }
             }
-        }
-        // A shell pane — the current studio's header menu.
-        if let Some(key) = self.studio.current.clone()
-            && let Some(studio) = crate::panel::data::studio(&machines, &key)
-        {
-            let menu = StudioMenu::studio(
-                &key,
-                studio.studio,
-                !self.machine_stage_running(studio.machine),
-                !self.machine_reachable(studio.machine),
-            );
-            self.open_studio_menu(menu, point);
+            Some(crate::studio::StudioFocus::Role(key, terminal)) => {
+                if let Some(studio) = crate::panel::data::studio(&machines, &key) {
+                    if let Some(role) = studio
+                        .studio
+                        .roles
+                        .iter()
+                        .find(|r| r.terminal.as_deref() == Some(terminal.as_str()))
+                    {
+                        let offline = !self.machine_reachable(studio.machine);
+                        self.open_studio_menu(StudioMenu::role(&key, role, offline), point);
+                    } else {
+                        let menu = StudioMenu::studio(
+                            &key,
+                            studio.studio,
+                            !self.machine_stage_running(studio.machine),
+                            !self.machine_reachable(studio.machine),
+                        );
+                        self.open_studio_menu(menu, point);
+                    }
+                }
+            }
+            None => {
+                if let Some(terminal) = self.focused.clone() {
+                    for studio in crate::panel::data::studios(&machines) {
+                        if let Some(role) = studio
+                            .studio
+                            .roles
+                            .iter()
+                            .find(|r| r.terminal.as_deref() == Some(terminal.as_str()))
+                        {
+                            let key = studio.key();
+                            let offline = !self.machine_reachable(studio.machine);
+                            self.open_studio_menu(StudioMenu::role(&key, role, offline), point);
+                            return;
+                        }
+                    }
+                }
+                if let Some(key) = self.studio.current.clone()
+                    && let Some(studio) = crate::panel::data::studio(&machines, &key)
+                {
+                    let menu = StudioMenu::studio(
+                        &key,
+                        studio.studio,
+                        !self.machine_stage_running(studio.machine),
+                        !self.machine_reachable(studio.machine),
+                    );
+                    self.open_studio_menu(menu, point);
+                }
+            }
         }
     }
 
@@ -231,10 +276,32 @@ impl App {
                 .find(|r| r.terminal.as_deref() == Some(pane_id))
             {
                 let key = studio.key();
+                self.studio.current = Some(key.clone());
+                self.studio.focus = Some(crate::studio::StudioFocus::Role(
+                    key.clone(),
+                    pane_id.to_owned(),
+                ));
                 let offline = !self.machine_reachable(studio.machine);
                 self.open_studio_menu(StudioMenu::role(&key, role, offline), point);
                 return true;
             }
+        }
+        if let Some(key) = self.shell_studio_key(pane_id, &machines)
+            && let Some(studio) = crate::panel::data::studio(&machines, &key)
+        {
+            self.studio.current = Some(key.clone());
+            self.studio.focus = Some(crate::studio::StudioFocus::Role(
+                key.clone(),
+                pane_id.to_owned(),
+            ));
+            let menu = StudioMenu::studio(
+                &key,
+                studio.studio,
+                !self.machine_stage_running(studio.machine),
+                !self.machine_reachable(studio.machine),
+            );
+            self.open_studio_menu(menu, point);
+            return true;
         }
         false
     }
@@ -246,6 +313,7 @@ impl App {
         let Some(studio) = crate::panel::data::studio(&machines, key) else {
             return;
         };
+        self.studio.set_studio_focus(key.clone());
         let menu = StudioMenu::studio(
             key,
             studio.studio,

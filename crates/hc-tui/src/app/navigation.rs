@@ -69,6 +69,7 @@ impl App {
             true,
             &self.shell_state.collapsed_groups,
             &self.shell_state.remote_collapsed_groups,
+            !self.plain,
         )
     }
 

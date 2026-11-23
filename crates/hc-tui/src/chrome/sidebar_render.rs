@@ -40,7 +40,11 @@ pub(crate) fn render_sidebar(
         Rect::new(area.right().saturating_sub(1), area.y, 1, area.height)
     };
 
-    let entries = workspace_entries(snapshot, state.collapsed_groups);
+    let entries = sidebar_rows::workspace_entries_filtered(
+        snapshot,
+        state.collapsed_groups,
+        state.hide_stage_space,
+    );
     let row_heights = entries
         .iter()
         .map(|entry| {

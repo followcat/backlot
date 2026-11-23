@@ -54,6 +54,8 @@ pub(crate) struct CastView<'a> {
     pub(crate) others_expanded: bool,
     /// The working-mark spinner frame (~120 ms ticks).
     pub(crate) spin: usize,
+    /// `true` when `StudioFocus::Studio(_)` owns focus rather than any role.
+    pub(crate) studio_focused: bool,
 }
 
 impl<'a> CastView<'a> {
@@ -165,6 +167,7 @@ impl<'a> CastView<'a> {
             others,
             others_expanded,
             spin,
+            studio_focused: false,
         }
     }
 }

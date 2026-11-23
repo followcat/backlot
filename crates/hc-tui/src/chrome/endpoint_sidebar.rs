@@ -34,18 +34,22 @@ pub(crate) fn render_collapsed(
             continue;
         }
         if let Some(snapshot) = endpoint.snapshot.as_deref() {
+            let visible_workspaces: Vec<_> = snapshot
+                .workspaces
+                .iter()
+                .filter(|w| !(state.hide_stage_space && super::snapshot::is_backlot_stage_space(w)))
+                .collect();
             if reveal
                 && let Some(target) = state
                     .selected_workspace_id
                     .filter(|target| target.endpoint_id == endpoint.endpoint_id)
             {
-                selected_row = snapshot
-                    .workspaces
+                selected_row = visible_workspaces
                     .iter()
                     .position(|workspace| workspace.workspace_id == target.workspace_id)
                     .map(|index| total_rows + index);
             }
-            total_rows += snapshot.workspaces.len();
+            total_rows += visible_workspaces.len();
         }
     }
     let height = usize::from(workspace_area.height);
@@ -124,6 +128,9 @@ pub(crate) fn render_collapsed(
             continue;
         };
         for workspace in &snapshot.workspaces {
+            if state.hide_stage_space && super::snapshot::is_backlot_stage_space(workspace) {
+                continue;
+            }
             if skip > 0 {
                 skip -= 1;
                 continue;

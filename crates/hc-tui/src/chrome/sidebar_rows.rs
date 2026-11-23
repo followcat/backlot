@@ -5,8 +5,22 @@ pub(crate) fn workspace_entries(
     snapshot: &ClientShellSnapshot,
     collapsed_groups: &HashSet<String>,
 ) -> Vec<WorkspaceEntry> {
+    workspace_entries_filtered(snapshot, collapsed_groups, false)
+}
+
+pub(crate) fn workspace_entries_filtered(
+    snapshot: &ClientShellSnapshot,
+    collapsed_groups: &HashSet<String>,
+    hide_stage_space: bool,
+) -> Vec<WorkspaceEntry> {
+    let visible = |workspace: &crate::chrome::snapshot::ClientShellWorkspace| {
+        !(hide_stage_space && crate::chrome::snapshot::is_backlot_stage_space(workspace))
+    };
     let mut members = HashMap::<&str, Vec<usize>>::new();
     for (index, workspace) in snapshot.workspaces.iter().enumerate() {
+        if !visible(workspace) {
+            continue;
+        }
         if let Some(worktree) = &workspace.worktree {
             members.entry(&worktree.key).or_default().push(index);
         }
@@ -31,6 +45,9 @@ pub(crate) fn workspace_entries(
     let mut emitted = HashSet::<&str>::new();
     let mut entries = Vec::new();
     for (index, workspace) in snapshot.workspaces.iter().enumerate() {
+        if !visible(workspace) {
+            continue;
+        }
         let Some(worktree) = workspace
             .worktree
             .as_ref()

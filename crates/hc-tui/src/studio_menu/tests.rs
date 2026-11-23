@@ -72,7 +72,8 @@ fn a_studio_rows_items_follow_the_spec_order() {
             "Tell producer…",
             "Stop stage…",
             "Finish studio…",
-            "Actor records"
+            "Actor records",
+            "Delete studio…"
         ]
     );
     // A down stage swaps stop for start; a ready studio's finish is
@@ -83,6 +84,14 @@ fn a_studio_rows_items_follow_the_spec_order() {
     ready.ready_to_finish = true;
     let menu = StudioMenu::studio(&key(None), &ready, false, false);
     assert!(menu.items()[5].teal, "finish draws teal when ready");
+    assert_eq!(menu.title(), "Studio · acme-shop");
+    let role_menu = StudioMenu::role(&key(None), &role("live"), false);
+    assert_eq!(role_menu.title(), "Role · alice (acme-shop)");
+    let task_menu = StudioMenu::task(&key(None), &task(), false);
+    assert_eq!(task_menu.title(), "Task · t1 (acme-shop)");
+    assert_eq!(StudioMenu::stage(false).title(), "Stage");
+    assert_eq!(StudioMenu::lot().title(), "Lot");
+    assert_eq!(StudioMenu::hollywood(None).title(), "Hollywood");
 }
 
 #[test]

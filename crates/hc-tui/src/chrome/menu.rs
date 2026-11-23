@@ -100,6 +100,13 @@ pub(crate) struct ContextMenuItem {
 }
 
 impl ContextMenu {
+    pub(crate) fn title(&self) -> Option<String> {
+        match &self.target {
+            ContextMenuTarget::Studio(menu) => Some(menu.title()),
+            _ => None,
+        }
+    }
+
     pub(crate) fn items(&self) -> Vec<ContextMenuItem> {
         use ContextMenuAction as Action;
 
@@ -243,6 +250,8 @@ pub(crate) fn render_context_menu_in(
     max_right: u16,
     palette: &Palette,
 ) -> Option<ContextMenuRender> {
+    let title = menu.title();
+    let title_rows = u16::from(title.is_some());
     let items = menu.items();
     let screen = buffer.area;
     let bound_w = max_right.saturating_sub(screen.x).min(screen.width);
@@ -251,6 +260,7 @@ pub(crate) fn render_context_menu_in(
         .map(|item| {
             display_width(&item.label) + item.dim.as_deref().map_or(0, |d| display_width(d) + 3)
         })
+        .chain(title.as_deref().map(display_width))
         .max()
         .unwrap_or(0);
     // S3 §1: menus clamp to `min(34, bound_w - 4)`; the reference menus
@@ -262,7 +272,7 @@ pub(crate) fn render_context_menu_in(
         .min(max_width)
         .min(bound_w.max(1));
     let height = (items.len() as u16)
-        .saturating_add(2)
+        .saturating_add(2 + title_rows)
         .min(screen.height.max(1));
     let x = menu
         .x
@@ -279,9 +289,28 @@ pub(crate) fn render_context_menu_in(
         Clear.render(rect, buffer);
     }
     let inner = panel(buffer, rect, palette.accent, palette.panel_bg)?;
+    if let Some(title) = title.as_deref()
+        && inner.height > 0
+    {
+        let title_style = Style::default()
+            .fg(palette.overlay0)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD);
+        put_text(
+            buffer,
+            inner.x,
+            inner.y,
+            inner.width,
+            &truncate_end(title, inner.width as usize),
+            title_style,
+        );
+    }
     let mut rows = Vec::new();
     for (index, item) in items.iter().enumerate() {
-        let row_y = inner.y.saturating_add(index as u16);
+        let row_y = inner
+            .y
+            .saturating_add(title_rows)
+            .saturating_add(index as u16);
         if row_y >= inner.bottom() {
             break;
         }

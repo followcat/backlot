@@ -178,25 +178,35 @@ impl App {
     /// is marked seen, and the pane re-syncs.
     pub(in crate::app) fn focus_pane(&mut self, pane_id: String) {
         self.focused = Some(pane_id);
+        self.studio.clear_focus_latch();
         self.refresh_projection();
         self.mark_active_seen();
         self.sync_target();
     }
 
-    /// Workspace row click: its active tab's first pane.
+    /// Workspace row click: its active tab's first pane. In studio
+    /// mode, a click on a studio's workspace row also sets `StudioFocus`
+    /// to `Studio(key)` unless the user clicked a role directly.
     pub(in crate::app) fn focus_workspace(
         &mut self,
-        _endpoint_id: &crate::chrome::snapshot::ClientEndpointId,
+        endpoint_id: &crate::chrome::snapshot::ClientEndpointId,
         workspace_id: &str,
     ) {
         let target = crate::chrome::navigate::WorkspaceNavigationTarget {
-            endpoint_id: _endpoint_id.clone(),
+            endpoint_id: endpoint_id.clone(),
             workspace_id: workspace_id.to_owned(),
             boot_id: String::new(),
             generation: None,
         };
         if let Some(id) = self.workspace_terminal(&target) {
             self.focus_pane(id);
+        }
+        if self.studio.active
+            && let Some(key) = self.studio_for_workspace(endpoint_id, workspace_id)
+        {
+            self.studio.set_studio_focus(key);
+            let machines = self.panel_summaries();
+            self.sync_lot(&machines);
         }
     }
 

@@ -11,7 +11,7 @@ use crate::input::KeybindAction as A;
 
 /// One endpoint (`Local`), two workspaces, studio mode on.
 fn studio_app_one_machine() -> App {
-    let mut app = app_with_spaces(&[("t1", "acme-shop"), ("t2", "backlot")]);
+    let mut app = app_with_spaces(&[("t1", "acme-shop"), ("t2", "beta-tools")]);
     app.set_plain(false);
     app.focused = Some("t1".into());
     app.refresh_projection();
@@ -168,6 +168,45 @@ async fn workspace_nav_and_machine_clicks_work_with_one_machine() {
     ));
     assert_eq!(app.focused.as_deref(), Some("t1"));
     assert_eq!(app.projection.active_endpoint_id, ClientEndpointId::Local);
+}
+
+#[tokio::test]
+async fn studio_mode_hides_backlot_stage_space_while_plain_keeps_it() {
+    let mut app = app_with_spaces(&[("t1", "acme-shop"), ("t2", "backlot"), ("t3", "beta-tools")]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
+    app.area = (120, 24);
+    let backend = draw_to(&mut app, 120, 24);
+    let sidebar = sidebar_text(&backend);
+    assert!(sidebar.contains("acme-shop"), "{sidebar}");
+    assert!(sidebar.contains("beta-tools"), "{sidebar}");
+    assert!(
+        !sidebar.contains("· backlot"),
+        "stage space hidden: {sidebar}"
+    );
+    assert_eq!(app.hit_map.workspaces.len(), 2, "{sidebar}");
+
+    pending_attach(&mut app);
+    app.on_action(A::NextWorkspace, 80);
+    assert_eq!(app.focused.as_deref(), Some("t3"), "skips backlot space");
+    app.on_action(A::NextWorkspace, 80);
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t1"),
+        "wraps past backlot space"
+    );
+
+    app.set_plain(true);
+    app.refresh_projection();
+    let plain_backend = draw_to(&mut app, 120, 24);
+    let plain_sidebar = sidebar_text(&plain_backend);
+    assert!(
+        plain_sidebar.contains("backlot"),
+        "visible in --plain: {plain_sidebar}"
+    );
+    assert_eq!(app.hit_map.workspaces.len(), 3, "{plain_sidebar}");
 }
 
 #[tokio::test]

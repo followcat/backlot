@@ -107,6 +107,11 @@ impl StudioMenu {
             Some('a'),
             StudioAct::Records,
         ));
+        out.push(item(
+            "Delete studio…".to_owned(),
+            Some('d'),
+            StudioAct::DeleteStudio,
+        ));
         out
     }
 
@@ -175,6 +180,11 @@ impl StudioMenu {
             "Actor records".to_owned(),
             Some('a'),
             StudioAct::Records,
+        ));
+        out.push(item(
+            "Delete studio…".to_owned(),
+            Some('d'),
+            StudioAct::DeleteStudio,
         ));
         out
     }

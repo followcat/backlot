@@ -125,7 +125,6 @@ pub(crate) fn clear_attention(key: &StudioKey, role: &str, seq: u64) -> Action {
     a
 }
 
-/// `studio finish [--reason <r>]` (§4).
 pub(crate) fn finish(key: &StudioKey, reason: Option<&str>) -> Action {
     let mut command = vec!["studio".into(), "finish".into()];
     if let Some(reason) = reason.filter(|r| !r.is_empty()) {
@@ -141,25 +140,18 @@ pub(crate) fn finish(key: &StudioKey, reason: Option<&str>) -> Action {
     a.argv = studio_argv(&command, key);
     a
 }
-
-/// `stage <verb>` — a machine call, not a studio one: `--as user`
-/// follows the verb.
 fn stage(verb: &str, label: String, done: String, name: String, machine: Option<String>) -> Action {
     Action {
         label,
         done,
         name,
         mark: mark::stage(machine.as_deref()),
-        // `stage` is global — no `--as user` (the parser knows no
-        // actor for it), matching the pre-S3 argv.
         argv: vec!["stage".into(), verb.into()],
         machine,
         stdin: None,
         view: false,
     }
 }
-
-/// `backlot stage start`.
 pub(crate) fn stage_start(machine: Option<String>) -> Action {
     let m = machine.as_deref().unwrap_or("Local");
     stage(
@@ -170,8 +162,6 @@ pub(crate) fn stage_start(machine: Option<String>) -> Action {
         machine,
     )
 }
-
-/// `backlot stage stop` (G1) — the same targeting as `stage start`.
 pub(crate) fn stage_stop(machine: Option<String>) -> Action {
     let m = machine.as_deref().unwrap_or("Local");
     stage(
@@ -387,5 +377,21 @@ pub(crate) fn report_show(key: &StudioKey, seq: u64, file: &str) -> Action {
         key,
     );
     a.view = true;
+    a
+}
+
+pub(crate) fn prune(key: &StudioKey, force: bool) -> Action {
+    let mut command = vec!["studio".into(), "prune".into(), key.id.clone()];
+    if force {
+        command.push("--force".into());
+    }
+    let mut a = action(
+        format!("pruning {}", key.id),
+        format!("deleted studio {}", key.id),
+        "prune studio".into(),
+        key,
+        mark::studio(key),
+    );
+    a.argv = plain_argv(&command);
     a
 }

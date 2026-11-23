@@ -78,16 +78,31 @@ pub(super) fn render_confirm(
     // no silent clipping).
     let inner = width.saturating_sub(4).max(8) as usize;
     let mut lines = Vec::new();
-    let mut rest = d.body.as_str();
-    while !rest.is_empty() {
-        let cut = if usize::from(display_width(rest)) <= inner {
-            rest.len()
+    let mut line = String::new();
+    for word in d.body.split_whitespace() {
+        let word_w = usize::from(display_width(word));
+        let line_w = usize::from(display_width(&line));
+        if line.is_empty() {
+            if word_w <= inner {
+                line.push_str(word);
+            } else {
+                lines.push(truncate_end(word, inner));
+            }
+        } else if line_w + 1 + word_w <= inner {
+            line.push(' ');
+            line.push_str(word);
         } else {
-            super::super::text::truncate_end(rest, inner).len()
-        };
-        let (head, tail) = rest.split_at(cut.max(1));
-        lines.push(head.to_owned());
-        rest = tail.trim_start();
+            lines.push(line);
+            line = if word_w <= inner {
+                word.to_owned()
+            } else {
+                lines.push(truncate_end(word, inner));
+                String::new()
+            };
+        }
+    }
+    if !line.is_empty() {
+        lines.push(line);
     }
     let height = (lines.len() as u16)
         .saturating_add(6)

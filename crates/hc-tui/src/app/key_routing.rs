@@ -205,21 +205,15 @@ impl App {
             // through the usual focus path. Persistent floats only:
             // an ephemeral popup owns its keys, like herdr's tab keys.
             if self.studio.active
-                && self.popup.as_ref().is_some_and(|popup| popup.persistent)
                 && let Some(nav) = self.panel_config.keys.nav(&popup_combo)
+                && !crate::panel::data::studios(&self.panel_summaries()).is_empty()
             {
-                let role_key = matches!(
-                    nav,
-                    crate::panel::StudioNav::PreviousRole | crate::panel::StudioNav::NextRole
-                );
-                // The role keys only win in a studio workspace; in
-                // any other workspace they fall through to herdr's
-                // own binding so tabs still switch there.
-                if !role_key || self.studio.lot.studio_workspace {
-                    self.popup_key_suppress.insert(press.identity());
-                    self.studio_nav(nav);
-                    return None;
+                if self.popup.as_ref().is_some_and(|popup| !popup.persistent) {
+                    self.dismiss_popup();
                 }
+                self.popup_key_suppress.insert(press.identity());
+                self.studio_nav(nav);
+                return None;
             }
             // H4: Hollywood's direct toggle parks a persistent float
             // exactly like the studio keys — ephemeral popups keep it.
@@ -260,6 +254,37 @@ impl App {
         // A popup still opening swallows input — the reference's
         // `popup_pending` arm.
         if self.popup_pending.is_some() {
+            return None;
+        }
+        let text_input_modal = self.dialog.is_some()
+            || self.studio_dialog.is_some()
+            || self.new_studio.is_some()
+            || self.hw_setup.is_some()
+            || self.settings.is_some()
+            || self.update_modal.is_some();
+        if !text_input_modal
+            && !matches!(self.mode, Mode::Copy | Mode::Resize)
+            && self.studio.active
+            && press.input.action == hc_vt::Action::Press
+            && let Some(nav) = self
+                .panel_config
+                .keys
+                .nav(&crate::input::terminal_key_of(&press))
+            && !crate::panel::data::studios(&self.panel_summaries()).is_empty()
+        {
+            self.peek = None;
+            self.menu = None;
+            self.sheet = None;
+            self.help = false;
+            self.navigator = None;
+            if self.mode == Mode::Navigate {
+                self.mode = Mode::Normal;
+                self.navigate_target = None;
+            }
+            self.nav_leave_overlays();
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.studio_nav(nav);
             return None;
         }
         if self.peek_key(&press) {
@@ -376,26 +401,14 @@ impl App {
                 .panel_config
                 .keys
                 .nav(&crate::input::terminal_key_of(&press))
+            && !crate::panel::data::studios(&self.panel_summaries()).is_empty()
         {
-            let role_key = matches!(
-                nav,
-                crate::panel::StudioNav::PreviousRole | crate::panel::StudioNav::NextRole
-            );
-            // No studio at all hands every studio key back to herdr;
-            // the role keys also only win in a studio workspace —
-            // where a studio header sits — and fall through to
-            // herdr's own binding everywhere else, so tabs still
-            // switch there.
-            let owns = !crate::panel::data::studios(&self.panel_summaries()).is_empty()
-                && (!role_key || self.studio.lot.studio_workspace);
-            if owns {
-                // Like the panel chord: an armed prefix disarms on
-                // the intercepted press.
-                self.prefix.reset();
-                self.prefix.swallow(&press);
-                self.studio_nav(nav);
-                return None;
-            }
+            // Like the panel chord: an armed prefix disarms on
+            // the intercepted press.
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.studio_nav(nav);
+            return None;
         }
         // H4: Hollywood's own binding — `alt+y` direct by default, or
         // the `[hollywood] key` override as a direct binding or a
