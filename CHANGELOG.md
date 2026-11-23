@@ -42,6 +42,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   peach, and a needs-you attention that is not a prompt reads `needs you · …`, red. A live
   producer with `work: waiting`, `doing: idle` and an open `session id not found` now reads
   `ready`, not `! stalled`.
+- **The producer's questions reach the person.** The producer's prompt now says every question to
+  the user — including the first "What would you like us to build?" when no requirement is
+  recorded — also goes through `backlot tell user --text <question>`, while the terminal stays the
+  conversation. The role summary carries the newest unanswered `tell user` as `asks`, which the
+  person row shows as `asks you · <question>`; a user `tell` back to that role answers it.
+  `backlot tell user` is covered by every runner's pre-allow list.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

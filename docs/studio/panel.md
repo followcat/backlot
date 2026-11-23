@@ -192,7 +192,8 @@ A person shows exactly one state, in this priority:
 1. `needs you · <what>` — a user or director prompt as before (the prompt row keeps `y`/`d`/`p`
    and a non-actor's word is `USER`), or a `needs you` attention that is not a prompt (`■` red).
 2. `asks you · <question>` — the role's newest `tell user` that the user has not answered with a
-   `tell` back to that role (`?` peach).
+   `tell` back to that role (`?` peach). Opening the message in the Dock shows it, but only a
+   `tell` back records an answer.
 3. `stuck · <plain reason>` — a `stuck` attention (`!` peach).
 4. `working · <doing>` — the watch pass reads the screen working.
 5. `waiting` — anything else that is live and not doing work; a held role reads its

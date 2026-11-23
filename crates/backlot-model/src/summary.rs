@@ -441,7 +441,7 @@ pub fn summary_with_exchange(
         let done = finished(state);
         let mut roles: Vec<RoleSummary> = role_keys(state)
             .into_iter()
-            .filter_map(|role| role_summary(name, state, role, live, work, failed))
+            .filter_map(|role| role_summary(name, state, role, live, work, failed, snippets))
             .collect();
         // Runner limits (S9e): a held wanted role shows `waiting for
         // a <runner> slot` — overriding a recorded closed/lost row,

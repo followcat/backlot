@@ -9,7 +9,7 @@ use crate::summary::{
     HEADLINE_CHARS, MAX_STUDIO_EXCHANGE, SUMMARY_SCHEMA, Summary, studio_exchange,
     studio_exchange_files, summary_with_exchange,
 };
-use crate::testkit::base_state;
+use crate::testkit::{base_events, base_state, role_started, state_with};
 
 fn msg(
     seq: u64,
@@ -279,6 +279,64 @@ fn studio_exchange_caps_count_and_200_char_utf8_and_stays_under_budget() {
     );
     let bytes = serde_json::to_vec(&doc).unwrap().len();
     assert!(bytes < 60_000, "summary grew to {bytes} bytes");
+}
+
+/// A role's newest `tell user` lands as `asks`; the user's `tell`
+/// back to that role answers it.
+#[test]
+fn role_asks_tracks_the_newest_unanswered_tell_user() {
+    let mut state = state_with(&base_events(), vec![("producer", role_started("producer"))]);
+    state.messages.push(msg(
+        10,
+        "producer",
+        "user",
+        Some("messages/10-q.md"),
+        None,
+        None,
+    ));
+    state.messages.push(msg(
+        11,
+        "producer",
+        "user",
+        Some("messages/11-q2.md"),
+        None,
+        None,
+    ));
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "first question".into());
+    snippets.insert(("acme-shop".into(), 11), "what should we build?".into());
+    let build = |s: &StudioState| {
+        summary_with_exchange(
+            &[("acme-shop".into(), s.clone())],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &snippets,
+            1,
+        )
+        .studios
+        .remove(0)
+    };
+    let studio = build(&state);
+    let producer = studio
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .expect("the producer's row");
+    assert_eq!(producer.asks.as_deref(), Some("what should we build?"));
+
+    state.messages.push(msg(
+        12,
+        "user",
+        "producer",
+        Some("messages/12-a.md"),
+        None,
+        None,
+    ));
+    let studio = build(&state);
+    let producer = studio.roles.iter().find(|r| r.role == "producer").unwrap();
+    assert!(producer.asks.is_none(), "{:?}", producer.asks);
 }
 
 #[test]
