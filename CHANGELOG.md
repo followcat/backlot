@@ -22,7 +22,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   published `backlot_build`, compared once the versions are equal) or an installed
   `backlot --version` from the six-hour machine probe is newer than the running client,
   one dim line closes the lot: `backlot <new> installed — restart the client to update
-  (q, then backlot)`. Strict semver decides; an older stage never draws it.
+  (q, then backlot)`. Strict semver decides; an older stage never draws it. The build id is
+  compiled in from git (`HEAD`, `-dirty` while the tree has changes), and
+  `backlot --version` prints it as `backlot 0.3.0 (abc123def456)` so equal-version rebuilds
+  are still distinguishable.
 
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same

@@ -121,7 +121,11 @@ terminal behind. This path is unit-tested only — no test has driven a real rem
 Each machine's `backlot` version shows under its sidebar row: the running stage publishes it in
 the `backlot` document (`backlot_version`, added in this release — older stage documents lack
 it and read as unprobed until the probe answers), and machines without it are probed through
-`terminal.run` at most once per six hours. The machine menu's install/upgrade opens a popup
+`terminal.run` at most once per six hours. The build also compiles in a `backlot_build` — the
+git `HEAD` short hash, with `-dirty` while the tracked tree has changes — so two installs of one
+version stay distinguishable; `backlot --version` prints it as
+`backlot 0.3.0 (abc123def456)`, and the probe reads the version before the parenthesised id.
+The machine menu's install/upgrade opens a popup
 running the official installer on that machine (`curl | sh` with `BACKLOT_SKIP_CORE=1`), refuses
 package-managed binaries first, and restarts an upgraded machine's stage. The version read, the
 menu items, the managed-install refusal, the pinned installer line, the re-probe and the
