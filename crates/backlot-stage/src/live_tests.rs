@@ -4,7 +4,10 @@
 
 use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
 
-use crate::live::{Live, LiveRole, from_summary, path, read, work_map, write};
+use crate::live::{
+    HEARTBEAT_MS, Live, LiveRole, STALE_MS, Write, due, from_summary, path, read, read_fresh,
+    work_map, write,
+};
 use crate::test_support::TestDir;
 
 fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSummary {
@@ -80,7 +83,8 @@ fn a_summary_round_trips_through_the_file() {
     let live = from_summary(&doc, 7_000);
     write(tmp.path(), &live).unwrap();
 
-    let back = read(tmp.path());
+    // Read 7 s after the write: fresh.
+    let back = read(tmp.path(), 14_000);
     assert_eq!(back, live);
     assert_eq!(back.updated_ms, 7_000);
     let producer = back
@@ -101,8 +105,8 @@ fn a_summary_round_trips_through_the_file() {
 #[test]
 fn a_missing_file_reads_empty() {
     let tmp = TestDir::new("backlot-live-empty");
-    assert_eq!(read(tmp.path()), Live::default());
-    assert!(work_map(&read(tmp.path())).is_empty());
+    assert_eq!(read(tmp.path(), 1_000), Live::default());
+    assert!(work_map(&read(tmp.path(), 1_000)).is_empty());
     assert!(!path(tmp.path()).exists());
 }
 
@@ -127,4 +131,64 @@ fn only_classified_rows_become_facts() {
             doing: Some("writing tests".into()),
         }]
     );
+}
+
+/// A file older than `STALE_MS` reads empty and is not "fresh": after
+/// the stage stops, its last `· working` is a stale snapshot, not
+/// current state.
+#[test]
+fn an_old_file_reads_empty() {
+    let tmp = TestDir::new("backlot-live-stale");
+    let doc = summary(
+        "acme",
+        vec![role_summary(
+            "producer",
+            Some(Work::Working),
+            Some("running checks"),
+        )],
+    );
+    let live = from_summary(&doc, 1_000);
+    write(tmp.path(), &live).unwrap();
+
+    // Exactly at the stale boundary is still fresh…
+    assert!(read_fresh(tmp.path(), 1_000 + STALE_MS).is_some());
+    // …one millisecond past it is stale.
+    let late = 1_000 + STALE_MS + 1;
+    assert_eq!(read(tmp.path(), late), Live::default());
+    assert!(read_fresh(tmp.path(), late).is_none());
+    assert!(work_map(&read(tmp.path(), late)).is_empty());
+}
+
+/// The write throttle: an unchanged summary is not rewritten within the
+/// heartbeat, and is rewritten once the heartbeat is due.
+#[test]
+fn an_unchanged_summary_is_not_rewritten_within_the_heartbeat() {
+    let doc = summary(
+        "acme",
+        vec![role_summary("producer", Some(Work::Working), None)],
+    );
+    let written = from_summary(&doc, 1_000);
+    // Same roles, same tick: skip.
+    assert_eq!(due(&written, Some(&written), 1_000), Write::Skip);
+    // A tick later, still inside the heartbeat: skip.
+    assert_eq!(
+        due(&written, Some(&written), 1_000 + HEARTBEAT_MS - 1),
+        Write::Skip
+    );
+    // The heartbeat is due: write.
+    assert_eq!(
+        due(&written, Some(&written), 1_000 + HEARTBEAT_MS),
+        Write::Now
+    );
+    // A change writes at once, whatever the clock.
+    let changed = from_summary(
+        &summary(
+            "acme",
+            vec![role_summary("producer", Some(Work::Waiting), None)],
+        ),
+        1_001,
+    );
+    assert_eq!(due(&changed, Some(&written), 1_001), Write::Now);
+    // No file yet: write.
+    assert_eq!(due(&written, None, 1_001), Write::Now);
 }

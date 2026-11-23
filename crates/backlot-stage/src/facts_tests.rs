@@ -12,7 +12,16 @@ use backlot_model::state::{Attention, replay};
 use backlot_model::summary::Work;
 use backlot_model::testkit::*;
 
+use crate::live::LiveView;
 use crate::render::{attention_fact, status};
+
+/// A running stage's live view with the given samples.
+fn running(work: BTreeMap<(String, String), Work>) -> LiveView {
+    LiveView {
+        work,
+        running: true,
+    }
+}
 
 fn raised(seq: u64, role: &str, reason: &str, detail: &str) -> Event {
     ev(
@@ -145,7 +154,7 @@ fn a_role_line_carries_its_live_work_state() {
         ("acme-shop".to_string(), "producer".to_string()),
         Work::Working,
     )]);
-    let out = status("acme-shop", &state, &Default::default(), 0, &live);
+    let out = status("acme-shop", &state, &Default::default(), 0, &running(live));
     assert!(
         out.contains("producer  runner-prod/model-prod/high/standard (live) · working"),
         "{out}"
@@ -157,7 +166,13 @@ fn a_role_line_carries_its_live_work_state() {
         ("acme-shop".to_string(), "producer".to_string()),
         Work::Waiting,
     )]);
-    let out = status("acme-shop", &state, &Default::default(), 0, &waiting);
+    let out = status(
+        "acme-shop",
+        &state,
+        &Default::default(),
+        0,
+        &running(waiting),
+    );
     assert!(out.contains("(live) · waiting"), "{out}");
     let out = status(
         "acme-shop",
@@ -170,4 +185,43 @@ fn a_role_line_carries_its_live_work_state() {
         out.contains("producer  runner-prod/model-prod/high/standard (live)\n"),
         "{out}"
     );
+}
+
+/// A stopped stage shows no work word and one plain notice under
+/// `roles:` — never the last `· working` as if it were current.
+#[test]
+fn a_stopped_stage_says_live_state_unknown() {
+    let mut events = base_events();
+    events.push(ev(
+        9,
+        "stage",
+        EventKind::RoleStarted {
+            role: "producer".into(),
+            terminal: Some("bl-acme-shop-producer".into()),
+            actor: Some(ActorIdentity {
+                runner: "fake".into(),
+                runner_version: None,
+                model: "plain".into(),
+                effort: Some("high".into()),
+                permission_profile: "standard".into(),
+            }),
+            session_id: Some("s-1".into()),
+            reason: None,
+        },
+    ));
+    let state = replay(&events);
+    // No fresh file: the view is not running and carries no sample.
+    let out = status(
+        "acme-shop",
+        &state,
+        &Default::default(),
+        0,
+        &LiveView::default(),
+    );
+    assert!(
+        out.contains("roles:\n    stage not running — live state unknown\n"),
+        "{out}"
+    );
+    assert!(!out.contains("· working"), "{out}");
+    assert!(!out.contains("· waiting"), "{out}");
 }

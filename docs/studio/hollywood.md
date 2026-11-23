@@ -318,13 +318,16 @@ notice's body, in the status commands it runs — carries the same shaping, from
 - **for a screen snapshot,** when it was taken: `screen at 14:02, may be stale`.
 
 Each role line also carries its **current live work state** — `working`, `waiting` or
-`blocked` — from the stage's last watch sample, read out of `<state dir>/live.json` (the stage
-writes it beside the ledgers every tick, so a role terminal's `backlot status` sees the same
-picture the client draws). That is what the round-5 miss looked like: Hollywood read an
-attention's saved screen — agy's sign-in splash, captured at launch — as the current state, and
-reported a healthy producer as "not signed in". The prompt's rule, and the fact shaping above,
-are what stop it: **decide from the role's current state, never from an old snapshot; `info`
-items are bookkeeping and are never reported as problems.**
+`blocked` — from the stage's last watch sample, read out of `<state dir>/live.json` so a role
+terminal's `backlot status` sees the same picture the client draws. The stage writes that file on
+a change and a heartbeat (at most every 5 s), and a reader drops a file older than 15 s: after the
+stage stops, a role line carries no work word and `backlot status` says once, under `roles:`,
+`stage not running — live state unknown` — the file's age is a liveness signal, never a stale
+`· working`. That is what the round-5 miss looked like: Hollywood read an attention's saved screen
+— agy's sign-in splash, captured at launch — as the current state, and reported a healthy producer
+as "not signed in". The prompt's rule, the fact shaping above and the age check are what stop it:
+**decide from the role's current state, never from an old snapshot; `info` items are bookkeeping
+and are never reported as problems.**
 
 ### What Hollywood may run
 

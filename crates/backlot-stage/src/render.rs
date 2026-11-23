@@ -138,19 +138,23 @@ fn fmt_status(s: TaskStatus) -> String {
 /// `next:` line. `live` carries the stage's last work sample per
 /// `(studio, role)` — the file the stage writes beside the ledgers, so
 /// a role terminal reads the person's current state, not just its
-/// ledger record.
+/// ledger record — and whether a running stage supplied it.
 pub fn status(
     name: &str,
     state: &StudioState,
     failed: &BTreeMap<String, String>,
     now_ms: u64,
-    live: &BTreeMap<(String, String), Work>,
+    live: &crate::live::LiveView,
 ) -> String {
     let mut out = String::new();
     let Some(studio) = &state.studio else {
         return format!("studio {name}: no events yet\n");
     };
-    let work = |role: &str| live.get(&(name.to_string(), role.to_string())).copied();
+    let work = |role: &str| {
+        live.work
+            .get(&(name.to_string(), role.to_string()))
+            .copied()
+    };
     // R14: an experimental studio flags itself in the header; a
     // standard studio's line stays exactly what it was.
     let badge = match studio.mode {
@@ -189,6 +193,11 @@ pub fn status(
         let _ = writeln!(out, "  usage: {}", state.usage.compact());
     }
     let _ = writeln!(out, "  roles:");
+    // A stopped (or never-started) stage supplies no work samples: say
+    // so once, plainly, rather than showing a stale `· working`.
+    if !live.running {
+        let _ = writeln!(out, "    stage not running — live state unknown");
+    }
     // S9f: a role whose last hook signal was a StopFailure carries
     // ` — last turn failed: <error>` on its own line until the next
     // signal — appended to the roles line it has, or on a line of
@@ -261,7 +270,7 @@ pub fn status(
     }
     // Actors and any other live role the fixed three do not cover:
     // the stage's work sample names what each is doing right now.
-    for ((studio, role), work) in live {
+    for ((studio, role), work) in &live.work {
         if studio != name || shown.contains(role.as_str()) {
             continue;
         }

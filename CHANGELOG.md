@@ -55,8 +55,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   `backlot status`, in a notice body, in the status commands it runs — now carries its class
   (`needs you` / `stuck` / `info`), its age (`raised 2h ago`) and, for a screen snapshot, when the
   screen was taken (`screen at 14:02, may be stale`). Each role line also carries its current live
-  work state (`working`, `waiting`, `blocked`), read from `<state dir>/live.json`, which the stage
-  writes beside the ledgers every tick. Before this, Hollywood read a launch-time sign-in snapshot
+  work state (`working`, `waiting`, `blocked`), read from `<state dir>/live.json`. The stage writes
+  that file on a change and a heartbeat (at most every 5 s), and a reader drops a file older than
+  15 s — after the stage stops, `backlot status` says `stage not running — live state unknown`
+  instead of the last `· working`. Before this, Hollywood read a launch-time sign-in snapshot
   as the producer's current state and reported a healthy producer as "not signed in". Its prompt
   now says: decide from the role's current state, never from an old snapshot, and never report
   `info` bookkeeping as a problem. `AttentionClass::label` is the one wording every surface reads.

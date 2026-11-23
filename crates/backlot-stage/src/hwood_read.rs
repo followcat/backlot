@@ -69,7 +69,7 @@ fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String,
             &state,
             &crate::signals::failed_roles(&dir, &state),
             now_ms,
-            &crate::live::work_map(&crate::live::read(base)),
+            &crate::live::LiveView::read(base, now_ms),
         )
     })
 }
@@ -495,7 +495,13 @@ pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
 /// cards and headline — the shape the expanded layer will draw (D16).
 pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
     let names = store::studios(base).map_err(|e| Fail::refused(e.to_string()))?;
-    let live = crate::live::work_map(&crate::live::read(base));
+    // One clock for the read and the render, so the age check and the
+    // `next:` ages agree.
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let live = crate::live::LiveView::read(base, now_ms);
     let mut blocks = Vec::new();
     let mut states = BTreeMap::new();
     for name in &names {
@@ -504,10 +510,6 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
         if json {
             states.insert(name.clone(), state);
         } else {
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
             blocks.push(render::status(
                 name,
                 &state,
