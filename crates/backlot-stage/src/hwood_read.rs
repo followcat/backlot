@@ -69,6 +69,7 @@ fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String,
             &state,
             &crate::signals::failed_roles(&dir, &state),
             now_ms,
+            &crate::live::work_map(&crate::live::read(base)),
         )
     })
 }
@@ -494,6 +495,7 @@ pub fn card_show(common: &Common, env: &Env, id: u64) -> Result<String, Fail> {
 /// cards and headline — the shape the expanded layer will draw (D16).
 pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
     let names = store::studios(base).map_err(|e| Fail::refused(e.to_string()))?;
+    let live = crate::live::work_map(&crate::live::read(base));
     let mut blocks = Vec::new();
     let mut states = BTreeMap::new();
     for name in &names {
@@ -511,6 +513,7 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
                 &state,
                 &crate::signals::failed_roles(&dir, &state),
                 now_ms,
+                &live,
             ));
         }
     }

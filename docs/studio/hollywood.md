@@ -288,6 +288,27 @@ undelivered items go as one digest, and a queued notice whose source moved on is
 sent (`message.dropped`). Hollywood's own words — a recovered terminal, each card's outcome —
 join the same inbox.
 
+### What Hollywood is fed: facts with their age and class
+
+Hollywood is fed facts, not jargon. Every attention it can read — in `backlot status`, in a
+notice's body, in the status commands it runs — carries the same shaping, from one function
+(`backlot_model::attention::AttentionClass`):
+
+- **its class:** `needs you`, `stuck` or `info`;
+- **its age:** `raised 2h ago`;
+- **for a screen snapshot,** when it was taken: `screen at 14:02, may be stale`.
+
+Each role line also carries its **current live work state** — `working`, `waiting` or
+`blocked` — from the stage's last watch sample, read out of `<state dir>/live.json` (the stage
+writes it beside the ledgers every tick, so a role terminal's `backlot status` sees the same
+picture the client draws). That is what the round-5 miss looked like: Hollywood read an
+attention's saved screen — agy's sign-in splash, captured at launch — as the current state, and
+reported a healthy producer as "not signed in". The prompt's rule, and the fact shaping above,
+are what stop it: **decide from the role's current state, never from an old snapshot; `info`
+items are bookkeeping and are never reported as problems.**
+
+### What Hollywood may run
+
 Hollywood's own reports come back through `backlot hollywood report` — the newest headline is
 what the collapsed strip and the expanded panel show, read from the ledger into the summary
 document's `hollywood` object (D21). It may also talk *to* a studio's producer on your behalf — its one write into a studio:

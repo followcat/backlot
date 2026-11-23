@@ -37,6 +37,16 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
   `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
 
+- **Hollywood is fed facts, not snapshots.** Every attention Hollywood can read — in
+  `backlot status`, in a notice body, in the status commands it runs — now carries its class
+  (`needs you` / `stuck` / `info`), its age (`raised 2h ago`) and, for a screen snapshot, when the
+  screen was taken (`screen at 14:02, may be stale`). Each role line also carries its current live
+  work state (`working`, `waiting`, `blocked`), read from `<state dir>/live.json`, which the stage
+  writes beside the ledgers every tick. Before this, Hollywood read a launch-time sign-in snapshot
+  as the producer's current state and reported a healthy producer as "not signed in". Its prompt
+  now says: decide from the role's current state, never from an old snapshot, and never report
+  `info` bookkeeping as a problem. `AttentionClass::label` is the one wording every surface reads.
+
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on

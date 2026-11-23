@@ -44,6 +44,7 @@ mod hwood_read;
 mod hwood_show;
 mod limits;
 pub mod link;
+mod live;
 mod migrate;
 mod notices;
 mod nudge;
@@ -130,6 +131,8 @@ mod draft_tests;
 #[cfg(test)]
 mod exchange_read_tests;
 #[cfg(test)]
+mod facts_tests;
+#[cfg(test)]
 mod finish_sweep_tests;
 #[cfg(test)]
 mod gitcmd_tests;
@@ -154,6 +157,8 @@ mod hwood_show_tests;
 mod hwood_tests;
 #[cfg(test)]
 mod limits_cmd_tests;
+#[cfg(test)]
+mod live_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
 #[cfg(test)]

@@ -3,8 +3,10 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
+use backlot_model::attention::AttentionClass;
 use backlot_model::event::{CANNOT_RESUME, CheckDecl, EventKind, STALLED};
-use backlot_model::state::{StudioState, Task, TaskStatus};
+use backlot_model::state::{Attention, StudioState, Task, TaskStatus};
+use backlot_model::summary::Work;
 use backlot_model::{ActorIdentity, ActorRecord};
 
 fn actor_short(a: &ActorIdentity) -> String {
@@ -40,6 +42,35 @@ fn hh_mm(ms: u64) -> String {
         return "?".into();
     }
     format!("{:02}:{:02}", local.tm_hour, local.tm_min)
+}
+
+/// `2h`, `3m`, `12s` — an age, compact enough for one line.
+pub fn age_short(ms: u64) -> String {
+    let s = ms / 1000;
+    if s >= 3600 {
+        format!("{}h", s / 3600)
+    } else if s >= 60 {
+        format!("{}m", s / 60)
+    } else {
+        format!("{s}s")
+    }
+}
+
+/// The plain-words fact every reader of an attention gets: its class,
+/// when it was raised, and — for a screen snapshot — when the screen
+/// was taken with the stale warning. `backlot status` prints it and
+/// Hollywood's notices quote it, so a stage diagnostic is never read
+/// as the role's current state (P5, H1). `now_ms` ages the raise.
+pub fn attention_fact(a: &Attention, now_ms: u64) -> String {
+    let class = AttentionClass::of(&a.reason, a.needs_user).label();
+    let mut fact = format!(
+        "{class} · raised {} ago",
+        age_short(now_ms.saturating_sub(a.ts_ms))
+    );
+    if a.detail.contains("screen saved to attention/") {
+        fact.push_str(&format!(" · screen at {}, may be stale", hh_mm(a.ts_ms)));
+    }
+    fact
 }
 
 fn task_line(t: &Task, state: &StudioState, declared: &[CheckDecl], cap: u32) -> String {
@@ -104,17 +135,22 @@ fn fmt_status(s: TaskStatus) -> String {
 }
 
 /// The status view for one studio. `now_ms` ages each owed step's
-/// `next:` line.
+/// `next:` line. `live` carries the stage's last work sample per
+/// `(studio, role)` — the file the stage writes beside the ledgers, so
+/// a role terminal reads the person's current state, not just its
+/// ledger record.
 pub fn status(
     name: &str,
     state: &StudioState,
     failed: &BTreeMap<String, String>,
     now_ms: u64,
+    live: &BTreeMap<(String, String), Work>,
 ) -> String {
     let mut out = String::new();
     let Some(studio) = &state.studio else {
         return format!("studio {name}: no events yet\n");
     };
+    let work = |role: &str| live.get(&(name.to_string(), role.to_string())).copied();
     // R14: an experimental studio flags itself in the header; a
     // standard studio's line stays exactly what it was.
     let badge = match studio.mode {
@@ -184,7 +220,7 @@ pub fn status(
         ("writer", writer, state.roles.get("writer")),
     ] {
         shown.insert(role);
-        let live = match live {
+        let life = match live {
             _ if held.contains_key(role) => {
                 format!("waiting for a {} slot", held[role])
             }
@@ -193,9 +229,15 @@ pub fn status(
             Some(_) => "lost".into(),
             None => "not started".into(),
         };
+        let doing = match work(role) {
+            Some(Work::Working) => " · working",
+            Some(Work::Waiting) => " · waiting",
+            Some(Work::Blocked) => " · blocked",
+            None => "",
+        };
         let _ = writeln!(
             out,
-            "    {role:<9} {} ({live}){}",
+            "    {role:<9} {} ({life}){doing}{}",
             actor_short(cfg),
             suffix(role)
         );
@@ -216,6 +258,47 @@ pub fn status(
             actor_short(&w.actor),
             suffix(&w.role),
         );
+    }
+    // Actors and any other live role the fixed three do not cover:
+    // the stage's work sample names what each is doing right now.
+    for ((studio, role), work) in live {
+        if studio != name || shown.contains(role.as_str()) {
+            continue;
+        }
+        let life = match state.roles.get(role) {
+            Some(r) if r.live => "live",
+            Some(r) if r.closed => "closed",
+            Some(_) => "lost",
+            None => "not started",
+        };
+        let doing = match work {
+            Work::Working => " · working",
+            Work::Waiting => " · waiting",
+            Work::Blocked => " · blocked",
+        };
+        let who = state
+            .roles
+            .get(role)
+            .and_then(|r| r.actor.clone())
+            .or_else(|| {
+                wanted
+                    .iter()
+                    .find(|w| w.role == *role)
+                    .map(|w| w.actor.clone())
+            });
+        match who {
+            Some(a) => {
+                let _ = writeln!(
+                    out,
+                    "    {role:<9} {} ({life}){doing}{}",
+                    actor_short(&a),
+                    suffix(role)
+                );
+            }
+            None => {
+                let _ = writeln!(out, "    {role:<9} ({life}){doing}");
+            }
+        }
     }
     for (role, error) in failed {
         if shown.contains(role.as_str()) {
@@ -328,7 +411,14 @@ pub fn status(
     } else {
         let _ = writeln!(out, "  attention:");
         for a in open {
-            let _ = writeln!(out, "    {}: {} — {}", a.role, a.reason, a.detail);
+            let _ = writeln!(
+                out,
+                "    {}: {} — {} ({})",
+                a.role,
+                a.reason,
+                a.detail,
+                attention_fact(a, now_ms)
+            );
         }
     }
     if !state.corrections.is_empty() {

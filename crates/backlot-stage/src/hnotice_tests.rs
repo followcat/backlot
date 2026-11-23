@@ -29,7 +29,7 @@ fn one(studios: &[(&str, StudioState)]) -> Vec<HNotice> {
         .iter()
         .map(|(n, s)| (n.to_string(), s.clone()))
         .collect();
-    hnotice::owed(&map, &BTreeMap::new(), &HollywoodState::default())
+    hnotice::owed(&map, &BTreeMap::new(), &HollywoodState::default(), 0)
 }
 
 /// An open attention is one notice, named with its studio and
@@ -132,7 +132,7 @@ fn finished_accepted_and_failed() {
     let mut errors = BTreeMap::new();
     errors.insert("acme".to_string(), "ledger: corrupt".to_string());
     let map: BTreeMap<String, StudioState> = [("acme".to_string(), s)].into();
-    let n = hnotice::owed(&map, &errors, &HollywoodState::default());
+    let n = hnotice::owed(&map, &errors, &HollywoodState::default(), 0);
     let labels: Vec<&str> = n.iter().map(|x| x.label).collect();
     assert_eq!(labels, vec!["finished", "accepted", "failed"], "{labels:?}");
     let failed = &n[2];
@@ -153,7 +153,7 @@ fn the_recovered_word_and_card_outcomes() {
         &mut h,
         &tk::hev(2, "user", HollywoodKind::CardApplied { card: 1 }),
     );
-    let n = hnotice::owed(&BTreeMap::new(), &BTreeMap::new(), &h);
+    let n = hnotice::owed(&BTreeMap::new(), &BTreeMap::new(), &h, 0);
     let labels: Vec<&str> = n.iter().map(|x| x.label).collect();
     assert_eq!(labels, vec!["card", "recovered"], "{labels:?}");
     assert!(n.iter().all(|x| x.studio.is_none()));
@@ -173,7 +173,7 @@ fn the_recovered_word_and_card_outcomes() {
             },
         ),
     );
-    let n = hnotice::owed(&BTreeMap::new(), &BTreeMap::new(), &h);
+    let n = hnotice::owed(&BTreeMap::new(), &BTreeMap::new(), &h, 0);
     let card_notices: Vec<&HNotice> = n.iter().filter(|x| x.label == "card").collect();
     assert_eq!(card_notices.len(), 2);
     let done = card_notices[1];
@@ -206,7 +206,7 @@ fn told_notices_are_never_owed_again() {
             dropped,
         });
         assert!(
-            hnotice::owed(&map, &BTreeMap::new(), &h).is_empty(),
+            hnotice::owed(&map, &BTreeMap::new(), &h, 0).is_empty(),
             "delivered={delivered} dropped={dropped} was owed again"
         );
     }
@@ -240,9 +240,9 @@ fn told_notices_are_never_owed_again() {
         delivered: false,
         dropped: false,
     });
-    assert!(hnotice::owed(&map, &errors, &h).is_empty());
+    assert!(hnotice::owed(&map, &errors, &h, 0).is_empty());
     errors.insert("acme".to_string(), "e2".to_string());
-    let owed = hnotice::owed(&map, &errors, &h);
+    let owed = hnotice::owed(&map, &errors, &h, 0);
     assert_eq!(owed.len(), 1);
     assert_eq!(owed[0].label, "failed");
 }
@@ -310,4 +310,52 @@ fn labels_and_the_digest_order() {
     let prompt = hnotice::rank(&m("messages/1-prompt.md"));
     let card = hnotice::rank(&m("messages/2-card.md"));
     assert!(prompt < card, "the prompt does not lead the digest");
+}
+
+/// The body Hollywood reads carries the attention's facts: its class,
+/// its age, and — for a saved screen — when the screen was taken with
+/// the stale warning. An `info` attention is labelled `info`, so it is
+/// never read as a problem (H1, P5).
+#[test]
+fn an_attention_notice_carries_its_class_and_age() {
+    let mut s = StudioState::default();
+    let mut info = attention(7, "producer", "session id not found", false);
+    info.ts_ms = 0;
+    info.detail = "no conversation recorded".into();
+    s.attention.push(info);
+    let map: BTreeMap<String, StudioState> = [("acme".to_string(), s)].into();
+    // One hour after the raise.
+    let n = hnotice::owed(
+        &map,
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        60 * 60 * 1000,
+    );
+    assert_eq!(n.len(), 1);
+    assert!(
+        n[0].body.contains("fact: info · raised 1h ago"),
+        "{}",
+        n[0].body
+    );
+
+    // A snapshot attention names the screen's time and stale warning.
+    let mut s = StudioState::default();
+    let mut snap = attention(8, "producer", PERMISSION_PROMPT, true);
+    snap.ts_ms = 0;
+    snap.detail = "Bash: ls; screen saved to attention/8.txt".into();
+    s.attention.push(snap);
+    let map: BTreeMap<String, StudioState> = [("acme".to_string(), s)].into();
+    let n = hnotice::owed(
+        &map,
+        &BTreeMap::new(),
+        &HollywoodState::default(),
+        90 * 60 * 1000,
+    );
+    assert!(
+        n[0].body.contains("fact: needs you · raised 1h ago"),
+        "{}",
+        n[0].body
+    );
+    assert!(n[0].body.contains("screen at "), "{}", n[0].body);
+    assert!(n[0].body.contains("may be stale"), "{}", n[0].body);
 }

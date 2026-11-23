@@ -912,8 +912,22 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
     loop {
         stage.tick(&live).await?;
         // The summary regenerates each tick; the throttle writes it
-        // only on change, at most once per gap.
-        throttle.note(stage.summary_view(&live.doing));
+        // only on change, at most once per gap. The same facts land in
+        // `live.json` beside the ledgers every tick: a role terminal
+        // carries `BACKLOT_STATE_DIR` and never connects to the core,
+        // so its `backlot status` reads them from there.
+        let summary = stage.summary_view(&live.doing);
+        let live_facts = crate::live::from_summary(
+            &summary,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        );
+        if let Err(e) = crate::live::write(&stage.base, &live_facts) {
+            stage.log_once("live", &format!("live facts: {e}"));
+        }
+        throttle.note(summary);
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
