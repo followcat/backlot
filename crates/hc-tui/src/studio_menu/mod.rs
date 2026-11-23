@@ -178,7 +178,8 @@ pub(crate) enum StudioAct {
     ClearAttention,
     /// `stage start` direct.
     StageStart,
-    /// `stage stop` (G1) through the confirm dialog.
+    /// `stage stop` (G1) through the confirm dialog — a machine-wide
+    /// action, so only the machine row's menu offers it.
     StageStop,
     /// `studio finish` through the reason dialog (reason optional).
     Finish,
@@ -257,7 +258,8 @@ pub(crate) struct StudioMenu {
     pub task: Option<MenuTask>,
     /// The card id (Card rows).
     pub card: Option<String>,
-    /// The machine's stage is down — studio items swap start/stop.
+    /// The machine's stage is down — a studio shows `Start stage` and
+    /// the machine row swaps restart/stop for `Start the stage`.
     pub stage_down: bool,
     /// The machine is unreachable — every action dims.
     pub offline: bool,

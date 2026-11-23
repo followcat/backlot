@@ -157,8 +157,9 @@ impl App {
             StudioAct::StageStop => {
                 let machine = menu.machine().map(str::to_owned);
                 self.studio_dialog = Some(StudioDialog::confirm(
-                    format!("Stop stage · {}", machine.as_deref().unwrap_or("Local")),
-                    "the stage's terminal exits; the studio's terminals and ledger keep running. Stop it?"
+                    format!("Stop the stage · {}", machine.as_deref().unwrap_or("Local")),
+                    "Every studio on this machine stops advancing until the stage starts again. \
+                     Running roles and the ledger keep going. Stop it?"
                         .to_owned(),
                     ConfirmFor::StageStop { machine },
                 ));

@@ -8,6 +8,18 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- **Stopping the stage moved to the machine's menu.** `Stop stage…` is gone
+  from every studio's context menu: a stage is the scheduler of a whole
+  machine, so stopping it halts every studio there while running roles and the
+  ledger keep going. The machine row's menu now lists `Stop the stage…` right
+  after `Restart the stage` while the stage runs, and its confirm names the
+  machine and says the stop is machine-wide. A studio keeps `Start stage` while
+  the stage is down, the one stage row that unblocks it.
+
 ## 0.3.0 — 2026-11-20
 
 This release gives every machine its own `backlot` version, a machine menu that

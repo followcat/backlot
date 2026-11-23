@@ -1,7 +1,7 @@
 //! S3 §1 menu tests — each target kind's item list and order, the
 //! dimmed-or-hidden rule and the offline dim.
 
-use super::{MenuKind, StudioAct, StudioMenu};
+use super::{MenuBacklot, MenuKind, StudioAct, StudioMenu};
 use crate::studio::StudioKey;
 use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
@@ -70,20 +70,24 @@ fn a_studio_rows_items_follow_the_spec_order() {
             "Inspect studio sheet (v)",
             "Revise requirement…",
             "Tell producer…",
-            "Stop stage…",
             "Finish studio…",
             "Actor records",
             "Delete studio…"
         ]
     );
-    // A down stage swaps stop for start; a ready studio's finish is
-    // teal.
+    // A down stage adds `Start stage` — the row that unblocks this
+    // studio. Stopping the stage is machine-wide and lives on the
+    // machine's own menu.
     let down = StudioMenu::studio(&key(None), &studio(), true, false);
     assert_eq!(labels(&down)[4], "Start stage");
+    assert!(
+        !labels(&menu).iter().any(|l| l.contains("Stop stage")),
+        "a live stage offers no per-studio stop"
+    );
     let mut ready = studio();
     ready.ready_to_finish = true;
     let menu = StudioMenu::studio(&key(None), &ready, false, false);
-    assert!(menu.items()[5].teal, "finish draws teal when ready");
+    assert!(menu.items()[4].teal, "finish draws teal when ready");
     assert_eq!(menu.title(), "Studio · acme-shop");
     let role_menu = StudioMenu::role(&key(None), &role("live"), false);
     assert_eq!(role_menu.title(), "Role · alice (acme-shop)");
@@ -204,6 +208,70 @@ fn a_stage_rows_items() {
     assert_eq!(labels(&menu), ["Start stage"]);
     // An unreachable machine's stage row shows no items at all.
     assert!(StudioMenu::stage(true).items().is_empty());
+}
+
+fn machine_row(backlot: MenuBacklot, stage_down: bool) -> StudioMenu {
+    StudioMenu::machine_row(Some("host-b".into()), backlot, stage_down, false, None)
+}
+
+#[test]
+fn a_running_stage_machine_menu_restarts_then_stops_the_stage() {
+    let menu = machine_row(MenuBacklot::Installed("0.3.0".into()), false);
+    let items = menu.items();
+    assert_eq!(
+        labels(&menu),
+        [
+            "Restart the stage",
+            "Stop the stage…",
+            "New studio here",
+            "Connect machine",
+            "Rename machine",
+            "Remove machine"
+        ]
+    );
+    assert_eq!(items[0].act, StudioAct::StageRestart);
+    assert_eq!(items[1].act, StudioAct::StageStop);
+    assert!(items.iter().all(|it| it.dim.is_none()), "{items:?}");
+}
+
+#[test]
+fn a_down_stage_machine_menu_only_starts_the_stage() {
+    let menu = machine_row(MenuBacklot::Installed("0.3.0".into()), true);
+    let labels = labels(&menu);
+    assert_eq!(labels[0], "Start the stage");
+    assert!(
+        !labels
+            .iter()
+            .any(|l| l.contains("Stop") || l.contains("Restart")),
+        "a down stage offers only its start: {labels:?}"
+    );
+}
+
+#[test]
+fn a_machine_without_backlot_offers_no_stage_controls() {
+    for backlot in [MenuBacklot::Missing, MenuBacklot::Unknown] {
+        let labels = labels(&machine_row(backlot, false));
+        assert!(
+            !labels.iter().any(|l| l.contains("stage")),
+            "no stage controls without an install: {labels:?}"
+        );
+    }
+}
+
+#[test]
+fn the_machine_menu_key_hints_are_unique() {
+    for menu in [
+        machine_row(MenuBacklot::Installed("0.3.0".into()), false),
+        machine_row(MenuBacklot::Installed("0.3.0".into()), true),
+        machine_row(MenuBacklot::Missing, false),
+    ] {
+        let mut seen = std::collections::BTreeSet::new();
+        for item in menu.items() {
+            if let Some(k) = item.key {
+                assert!(seen.insert(k), "duplicate hint {k} on {}", item.label);
+            }
+        }
+    }
 }
 
 #[test]

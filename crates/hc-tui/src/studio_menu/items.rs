@@ -84,17 +84,14 @@ impl StudioMenu {
             ),
             item("Tell producer…".to_owned(), Some('t'), StudioAct::Tell),
         ];
+        // The stage serves its whole machine, so its stop lives on the
+        // machine row's menu; a studio only offers the start that
+        // unblocks it.
         if self.stage_down {
             out.push(item(
                 "Start stage".to_owned(),
                 Some('s'),
                 StudioAct::StageStart,
-            ));
-        } else {
-            out.push(item(
-                "Stop stage…".to_owned(),
-                Some('s'),
-                StudioAct::StageStop,
             ));
         }
         // A live studio keeps Finish even with tasks open: the command
@@ -168,12 +165,6 @@ impl StudioMenu {
                 "Start stage".to_owned(),
                 Some('s'),
                 StudioAct::StageStart,
-            ));
-        } else {
-            out.push(item(
-                "Stop stage…".to_owned(),
-                Some('s'),
-                StudioAct::StageStop,
             ));
         }
         out.push(item(
@@ -474,6 +465,15 @@ impl StudioMenu {
                 "Restart the stage".to_owned(),
                 Some('r'),
                 StudioAct::StageRestart,
+            ));
+            // The stage serves the whole machine — every studio on it —
+            // so its stop belongs here, not on any one studio's menu.
+            // `s` is free in this branch: `Start the stage` holds it
+            // only while the stage is down.
+            out.push(item(
+                "Stop the stage…".to_owned(),
+                Some('s'),
+                StudioAct::StageStop,
             ));
         }
         if installed.is_some() {
