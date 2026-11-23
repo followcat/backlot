@@ -40,6 +40,7 @@ const COMMANDS: &[&str] = &[
     "priority",
     "reopen",
     "close",
+    "recast",
     "approve",
     "attention",
     "hook",
@@ -346,10 +347,18 @@ pub(crate) fn exec_event(
             | Cmd::TaskState { .. }
             | Cmd::Priority { .. }
     );
+    // A recast is the user's — a role terminal is refused before the
+    // ledger or the discovery scan is touched, exactly like `card
+    // apply`.
+    if matches!(cmd, Cmd::Recast { .. }) && env.get("BACKLOT_ROLE").is_some() {
+        return Err(Fail::refused(
+            "a recast is the user's — BACKLOT_ROLE is set",
+        ));
+    }
     let caller = match &cmd {
         // `studio new` runs before any role terminal exists; the user
         // records it (`--as`/`BACKLOT_ROLE` may still override).
-        Cmd::StudioNew { .. } => Caller {
+        Cmd::StudioNew { .. } | Cmd::Recast { .. } => Caller {
             studio: studio_name(&common, env)?,
             role: common
                 .role

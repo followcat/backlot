@@ -53,37 +53,46 @@ pub fn check(
             "[[checks]] need a single git repository — a workspace or no-git studio cannot run them",
         ));
     }
-    // Every runner the draft names must have an adapter — an
-    // unsupported name refuses before any probing or writing.
+    // Every runner the draft names must have an adapter and a launch
+    // file that resolves under the PATH a launch gets.
     let named = crate::commands::cast_runners(&cast);
-    for runner in &named {
+    check_runners(base, &named, env)?;
+    Ok(binding)
+}
+
+/// The runner half of the `studio new --dry-run` check, shared with
+/// `backlot recast` and a recast card's proposal: every named runner
+/// has an adapter, seated ones detection reached only outside the
+/// inherited PATH earn their `[runner_env]` write, and the launch PATH
+/// resolves each one. An existing PATH is never rewritten.
+pub(crate) fn check_runners(
+    base: &Path,
+    named: &std::collections::BTreeSet<String>,
+    env: &Env,
+) -> Result<(), Fail> {
+    for runner in named {
         if !crate::runners::supported(runner) {
             return Err(Fail::refused(format!(
-                "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline)"
+                "runner '{runner}' is not supported (supported: fake, claude, codex, devin, opencode, cursor, cmd, cline, agy)"
             )));
         }
     }
-    // Seated runners detection reached only outside the inherited
-    // PATH get their `[runner_env]` write here too — a dry run preps
-    // the launch env like the real `new` does; an existing PATH is
-    // never rewritten.
     let scope = crate::runners::detect::scope(env);
     let mut stderr = std::io::stderr();
     crate::wizard_paths::ensure_runner_paths(
         base,
-        &named,
+        named,
         env,
         &mut |runner| crate::runners::detect::find(runner, &scope),
         &mut stderr,
     )?;
-    // The PATH a launch would get resolves every runner the draft
-    // names: a configured `[runner_env.<runner>]` PATH is the whole
-    // launch PATH, and without one detection's order stands — the
-    // picker's "detected" list and this check answer the same way.
+    // A configured `[runner_env.<runner>]` PATH is the whole launch
+    // PATH, and without one detection's order stands — the picker's
+    // "detected" list and this check answer the same way.
     let config_text = std::fs::read_to_string(base.join("config.toml")).unwrap_or_default();
     for runner in named {
-        crate::runners::resolve::launch_binary(&runner, &config_text, &scope)
+        crate::runners::resolve::launch_binary(runner, &config_text, &scope)
             .map_err(Fail::refused)?;
     }
-    Ok(binding)
+    Ok(())
 }

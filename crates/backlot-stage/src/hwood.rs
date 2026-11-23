@@ -85,10 +85,12 @@ fn propose(common: &Common, env: &Env, action: &CardAction, why: &str) -> Result
         )));
     }
     let base = base_of(common, env)?;
-    let card_base = crate::hwood_base::card_base(&base, action, env)?;
+    // A recast's identity is completed and checked before the card
+    // exists; every other action passes through unchanged.
+    let action = crate::hwood_base::resolve_action(&base, action, env)?;
+    let card_base = crate::hwood_base::card_base(&base, &action, env)?;
     let hdir = store::hollywood_dir(&base);
     let by = by_for(common, env);
-    let action = action.clone();
     let why = why.to_string();
     let event = store::append_hollywood(&hdir, |_, _| {
         Ok::<HPending, Fail>(HPending {

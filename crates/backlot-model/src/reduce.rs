@@ -72,8 +72,20 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             if terminal.is_some() {
                 entry.terminal = terminal.clone();
             }
-            if actor.is_some() {
-                entry.actor = actor.clone();
+            if let Some(actor) = actor {
+                // A new identity starts a new conversation: the old
+                // session id belongs to the runner that left, so a
+                // recast's start never resumes it later. A restarted
+                // binary's loader-filled `runner_version` is not a new
+                // identity.
+                if entry
+                    .actor
+                    .as_ref()
+                    .is_some_and(|old| !crate::recast::same_identity(old, actor))
+                {
+                    entry.session_id = None;
+                }
+                entry.actor = Some(actor.clone());
             }
             if session_id.is_some() {
                 entry.session_id = session_id.clone();
@@ -119,6 +131,25 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             if let Some(entry) = state.roles.get_mut(role) {
                 entry.session_id = Some(session_id.clone());
             }
+            state.targets.insert(seq, SeqTarget::Role(role.clone()));
+        }
+        // The newest recast is the fixed role's identity from here on;
+        // the role's recorded lifecycle — and every earlier delivery
+        // and review — keeps the identity it was started with.
+        EventKind::RoleRecast {
+            role,
+            actor,
+            reason,
+            card,
+        } => {
+            state.recasts.push(RecastRecord {
+                role: role.clone(),
+                actor: actor.clone(),
+                reason: reason.clone(),
+                card: card.clone(),
+                seq,
+                ts_ms: ts,
+            });
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
         // `held` is the panel's hold on a person: it survives a

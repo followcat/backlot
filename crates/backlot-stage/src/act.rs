@@ -77,22 +77,17 @@ fn tolerate(r: Result<serde_json::Value, CallError>) -> Result<(), Fail> {
 /// or the cast the `actor-<task>-c<n>` key names (used by `Adopt`,
 /// where `Start`'s own `actor` is unavailable).
 fn desired_actor<'s>(state: &'s StudioState, role: &str) -> Option<&'s ActorIdentity> {
-    let cfg = state.studio.as_ref()?;
-    match role {
-        "producer" => Some(&cfg.roles.producer),
-        "director" => Some(&cfg.roles.director),
-        "writer" => Some(&cfg.roles.writer),
-        _ => {
-            let (task, n) = role.strip_prefix("actor-")?.rsplit_once("-c")?;
-            let n: usize = n.parse().ok()?;
-            state
-                .tasks
-                .get(task)?
-                .casts
-                .get(n.checked_sub(1)?)
-                .map(|c| &c.actor)
-        }
+    if matches!(role, "producer" | "director" | "writer") {
+        return state.fixed_identity(role);
     }
+    let (task, n) = role.strip_prefix("actor-")?.rsplit_once("-c")?;
+    let n: usize = n.parse().ok()?;
+    state
+        .tasks
+        .get(task)?
+        .casts
+        .get(n.checked_sub(1)?)
+        .map(|c| &c.actor)
 }
 
 /// A config file's text, empty when it does not exist — a read error

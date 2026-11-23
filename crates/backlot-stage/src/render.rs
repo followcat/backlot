@@ -168,18 +168,20 @@ pub fn status(
     // <runner> slot` — a fixed role in place, actors after the fixed
     // three in wanted order.
     let held = backlot_model::limits::held(state);
+    // A recast fixed role shows the identity it plays now.
+    let producer = state
+        .fixed_identity("producer")
+        .unwrap_or(&studio.roles.producer);
+    let director = state
+        .fixed_identity("director")
+        .unwrap_or(&studio.roles.director);
+    let writer = state
+        .fixed_identity("writer")
+        .unwrap_or(&studio.roles.writer);
     for (role, cfg, live) in [
-        (
-            "producer",
-            &studio.roles.producer,
-            state.roles.get("producer"),
-        ),
-        (
-            "director",
-            &studio.roles.director,
-            state.roles.get("director"),
-        ),
-        ("writer", &studio.roles.writer, state.roles.get("writer")),
+        ("producer", producer, state.roles.get("producer")),
+        ("director", director, state.roles.get("director")),
+        ("writer", writer, state.roles.get("writer")),
     ] {
         shown.insert(role);
         let live = match live {

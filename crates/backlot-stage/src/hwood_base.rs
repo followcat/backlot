@@ -27,6 +27,41 @@ fn require_task<'a>(s: &'a StudioState, studio: &str, task: &str) -> Result<&'a 
         .ok_or_else(|| Fail::refused(format!("no task '{task}' in studio '{studio}'")))
 }
 
+/// The action as the card will store it. A recast arrives with an
+/// empty permission profile (the propose flags do not take one); it is
+/// filled from the role's current identity, and the whole identity is
+/// checked before the card exists.
+pub(crate) fn resolve_action(
+    base: &Path,
+    action: &CardAction,
+    env: &Env,
+) -> Result<CardAction, Fail> {
+    let CardAction::Recast {
+        studio,
+        person,
+        actor,
+    } = action
+    else {
+        return Ok(action.clone());
+    };
+    let s = require_studio(base, studio)?;
+    let current = s
+        .fixed_identity(person)
+        .ok_or_else(|| Fail::refused(format!("no fixed role '{person}' in studio '{studio}'")))?;
+    let mut actor = actor.clone();
+    if actor.permission_profile.trim().is_empty() {
+        actor.permission_profile = current.permission_profile.clone();
+    }
+    backlot_model::recast::check(&s, person, &actor).map_err(|e| Fail::refused(e.to_string()))?;
+    let named = std::collections::BTreeSet::from([actor.runner.clone()]);
+    crate::draft::check_runners(base, &named, env)?;
+    Ok(CardAction::Recast {
+        studio: studio.clone(),
+        person: person.clone(),
+        actor,
+    })
+}
+
 /// The card's base, computed from the live studio state — or the
 /// refusal when the fact it would hold is already false.
 pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<CardBase, Fail> {
@@ -116,6 +151,22 @@ pub(crate) fn card_base(base: &Path, action: &CardAction, env: &Env) -> Result<C
                 )));
             }
             Ok(CardBase::TaskStatus { was: t.status })
+        }
+        // A recast is born stale the moment the role's identity moves;
+        // the proposal runs the same rule `backlot recast` does, so an
+        // invalid identity never becomes a card.
+        CardAction::Recast {
+            studio,
+            person,
+            actor,
+        } => {
+            let s = require_studio(base, studio)?;
+            backlot_model::recast::check(&s, person, actor)
+                .map_err(|e| Fail::refused(e.to_string()))?;
+            let current = s.fixed_identity(person).cloned().ok_or_else(|| {
+                Fail::refused(format!("no fixed role '{person}' in studio '{studio}'"))
+            })?;
+            Ok(CardBase::RoleIdentity { actor: current })
         }
     }
 }

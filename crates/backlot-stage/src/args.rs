@@ -118,6 +118,18 @@ pub enum Cmd {
     Close {
         person: String,
     },
+    /// `recast --person <role> --runner <r> --model <m> [--effort <e>]
+    /// [--permission-profile standard|worktree] [--reason <r>]` — the
+    /// user's; the permission profile is kept from the current
+    /// identity when the flag is absent.
+    Recast {
+        person: String,
+        runner: String,
+        model: String,
+        effort: Option<String>,
+        permission_profile: Option<String>,
+        reason: String,
+    },
     Approve {
         person: String,
         decision: ApprovalDecision,
@@ -430,6 +442,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "close" => args_task::person(&mut common, &mut it, U_CLOSE, |person| Cmd::Close {
             person,
         }),
+        "recast" => args_task::recast(&mut common, &mut it),
         "approve" => args_task::approve(&mut common, &mut it),
         "attention" => {
             let Some(sub) = it.next() else {

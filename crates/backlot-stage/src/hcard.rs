@@ -74,6 +74,12 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
         }
         CardAction::Close { person, .. } => s.roles.get(person).is_some_and(|r| !r.held),
         CardAction::Reopen { person, .. } => s.roles.get(person).is_some_and(|r| r.held),
+        CardAction::Recast { .. } => {
+            let marker = format!("c{}", card.seq);
+            s.recasts
+                .iter()
+                .any(|r| r.card.as_deref() == Some(marker.as_str()))
+        }
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
     }
 }
@@ -217,6 +223,12 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
             task: task.clone(),
             state: state_change(&card.action).expect("a task-state action"),
             reason: marker(card.seq, &card.why),
+        }),
+        CardAction::Recast { person, actor, .. } => Ok(EventKind::RoleRecast {
+            role: person.clone(),
+            actor: actor.clone(),
+            reason: Some(card.why.clone()),
+            card: Some(format!("c{}", card.seq)),
         }),
         CardAction::StudioNew { .. } => Err("studio-new is handled apart".into()),
     }

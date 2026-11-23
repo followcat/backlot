@@ -22,6 +22,7 @@ confirms first.
 - `backlot hollywood propose priority --studio acme-shop --task t1 --level high --why "blocks t2"`
 - `backlot hollywood propose close --studio acme-shop --person actor-t1-c1 --why "task done"`
 - `backlot hollywood propose reopen --studio acme-shop --person actor-t1-c1 --why "work returned"`
+- `backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "director's runner keeps returning a quota error"`
 - `backlot hollywood report "two studios idle, one card open"` — your
   standing headline; the summary document carries the latest.
 - `backlot hollywood report "two studios idle, one card open" --body report.md` —
@@ -49,6 +50,18 @@ The base each action carries, in the model's own words:
   priority you saw.
 - `pause`, `resume`, `abandon` — `task_status { was }`: the task is
   still in the status you saw.
+- `recast` — `role_identity`: the fixed role still plays the identity
+  you saw, and the studio is not finished.
+
+## Recasting a fixed role
+
+Propose a `recast` only when the user asks, or when a fixed role keeps
+failing — it cannot resume, or its runner keeps returning a quota or
+limit error. Name the evidence in `--why` (the error, the ledger seq);
+never recast on a hunch. The card swaps the agent that plays the role:
+applied, the stage closes the old terminal and starts a fresh
+conversation on the new runner and model. The ledger and the queued
+messages stay.
 
 ## Drafting a studio
 

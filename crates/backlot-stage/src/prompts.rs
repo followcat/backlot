@@ -18,6 +18,9 @@ const PRODUCER: &str = include_str!("../prompts/producer.md");
 const DIRECTOR: &str = include_str!("../prompts/director.md");
 const WRITER: &str = include_str!("../prompts/writer.md");
 const ACTOR: &str = include_str!("../prompts/actor.md");
+/// The section a fixed role's first prompt gains when `role.recast`
+/// replaced the agent that used to play it.
+const RECAST: &str = include_str!("../prompts/recast.md");
 
 /// Hollywood's own prompt — written to `<base>/hollywood/AGENTS.md`
 /// on first launch (H3). `{core}` is the core's name.
@@ -210,10 +213,19 @@ pub fn prepare(
     let prompts = dir.join("prompts");
     fs::create_dir_all(&prompts)?;
     let work = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
-    let mut text = render(
-        template(start.kind),
-        &fields(studio, dir, start, state, &work),
-    );
+    let fields = fields(studio, dir, start, state, &work);
+    let mut text = render(template(start.kind), &fields);
+    // A role whose previous agent ran a different identity is taking
+    // the role over: it must read the state it inherits before acting.
+    let recast = state.recasts.iter().any(|r| r.role == start.role)
+        && state
+            .roles
+            .get(&start.role)
+            .and_then(|r| r.actor.as_ref())
+            .is_some_and(|old| !backlot_model::recast::same_identity(old, &start.actor));
+    if recast {
+        text.push_str(&render(RECAST, &fields));
+    }
     text.push_str(mode_guidance(start.kind, state));
     let file = prompts.join(format!("{}.md", start.role));
     fs::write(&file, text)?;
