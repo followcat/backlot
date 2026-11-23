@@ -215,6 +215,13 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::UnfinishedTasks(open))
             }
         }
+        EventKind::StudioDeleted { .. } => {
+            require_studio(state)?;
+            if state.finished.is_none() {
+                return Err(Refusal::NotFinished);
+            }
+            Ok(())
+        }
         EventKind::ReqVersion { version, .. } => {
             require_studio(state)?;
             let expected = state.requirement_version + 1;

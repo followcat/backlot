@@ -549,6 +549,10 @@ pub enum EventKind {
         #[serde(default)]
         reason: String,
     },
+    /// `studio.deleted`: the user archived the finished studio's
+    /// ledger directory under `archive/<id>-<stamp>`.
+    #[serde(rename = "studio.deleted")]
+    StudioDeleted { archive: String },
     /// `target` is the seq of the event being corrected; `set` holds
     /// the changed fields. The earlier event stays in the log.
     #[serde(rename = "correction")]
@@ -618,6 +622,7 @@ impl EventKind {
             EventKind::StageAnswered { .. } => "stage.answered",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
+            EventKind::StudioDeleted { .. } => "studio.deleted",
             EventKind::Correction { .. } => "correction",
         }
     }

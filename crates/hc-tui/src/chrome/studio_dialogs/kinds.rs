@@ -78,31 +78,33 @@ pub(super) fn render_confirm(
     // no silent clipping).
     let inner = width.saturating_sub(4).max(8) as usize;
     let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in d.body.split_whitespace() {
-        let word_w = usize::from(display_width(word));
-        let line_w = usize::from(display_width(&line));
-        if line.is_empty() {
-            if word_w <= inner {
+    for para in d.body.split('\n') {
+        let mut line = String::new();
+        for word in para.split_whitespace() {
+            let word_w = usize::from(display_width(word));
+            let line_w = usize::from(display_width(&line));
+            if line.is_empty() {
+                if word_w <= inner {
+                    line.push_str(word);
+                } else {
+                    lines.push(truncate_end(word, inner));
+                }
+            } else if line_w + 1 + word_w <= inner {
+                line.push(' ');
                 line.push_str(word);
             } else {
-                lines.push(truncate_end(word, inner));
+                lines.push(line);
+                line = if word_w <= inner {
+                    word.to_owned()
+                } else {
+                    lines.push(truncate_end(word, inner));
+                    String::new()
+                };
             }
-        } else if line_w + 1 + word_w <= inner {
-            line.push(' ');
-            line.push_str(word);
-        } else {
-            lines.push(line);
-            line = if word_w <= inner {
-                word.to_owned()
-            } else {
-                lines.push(truncate_end(word, inner));
-                String::new()
-            };
         }
-    }
-    if !line.is_empty() {
-        lines.push(line);
+        if !line.is_empty() {
+            lines.push(line);
+        }
     }
     let height = (lines.len() as u16)
         .saturating_add(6)
@@ -139,15 +141,15 @@ pub(super) fn render_confirm(
     let [ok, cancel] = rs.as_slice() else {
         return None;
     };
-    button(
-        b,
-        *ok,
-        " ↵ / y confirm ",
+    let ok_style = if d.loading {
+        Style::default().fg(palette.overlay0).bg(palette.surface0)
+    } else {
         Style::default()
             .fg(contrast(palette))
             .bg(palette.accent)
-            .add_modifier(Modifier::BOLD),
-    );
+            .add_modifier(Modifier::BOLD)
+    };
+    button(b, *ok, " ↵ / y confirm ", ok_style);
     cancel_button(b, *cancel, palette);
     Some(DialogHits {
         area: q,

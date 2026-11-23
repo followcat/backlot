@@ -408,3 +408,40 @@ fn the_other_roles_keep_what_they_had() {
         Ok(())
     );
 }
+
+#[test]
+fn only_user_may_record_studio_deleted() {
+    let finished = state_with(
+        &base_events(),
+        vec![
+            (
+                "director",
+                task_state("t1", TaskStateChange::Abandoned, "cut"),
+            ),
+            (
+                "director",
+                task_state("t2", TaskStateChange::Abandoned, "cut"),
+            ),
+            (
+                "producer",
+                EventKind::StudioFinished {
+                    reason: "done".into(),
+                },
+            ),
+        ],
+    );
+    let kind = EventKind::StudioDeleted {
+        archive: "archive/acme-20261123T060000Z".into(),
+    };
+    assert_eq!(validate(&finished, &new_ev("user", kind.clone())), Ok(()));
+    for role in ["producer", "director", "writer", "stage", "actor-t1-c1"] {
+        assert_eq!(
+            validate(&finished, &new_ev(role, kind.clone())),
+            Err(Refusal::RoleBound {
+                role: role.into(),
+                who: "the user",
+            }),
+            "role {role} must be refused"
+        );
+    }
+}

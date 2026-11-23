@@ -106,31 +106,41 @@ impl App {
         });
     }
 
-    /// The prefill reply — only while the matching Revise dialog is
+    /// The prefill/dry-run reply — only while the matching dialog is
     /// still open does it land; a closed or re-opened dialog's
     /// generation drops the fetch.
     pub(crate) fn on_dialog_fetch(&mut self, (epoch, result): (u64, Result<String, String>)) {
         if epoch != self.studio_dialog_gen {
             return;
         }
-        let Some(StudioDialog::Revise(d)) = self.studio_dialog.as_mut() else {
-            return;
-        };
-        match result {
-            Ok(text) => {
-                d.body = Some(BodyEditor::new(&text));
-                d.prefill_failed = false;
-                d.confirm_overwrite = false;
-                d.error = None;
+        match self.studio_dialog.as_mut() {
+            Some(StudioDialog::Revise(d)) => {
+                match result {
+                    Ok(text) => {
+                        d.body = Some(BodyEditor::new(&text));
+                        d.prefill_failed = false;
+                        d.confirm_overwrite = false;
+                        d.error = None;
+                    }
+                    Err(error) => {
+                        d.body = Some(BodyEditor::default());
+                        d.prefill_failed = true;
+                        d.confirm_overwrite = false;
+                        d.error = Some(error);
+                    }
+                }
+                self.sched.mark_dirty(std::time::Instant::now());
             }
-            Err(error) => {
-                d.body = Some(BodyEditor::default());
-                d.prefill_failed = true;
-                d.confirm_overwrite = false;
-                d.error = Some(error);
+            Some(StudioDialog::Confirm(d))
+                if matches!(
+                    d.for_,
+                    crate::studio_dialog::ConfirmFor::DeleteStudio { force: false, .. }
+                ) =>
+            {
+                self.delete_studio_dry_run_reply(result);
             }
+            _ => {}
         }
-        self.sched.mark_dirty(std::time::Instant::now());
     }
 
     /// `^E` in the Revise dialog — a temp copy in `$VISUAL`/`$EDITOR`

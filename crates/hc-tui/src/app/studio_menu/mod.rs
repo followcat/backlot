@@ -13,6 +13,7 @@ use crate::studio_menu::StudioMenu;
 use super::App;
 
 mod activate;
+mod delete;
 
 impl App {
     /// Right-click on the sidebar's studio surfaces — the studio

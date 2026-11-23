@@ -112,6 +112,13 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
     if let EventKind::TaskDelivered { task, .. } = &new.kind {
         return may_deliver(state, role, task);
     }
+    if let EventKind::StudioDeleted { .. } = &new.kind {
+        return if role == "user" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the user"))
+        };
+    }
     Ok(())
 }
 
@@ -120,7 +127,7 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
 /// or the stage for the ledger-internal events.
 fn who_can(kind: &EventKind) -> &'static str {
     match kind {
-        EventKind::StudioCreated { .. } => "the user",
+        EventKind::StudioCreated { .. } | EventKind::StudioDeleted { .. } => "the user",
         EventKind::RoleStarted { .. }
         | EventKind::RoleLost { .. }
         | EventKind::RoleResumed { .. }

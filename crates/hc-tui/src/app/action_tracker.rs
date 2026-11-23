@@ -106,7 +106,7 @@ impl App {
         // U6c: a restart's `stage stop` chains `stage start` on `Ok`
         // before the toast draws.
         self.machine_stage_restart_chain(&pending.action, result.is_ok());
-        if self.delete_studio_reply(&pending.action, &result) {
+        if self.delete_studio_reply(&pending, &result) {
             return;
         }
         // The setup dialog's write: `Ok` flips the bar to its agent

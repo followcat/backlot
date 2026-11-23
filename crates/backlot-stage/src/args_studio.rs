@@ -166,6 +166,43 @@ pub(crate) fn studio_prune(common: &mut Common, it: &mut It) -> Result<(Common, 
     ))
 }
 
+/// `studio delete [<studio>] [--dry-run] [--force] [--json]`:
+/// positional `<studio>` is optional and falls back to `--studio` /
+/// `BACKLOT_STUDIO`.
+pub(crate) fn studio_delete(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut studio = None;
+    let mut dry_run = false;
+    let mut force = false;
+    let mut json = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--force" => force = true,
+            "--json" => json = true,
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO));
+            }
+            _ if studio.is_none() => studio = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::StudioDelete {
+            studio,
+            dry_run,
+            force,
+            json,
+        },
+    ))
+}
+
 /// `studio migrate [<studio> | --all] [--dry-run]` — rewrites the
 /// ledger at the current schema version; appends nothing.
 pub(crate) fn studio_migrate(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {

@@ -121,7 +121,7 @@ pub(crate) fn plan(git: &mut GitRun<'_>, cfg: &StudioConfig) -> (Plan, Vec<Step>
 
 /// A member repository's leaf name — how the output names it, the
 /// same leaf the per-member worktree directory carries.
-fn member_leaf(member: &str) -> String {
+pub(crate) fn member_leaf(member: &str) -> String {
     Path::new(member)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())

@@ -36,8 +36,13 @@ pub(crate) fn prepare_hooks(hooks: &runners::HookSetup) -> std::io::Result<()> {
     Ok(())
 }
 
-/// A ledger event the stage appends for one studio.
+/// A ledger event the stage appends for one studio. If the studio was
+/// archived concurrently (`events.jsonl` gone), refuse without
+/// re-creating the directory.
 pub(crate) fn record(dir: &Path, kind: EventKind) -> Result<Event, Fail> {
+    if !dir.join("events.jsonl").is_file() {
+        return Err(Fail::refused("studio archived"));
+    }
     store::append(dir, move |_state, _seq| {
         Ok::<_, std::convert::Infallible>(store::Pending {
             event: NewEvent::new(EventBy::role("stage"), kind),

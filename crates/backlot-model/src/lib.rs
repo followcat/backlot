@@ -92,6 +92,8 @@ mod summary_tests;
 #[cfg(test)]
 mod usage_tests;
 #[cfg(test)]
+mod validate_delete_tests;
+#[cfg(test)]
 mod validate_extra_tests;
 #[cfg(test)]
 mod validate_tests;

@@ -554,6 +554,7 @@ pub fn confirm(event: &backlot_model::Event) -> String {
         EventKind::TaskState { task, state, .. } => format!(" {task} {state:?}"),
         EventKind::MessageQueued { to, .. } => format!(" → {to}"),
         EventKind::ReportSent { node, to, .. } => format!(" {node} → {to}"),
+        EventKind::StudioDeleted { archive } => format!(" → {archive}"),
         EventKind::Correction { target, .. } => format!(" on event {target}"),
         _ => String::new(),
     };

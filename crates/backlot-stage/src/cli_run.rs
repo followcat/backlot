@@ -113,6 +113,16 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             };
             return crate::prune::run(&base, named, all_finished, dry_run, force);
         }
+        // `studio delete` closes terminals, prunes worktrees/branches,
+        // records `studio.deleted` and archives the ledger.
+        Cmd::StudioDelete {
+            studio,
+            dry_run,
+            force,
+            json,
+        } => {
+            return crate::delete::run(env, &common, studio, dry_run, force, json);
+        }
         // `studio migrate` rewrites logs at the current schema
         // version — under the same locks, no event appended.
         Cmd::StudioMigrate {

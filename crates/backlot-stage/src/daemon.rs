@@ -125,7 +125,7 @@ async fn refresh_inventory(
 }
 
 /// What one ledger file looked like when its state was loaded.
-struct Seen {
+pub(crate) struct Seen {
     len: u64,
     mtime_ms: u64,
 }
@@ -223,7 +223,7 @@ pub(crate) struct Stage {
     /// Reduced state per studio, reloaded when its log grew.
     pub(crate) cached: BTreeMap<String, StudioState>,
     /// `events.jsonl` length and mtime at each state's last load.
-    seen: BTreeMap<String, Seen>,
+    pub(crate) seen: BTreeMap<String, Seen>,
     /// Studio → the last load error while its ledger stays unreadable:
     /// the tick skips it and the summary shows it.
     pub(crate) broken: BTreeMap<String, String>,
@@ -234,7 +234,7 @@ pub(crate) struct Stage {
     pub(crate) failed: BTreeMap<String, String>,
     /// Every error line already printed — each distinct message logs
     /// once, whatever its studio.
-    logged: BTreeSet<String>,
+    pub(crate) logged: BTreeSet<String>,
     /// Hollywood's reduced state — the overseer is not a studio, so
     /// it keeps its own ledger, its own state and its own seen mark
     /// (`hseen`) under `<base>/hollywood/` (D13).
@@ -290,6 +290,79 @@ impl Stage {
         }
     }
 
+    /// Evict every in-memory studio key not in `present` (deleted/archived
+    /// studios disappear immediately without restart or stale errors),
+    /// while preserving Hollywood's own synthetic `(HOLLYWOOD, HOLLYWOOD)`
+    /// entries.
+    fn evict_missing(&mut self, present: &BTreeSet<String>) {
+        let keep = |s: &str| present.contains(s) || s == backlot_model::hollywood::HOLLYWOOD;
+        self.cached.retain(|k, _| present.contains(k));
+        self.seen.retain(|k, _| present.contains(k));
+        self.broken.retain(|k, _| present.contains(k));
+        self.failed.retain(|k, _| present.contains(k));
+        self.pruned.borrow_mut().retain(|k| present.contains(k));
+        self.checking
+            .borrow_mut()
+            .retain(|k, _| present.contains(k));
+        self.discover_looked
+            .borrow_mut()
+            .retain(|(s, _), _| keep(s));
+        self.trust_pace.borrow_mut().retain(|(s, _), _| keep(s));
+        self.work.borrow_mut().retain(|(s, _), _| keep(s));
+        self.work_looked.borrow_mut().retain(|(s, _), _| keep(s));
+        self.screens.borrow_mut().retain(|(s, _), _| keep(s));
+        self.sent_ms.borrow_mut().retain(|(s, _), _| keep(s));
+        self.sending.borrow_mut().retain(|(s, _), _| keep(s));
+        self.blocked_since.borrow_mut().retain(|(s, _), _| keep(s));
+        self.unblocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| keep(s));
+        self.idle_since.borrow_mut().retain(|(s, _), _| keep(s));
+        self.last_signal.borrow_mut().retain(|(s, _), _| keep(s));
+        self.revision_since.borrow_mut().retain(|(s, _), _| keep(s));
+        self.rate_pace.borrow_mut().retain(|(s, _), _| keep(s));
+        self.conn_pace.borrow_mut().retain(|(s, _), _| keep(s));
+        self.session_warned.borrow_mut().retain(|(s, _)| keep(s));
+        self.exchange_cache.borrow_mut().retain(|(s, _), _| keep(s));
+    }
+
+    /// Evict a single studio key across all in-memory caches (used when a
+    /// studio disappears mid-tick).
+    fn evict_studio(&mut self, name: &str) {
+        self.cached.remove(name);
+        self.seen.remove(name);
+        self.broken.remove(name);
+        self.failed.remove(name);
+        self.pruned.borrow_mut().remove(name);
+        self.checking.borrow_mut().remove(name);
+        self.discover_looked
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+        self.trust_pace.borrow_mut().retain(|(s, _), _| s != name);
+        self.work.borrow_mut().retain(|(s, _), _| s != name);
+        self.work_looked.borrow_mut().retain(|(s, _), _| s != name);
+        self.screens.borrow_mut().retain(|(s, _), _| s != name);
+        self.sent_ms.borrow_mut().retain(|(s, _), _| s != name);
+        self.sending.borrow_mut().retain(|(s, _), _| s != name);
+        self.blocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+        self.unblocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+        self.idle_since.borrow_mut().retain(|(s, _), _| s != name);
+        self.last_signal.borrow_mut().retain(|(s, _), _| s != name);
+        self.revision_since
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+        self.rate_pace.borrow_mut().retain(|(s, _), _| s != name);
+        self.conn_pace.borrow_mut().retain(|(s, _), _| s != name);
+        self.session_warned.borrow_mut().retain(|(s, _)| s != name);
+        self.exchange_cache
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+    }
+
     /// Reload changed ledgers, reconcile each studio and act. Each
     /// studio sees only the terminals its label owns — the name is
     /// never enough to stop, adopt or drop. One studio's bad ledger
@@ -297,16 +370,27 @@ impl Stage {
     /// only a lost core (`Fail::Core`) ends the stage.
     pub(crate) async fn tick(&mut self, live: &Inventory) -> Result<(), Fail> {
         self.read_stage_config();
-        for name in store::studios(&self.base)
+        let present: BTreeSet<String> = store::studios(&self.base)
             .map_err(|e| Fail::refused(format!("cannot read {}: {e}", self.base.display())))?
-        {
+            .into_iter()
+            .collect();
+        self.evict_missing(&present);
+        for name in present {
             let dir = store::studio_dir(&self.base, &name);
+            if !dir.join("events.jsonl").is_file() {
+                self.evict_studio(&name);
+                continue;
+            }
             let meta = fs::metadata(dir.join("events.jsonl"));
             let len = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             // A broken studio retries every tick — a repair that keeps
             // the length, or a transient read error, must not leave it
             // skipped until something appends.
             if self.seen.get(&name).map(|s| s.len) != Some(len) || self.broken.contains_key(&name) {
+                if !dir.join("events.jsonl").is_file() {
+                    self.evict_studio(&name);
+                    continue;
+                }
                 match load_studio(&dir) {
                     Ok(state) => {
                         self.cached.insert(name.clone(), state);
@@ -315,6 +399,10 @@ impl Stage {
                     // A ledger that cannot be loaded marks the studio
                     // broken; it stays skipped until the file loads.
                     Err(e) => {
+                        if !dir.join("events.jsonl").is_file() {
+                            self.evict_studio(&name);
+                            continue;
+                        }
                         let msg = e.message().to_string();
                         self.broken.insert(name.clone(), msg.clone());
                         self.log_once(&name, &msg);
@@ -351,8 +439,15 @@ impl Stage {
             {
                 Err(e @ Fail::Core(_)) => return Err(e),
                 Err(e) => {
-                    self.failed.insert(name.clone(), e.message().to_string());
-                    self.log_once(&name, e.message());
+                    if !store::studio_dir(&self.base, &name)
+                        .join("events.jsonl")
+                        .is_file()
+                    {
+                        self.evict_studio(&name);
+                    } else {
+                        self.failed.insert(name.clone(), e.message().to_string());
+                        self.log_once(&name, e.message());
+                    }
                 }
                 Ok(()) => {
                     self.failed.remove(&name);
@@ -370,7 +465,7 @@ impl Stage {
 
     /// One studio's reconcile → act → watch → deliver for a tick, so
     /// any failure inside it is one studio's, never the stage's.
-    async fn studio_pass(
+    pub(crate) async fn studio_pass(
         &self,
         name: &str,
         live: &Inventory,
@@ -379,9 +474,16 @@ impl Stage {
         now_ms: u64,
     ) -> Result<(), Fail> {
         let dir = store::studio_dir(&self.base, name);
+        let live_ledger = || dir.join("events.jsonl").is_file();
+        if !live_ledger() {
+            return Ok(());
+        }
         let state = &self.cached[name];
         let view = reconcile::studio_view(name, &live.terms);
         for action in reconcile::reconcile(name, state, &view, now_ms) {
+            if !live_ledger() {
+                return Ok(());
+            }
             self.act(name, &dir, state, &action, real_slot_free, blocked)
                 .await?;
         }
@@ -389,12 +491,27 @@ impl Stage {
         // did not. Ownership is the `backlot.studio` label, so another
         // studio's record and the user's own shells stay.
         for action in reconcile::finish_sweep(name, state, &live.finished) {
+            if !live_ledger() {
+                return Ok(());
+            }
             self.act(name, &dir, state, &action, real_slot_free, blocked)
                 .await?;
         }
+        if !live_ledger() {
+            return Ok(());
+        }
         self.relabel(name, state, &live.terms).await?;
+        if !live_ledger() {
+            return Ok(());
+        }
         self.watch(name, &dir, state, &live.terms, now_ms).await?;
+        if !live_ledger() {
+            return Ok(());
+        }
         self.deliver(name, &dir, state, &live.terms, now_ms).await?;
+        if !live_ledger() {
+            return Ok(());
+        }
         self.check(name, &dir, state, now_ms)
     }
 
