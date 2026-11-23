@@ -1,10 +1,14 @@
 //! Antigravity (`agy`): the runner mints the session id — the
-//! stage finds it under `~/.gemini/antigravity-cli/conversations/`
-//! after launch and records `role.session`: each `<uuid>.db` is a
-//! sqlite file whose bytes embed the workspace's `file://` URIs
-//! verbatim, so a byte scan finds the role's own — no sqlite read
-//! needed. The launch always passes `--mode accept-edits` (the
-//! measured work posture, for either permission profile),
+//! stage finds it after launch and records `role.session`. agy
+//! 1.5.14 keeps `~/.gemini/antigravity-cli/cache/last_conversations.json`,
+//! mapping an absolute cwd to the id of the last conversation
+//! started there; the role's own cwd names its conversation
+//! directly. Older agy has no map, and the role's workspace URI
+//! may not survive in the db at all, so the fallback stays: each
+//! `<uuid>.db` under `conversations/` is a sqlite file whose bytes
+//! embed the workspace's `file://` URIs verbatim, and a byte scan
+//! finds the role's own — no sqlite read needed. The launch always
+//! passes `--mode accept-edits` (the measured work posture, for either permission profile),
 //! `--effort <effort>`, `--model <model>` and `--settings <file>`
 //! naming the workdir's session-scoped file; `-i` carries the
 //! first prompt on a fresh launch only — a `--conversation <id>`
@@ -148,16 +152,50 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
     !needle.is_empty() && hay.windows(needle.len()).any(|w| w == needle)
 }
 
-/// The session id a live agy role's launch minted: the newest
-/// `<uuid>.db` under `conversations/` created at or after the
-/// role's start whose bytes name `file://<cwd>` — percent-encoded
-/// or verbatim — and no other role already claims.
+/// The id `cache/last_conversations.json` — agy's own cwd → last
+/// conversation map, the sibling of `conversations/` — assigns
+/// `cwd`, when that conversation is usable: the value is a plain
+/// stem (no separator, no `..`), its `<id>.db` exists, was born at
+/// or after `started_ms` (the same clock the scan reads) and no
+/// other role claims it. A missing, unreadable or malformed file is
+/// no answer, never an error; agy older than 1.5.14 keeps no map at
+/// all.
+fn mapped_session(
+    conversations: &Path,
+    cwd: &str,
+    started_ms: u64,
+    taken: &BTreeSet<String>,
+) -> Option<String> {
+    let map = conversations
+        .parent()?
+        .join("cache/last_conversations.json");
+    let text = std::fs::read_to_string(&map).ok()?;
+    let ids: BTreeMap<String, String> = serde_json::from_str(&text).ok()?;
+    let id = ids.get(cwd)?;
+    // A plain stem only: the value names `conversations/<id>.db`,
+    // so a separator or a `..` segment is no answer at all.
+    if id.is_empty() || id.contains(['/', '\\']) || id.contains("..") || taken.contains(id) {
+        return None;
+    }
+    let db = conversations.join(format!("{id}.db"));
+    (file_time_ms(&db)? >= started_ms).then(|| id.clone())
+}
+
+/// The session id a live agy role's launch minted: the id agy's
+/// own cwd → conversation map names for this cwd when its db is
+/// new enough, else the newest `<uuid>.db` under `conversations/`
+/// created at or after the role's start whose bytes name
+/// `file://<cwd>` — percent-encoded or verbatim — and no other
+/// role already claims.
 pub fn session_at(
     conversations: &Path,
     cwd: &str,
     started_ms: u64,
     taken: &BTreeSet<String>,
 ) -> Option<String> {
+    if let Some(id) = mapped_session(conversations, cwd, started_ms, taken) {
+        return Some(id);
+    }
     let needles = uri_needles(cwd);
     let entries = std::fs::read_dir(conversations).ok()?;
     let mut best: Option<(u64, String)> = None;

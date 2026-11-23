@@ -8,8 +8,9 @@ use std::collections::BTreeSet;
 
 use crate::watch::{
     DISCOVERY_STOP_MS, SESSION_NOT_FOUND, SESSION_WAIT_MS, TRUST_KEY_GAP_MS, TRUST_SETTLE_MS,
-    TrustPace, WORK_SAMPLE_EVERY_MS, discovery_blocked, discovery_due, session_event,
-    structured_state, taken_ids, trust_dialog, trust_key, trust_step, work_due,
+    TrustPace, WORK_SAMPLE_EVERY_MS, discovery_age, discovery_blocked, discovery_due,
+    discovery_due_for, session_event, structured_state, taken_ids, trust_dialog, trust_key,
+    trust_step, work_due,
 };
 
 fn actor(runner: &str) -> ActorIdentity {
@@ -147,6 +148,51 @@ fn discovery_is_throttled_and_stops_only_at_the_stop() {
     assert!(discovery_due(61_000, None, 200_000));
     // And nothing looks past the hard stop.
     assert!(!discovery_due(DISCOVERY_STOP_MS + 1, None, 700_000));
+}
+
+/// A stage (re)start gives every still session-less live role a
+/// fresh discovery window: the age is measured from the later of the
+/// role's start and this process's start. A role older than the stop
+/// is due again in a stage started a minute ago — while the old
+/// age rule, reading `role.since_ms` alone, never looks for it again.
+#[test]
+fn a_restart_reopens_the_discovery_window() {
+    let role_started = 1_000_000;
+    let stage_started = role_started + DISCOVERY_STOP_MS + 3_600_000;
+    let now = stage_started + 60_000;
+    // The role is over an hour older than the stop by its own clock.
+    let old_age = now - role_started;
+    assert!(old_age > DISCOVERY_STOP_MS);
+    assert!(!discovery_due(old_age, None, now), "the old rule gave up");
+    assert!(
+        !discovery_due_for(role_started, 0, None, now),
+        "stage born at 0"
+    );
+    // Measured from the stage's start, it is a minute old and due.
+    let age = discovery_age(role_started, stage_started, now);
+    assert_eq!(age, 60_000);
+    assert!(discovery_due_for(role_started, stage_started, None, now));
+    // The five-second throttle and the stop still apply to that
+    // fresh window, measured from the stage.
+    assert!(!discovery_due_for(
+        role_started,
+        stage_started,
+        Some(now - 1_000),
+        now
+    ));
+    assert!(!discovery_due_for(
+        role_started,
+        stage_started,
+        None,
+        stage_started + DISCOVERY_STOP_MS + 1
+    ));
+    // Within the role's own life the stage floor never shortens the
+    // age: a stage older than the role measures from the role.
+    assert_eq!(discovery_age(now, role_started - 1, now), 0);
+    assert_eq!(
+        discovery_age(role_started, role_started - 1, now),
+        now - role_started
+    );
 }
 
 /// Claimed ids pool across every studio and the ids this pass

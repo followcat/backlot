@@ -392,6 +392,8 @@ fn uuid_v4() -> String {
 }
 
 #[cfg(test)]
+mod agy_session_tests;
+#[cfg(test)]
 mod agy_tests;
 #[cfg(test)]
 mod argv_tests;

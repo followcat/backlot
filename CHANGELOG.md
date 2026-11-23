@@ -31,6 +31,17 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **An agy role's session is found again on agy 1.5.14.** The conversation db no longer always
+  embeds the workspace's `file://` URI, so the byte scan found nothing and the role raised
+  `session not found` after 60 s. The stage now reads agy's own
+  `~/.gemini/antigravity-cli/cache/last_conversations.json` first — a cwd → last-conversation map —
+  and takes the id it names for the role's cwd when that `.db` exists, is new enough and unclaimed.
+  A missing, unreadable or malformed map falls back to the old byte scan, so older agy is unchanged.
+- **A restarted stage looks for a role's session again, so installing the fix repairs a stalled
+  role.** The ten-minute discovery stop is measured from the later of the role's start and the stage
+  process's own start. A `role.started` replays unchanged across a restart, so a role already past
+  the stop previously kept its open `session not found` forever; now a restarted stage re-scans it,
+  records `role.session` and clears the attention on its own.
 - **A cmd role's extra directory really stops the outside-workspace prompt.**
   `--add-dir` only feeds the model's `<workspace>` context; the tool permission check
   builds its runtime without that list and reads
