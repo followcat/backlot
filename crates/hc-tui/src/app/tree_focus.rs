@@ -215,9 +215,12 @@ impl App {
                     self.focus_studio(&key);
                 }
             }
-            StudioRow::FinishedFold { .. } | StudioRow::Unreachable => {
+            StudioRow::FinishedFold { .. } => {
                 self.toggle_finished_group(machine);
             }
+            // A machine that cannot be reached has no stage to start —
+            // Enter folds its one line, like the machine row itself.
+            StudioRow::Unreachable => self.tree_toggle_endpoint(endpoint),
             StudioRow::Finished { id } => {
                 let key = StudioKey { machine, id };
                 let menu = self.finished_studio_menu(&key);
