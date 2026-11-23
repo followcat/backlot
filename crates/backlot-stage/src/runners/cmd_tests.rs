@@ -130,6 +130,21 @@ fn rules_per_role() {
     }
 }
 
+/// D17a: Hollywood's list carries the read-only help rules, and never
+/// the bare `Shell(backlot)` family — a help read is not a licence to
+/// run every backlot command.
+#[test]
+fn hollywood_may_read_its_own_cli() {
+    let rules = allow_rules("hollywood", &[]);
+    for rule in ["Shell(backlot --help:*)", "Shell(backlot help:*)"] {
+        assert!(rules.iter().any(|r| r == rule), "{rules:?}");
+    }
+    assert!(
+        !rules.iter().any(|r| r == "Shell(backlot)"),
+        "{rules:?}: no command family"
+    );
+}
+
 /// A settings file that does not exist yet is written with the
 /// minimal schema cmd itself accepts: `permissions` only.
 #[test]

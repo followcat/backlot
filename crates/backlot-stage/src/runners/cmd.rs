@@ -120,6 +120,10 @@ pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
             "backlot hollywood propose",
             "backlot hollywood report",
             "backlot studio new --dry-run",
+            // Read-only: Hollywood may check its own CLI's flags
+            // without stopping at a prompt.
+            "backlot --help",
+            "backlot help",
         ]
         .iter()
         .map(|c| format!("Shell({c}:*)"))
