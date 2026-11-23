@@ -37,6 +37,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
   `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
 
+- **Hollywood's terminal starts at a readable size.** `bl-hollywood`'s `terminal.run` now carries
+  an initial grid of at least 100 columns and hc's `200×120` default, so a person who peeks or
+  focuses it sees its answers instead of a 21-column strip. Peeking stays
+  strictly read-only: a peek attaches as an observer, which never sends a size, so no client view
+  can narrow it — only focusing it into a pane does (H3).
+
 - **Hollywood's AGENTS.md carries a generated CLI reference.** The stage writes one line per
   command Hollywood may run, with its flags, sliced from the CLI's own usage strings
   (`args_usage.rs`, `args_hwood.rs`) at every start, and substitutes it for `{{CLI_REFERENCE}}`

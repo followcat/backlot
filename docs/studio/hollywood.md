@@ -195,6 +195,13 @@ The stage owns the folder: `AGENTS.md` (the role prompt, rewritten every start),
 (made once, never overwritten), `drafts/<studio>/` for studio-new work, plus `messages/`,
 `reports/` and `roles/hollywood/`. Hollywood owes no steps and is never nudged.
 
+The terminal starts at a readable grid — at least 100 columns and hc's `200×120` default
+(`hlife::hsize`), so a person who peeks or focuses `bl-hollywood` sees its answers, not a
+21-column strip. Peeking is strictly read-only: a peek attaches as `Role::Observe`, and an
+observer never sends a size (only the focused pane and a visible size lease do). So no client
+view can narrow `bl-hollywood` — only focusing it into a pane, the normal way, sizes it to that
+pane.
+
 ### Its CLI reference, generated
 
 Hollywood's `AGENTS.md` carries a **command reference generated from the CLI's own usage
