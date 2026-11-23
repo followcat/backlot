@@ -16,6 +16,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: x86_64-unknown-linux-musl
       # mlugg/setup-zig v1 fetches the obsolete zig-linux-x86_64-* name;
       # install the verified zig-x86_64-linux-* release directly.
       - uses: actions/cache@v4
@@ -39,6 +40,12 @@ jobs:
       - run: python3 -m unittest discover -s scripts/parity -p 'test_*.py'
       - run: sh scripts/test-install.sh
       - run: sh tools/test-fetch-zig-deps.sh
+      - name: Link static musl binary
+        run: |
+          cargo build --target x86_64-unknown-linux-musl -p hc-tui
+          b=target/x86_64-unknown-linux-musl/debug/backlot
+          file "$b" | grep -q "static"
+          "$b" --version
 
   macos:
     runs-on: macos-latest
