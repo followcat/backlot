@@ -27,6 +27,11 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   context menu. `Esc` returns the keys to the terminal. `Ctrl+B t` is free in the default keymap
   (`Ctrl+B Tab`/`Ctrl+B h` would collide with the pane cycle/focus bindings).
 
+- **The empty states say what to do.** With every stage down and no published studio, the lot
+  now says `<n> studios on stopped stages — s to start` (starting that one stage when a single
+  machine holds them all) instead of `no studios`, and the cast says `stage stopped — s to start`
+  instead of drawing blank.
+
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same
   `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the

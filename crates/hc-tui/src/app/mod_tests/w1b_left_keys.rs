@@ -375,3 +375,84 @@ async fn the_tree_cursor_paints_the_highlighted_row() {
     let highlighted = (0..28).any(|y| buf[(0, y)].symbol() == "▌");
     assert!(highlighted, "the tree row carries the accent cursor");
 }
+
+// ---------- the empty states say what to do ----------
+
+/// `two_machine_studio_app` with every stage down and no document
+/// published, but both ledgers listing their studio — the rig's empty
+/// state: the tree lists studios, the lot and the cast have none.
+fn every_stage_down() -> App {
+    let mut app = two_machine_studio_app();
+    let version = app.view.version + 1;
+    let terms: Vec<_> = app
+        .view
+        .inventory
+        .terminals()
+        .values()
+        .filter(|t| t.name.as_deref() != Some("backlot-stage"))
+        .cloned()
+        .collect();
+    app.view.inventory_mut().replace(version, terms);
+    app.view.documents_mut().clear();
+    app.studio_index.note_reply(
+        None,
+        false,
+        Instant::now(),
+        Ok(r#"{"studios":[{"name":"acme-shop","state":"live"}]}"#),
+    );
+    app.studio_index.note_reply(
+        Some("host-b".into()),
+        false,
+        Instant::now(),
+        Ok(r#"{"studios":[{"name":"beta-tools","state":"live"}]}"#),
+    );
+    app.reconcile_published_view();
+    app.studio.current = None;
+    app
+}
+
+#[tokio::test]
+async fn the_lot_says_how_many_studios_wait_on_stopped_stages() {
+    let mut app = every_stage_down();
+    app.area = (160, 32);
+    app.panel.mode = crate::panel::PanelMode::Expanded;
+    app.panel.focused = false;
+    let backend = draw_to(&mut app, 160, 32);
+    let text = screen_lines(&backend).join("\n");
+    assert!(
+        text.contains("2 studios on stopped stages"),
+        "the lot names the studios the tree lists — {text}"
+    );
+    assert!(
+        !text.contains("no studios"),
+        "the bare `no studios` is gone — {text}"
+    );
+    assert!(app.panel.stopped.is_some(), "the latch carries the count");
+}
+
+#[tokio::test]
+async fn the_empty_cast_says_stage_stopped() {
+    let mut app = every_stage_down();
+    app.area = (160, 32);
+    app.sidebar_width = 34;
+    let backend = draw_to(&mut app, 160, 32);
+    let text = screen_lines(&backend).join("\n");
+    assert!(
+        text.contains("stage stopped — s to start"),
+        "the empty cast explains itself — {text}"
+    );
+}
+
+#[tokio::test]
+async fn a_running_stage_keeps_the_cast_blank_not_the_stopped_line() {
+    // acme-shop's stage runs — the cast shows its studio, never the
+    // `stage stopped` line.
+    let mut app = two_machine_studio_app();
+    app.area = (120, 28);
+    let backend = draw_to(&mut app, 120, 28);
+    let text = screen_lines(&backend).join("\n");
+    assert!(
+        !text.contains("stage stopped — s to start"),
+        "a live studio's cast draws — {text}"
+    );
+}

@@ -316,6 +316,9 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   list comes from `backlot studio list --json`, run locally or over `terminal.run` for a remote,
   cached and refreshed on a stage change or every 30 s at most. The tree scrolls to the machine
   row of the studio the selection lands on.
+- `Ctrl+B t` gives the tree the keyboard — `↑`/`↓` move the highlighted row (drawn with the
+  accent `▌`), `Enter` runs the row's click action, `m` opens its context menu, `Esc` returns the
+  keys to the terminal. The whole tree's surfaces are also in `Ctrl+B ?`'s `machines` group.
 - The stage log is read-only: when its terminal holds the focus, typed keys are dropped and the
   mode bar reads `stage log — read only`. A stage start never moves the focus to it.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the

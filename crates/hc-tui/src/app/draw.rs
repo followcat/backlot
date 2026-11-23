@@ -107,6 +107,18 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     });
     if let Some(view) = cast.as_mut() {
         view.studio_focused = studio_focused;
+        // W1b: with no studio current and no stage running, the cast
+        // says `stage stopped — s to start` rather than drawing blank.
+        // The `select a studio` hint (studios exist, none current) keeps
+        // its own line — this fills the otherwise-empty cast.
+        let stage_running = app.projection.endpoints.iter().any(|endpoint| {
+            let machine = match &endpoint.endpoint_id {
+                crate::chrome::snapshot::ClientEndpointId::Local => None,
+                crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.as_str()),
+            };
+            app.machine_stage_running(machine)
+        });
+        view.stopped = view.studio.is_none() && !view.hint && !stage_running;
     }
     // W1: the extra studio rows under each machine, and the current
     // studio the tree highlights and keeps in view — owned before the
