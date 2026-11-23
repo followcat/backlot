@@ -48,6 +48,15 @@ impl App {
             return;
         }
         self.shell_state.sidebar_collapsed = false;
+        // Entering the tree hands it the keys from any other owner: a
+        // focused dock, the expanded Call Sheet, Navigate mode, the
+        // opening page — the same releases the studio keys run.
+        self.nav_leave_overlays();
+        if self.mode == crate::app::Mode::Navigate {
+            self.mode = crate::app::Mode::Normal;
+            self.navigate_target = None;
+        }
+        self.peek = None;
         let rows = self.tree_rows();
         if rows.is_empty() {
             return;
