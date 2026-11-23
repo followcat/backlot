@@ -569,6 +569,42 @@ you approve what is actually there. A prompt answered in the terminal itself clo
 `prompt answered elsewhere` a couple of seconds later, so the next prompt raises fresh either way.
 A denied role gets a notice telling it the command did not run.
 
+## Changing who plays a role
+
+Actors are recast through `backlot cast`; the three fixed roles — producer, director and writer —
+are swapped with `backlot recast`:
+
+```sh
+backlot recast --person director --runner cmd --model deepseek-v4.1-flash --reason "quota errors" --studio acme-shop
+```
+
+The new identity takes the runner, model, effort, permission profile and, at launch, the runner
+version. `--permission-profile standard|worktree` overrides the profile the role plays now; without
+it the current one is kept. The command is the user's: a role terminal is refused, exactly like
+`card apply`. It runs the same identity and seat rules `studio new --dry-run` does — a supported,
+installed runner, the cast file's effort and cline-model rules, and the studio's `[limits]` still
+seating the fixed roles — and refuses a `finished` studio, an actor key (recast actors with
+`cast`), and an identity that changes nothing.
+
+The stage carries it out on its next tick: the old terminal is closed deliberately (`role.closed`,
+reason `recast` — never counted as a loss) and a fresh terminal starts under the same
+`bl-<studio>-<role>` name. **The conversation is new** — the old runner's session is never resumed
+— and the new role's first prompt says it is taking the role over and must read `backlot status`
+and `backlot records` before acting. **The record is not:** the ledger keeps every event, earlier
+deliveries and reviews stay attributed to the identity that made them, and messages already queued
+for the role are delivered to the new terminal under the usual guarded-send rules. A recast while
+the old role has an open permission prompt still closes it — the answer waits, the replacement does
+not.
+
+Hollywood may propose the same change as a card (see [hollywood.md](hollywood.md)):
+
+```sh
+backlot hollywood propose recast --studio acme-shop --person director --runner cmd --model deepseek-v4.1-flash --why "quota errors" --as hollywood
+```
+
+The card shows `recast director → cmd/deepseek-v4.1-flash`; applying it re-checks the role's
+identity, and the stage records one `role.recast` with the card's marker.
+
 ## Changing the requirement midway
 
 Requirements are versioned. The producer records a new version — you can record one directly too:

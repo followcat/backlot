@@ -1,5 +1,47 @@
 # Studio progress
 
+## R1: recasting a fixed role, and a runner PATH the stage reads (2026-11-23)
+
+- Done: `role.recast` is a studio event carrying a fixed role's full new
+  identity, an optional reason and the `c<n>` marker a card's execution writes.
+  The reduced state uses the newest identity for that role; the lifecycle record
+  and every earlier event keep the identity they were recorded with, so
+  deliveries and reviews stay attributed to whoever made them. `backlot recast
+  --person producer|director|writer --runner <r> --model <m> [--effort <e>]
+  [--permission-profile standard|worktree] [--reason <r>]` is the user's alone
+  (a `BACKLOT_ROLE` shell is refused like `card apply`) and reuses the dry run's
+  runner/effort/cline-model rules and the `[limits]` seat check. On its tick the
+  stage closes the old terminal with `role.closed` (reason `recast`, never a
+  loss) and starts a fresh terminal under `bl-<studio>-<role>` with the new
+  identity, never resuming the old session; queued messages stay queued, and a
+  recast while an old permission prompt is open still closes it. The first
+  prompt gains a takeover section naming `backlot status` and `backlot
+  records`. Hollywood gains a `recast` card whose base is the role's current
+  identity; its text reads `recast director → cmd/deepseek-v4.1-flash`, `card
+  show` prints both identities, and execution appends one `role.recast`
+  `by: user` with the card marker. Separately, a role's launch env now reads
+  `[runner_env.<runner>]` from the user config (`~/.config/backlot/config.toml`)
+  as a lower layer than the per-core config, so the PATH `hollywood setup`
+  writes reaches the stage; the per-core table still wins, and only
+  `[runner_env]` is read from the user config.
+- Measured: model tests cover the reduction (newest identity wins, the past is
+  untouched, an older ledger replays unchanged), every refusal (actor key,
+  finished studio, unsupported runner, effort both ways, cline model, profile,
+  a `[limits]` cap that leaves no fixed slot, an unchanged identity), the
+  user-only role gate, and the card base's staleness. Stage tests cover a live
+  role closed with reason `recast` then started fresh with no resume, a
+  never-started role and a lost role starting under the new identity, a queued
+  message still targeting the role's terminal, the recast prompt, the CLI usage
+  and role-terminal refusal, `hollywood propose recast` + `card show`, and the
+  card's execution once with its marker plus its stale and crash-replay paths.
+  `config`/`act` tests prove the user-config `[runner_env]` layer, the per-core
+  override and the position-only malformed refusal. `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test
+  --workspace` pass.
+- Not verified: no live-session run — a real runner swap and a real terminal
+  close are exercised through the ledger, the pure reconcile and the fake core
+  only.
+
 ## Ux: stopping the stage belongs to the machine, not a studio
 
 - Done: `Stop stage…` sat in each studio's context menu, but a stage
