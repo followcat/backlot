@@ -116,7 +116,12 @@ screen read-only, and `Enter` focuses `bl-hollywood`. The `allow` is the runner'
 key — cmd's `❯ 1. Yes` — never "don't ask again", which would allow every `backlot` command,
 deletes included. Once a reply lands the row leaves; a `waiting` Hollywood after a reply shows
 nothing, and the calm row and headline carry on as before. The stage sends the key only while
-the prompt the decision was made on still shows.
+the prompt the decision was made on still shows. The prompt is found whichever channel names it —
+the terminal's structured status (`kind: permission`, `state: blocked`), the hook signal, or a
+picker on the screen — so a terminal resized narrow cannot hide the row. Its detail is unwrapped
+from the screen's wrapping: the whole command for cmd, the question for the other runners, and
+`permission prompt` when the screen cannot name it. The same width-independent picker detection
+and detail reading raise a role's `permission prompt` attention.
 
 Everything the bar draws comes from the published `backlot` summary documents plus the
 watcher's machine and stage state — never scraped terminal output — so the frames show even

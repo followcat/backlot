@@ -7,6 +7,7 @@
 
 use backlot_model::summary::Work;
 
+use super::prompt::joined;
 use crate::watch::trust_dialog;
 
 /// `runner`'s current state from the terminal's visible text.
@@ -20,73 +21,74 @@ pub(crate) fn work_state(runner: &str, screen: &str) -> Work {
     Work::Waiting
 }
 
-fn has_line_containing(screen: &str, needle: &str) -> bool {
-    screen.lines().any(|l| l.contains(needle))
+/// cmd's picker: the option cursor plus both neighbouring options.
+/// Joined first, so the option texts wrapping across lines cannot
+/// hide the picker (S12a).
+fn cmd_picker(screen: &str) -> bool {
+    let flat = joined(screen);
+    flat.contains("❯ 1. Yes") && flat.contains("2. Yes, don't ask") && flat.contains("3. No")
 }
 
-/// A line whose trimmed start begins with `prefix`.
-fn has_line_starting(screen: &str, prefix: &str) -> bool {
-    screen.lines().any(|l| l.trim_start().starts_with(prefix))
+/// The first whole-word position of `word` in the joined text.
+fn word_at(text: &str, word: &str) -> Option<usize> {
+    text.match_indices(word).map(|(i, _)| i).find(|&i| {
+        text[..i]
+            .chars()
+            .next_back()
+            .is_none_or(char::is_whitespace)
+            && text[i + word.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_alphanumeric())
+    })
 }
 
-/// A Devin option line without its selection cursor: the `❭` marks
-/// the highlighted option (`❭ Allow` by default) and can sit on
-/// `Deny` or `Bypass mode` instead.
-fn devin_option(l: &str) -> &str {
-    let t = l.trim();
-    t.strip_prefix('❭').map_or(t, str::trim_start)
-}
-
-/// Devin's picker line as read on 3000.12.32: `Allow` — after an
-/// optional `❭` cursor — then `← ◼◼◼◼ →` and a scope word. Any
-/// scope counts (`Once`, `Session`, …): it is the same prompt.
-fn devin_picker_line(l: &str) -> bool {
-    let Some(rest) = devin_option(l).strip_prefix("Allow") else {
+/// Devin's picker read on the joined screen: the `Allow` option with
+/// its `← ◼◼◼◼ →` scope control and the `Deny` option — the shape
+/// measured on 3000.12.32. Any scope counts (`Once`, `Session`, …):
+/// it is the same prompt.
+fn devin_blocked(screen: &str) -> bool {
+    let flat = joined(screen);
+    let Some(i) = word_at(&flat, "Allow") else {
         return false;
     };
-    let Some(i) = rest.find('←') else {
+    let rest = &flat[i + "Allow".len()..];
+    let Some(left) = rest.find('←') else {
         return false;
     };
-    let Some(j) = rest[i..].find('→') else {
+    let Some(right) = rest[left..].find('→') else {
         return false;
     };
-    !rest[i + j + '→'.len_utf8()..].trim().is_empty()
+    let scope = rest[left + right + '→'.len_utf8()..].trim_start();
+    !scope.is_empty() && word_at(&flat, "Deny").is_some()
 }
 
 /// The runner's screen reads as an unanswered permission or trust
-/// prompt.
+/// prompt. Markers are matched on the joined lines: a narrow terminal
+/// wraps the question and the options, never the prompt.
 fn blocked(runner: &str, screen: &str) -> bool {
     match runner {
         "claude" => {
-            trust_dialog(screen)
-                || (has_line_containing(screen, "Do you want to")
-                    && has_line_starting(screen, "❯ 1."))
+            let flat = joined(screen);
+            trust_dialog(screen) || (flat.contains("Do you want to") && flat.contains("❯ 1."))
         }
         "codex" => {
-            has_line_containing(screen, "Would you like to") && has_line_starting(screen, "› 1.")
+            let flat = joined(screen);
+            flat.contains("Would you like to") && flat.contains("› 1.")
         }
-        "devin" => {
-            screen.lines().any(devin_picker_line)
-                && screen.lines().any(|l| devin_option(l) == "Deny")
-        }
+        "devin" => devin_blocked(screen),
         // The OpenCode permission screen is not measured yet — see
         // docs/studio/runners.md.
         "opencode" => {
-            has_line_containing(screen, "Permission required")
-                && has_line_containing(screen, "Allow once")
+            let flat = joined(screen);
+            flat.contains("Permission required") && flat.contains("Allow once")
         }
         "cursor" => cursor_trust_dialog(screen) || cursor_approval_picker(screen),
-        // Command Code's permission prompt: the `needs to …`
-        // sentence plus the numbered picker cursor (S12a). The
-        // folder-trust dialog is blocked too — `--trust` should
-        // keep it away, so it is the user's prompt, never answered.
-        "cmd" => {
-            cmd_trust_dialog(screen)
-                || ((has_line_containing(screen, "needs to execute")
-                    || has_line_containing(screen, "needs to run")
-                    || has_line_containing(screen, "make this edit to"))
-                    && has_line_starting(screen, "❯ 1."))
-        }
+        // Command Code's permission prompt: the numbered picker under
+        // its `needs to …` sentence (S12a). The folder-trust dialog is
+        // blocked too — `--trust` should keep it away, so it is the
+        // user's prompt, never answered.
+        "cmd" => cmd_trust_dialog(screen) || cmd_picker(screen),
         "fake" => fake_state(screen) == Some(Work::Blocked),
         // cline's approval block (S14a section 4) — it should never
         // appear under `--yolo`, which forces auto-approve on; when
@@ -102,8 +104,8 @@ fn blocked(runner: &str, screen: &str) -> bool {
 /// screen still showing it means the user switched the mode off — the
 /// prompt is theirs and the stage never answers it.
 pub(crate) fn cline_approval(text: &str) -> bool {
-    has_line_containing(text, "Cline needs permission")
-        && has_line_containing(text, "Approve tool call?")
+    let flat = joined(text);
+    flat.contains("Cline needs permission") && flat.contains("Approve tool call?")
 }
 
 /// The runner's screen reads as mid-turn.
