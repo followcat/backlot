@@ -563,6 +563,7 @@ impl StudioMenu {
 }
 
 mod items;
+mod items_views;
 
 #[cfg(test)]
 #[path = "finished_tests.rs"]
