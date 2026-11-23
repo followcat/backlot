@@ -241,3 +241,34 @@ fn every_attention_reason_is_documented() {
         );
     }
 }
+
+/// Every reason's class is in the panel's table, and the class there is
+/// the one the shared function returns.
+#[test]
+fn attention_classes_are_documented() {
+    use backlot_model::attention::AttentionClass;
+    let panel = repo_file("docs/studio/panel.md");
+    let table = section(&panel, "## Person states and attentions");
+    let documented = |reason: &str| {
+        let word = match AttentionClass::of(reason, false) {
+            AttentionClass::NeedsYou => "needs you",
+            AttentionClass::Stuck => "stuck",
+            AttentionClass::Info => "info",
+        };
+        let key = if reason.ends_with(" prep failed") {
+            "<runner> prep failed".to_string()
+        } else {
+            format!("`{reason}`")
+        };
+        table
+            .lines()
+            .any(|line| line.contains(&key) && line.contains(&format!("| {word} |")))
+    };
+    for reason in reasons::ALL {
+        assert!(documented(reason), "panel.md's table misses `{reason}`");
+    }
+    assert!(
+        documented(backlot_model::event::FOLDER_TRUST),
+        "panel.md's table misses the folder-trust dialog"
+    );
+}

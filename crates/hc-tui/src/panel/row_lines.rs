@@ -7,6 +7,21 @@ use backlot_model::summary::{RoleSummary, StudioSummary, TaskSummary};
 
 use super::data::StudioRef;
 
+/// The dim line a role's details carry for a stage-bookkeeping
+/// attention — `· session id not found`. It never shows on the row.
+pub(crate) fn info_line(role: &RoleSummary) -> Option<String> {
+    (crate::studio::glyphs::Person::attention_class(role)
+        == Some(backlot_model::attention::AttentionClass::Info))
+    .then(|| {
+        let detail = role
+            .attention_detail
+            .as_deref()
+            .or(role.attention.as_deref())
+            .unwrap_or("stage note");
+        format!("· {detail}")
+    })
+}
+
 /// `14:02` — a ledger millisecond stamp as the local wall clock's
 /// hour and minute, the tab clock's own format. `None` when the
 /// clock cannot be read; the line then just loses its time.
@@ -71,6 +86,9 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
                 l2 = format!("{l2} · {word}");
             }
             lines.push(l2);
+            if let Some(line) = info_line(role) {
+                lines.push(line);
+            }
             if let Some(line) = stage_answer_line(role) {
                 lines.push(line);
             }
@@ -91,14 +109,22 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
             } else {
                 agent
             });
-            let l2 = role
-                .attention_detail
-                .as_deref()
-                .or(role.attention.as_deref())
-                .map(|a| format!("! {a}"))
-                .or_else(|| role.doing.clone())
-                .unwrap_or_else(|| role.state.clone());
+            let l2 = match crate::studio::glyphs::Person::attention_class(role) {
+                Some(backlot_model::attention::AttentionClass::Info) => {
+                    role.doing.clone().unwrap_or_else(|| role.state.clone())
+                }
+                _ => role
+                    .attention_detail
+                    .as_deref()
+                    .or(role.attention.as_deref())
+                    .map(|a| format!("! {a}"))
+                    .or_else(|| role.doing.clone())
+                    .unwrap_or_else(|| role.state.clone()),
+            };
             lines.push(l2);
+            if let Some(line) = info_line(role) {
+                lines.push(line);
+            }
             if let Some(line) = stage_answer_line(role) {
                 lines.push(line);
             }

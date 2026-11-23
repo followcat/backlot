@@ -4,12 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use crate::state::{Message, ReportRecord, StudioState};
+use crate::event::EventKind;
+use crate::state::{Message, ReportRecord, StudioState, replay};
 use crate::summary::{
     HEADLINE_CHARS, MAX_STUDIO_EXCHANGE, SUMMARY_SCHEMA, Summary, studio_exchange,
     studio_exchange_files, summary_with_exchange,
 };
-use crate::testkit::base_state;
+use crate::testkit::{base_events, base_state, ev, role_started, state_with};
 
 fn msg(
     seq: u64,
@@ -279,6 +280,151 @@ fn studio_exchange_caps_count_and_200_char_utf8_and_stays_under_budget() {
     );
     let bytes = serde_json::to_vec(&doc).unwrap().len();
     assert!(bytes < 60_000, "summary grew to {bytes} bytes");
+}
+
+/// A role's newest `tell user` lands as `asks`; the user's `tell`
+/// back to that role answers it.
+#[test]
+fn role_asks_tracks_the_newest_unanswered_tell_user() {
+    let mut state = state_with(&base_events(), vec![("producer", role_started("producer"))]);
+    state.messages.push(msg(
+        10,
+        "producer",
+        "user",
+        Some("messages/10-q.md"),
+        None,
+        None,
+    ));
+    state.messages.push(msg(
+        11,
+        "producer",
+        "user",
+        Some("messages/11-q2.md"),
+        None,
+        None,
+    ));
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "first question".into());
+    snippets.insert(("acme-shop".into(), 11), "what should we build?".into());
+    let build = |s: &StudioState| {
+        summary_with_exchange(
+            &[("acme-shop".into(), s.clone())],
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &snippets,
+            1,
+        )
+        .studios
+        .remove(0)
+    };
+    let studio = build(&state);
+    let producer = studio
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .expect("the producer's row");
+    assert_eq!(producer.asks.as_deref(), Some("what should we build?"));
+
+    state.messages.push(msg(
+        12,
+        "user",
+        "producer",
+        Some("messages/12-a.md"),
+        None,
+        None,
+    ));
+    let studio = build(&state);
+    let producer = studio.roles.iter().find(|r| r.role == "producer").unwrap();
+    assert!(producer.asks.is_none(), "{:?}", producer.asks);
+}
+
+/// A ledger action the role records afterwards answers the question —
+/// the person answered in the role's terminal, not with a `tell`.
+#[test]
+fn role_asks_clears_when_the_role_acts_after_it() {
+    let mut events = base_events();
+    events.push(ev(4, "producer", role_started("producer")));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(
+        11,
+        "producer",
+        EventKind::ReqVersion {
+            version: 2,
+            file: "req/v2.md".into(),
+            summary: "second cut".into(),
+        },
+    ));
+    let state = replay(&events);
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "which shop?".into());
+    let studio = summary_with_exchange(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        1,
+    )
+    .studios
+    .remove(0);
+    let producer = studio.roles.iter().find(|r| r.role == "producer").unwrap();
+    assert!(producer.asks.is_none(), "{:?}", producer.asks);
+}
+
+/// A stage-written event — an attention raised on the role — is not
+/// the role answering, so the question stays.
+#[test]
+fn a_stage_written_event_does_not_answer_the_role() {
+    let mut events = base_events();
+    events.push(ev(4, "producer", role_started("producer")));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(
+        11,
+        "stage",
+        EventKind::AttentionRaised {
+            role: "producer".into(),
+            reason: "session id not found".into(),
+            detail: "still looking".into(),
+            needs_user: false,
+        },
+    ));
+    let state = replay(&events);
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "which shop?".into());
+    let studio = summary_with_exchange(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        1,
+    )
+    .studios
+    .remove(0);
+    let producer = studio.roles.iter().find(|r| r.role == "producer").unwrap();
+    assert_eq!(producer.asks.as_deref(), Some("which shop?"));
 }
 
 #[test]

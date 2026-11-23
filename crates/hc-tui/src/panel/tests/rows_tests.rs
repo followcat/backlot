@@ -4,7 +4,7 @@
 use super::*;
 use crate::panel::data::StudioRef;
 use crate::panel::row_lines::person_drawer;
-use crate::panel::rows::{Target, rows};
+use crate::panel::rows::{Owed, Target, rows};
 use crate::panel::rows_fit::mark_counts;
 use crate::panel::{Panel, PanelMode};
 use crate::studio::StudioKey;
@@ -215,7 +215,7 @@ fn mark_counts_follow_the_mark_order() {
             (Person::DirPrompt, 1),
             (Person::Lost, 1),
             (Person::Working, 3),
-            (Person::Idle, 2),
+            (Person::Ready, 2),
             (Person::Resumable, 1),
         ]
     );
@@ -394,6 +394,30 @@ fn a_first_run_dock_names_the_setup_row() {
     assert!(
         out.iter()
             .all(|row| !matches!(row, crate::panel::Row::SetupHint)),
+        "{out:?}"
+    );
+}
+
+/// The lot studio row carries the studio's own next step: a studio
+/// with no requirement says to tell the producer what to build.
+#[test]
+fn the_studio_row_shows_its_next_step() {
+    use crate::panel::rows::Row;
+    let mut value = summary_json();
+    value["studios"][0]["requirement_version"] = serde_json::json!(0);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let p = panel(PanelMode::Expanded);
+    let all = machines(Some(&summary));
+    let out = rows(&all, |_| true, |_| true, &p, p.mode, None, 40);
+    assert!(
+        out.iter().any(|row| matches!(
+            row,
+            Row::Owed {
+                kind: Owed::Next,
+                text,
+                ..
+            } if text == "next: tell the producer what to build"
+        )),
         "{out:?}"
     );
 }

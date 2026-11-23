@@ -18,9 +18,10 @@ use crate::hollywood::HollywoodActivity;
 use crate::studio::StudioKey;
 use crate::studio::glyphs::{Person, PriorityMark};
 
-/// What the pill counts: `S` studios, `U` waits that are the user's
-/// (user-owned prompts, stopped stages under live studios, ledger
-/// errors), `C` ready work (open cards + `ready_to_finish`), `unread`
+/// What the pill counts: `S` studios, `U` the one needs-you list
+/// (prompts, roles that need the user, blocked Hollywood, new
+/// studios, stage issues, cards and ready studios — so `C`, its old
+/// ready-work count, stays 0 now that the list covers it), `unread`
 /// new Hollywood replies while collapsed, and `activity` for spinner.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct LotCounts {

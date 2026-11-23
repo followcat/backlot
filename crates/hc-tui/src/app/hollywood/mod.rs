@@ -244,7 +244,15 @@ impl App {
     fn hollywood_wait_selected(&self) -> bool {
         matches!(
             self.hollywood.selected,
-            Some(Target::Prompt(..) | Target::Stage(..) | Target::Card(_) | Target::Ready(_))
+            Some(
+                Target::Prompt(..)
+                    | Target::Role(..)
+                    | Target::Hollywood
+                    | Target::Tell(_)
+                    | Target::Stage(..)
+                    | Target::Card(_)
+                    | Target::Ready(_)
+            )
         )
     }
 

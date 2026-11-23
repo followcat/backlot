@@ -388,8 +388,10 @@ async fn the_lot_pill_sits_at_the_bar_s_right_end_and_opens_on_click() {
     app.area = (120, 24);
     let backend = draw_to(&mut app, 120, 24);
     let top = &screen_lines(&backend)[0];
-    assert!(top.contains('✦'), "the lot pill: {top}");
-    assert!(top.contains("2 cards"), "the card count: {top}");
+    assert!(top.contains("✦"), "the lot pill: {top}");
+    // The two open cards are on the needs-you list, so the pill's
+    // urgent count names them.
+    assert!(top.contains("!2 you"), "the needs-you count: {top}");
     let pill = app.hit_map.lot_pill;
     assert_eq!(pill.height, 1);
     assert_eq!(pill.x + pill.width, 120, "the right end of the row");

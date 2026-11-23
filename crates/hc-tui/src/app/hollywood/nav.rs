@@ -117,14 +117,28 @@ impl App {
                 .filter(|t| {
                     matches!(
                         t,
-                        Target::Prompt(..) | Target::Stage(..) | Target::Card(_) | Target::Ready(_)
+                        Target::Prompt(..)
+                            | Target::Role(..)
+                            | Target::Hollywood
+                            | Target::Tell(_)
+                            | Target::Stage(..)
+                            | Target::Card(_)
+                            | Target::Ready(_)
                     )
                 })
                 .count()
         };
         if !matches!(
             band.get(index),
-            Some(Target::Prompt(..) | Target::Stage(..) | Target::Card(_) | Target::Ready(_))
+            Some(
+                Target::Prompt(..)
+                    | Target::Role(..)
+                    | Target::Hollywood
+                    | Target::Tell(_)
+                    | Target::Stage(..)
+                    | Target::Card(_)
+                    | Target::Ready(_)
+            )
         ) {
             return;
         }
@@ -179,7 +193,12 @@ impl App {
             }
             Some(Target::NewStudio) => self.hollywood_new_studio(),
             Some(Target::Prompt(studio, role)) => self.hollywood_prompt_open(&studio, &role),
+            Some(Target::Role(studio, role)) => self.hollywood_prompt_open(&studio, &role),
             Some(Target::Hollywood) => self.hollywood_focus_terminal(),
+            Some(Target::Tell(key)) => {
+                self.focus_studio(&key);
+                self.hollywood_leave();
+            }
             Some(Target::Stage(machine, offline)) => {
                 if offline {
                     self.hollywood_check_machine(machine.as_deref());

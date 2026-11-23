@@ -174,6 +174,7 @@ impl App {
                 self.panel.finish_confirm = None;
             }
             KeyCode::Char('i') if plain => self.panel_input_focus(false),
+            KeyCode::Char('t') if plain => self.panel_input_focus(false),
             KeyCode::Char('/') if plain => self.panel_input_focus(true),
             KeyCode::Char('m') if plain => self.panel_menu_selected(),
             KeyCode::Char('+') | KeyCode::Char('=')

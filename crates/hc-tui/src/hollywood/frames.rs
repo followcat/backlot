@@ -324,6 +324,19 @@ fn draw_studio(
         &format!(" {}", truncate_end(what, inner.saturating_sub(1) as usize)),
         on(colour, bg),
     );
+    // Row 4: the studio's own next step — the one thing to do next
+    // when its state names it. Everything else stays blank.
+    if let Some(step) = crate::panel::data::next_step(studio.studio) {
+        let text = format!("next: {step}");
+        put_text(
+            buf,
+            rect.x + 2,
+            rect.y + 4,
+            inner,
+            &format!(" {}", truncate_end(&text, inner.saturating_sub(1) as usize)),
+            on(palette.overlay1, bg),
+        );
+    }
     // Row 5: the cast, one glyph each; `◈ <open> rev` in blue when
     // reviews wait, else `<N> cast`.
     let cast_label = if studio.studio.open_reviews > 0 {

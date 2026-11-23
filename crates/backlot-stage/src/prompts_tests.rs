@@ -588,3 +588,51 @@ fn first_prompt_is_one_line() {
     assert_eq!(f, dir.join("prompts").join("actor-t1-c1.first.txt"));
     assert_eq!(fs::read_to_string(&f).unwrap(), format!("{line}\n"));
 }
+
+/// The producer's questions reach the person: every one is also a
+/// `tell user`, and the first "what should we build" goes that way
+/// when no requirement is recorded yet. The terminal stays the
+/// conversation.
+#[test]
+fn the_producer_records_every_question_as_a_tell() {
+    let text = template(RoleKind::Producer);
+    assert!(
+        text.contains("`backlot tell user --text <question>`"),
+        "{text}"
+    );
+    assert!(
+        text.contains("When no requirement is recorded yet"),
+        "{text}"
+    );
+    assert!(
+        text.contains("\"What would you like us to build?\""),
+        "{text}"
+    );
+    assert!(
+        text.contains("Every question you put to the user also goes through"),
+        "{text}"
+    );
+}
+
+/// `backlot tell user` is in the producer's pre-allowed commands for
+/// every runner with a pre-allow list.
+#[test]
+fn the_producers_tell_user_is_preallowed() {
+    let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", "producer", &[]);
+    assert!(
+        claude.split(',').any(|rule| rule == "Bash(backlot *)"),
+        "{claude}"
+    );
+    for (runner, rules) in [
+        (
+            "cursor",
+            crate::runners::cursor::allow_rules("producer", &[]),
+        ),
+        ("cmd", crate::runners::cmd::allow_rules("producer", &[])),
+    ] {
+        assert!(
+            rules.iter().any(|rule| rule == "Shell(backlot)"),
+            "{runner}: {rules:?}"
+        );
+    }
+}

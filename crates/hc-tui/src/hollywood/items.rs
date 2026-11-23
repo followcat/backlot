@@ -3,7 +3,7 @@
 //! painter so the words and the cells change independently.
 
 use super::rows::Live;
-use super::sheet::{PromptItem, ReadyItem, StageItem, Wait, machine_label};
+use super::sheet::{PromptItem, ReadyItem, RoleItem, StageItem, StudioItem, Wait, machine_label};
 
 /// One action chip's label and its key — `allow y` draws ` allow y `.
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +45,64 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             Chip {
                 label: "open",
                 key: "↵",
+                primary: false,
+            },
+        ],
+        Wait::Role(_) => vec![
+            Chip {
+                label: "open",
+                key: "↵",
+                primary: true,
+            },
+            Chip {
+                label: "peek",
+                key: "p",
+                primary: false,
+            },
+        ],
+        Wait::Hollywood(hollywood) if hollywood.attention_user => vec![
+            Chip {
+                label: "allow",
+                key: "y",
+                primary: true,
+            },
+            Chip {
+                label: "deny",
+                key: "d",
+                primary: false,
+            },
+            Chip {
+                label: "peek",
+                key: "p",
+                primary: false,
+            },
+            Chip {
+                label: "open",
+                key: "↵",
+                primary: false,
+            },
+        ],
+        Wait::Hollywood(_) => vec![
+            Chip {
+                label: "open",
+                key: "↵",
+                primary: true,
+            },
+            Chip {
+                label: "peek",
+                key: "p",
+                primary: false,
+            },
+        ],
+        Wait::NoRequirement(_) => vec![
+            Chip {
+                label: "open",
+                key: "↵",
+                primary: true,
+            },
+            Chip {
+                label: "peek",
+                key: "p",
                 primary: false,
             },
         ],
@@ -126,6 +184,45 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
                 "×",
             )
         }
+        Wait::Role(RoleItem {
+            machine,
+            studio,
+            role,
+            asks,
+        }) => {
+            let machine = machine_label(*machine, local, multi);
+            let machine = if machine.is_empty() {
+                String::new()
+            } else {
+                format!("{machine} · ")
+            };
+            let kind = if *asks { "ASKS" } else { "NEEDS YOU" };
+            (
+                format!("{kind} {} · {machine}{}", studio.id, role.name),
+                if *asks { "?" } else { "×" },
+            )
+        }
+        Wait::Hollywood(hollywood) if hollywood.attention_user => (
+            format!(
+                "HOLLYWOOD asks: {}",
+                hollywood
+                    .attention_detail
+                    .as_deref()
+                    .or(hollywood.attention.as_deref())
+                    .unwrap_or("permission prompt")
+            ),
+            "⚠",
+        ),
+        Wait::Hollywood(_) => ("HOLLYWOOD blocked".to_string(), "!"),
+        Wait::NoRequirement(StudioItem { machine, studio }) => {
+            let machine = machine_label(*machine, local, multi);
+            let machine = if machine.is_empty() {
+                String::new()
+            } else {
+                format!(" · {machine}")
+            };
+            (format!("NEW {}{machine} · no requirement", studio.id), "✦")
+        }
         Wait::Stage(StageItem {
             machine,
             offline,
@@ -173,10 +270,43 @@ pub(crate) fn wait_head(wait: &Wait<'_>, local: &str, multi: bool) -> (String, &
     }
 }
 
+/// The second line the needs-you rows carry — a role's what or
+/// question, Hollywood's block, a new studio's next step.
+pub(crate) fn detail_text(wait: &Wait<'_>) -> Option<String> {
+    match wait {
+        Wait::Role(item) if item.asks => Some(
+            item.role
+                .asks
+                .clone()
+                .unwrap_or_else(|| "a question".into()),
+        ),
+        Wait::Role(item) => Some(
+            item.role
+                .attention_detail
+                .as_deref()
+                .or(item.role.attention.as_deref())
+                .unwrap_or("needs you")
+                .to_string(),
+        ),
+        Wait::Hollywood(hollywood) if hollywood.attention_user => {
+            Some("allow once with y, deny with d, peek with p, open with Enter".into())
+        }
+        Wait::Hollywood(_) => Some("blocked on a person — open its terminal".into()),
+        Wait::NoRequirement(item) => Some(format!(
+            "next: {}",
+            crate::panel::data::next_step(item.studio).unwrap_or("tell the producer what to build")
+        )),
+        _ => None,
+    }
+}
+
 /// The row's action label — what `pending` compares against.
 pub(crate) fn target_label<'a>(wait: &'a Wait<'a>) -> &'a str {
     match wait {
         Wait::Prompt(item) => &item.role.role,
+        Wait::Role(item) => &item.role.role,
+        Wait::Hollywood(_) => "hollywood",
+        Wait::NoRequirement(item) => &item.studio.id,
         Wait::Stage(item) => item.machine.unwrap_or("Local"),
         Wait::Card(card) => &card.id,
         Wait::Ready(item) => &item.studio.id,
@@ -192,6 +322,10 @@ pub(crate) fn ultra_head(wait: &Wait<'_>, _local: &str, _multi: bool) -> String 
             item.role.attention_seq.unwrap_or(0),
             item.role.name
         ),
+        Wait::Role(item) if item.asks => item.role.name.clone(),
+        Wait::Role(item) => format!("needs {}", item.role.name),
+        Wait::Hollywood(_) => "hollywood".into(),
+        Wait::NoRequirement(item) => item.studio.id.clone(),
         _ => String::new(),
     }
 }

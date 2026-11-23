@@ -2,7 +2,7 @@
 //! of the document.
 use super::*;
 use crate::hollywood::rows::{Frame, Live, Row, Target, band_rows, frames, hollywood_live, on_set};
-use crate::hollywood::sheet::{Conn, Status};
+use crate::hollywood::sheet::{Conn, Status, Wait};
 use crate::studio::glyphs::Person;
 use backlot_model::summary::Summary;
 
@@ -93,47 +93,106 @@ fn a_calm_band_still_ends_in_the_input_line() {
     let (waits, rows) = band_rows(&list, &all_live, true);
     assert!(waits.is_empty());
     assert_eq!(rows.len(), 3); // headline, calm, input
-    // acme-shop's two open flags are not `attention_user`, so the
-    // sheet lists nothing yet the calm row still names them.
-    assert!(matches!(
-        rows[1],
-        Row::Calm {
-            studios: 3,
-            flags: 2
-        }
-    ));
+    // acme-shop's screen is stalled (stuck, not the user's), so the
+    // sheet lists nothing and the calm row names all three studios.
+    assert!(matches!(rows[1], Row::Calm { studios: 3 }));
 }
 
+/// A blocked Hollywood is on the needs-you list — the bar is never
+/// calm while it waits on a person.
 #[test]
-fn the_calm_row_reports_the_attention_it_does_not_list() {
-    // A `waiting` record that is not `attention_user` never gets a
-    // sheet row, but the studio chip still shows `!N` — the calm row
-    // names it instead of pretending nothing is open.
+fn a_blocked_hollywood_is_not_calm() {
     let mut value = summary_json();
     value["hollywood"]["cards"] = serde_json::json!([]);
-    value["studios"][0]["waiting"] = serde_json::json!(2);
-    value["studios"][1]["waiting"] = serde_json::json!(1);
-    let summary: Summary = serde_json::from_value(value).unwrap();
-    let list = machines(Some(&summary));
-    let (_, rows) = band_rows(&list, &all_live, true);
-    assert!(matches!(
-        rows[1],
-        Row::Calm {
-            studios: 3,
-            flags: 3
-        }
-    ));
-    // An `attention_user` role already lists its record as a prompt
-    // row — it must not count toward the flags.
-    let mut value = summary_json();
-    value["hollywood"]["cards"] = serde_json::json!([]);
-    value["studios"][0]["waiting"] = serde_json::json!(1);
-    value["studios"][0]["roles"][0]["attention_user"] = serde_json::json!(true);
+    value["hollywood"]["work"] = serde_json::json!("blocked");
     let summary: Summary = serde_json::from_value(value).unwrap();
     let list = machines(Some(&summary));
     let (waits, rows) = band_rows(&list, &all_live, true);
-    assert_eq!(waits.len(), 1); // the prompt, so no calm row
-    assert!(matches!(rows[1], Row::Wait(0)));
+    let hollywood = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Hollywood(_)))
+        .expect("Hollywood is listed");
+    assert_eq!(
+        crate::hollywood::items::wait_head(hollywood, "Local", false).0,
+        "HOLLYWOOD blocked"
+    );
+    assert!(!rows.iter().any(|r| matches!(r, Row::Calm { .. })));
+}
+
+/// A Hollywood permission prompt is the asks row: the same `y` allow
+/// once / `d` deny / `p` peek / Enter the #109 live row takes, on the
+/// same target.
+#[test]
+fn a_hollywood_prompt_is_an_asks_row() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["hollywood"]["work"] = serde_json::json!("blocked");
+    value["hollywood"]["attention_user"] = serde_json::json!(true);
+    value["hollywood"]["attention"] = serde_json::json!("permission prompt");
+    value["hollywood"]["attention_detail"] = serde_json::json!("may I run cargo?");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, _) = band_rows(&list, &all_live, true);
+    let hollywood = waits
+        .iter()
+        .find(|w| matches!(w, Wait::Hollywood(_)))
+        .expect("Hollywood is listed");
+    assert_eq!(
+        crate::hollywood::items::wait_head(hollywood, "Local", false),
+        ("HOLLYWOOD asks: may I run cargo?".into(), "⚠")
+    );
+    assert_eq!(hollywood.target(), Target::Hollywood);
+    let keys: Vec<&str> = crate::hollywood::items::chips_of(hollywood)
+        .iter()
+        .map(|c| c.key)
+        .collect();
+    assert_eq!(keys, ["y", "d", "p", "↵"]);
+}
+
+/// A stage-bookkeeping attention alone leaves the bar calm: the
+/// person can do nothing about it.
+#[test]
+fn an_info_attention_alone_stays_calm() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["roles"][1]["attention"] = serde_json::json!("session id not found");
+    value["studios"][0]["roles"][1]["attention_class"] = serde_json::json!("info");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, rows) = band_rows(&list, &all_live, true);
+    assert!(
+        waits.is_empty(),
+        "{:?}",
+        waits.iter().map(|w| w.target()).collect::<Vec<_>>()
+    );
+    assert!(matches!(rows[1], Row::Calm { studios: 3 }));
+}
+
+/// A studio with no requirement is listed with its next step.
+#[test]
+fn a_studio_with_no_requirement_is_listed_with_its_next_step() {
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["studios"][0]["requirement_version"] = serde_json::json!(0);
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let list = machines(Some(&summary));
+    let (waits, _) = band_rows(&list, &all_live, true);
+    let found = waits
+        .iter()
+        .find(|w| matches!(w, Wait::NoRequirement(_)))
+        .expect("the new studio lists");
+    assert_eq!(
+        found.target(),
+        Target::Tell(crate::studio::StudioKey::local("acme-shop"))
+    );
+    assert_eq!(
+        crate::hollywood::items::detail_text(found).as_deref(),
+        Some("next: tell the producer what to build")
+    );
+    let Wait::NoRequirement(item) = found else {
+        unreachable!()
+    };
+    assert_eq!(item.studio.id, "acme-shop");
 }
 
 #[test]
@@ -157,9 +216,9 @@ fn cast_marks_follow_the_role_state() {
         marks,
         vec![
             Person::Working, // producer, working
-            Person::Stalled, // alice, an attention
+            Person::Stuck,   // alice, a stalled screen
             Person::Lost,    // bob, lost
-            Person::Idle,    // carol, waiting
+            Person::Ready,   // carol, live and nothing assigned
         ]
     );
 }

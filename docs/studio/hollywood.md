@@ -19,10 +19,13 @@ layout, so toggling it resizes nothing.
   `[hollywood]` table does (U7); without one it is the no-agent bar, and `backlot --plain` has
   no bar at all, so its screen is exactly the herdr screen.
 - **Collapsed** is the **lot pill** in the chrome row — a reserved, clickable segment at the
-  right end of the tab bar, or of the one-row studio header on a studio workspace. It counts
-  the urgent items (user prompts you own, stopped stages, ledger errors), the open cards and
-  studios ready to finish, and the studios (`✦`); urgent counts turn it red, and narrow widths
-  shrink it through shorter texts. A click or the toggle key expands the band.
+  right end of the tab bar, or of the one-row studio header on a studio workspace. Its urgent
+  count is the length of the one needs-you list — user prompts, roles with a needs-you attention
+  or an unanswered question, blocked Hollywood, studios with no requirement, stopped stages,
+  open cards and studios ready to finish — so it can never disagree with the sheet or the calm
+  row; it also counts the studios (`✦`) and, while collapsed, new Hollywood replies. Urgent
+  counts turn it red, and narrow widths shrink it through shorter texts. A click or the toggle
+  key expands the band.
 - **Expanded** is the **Call Sheet** — the film-strip band dropped from the top over the
   whole width, at most half the height (sixteen rows on a mobile width): `▄▄`/`▀▀` sprocket
   rows, the `✦  H O L L Y W O O D` title with the agent's square, role state and runner /
@@ -31,13 +34,19 @@ layout, so toggling it resizes nothing.
   machine-qualified id in the top edge (accent on `selection_bg` when selected), its own
   machine's `■ live` / `◌ stage stopped` / `× offline` and a ` !n ` chip, `r<ver> · <done>/<total>`
   task counts, the role on set, what it is doing (a broken ledger's error in red), and one
-  `◆` per cast member coloured by its state. The last frame is always the dashed
+  `◆` per cast member coloured by its state. A frame whose studio has a plain next step carries
+  `· next: tell the producer what to build`, `· next: director reviewing` or `· next: finish (f)`
+  on its blank row. The last frame is always the dashed
   **new-studio** frame; frames that do not fit scroll sideways behind `‹`/`›`, a narrow screen
-  puts two per row. Under them the band lists the **waiting items** — everything that waits on
-  the user across every machine, sorted by urgency: user-owned prompts first (a
-  director-owned prompt never lists), then stopped stages and offline machines that have live
-  studios, then the local core's open cards, then studios ready to finish. Each row carries
-  its action chips and a detail line; when nothing waits, a calm `✓` row says so. The
+  puts two per row. Under them the band lists the **waiting items** — the one needs-you list,
+  everything that waits on the user across every machine, sorted by urgency: user-owned prompts
+  first (a director-owned prompt never lists), then roles with a needs-you attention or an
+  unanswered question, Hollywood itself — `HOLLYWOOD asks: <prompt>`, which takes the same
+  `y` allow once / `d` deny / `p` peek / Enter as its live row, or `HOLLYWOOD blocked` without a
+  prompt — studios with no requirement, stopped stages and offline machines that have live
+  studios, then the local core's open cards, then studios ready to finish. Each row carries its
+  action chips and a detail line; only when the list is empty does a calm `✓` row say
+  `nothing waiting on you`. The
   `tell hollywood` line ends the band — or, without a `[hollywood]` table, the `⏎ hollywood setup`
   line that opens the setup dialog. Waiting items and the `tell` line are never dropped: the height
   ladder drops the blanks first, then the unselected details, then the 7-row frames fold into

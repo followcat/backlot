@@ -201,14 +201,111 @@ pub(crate) fn role_attention_user(state: &StudioState, role: &str) -> bool {
     })
 }
 
+/// Whether `role` recorded a ledger action of its own after `seq` —
+/// the person often answers in the role's terminal, and every
+/// role-written event that follows (a revised requirement, a report,
+/// a delivery, a new tell, a cast, a review, …) answers the earlier
+/// question just as a user `tell` would. Stage-written events never
+/// count: they describe the stage, not the role.
+fn role_acted_later(state: &StudioState, role: &str, seq: u64) -> bool {
+    if state.messages.iter().any(|m| m.from == role && m.seq > seq) {
+        return true;
+    }
+    if state.reports.iter().any(|r| r.from == role && r.seq > seq) {
+        return true;
+    }
+    if state
+        .approvals
+        .iter()
+        .any(|a| a.role == role && a.seq > seq)
+    {
+        return true;
+    }
+    if state.recasts.iter().any(|r| r.role == role && r.seq > seq) {
+        return true;
+    }
+    match role {
+        "producer" if state.requirements.iter().any(|r| r.seq > seq) => return true,
+        "writer" if state.plans.iter().any(|p| p.seq > seq) => return true,
+        _ => {}
+    }
+    let task_id = crate::state::actor_task(role);
+    for task in state.tasks.values() {
+        if task.created_by == role && task.created_seq > seq {
+            return true;
+        }
+        if task.casts.iter().any(|c| c.by == role && c.seq > seq) {
+            return true;
+        }
+        if task
+            .reviews
+            .iter()
+            .any(|r| r.reviewer == role && r.seq > seq)
+        {
+            return true;
+        }
+        if task
+            .finding_reports
+            .iter()
+            .any(|f| f.by == role && f.seq > seq)
+        {
+            return true;
+        }
+        if task
+            .state_changes
+            .iter()
+            .any(|c| c.by == role && c.seq > seq)
+        {
+            return true;
+        }
+        if task_id == Some(task.id.as_str()) && task.deliveries.iter().any(|d| d.seq > seq) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The role's newest `tell user` the user has not answered with a
+/// `tell` back to that role, and the role has recorded no later
+/// ledger action of its own. `snippets` carries the message bodies the
+/// stage read for the exchange projection; a body it could not read
+/// falls back to a neutral line so the question is never hidden.
+pub(crate) fn role_asks(
+    studio: &str,
+    state: &StudioState,
+    role: &str,
+    snippets: &BTreeMap<(String, u64), String>,
+) -> Option<String> {
+    let ask = state
+        .messages
+        .iter()
+        .filter(|m| {
+            m.from == role
+                && m.to == "user"
+                && !m.dropped
+                && m.purpose.is_none()
+                && m.source_seq.is_none()
+        })
+        .max_by_key(|m| m.seq)?;
+    let answered = state
+        .messages
+        .iter()
+        .any(|m| m.from == "user" && m.to == role && m.seq > ask.seq)
+        || role_acted_later(state, role, ask.seq);
+    if answered {
+        return None;
+    }
+    Some(cap(snippets
+        .get(&(studio.to_string(), ask.seq))
+        .map(String::as_str)
+        .unwrap_or("question — see the studio dock")))
+}
+
 /// One role's summary. `live` maps a terminal address to what the
 /// program there reports doing; `work` the watch pass's per-role
 /// screen classification and `failed` a role's StopFailure error,
-/// both keyed `(studio, role)`.
-/// One role's summary. `live` maps a terminal address to what the
-/// program there reports doing; `work` the watch pass's per-role
-/// screen classification and `failed` a role's StopFailure error,
-/// both keyed `(studio, role)`.
+/// both keyed `(studio, role)`. `snippets` supplies the body of the
+/// role's newest unanswered `tell user`.
 pub(crate) fn role_summary(
     studio: &str,
     state: &StudioState,
@@ -216,6 +313,7 @@ pub(crate) fn role_summary(
     live: &BTreeMap<String, String>,
     work: &BTreeMap<(String, String), Work>,
     failed: &BTreeMap<(String, String), String>,
+    snippets: &BTreeMap<(String, u64), String>,
 ) -> Option<RoleSummary> {
     let r = state.roles.get(role)?;
     let lifecycle = r.lifecycle();
@@ -284,6 +382,9 @@ pub(crate) fn role_summary(
         resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
         since_ms: r.since_ms,
         attention: role_attention(state, role),
+        attention_class: open
+            .map(|a| crate::attention::AttentionClass::of(&a.reason, a.needs_user)),
+        asks: role_asks(studio, state, role, snippets),
         attention_user: role_attention_user(state, role),
         attention_seq: open.map(|a| a.seq),
         attention_detail: open.map(attention_detail),

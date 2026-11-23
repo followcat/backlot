@@ -90,6 +90,8 @@ pub(crate) enum Owed {
     Offline,
     /// `! <error>` — the ledger/stage error.
     Error,
+    /// `· next: <step>` — the studio's own next step.
+    Next,
 }
 
 /// An extra line under a person.
@@ -312,6 +314,15 @@ fn block_rows<'a>(
             text: format!("finish {}{pending}? [y/n]", studio.studio.id),
         });
     }
+    // The studio's own next step, when its state names one — the
+    // ledger's owed step is a different line above it.
+    if let Some(step) = super::data::next_step(studio.studio) {
+        out.push(Row::Owed {
+            studio,
+            kind: Owed::Next,
+            text: format!("next: {step}"),
+        });
+    }
     // P4a: runner-reported usage sits beside the owed line — a
     // factual count only while a delivery recorded any (D8).
     if studio.studio.usage.is_some() {
@@ -320,7 +331,16 @@ fn block_rows<'a>(
     let emit_person = |out: &mut Vec<Row<'a>>, role: &'a RoleSummary| {
         let key = studio.key();
         out.push(Row::Person { studio, role });
-        if role.attention.is_some() {
+        // The state's own detail line: a prompt's cue, a needs-you
+        // attention, an unanswered question or a stuck episode. An
+        // `info` attention has no line here — it lives in the details,
+        // and a blocked screen with no attention row keeps its old
+        // one-line row.
+        let cue = role.asks.is_some()
+            || (role.attention.is_some()
+                && crate::studio::glyphs::Person::attention_class(role)
+                    != Some(backlot_model::attention::AttentionClass::Info));
+        if cue {
             out.push(Row::PersonLine {
                 studio,
                 role,

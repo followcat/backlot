@@ -92,7 +92,7 @@ pub(crate) fn draw_row(
                 );
             }
         }
-        Row::Calm { studios, flags } => {
+        Row::Calm { studios } => {
             let base = Style::default().bg(palette.surface_dim);
             put_text(buf, rect.x + MARGIN, rect.y, 1, "✓", base.fg(palette.teal));
             let text = format!(" nothing waiting on you across {studios} studios");
@@ -104,17 +104,6 @@ pub(crate) fn draw_row(
                 &truncate_end(&text, rect.width as usize),
                 base.fg(palette.overlay1),
             );
-            if *flags > 0 {
-                put_text(
-                    buf,
-                    rect.x + MARGIN + 1 + text.chars().count() as u16,
-                    rect.y,
-                    rect.width
-                        .saturating_sub(MARGIN + 1 + text.chars().count() as u16),
-                    &format!(" · !{flags} flagged"),
-                    base.fg(palette.peach),
-                );
-            }
         }
         Row::Talk(line) => draw_talk(buf, rect, line, selected, palette, hits),
         Row::Live(live) => draw_live(buf, rect, live, selected, palette),
@@ -158,6 +147,11 @@ fn draw_wait(
     let (head, glyph) = wait_head(wait, local, multi);
     let glyph_colour = match wait {
         Wait::Prompt(_) => palette.red,
+        Wait::Role(item) if item.asks => palette.peach,
+        Wait::Role(_) => palette.red,
+        Wait::Hollywood(hollywood) if hollywood.attention_user => palette.red,
+        Wait::Hollywood(_) => palette.peach,
+        Wait::NoRequirement(_) => palette.accent,
         Wait::Stage(item) if item.offline => palette.red,
         Wait::Stage(_) => palette.peach,
         Wait::Card(_) => palette.accent,
@@ -296,6 +290,17 @@ fn draw_detail(
                 .fg(palette.peach)
                 .bg(bg)
                 .add_modifier(Modifier::BOLD),
+        );
+        return;
+    }
+    if let Some(text) = super::items::detail_text(wait) {
+        put_text(
+            buf,
+            x,
+            rect.y,
+            width,
+            &truncate_end(&text, width as usize),
+            Style::default().fg(palette.subtext0).bg(bg),
         );
         return;
     }

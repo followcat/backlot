@@ -1,0 +1,63 @@
+//! What an attention reason means to the person seeing it: something
+//! they must act on, something the stage is still retrying, or the
+//! stage's own bookkeeping. One function, shared by the stage, the
+//! client and Hollywood, so no surface invents its own reading of a
+//! reason.
+
+use serde::{Deserialize, Serialize};
+
+/// How one open attention reads to the person.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AttentionClass {
+    /// The person must act: a prompt, a refusal, a failed launch, a
+    /// budget overrun, or anything the stage does not recognise.
+    NeedsYou,
+    /// Something is wrong while the stage still retries it — a stall
+    /// with nudges left, a rate limit or a connection error that has
+    /// not escalated yet.
+    Stuck,
+    /// The stage's own bookkeeping. The person cannot act on it; it
+    /// never changes a state and never counts as flagged.
+    Info,
+}
+
+impl AttentionClass {
+    /// Sort `reason` into its class. `needs_user` is the ledger
+    /// attention's own escalation flag — a `rate limited` or
+    /// `connection error` episode that exhausted its retries sets it,
+    /// and the reason then stops being `stuck`. An unknown reason is
+    /// `NeedsYou`, so nothing important is hidden.
+    pub fn of(reason: &str, needs_user: bool) -> AttentionClass {
+        if needs_user {
+            return AttentionClass::NeedsYou;
+        }
+        match reason {
+            "permission prompt"
+            | "folder-trust"
+            | "folder trust refused"
+            | "cannot resume"
+            | "launch refused"
+            | "runner not supported"
+            | "permission profile not supported"
+            | "model not supported"
+            | "effort not supported"
+            | "config malformed"
+            | "not a git repository"
+            | "work area failed"
+            | "over budget"
+            | "agent error"
+            | "owed" => AttentionClass::NeedsYou,
+            "stalled" | "rate limited" | "connection error" => AttentionClass::Stuck,
+            "session id not found" | "inherited XDG_CONFIG_HOME" | "cursor dir was open" => {
+                AttentionClass::Info
+            }
+            r if r.ends_with(" prep failed") => AttentionClass::NeedsYou,
+            _ => AttentionClass::NeedsYou,
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "attention_tests.rs"]
+mod tests;

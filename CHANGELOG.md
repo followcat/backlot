@@ -27,6 +27,42 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   only while the prompt the decision answered still shows. Hollywood's cmd launch
   also pre-allows the read-only `backlot --help` and `backlot help`, so it can read
   its own CLI without a prompt.
+- **One attention class per reason.** `backlot_model::attention::AttentionClass::of` sorts every
+  reason the stage can raise into `needs you`, `stuck` or `info`: a person's prompts, refusals,
+  failed launches and budget overruns are theirs; a stall with nudges left, a rate limit or a
+  connection error is `stuck` until the stage escalates it; `session id not found`,
+  `inherited XDG_CONFIG_HOME` and `cursor dir was open` are stage bookkeeping. An unrecognised
+  reason is `needs you`, so nothing important is hidden. The role summary carries the class as
+  `attention_class`, and `docs/studio/panel.md` holds the full table.
+- **One honest state per person, in plain words.** A person row now shows exactly one state, in
+  this priority: `needs you · <what>`, `asks you · <question>`, `stuck · <reason>`,
+  `working · <doing>`, `waiting`, `ready`. `info` attentions — the stage's own bookkeeping such as
+  `session id not found` — never change the state; they show only in the role's drawer and the
+  sheet's overview, dimmed. The old `stalled` label is gone: a `stuck` episode reads `stuck …`,
+  peach, and a needs-you attention that is not a prompt reads `needs you · …`, red. A live
+  producer with `work: waiting`, `doing: idle` and an open `session id not found` now reads
+  `ready`, not `! stalled`.
+- **The producer's questions reach the person.** The producer's prompt now says every question to
+  the user — including the first "What would you like us to build?" when no requirement is
+  recorded — also goes through `backlot tell user --text <question>`, while the terminal stays the
+  conversation. The role summary carries the newest unanswered `tell user` as `asks`, which the
+  person row shows as `asks you · <question>`; a user `tell` back to that role — or any later
+  ledger action the role records itself, such as a revised requirement, report or delivery —
+  answers it, while stage-written events do not.
+  `backlot tell user` is covered by every runner's pre-allow list.
+- **One needs-you list everywhere.** One function builds it from every machine's `backlot`
+  document — user prompts, roles with a needs-you attention or an unanswered question, Hollywood
+  with a user-owned prompt (`HOLLYWOOD asks: …`, taking the same `y` allow once / `d` deny /
+  `p` peek / Enter as its live row) or a blocked screen without one, studios with no requirement,
+  stopped stages, open cards and ready studios. The Call
+  Sheet's rows, the lot pill's urgent count and the band's calm row read it, so
+  `✓ nothing waiting on you` shows only when the list is empty; the misleading `!N flagged`
+  suffix is gone, and a `stuck` role shows on its own row.
+- **Every studio shows its next step.** The dock's studio row and the Hollywood frame carry one
+  `next:` line from the studio's own state: `tell the producer what to build` when no requirement
+  is recorded (Enter on the studio row or `t` opens the producer tell input), `director reviewing`
+  while tasks are in review, and `finish (f)` once every task is accepted. Any other state draws
+  nothing.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

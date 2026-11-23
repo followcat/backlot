@@ -24,7 +24,8 @@ pub(super) fn summary_json() -> serde_json::Value {
                     { "role": "producer", "name": "producer", "state": "live",
                       "work": "working" },
                     { "role": "actor-alice", "name": "alice", "state": "live",
-                      "work": "blocked", "attention": "may I run the tests?" },
+                      "work": "blocked", "attention": "stalled",
+                      "attention_detail": "may I run the tests?" },
                     { "role": "actor-bob", "name": "bob", "state": "lost" },
                     { "role": "actor-carol", "name": "carol", "state": "live",
                       "work": "waiting" }
@@ -81,6 +82,8 @@ pub(super) fn with_user_prompt(studio: &str, role: &str) -> Summary {
             for r in s["roles"].as_array_mut().unwrap() {
                 if r["role"] == role {
                     r["attention_user"] = true.into();
+                    r["attention"] = "permission prompt".into();
+                    r["attention_class"] = "needs_you".into();
                     r["attention_seq"] = 7.into();
                     r["attention_detail"] = "may I run the tests?".into();
                 }

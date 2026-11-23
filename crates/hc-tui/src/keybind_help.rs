@@ -356,7 +356,7 @@ pub(crate) fn backlot_help_groups(
                 // `✓ closed` never clips inside 80×24's 74 inner cols.
                 entry(
                     "people",
-                    "◐ work · ○ idle · ◌ slot · × USER/dir · ! fail · ✓ closed",
+                    "◐ work · ○ wait · × prompt · ■ need · ? ask · ✓ closed",
                 ),
                 entry(
                     "tasks",
