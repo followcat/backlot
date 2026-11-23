@@ -148,6 +148,42 @@ closed or reopened is dropped. `o` on a delivery or check line streams its file 
 `backlot report show` — a local file for a local studio, the same command remotely — and
 `Esc` backs out of the report first. A click outside the frame closes the sheet.
 
+## Person states and attentions
+
+Every open attention carries one class, built by
+`backlot_model::attention::AttentionClass::of` from its reason and the ledger's `needs_user`
+escalation flag. The class decides what a person row shows; the raw reason never does.
+
+| Reason | Class | Shown as |
+|---|---|---|
+| `permission prompt` | needs you | `needs you · <what>`; the prompt row keeps `y`/`d`/`p`, and a non-actor's reads `USER` |
+| `folder-trust` | needs you | `needs you · <what>` |
+| `folder trust refused` | needs you | `needs you · <what>` |
+| `cannot resume` | needs you | `needs you · <what>` |
+| `launch refused` | needs you | `needs you · <what>` |
+| `runner not supported` | needs you | `needs you · <what>` |
+| `permission profile not supported` | needs you | `needs you · <what>` |
+| `model not supported` | needs you | `needs you · <what>` |
+| `effort not supported` | needs you | `needs you · <what>` |
+| `config malformed` | needs you | `needs you · <what>` |
+| `not a git repository` | needs you | `needs you · <what>` |
+| `work area failed` | needs you | `needs you · <what>` |
+| `over budget` | needs you | `needs you · <what>` |
+| `agent error` | needs you | `needs you · <what>` |
+| `owed` | needs you | `needs you · <what>` — the escalated stall |
+| `<runner> prep failed` | needs you | `needs you · <what>` |
+| `stalled` | stuck | `stuck · <plain reason>` |
+| `rate limited` | stuck | `stuck · <plain reason>` |
+| `connection error` | stuck | `stuck · <plain reason>` |
+| `session id not found` | info | the role's details only, dimmed |
+| `inherited XDG_CONFIG_HOME` | info | the role's details only, dimmed |
+| `cursor dir was open` | info | the role's details only, dimmed |
+
+A `stuck` episode that escalates — `rate limited` or `connection error` after its auto-retries,
+or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs you`. A reason
+the table does not list is `needs you`, so nothing important is hidden. Stage bookkeeping never
+changes a person's state and never counts as flagged.
+
 ## The cast
 
 In studio mode the sidebar's agents section is the current studio's cast instead (see

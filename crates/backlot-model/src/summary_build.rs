@@ -284,6 +284,9 @@ pub(crate) fn role_summary(
         resumable: lifecycle == RoleLifecycle::Closed && r.session_id.is_some() && !r.held,
         since_ms: r.since_ms,
         attention: role_attention(state, role),
+        attention_class: open
+            .map(|a| crate::attention::AttentionClass::of(&a.reason, a.needs_user)),
+        asks: None,
         attention_user: role_attention_user(state, role),
         attention_seq: open.map(|a| a.seq),
         attention_detail: open.map(attention_detail),

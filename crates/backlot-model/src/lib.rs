@@ -13,6 +13,7 @@
 //! - [`hollywood`]: the overseer's own ledger — cards, headlines,
 //!   messages — its own kinds so no studio list or rule sees it.
 
+pub mod attention;
 pub mod budget;
 pub mod casting;
 pub mod correct;

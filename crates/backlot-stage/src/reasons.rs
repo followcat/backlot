@@ -3,6 +3,8 @@
 //! lands here — the docs test fails before the docs can drift.
 
 #[cfg(test)]
+pub use crate::runners::agy::AGY_PREP_FAILED;
+#[cfg(test)]
 pub use crate::runners::cline::CLINE_PREP_FAILED;
 #[cfg(test)]
 pub use crate::runners::cline::{EFFORT_NOT_SUPPORTED, MODEL_NOT_SUPPORTED};
@@ -51,6 +53,7 @@ pub const ALL: &[&str] = &[
     XDG_CONFIG_HOME_SET,
     CMD_PREP_FAILED,
     CLINE_PREP_FAILED,
+    AGY_PREP_FAILED,
     MODEL_NOT_SUPPORTED,
     EFFORT_NOT_SUPPORTED,
     OWED,
@@ -59,3 +62,7 @@ pub const ALL: &[&str] = &[
     crate::ratelimit::AGENT_ERROR,
     crate::connerr::CONNECTION_ERROR,
 ];
+
+#[cfg(test)]
+#[path = "reasons_tests.rs"]
+mod tests;

@@ -27,6 +27,13 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   only while the prompt the decision answered still shows. Hollywood's cmd launch
   also pre-allows the read-only `backlot --help` and `backlot help`, so it can read
   its own CLI without a prompt.
+- **One attention class per reason.** `backlot_model::attention::AttentionClass::of` sorts every
+  reason the stage can raise into `needs you`, `stuck` or `info`: a person's prompts, refusals,
+  failed launches and budget overruns are theirs; a stall with nudges left, a rate limit or a
+  connection error is `stuck` until the stage escalates it; `session id not found`,
+  `inherited XDG_CONFIG_HOME` and `cursor dir was open` are stage bookkeeping. An unrecognised
+  reason is `needs you`, so nothing important is hidden. The role summary carries the class as
+  `attention_class`, and `docs/studio/panel.md` holds the full table.
 - **Recasting a fixed role.** `backlot recast --person producer|director|writer
   --runner <r> --model <m> [--effort <e>] [--permission-profile
   standard|worktree] [--reason <r>]` records `role.recast` in the studio's

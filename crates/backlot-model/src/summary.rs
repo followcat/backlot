@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::attention::AttentionClass;
 use crate::event::{Priority, StudioMode, UsageTotals};
 use crate::state::{StudioState, TaskStatus};
 use crate::summary_build::*;
@@ -203,6 +204,16 @@ pub struct RoleSummary {
     pub since_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention: Option<String>,
+    /// What the open `attention` means to the person: `needs_you`,
+    /// `stuck` or `info`. Stage bookkeeping never changes a person's
+    /// shown state. Documents an older stage wrote have none — the
+    /// client then sorts the reason itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention_class: Option<AttentionClass>,
+    /// The role's newest `tell user` the user has not answered with a
+    /// `tell` back to that role — shown as `asks you · <question>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asks: Option<String>,
     /// The open `attention` is a `permission prompt` only the user may
     /// answer — a flagged screen, or a prompt on a non-actor role
     /// (D9). Documents an older stage wrote read as `false`.
@@ -477,6 +488,8 @@ pub fn summary_with_exchange(
                 resumable: false,
                 since_ms: 0,
                 attention: None,
+                attention_class: None,
+                asks: None,
                 attention_user: false,
                 attention_seq: None,
                 attention_detail: None,

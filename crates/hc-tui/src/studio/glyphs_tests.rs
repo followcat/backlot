@@ -126,6 +126,8 @@ fn person_of_reads_a_role() {
         resumable: false,
         since_ms: 0,
         attention: None,
+        attention_class: None,
+        asks: None,
         attention_user: false,
         attention_seq: None,
         attention_detail: None,
