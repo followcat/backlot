@@ -4,7 +4,10 @@
 //! passes `--trust` (it only initializes the project's slug
 //! directory — a non-empty cwd without it deadlocks on the trust
 //! dialog the stage never answers), `--skip-onboarding`,
-//! `--no-auto-update` and `-m <model>`; a fresh launch also names
+//! `--no-auto-update`, `-m <model>` and `--add-dir <dir>` — the
+//! studio state directory (for Hollywood, `<base>/studios`) so the
+//! message files the stage sends are inside the workspace and their
+//! reads never prompt; a fresh launch also names
 //! the session after its terminal (`-n`), which stays a resumable
 //! name for `-r`. The first prompt is positional on a fresh launch
 //! only — a resume ignores it, so the stage sends the prompt after
@@ -307,12 +310,26 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         Some(id) => argv.extend(["-r".into(), id.to_string()]),
         None => argv.extend(["-n".into(), ctx.terminal.to_string()]),
     }
+    // `--add-dir` widens cmd's workspace past the cwd, which is a
+    // worktree for a role and `hollywood/` for the overseer. A
+    // role's message files and prompts live in the studio's state
+    // directory; Hollywood reads every studio's under `<base>/studios`,
+    // the sibling of its cwd. Without it those reads prompt and the
+    // stage's guarded send never delivers.
+    let add_dir = if ctx.role == "hollywood" {
+        let hdir = Path::new(ctx.studio_dir);
+        hdir.parent().unwrap_or(hdir).join("studios")
+    } else {
+        PathBuf::from(ctx.studio_dir)
+    };
     argv.extend([
         "-m".into(),
         identity.model.clone(),
         "--trust".into(),
         "--skip-onboarding".into(),
         "--no-auto-update".into(),
+        "--add-dir".into(),
+        add_dir.to_string_lossy().into_owned(),
     ]);
     if ctx.resume.is_none()
         && let Some(p) = ctx.prompt

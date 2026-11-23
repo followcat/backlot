@@ -31,6 +31,14 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **cmd roles and Hollywood read their state files without a prompt.** A `cmd`
+  launch now passes `--add-dir`: the studio's state directory for a studio role,
+  and `<base>/studios` for Hollywood, the sibling of its `<base>/hollywood` cwd.
+  A role's cwd is its worktree and Hollywood's is `hollywood/`, so the message
+  files the stage sends (`<studio dir>/messages/<n>-….md`) lay outside cmd's
+  workspace and every read stopped at `Outside the workspace — …` — while the
+  prompt is open the stage's guarded send never delivers. The flag is per run and
+  rides fresh and resumed launches alike.
 - **A user config's `[runner_env]` now reaches every role's launch.** `hollywood
   setup` writes the runner's `PATH` into `~/.config/backlot/config.toml`, but the
   stage read `[runner_env]` only from the per-core `config.toml`, so the next
