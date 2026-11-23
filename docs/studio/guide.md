@@ -528,7 +528,10 @@ the newest release, `no backlot` when there is none.
 
 Right-click a machine row (or find it under `Ctrl+B ?`'s `machines` group) for its own menu —
 only what is valid there: `Install backlot`, `Upgrade backlot to v<latest>`,
-`Start`/`Restart the stage`, `New studio here`, and the endpoint ops. Install and upgrade open
+`Start the stage` when it is down, `Restart the stage` and `Stop the stage…` while it runs,
+`New studio here`, and the endpoint ops. The stage serves its whole machine, so its stop sits
+here rather than in any one studio's menu: every studio on that machine stops advancing until
+the stage starts again, while running roles and the ledger keep going. Install and upgrade open
 a terminal on that machine running the official installer with `BACKLOT_SKIP_CORE=1` — hc is
 never touched — and a `backlot` managed by mise, Homebrew, Nix, cargo or a dev build is refused
 first with the channel's own upgrade command. An upgraded machine whose stage ran is restarted

@@ -147,14 +147,17 @@ async fn slash_stop_arms_the_same_confirm_the_menu_arms() {
     }
     key(&mut app, hc_vt::Key::Enter);
     // The deterministic verb opened `m`'s confirm — no LLM, no
-    // action run yet (the dialog decides).
+    // action run yet (the dialog decides). It is the machine-wide
+    // wording the machine menu's own row uses.
+    let Some(crate::studio_dialog::StudioDialog::Confirm(d)) = &app.studio_dialog else {
+        panic!("the /stop verb arms the confirm");
+    };
+    assert_eq!(d.title, "Stop the stage · Local");
     assert!(
-        matches!(
-            app.studio_dialog,
-            Some(crate::studio_dialog::StudioDialog::Confirm(_))
-        ),
-        "{:?}",
-        app.studio_dialog.is_some()
+        d.body
+            .contains("Every studio on this machine stops advancing"),
+        "{}",
+        d.body
     );
 }
 

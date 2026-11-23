@@ -29,7 +29,9 @@ pub(crate) enum ReasonFor {
 pub(crate) enum ConfirmFor {
     /// `close --person <role>` — "the role's terminal is removed…".
     Close { key: StudioKey, role: String },
-    /// `stage stop` (G1) — "the stage's terminal exits…".
+    /// `stage stop` (G1) — "every studio on this machine stops
+    /// advancing…". The stage serves the whole machine, so the row
+    /// lives on the machine menu.
     StageStop { machine: Option<String> },
     /// `attention clear <seq>` — a stale prompt the role already
     /// left behind.

@@ -210,7 +210,7 @@ async fn plain_mode_has_no_version_lines() {
 async fn the_machine_menu_offers_its_valid_actions() {
     let mut app = versioned_app(&older());
     // Installed + behind latest + stage running → upgrade, restart,
-    // new studio, then the endpoint ops.
+    // stop, new studio, then the endpoint ops.
     app.update_latest = Some(running());
     let menu = app.machine_menu(&remote("host-b"));
     assert_eq!(menu.kind, MenuKind::Machine);
@@ -222,6 +222,7 @@ async fn the_machine_menu_offers_its_valid_actions() {
         vec![
             upgrade.as_str(),
             "Restart the stage",
+            "Stop the stage…",
             "New studio here",
             "Connect machine",
             "Rename machine",
@@ -231,7 +232,8 @@ async fn the_machine_menu_offers_its_valid_actions() {
     );
     assert_eq!(items[0].act, StudioAct::MachineInstall);
     assert_eq!(items[1].act, StudioAct::StageRestart);
-    assert_eq!(items[2].act, StudioAct::NewStudio);
+    assert_eq!(items[2].act, StudioAct::StageStop);
+    assert_eq!(items[3].act, StudioAct::NewStudio);
     assert!(
         items.iter().all(|it| it.dim.is_none()),
         "online — {items:?}"
@@ -330,6 +332,51 @@ async fn right_click_on_a_machine_opens_its_menu() {
     };
     assert_eq!(m.kind, MenuKind::Machine);
     assert_eq!(m.machine.as_deref(), Some("host-b"));
+}
+
+#[tokio::test]
+async fn the_machine_menus_stop_opens_a_machine_wide_confirm() {
+    let mut app = versioned_app(&older());
+    let menu = app.machine_menu(&remote("host-b"));
+    let index = menu
+        .items()
+        .iter()
+        .position(|it| it.label == "Stop the stage…")
+        .expect("the machine menu's stop row");
+    app.studio_menu_activate(&menu, index);
+    let Some(crate::studio_dialog::StudioDialog::Confirm(d)) = &app.studio_dialog else {
+        panic!("the stop opened its confirm");
+    };
+    assert_eq!(d.title, "Stop the stage · host-b");
+    assert!(
+        d.body
+            .contains("Every studio on this machine stops advancing"),
+        "the body says it is machine-wide: {}",
+        d.body
+    );
+    assert!(
+        d.body.contains("Running roles and the ledger keep going"),
+        "{}",
+        d.body
+    );
+    // Confirming runs `stage stop` for that machine, exactly as the
+    // restart's stop half does — and nothing else.
+    key(&mut app, hc_vt::Key::Enter, hc_vt::Mods::NONE);
+    assert!(app.studio_dialog.is_none(), "the confirm closed");
+    let stop = app
+        .actions
+        .pending
+        .iter()
+        .find(|p| p.action.argv == ["stage", "stop"])
+        .expect("the stop ran");
+    assert_eq!(stop.action.machine.as_deref(), Some("host-b"));
+    assert!(
+        !app.actions
+            .pending
+            .iter()
+            .any(|p| p.action.argv == ["stage", "start"]),
+        "a plain stop never chains a start"
+    );
 }
 
 #[tokio::test]

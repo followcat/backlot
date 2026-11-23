@@ -184,7 +184,8 @@ fn a_finished_studio_with_a_seatless_producer_still_reopens() {
 }
 
 /// The rows a finished studio keeps: the sheet, the records and the
-/// requirement read the ledger, and the stage and `tell` still work.
+/// requirement read the ledger, and `tell` still works. The stage's
+/// stop is machine-wide and lives on the machine's menu, not here.
 #[test]
 fn a_finished_studio_keeps_its_live_rows() {
     let menu = StudioMenu::studio(&key(None), &finished(), false, false);
@@ -193,16 +194,32 @@ fn a_finished_studio_keeps_its_live_rows() {
         "Inspect studio sheet (v)",
         "Revise requirement…",
         "Tell producer…",
-        "Stop stage…",
         "Actor records",
     ] {
         assert!(labels.iter().any(|l| l == want), "{want} stays: {labels:?}");
     }
+    assert!(
+        !labels.iter().any(|l| l.contains("Stop stage")),
+        "no per-studio stage stop: {labels:?}"
+    );
     // Nothing in the finished set is dimmed — the review keeps the
     // rows pressable, and only Finish goes away entirely.
     for it in menu.items() {
         assert!(it.dim.is_none(), "{} must not dim", it.label);
     }
+}
+
+/// A finished studio whose stage is down keeps `Start stage` — the
+/// one stage row a studio still owns, because it unblocks this studio.
+#[test]
+fn a_finished_studio_with_a_down_stage_still_starts_it() {
+    let menu = StudioMenu::studio(&key(None), &finished(), true, false);
+    let start = item(&menu, "Start stage").expect("a start row");
+    assert_eq!(start.act, StudioAct::StageStart);
+    assert!(
+        !labels(&menu).iter().any(|l| l.contains("Stop stage")),
+        "the stop never returns to a studio's menu"
+    );
 }
 
 /// A ready-but-unfinished studio keeps `Finish studio…` and has no

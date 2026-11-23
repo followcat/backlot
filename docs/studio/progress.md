@@ -1,5 +1,28 @@
 # Studio progress
 
+## Ux: stopping the stage belongs to the machine, not a studio
+
+- Done: `Stop stage…` sat in each studio's context menu, but a stage
+  schedules its whole machine — stopping it stops every studio there while
+  running roles and the ledger keep going. The row is gone from both studio
+  lists; a studio keeps `Start stage` while its stage is down, the one stage
+  row that unblocks it. The machine row's menu (installed, stage running) now
+  lists `Stop the stage…` right after `Restart the stage`, on a free key hint,
+  and its confirm names the machine and says the stop is machine-wide. A down
+  stage still lists only `Start the stage`; an uninstalled machine lists no
+  stage controls. The panel's `/stop` verb keeps working through the same
+  `StudioAct::StageStop` arm and now shows the new wording.
+- Measured: `studio_menu/tests.rs` covers the studio list without the stop, the
+  machine menu's restart → stop order, a down stage's start-only list and the
+  key-hint uniqueness; `studio_menu/finished_tests.rs` covers the finished
+  list and its `Start stage`; `app/mod_tests/machine_versions.rs` drives the
+  machine menu's stop into the confirm and checks the machine-qualified title,
+  the machine-wide body, and the `stage stop` action on that machine.
+  `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D
+  warnings` and `cargo test --workspace` pass.
+- Not verified: no live-session run — the menus and the dialog are exercised
+  through summary fixtures only.
+
 ## Ux: a finished studio with a live producer offers Focus (A12)
 
 - Done: a finished studio's menu kept showing `Reopen producer (o)` after the

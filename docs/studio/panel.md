@@ -55,7 +55,9 @@ focused.
 ### The studio row's menu
 
 The list follows the studio's own state. A live studio offers `Focus producer`, the sheet, the
-requirement, `Tell producer…`, the stage start/stop, `Finish studio…` and `Actor records` —
+requirement, `Tell producer…`, `Finish studio…` and `Actor records` — `Start stage` joins it
+only while the stage is down, since that is the row which unblocks this studio; stopping the
+stage is machine-wide and lives on the machine row's own menu.
 `Finish` enters the confirm even while tasks are open, because the command's own refusal names
 them, and it draws teal when the studio is ready to finish.
 
@@ -66,9 +68,9 @@ row uses — a fixed seat reopens without a saved session — and it is the one 
 finished studio has, since the sidebar and the band show no person rows for it. Once the producer
 is live again the seat is already open, so the row reads `Focus producer` and lands on its
 terminal like the live menu's own item. The rest of the list stands: the sheet, the requirement
-and `Actor records` read the ledger, the stage still starts and stops, and `Tell producer…`
-queues mail for a person reopened later. Individual people's reopens stay on their own closed
-rows, never in this menu.
+and `Actor records` read the ledger, `Start stage` still stands while the stage is down, and
+`Tell producer…` queues mail for a person reopened later. Individual people's reopens stay on
+their own closed rows, never in this menu.
 
 A ready-but-unfinished studio reads `state: "finished"` in the document too, so the menu keys on
 `ready_to_finish` to keep `Finish` for it. In the band, `f` on a studio's frame arms that finish
