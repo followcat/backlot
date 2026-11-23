@@ -82,23 +82,35 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // U1: studio mode replaces the agents section with the current
     // studio's cast — borrowed views only, every machine's summaries.
     let machines = app.panel_summaries();
-    let cast = app.studio.active.then(|| {
+    let studio_focused = matches!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(_))
+    );
+    let cast_focused = match &app.studio.focus {
+        Some(crate::studio::StudioFocus::Studio(_)) => None,
+        Some(crate::studio::StudioFocus::Role(_, term)) => Some(term.as_str()),
+        None if app.studio.lot.studio_workspace => app.focused.as_deref(),
+        None => None,
+    };
+    let mut cast = app.studio.active.then(|| {
         crate::cast::CastView::build(
             &machines,
             &app.projection.snapshot,
             &app.view,
             app.studio.current.as_ref(),
-            // R3-M6: the cast belongs to a focused studio workspace —
-            // over `backlot`/`stage`, `bl-hollywood` or a plain
-            // workspace no studio's people paint as the cast.
-            app.studio.lot.studio_workspace,
+            // Cast belongs to a focused studio workspace — or any studio
+            // selected via `StudioFocus::Studio(_)`.
+            app.studio.lot.studio_workspace || studio_focused,
             Some(crate::project::LOCAL_LABEL),
             &app.shell,
             app.studio.others_expanded,
-            app.focused.as_deref(),
+            cast_focused,
             app.panel.spin,
         )
     });
+    if let Some(view) = cast.as_mut() {
+        view.studio_focused = studio_focused;
+    }
     let lot = (app.studio.lot.pill || app.studio.lot.header.is_some()).then_some(
         crate::chrome::lot::LotFrame {
             counts: app.studio.lot.counts,
@@ -117,8 +129,12 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
     // cell-identical to Herdr; resolved before `shell_state`'s
     // mutable borrows below.
     let machine_lines = (!app.plain).then(|| app.machine_lines());
-    // Resolved before the `shell_state` borrows below.
+    // Resolved before the `shell_state` / `studio` borrows below.
     let federated = app.federated_sidebar();
+    let focused_studio = (!app.plain)
+        .then(|| app.studio.focused_studio())
+        .flatten()
+        .cloned();
     let state = crate::chrome::render::ShellRenderState {
         machine_diagnostics: &app.shell_state.machine_diagnostics,
         federated,
@@ -145,6 +161,8 @@ pub fn draw(app: &mut App, frame: &mut ratatui::Frame, _now: Instant) {
         cast_scroll: &mut app.studio.cast_scroll,
         lot,
         machine_lines: machine_lines.as_ref(),
+        hide_stage_space: !app.plain,
+        focused_studio: focused_studio.as_ref(),
     };
     app.hit_map = crate::chrome::render::render_shell(
         buf,

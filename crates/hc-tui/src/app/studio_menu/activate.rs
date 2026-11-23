@@ -175,6 +175,11 @@ impl App {
                     ));
                 }
             }
+            StudioAct::DeleteStudio => {
+                if let Some(key) = &menu.studio {
+                    self.studio_dialog = Some(StudioDialog::delete_studio(key, menu.finished));
+                }
+            }
             StudioAct::Tell => self.tell_dialog_open(menu),
             StudioAct::Revise => self.revise_dialog_open(menu),
             StudioAct::Records => {
@@ -295,6 +300,59 @@ impl App {
                 peek.prompt = Some((key.clone(), role.role.clone()));
             }
         }
+    }
+
+    /// Delete a studio via CLI `studio finish` (if live) then `studio prune`.
+    pub(crate) fn delete_studio_run(
+        &mut self,
+        key: &crate::studio::StudioKey,
+        finished: bool,
+        force: bool,
+    ) {
+        if !finished && !force {
+            self.delete_finish_pending
+                .insert(crate::action::mark::studio(key), key.clone());
+            self.run_action(studio_cmds::finish(key, None));
+        } else {
+            self.run_action(studio_cmds::prune(key, force));
+        }
+    }
+
+    /// Handle follow-up chaining for `Delete studio…`: `finish` chains `prune`;
+    /// non-forced `prune` returning kept trees/branches opens `--force` confirm.
+    pub(in crate::app) fn delete_studio_reply(
+        &mut self,
+        action: &crate::action::Action,
+        result: &Result<String, String>,
+    ) -> bool {
+        if action.argv.starts_with(&["studio".into(), "finish".into()])
+            && let Some(key) = self.delete_finish_pending.remove(&action.mark)
+        {
+            if result.is_ok() {
+                self.run_action(studio_cmds::prune(&key, false));
+                return true;
+            }
+            return false;
+        }
+        if let Ok(stdout) = result
+            && action.name == "prune studio"
+            && !action.argv.iter().any(|a| a == "--force")
+        {
+            let kept = studio_dialog::kept_from_prune(stdout);
+            if !kept.is_empty()
+                && let Some(id) = action.argv.get(2)
+            {
+                let key = crate::studio::StudioKey {
+                    machine: action.machine.clone(),
+                    id: id.clone(),
+                };
+                self.studio_dialog = Some(studio_dialog::StudioDialog::delete_studio_force(
+                    &key, &kept,
+                ));
+                return true;
+            }
+        }
+        false
     }
 }
 

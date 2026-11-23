@@ -59,6 +59,12 @@ impl PartialEq<&str> for StudioKey {
 /// The client-local studio state: whether studio mode is on, which
 /// studio is current, the person each studio last focused and the
 /// cast's `others` expansion.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum StudioFocus {
+    Studio(StudioKey),
+    Role(StudioKey, String),
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Studio {
     /// The studio-layout latch (U2): on whenever the client is not
@@ -71,6 +77,8 @@ pub(crate) struct Studio {
     /// elsewhere. At the start it is the first studio in the
     /// aggregate's order.
     pub current: Option<StudioKey>,
+    /// Independent studio/role cursor for `Alt+arrows` and `Ctrl+B m`.
+    pub focus: Option<StudioFocus>,
     /// `(machine, studio) → role`: the person last focused in each
     /// studio, so returning lands on the same person.
     pub remembered: BTreeMap<StudioKey, String>,
@@ -82,35 +90,90 @@ pub(crate) struct Studio {
     /// The lot latch — the pill's counts and the focused workspace's
     /// studio header, rebuilt by `sync_studio`.
     pub(crate) lot: crate::chrome::lot::Lot,
+    last_focused_terminal: Option<String>,
 }
 
 impl Studio {
+    /// Target the studio row itself without changing `App::focused`.
+    pub(crate) fn set_studio_focus(&mut self, key: StudioKey) {
+        self.current = Some(key.clone());
+        self.focus = Some(StudioFocus::Studio(key));
+    }
+
+    /// Force the next sync pass to re-evaluate `App::focused` even if it
+    /// points to the same terminal pane as before.
+    pub(crate) fn clear_focus_latch(&mut self) {
+        self.last_focused_terminal = None;
+    }
+
+    /// Studio currently owning `StudioFocus::Studio(key)` (not `Role`).
+    pub(crate) fn focused_studio(&self) -> Option<&StudioKey> {
+        match &self.focus {
+            Some(StudioFocus::Studio(key)) => Some(key),
+            _ => None,
+        }
+    }
+
     /// Sync against the last good summaries and the focused terminal.
     /// No machine's document at all keeps every latch. The `active`
     /// latch itself is `sync_studio`'s (`!plain`), not the
     /// documents'.
+    #[cfg(test)]
     pub(crate) fn sync(&mut self, machines: &[MachineSummary], focused: Option<&str>) {
+        self.sync_with_shell(machines, focused, None);
+    }
+
+    /// Sync against summaries, the focused terminal, and any resolved
+    /// studio-shell ownership for `focused`.
+    pub(crate) fn sync_with_shell(
+        &mut self,
+        machines: &[MachineSummary],
+        focused: Option<&str>,
+        shell_key: Option<StudioKey>,
+    ) {
         if machines.is_empty() {
             return;
         }
         let studios = crate::panel::data::studios(machines);
-        // A focused terminal owned by a studio person moves the
-        // current pointer and remembers the person there. An
-        // unfocused frame (`None`) must not match the unseated
-        // roles — `None == None` would otherwise pin the current
-        // studio to the first with a terminal-less person.
-        if let Some((studio, role)) = focused.and_then(|terminal| {
-            studios.iter().find_map(|s| {
-                s.studio
-                    .roles
-                    .iter()
-                    .find(|role| role.terminal.as_deref() == Some(terminal))
-                    .map(|role| (*s, role))
-            })
-        }) {
-            let key = studio.key();
-            self.current = Some(key.clone());
-            self.remembered.insert(key, role.role.clone());
+        let focus_changed = focused != self.last_focused_terminal.as_deref();
+        if focus_changed {
+            self.last_focused_terminal = focused.map(str::to_owned);
+        }
+        let matched = focused.and_then(|terminal| {
+            studios
+                .iter()
+                .find_map(|s| {
+                    s.studio
+                        .roles
+                        .iter()
+                        .find(|role| role.terminal.as_deref() == Some(terminal))
+                        .map(|role| (s.key(), role.role.clone(), terminal.to_owned()))
+                })
+                .or_else(|| {
+                    shell_key
+                        .clone()
+                        .filter(|key| studios.iter().any(|s| &s.key() == key))
+                        .map(|key| (key, terminal.to_owned(), terminal.to_owned()))
+                })
+        });
+        if focus_changed {
+            if let Some((key, member, terminal)) = matched {
+                self.current = Some(key.clone());
+                self.remembered.insert(key.clone(), member);
+                self.focus = Some(StudioFocus::Role(key, terminal));
+            } else if matches!(self.focus, Some(StudioFocus::Role(..))) {
+                self.focus = None;
+            }
+        } else if let Some(StudioFocus::Studio(key)) = &self.focus {
+            if studios.iter().any(|s| &s.key() == key) {
+                self.current = Some(key.clone());
+            } else {
+                self.focus = studios.first().map(|s| StudioFocus::Studio(s.key()));
+            }
+        } else if let Some(StudioFocus::Role(key, _)) = &self.focus
+            && !studios.iter().any(|s| &s.key() == key)
+        {
+            self.focus = None;
         }
         // A current studio that left every machine's document falls
         // back to the aggregate's order, like the start does.

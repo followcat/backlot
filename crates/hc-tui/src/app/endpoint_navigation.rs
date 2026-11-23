@@ -41,6 +41,7 @@ impl App {
             false,
             &HashSet::new(),
             &HashMap::new(),
+            !self.plain,
         )
     }
 

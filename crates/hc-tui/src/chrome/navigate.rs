@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::sidebar_render::workspace_entries;
+use super::sidebar_render::workspace_entries_filtered;
 use super::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellEndpoint};
 
 /// A client-only preview. Snapshot identity prevents Enter from using a reused
@@ -75,6 +75,9 @@ pub(crate) fn navigation_target_valid(
 /// enumeration: online endpoints only; the collapsed sidebar uses flat
 /// workspace order, the expanded sidebar honors grouped/collapsed worktrees,
 /// and mobile ignores collapsed groups.
+/// Ordered navigation targets, matching `move_navigate_workspace`'s entry
+/// enumeration, optionally hiding the internal `backlot` stage space in
+/// studio mode.
 pub(crate) fn workspace_navigation_targets(
     endpoints: &[ClientShellEndpoint],
     sidebar_collapsed: bool,
@@ -82,6 +85,7 @@ pub(crate) fn workspace_navigation_targets(
     surface_available: bool,
     collapsed_groups: &HashSet<String>,
     remote_collapsed_groups: &HashMap<ClientEndpointId, HashSet<String>>,
+    hide_stage_space: bool,
 ) -> Vec<WorkspaceNavigationTarget> {
     let empty_collapsed_groups = HashSet::new();
     let mut targets = Vec::new();
@@ -97,6 +101,10 @@ pub(crate) fn workspace_navigation_targets(
                 .workspaces
                 .iter()
                 .enumerate()
+                .filter(|(_, workspace)| {
+                    !(hide_stage_space
+                        && crate::chrome::snapshot::is_backlot_stage_space(workspace))
+                })
                 .map(|(index, _)| super::workspace::WorkspaceEntry {
                     index,
                     indented: false,
@@ -113,7 +121,7 @@ pub(crate) fn workspace_navigation_targets(
                     .get(&endpoint.endpoint_id)
                     .unwrap_or(&empty_collapsed_groups)
             };
-            workspace_entries(snapshot, groups)
+            workspace_entries_filtered(snapshot, groups, hide_stage_space)
         };
         for entry in entries {
             targets.push(WorkspaceNavigationTarget {

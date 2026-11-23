@@ -97,6 +97,7 @@ fn cast_view<'a>(
         others,
         others_expanded,
         spin: 0,
+        studio_focused: false,
     }
 }
 

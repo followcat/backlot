@@ -15,9 +15,9 @@ use super::render::{
 };
 use super::sidebar_render::{
     displayed_workspace_status, render_parent_group_toggle, render_workspace_rows,
-    workspace_entries, workspace_rows,
+    workspace_entries_filtered, workspace_rows,
 };
-use super::snapshot::{ClientEndpointStatus, ClientShellSnapshot};
+use super::snapshot::{ClientEndpointId, ClientEndpointStatus, ClientShellSnapshot};
 use super::spans::{expanded_sidebar_sections, sidebar_section_divider_rect};
 use super::workspace::WorkspaceEntry;
 
@@ -57,7 +57,7 @@ pub(crate) fn render_expanded(
             let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                 .unwrap_or(&empty_collapsed_groups);
             rows.extend(
-                workspace_entries(snapshot, collapsed_groups)
+                workspace_entries_filtered(snapshot, collapsed_groups, state.hide_stage_space)
                     .into_iter()
                     .map(|entry| Row::Workspace {
                         endpoint: endpoint_index,
@@ -297,9 +297,20 @@ pub(crate) fn render_expanded(
                     rect.height,
                 );
                 let endpoint_active = &endpoint.endpoint_id == state.active_endpoint_id;
+                let studio_focused = state.focused_studio.is_some_and(|key| {
+                    let machine_matches = match (&endpoint.endpoint_id, &key.machine) {
+                        (ClientEndpointId::Local, None) => true,
+                        (ClientEndpointId::Remote(ep), Some(m)) => ep == m,
+                        _ => false,
+                    };
+                    machine_matches && workspace.label == key.id
+                });
                 let selected = state.selected_workspace_id.is_some_and(|target| {
                     target.matches(&endpoint.endpoint_id, &workspace.workspace_id)
                 });
+                if studio_focused && !selected {
+                    buffer.set_style(rect, Style::default().bg(palette.active_row_bg));
+                }
                 render_workspace_rows(
                     buffer,
                     nested,
@@ -307,12 +318,22 @@ pub(crate) fn render_expanded(
                     config.status_indicators,
                     entry,
                     tokens,
-                    endpoint_active && workspace.focused,
+                    (endpoint_active && workspace.focused) || studio_focused,
                     selected,
                     state.selected_workspace_id.is_some(),
                     false,
                     palette,
                 );
+                if studio_focused && !selected && !rect.is_empty() {
+                    put_text(
+                        buffer,
+                        rect.x,
+                        rect.y,
+                        1,
+                        "▌",
+                        Style::default().fg(palette.accent),
+                    );
+                }
                 if endpoint.status != ClientEndpointStatus::Online {
                     buffer.set_style(
                         rect,

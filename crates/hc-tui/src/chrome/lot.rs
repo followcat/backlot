@@ -461,6 +461,8 @@ pub(crate) struct StudioHeader {
     pub studio: String,
     /// `· host-b` when the aggregate spans machines.
     pub machine: Option<String>,
+    /// `true` while `StudioFocus::Studio(key)` points at this studio.
+    pub studio_focused: bool,
     pub kind: HeaderKind,
 }
 
@@ -510,7 +512,14 @@ fn header_spans(header: &StudioHeader, palette: &Palette) -> Vec<(String, Style)
     let mut spans = vec![
         (
             format!(" {}", header.studio),
-            text.add_modifier(Modifier::BOLD),
+            if header.studio_focused {
+                Style::default()
+                    .fg(palette.accent)
+                    .bg(palette.panel_bg)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                text.add_modifier(Modifier::BOLD)
+            },
         ),
         (
             header

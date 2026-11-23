@@ -11,7 +11,7 @@ use ratatui::{
 use super::mobile::{MobileItem, compact_tab_status, mobile_endpoint_state};
 use super::navigate::WorkspaceNavigationTarget;
 use super::render::ClientMobileTarget;
-use super::sidebar_render::workspace_entries;
+use super::sidebar_render::workspace_entries_filtered;
 use super::snapshot::{ClientEndpointId, ClientShellEndpoint, ClientShellSnapshot};
 use super::status::{AgentStatus, status_color, status_icon, status_text};
 use super::text::truncate_end;
@@ -200,7 +200,7 @@ pub(crate) fn mobile_items(
         palette,
     ));
     for endpoint in super::endpoints::cached_endpoint_snapshots(endpoints) {
-        for entry in workspace_entries(endpoint.snapshot, &HashSet::new()) {
+        for entry in workspace_entries_filtered(endpoint.snapshot, &HashSet::new(), federated) {
             let Some(workspace) = endpoint.snapshot.workspaces.get(entry.index) else {
                 continue;
             };

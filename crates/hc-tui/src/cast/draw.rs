@@ -71,24 +71,25 @@ pub(crate) fn render_cast(
                 .as_ref()
                 .map(|label| label.fit(id_width as usize))
                 .unwrap_or_else(|| studio.studio.id.clone());
+            let header_fg = if view.studio_focused {
+                palette.accent
+            } else {
+                palette.overlay0
+            };
             put_text(
                 buffer,
                 header.x,
                 header.y,
                 header.width,
                 &format!(" {label}"),
-                Style::default()
-                    .fg(palette.overlay0)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
             );
             put_right_text(
                 buffer,
                 header,
                 header.y,
                 &format!("{}/{}", view.index + 1, view.total),
-                Style::default()
-                    .fg(palette.overlay0)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(header_fg).add_modifier(Modifier::BOLD),
             );
         }
         // No studio yet (U2): the header alone — the `others` row is

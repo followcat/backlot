@@ -182,21 +182,36 @@ async fn the_sidebar_width_follows_the_mode_unless_dragged() {
 #[tokio::test]
 async fn next_and_previous_studio_cycle_and_land_on_the_remembered() {
     let mut app = two_studio_app();
-    // Producer-focused → acme remembers producer.
+    // Alt+Down moves StudioFocus to Studio(night-owl) without moving the
+    // attached typing pane (`t1`); Alt+Right enters its remembered member.
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "night-owl"
+        )))
+    );
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t1"),
+        "pane stays attached for typing"
+    );
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t7"), "the producer lands");
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("ghost".into()));
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("acme-shop".into()), "wraps");
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t1"));
-    // Focus alice, leave, come back → alice lands, not the producer.
+    // Focus alice, leave, come back → alice lands when entering roles.
     app.focused = Some("t4".into());
     app.refresh_projection();
     alt(&mut app, hc_vt::Key::ArrowDown);
     alt(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.focused.as_deref(),
         Some("t4"),
@@ -218,7 +233,7 @@ async fn next_and_previous_role_skip_the_closed_and_wrap() {
 }
 
 #[tokio::test]
-async fn a_role_key_from_outside_the_studio_falls_through() {
+async fn a_role_key_from_outside_the_studio_enters_the_current_studio() {
     let mut app = two_studio_app();
     app.focused = Some("t4".into());
     app.refresh_projection();
@@ -229,15 +244,16 @@ async fn a_role_key_from_outside_the_studio_falls_through() {
             .map(String::as_str),
         Some("actor-alice")
     );
-    // Focus a terminal no person owns → not a studio workspace, so
-    // the role key falls through to herdr's binding (unbound here:
-    // nothing happens), and acme's remembered role stays put.
+    // Focus a terminal outside studios: role keys belong to Backlot
+    // whenever studios exist and enter the current studio's remembered role.
     app.focused = Some("t99".into());
     app.refresh_projection();
     alt(&mut app, hc_vt::Key::ArrowRight);
-    assert_eq!(app.focused.as_deref(), Some("t99"), "herdr got the key");
-    // Back inside the studio the same key cycles the cast — and the
-    // remembered alice is where a studio hop lands.
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t4"),
+        "entered remembered role from outside studio workspace"
+    );
     app.focused = Some("t1".into());
     app.refresh_projection();
     alt(&mut app, hc_vt::Key::ArrowRight);
@@ -251,8 +267,18 @@ async fn a_studio_with_no_live_terminal_still_becomes_current() {
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("ghost".into()));
     assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "ghost"
+        )))
+    );
+    assert_eq!(app.focused.as_deref(), Some("t1"));
+    // Entering roles on a dead studio reports no live terminal without
+    // losing the current terminal.
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(
         app.focused.as_deref(),
-        Some("t7"),
+        Some("t1"),
         "no focus move — nobody live to land on"
     );
     assert!(app.notice.is_some(), "the notice says so");
@@ -326,7 +352,13 @@ async fn the_studio_keys_fire_while_the_panel_owns_the_keys() {
     app.panel.focused = true;
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t7"));
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "night-owl"
+        )))
+    );
+    assert_eq!(app.focused.as_deref(), Some("t1"));
 }
 
 #[tokio::test]
@@ -351,7 +383,12 @@ async fn the_studio_keys_fire_while_a_persistent_float_is_focused() {
     assert!(app.popup.is_some(), "the float shows");
     alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.studio.current, Some("night-owl".into()));
-    assert_eq!(app.focused.as_deref(), Some("t7"), "the nav ran");
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "night-owl"
+        )))
+    );
 }
 
 #[tokio::test]

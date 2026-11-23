@@ -139,11 +139,12 @@ impl App {
             self.hollywood_toggle();
             return;
         }
-        // The studio header's name focuses the dock on that studio.
+        // The studio header's name focuses the dock and sets `StudioFocus`
+        // on that studio.
         if contains(hits.studio_header, point)
             && let Some(key) = hits.studio_key.clone()
         {
-            self.studio.current = Some(key.clone());
+            self.studio.set_studio_focus(key.clone());
             if self.panel_mode_at(self.area.0) == crate::panel::PanelMode::Closed {
                 self.panel.mode = crate::panel::PanelMode::Expanded;
             }

@@ -126,10 +126,11 @@ pub(super) fn render_overlays_and_cursor(
         // R3-M6: `▸` belongs to a studio workspace's studio only —
         // over `backlot`/`stage`, `bl-hollywood` or a plain workspace
         // the remembered `current` does not paint as active.
-        let mark = if app.studio.lot.studio_workspace {
-            app.studio.current.as_ref()
-        } else {
-            None
+        let mark = match &app.studio.focus {
+            Some(crate::studio::StudioFocus::Studio(key))
+            | Some(crate::studio::StudioFocus::Role(key, _)) => Some(key),
+            None if app.studio.lot.studio_workspace => app.studio.current.as_ref(),
+            None => None,
         };
         // wide-01: `←→ role` only has somewhere to go while the
         // current studio cycles ≥2 live members (roles + shells).

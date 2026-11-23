@@ -194,6 +194,10 @@ pub(crate) struct ShellRenderState<'a> {
     /// U6c's per-machine version lines, keyed by endpoint id —
     /// `None` in plain mode so Herdr's rows stay exactly one line.
     pub machine_lines: Option<&'a std::collections::BTreeMap<ClientEndpointId, MachineLine>>,
+    /// Studio mode hides the internal `backlot` stage space from the sidebar.
+    pub hide_stage_space: bool,
+    /// Studio currently owning `StudioFocus::Studio(key)`, highlighted in the sidebar.
+    pub focused_studio: Option<&'a crate::studio::StudioKey>,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {

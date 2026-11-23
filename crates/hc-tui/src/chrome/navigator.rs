@@ -110,6 +110,9 @@ pub(crate) fn navigator_rows(
                     .push(pane);
             }
             for workspace in &snapshot.workspaces {
+                if federated && super::snapshot::is_backlot_stage_space(workspace) {
+                    continue;
+                }
                 let workspace_matches = endpoint_query_matches
                     || text(&workspace.label)
                     || workspace.branch.as_deref().is_some_and(text);

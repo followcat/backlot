@@ -94,6 +94,13 @@ impl App {
             ConfirmFor::DirOverride { key, role, allow } => {
                 self.run_action(studio_cmds::decide(key, role, *allow));
             }
+            ConfirmFor::DeleteStudio {
+                key,
+                finished,
+                force,
+            } => {
+                self.delete_studio_run(key, *finished, *force);
+            }
         }
     }
 

@@ -200,17 +200,6 @@ impl App {
             })
             .collect()
     }
-
-    /// The current studio's shell terminals for the role keys —
-    /// after the people, in shell-number order, on its own machine.
-    pub(crate) fn focused_studio_shells(&self) -> Vec<String> {
-        let machines = self.panel_summaries();
-        let Some(index) = self.studio.current_index(&machines) else {
-            return Vec::new();
-        };
-        let current = crate::panel::data::studios(&machines)[index];
-        self.studio_shells_live(&current.key())
-    }
 }
 
 #[cfg(test)]

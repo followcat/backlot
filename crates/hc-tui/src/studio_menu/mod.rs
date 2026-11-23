@@ -182,6 +182,8 @@ pub(crate) enum StudioAct {
     StageStop,
     /// `studio finish` through the reason dialog (reason optional).
     Finish,
+    /// `studio finish` (if live) + `studio prune` through confirmation.
+    DeleteStudio,
     /// `tell <role> --text` through the Tell dialog.
     Tell,
     /// `req revise --stdin` through the Revise dialog.
@@ -499,6 +501,43 @@ impl StudioMenu {
         StudioMenu {
             kind: MenuKind::Hollywood(seq),
             ..StudioMenu::lot()
+        }
+    }
+
+    /// Non-selectable header line identifying the menu's target.
+    pub(crate) fn title(&self) -> String {
+        let studio = self.studio.as_ref().map(|k| k.id.as_str()).unwrap_or("");
+        match self.kind {
+            MenuKind::Studio | MenuKind::StudioTalk(_) => format!("Studio · {studio}"),
+            MenuKind::Role | MenuKind::Prompt | MenuKind::DirPrompt | MenuKind::Closed => {
+                let name = self.role.as_ref().map(|r| r.name.as_str()).unwrap_or("");
+                if studio.is_empty() {
+                    format!("Role · {name}")
+                } else {
+                    format!("Role · {name} ({studio})")
+                }
+            }
+            MenuKind::Task => {
+                let task = self.task.as_ref().map(|t| t.id.as_str()).unwrap_or("");
+                if studio.is_empty() {
+                    format!("Task · {task}")
+                } else {
+                    format!("Task · {task} ({studio})")
+                }
+            }
+            MenuKind::Card => match &self.card {
+                Some(id) => format!("Card · {id}"),
+                None => "Card".to_owned(),
+            },
+            MenuKind::Stage => match &self.machine {
+                Some(m) => format!("Stage · {m}"),
+                None => "Stage".to_owned(),
+            },
+            MenuKind::Lot => "Lot".to_owned(),
+            MenuKind::Machine => {
+                format!("Machine · {}", self.machine.as_deref().unwrap_or("Local"))
+            }
+            MenuKind::Hollywood(_) => "Hollywood".to_owned(),
         }
     }
 

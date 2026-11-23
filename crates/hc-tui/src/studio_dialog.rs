@@ -45,6 +45,13 @@ pub(crate) enum ConfirmFor {
         role: String,
         allow: bool,
     },
+    /// `studio finish` (if live) + `studio prune [--force]` — deletes a
+    /// studio's worktrees and task branches on confirmation.
+    DeleteStudio {
+        key: StudioKey,
+        finished: bool,
+        force: bool,
+    },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -162,6 +169,50 @@ impl StudioDialog {
             },
         })
     }
+
+    /// First confirmation before `studio finish` + `studio prune`.
+    pub(crate) fn delete_studio(key: &StudioKey, finished: bool) -> StudioDialog {
+        StudioDialog::Confirm(ConfirmDialog {
+            title: format!("Delete studio · {}", Self::place(key)),
+            body: "Removes the studio's roles and terminals, its worktrees and \
+                   task branches, and its ledger. The integration branch and your \
+                   repository are never deleted."
+                .to_owned(),
+            for_: ConfirmFor::DeleteStudio {
+                key: key.clone(),
+                finished,
+                force: false,
+            },
+        })
+    }
+
+    /// Second confirmation after `studio prune` kept dirty worktrees or
+    /// unmerged task branches.
+    pub(crate) fn delete_studio_force(key: &StudioKey, kept: &[String]) -> StudioDialog {
+        StudioDialog::Confirm(ConfirmDialog {
+            title: format!("Force delete studio? · {}", Self::place(key)),
+            body: format!(
+                "Kept: {}. Pass --force to discard dirty worktrees and unmerged task \
+                 branches? The integration branch and your repository are never deleted.",
+                kept.join("; ")
+            ),
+            for_: ConfirmFor::DeleteStudio {
+                key: key.clone(),
+                finished: true,
+                force: true,
+            },
+        })
+    }
+}
+
+/// Kept dirty worktrees or unmerged task branches reported by `studio prune`.
+pub(crate) fn kept_from_prune(stdout: &str) -> Vec<String> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("kept worktree ") || line.starts_with("kept branch "))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The 4-row editor the Tell and Revise bodies share (§2.3/§2.4):
