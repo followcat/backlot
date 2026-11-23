@@ -393,6 +393,8 @@ mod agy_tests;
 #[cfg(test)]
 mod argv_tests;
 #[cfg(test)]
+mod caps_tests;
+#[cfg(test)]
 mod cline_hook_json_tests;
 #[cfg(test)]
 mod cline_hook_tests;
