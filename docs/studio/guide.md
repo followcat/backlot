@@ -603,7 +603,7 @@ stage can raise:
 | `permission profile not supported` | The cast's `permission_profile` is not `standard` or `worktree`. | Same: the role never starts; fix the cast for the next studio. |
 | `model not supported` | A cline role's model names no provider the adapter knows — only `cline-pass/<model>` ids were measured, and there is no per-role config for a provider. | The role never starts; give the cast a `cline-pass/…` model. |
 | `effort not supported` | A cline role's `effort` is not one `--thinking` takes (`none`, `low`, `medium`, `high`, `xhigh`). | Same: the role never starts; fix the cast's effort. |
-| `config malformed` | `<state base>/config.toml` did not parse, a `[runner_env.<runner>]` table held a non-string, or an env file `[env_file]` names could not be read or parsed — the role gets no runner env and does not start. | Fix the file's TOML or the env file; the stage retries each tick. Only the error's line and column or the file's path are reported, never the contents. |
+| `config malformed` | `<state base>/config.toml` or the user config's `[runner_env]` did not parse, a `[runner_env.<runner>]` table held a non-string, or an env file `[env_file]` names could not be read or parsed — the role gets no runner env and does not start. | Fix the file's TOML or the env file; the stage retries each tick. Only the error's line and column or the file's path are reported, never the contents. |
 | `cursor prep failed` | A cursor role's per-session setup failed — its directories, `cli-config.json` or the `mcp-disabled.json` list could not be written, or the global `mcp.json` did not parse. | The role does not start; the detail names what failed. Fix it and the start retries each tick. |
 | `cursor dir was open` | A cursor role's `roles/<role>/cursor/` — the boundary that keeps the agent's `authInfo`-holding files unreachable — carried a group or other permission bit. The stage found it at launch prep or at session discovery and set it back to 700. | Informational only — the detail names the path suffix. Check what set the mode (a loose umask, an outside chmod); a repeat drift raises it again. |
 | `inherited XDG_CONFIG_HOME` | The stage's own environment carries `XDG_CONFIG_HOME` — cursor's `auth.json` moves with it, so a cursor role would start logged out. | The role does not start. Unset `XDG_CONFIG_HOME` where the stage runs and it retries each tick. |
@@ -798,12 +798,19 @@ inherited `PATH` (shown before it is written, an existing `PATH` never touched),
 resolver answers the installed check the way a launch would: a runner the picker offers is a
 runner that can seat.
 
+The stage also reads `[runner_env.<runner>]` from the **user config**
+(`~/.config/backlot/config.toml`) as a lower layer — that is where `hollywood setup` writes a
+runner's `PATH`, and the `[hollywood]` table there applies to every session on the machine, so its
+`PATH` must too. The per-core table wins on any key both set; the user config's `[env_file]` is
+never read. Every role reads the pair through the same lookup, Hollywood included, so one
+`hollywood setup` covers the overseer and every studio role on the machine.
+
 Larger env sets — a company proxy's whole bundle, say — live in dotenv files rather than inline.
 An `agent.env` beside the `config.toml` applies to every runner the moment it exists, and
 `[env_file]` tables name more: `default` for every runner, a runner's own key for that one only.
 Paths are absolute or `~/`-relative, a missing file is skipped, and each layer sits under the one
-after it — `agent.env`, then `default`, then the runner's file, then `[runner_env]` strings, which
-always win.
+after it — `agent.env`, then `default`, then the runner's file, then the user config's
+`[runner_env]` strings, then the per-core `[runner_env]` strings, which always win.
 
 ```toml
 [env_file]

@@ -95,6 +95,16 @@ fn desired_actor<'s>(state: &'s StudioState, role: &str) -> Option<&'s ActorIden
     }
 }
 
+/// A config file's text, empty when it does not exist — a read error
+/// names the path only, never the contents.
+fn read_config(path: &Path) -> Result<String, String> {
+    match std::fs::read_to_string(path) {
+        Ok(t) => Ok(t),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
 /// The env a role terminal gets: the adapter's, then the runner's own
 /// config map, then the role's structural variables on top — the
 /// launch's working set never overrides `BACKLOT_*`. `PATH` is the
@@ -334,19 +344,20 @@ impl Stage {
 
     /// The launch env a role gets for `runner`: `<state>/agent.env`
     /// and the `[env_file]`/`[runner_env]` layers of
-    /// `<base>/config.toml` — secrets the terminal gets through
+    /// `<base>/config.toml`, then the user config's `[runner_env]` as
+    /// a lower layer than the per-core one — `hollywood setup` writes
+    /// its PATH there, and every role (Hollywood included) reads it
+    /// through this one call. Values reach the terminal through
     /// `terminal.run` env only. Missing pieces are no extra env; a
     /// malformed one is the caller's `attention.raised` detail, so
     /// the role starts nothing.
     pub(crate) fn runner_env(&self, runner: &str) -> Result<BTreeMap<String, String>, String> {
         let state_dir = Path::new(&self.state_dir);
-        let path = state_dir.join("config.toml");
-        let text = match std::fs::read_to_string(&path) {
-            Ok(t) => t,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(format!("{}: {e}", path.display())),
-        };
-        config::runner_env_for(state_dir, &text, runner)
+        let core_path = state_dir.join("config.toml");
+        let core_text = read_config(&core_path)?;
+        let user_path = config::config_path(&self.env_vars);
+        let user_text = read_config(&user_path)?;
+        config::runner_env_layered(state_dir, &core_text, &user_text, runner)
     }
 
     /// `<program> --version`'s first line, asked once per launch

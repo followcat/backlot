@@ -10,6 +10,18 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ## Unreleased
 
+### Fixed
+
+- **A user config's `[runner_env]` now reaches every role's launch.** `hollywood
+  setup` writes the runner's `PATH` into `~/.config/backlot/config.toml`, but the
+  stage read `[runner_env]` only from the per-core `config.toml`, so the next
+  Hollywood launch failed with `cannot start "cmd": No such file or directory`.
+  The stage now reads the user config's `[runner_env.<runner>]` as a lower layer
+  than the per-core one — `agent.env` and `[env_file]` first, then the user
+  config, then the per-core table, which wins on any key it sets. Only
+  `[runner_env]` is read from the user config; its `[env_file]` is ignored, and a
+  malformed user file refuses with the position only, like the per-core one.
+
 ### Changed
 
 - **Stopping the stage moved to the machine's menu.** `Stop stage…` is gone

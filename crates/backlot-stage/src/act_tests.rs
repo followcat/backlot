@@ -139,6 +139,27 @@ fn runner_env_path_leads_but_keeps_the_exe_dir() {
     assert_eq!(env["PATH"], "/exe:/usr/bin");
 }
 
+/// A PATH the user config sets — where `hollywood setup` writes one —
+/// reaches the launch env after the exe's directory, exactly as a
+/// per-core `[runner_env]` PATH does.
+#[test]
+fn a_user_configs_runner_path_reaches_the_launch() {
+    let dir = crate::test_support::TestDir::new("backlot-act-user-path");
+    let user = "[runner_env.cmd]\nPATH = \"/opt/nvm/bin\"\n";
+    let merged =
+        crate::config::runner_env_layered_home(dir.path(), "", user, "cmd", dir.path()).unwrap();
+    let env = role_env(
+        "acme",
+        &start(),
+        "/state",
+        "/exe",
+        "/exe:/usr/bin",
+        BTreeMap::new(),
+        merged,
+    );
+    assert_eq!(env["PATH"], "/exe:/opt/nvm/bin");
+}
+
 /// `launch refused` and every other raiser share the one open
 /// attention per role and reason: a second identical raise is
 /// suppressed, a different role or reason is not, and a cleared
