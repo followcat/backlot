@@ -102,6 +102,9 @@ pub enum Refusal {
     RoleNoSession(String),
     RoleHeld(String),
     RoleNotHeld(String),
+    /// `close` on one of the three fixed seats: it stays live for the
+    /// studio's whole run — restart it, or finish the studio.
+    FixedSeat(String),
     /// `restart` on a closed person — `reopen` is that way back.
     RestartClosed(String),
     /// `restart` on a finished studio.
@@ -292,7 +295,14 @@ impl fmt::Display for Refusal {
                 write!(f, "role '{r}' has no recorded session to reopen")
             }
             Refusal::RoleHeld(r) => write!(f, "role '{r}' is already held for reopening"),
-            Refusal::RoleNotHeld(r) => write!(f, "role '{r}' is not held"),
+            Refusal::RoleNotHeld(r) => write!(
+                f,
+                "the {r} has nothing to close — it closes with its task; use restart to reload it"
+            ),
+            Refusal::FixedSeat(r) => write!(
+                f,
+                "the {r} is a fixed seat — use restart, or finish the studio"
+            ),
             Refusal::RestartClosed(r) => write!(f, "the {r} is closed — use reopen"),
             Refusal::RestartFinished => {
                 write!(f, "the studio is finished — reopen or restore it first")

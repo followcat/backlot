@@ -628,7 +628,11 @@ the role's prompt instead. The ledger records the role as `restarted`, which the
 Hollywood read.
 
 `restart` is the user's or the director's. It refuses a closed person (`closed — use reopen`) and a
-finished studio (`the studio is finished — reopen or restore it first`).
+finished studio (`the studio is finished — reopen or restore it first`). The three fixed seats —
+producer, director, writer — are always live while the studio runs, so `close` on one refuses:
+`the director is a fixed seat — use restart, or finish the studio`. `close` only releases a held
+person; on anything else it says `the actor-t1-c1 has nothing to close — it closes with its task;
+use restart to reload it`.
 
 `restart --person hollywood` reloads the overseer itself, from its own ledger and the same
 `[hollywood]` setup; a fresh restart starts a new conversation.

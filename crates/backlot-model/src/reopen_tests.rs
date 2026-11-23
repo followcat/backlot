@@ -192,7 +192,9 @@ fn reopen_refusals() {
     );
 }
 
-/// `role.release` wants a held role and nothing else.
+/// `role.release` wants a held person and nothing else: a closed
+/// actor with no hold refuses plainly, and a fixed seat never
+/// releases (it stays live for the studio's run).
 #[test]
 fn release_refusals() {
     let state = state_with(&base_events(), closed_actor());
@@ -204,8 +206,21 @@ fn release_refusals() {
         validate(&state, &new_ev("user", release("nobody"))),
         Err(Refusal::NoRole("nobody".into()))
     );
+    // A live fixed seat is a fixed seat, not a close target.
     let mut state = state;
-    apply(&mut state, &ev(9, "user", reopen("actor-t1-c1")));
+    apply(
+        &mut state,
+        &ev(
+            9,
+            "stage",
+            started("director", "bl-acme-shop-director", "sess-d"),
+        ),
+    );
+    assert_eq!(
+        validate(&state, &new_ev("user", release("director"))),
+        Err(Refusal::FixedSeat("director".into()))
+    );
+    apply(&mut state, &ev(10, "user", reopen("actor-t1-c1")));
     assert_eq!(
         validate(&state, &new_ev("user", release("actor-t1-c1"))),
         Ok(())

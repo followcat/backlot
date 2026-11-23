@@ -70,6 +70,23 @@ fn restart_records_the_request() {
     assert_eq!(v["roles"]["producer"]["restart"]["fresh"], true);
 }
 
+/// `close` on a fixed seat refuses plainly — no "held" jargon — and
+/// points at restart.
+#[test]
+fn close_on_a_fixed_seat_is_a_plain_sentence() {
+    let (scratch, env) = scratch();
+    studio_with_live_roles(&scratch, &env);
+    for role in ["producer", "director"] {
+        let msg = refused(&env, &format!("close --person {role} --as user"));
+        assert_eq!(
+            msg,
+            format!("the {role} is a fixed seat — use restart, or finish the studio"),
+            "{role}"
+        );
+        assert!(!msg.contains("held"), "no jargon: {msg}");
+    }
+}
+
 /// `restart` refuses a closed person and is the user's or director's.
 #[test]
 fn restart_refusals_reach_the_caller() {

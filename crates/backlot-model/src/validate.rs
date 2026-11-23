@@ -122,11 +122,25 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         }
         EventKind::RoleRelease { role } => {
             require_studio(state)?;
-            match state.roles.get(role) {
-                Some(r) if r.held => Ok(()),
-                Some(_) => Err(Refusal::RoleNotHeld(role.clone())),
-                None => Err(Refusal::NoRole(role.clone())),
+            let r = state
+                .roles
+                .get(role)
+                .ok_or_else(|| Refusal::NoRole(role.clone()))?;
+            // `close` on a held person is the release that stops
+            // wanting it — for any role, fixed seat included.
+            if r.held {
+                return Ok(());
             }
+            // The three fixed seats stay live for the studio's whole
+            // run: the stage wants them again the tick after a close,
+            // so a close cannot stick. Restart one, or finish the
+            // studio (L1).
+            if matches!(role.as_str(), "producer" | "director" | "writer") {
+                return Err(Refusal::FixedSeat(role.clone()));
+            }
+            // An actor that is not held has nothing to release: it
+            // closes when its task does. Never "held" jargon.
+            Err(Refusal::RoleNotHeld(role.clone()))
         }
         // A restart is for a role the studio still runs or one whose
         // terminal got stuck: a live or lost person, never a finished

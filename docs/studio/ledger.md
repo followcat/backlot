@@ -99,7 +99,10 @@ it with the session it closed with — the launch lands as `role.resumed` (reaso
 `role.started`. `held` clears on `role.release` or `role.closed`; a released role stops being
 desired, so the usual stop closes it. `role.reopen` is refused unless the role is closed, has a
 session ID, is not already held and no other live role uses its terminal name; `role.release` is
-refused unless held. Both are user- and director-facing events.
+refused unless held. Both are user- and director-facing events. `role.release` is `close`: it
+releases a held person and nothing else — a fixed seat (producer, director, writer) refuses with
+"the <role> is a fixed seat — use restart, or finish the studio", and an actor with no hold refuses
+with "the <role> has nothing to close — it closes with its task".
 
 `role.restart` is the in-place reload (L2): the stage stops the role's terminal deliberately
 (`role.closed`, reason `restarted` — never counted as a loss) and launches it again under the same

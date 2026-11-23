@@ -184,6 +184,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **`close` is plain, and fixed seats stay open.** `close` on the producer, director or writer now
+  refuses with `the <role> is a fixed seat — use restart, or finish the studio`, and on an actor
+  that is not held with `the <role> has nothing to close — it closes with its task`. No more
+  `role '...' is not held` jargon.
 - **Stopping the stage moved to the machine's menu.** `Stop stage…` is gone
   from every studio's context menu: a stage is the scheduler of a whole
   machine, so stopping it halts every studio there while running roles and the
