@@ -15,7 +15,7 @@ use crate::chrome::palette::Palette;
 use crate::chrome::render::{ShellHitMap, put_right_text, put_text};
 use crate::chrome::scroll::{list_scroll_metrics, render_list_scrollbar};
 use crate::chrome::text::{display_width, truncate_end};
-use crate::studio::glyphs::Person;
+use crate::studio::glyphs::{self, Person};
 
 /// A person's second row's state — the shared vocabulary's own
 /// `needs you · <what>` / `asks you · <question>` / `stuck · …` /
@@ -24,11 +24,9 @@ fn state_word(role: &RoleSummary) -> String {
     Person::state_text(role)
 }
 
-/// The short model form: drop a `<provider>/` prefix and a leading
-/// `claude-`, cut to at most 10 cells with `…`.
+/// The short model form, shared with the lot's person rows.
 fn short_model(model: &str) -> String {
-    let tail = model.rsplit('/').next().unwrap_or(model);
-    truncate_end(tail.strip_prefix("claude-").unwrap_or(tail), 10)
+    glyphs::short_model(model)
 }
 
 /// The whole cast section: `─` divider, ` <id>` + `<n>/<total>`

@@ -236,9 +236,32 @@ fn a_person_draws_one_line_with_the_state_word_right() {
         .collect::<String>();
     assert!(line.contains("alice · task-1"), "{line}");
     assert!(line.trim_end().ends_with("working│"), "{line}");
-    // No runner/model/doing on the person line.
-    assert!(!line.contains("agent-a"), "{line}");
+    // L4: the dim runner tag and short model ride before the state;
+    // the `doing` text stays off the row.
+    assert!(line.contains("agent-a"), "{line}");
+    assert!(line.contains(" m "), "{line}");
     assert!(!line.contains("writes code"), "{line}");
+}
+
+/// L4: a narrow row keeps the state word and gives up the runner tag
+/// first — the tag never pushes the state off the line.
+#[test]
+fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 22, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
 }
 
 #[test]

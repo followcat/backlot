@@ -240,6 +240,14 @@ impl Person {
     }
 }
 
+/// The short model form the cast and the lot share: drop a
+/// `<provider>/` prefix and a leading `claude-`, cut to at most 10
+/// cells with `…`.
+pub(crate) fn short_model(model: &str) -> String {
+    let tail = model.rsplit('/').next().unwrap_or(model);
+    crate::chrome::text::truncate_end(tail.strip_prefix("claude-").unwrap_or(tail), 10)
+}
+
 /// A task's glyph — defined and tested now, drawn from S2 on.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

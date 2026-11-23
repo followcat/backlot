@@ -121,7 +121,12 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   blank row.
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
-  prompt, and the state word right-aligned. A user-owned prompt adds a cue line
+  prompt, and the state word right-aligned. Before the state word sit the dim runner tag
+  (`claude`, `cmd`, `agy`, `codex`, `devin`, `cursor`, `cline`, `opencode`, `fake`) and,
+  while the frame has room, the short model form the cast uses — the same truncation with
+  `…`. The state word keeps the right edge: the model drops first, then the runner tag,
+  and only the name gives cells before either can push the state off the row. A user-owned
+  prompt adds a cue line
   `! <attention>  [y/d/p]` — or `! <attention> · answer in its terminal (Enter)` when the runner
   has no approval key (`opencode`, `cline`, `agy`), since `y`/`d` would send nothing; a
   director-owned one reads `! prompt · director reviewing`. A

@@ -6,6 +6,7 @@
 //! to herdr: no columns are reserved, no keys are consumed and no
 //! timer is armed.
 
+mod badge;
 mod config;
 pub(crate) mod data;
 mod draw;

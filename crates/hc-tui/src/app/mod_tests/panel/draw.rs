@@ -50,7 +50,7 @@ async fn open_close_open_repaints_both_regions() {
     let open = draw_to(&mut app, 120, 24);
     let text = screen_lines(&open).join("\n");
     assert!(text.contains(" lot"), "{text}");
-    assert!(text.contains("alice · task-1"), "{text}");
+    assert!(text.contains("alice · task"), "{text}");
     assert!(text.contains("PANE-ALPHA"), "{text}");
     // The right 26 columns are all panel: no pane paint remains there.
     let right = columns_text(&open, 84, 120);
@@ -106,7 +106,7 @@ async fn a_resize_moves_the_panel_between_beside_and_overlay() {
     app.area = (80, 24);
     let overlay = draw_to(&mut app, 80, 24);
     let right = columns_text(&overlay, 44, 80);
-    assert!(right.contains("alice · task-1"), "{right}");
+    assert!(right.contains("alice · task"), "{right}");
     assert!(right.contains("tell producer"), "{right}");
     assert!(!right.contains("PANE-ALPHA"), "{right}");
     // When unfocused at 80 (`R3-1` / `R3-M3`), the dock auto-hides to
@@ -165,5 +165,5 @@ async fn the_collapsed_strip_draws_without_touching_the_panes() {
     app.panel.mode = PanelMode::Expanded;
     let expanded = draw_to(&mut app, 120, 24);
     let right = columns_text(&expanded, 84, 120);
-    assert!(right.contains("alice · task-1"), "{right}");
+    assert!(right.contains("alice · task"), "{right}");
 }
