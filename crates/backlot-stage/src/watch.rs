@@ -223,6 +223,37 @@ pub(crate) fn taken_ids(
         .collect()
 }
 
+/// The age discovery measures a role by: its own life, but no older
+/// than this stage process. `role.since_ms` replays unchanged across
+/// a restart, so without the floor a role already past
+/// [`DISCOVERY_STOP_MS`] would never be looked for again — and a fix
+/// installed in the stage could never repair its open
+/// `session not found`. Measuring from `max(since_ms, stage start)`
+/// gives every still session-less live role a fresh window after a
+/// (re)start; a stage that has just begun looks at a role at once.
+pub(crate) fn discovery_age(role_since_ms: u64, stage_started_ms: u64, now_ms: u64) -> u64 {
+    now_ms.saturating_sub(role_since_ms.max(stage_started_ms))
+}
+
+/// Whether this tick looks for a still session-less role's id — the
+/// whole rule in one place: the age floored at this stage's start,
+/// then the five-second throttle and the hard stop. Every still
+/// session-less live role gets a fresh window after a stage
+/// (re)start, so a fix installed in the stage can repair a role
+/// already raising `session not found`.
+pub(crate) fn discovery_due_for(
+    role_since_ms: u64,
+    stage_started_ms: u64,
+    last_look_ms: Option<u64>,
+    now_ms: u64,
+) -> bool {
+    discovery_due(
+        discovery_age(role_since_ms, stage_started_ms, now_ms),
+        last_look_ms,
+        now_ms,
+    )
+}
+
 /// Whether this tick pays for a discovery look at all: at most once
 /// every [`DISCOVERY_EVERY_MS`], and never past the hard stop. The
 /// 60 second attention never pauses the looks — a slow first start
@@ -369,10 +400,12 @@ impl Stage {
             // Discovery is throttled: at most one look per five
             // seconds per role, for as long as the role is young
             // enough — its 60 second attention never pauses the
-            // looks.
+            // looks. Its age is floored at this stage's own start, so
+            // a restart gives a still session-less role a fresh
+            // window.
             let pair = (studio.to_string(), key.clone());
             let last_look = self.discover_looked.borrow().get(&pair).copied();
-            let found = if discovery_due(age_ms, last_look, now_ms) {
+            let found = if discovery_due_for(role.since_ms, self.started_ms, last_look, now_ms) {
                 self.discover_looked.borrow_mut().insert(pair, now_ms);
                 // A cursor role's root keeps the agent-written
                 // files under it unreachable: heal a drifted-open

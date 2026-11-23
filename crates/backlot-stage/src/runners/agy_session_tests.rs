@@ -294,3 +294,40 @@ fn session_at_survives_a_malformed_map() {
         Some(id)
     );
 }
+
+/// A map value that is not a plain stem names no conversation: a
+/// separator or a `..` segment would join outside `conversations/`,
+/// so it is no answer and the needle scan decides. The file a naive
+/// join would reach is new, exists and holds no URI, so only the
+/// guard can reject it.
+#[test]
+fn session_at_refuses_a_mapped_id_that_is_a_path() {
+    let needle = "ssssssss-0000-0000-0000-000000000018";
+    for (i, bad) in [
+        "../escape",
+        "../../escape",
+        "nested/inside",
+        "back\\slash",
+        "..",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (dir, conv) = tree(
+            &format!("sessions-map-path{i}"),
+            Some(&format!("{{\"/home/user/acme-shop\": \"{bad}\"}}")),
+        );
+        // Exactly the path `conversations.join(format!("{id}.db"))`
+        // would reach without the guard.
+        let escaped = conv.join(format!("{bad}.db"));
+        fs::create_dir_all(escaped.parent().unwrap()).unwrap();
+        fs::write(&escaped, "no uri at all").unwrap();
+        conversation_db(&conv, needle, "blob file:///home/user/acme-shop/blob");
+        assert_eq!(
+            session_at(&conv, "/home/user/acme-shop", 0, &BTreeSet::new()).as_deref(),
+            Some(needle),
+            "{bad} must not be taken"
+        );
+        drop(dir);
+    }
+}

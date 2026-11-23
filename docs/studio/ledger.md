@@ -108,6 +108,15 @@ Adapters that choose the session ID at launch record it in `role.started`. Ones 
 itself — found by a file scan or a CLI query after the terminal is up — land in `role.session`, which
 the stage records once it finds the ID. A `role.session` for a role the log does not know is refused.
 
+For a runner that assigns its own ID, the watch looks for it at most once every five seconds while
+the role is live and session-less, until a hard stop ten minutes after the role's start — past the
+60-second `session id not found` attention, so a slow first start still gets an ID. That age is
+measured from the later of the role's `role.started` and the stage process's own start: a
+`role.started` replays unchanged across a stage restart, so flooring the age at the process start
+gives every still session-less live role a fresh ten-minute window after a (re)start. A restarted
+stage therefore looks again at a role already past the stop, finds the ID, and records
+`role.session` plus an `attention.cleared` for its open `session not found`.
+
 Two `message.queued` events carry a `purpose` the stage acts on: `plan request` records `plan`
 (to the writer), `dispatch` records `dispatch` (to the director). The writer is wanted from a
 `plan` message until the next `dispatch`; plain `tell`/`ask` messages carry no purpose.

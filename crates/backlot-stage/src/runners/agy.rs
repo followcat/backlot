@@ -154,11 +154,12 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
 
 /// The id `cache/last_conversations.json` — agy's own cwd → last
 /// conversation map, the sibling of `conversations/` — assigns
-/// `cwd`, when that conversation is usable: its `<id>.db` exists,
-/// was born at or after `started_ms` (the same clock the scan
-/// reads) and no other role claims it. A missing, unreadable or
-/// malformed file is no answer, never an error; agy older than
-/// 1.5.14 keeps no map at all.
+/// `cwd`, when that conversation is usable: the value is a plain
+/// stem (no separator, no `..`), its `<id>.db` exists, was born at
+/// or after `started_ms` (the same clock the scan reads) and no
+/// other role claims it. A missing, unreadable or malformed file is
+/// no answer, never an error; agy older than 1.5.14 keeps no map at
+/// all.
 fn mapped_session(
     conversations: &Path,
     cwd: &str,
@@ -171,7 +172,9 @@ fn mapped_session(
     let text = std::fs::read_to_string(&map).ok()?;
     let ids: BTreeMap<String, String> = serde_json::from_str(&text).ok()?;
     let id = ids.get(cwd)?;
-    if id.is_empty() || taken.contains(id) {
+    // A plain stem only: the value names `conversations/<id>.db`,
+    // so a separator or a `..` segment is no answer at all.
+    if id.is_empty() || id.contains(['/', '\\']) || id.contains("..") || taken.contains(id) {
         return None;
     }
     let db = conversations.join(format!("{id}.db"));
