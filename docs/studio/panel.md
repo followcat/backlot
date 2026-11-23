@@ -113,10 +113,12 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
   `→ deliver t1 · actor-a` — never a raw `actor-t1-c1` ledger key; the stage-down and
   machine-offline forms say so instead.
 - The **next-step** line under that one comes from the studio's own state:
-  `· next: tell the producer what to build` (no requirement recorded; Enter on the studio row or
+  `· next: tell the producer what to build` (no requirement recorded and no brief queued; Enter on the studio row or
   `t` opens the producer tell input), `· next: director reviewing` (tasks in review), or
-  `· next: finish (f)` (every task accepted). Any other state draws nothing. The Hollywood frame
-  carries the same line on its blank row.
+  `· next: finish (f)` (every task accepted). A studio started with `--ask`/the wizard's build
+  field already has its brief queued as the producer's first `tell`, so it moves past this state
+  on its own. Any other state draws nothing. The Hollywood frame carries the same line on its
+  blank row.
 - A **person** is one line: mark, name (an actor's shows `· task` and the priority flag),
   a `USER` badge on the user's own role, the read-only `dir` tag on a director-owned
   prompt, and the state word right-aligned. A user-owned prompt adds a cue line

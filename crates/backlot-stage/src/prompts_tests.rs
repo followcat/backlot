@@ -591,7 +591,9 @@ fn first_prompt_is_one_line() {
 
 /// The producer's questions reach the person: every one is also a
 /// `tell user`, and the first "what should we build" goes that way
-/// when no requirement is recorded yet. The terminal stays the
+/// when no requirement is recorded yet. A first `tell` from the user
+/// is read as the brief instead — the wizard can start a studio with
+/// it, so the producer must not ask over it. The terminal stays the
 /// conversation.
 #[test]
 fn the_producer_records_every_question_as_a_tell() {
@@ -608,6 +610,13 @@ fn the_producer_records_every_question_as_a_tell() {
         text.contains("\"What would you like us to build?\""),
         "{text}"
     );
+    // W6: a first `tell` from the user is the requirement brief —
+    // recorded before any question, not asked over.
+    assert!(
+        text.contains("is their brief — read it and record it as"),
+        "{text}"
+    );
+    assert!(text.contains("Only when there is no such"), "{text}");
     assert!(
         text.contains("Every question you put to the user also goes through"),
         "{text}"

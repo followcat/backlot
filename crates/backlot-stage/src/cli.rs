@@ -424,9 +424,26 @@ pub(crate) fn exec_event(
     // studio's producer (R26) — the `message.queued` just recorded is
     // the delivery record. Captured before `build` consumes the cmd.
     let h_mirror = crate::hwood::mirror_for(&caller, &cmd);
+    // `studio new --ask`: the person's first message to the producer,
+    // queued as the same `message.queued` a `tell producer --as user`
+    // records — after `studio.created`, before its confirmation is
+    // printed. The source is a file by now: `cli_run::materialize`
+    // staged `--ask`'s text, and `--ask-file` already names one.
+    let ask = match &cmd {
+        Cmd::StudioNew {
+            ask: Some(crate::args::TextSource::File(file)),
+            ..
+        } => Some(file.clone()),
+        _ => None,
+    };
     let built = commands::build(&caller, cmd, env, base)?;
     let event = store::append(&dir, |state, seq| built(state, seq))?;
     let mut out = render::confirm(&event);
+    if let Some(file) = ask {
+        let ask = commands::ask_cmd(caller.by(), file)?;
+        let queued = store::append(&dir, |state, seq| ask(state, seq))?;
+        out.push_str(&format!("\n{}", render::confirm(&queued)));
+    }
     if let Some(file) = h_mirror {
         out.push_str(&format!(
             "\n{}",

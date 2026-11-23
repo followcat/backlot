@@ -13,7 +13,7 @@ use crate::store;
 
 /// A cast whose three fixed roles and one candidate all run on
 /// `fake` — the only runner whose launch file ships with the repo.
-const FAKE_CAST: &str = r#"
+pub(crate) const FAKE_CAST: &str = r#"
 mode = "standard"
 rework_cap = 2
 

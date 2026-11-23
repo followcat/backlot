@@ -126,13 +126,17 @@ With no studio, `backlot` opens on the **opening page**: one line of what it is,
 actions. Press `n` — the **New Studio dialog** opens, a four-step overlay that runs in the
 client itself: **1 Machine & Repo** (Local plus every attached machine, each checked for
 reachability and `backlot --version`; a machine without backlot or offline says why and cannot
-be picked), **2 ID & Title** (the repository's name, validated live), **3 Cast** (the runners
+be picked), **2 ID & Title** (the repository's name, validated live, plus an optional
+**What should this studio build?** brief — multi-line, `alt+⏎` adds a line, `Ctrl+E` edits it in
+`$EDITOR`; left empty the producer asks first, as before), **3 Cast** (the runners
 the target machine's `backlot runners --json` found, cycled per role; the table opens on the
 cast the machine's last successful `studio new` used when one was saved, `Ctrl+E` edits the
 generated cast.toml in `$EDITOR`), **4 Check & Start** (`studio new --dry-run` on the target
-machine, its card disclosing that the stage answers the agent's folder-trust prompt for the
+machine — its summary card shows the brief's first line under `First ask` — the card disclosing
+that the stage answers the agent's folder-trust prompt for the
 picked repo itself — the `[stage] answer_trust` switch in the user config turns that off —
-then `Enter` creates — over hc's `terminal.run` when the machine is remote — and
+then `Enter` creates — over hc's `terminal.run` when the machine is remote, the brief written
+there as an `--ask-file` temp — and
 optionally starts the stage before the new producer's terminal takes focus). `Esc` steps back
 and then closes; `Ctrl+C` cancels from any step. When a studio exists, the page is gone and the
 studio is current.
@@ -228,6 +232,13 @@ backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop
 backlot stage start
 ```
 
+Start with the requirement instead of asking for it — the first `tell` the stage delivers is the
+brief:
+
+```sh
+backlot studio new --studio acme-shop --title "Shop" --repo /home/user/acme-shop --cast /home/user/cast.toml --ask-file /home/user/brief.md
+```
+
 `backlot studio new` records `studio.created` in the studio's ledger and prints it back.
 `--studio` names the studio — `[a-z0-9_-]{1,16}` — and every later command takes the same
 `--studio` flag or reads `BACKLOT_STUDIO`. The name resolves across sessions: when it is not
@@ -245,7 +256,13 @@ whatever the flags leave out is asked for on the terminal with the same defaults
 dialog — its picker binds any directory and defaults a plain one to `git init`. `--cast -`
 reads the cast file from stdin — how the client's dialog hands a generated cast to a remote
 `studio new` without leaving a file on that machine. `--mode standard|experimental` overrides
-the cast file's `mode` — an invalid value is a usage error.
+the cast file's `mode` — an invalid value is a usage error. `--ask <text>` (or `--ask-file <f>`)
+queues the person's first message to the new producer: right after `studio.created` it is
+recorded as a `message.queued` — the same event `backlot tell producer --as user` writes, with the
+user as its sender — so the stage delivers it to the producer's terminal as its first
+`[backlot] user → producer: read <file>` line. An empty ask is refused and nothing is created;
+`--dry-run` restates its first line and records nothing. This is how a studio can start with a
+requirement instead of the producer's opening "What would you like us to build?".
 
 `backlot stage start` starts `backlot-stage`, a terminal on the same core that runs the
 scheduling loop. It is idempotent — a second `stage start` says it is already running. The stage
@@ -324,6 +341,11 @@ same flags the TUI takes.
 Focus the producer's terminal — its sidebar row or pane, or Enter on the studio's row in the
 panel — and type, exactly like talking to the agent yourself. Tell it what you want built, in as
 much detail as you would give a person.
+
+A studio created with `--ask` (the wizard's build field) starts with that message already queued
+as the producer's first `tell` — read it in the producer's terminal as `[backlot] user → producer:
+read <file>`; the producer records it as the requirement instead of asking. A studio created
+without one opens on the producer's own question, "What would you like us to build?".
 
 The other roles are reached the same way: focus their terminals (`bl-acme-shop-director`,
 `bl-acme-shop-writer`, `bl-acme-shop-t1` for task t1's actor) and type. For a recorded message

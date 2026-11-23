@@ -169,6 +169,7 @@ impl App {
         // close) — reload and validate the file it left. The Revise
         // dialog's `^E` requirement editor rides the same check.
         self.ns_editor_check();
+        self.ns_build_editor_check();
         self.studio_editor_check();
         self.synthesize_alerts(Instant::now());
         self.share_seen();

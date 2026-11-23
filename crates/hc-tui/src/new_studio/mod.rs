@@ -37,12 +37,14 @@ use crate::chrome::text::{display_width, fit_hints};
 use crate::chrome::text_editor::TextEditor;
 
 /// Step 2's focusable fields — `Mode` is a two-value toggle, not
-/// a text field: `←`/`→`/space flips it.
+/// a text field: `←`/`→`/space flips it. `Build` is the optional
+/// multi-line "what should this studio build?" brief.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Step2Field {
     Id,
     Title,
     Mode,
+    Build,
 }
 
 /// The whole dialog. All probes are generation-tagged: a stale
@@ -66,6 +68,10 @@ pub(crate) struct NewStudio {
     pub field: Step2Field,
     /// The studio's production mode (R14) — `standard` default.
     pub mode: backlot_model::event::StudioMode,
+    /// The optional "what should this studio build?" brief, edited on
+    /// step 2 — multi-line: `alt+⏎`, paste or `^E` add lines. Empty
+    /// means today's behaviour: the producer asks first.
+    pub build: crate::studio_dialog::BodyEditor,
     /// The repo path the id/title prefills came from — re-picking
     /// the same repo keeps the user's edits (Esc-back's rule).
     pub prefilled_for: Option<String>,
@@ -104,6 +110,8 @@ pub(crate) enum NsHit {
     IdField,
     TitleField,
     ModeField,
+    /// The step-2 "what should this studio build?" body rows.
+    BuildField,
     CastCell {
         row: usize,
         col: usize,
@@ -152,6 +160,7 @@ impl NewStudio {
             title: TextEditor::new("", false),
             field: Step2Field::Id,
             mode: backlot_model::event::StudioMode::Standard,
+            build: crate::studio_dialog::BodyEditor::default(),
             prefilled_for: None,
             studios: Vec::new(),
             runners: Probe::Pending,
@@ -255,6 +264,23 @@ impl NewStudio {
             Some(_) => None,
             None => Some("no path selected".into()),
         }
+    }
+
+    /// The build brief as text — trimmed; empty means "ask as
+    /// before". Only whitespace counts as empty.
+    pub(crate) fn build_text(&self) -> String {
+        self.build.text().trim().to_string()
+    }
+
+    /// The build brief's first non-empty line — step 4's summary
+    /// card shows it, so a long brief stays one readable row.
+    pub(crate) fn build_summary(&self) -> Option<String> {
+        self.build
+            .text()
+            .lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .map(str::to_string)
     }
 }
 
@@ -435,9 +461,9 @@ pub(crate) fn render(b: &mut Buffer, d: &NewStudio, p: &Palette, band: Rect) -> 
             "esc",
         ],
         Step::IdTitle => &[
-            "tab/↑↓ next field  ←→ mode  ⏎ continue to cast  esc back to repo",
-            "tab field  ←→ mode  ⏎ continue  esc back",
-            "⏎  esc",
+            "tab/↑↓ next field  ←→ mode  alt+⏎ line  ^E editor  ⏎ continue  esc back",
+            "tab field  ←→ mode  ^E editor  ⏎ continue  esc back",
+            "tab  ⏎  esc",
         ],
         Step::Cast if d.model_pick.is_some() => {
             &["↑↓ move  type to filter  ⏎ pick  esc cancel", "↑↓  ⏎  esc"]

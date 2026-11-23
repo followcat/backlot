@@ -141,6 +141,16 @@ pub(crate) fn draw(b: &mut Buffer, body: Rect, d: &NewStudio, p: &Palette, hits:
         &format!("{} — \"{}\"", d.id.as_str(), d.title.as_str()),
     );
     y += 1;
+    // The build brief's first line — the requirement the producer
+    // starts from; absent when the field was left empty.
+    if let Some((first, more)) = d.build_summary().map(|line| {
+        let more = d.build.text().trim().lines().count() > 1;
+        (line, more)
+    }) {
+        let value = if more { format!("{first} …") } else { first };
+        card_line(b, body, y, p, "First ask", &value);
+        y += 1;
+    }
     let runners = match &d.runners {
         Probe::Done(r) => r.as_slice(),
         _ => &[],

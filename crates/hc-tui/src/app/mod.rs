@@ -231,6 +231,8 @@ pub struct App {
     ns_pending_focus: Option<crate::studio::StudioKey>,
     /// The `^E` cast editor's temp file while its popup is open.
     ns_editor: Option<std::path::PathBuf>,
+    /// The `^E` build-brief editor's temp file while its popup is open.
+    ns_build_editor: Option<std::path::PathBuf>,
     /// Injectable `backlot …` runner for the dialog's probes —
     /// `None` uses `current_exe` locally and `remote_runner` on a
     /// machine; tests record argv and feed canned JSON.

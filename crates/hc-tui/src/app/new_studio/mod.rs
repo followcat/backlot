@@ -15,6 +15,7 @@ use crate::chrome::snapshot::ClientEndpointId;
 use crate::new_studio::{self, CastTable, MachineRow, MachineState, Probe, Step1Pane};
 use crate::operations::Action;
 use crate::studio::StudioKey;
+use keys::sh_quote;
 
 /// One async answer the dialog waits on. `epoch` matches the state's
 /// generation — a machine switch or a `^R` re-check invalidates
@@ -71,6 +72,34 @@ pub(crate) type NsRun = Arc<
         + Send
         + Sync,
 >;
+
+/// One `studio new` invocation the dialog will run: the machine,
+/// argv, the cast on stdin, and — when the build brief is non-empty
+/// — the ask temp file's path and body to write there first. Cloned
+/// into the spawned task so the write and the run name one machine.
+#[derive(Clone)]
+struct NsCreate {
+    machine: Option<String>,
+    argv: Vec<String>,
+    cast: String,
+    ask: Option<(String, String)>,
+}
+
+/// The ask temp file's leaf — process and a monotonic counter, so a
+/// second create's file never overwrites a first one's.
+fn ns_ask_file_name() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    format!(
+        "backlot-ask-{}-{}.md",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// The ask file's write-then-cleanup pair — both run on the same
+/// machine `studio new` does.
+type AskOp = (BoxFut<Result<(), String>>, BoxFut<Result<(), String>>);
 
 impl App {
     /// Every entry point (`Ctrl+B N` over a studio, `n` on the page
@@ -291,8 +320,10 @@ impl App {
     /// The `studio new` argv — shared by the dry run and the
     /// create; `--cast -` takes the table's toml on stdin. A plain
     /// directory rides `--init` or the step-4 toggle's `--no-git`
-    /// (D4); repositories and workspaces take neither.
-    fn ns_studio_argv(&self, dry_run: bool) -> Option<(Option<String>, Vec<String>, String)> {
+    /// (D4); repositories and workspaces take neither. A non-empty
+    /// build brief rides `--ask-file <temp>`, whose path the caller
+    /// writes on the target machine (returned in `ask`).
+    fn ns_studio_argv(&self, dry_run: bool) -> Option<NsCreate> {
         let d = self.new_studio.as_ref()?;
         let entry = d.repo()?;
         let mut argv = vec![
@@ -310,6 +341,24 @@ impl App {
         if entry.shape() == new_studio::PathShape::Plain {
             argv.push(if d.no_git { "--no-git" } else { "--init" }.into());
         }
+        // The first message: written to a temp file on the target
+        // machine, then passed as `--ask-file`. A remote machine
+        // gets `/tmp` — this host's `TMPDIR` means nothing there.
+        let ask = {
+            let text = d.build_text();
+            if text.is_empty() {
+                None
+            } else {
+                let dir = match d.machine_name() {
+                    Some(_) => std::path::PathBuf::from("/tmp"),
+                    None => std::env::temp_dir(),
+                };
+                let path = dir.join(ns_ask_file_name()).to_string_lossy().into_owned();
+                argv.push("--ask-file".into());
+                argv.push(path.clone());
+                Some((path, format!("{text}\n")))
+            }
+        };
         if dry_run {
             argv.push("--dry-run".into());
         }
@@ -317,17 +366,24 @@ impl App {
             Probe::Done(r) => r.as_slice(),
             _ => &[],
         };
-        Some((d.machine_name(), argv, d.cast.toml(runners, d.mode)))
+        Some(NsCreate {
+            machine: d.machine_name(),
+            argv,
+            cast: d.cast.toml(runners, d.mode),
+            ask,
+        })
     }
 
     /// Step 4's dry run — `studio new … --dry-run` on the target
     /// machine; its verdict (or the exact error) paints the step.
+    /// A build brief's temp file is written first, then removed.
     fn ns_dry_run(&mut self) {
-        let Some((machine, argv, cast)) = self.ns_studio_argv(true) else {
+        let Some(call) = self.ns_studio_argv(true) else {
             return;
         };
         let run = self.ns_runner();
         let tx = self.ns_tx.clone();
+        let write = self.ns_ask_writer(&call);
         let Some(d) = &mut self.new_studio else {
             return;
         };
@@ -335,9 +391,85 @@ impl App {
         let epoch = d.dry_gen;
         d.dry = Probe::Pending;
         tokio::spawn(async move {
-            let out = run(machine, argv, Some(cast)).await;
+            let out = if let Some(write) = write {
+                match write.0.await {
+                    Ok(()) => {}
+                    Err(e) => {
+                        let _ = tx.send(NsReply::Dry { epoch, out: Err(e) }).await;
+                        return;
+                    }
+                }
+                let out = run(call.machine, call.argv, Some(call.cast)).await;
+                let _ = write.1.await;
+                out
+            } else {
+                run(call.machine, call.argv, Some(call.cast)).await
+            };
             let _ = tx.send(NsReply::Dry { epoch, out }).await;
         });
+    }
+
+    /// The ask file's write-and-remove futures for `call`, the same
+    /// machine `studio new` runs on — `None` when no brief was given.
+    fn ns_ask_writer(&self, call: &NsCreate) -> Option<AskOp> {
+        let (path, text) = call.ask.clone()?;
+        let write = self.ns_ask_write(call.machine.clone(), path.clone(), text);
+        let remove = self.ns_ask_remove(call.machine.clone(), path);
+        Some((write, remove))
+    }
+
+    /// Write `text` to `path` on `machine` — `std::fs` locally, a
+    /// `sh -c` piping base64 through the panel's `RemoteRunner` on a
+    /// machine (no quoting surprises, no stray file on this host).
+    fn ns_ask_write(
+        &self,
+        machine: Option<String>,
+        path: String,
+        text: String,
+    ) -> BoxFut<Result<(), String>> {
+        match machine {
+            None => Box::pin(async move { std::fs::write(&path, text).map_err(|e| e.to_string()) }),
+            Some(machine) => {
+                let script = format!(
+                    "printf %s {} | base64 -d > {}",
+                    crate::selection::base64_encode(text.as_bytes()),
+                    sh_quote(&path)
+                );
+                self.ns_run_script(machine, script)
+            }
+        }
+    }
+
+    /// Remove the ask file on `machine`, best-effort.
+    fn ns_ask_remove(&self, machine: Option<String>, path: String) -> BoxFut<Result<(), String>> {
+        match machine {
+            None => Box::pin(async move {
+                match std::fs::remove_file(&path) {
+                    Ok(()) => Ok(()),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                    Err(e) => Err(e.to_string()),
+                }
+            }),
+            Some(machine) => self.ns_run_script(machine, format!("rm -f {}", sh_quote(&path))),
+        }
+    }
+
+    /// `sh -c <script>` on `machine` through the panel's runner.
+    fn ns_run_script(&self, machine: String, script: String) -> BoxFut<Result<(), String>> {
+        match self.remote_runner.clone() {
+            Some(runner) => Box::pin(async move {
+                runner
+                    .run_script(machine, script)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| format!("ask file: {e}"))
+            }),
+            None => {
+                Box::pin(
+                    async move { Err(format!("cannot reach {machine}: no remote connection")) },
+                )
+            }
+        }
     }
 
     /// `studio new` created on `machine` — the cast it used becomes
@@ -383,9 +515,16 @@ impl App {
         if self.new_studio.as_ref().is_none_or(|d| d.creating) {
             return;
         }
-        let Some((machine, argv, cast)) = self.ns_studio_argv(false) else {
+        let Some(call) = self.ns_studio_argv(false) else {
             return;
         };
+        let NsCreate {
+            machine,
+            argv,
+            cast,
+            ..
+        } = call.clone();
+        let write = self.ns_ask_writer(&call);
         let run = self.ns_runner();
         let tx = self.ns_tx.clone();
         let Some(d) = &mut self.new_studio else {
@@ -399,7 +538,18 @@ impl App {
         d.create_error = None;
         let stage_machine = machine.clone();
         tokio::spawn(async move {
-            let first = run(machine.clone(), argv, Some(cast)).await;
+            let first = if let Some((write, remove)) = write {
+                match write.await {
+                    Ok(()) => {
+                        let out = run(machine.clone(), argv, Some(cast)).await;
+                        let _ = remove.await;
+                        out
+                    }
+                    Err(e) => Err(e),
+                }
+            } else {
+                run(machine.clone(), argv, Some(cast)).await
+            };
             let created = first.is_ok();
             let out = match first {
                 Ok(text) => {
@@ -607,6 +757,9 @@ impl App {
                 }
                 new_studio::Step2Field::Title => {
                     d.title.insert(text);
+                }
+                new_studio::Step2Field::Build => {
+                    d.build.insert(text);
                 }
                 new_studio::Step2Field::Mode => {}
             }
