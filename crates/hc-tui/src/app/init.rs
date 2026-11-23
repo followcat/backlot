@@ -151,6 +151,7 @@ impl App {
             install_upgrade: Default::default(),
             stage_restart_pending: Default::default(),
             studio_index: Default::default(),
+            stage_focus: None,
             last_current_studio: None,
             sheet: None,
             sheet_hits: crate::sheet::SheetRender::default(),

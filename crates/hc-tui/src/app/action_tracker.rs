@@ -62,6 +62,12 @@ impl App {
     /// the refusal lands through the same reply path a failed run
     /// would take.
     pub(crate) fn run_action(&mut self, action: Action) {
+        // S1: remember where the keys were before the stage's terminals
+        // publish — a stage start keeps the focus, and an opening-page
+        // start lands on a studio or the lot, never the stage log.
+        if action.name == "start stage" {
+            self.note_stage_start();
+        }
         let hostile = action
             .argv
             .iter()

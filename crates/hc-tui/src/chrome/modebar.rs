@@ -32,10 +32,15 @@ pub(crate) fn render_mode_bar(
     endpoint_error: Option<&str>,
     update_available: bool,
     restart_ready: bool,
+    // S1: the focused pane is the stage log — a read-only frame.
+    stage_log: bool,
     keybinds: &LiveKeybindConfig,
     palette: &Palette,
 ) -> Option<Rect> {
-    if (mode == ClientShellMode::Terminal && !keyboard_locked && endpoint_error.is_none())
+    if (mode == ClientShellMode::Terminal
+        && !keyboard_locked
+        && endpoint_error.is_none()
+        && !stage_log)
         || pane_area.is_empty()
     {
         return None;
@@ -198,7 +203,14 @@ pub(crate) fn render_mode_bar(
                     ]);
                 }
             }
-            ClientShellMode::Terminal => unreachable!(),
+            // Only a read-only stage log reaches the bar in Terminal
+            // mode (S1): keys are dropped, and the bar says so.
+            ClientShellMode::Terminal => {
+                segments.extend([
+                    (" STAGE LOG ".to_owned(), mode_style),
+                    (" stage log — read only".to_owned(), base),
+                ]);
+            }
         }
     }
 

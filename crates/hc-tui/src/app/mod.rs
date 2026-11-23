@@ -69,6 +69,7 @@ mod selection_copy;
 mod settings;
 mod shared;
 mod shell_state;
+mod stage_log;
 mod studio;
 mod studio_dialog;
 mod studio_menu;
@@ -121,6 +122,17 @@ pub(crate) enum Mode {
     /// program sees none of them.
     Copy,
     Resize,
+}
+
+/// W1/S1: what a stage start must not take with it — the focus to keep,
+/// and whether the opening page was up (then the first studio's view or
+/// the lot is the landing, never the stage log).
+#[derive(Debug, Clone)]
+pub(crate) struct StageFocus {
+    /// The focused terminal when the start was asked for.
+    pub(crate) restore: Option<String>,
+    /// The opening page was the surface — land on a studio or the lot.
+    pub(crate) from_opening: bool,
 }
 
 /// Where host-mode control writes go (keyboard push/pop, mouse modes,
@@ -302,6 +314,10 @@ pub struct App {
     /// left machines tree lists studios whose stage is down (or whose
     /// document is missing).
     studio_index: crate::studio_index::StudioIndex,
+    /// W1: the stage-start focus landing — the focus to keep (or the
+    /// opening page's move to the studio) once the stage's terminals
+    /// publish.
+    stage_focus: Option<StageFocus>,
     /// W1/M4: the last studio the machines tree highlighted, so a
     /// change scrolls its machine row into view.
     last_current_studio: Option<crate::studio::StudioKey>,

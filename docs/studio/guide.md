@@ -542,8 +542,13 @@ the newest release, `no backlot` when there is none.
 
 Right-click a machine row (or find it under `Ctrl+B ?`'s `machines` group) for its own menu —
 only what is valid there: `Install backlot`, `Upgrade backlot to v<latest>`,
-`Start the stage` when it is down, `Restart the stage` and `Stop the stage…` while it runs,
-`New studio here`, and the endpoint ops. The stage serves its whole machine, so its stop sits
+`Start the stage` when it is down, `Restart the stage`, `Stop the stage…` and `Stage log` while
+it runs, `New studio here`, and the endpoint ops. `Stage log` opens the stage's own terminal as
+the observe-only peek: its output is readable, and no key reaches the stage process from there.
+Starting the stage from any entry keeps the focus where it was; from the opening page the client
+lands on a studio's view, or on the lot when there is none, and never on the stage tab. When the
+stage's terminal does hold the focus its frame is read-only, with `stage log — read only` on the
+bar, so typed keys and a stray `Ctrl+C` cannot reach it. The stage serves its whole machine, so its stop sits
 here rather than in any one studio's menu: every studio on that machine stops advancing until
 the stage starts again, while running roles and the ledger keep going. Install and upgrade open
 a terminal on that machine running the official installer with `BACKLOT_SKIP_CORE=1` — hc is

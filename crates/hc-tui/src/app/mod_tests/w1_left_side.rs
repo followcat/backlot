@@ -1,7 +1,9 @@
 //! W1's left side: every machine's studios from the ledger, the
-//! finished group and the tree that scrolls with the selection.
-//! Neutral fixtures only.
+//! finished group, the tree that scrolls with the selection, the cast
+//! that explains itself and the stage log that keeps the focus and
+//! drops keys. Neutral fixtures only.
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::studio_machines::two_machine_studio_app;
@@ -10,10 +12,10 @@ use crate::app::input::MouseButton;
 use crate::app::input::MouseEventKind;
 use crate::chrome::render::StudioRowAct;
 use crate::panel::StudioNav;
-use crate::sidebar::fixture::machine;
+use crate::sidebar::fixture::{machine, term};
 use crate::studio_menu::StudioAct;
 use hc_proto::watch::{DocKey, Document};
-use hc_vt::Mods;
+use hc_vt::{Action, Key, Mods};
 use serde_json::json;
 
 const HOST_B_LIST: &str = r#"{
@@ -248,27 +250,25 @@ async fn a_short_sidebar_scrolls_to_the_selected_machines_row() {
 /// lone live studio and hint when more than one exists.
 #[test]
 fn the_cast_shows_the_only_live_studio_and_hints_otherwise() {
-    fn summary(ids: &[&str]) -> backlot_model::summary::Summary {
-        let studios: Vec<serde_json::Value> = ids
-            .iter()
-            .map(|id| {
-                json!({"id": id, "title": id, "state": "live",
-                       "requirement_version": 1, "mode": "standard",
-                       "open_reviews": 0, "waiting": 0, "roles": []})
-            })
-            .collect();
-        serde_json::from_value(json!({
-            "schema": "backlot/1", "updated_ms": 1, "studios": studios
-        }))
-        .unwrap()
-    }
+    let one: backlot_model::summary::Summary = serde_json::from_value(json!({
+        "schema": "backlot/1", "updated_ms": 1,
+        "studios": [{"id": "acme-shop", "title": "Acme", "state": "live",
+                     "requirement_version": 1, "mode": "standard",
+                     "open_reviews": 0, "waiting": 0,
+                     "roles": [{"role": "producer", "name": "producer", "state": "closed"}]}]
+    }))
+    .unwrap();
+    let machines = vec![crate::panel::data::MachineSummary {
+        machine: None,
+        summary: one,
+    }];
+    let view = hc_proto::watch::View::default();
     let config = crate::chrome::ClientShellConfig::from_config(
         &crate::config::Config::default(),
         None,
         None,
         std::path::PathBuf::new(),
     );
-    let view = hc_proto::watch::View::default();
     let snapshot = crate::chrome::snapshot::ClientShellSnapshot {
         boot_id: String::new(),
         revision: 0,
@@ -285,38 +285,117 @@ fn the_cast_shows_the_only_live_studio_and_hints_otherwise() {
         agents: Vec::new(),
         commands: Vec::new(),
     };
-    fn build<'a>(
-        machines: &'a [crate::panel::data::MachineSummary],
-        snapshot: &'a crate::chrome::snapshot::ClientShellSnapshot,
-        view: &'a hc_proto::watch::View,
-        config: &'a crate::chrome::ClientShellConfig,
-    ) -> crate::cast::CastView<'a> {
-        crate::cast::CastView::build(
-            machines,
-            snapshot,
-            view,
-            None,
-            Some(crate::project::LOCAL_LABEL),
-            config,
-            false,
-            None,
-            0,
-        )
-    }
-
-    let one = [crate::panel::data::MachineSummary {
-        machine: None,
-        summary: summary(&["acme-shop"]),
-    }];
-    let cast = build(&one, &snapshot, &view, &config);
+    let cast = crate::cast::CastView::build(
+        &machines,
+        &snapshot,
+        &view,
+        None,
+        Some(crate::project::LOCAL_LABEL),
+        &config,
+        false,
+        None,
+        0,
+    );
     assert!(cast.studio.is_some(), "the only live studio shows");
     assert!(!cast.hint);
 
-    let two = [crate::panel::data::MachineSummary {
+    let two: backlot_model::summary::Summary = serde_json::from_value(json!({
+        "schema": "backlot/1", "updated_ms": 1,
+        "studios": [
+            {"id": "acme-shop", "title": "Acme", "state": "live",
+             "requirement_version": 1, "mode": "standard",
+             "open_reviews": 0, "waiting": 0, "roles": []},
+            {"id": "beta-tools", "title": "Beta", "state": "live",
+             "requirement_version": 1, "mode": "standard",
+             "open_reviews": 0, "waiting": 0, "roles": []}
+        ]
+    }))
+    .unwrap();
+    let machines = vec![crate::panel::data::MachineSummary {
         machine: None,
-        summary: summary(&["acme-shop", "beta-tools"]),
+        summary: two,
     }];
-    let cast = build(&two, &snapshot, &view, &config);
+    let cast = crate::cast::CastView::build(
+        &machines,
+        &snapshot,
+        &view,
+        None,
+        Some(crate::project::LOCAL_LABEL),
+        &config,
+        false,
+        None,
+        0,
+    );
     assert!(cast.studio.is_none(), "two studios need a choice");
     assert!(cast.hint, "the hint answers for them");
+}
+
+fn stage_app() -> App {
+    let mut stage = term("t9");
+    stage.name = Some("backlot-stage".into());
+    stage.labels.insert("backlot.role".into(), "stage".into());
+    stage.labels.insert("herdr.space".into(), "backlot".into());
+    stage.labels.insert("herdr.tab".into(), "stage".into());
+    let mut person = term("t1");
+    person
+        .labels
+        .insert("herdr.space".into(), "acme-shop".into());
+    person.labels.insert("herdr.tab".into(), "main".into());
+    let mut app = app_with_terms(vec![person, stage]);
+    app.set_plain(false);
+    app.focused = Some("t1".into());
+    app.refresh_projection();
+    app.hollywood.mode = crate::hollywood::LayerMode::Hidden;
+    app
+}
+
+#[tokio::test]
+async fn a_stage_start_keeps_the_focus_off_the_stage_tab() {
+    let mut app = stage_app();
+    app.note_stage_start();
+    // The core focuses the new stage terminal in the shared layout.
+    let key = crate::project::layout_key(
+        None,
+        app.projection.snapshot.focused_tab_id.as_ref().unwrap(),
+    );
+    let value = json!({
+        "schema": 1,
+        "focus": "t9",
+        "tabs": {key: {"root": {"type": "pane", "terminal": "t9"}}}
+    });
+    app.view.documents_mut().insert(
+        DocKey {
+            machine: None,
+            name: "hc-tui".into(),
+        },
+        Arc::new(Document {
+            value,
+            ..Document::default()
+        }),
+    );
+    app.reconcile_published_view();
+    assert_eq!(
+        app.focused.as_deref(),
+        Some("t1"),
+        "the stage log never takes focus"
+    );
+}
+
+#[tokio::test]
+async fn keys_to_the_stage_terminal_are_dropped_and_the_bar_says_read_only() {
+    let mut app = stage_app();
+    app.focused = Some("t9".into());
+    app.refresh_projection();
+    app.sync_target();
+    assert_eq!(app.pane.target(), Some("t9"));
+    app.on_key(term_key(Key::Char('j'), Mods::NONE, Action::Press), 120);
+    assert!(
+        app.pane_leases.forwarded().next().is_none(),
+        "no press reached the stage process"
+    );
+    app.on_key(term_key(Key::Char('j'), Mods::NONE, Action::Release), 120);
+    app.area = (120, 24);
+    let backend = draw_to(&mut app, 120, 24);
+    let text = screen_lines(&backend).join("\n");
+    assert!(text.contains("stage log — read only"), "{text}");
 }

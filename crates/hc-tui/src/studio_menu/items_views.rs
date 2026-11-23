@@ -93,6 +93,9 @@ impl StudioMenu {
                 Some('s'),
                 StudioAct::StageStop,
             ));
+            // S1: the stage output stays reachable without its tab
+            // stealing the focus — the log opens read-only.
+            out.push(item("Stage log".to_owned(), Some('l'), StudioAct::StageLog));
         }
         if self.finished_count > 0 {
             out.push(item(

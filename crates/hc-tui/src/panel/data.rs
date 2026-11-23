@@ -298,6 +298,13 @@ fn parse(value: &serde_json::Value, machine: Option<&str>) -> Option<Summary> {
     Some(summary)
 }
 
+/// Whether `term` is a stage terminal — its own name, or the
+/// `backlot.role=stage` label an older stage wrote.
+pub(crate) fn is_stage_terminal(term: &hc_proto::terminal::Terminal) -> bool {
+    term.name.as_deref() == Some("backlot-stage")
+        || term.labels.get("backlot.role").map(String::as_str) == Some("stage")
+}
+
 /// Whether the inventory shows a live `backlot-stage` terminal on
 /// `machine` (`None` is this core) — the producer of its document.
 /// When it is gone the panel says so on one line but still shows the

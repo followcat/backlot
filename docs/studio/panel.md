@@ -314,6 +314,8 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   list comes from `backlot studio list --json`, run locally or over `terminal.run` for a remote,
   cached and refreshed on a stage change or every 30 s at most. The tree scrolls to the machine
   row of the studio the selection lands on.
+- The stage log is read-only: when its terminal holds the focus, typed keys are dropped and the
+  mode bar reads `stage log — read only`. A stage start never moves the focus to it.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the
   injected runner (`std::env::current_exe()` in production, a recorder in tests); a failure
   shows its first stderr line.

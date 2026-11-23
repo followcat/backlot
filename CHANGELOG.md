@@ -21,7 +21,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   finished-studio menu. A machine that cannot be reached shows one `unreachable` line instead of
   an empty tree, and the tree scrolls to the machine row of the studio the selection lands on,
   so a row never drops out of a short sidebar. The cast explains itself: with no studio current
-  it shows the only live studio's cast, or one dim `select a studio (Enter on it)` line.
+  it shows the only live studio's cast, or one dim `select a studio (Enter on it)` line. Starting
+  the stage keeps the focus where it was (from the opening page it lands on a studio or the lot,
+  never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
+  `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on

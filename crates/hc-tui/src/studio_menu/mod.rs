@@ -186,6 +186,9 @@ pub(crate) enum StudioAct {
     /// `stage stop` (G1) through the confirm dialog — a machine-wide
     /// action, so only the machine row's menu offers it.
     StageStop,
+    /// S1: the machine's live stage terminal, opened as the read-only
+    /// observe-only peek — `stage log`.
+    StageLog,
     /// W1: fold or unfold the machine's `finished (n)` group in the
     /// machines tree — the keyboard path the tree's own row gives the
     /// mouse.

@@ -112,7 +112,12 @@ impl App {
                 if self.view.inventory.get(&focus).is_none() {
                     return;
                 }
-                self.focused = Some(focus);
+                // S1: a stage start creates and focuses its log tab in
+                // the layout document; the client never follows that
+                // focus — the log is opened deliberately, read-only.
+                if !self.is_stage_terminal(&focus) {
+                    self.focused = Some(focus);
+                }
             }
             self.layout_seen = Some(stamp);
         }
