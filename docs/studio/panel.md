@@ -197,9 +197,11 @@ A person shows exactly one state, in this priority:
 
 1. `needs you · <what>` — a user or director prompt as before (the prompt row keeps `y`/`d`/`p`
    and a non-actor's word is `USER`), or a `needs you` attention that is not a prompt (`■` red).
-2. `asks you · <question>` — the role's newest `tell user` that the user has not answered with a
-   `tell` back to that role (`?` peach). Opening the message in the Dock shows it, but only a
-   `tell` back records an answer.
+2. `asks you · <question>` — the role's newest `tell user` the user has not answered (`?`
+   peach). The answer is a `tell` back to that role or any later ledger action the role records
+   itself — a revised requirement, a report, a delivery, a cast, a review, a new tell — because
+   the person often answers in the role's terminal. Stage-written events never answer it; the
+   Dock records no read state, so merely opening the message does not either.
 3. `stuck · <plain reason>` — a `stuck` attention (`!` peach).
 4. `working · <doing>` — the watch pass reads the screen working.
 5. `waiting` — anything else that is live and not doing work; a held role reads its
@@ -212,11 +214,13 @@ drawer and the sheet's studio overview), dimmed.
 ## The needs-you list
 
 One function builds the list from every machine's document, in this order: user-owned prompts;
-roles with a `needs you` attention or an unanswered question; a blocked Hollywood; studios with
-no requirement; stopped stages and unreachable machines with live studios; open cards; studios
-ready to finish. The Call Sheet's waiting rows, the lot pill's urgent count and the band's calm
-row all read this one list. `✓ nothing waiting on you` shows only while it is empty; there is no
-separate `!N flagged` suffix — a `stuck` role shows on its own row and never counts here.
+roles with a `needs you` attention or an unanswered question; Hollywood with a user-owned prompt
+(`HOLLYWOOD asks: <attention_detail>`, taking the same `y` allow once / `d` deny / `p` peek /
+Enter actions as its live row) or a blocked screen with no prompt (`HOLLYWOOD blocked`); studios
+with no requirement; stopped stages and unreachable machines with live studios; open cards;
+studios ready to finish. The Call Sheet's waiting rows, the lot pill's urgent count and the band's
+calm row all read this one list. `✓ nothing waiting on you` shows only while it is empty; there is
+no separate `!N flagged` suffix — a `stuck` role shows on its own row and never counts here.
 
 ## The cast
 

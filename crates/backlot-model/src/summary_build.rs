@@ -201,8 +201,73 @@ pub(crate) fn role_attention_user(state: &StudioState, role: &str) -> bool {
     })
 }
 
+/// Whether `role` recorded a ledger action of its own after `seq` —
+/// the person often answers in the role's terminal, and every
+/// role-written event that follows (a revised requirement, a report,
+/// a delivery, a new tell, a cast, a review, …) answers the earlier
+/// question just as a user `tell` would. Stage-written events never
+/// count: they describe the stage, not the role.
+fn role_acted_later(state: &StudioState, role: &str, seq: u64) -> bool {
+    if state.messages.iter().any(|m| m.from == role && m.seq > seq) {
+        return true;
+    }
+    if state.reports.iter().any(|r| r.from == role && r.seq > seq) {
+        return true;
+    }
+    if state
+        .approvals
+        .iter()
+        .any(|a| a.role == role && a.seq > seq)
+    {
+        return true;
+    }
+    if state.recasts.iter().any(|r| r.role == role && r.seq > seq) {
+        return true;
+    }
+    match role {
+        "producer" if state.requirements.iter().any(|r| r.seq > seq) => return true,
+        "writer" if state.plans.iter().any(|p| p.seq > seq) => return true,
+        _ => {}
+    }
+    let task_id = crate::state::actor_task(role);
+    for task in state.tasks.values() {
+        if task.created_by == role && task.created_seq > seq {
+            return true;
+        }
+        if task.casts.iter().any(|c| c.by == role && c.seq > seq) {
+            return true;
+        }
+        if task
+            .reviews
+            .iter()
+            .any(|r| r.reviewer == role && r.seq > seq)
+        {
+            return true;
+        }
+        if task
+            .finding_reports
+            .iter()
+            .any(|f| f.by == role && f.seq > seq)
+        {
+            return true;
+        }
+        if task
+            .state_changes
+            .iter()
+            .any(|c| c.by == role && c.seq > seq)
+        {
+            return true;
+        }
+        if task_id == Some(task.id.as_str()) && task.deliveries.iter().any(|d| d.seq > seq) {
+            return true;
+        }
+    }
+    false
+}
+
 /// The role's newest `tell user` the user has not answered with a
-/// `tell` back to that role. `snippets` carries the message bodies the
+/// `tell` back to that role, and the role has recorded no later
+/// ledger action of its own. `snippets` carries the message bodies the
 /// stage read for the exchange projection; a body it could not read
 /// falls back to a neutral line so the question is never hidden.
 pub(crate) fn role_asks(
@@ -225,7 +290,8 @@ pub(crate) fn role_asks(
     let answered = state
         .messages
         .iter()
-        .any(|m| m.from == "user" && m.to == role && m.seq > ask.seq);
+        .any(|m| m.from == "user" && m.to == role && m.seq > ask.seq)
+        || role_acted_later(state, role, ask.seq);
     if answered {
         return None;
     }

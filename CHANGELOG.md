@@ -46,11 +46,15 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   the user — including the first "What would you like us to build?" when no requirement is
   recorded — also goes through `backlot tell user --text <question>`, while the terminal stays the
   conversation. The role summary carries the newest unanswered `tell user` as `asks`, which the
-  person row shows as `asks you · <question>`; a user `tell` back to that role answers it.
+  person row shows as `asks you · <question>`; a user `tell` back to that role — or any later
+  ledger action the role records itself, such as a revised requirement, report or delivery —
+  answers it, while stage-written events do not.
   `backlot tell user` is covered by every runner's pre-allow list.
 - **One needs-you list everywhere.** One function builds it from every machine's `backlot`
-  document — user prompts, roles with a needs-you attention or an unanswered question, blocked
-  Hollywood, studios with no requirement, stopped stages, open cards and ready studios. The Call
+  document — user prompts, roles with a needs-you attention or an unanswered question, Hollywood
+  with a user-owned prompt (`HOLLYWOOD asks: …`, taking the same `y` allow once / `d` deny /
+  `p` peek / Enter as its live row) or a blocked screen without one, studios with no requirement,
+  stopped stages, open cards and ready studios. The Call
   Sheet's rows, the lot pill's urgent count and the band's calm row read it, so
   `✓ nothing waiting on you` shows only when the list is empty; the misleading `!N flagged`
   suffix is gone, and a `stuck` role shows on its own row.
