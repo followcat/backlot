@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::event::PERMISSION_PROMPT;
 use crate::hollywood_state::HollywoodState;
-use crate::summary::{Work, cap, steady};
+use crate::summary::{Work, cap, default_true, is_true, steady};
 
 /// The headline's character cap in the document.
 pub const HEADLINE_CHARS: usize = 200;
@@ -56,6 +56,12 @@ pub struct HollywoodSummary {
     /// about.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention_detail: Option<String>,
+    /// Whether Hollywood's runner can answer its own prompt — false
+    /// for a runner with no approval key, where the client offers
+    /// `answer in its terminal (Enter)`. Absent on documents an older
+    /// stage wrote, which keeps today's `y`/`d` behaviour.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub can_answer_prompt: bool,
     /// The newest `hollywood.reported` headline (≤ [`HEADLINE_CHARS`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headline: Option<String>,
@@ -170,6 +176,7 @@ pub fn hollywood_section_with_activity(
             .then(|| format!("{PERMISSION_PROMPT} — needs the user")),
         attention_user: prompt.is_some(),
         attention_detail: prompt,
+        can_answer_prompt: runner.is_none_or(crate::caps::can_answer_prompt),
         headline: state.last_headline().map(cap_headline),
         headline_seq: state.reports.last().map(|r| r.seq),
         cards: state

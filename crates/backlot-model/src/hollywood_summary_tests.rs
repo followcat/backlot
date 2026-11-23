@@ -32,6 +32,32 @@ fn a_document_without_hollywood_still_parses() {
     assert!(v.get("cards").is_none());
 }
 
+/// `can_answer_prompt` follows Hollywood's runner: false for a runner
+/// with no approval key, true for cmd; a document written before the
+/// field existed reads `true`.
+#[test]
+fn hollywood_can_answer_prompt_follows_the_runner() {
+    let state = HollywoodState::default();
+    let off = hollywood_section(&state, "live", Some("opencode"), Some("m"), None);
+    assert!(!off.can_answer_prompt);
+    let on = hollywood_section(&state, "live", Some("cmd"), Some("m"), None);
+    assert!(on.can_answer_prompt);
+    // No runner configured reads true — nothing to answer.
+    let none = hollywood_section(&state, "down", None, None, None);
+    assert!(none.can_answer_prompt);
+    // The field is skipped when true, present when false.
+    assert!(
+        serde_json::to_value(&on)
+            .unwrap()
+            .get("can_answer_prompt")
+            .is_none()
+    );
+    let v = serde_json::to_value(&off).unwrap();
+    assert_eq!(v["can_answer_prompt"], false);
+    let back: crate::hollywood_summary::HollywoodSummary = serde_json::from_value(v).unwrap();
+    assert!(!back.can_answer_prompt);
+}
+
 /// The headline caps at 200 chars, only the first 10 open cards
 /// reach the document, and every card string is capped.
 #[test]
