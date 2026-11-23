@@ -375,11 +375,15 @@ state (`live`, `finished`, or `failed` when the log will not load), title and bo
 activity first; `--json` prints the same rows structured. A pinned `BACKLOT_STATE_DIR`,
 `--session` or `--remote` lists that one directory only, so a role terminal never sees other
 cores. `--remote <host>` (`backlot --remote host-b studio list`) reads the studios on that
-machine; `--help` spells both reads out.
+machine; `--help` spells both reads out. `--archived` reads the `archive/` directory instead — the
+studios `studio delete` retired — with each entry's name, stamp, repo and last requirement title;
+`studio restore <archived-name> [--name <new-name>]` brings one back as a finished studio.
 
 ```sh
 backlot studio list
 backlot studio list --json
+backlot studio list --archived
+backlot studio restore acme-shop-20260101T120000Z --name acme-shop-2
 backlot --remote host-b studio list
 ```
 
@@ -827,6 +831,19 @@ delete is kept with git's reason, so unmerged integration work is never lost. `-
 removed, pruned, deleted or kept. The ledger, `reports/`, `messages/` and `attention/` stay:
 `backlot records` and `backlot status` keep the full history. To remove that history too,
 delete the studio's directory under `studios/` yourself.
+
+### Finish, prune, delete, restore
+
+| Command | What it does | The ledger |
+|---|---|---|
+| `studio finish [--force]` | Ends the studio; producer and director close, only a reopened person comes back. Refuses while a task is open, and on an empty studio unless `--force`. | Kept where it is; `studio.finished` appended. |
+| `studio prune <s> \| --all-finished` | Reaps a finished studio's `work/` worktrees and `backlot/<studio>/*` branches git considers merged. | Kept; nothing appended. |
+| `studio delete <s>` | Finishes if needed, closes the studio's terminals, prunes safely, records `studio.deleted`, and moves the ledger under `archive/<s>-<stamp>`. | Archived to `archive/`, gone from `studios/`. |
+| `studio list --archived` | Lists what is under `archive/`: name, stamp, repo and last requirement title. | Read-only. |
+| `studio restore <archived-name> [--name <new>]` | Copies an archived ledger back under `studios/` as a finished studio; `--name` renames it. Refuses a name already taken; `--dry-run` shows the plan. | The copy is live again; the archive copy stays. |
+
+`studio restore` recreates no work areas: the studio comes back `finished` and `reopen` works from
+there. `prune` stays what it was — it never touches the ledger.
 
 Which repositories prune works follows the binding (D4, D10). A workspace-bound studio is
 pruned member by member, over the member list the ledger recorded at `studio new` — never a

@@ -170,9 +170,21 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
             return crate::migrate::run(&base, named, all, dry_run);
         }
         // `studio list` reads every core directory (or the pinned
-        // one) — no studio name, no event appended.
-        Cmd::StudioList { json } => {
-            return crate::studio_list::run(env, &common, json);
+        // one) — no studio name, no event appended. `--archived`
+        // reads the ledgers under `archive/` instead.
+        Cmd::StudioList { json, archived } => {
+            return crate::studio_list::run(env, &common, json, archived);
+        }
+        // `studio restore` brings an archived ledger back as a
+        // finished studio — nothing appended to a live ledger until
+        // the copy lands.
+        Cmd::StudioRestore {
+            archived,
+            new_name,
+            dry_run,
+        } => {
+            check_stage_caller(&common, env)?;
+            return crate::restore::run(env, &common, &archived, new_name.as_deref(), dry_run);
         }
         _ => {}
     }

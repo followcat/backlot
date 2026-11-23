@@ -54,6 +54,86 @@ struct Listing {
     studios: Vec<Row>,
 }
 
+/// One archived studio, as `studio list --archived` shows it: the
+/// `archive/<id>-<stamp>` entry's name, its stamp, the repo it was
+/// bound to and its last requirement title.
+#[derive(Debug, Serialize)]
+struct ArchivedRow {
+    /// The archive entry's directory name (`acme-shop-20260101T120000Z`).
+    name: String,
+    /// The `<stamp>` part of that name.
+    stamp: String,
+    /// The studio id the ledger was recorded under, when it reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    studio: Option<String>,
+    /// The core cell, as the live table's.
+    #[serde(skip)]
+    core_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repo: Option<String>,
+    /// The newest requirement version's summary — what the studio
+    /// was last asked for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    requirement: Option<String>,
+    last_ms: u64,
+}
+
+/// The `--archived --json` document.
+#[derive(Debug, Serialize)]
+struct ArchivedListing {
+    pinned: bool,
+    archived: Vec<ArchivedRow>,
+}
+
+/// The `(id, stamp)` an archive entry's name carries — the id is
+/// everything before the last `-`, the stamp all after it.
+fn split_archive(name: &str) -> (String, String) {
+    match name.rsplit_once('-') {
+        Some((id, stamp)) => (id.to_string(), stamp.to_string()),
+        None => (name.to_string(), String::new()),
+    }
+}
+
+/// Read one directory's archived studios into `rows`.
+fn scan_archived(dir: &Path, core: Option<&str>, hint: Option<&str>, rows: &mut Vec<ArchivedRow>) {
+    let Ok(entries) = store::archived_studios(dir) else {
+        return;
+    };
+    let label = core_label(dir, core, hint);
+    for (name, adir) in entries {
+        let (id, stamp) = split_archive(&name);
+        let row = match store::load_events(&adir) {
+            Ok((events, _)) => {
+                let state = backlot_model::replay(&events);
+                let config = state.studio.as_ref();
+                ArchivedRow {
+                    name: name.clone(),
+                    stamp,
+                    studio: Some(id),
+                    core_label: label.clone(),
+                    repo: config.map(|c| c.repo.clone()),
+                    requirement: state
+                        .requirements
+                        .last()
+                        .map(|r| r.summary.clone())
+                        .or_else(|| config.map(|c| c.title.clone())),
+                    last_ms: events.last().map(|e| e.ts_ms).unwrap_or(0),
+                }
+            }
+            Err(_) => ArchivedRow {
+                name: name.clone(),
+                stamp,
+                studio: Some(id),
+                core_label: label.clone(),
+                repo: None,
+                requirement: None,
+                last_ms: 0,
+            },
+        };
+        rows.push(row);
+    }
+}
+
 /// The core's display name from `<dir>/core.json` — hc's own identity
 /// document (`{"id": …, "name": …}`), absent on some cores and on a
 /// scratch state directory.
@@ -166,6 +246,39 @@ fn collect(env: &Env, common: &Common) -> Result<Listing, Fail> {
     })
 }
 
+/// Every archived studio the command can see, newest ledger first.
+fn collect_archived(env: &Env, common: &Common) -> Result<ArchivedListing, Fail> {
+    let pinned = env.get("BACKLOT_STATE_DIR").is_some()
+        || common.session.is_some()
+        || common.remote.is_some();
+    let mut rows = Vec::new();
+    if pinned {
+        let base = crate::cli::base(env, common)?;
+        let hint = if env.get("BACKLOT_STATE_DIR").is_some() {
+            None
+        } else {
+            base.file_name().and_then(|n| n.to_str()).map(str::to_owned)
+        };
+        scan_archived(&base, None, hint.as_deref(), &mut rows);
+    } else {
+        let root = store::root_dir(&env.vars);
+        if let Ok(entries) = std::fs::read_dir(&root) {
+            for entry in entries.flatten() {
+                if !entry.path().is_dir() {
+                    continue;
+                }
+                let core = entry.file_name().to_string_lossy().into_owned();
+                scan_archived(&entry.path(), Some(&core), None, &mut rows);
+            }
+        }
+    }
+    rows.sort_by(|a, b| b.last_ms.cmp(&a.last_ms).then_with(|| a.name.cmp(&b.name)));
+    Ok(ArchivedListing {
+        pinned,
+        archived: rows,
+    })
+}
+
 /// The plain table: `studio  core  state  title  path`.
 fn table(rows: &[Row]) -> String {
     if rows.is_empty() {
@@ -183,9 +296,33 @@ fn table(rows: &[Row]) -> String {
             ]
         })
         .collect();
-    let header = ["studio", "core", "state", "title", "path"];
+    render_table(&["studio", "core", "state", "title", "path"], &cells)
+}
+
+/// The plain `--archived` table: `studio  stamp  core  repo  requirement`.
+fn table_archived(rows: &[ArchivedRow]) -> String {
+    if rows.is_empty() {
+        return "no archived studios\n".into();
+    }
+    let cells: Vec<[String; 5]> = rows
+        .iter()
+        .map(|r| {
+            [
+                r.studio.clone().unwrap_or_else(|| r.name.clone()),
+                r.stamp.clone(),
+                r.core_label.clone(),
+                r.repo.clone().unwrap_or_else(|| "-".into()),
+                r.requirement.clone().unwrap_or_else(|| "-".into()),
+            ]
+        })
+        .collect();
+    render_table(&["studio", "stamp", "core", "path", "requirement"], &cells)
+}
+
+/// A five-column table with one space-padded gap between the cells.
+fn render_table(header: &[&str; 5], cells: &[[String; 5]]) -> String {
     let mut width = header.map(str::len);
-    for row in &cells {
+    for row in cells {
         for (i, cell) in row.iter().enumerate() {
             width[i] = width[i].max(cell.chars().count());
         }
@@ -201,14 +338,22 @@ fn table(rows: &[Row]) -> String {
         out.push('\n');
     };
     line(&header.map(String::from));
-    for row in &cells {
+    for row in cells {
         line(row);
     }
     out
 }
 
-/// `backlot studio list [--json]`.
-pub fn run(env: &Env, common: &Common, json: bool) -> Result<String, Fail> {
+/// `backlot studio list [--json] [--archived]`.
+pub fn run(env: &Env, common: &Common, json: bool, archived: bool) -> Result<String, Fail> {
+    if archived {
+        let listing = collect_archived(env, common)?;
+        if json {
+            return serde_json::to_string_pretty(&listing)
+                .map_err(|e| Fail::refused(format!("studio list: {e}")));
+        }
+        return Ok(table_archived(&listing.archived).trim_end().to_string());
+    }
     let listing = collect(env, common)?;
     if json {
         return serde_json::to_string_pretty(&listing)

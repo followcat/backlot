@@ -44,6 +44,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   `--fresh`. The role's ledger row carries `restarted`, which the summary and Hollywood read. The
   same request reloads Hollywood itself (`restart --person hollywood`, its own `role.restart`).
 
+- **Archive list and restore.** `backlot studio list --archived` lists the studios `studio delete`
+  retired — name, stamp, repo and last requirement title — and `backlot studio restore
+  <archived-name> [--name <new-name>] [--dry-run]` copies one back under `studios/` as a finished
+  studio, refusing a name already taken. `docs/studio/guide.md` gains a finish/prune/delete/restore
+  table.
+
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on

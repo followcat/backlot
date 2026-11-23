@@ -246,10 +246,20 @@ pub enum Cmd {
         /// `--all`: include `.`-prefixed directories.
         all: bool,
     },
-    /// `backlot studio list [--json]` — every studio under every
-    /// core's state directory, read-only.
+    /// `backlot studio list [--json] [--archived]` — every studio
+    /// under every core's state directory (or the archived ones),
+    /// read-only.
     StudioList {
         json: bool,
+        /// `--archived`: list the ledgers under `archive/`.
+        archived: bool,
+    },
+    /// `backlot studio restore <archived-name> [--as <new-name>]
+    /// [--dry-run]` — bring an archived studio back, finished.
+    StudioRestore {
+        archived: String,
+        new_name: Option<String>,
+        dry_run: bool,
     },
     /// `backlot hollywood propose|report` — Hollywood's own ledger.
     Hollywood(HollywoodCmd),
@@ -387,6 +397,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
                 "delete" => args_studio::studio_delete(&mut common, &mut it),
                 "migrate" => args_studio::studio_migrate(&mut common, &mut it),
                 "list" => args_studio::studio_list(&mut common, &mut it),
+                "restore" => args_studio::studio_restore(&mut common, &mut it),
                 "-h" | "--help" => Ok((common, Cmd::Help(U_STUDIO))),
                 _ => Err(usage(
                     format!("unknown studio subcommand '{sub}'"),

@@ -63,6 +63,7 @@ pub mod reconcile;
 mod relabel;
 pub mod render;
 mod repos;
+mod restore;
 mod runners;
 mod sample;
 mod sendfail;
@@ -192,6 +193,8 @@ mod reopen_cmd_tests;
 mod repos_tests;
 #[cfg(test)]
 mod restart_cmd_tests;
+#[cfg(test)]
+mod restore_tests;
 #[cfg(test)]
 mod role_cmd_tests;
 #[cfg(test)]
