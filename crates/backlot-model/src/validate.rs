@@ -128,6 +128,23 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 None => Err(Refusal::NoRole(role.clone())),
             }
         }
+        // A restart is for a role the studio still runs or one whose
+        // terminal got stuck: a live or lost person, never a finished
+        // studio — and a closed person comes back with `reopen`.
+        EventKind::RoleRestart { role, .. } => {
+            require_studio(state)?;
+            if state.finished.is_some() {
+                return Err(Refusal::RestartFinished);
+            }
+            let r = state
+                .roles
+                .get(role)
+                .ok_or_else(|| Refusal::NoRole(role.clone()))?;
+            if r.lifecycle() == RoleLifecycle::Closed {
+                return Err(Refusal::RestartClosed(role.clone()));
+            }
+            Ok(())
+        }
         // Recasting a fixed role carries the cast file's identity rules
         // and the studio's seat check — the same rule the CLI and a
         // card's proposal run.

@@ -171,6 +171,17 @@ pub enum HollywoodKind {
     /// relayed no longer stands; never pending again.
     #[serde(rename = "message.dropped")]
     MessageDropped { target: u64, reason: String },
+    /// The user's `backlot restart --person hollywood`: stop
+    /// `bl-hollywood` and launch it again — resuming its recorded
+    /// session unless `fresh` asks for a new conversation. The stage
+    /// carries it out on the next tick.
+    #[serde(rename = "role.restart")]
+    RoleRestart {
+        #[serde(default, skip_serializing_if = "crate::event::is_false")]
+        fresh: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
 }
 
 /// The move one `role.state` records — a studio's `role.started`,
@@ -211,6 +222,7 @@ impl HollywoodKind {
             HollywoodKind::RoleApproval { .. } => "role.approval",
             HollywoodKind::MessageDelivered { .. } => "message.delivered",
             HollywoodKind::MessageDropped { .. } => "message.dropped",
+            HollywoodKind::RoleRestart { .. } => "role.restart",
         }
     }
 }

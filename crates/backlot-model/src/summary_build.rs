@@ -390,5 +390,6 @@ pub(crate) fn role_summary(
         attention_detail: open.map(attention_detail),
         stage_answer_ms: r.stage_answer_ms,
         can_answer_prompt: actor.is_none_or(|a| crate::caps::can_answer_prompt(&a.runner)),
+        restarted_ms: r.restarted_ms,
     })
 }

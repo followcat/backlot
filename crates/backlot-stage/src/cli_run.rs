@@ -50,6 +50,17 @@ pub(crate) fn run_stdin(args: &[String], env: &Env, stdin: Option<&str>) -> Resu
     {
         return crate::hwood::approve(&common, env, decision);
     }
+    // `restart --person hollywood` restarts the overseer's own
+    // terminal: its own ledger, carried out by the stage's `hplan`.
+    if let Cmd::Restart {
+        ref person,
+        fresh,
+        ref reason,
+    } = cmd
+        && person == backlot_model::hollywood::HOLLYWOOD
+    {
+        return crate::hwood::restart(&common, env, fresh, reason);
+    }
     match cmd {
         // The stage connects itself; no ledger command needs it here.
         Cmd::StageStart => {

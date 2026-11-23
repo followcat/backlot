@@ -335,6 +335,20 @@ pub enum RoleLifecycle {
     Closed,
 }
 
+/// A `role.restart` the stage still owes (L2): stop the role's
+/// terminal, then launch it again under the same identity — resuming
+/// the recorded session, or `fresh` starting a new one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RestartRequest {
+    /// The `role.restart` event's seq.
+    pub seq: u64,
+    /// Start a new session instead of resuming the recorded one.
+    #[serde(default, skip_serializing_if = "crate::event::is_false")]
+    pub fresh: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RoleState {
     /// True while the role should have a live terminal.
@@ -373,6 +387,14 @@ pub struct RoleState {
     /// line. Bookkeeping only: no attention, nothing to clear.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage_answer_ms: Option<u64>,
+    /// A `role.restart` the stage still owes this role — cleared by
+    /// the `role.closed` (reason `restarted`) that carries it out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart: Option<RestartRequest>,
+    /// The newest time the stage restarted the role in place — the
+    /// `restarted` word the summary and Hollywood show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restarted_ms: Option<u64>,
 }
 
 impl RoleState {

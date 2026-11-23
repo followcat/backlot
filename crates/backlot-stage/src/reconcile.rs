@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use backlot_model::event::ActorIdentity;
+use backlot_model::event::{ActorIdentity, RESTARTED};
 use backlot_model::state::{RoleLifecycle, StudioState};
 
 mod budget;
@@ -263,7 +263,26 @@ pub fn reconcile(
                             .iter()
                             .find(|w| w.role == *key)
                             .expect("a wanted key has a Start");
-                        if moved(state, r, want) {
+                        if r.restart.is_some() {
+                            // A restart stops the old terminal on
+                            // purpose — `role.closed`, reason
+                            // `restarted`, never a loss — and the
+                            // start the request asks for lands next
+                            // tick, after the close makes the role
+                            // startable again.
+                            if let Some(address) = term {
+                                recover::closed_records(state, key, &mut records, &mut cleared);
+                                stops.push(Action::Stop {
+                                    role: key.clone(),
+                                    terminal: name,
+                                    address,
+                                    close: true,
+                                    reason: RESTARTED.into(),
+                                });
+                            } else {
+                                recover::lost_records(state, key, &mut records, &mut cleared);
+                            }
+                        } else if moved(state, r, want) {
                             // A recast: close the old terminal on
                             // purpose so it is never counted as a
                             // loss; the fresh start lands next tick,
@@ -334,7 +353,23 @@ pub fn reconcile(
                             .iter()
                             .find(|w| w.role == *key)
                             .expect("a wanted key has a Start");
-                        if moved(state, r, want) {
+                        if r.restart.is_some() {
+                            // A restart is the user's deliberate
+                            // intervention: free any stale terminal
+                            // on the name and start the role again —
+                            // resumed or fresh, as the request asked
+                            // — without the loss guard's delay.
+                            if let Some(address) = term {
+                                stops.push(Action::Stop {
+                                    role: key.clone(),
+                                    terminal: name,
+                                    address,
+                                    close: false,
+                                    reason: String::new(),
+                                });
+                            }
+                            starts.push(Action::Start(want.clone()));
+                        } else if moved(state, r, want) {
                             // A recast never resumes the old session:
                             // it belongs to the runner that left. Free
                             // a stale terminal on the name, then start
@@ -456,5 +491,7 @@ mod recast_tests;
 mod recover_tests;
 #[cfg(test)]
 mod reopen_tests;
+#[cfg(test)]
+mod restart_tests;
 #[cfg(test)]
 mod tests;

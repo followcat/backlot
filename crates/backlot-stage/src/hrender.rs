@@ -26,6 +26,13 @@ pub fn hconfirm(event: &HollywoodEvent) -> String {
         HollywoodKind::RoleApproval { decision } => format!(" {decision:?}"),
         HollywoodKind::MessageDelivered { target }
         | HollywoodKind::MessageDropped { target, .. } => format!(" #{target}"),
+        HollywoodKind::RoleRestart { fresh, .. } => {
+            if *fresh {
+                " (fresh session)".to_string()
+            } else {
+                String::new()
+            }
+        }
     };
     format!("event {}: {}{}", event.seq, event.kind.name(), subject)
 }

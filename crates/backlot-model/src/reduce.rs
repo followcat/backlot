@@ -56,19 +56,34 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             terminal,
             actor,
             session_id,
-            ..
+            reason,
         }
         | EventKind::RoleResumed {
             role,
             terminal,
             session_id,
             actor,
-            ..
+            reason,
         } => {
             let entry = state.roles.entry(role.clone()).or_default();
             entry.live = true;
             entry.closed = false;
             entry.since_ms = ts;
+            // The start a restart asked for is done; the role's newest
+            // move is the `restarted` word the summary shows. Any
+            // other start leaves the word behind.
+            let restarted = reason.as_deref() == Some(RESTARTED);
+            entry.restarted_ms = restarted.then_some(ts);
+            if restarted {
+                entry.restart = None;
+                // A fresh restart begins a new conversation: the id
+                // the launch minted (or none, for a post-launch
+                // runner) is the whole truth. A resumed one carries
+                // the id it resumed, set below.
+                if matches!(event.kind, EventKind::RoleStarted { .. }) {
+                    entry.session_id = None;
+                }
+            }
             if terminal.is_some() {
                 entry.terminal = terminal.clone();
             }
@@ -115,7 +130,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 entry.losses.push(ts);
             }
         }
-        EventKind::RoleClosed { role, .. } => {
+        EventKind::RoleClosed { role, reason } => {
             // A deliberate release keeps `actor` and `session_id`: the
             // person stays resumable while their studio is live.
             let entry = state.roles.entry(role.clone()).or_default();
@@ -123,6 +138,11 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             entry.closed = true;
             entry.held = false;
             entry.since_ms = ts;
+            // The stop a restart asked for carries the request on: the
+            // start that follows it clears it. Any other close ends it.
+            if reason.as_deref() != Some(RESTARTED) {
+                entry.restart = None;
+            }
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
         EventKind::RoleSession { role, session_id } => {
@@ -165,6 +185,21 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             if let Some(entry) = state.roles.get_mut(role) {
                 entry.held = false;
             }
+            state.targets.insert(seq, SeqTarget::Role(role.clone()));
+        }
+        // The request the stage carries out next tick: stop the
+        // terminal, then start the role again.
+        EventKind::RoleRestart {
+            role,
+            fresh,
+            reason,
+        } => {
+            let entry = state.roles.entry(role.clone()).or_default();
+            entry.restart = Some(RestartRequest {
+                seq,
+                fresh: *fresh,
+                reason: reason.clone(),
+            });
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
         }
         EventKind::ReqVersion {

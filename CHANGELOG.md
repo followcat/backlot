@@ -37,6 +37,13 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
   `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
 
+- **Restart a stuck role in place.** `backlot restart --person <role> [--fresh] [--reason <r>]`
+  reloads a live or lost producer, director, writer or actor under the same identity: the stage
+  stops its terminal deliberately (`role.closed`, reason `restarted` — never a loss) and launches it
+  again, resuming the recorded session when the runner supports it, or starting a new one with
+  `--fresh`. The role's ledger row carries `restarted`, which the summary and Hollywood read. The
+  same request reloads Hollywood itself (`restart --person hollywood`, its own `role.restart`).
+
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on

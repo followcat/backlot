@@ -610,6 +610,29 @@ you approve what is actually there. A prompt answered in the terminal itself clo
 `prompt answered elsewhere` a couple of seconds later, so the next prompt raises fresh either way.
 A denied role gets a notice telling it the command did not run.
 
+## Restarting a stuck role
+
+`close` only releases a held actor; `reopen` needs a closed seat; `recast` changes the identity.
+To reload a producer, director, writer or actor **in place** — same identity — use `restart`:
+
+```sh
+backlot restart --person director --reason "stuck at a prompt" --studio acme-shop --as user
+backlot restart --person producer --fresh --studio acme-shop --as user
+```
+
+The stage carries it out on its next tick: the role's terminal is stopped deliberately
+(`role.closed`, reason `restarted` — never counted as a loss) and launched again under the same
+identity and the same `bl-<studio>-<role>` terminal name. It **resumes the recorded session** when
+the runner supports resume by id and a session id was recorded; `--fresh` starts a new session with
+the role's prompt instead. The ledger records the role as `restarted`, which the panel and
+Hollywood read.
+
+`restart` is the user's or the director's. It refuses a closed person (`closed — use reopen`) and a
+finished studio (`the studio is finished — reopen or restore it first`).
+
+`restart --person hollywood` reloads the overseer itself, from its own ledger and the same
+`[hollywood]` setup; a fresh restart starts a new conversation.
+
 ## Changing who plays a role
 
 Actors are recast through `backlot cast`; the three fixed roles — producer, director and writer —

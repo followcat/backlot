@@ -102,6 +102,10 @@ pub enum Refusal {
     RoleNoSession(String),
     RoleHeld(String),
     RoleNotHeld(String),
+    /// `restart` on a closed person — `reopen` is that way back.
+    RestartClosed(String),
+    /// `restart` on a finished studio.
+    RestartFinished,
     RoleTerminalTaken {
         role: String,
         other: String,
@@ -289,6 +293,10 @@ impl fmt::Display for Refusal {
             }
             Refusal::RoleHeld(r) => write!(f, "role '{r}' is already held for reopening"),
             Refusal::RoleNotHeld(r) => write!(f, "role '{r}' is not held"),
+            Refusal::RestartClosed(r) => write!(f, "the {r} is closed — use reopen"),
+            Refusal::RestartFinished => {
+                write!(f, "the studio is finished — reopen or restore it first")
+            }
             Refusal::RoleTerminalTaken { role, other } => write!(
                 f,
                 "cannot reopen '{role}': live role '{other}' uses its terminal name"

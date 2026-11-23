@@ -10,7 +10,7 @@ use crate::event::{ActorIdentity, ApprovalDecision};
 use crate::hollywood::{
     CardAction, CardBase, HEADLINE_CAP, HollywoodEvent, HollywoodKind, RoleMotion,
 };
-use crate::state::RoleLifecycle;
+use crate::state::{RestartRequest, RoleLifecycle};
 
 /// A card's point in its life.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,6 +110,13 @@ pub struct HWRole {
     /// The seq of a `resumed` whose reason was `recovered`, while
     /// its notice is owed — a start or plain resume clears it.
     pub recovered_seq: Option<u64>,
+    /// A `role.restart` the stage still owes: stop the terminal and
+    /// launch again (resumed unless `fresh`). Cleared by the close it
+    /// records.
+    pub restart: Option<RestartRequest>,
+    /// The newest time the stage restarted `bl-hollywood` in place —
+    /// the `restarted` word the bar shows.
+    pub restarted_ms: Option<u64>,
 }
 
 impl HWRole {
@@ -269,6 +276,11 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 }
                 r.session_id = session_id.clone();
                 r.recovered_seq = None;
+                // A fresh restart's start — or any other start — is
+                // the moment the pending request is done.
+                r.restart = None;
+                r.restarted_ms =
+                    (reason.as_deref() == Some(crate::event::RESTARTED)).then_some(e.ts_ms);
             }
             // A resume continues the recorded conversation: keep the
             // old id when the record carries none.
@@ -288,6 +300,10 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                     r.session_id = session_id.clone();
                 }
                 r.recovered_seq = (reason.as_deref() == Some("recovered")).then_some(e.seq);
+                // The start a restart asked for is done.
+                r.restart = None;
+                r.restarted_ms =
+                    (reason.as_deref() == Some(crate::event::RESTARTED)).then_some(e.ts_ms);
             }
             RoleMotion::Lost => {
                 state.role.live = false;
@@ -299,9 +315,15 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 r.live = false;
                 r.closed = true;
                 r.closed_reason = reason.clone();
-                // A close ends the conversation: no later resume may
-                // hand this id to whichever runner starts next.
-                r.session_id = None;
+                // A close the restart asked for keeps the request and
+                // the session — the launch that follows resumes it.
+                // Any other close ends both.
+                if reason.as_deref() != Some(crate::event::RESTARTED) {
+                    r.restart = None;
+                    // A close ends the conversation: no later resume
+                    // may hand this id to whichever runner starts next.
+                    r.session_id = None;
+                }
                 // The close's own ts: a stage process born after it
                 // may revive a `cannot resume` give-up (R1-4), and the
                 // crash history ends with the lifecycle it counted.
@@ -323,6 +345,13 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
             if let Some(m) = state.messages.iter_mut().find(|m| m.seq == *target) {
                 m.dropped = true;
             }
+        }
+        HollywoodKind::RoleRestart { fresh, reason } => {
+            state.role.restart = Some(RestartRequest {
+                seq: e.seq,
+                fresh: *fresh,
+                reason: reason.clone(),
+            });
         }
     }
 }

@@ -553,6 +553,26 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
+        // `restart` is a person's: the stage stops the terminal and
+        // launches the role again (L2). A finished studio refuses.
+        Cmd::Restart {
+            person,
+            fresh,
+            reason,
+        } => {
+            person_gate(caller)?;
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::RoleRestart {
+                        role: person,
+                        fresh,
+                        reason: (!reason.is_empty()).then_some(reason),
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         // `recast` is the user's — a role terminal is refused before
         // the ledger is read, exactly like `card apply`.
         Cmd::Recast {

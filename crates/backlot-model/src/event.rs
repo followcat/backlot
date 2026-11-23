@@ -126,6 +126,11 @@ pub const REOPENED: &str = "reopened";
 /// restart — and the notice label that tells it so.
 pub const RECOVERED: &str = "recovered";
 
+/// The `role.closed` reason the stage records when it stops a role to
+/// restart it, and the `role.started`/`role.resumed` reason of the
+/// start that follows: one deliberate stop, never counted as a loss.
+pub const RESTARTED: &str = "restarted";
+
 /// The `dialog` a `stage.answered` names today: Claude Code's
 /// first-use folder-trust dialog.
 pub const FOLDER_TRUST: &str = "folder-trust";
@@ -385,6 +390,19 @@ pub enum EventKind {
     /// the role is held.
     #[serde(rename = "role.release")]
     RoleRelease { role: String },
+    /// Restart a live or lost person in place: the stage stops its
+    /// terminal (`role.closed`, reason `restarted`) and launches it
+    /// again under the same identity — resuming the recorded session,
+    /// or `fresh` starting a new one with the role's prompt. Refused
+    /// for a closed person (reopen is that) and a finished studio.
+    #[serde(rename = "role.restart")]
+    RoleRestart {
+        role: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        fresh: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
     #[serde(rename = "req.version")]
     ReqVersion {
         version: u32,
@@ -620,6 +638,7 @@ impl EventKind {
             EventKind::RoleRecast { .. } => "role.recast",
             EventKind::RoleReopen { .. } => "role.reopen",
             EventKind::RoleRelease { .. } => "role.release",
+            EventKind::RoleRestart { .. } => "role.restart",
             EventKind::ReqVersion { .. } => "req.version",
             EventKind::PlanPublished { .. } => "plan.published",
             EventKind::TaskCreated { .. } => "task.created",

@@ -14,6 +14,7 @@ use std::fs;
 use crate::cli::Env;
 use crate::cli_testkit::*;
 use crate::hwood_tests::{argv, argv_ok, running};
+use crate::store;
 
 fn refused(env: &Env, parts: &[&str]) -> String {
     match argv(env, parts) {
@@ -362,4 +363,63 @@ fn card_show_reads_a_plain_card_and_refuses_an_unknown_id() {
     assert!(out.contains("pause t1"), "{out}");
     let msg = refused(&env, &["card", "show", "c9"]);
     assert!(msg.contains("no card 'c9'"), "{msg}");
+}
+
+/// `restart --person hollywood` records a `role.restart` in the
+/// overseer's own ledger — after a start so there is something to
+/// restart — and refuses without `[hollywood]` or before it ran.
+#[test]
+fn hollywood_restarts_through_its_own_ledger() {
+    let (scratch, env) = scratch();
+    let env = cfg_env(&env);
+    // No `[hollywood]` yet: nothing to restart.
+    let msg = refused(&env, &["restart", "--person", "hollywood", "--as", "user"]);
+    assert!(msg.contains("hollywood is not set up"), "{msg}");
+
+    argv_ok(
+        &env,
+        &[
+            "hollywood",
+            "setup",
+            "--runner",
+            "fake",
+            "--model",
+            "model-h",
+            "--effort",
+            "high",
+        ],
+    );
+    // Configured but never started: the stage has yet to start it.
+    let msg = refused(&env, &["restart", "--person", "hollywood", "--as", "user"]);
+    assert!(msg.contains("has not started"), "{msg}");
+
+    // A recorded start gives it something to restart.
+    let hdir = store::hollywood_dir(&scratch.dir);
+    store::append_hollywood(&hdir, |_, _| {
+        Ok::<_, crate::cli::Fail>(crate::store::HPending {
+            event: backlot_model::hollywood::NewHollywoodEvent::new(
+                backlot_model::EventBy::role("stage"),
+                backlot_model::hollywood::HollywoodKind::RoleState {
+                    state: backlot_model::hollywood::RoleMotion::Started,
+                    terminal: Some("bl-hollywood".into()),
+                    actor: None,
+                    session_id: Some("sess-h".into()),
+                    reason: None,
+                },
+            ),
+            files: Vec::new(),
+        })
+    })
+    .unwrap();
+    let out = argv_ok(&env, &["restart", "--person", "hollywood", "--as", "user"]);
+    assert!(out.contains("role.restart"), "{out}");
+    let state = store::load_hstate(&hdir).unwrap();
+    assert!(state.role.restart.is_some());
+
+    // Only the user restarts the overseer.
+    let msg = refused(
+        &env,
+        &["restart", "--person", "hollywood", "--as", "producer"],
+    );
+    assert!(msg.contains("the user can"), "{msg}");
 }

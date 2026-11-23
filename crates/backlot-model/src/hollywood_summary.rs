@@ -65,6 +65,11 @@ pub struct HollywoodSummary {
     /// The newest `hollywood.reported` headline (≤ [`HEADLINE_CHARS`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headline: Option<String>,
+    /// When the stage last restarted `bl-hollywood` in place
+    /// (`role.restart`) — the bar reads `restarted`. Documents an
+    /// older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restarted_ms: Option<u64>,
     /// Ledger `seq` of the newest `hollywood.reported` event so the
     /// Call Sheet's headline row can open its full report body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -178,6 +183,7 @@ pub fn hollywood_section_with_activity(
         attention_detail: prompt,
         can_answer_prompt: runner.is_none_or(crate::caps::can_answer_prompt),
         headline: state.last_headline().map(cap_headline),
+        restarted_ms: state.role.restarted_ms,
         headline_seq: state.reports.last().map(|r| r.seq),
         cards: state
             .open_cards()

@@ -15,6 +15,7 @@ pub(crate) const U_CAST: &str = "usage: backlot cast --task <id> --actor <name> 
 pub(crate) const U_PRIORITY: &str = "usage: backlot priority --task <id> --level low|normal|high";
 pub(crate) const U_REOPEN: &str = "usage: backlot reopen --person <role key>";
 pub(crate) const U_CLOSE: &str = "usage: backlot close --person <role key>";
+pub(crate) const U_RESTART: &str = "usage: backlot restart --person <role key> [--fresh] [--reason <r>]\n  restart stops the person's terminal and launches it again under the same\n  identity. It resumes the recorded session when the runner supports resume by\n  id; --fresh starts a new session with the role's prompt.";
 pub(crate) const U_RECAST: &str = "usage: backlot recast --person producer|director|writer --runner <r> --model <m> [--effort <e>]\n       [--permission-profile standard|worktree] [--reason <r>] [--studio <s>]";
 pub(crate) const U_APPROVE: &str =
     "usage: backlot approve --person <role key> --decision allow|deny";

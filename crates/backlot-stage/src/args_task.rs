@@ -194,6 +194,39 @@ pub(crate) fn person(
     ))
 }
 
+/// `restart --person <role key> [--fresh] [--reason <r>]` (L2).
+pub(crate) fn restart(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut person = None;
+    let mut fresh = false;
+    let mut reason = String::new();
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_RESTART)));
+        }
+        if common_flag(it, common, &arg, U_RESTART)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--person" => person = Some(it.value("--person", U_RESTART)?),
+            _ if eq(&arg, "--person").is_some() => person = eq(&arg, "--person").map(String::from),
+            "--fresh" => fresh = true,
+            "--reason" => reason = it.value("--reason", U_RESTART)?,
+            _ if eq(&arg, "--reason").is_some() => {
+                reason = eq(&arg, "--reason").map(String::from).unwrap_or_default()
+            }
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_RESTART)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::Restart {
+            person: person.ok_or_else(|| usage("missing --person", U_RESTART))?,
+            fresh,
+            reason,
+        },
+    ))
+}
+
 /// `recast --person <role> --runner <r> --model <m> [--effort <e>]
 /// [--permission-profile standard|worktree] [--reason <r>]` — the
 /// user's recast of a fixed role.

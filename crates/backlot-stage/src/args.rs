@@ -123,6 +123,14 @@ pub enum Cmd {
     Close {
         person: String,
     },
+    /// `restart --person <role> [--fresh] [--reason <r>]`: stop the
+    /// person's terminal and launch it again under the same identity,
+    /// resuming the recorded session unless `--fresh`.
+    Restart {
+        person: String,
+        fresh: bool,
+        reason: String,
+    },
     /// `recast --person <role> --runner <r> --model <m> [--effort <e>]
     /// [--permission-profile standard|worktree] [--reason <r>]` — the
     /// user's; the permission profile is kept from the current
@@ -447,6 +455,7 @@ pub fn parse(args: &[String]) -> Result<(Common, Cmd), Fail> {
         "close" => args_task::person(&mut common, &mut it, U_CLOSE, |person| Cmd::Close {
             person,
         }),
+        "restart" => args_task::restart(&mut common, &mut it),
         "recast" => args_task::recast(&mut common, &mut it),
         "approve" => args_task::approve(&mut common, &mut it),
         "attention" => {

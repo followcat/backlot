@@ -545,6 +545,9 @@ pub fn confirm(event: &backlot_model::Event) -> String {
         EventKind::RoleReopen { role } | EventKind::RoleRelease { role } => {
             format!(" {role}")
         }
+        EventKind::RoleRestart { role, fresh, .. } => {
+            format!(" {role}{}", if *fresh { " (fresh session)" } else { "" })
+        }
         EventKind::TaskDelivered { task, delivery, .. } => format!(" {task} d{delivery}"),
         EventKind::TaskReviewed {
             task,

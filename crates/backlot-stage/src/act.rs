@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use backlot_model::EventBy;
-use backlot_model::event::{ActorIdentity, Event, EventKind, NewEvent, RECOVERED};
+use backlot_model::event::{ActorIdentity, Event, EventKind, NewEvent, RECOVERED, RESTARTED};
 use backlot_model::state::StudioState;
 use hc_proto::client::CallError;
 use hc_proto::terminal::{RunParams, TerminalParams};
@@ -167,10 +167,17 @@ pub(crate) fn work_area_cleared_events(state: &StudioState, role: &str) -> Vec<E
 
 /// The lifecycle event a successful `terminal.run` appends:
 /// `role.resumed` with the start's reason — `reopened` for a held
-/// person's reopen, `recovered` for a lost role — its session the
-/// requested one, since post-launch runners report no id on a
-/// resume — and `role.started` otherwise.
-pub(crate) fn start_event(start: &Start, launch: &runners::Launch, address: &str) -> EventKind {
+/// person's reopen, `recovered` for a lost role, `restarted` for a
+/// `role.restart` — its session the requested one, since post-launch
+/// runners report no id on a resume — and `role.started` otherwise.
+/// `start_reason` names a fresh start's own reason (`restarted` for a
+/// `--fresh` restart); an ordinary fresh start has none.
+pub(crate) fn start_event(
+    start: &Start,
+    launch: &runners::Launch,
+    address: &str,
+    start_reason: Option<&'static str>,
+) -> EventKind {
     match &start.resume {
         Some(resume) => EventKind::RoleResumed {
             role: start.role.clone(),
@@ -184,7 +191,7 @@ pub(crate) fn start_event(start: &Start, launch: &runners::Launch, address: &str
             terminal: Some(address.into()),
             actor: Some(start.actor.clone()),
             session_id: launch.session_id(),
-            reason: None,
+            reason: start_reason.map(String::from),
         },
     }
 }
@@ -332,7 +339,12 @@ impl Stage {
             }
             Err(e) => return Err(fatal(e)),
         };
-        record(dir, start_event(start, launch, &address))?;
+        let start_reason = state
+            .roles
+            .get(&start.role)
+            .and_then(|r| r.restart.as_ref())
+            .and_then(|r| r.fresh.then_some(RESTARTED));
+        record(dir, start_event(start, launch, &address, start_reason))?;
         crate::stagelog::stage_log!("started {} as {}", start.role, start.terminal);
         Ok(true)
     }

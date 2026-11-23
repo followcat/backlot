@@ -189,6 +189,8 @@ mod reopen_cmd_tests;
 #[cfg(test)]
 mod repos_tests;
 #[cfg(test)]
+mod restart_cmd_tests;
+#[cfg(test)]
 mod role_cmd_tests;
 #[cfg(test)]
 mod sample_tests;
