@@ -1,11 +1,8 @@
-//! The stall decision (S6a): a live role whose visible screen has
-//! not changed for the studio's `stall_limit_s` is stalled. An actor
-//! only stalls on a `running` task — `working` and `waiting` both
-//! count — and any other role only while `working`: an idle
-//! producer, director or writer is normal. `blocked` never counts —
-//! a permission prompt has its own attention. The decision reads the
-//! same `Screen` stability track `sample_work` keeps for the send
-//! gate, so detection needs no extra `terminal.read`.
+//! The unified stall rule (D4): a live, eligible role stalls when none of
+//! the six liveness sources in [`crate::liveness::Evidence`] moved within
+//! `stall_limit_s` (3x when the deepest descendant is waiting on a kernel inode
+//! lock). An actor only stalls on a `running` task (`working` and `waiting`
+//! both count); fixed roles stall only while `working`; `blocked` never stalls.
 
 use backlot_model::event::{EventKind, STALLED};
 use backlot_model::state::{Attention, StudioState, TaskStatus, actor_task};
@@ -13,20 +10,15 @@ use backlot_model::summary::Work;
 
 use crate::act::record;
 use crate::cli::Fail;
-use crate::deliver::Screen;
+use crate::liveness::{Evidence, ObserveInput};
+use crate::liveness_diff::role_work_roots;
+use crate::render::age_short;
 use crate::sample::{Raise, Watched};
 
-/// Whether this sample means `role` stalled. `task` is the actor's
-/// own task status — `None` for a role with no task — and `screen`
-/// the send gate's stability track for the role.
-pub fn stalled(
-    role: &str,
-    task: Option<TaskStatus>,
-    work: Work,
-    screen: &Screen,
-    limit_ms: u64,
-) -> bool {
-    if work == Work::Blocked || screen.at_ms.saturating_sub(screen.same_since_ms) < limit_ms {
+/// Whether `(role, task, work)` is currently eligible to accumulate stall
+/// silence (`blocked` never counts).
+pub(crate) fn eligible(role: &str, task: Option<TaskStatus>, work: Work) -> bool {
+    if work == Work::Blocked {
         return false;
     }
     match actor_task(role) {
@@ -37,29 +29,16 @@ pub fn stalled(
     }
 }
 
-/// The hook-signal half of the stall rule (S9f): a role whose last
-/// signal reports Working and is older than the stall limit is as
-/// stalled as a frozen screen — the screen may keep spinning while
-/// the turn itself is dead. `blocked` never counts, and the
-/// actor / fixed-role scoping matches the screen rule's.
-pub fn signal_stalled(
+/// Whether `evidence` indicates `role` is stalled at `now_ms` under `limit_ms`.
+pub(crate) fn stalled(
     role: &str,
     task: Option<TaskStatus>,
     work: Work,
-    signal: &crate::signals::Signal,
-    limit_ms: u64,
+    evidence: &Evidence,
     now_ms: u64,
+    limit_ms: u64,
 ) -> bool {
-    if work == Work::Blocked
-        || signal.work() != Some(Work::Working)
-        || now_ms.saturating_sub(signal.ts_ms) < limit_ms
-    {
-        return false;
-    }
-    match actor_task(role) {
-        Some(_) => task == Some(TaskStatus::Running),
-        None => true,
-    }
+    eligible(role, task, work) && evidence.is_stalled(now_ms, limit_ms)
 }
 
 /// The role's open `stalled` attention, when it has one.
@@ -124,20 +103,9 @@ pub fn notice_body(attention: &Attention, screen_file: &str) -> String {
 }
 
 impl crate::daemon::Stage {
-    /// The S6 stall pass on the sample just stored: a screen held
-    /// unchanged for the studio's `stall_limit_s` raises `stalled`
-    /// once — one open attention per role and reason — with the
-    /// screen saved under `attention/`; a screen that changed since
-    /// the raise clears the attention. A stage restart loses the
-    /// in-memory track, so the first sample after it reads as a
-    /// fresh screen: an open stall clears and can re-raise one
-    /// limit later — acceptable until S6b's recovery work.
-    ///
-    /// S9f adds the signal half: a role whose last hook signal
-    /// reports Working and is older than the limit is as stalled as
-    /// a frozen screen — the spinner may keep moving while the turn
-    /// itself is dead. Either source can clear an open stall: a new
-    /// screen, or a newer signal.
+    /// Update `role`'s D4 liveness evidence on the sample just stored, clear an
+    /// open `stalled` attention if any evidence moved, or raise one once no
+    /// source moved for `stall_limit_s` (3x on kernel inode lock waits).
     pub(crate) async fn stall(
         &self,
         studio: &str,
@@ -147,63 +115,77 @@ impl crate::daemon::Stage {
     ) -> Result<(), Fail> {
         let (dir, state, role) = (w.dir, w.state, w.role);
         let pair = (studio.to_string(), role.to_string());
-        // The structured stall's clock (S12d): while the terminal
-        // reports `working`, its activity revision must keep
-        // moving — `rev_since` is when the current revision first
-        // showed. A terminal not reporting `working`, or a runner
-        // whose revision is turn-level only (such as `agy`, R7a),
-        // drops its entry and never stalls this way.
-        let working = backlot_model::caps::revision_stalls(w.runner)
-            && w.term.status.as_ref().is_some_and(|s| s.state == "working");
-        let rev_since = match w.term.activity_revision.filter(|_| working) {
-            None => {
-                self.revision_since.borrow_mut().remove(&pair);
-                None
-            }
-            Some(rev) => {
-                let mut map = self.revision_since.borrow_mut();
-                let e = map.entry(pair.clone()).or_insert((rev, now_ms));
-                if e.0 != rev {
-                    *e = (rev, now_ms);
-                }
-                Some(e.1)
-            }
-        };
         let Some(screen) = self.screens.borrow().get(&pair).cloned() else {
             return Ok(());
         };
         let signal = self.last_signal.borrow().get(&pair).cloned();
-        if let Some(attn) = open_stall(state, role) {
-            // A newer signal — the turn demonstrably alive — an
-            // activity revision that moved since the raise, or the
-            // screen having moved ends the episode.
-            let cleared = if signal.as_ref().is_some_and(|s| s.ts_ms > attn.ts_ms) {
-                Some("new hook signal")
-            } else if rev_since.is_some_and(|s| s > attn.ts_ms) {
-                Some("activity resumed")
-            } else if screen.same_since_ms > attn.ts_ms {
-                Some("screen changed")
-            } else {
-                None
-            };
-            if let Some(reason) = cleared {
-                record(
-                    dir,
-                    EventKind::AttentionCleared {
-                        target: attn.seq,
-                        reason: Some(reason.into()),
-                    },
-                )?;
-            }
-            return Ok(());
-        }
         let task = actor_task(role)
             .and_then(|id| state.tasks.get(id))
             .map(|t| t.status);
+        let is_eligible = eligible(role, task, work);
+        let local_machine = self.is_local && !w.term.address.contains('/');
+        let work_roots = if local_machine {
+            role_work_roots(dir, state, role)
+        } else {
+            Vec::new()
+        };
+        let terminal_working = w.term.status.as_ref().is_some_and(|s| s.state == "working");
+        let input = ObserveInput {
+            now_ms,
+            runner: w.runner,
+            eligible: is_eligible,
+            raw_screen: &screen.text,
+            raw_same_since_ms: screen.same_since_ms,
+            signal: signal.as_ref(),
+            terminal_working,
+            activity_revision: w.term.activity_revision,
+            local_machine,
+            pid: w.term.pid,
+            work_roots: &work_roots,
+            ledger: state.last_by_role.get(role),
+        };
+
         let limit_ms = u64::from(state.stall_limit_s()) * 1000;
-        if let Some(sig) = signal.filter(|s| signal_stalled(role, task, work, s, limit_ms, now_ms))
-        {
-            let silent_s = now_ms.saturating_sub(sig.ts_ms) / 1000;
+        let open = open_stall(state, role);
+        let (cleared_action, raise_snap) = {
+            let mut map = self.liveness.borrow_mut();
+            let mut git = self.git.borrow_mut();
+            let ev = map
+                .entry(pair.clone())
+                .and_modify(|e| {
+                    e.observe(&input, &*self.proc_read, &*self.work_area_read, &mut **git);
+                })
+                .or_insert_with(|| {
+                    Evidence::new(&input, &*self.proc_read, &*self.work_area_read, &mut **git)
+                });
+
+            if let Some(attn) = open {
+                (
+                    ev.clear_reason(attn.ts_ms, now_ms).map(|r| (attn.seq, r)),
+                    None,
+                )
+            } else {
+                ev.clear_raised();
+                let raise = stalled(role, task, work, ev, now_ms, limit_ms).then(|| ev.clone());
+                (None, raise)
+            }
+        };
+
+        if let Some((target, reason)) = cleared_action {
+            record(
+                dir,
+                EventKind::AttentionCleared {
+                    target,
+                    reason: Some(reason.into()),
+                },
+            )?;
+            return Ok(());
+        }
+        if open.is_some() {
+            return Ok(());
+        }
+
+        if let Some(ev_snap) = raise_snap {
             self.raise_attention(
                 Raise {
                     dir,
@@ -213,52 +195,38 @@ impl crate::daemon::Stage {
                     needs_user: false,
                     bound: None,
                 },
-                move |seq| {
-                    format!("no hook signal for {silent_s}s; screen saved to attention/{seq}.txt")
-                },
+                move |seq| stall_detail(&ev_snap, now_ms, seq),
             )
             .await?;
-            crate::stagelog::stage_log!("{role} stalled");
-        } else if rev_since.is_some_and(|s| now_ms.saturating_sub(s) >= limit_ms) {
-            // The terminal still says `working` but its activity
-            // revision has not moved for the limit — the
-            // structured twin of the frozen-screen stall.
-            let held_s = now_ms.saturating_sub(rev_since.unwrap_or(now_ms)) / 1000;
-            self.raise_attention(
-                Raise {
-                    dir,
-                    role,
-                    reason: STALLED,
-                    text: &screen.text,
-                    needs_user: false,
-                    bound: None,
-                },
-                move |seq| {
-                    format!(
-                        "status 'working' but activity revision unchanged for {held_s}s; screen saved to attention/{seq}.txt"
-                    )
-                },
-            )
-            .await?;
-            crate::stagelog::stage_log!("{role} stalled");
-        } else if stalled(role, task, work, &screen, limit_ms) {
-            let held_s = screen.at_ms.saturating_sub(screen.same_since_ms) / 1000;
-            self.raise_attention(
-                Raise {
-                    dir,
-                    role,
-                    reason: STALLED,
-                    text: &screen.text,
-                    needs_user: false,
-                    bound: None,
-                },
-                move |seq| {
-                    format!("screen unchanged for {held_s}s; screen saved to attention/{seq}.txt")
-                },
-            )
-            .await?;
+            if let Some(ev) = self.liveness.borrow_mut().get_mut(&pair) {
+                ev.mark_raised(now_ms);
+            }
             crate::stagelog::stage_log!("{role} stalled");
         }
         Ok(())
+    }
+}
+
+/// Format the `detail` field of `AttentionRaised` (`STALLED`).
+pub(crate) fn stall_detail(ev: &Evidence, now_ms: u64, seq: u64) -> String {
+    let silent_s = now_ms.saturating_sub(ev.silence_start_ms()) / 1000;
+    if let Some((argv, since_ms)) = ev.lock_wait() {
+        let dur = age_short(now_ms.saturating_sub(since_ms));
+        return format!("waiting on: {argv} for {dur}; screen saved to attention/{seq}.txt");
+    }
+    if ev.animates_only() {
+        return format!(
+            "no sign of life for {silent_s}s; screen animates only (spinner); screen saved to attention/{seq}.txt"
+        );
+    }
+    match ev.last_moved_stamp() {
+        Some(stamp) => {
+            let age = age_short(now_ms.saturating_sub(stamp.at_ms));
+            format!(
+                "no sign of life for {silent_s}s; last: {} ({}) {age} ago; screen saved to attention/{seq}.txt",
+                stamp.desc, stamp.tag
+            )
+        }
+        None => format!("no sign of life for {silent_s}s; screen saved to attention/{seq}.txt"),
     }
 }

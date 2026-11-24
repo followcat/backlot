@@ -206,24 +206,25 @@ official hc, agents that do not report status have none at all. The stage theref
 
 | Source | Used for |
 |---|---|
-| Explicit `backlot` commands | Task state. This is the authority. |
-| hc status and turn events | Working or stopped, when reported |
-| `terminal.read` samples | Stalls: a live role's screen unchanged for `stall_limit_s` |
+| Explicit `backlot` commands | Task state and role ledger events (`last_by_role`). This is the authority. |
+| hc status and turn events | Working or stopped, when reported (`activity.revision` for `revision_stalls` runners) |
+| `terminal.read` samples | Work classification, D2/permission prompts, send gate (raw screen), and normalised screen liveness |
+| Local OS / git probes (local machine only) | Descendant processes (`term.pid` via `/proc` or `ps`), `cutime`, `wchan` lock waits, and git `HEAD`/`index`/`status` |
 | Per-runner screen patterns and D2 generic dialog fallback | Attention reasons: `permission prompt`, `question` |
 
-The stall rule reads the send gate's screen-stability track — a live role is stalled when its screen has not changed
-for `stall_limit_s` (default 600 s) and its work counts: an actor only on a `running` task, where `working` and
-`waiting` both count — an actor that went idle is exactly the case — while the producer, director and writer stall only
-while `working`; an idle one is normal, and `blocked` never counts because permission prompts and question dialogs have
-their own attentions.
-One `stalled` attention raises per frozen episode with the screen saved under `attention/<seq>.txt`; a changed screen
-clears it and a later freeze raises its own. For runners whose `activity.revision` is turn-level only (`agy`,
-`mid_turn_revision: false`), a frozen revision while `working` does not raise a structured stall. The notice goes to
-the actor's task reviewer and to the producer for the other fixed roles — the producer's own stall is panel-only.
+Instead of separate screen, signal, and revision clocks, the stage keeps one per-role liveness `Evidence` track combining six sources:
 
-A permission prompt follows the approval policy. Rate-limit and connection-error screen patterns are not built —
-nothing is measured — so a role that hits one simply stops, and reaches its reviewer as a stall like any other frozen
-screen.
+1. **Hook signal** (`Stage.last_signal`): any new state-mapping hook event (`ts_ms`).
+2. **Activity revision**: `activity.revision` movement while terminal status is `working`, for runners whose revision advances mid-turn (`backlot_model::caps::revision_stalls`).
+3. **Normalised screen**: `terminal.read` after stripping per-runner spinner animations (braille glyphs, Claude/cmd spinner symbols, elapsed timers, `Thought for …` headers, token counters, and status clocks). The delivery gate keeps using the raw screen.
+4. **Process tree** (local machine only, sampled at most every 10 s): walks descendants from `term.pid` via `/proc/<pid>/task/*/children` (with `/proc/*/stat` `ppid` fallback on Linux; `ps` CPU-only on macOS). Any new child PID, descendant CPU or `rchar+wchar` growth, or waited child CPU (`cutime+cstime` on root) counts. The agent root's own CPU and I/O counters (`depth == 0`) count strictly above `8 jiffies/s` CPU or `16 KB/s` I/O — floors measured on `agy` only in R7a (`2-4 jiffies/s` and `1-7 KB/s` idle noise) — and **only when `last_signal` is absent for the current session** (no hook signals wired or no signal yet); when hook signals are active (`last_signal` is `Some`), they govern the root's own turn so TUI render redraw CPU/I/O never overrides a stale hook, while descendants and `cutime+cstime` still count.
+5. **Work area** (local machine only): `HEAD` (and resolved branch ref target), `.git/index` mtime, and a hash of `git status --porcelain` sampled at most every 60 s — never walking `target/`, `node_modules/`, or `.git/objects/`.
+6. **Role ledger event**: any new ledger event whose `by.role` is this role.
+
+A role stalls only when it is eligible — an actor on a `running` task in `working` or `waiting`, or producer/director/writer while `working` (`blocked` never counts) — and **none** of the six sources moved within `stall_limit_s` (default 600 s), or `3 × stall_limit_s` when the deepest descendant's `wchan` contains `lock_inode_wait`.
+One `stalled` attention raises per episode with the screen saved under `attention/<seq>.txt` and a `detail` line naming the silent window plus the last evidence (`no sign of life for <n>s; last: <desc> (<source>) <age> ago`), `screen animates only (spinner)` when only stripped animations moved, or `waiting on: <argv> for <dur>` for inode lock waits. Any new evidence clears the episode (`AttentionCleared` naming the moving source). The notice goes to the actor's task reviewer and to the producer for the other fixed roles — the producer's own stall is panel-only unless a live director can read it.
+
+A permission prompt follows the approval policy. Rate-limit and connection-error screen patterns classify into their bounded retry episodes (`rate limited`, `connection error`); unrecognised stalled states reach the reviewer once no evidence moves.
 
 ## Hook signals (S9f)
 
@@ -251,9 +252,7 @@ fixed order:
    - When `.agents/hooks.json`, `.commandcode/settings.json`, or `.devin/config.local.json` is new and untracked, launch/resume prep adds it to `<git>/info/exclude` (following linked-worktree `commondir`). When the repository already tracks the hook file, prep leaves it untouched, logs `hooks unavailable`, raises one informational `hooks unavailable` attention, and leaves the role on its remaining evidence.
 4. A session that sent nothing — and runners without hooks — answers from the screen exactly as before.
 
-Two more uses of the same tail: a `working` last signal older than `stall_limit_s` raises `stalled` with `no hook
-signal for <n>s` — the dead-turn case a spinning screen never caught — and any newer signal clears it, the way a
-changed screen does. A `StopFailure` shows `last turn failed: <error>` on `backlot status` and the panel until the
+Two more uses of the same tail: hook signals feed the unified D4 liveness track alongside the other five sources (any newer state-mapping signal refreshes evidence and clears an open stall `new hook signal`), while a `StopFailure` shows `last turn failed: <error>` on `backlot status` and the panel until the
 role's next signal; nothing is raised — the owed-step machinery already nudges an idle role.
 
 A `PermissionRequest` also binds the permission attention it raises: the detail names the tool and the trimmed

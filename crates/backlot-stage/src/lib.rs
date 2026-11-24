@@ -50,6 +50,10 @@ mod hwood_show;
 mod limits;
 pub mod link;
 mod live;
+mod liveness;
+mod liveness_diff;
+mod liveness_probe;
+mod liveness_work;
 mod migrate;
 mod notices;
 mod nudge;
@@ -174,6 +178,10 @@ mod hwood_tests;
 mod limits_cmd_tests;
 #[cfg(test)]
 mod live_tests;
+#[cfg(test)]
+mod liveness_probe_tests;
+#[cfg(test)]
+mod liveness_tests;
 #[cfg(test)]
 mod loop_cmd_tests;
 #[cfg(test)]

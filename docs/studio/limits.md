@@ -187,12 +187,23 @@ re-raise one `stall_limit_s` later.
   Claude's and every other runner's exact live wording beyond the captured lines waits for a
   real run. A rate limit or connection error in an ordinary frozen screen still reaches its
   reviewer as a `stalled` once the taxonomy's words are absent.
-- **Stall detection watches an *unchanged* screen — and, for a hook-wired Claude, a silent
-  signal.** A runner that keeps animating while it is stuck — a live spinner, a clock in its
-  status line — never looks frozen on screen, but a Claude role whose last hook signal
-  reported working and then went quiet past `stall_limit_s` raises `stalled` anyway, `no hook
-  signal for <n>s`; any newer signal clears it. Every other runner still needs its screen to
-  freeze.
+- **Stall detection tracks six evidence sources on one clock, with local-only OS probes.**
+  Hook signals, activity revisions (for `revision_stalls` runners), per-runner normalised screens,
+  local process trees (descendants of `term.pid`, `cutime+cstime`, and root CPU/I/O strictly
+  above `8 jiffies/s` and `16 KB/s` — floors measured on `agy` only, and root counters count
+  only without hooks for the current session; once `last_signal` is `Some`, TUI redraw CPU/I/O on
+  the root is ignored so a spinner-animating Node/Ink runner cannot outweigh stale hooks while
+  descendants and `cutime+cstime` still count), local git work areas (`HEAD`, resolved ref, `.git/index`, and
+  60s-throttled `git status --porcelain`), and role ledger events (`by.role`) all feed one per-role
+  clock; spinner animations and elapsed timers alone no longer hide a hung runner (`animates
+  only`). Kernel inode lock waits (`lock_inode_wait` in `wchan`) raise at `3 × stall_limit_s` as
+  `waiting on: <argv> for <dur>`. **Remote roles** (`Endpoint::Remote` or terminal address with
+  `/`) have no OS process-tree or work-area evidence because `/proc` and local git files belong to
+  the remote host; they rely on hook signals, activity revisions, normalised screens, and ledger
+  events. On Linux, reading `/proc/<pid>/io` can fail for hardened processes (`0` bytes reported),
+  leaving CPU jiffies and child PIDs as the process evidence. On macOS, `ps -axo
+  pid=,ppid=,time=,command=` provides CPU-only process tree tracking (no `rchar`/`wchar`, no
+  `wchan` lock-wait detection) and remains unverified on real macOS hardware.
 - **Hook signals are only as good as the wiring.** `--settings` layers merge, so the user's own
   hooks keep running beside ours — and `disableAllHooks` in the user's settings turns ours off:
   the role then reads from its screen, as before. If the hook command itself stops working
@@ -423,7 +434,9 @@ re-raise one `stall_limit_s` later.
   the per-role research guidance all exist, and an experimental studio may create a task
   with no recorded requirement; no real agent has run a studio in it yet.
 - **macOS builds and tests pass in CI; nobody has run it on a real Mac.** `docs/troubleshooting.md`
-  has the open macOS issue — `Ctrl+B q` does not exit under automation there, cause unknown.
+  has the open macOS issue — `Ctrl+B q` does not exit under automation there, cause unknown — and
+  the `ps`-based CPU-only liveness probe (`liveness_probe::parse_macos_ps`) is verified by parser
+  tests on Linux only.
 - **Usage and cost** are only what a runner reports itself; nothing in backlot meters it.
   `backlot deliver` accepts `--tokens-in`, `--tokens-out`, `--cache-read-tokens` and
   `--cost-usd`, the ledger stores them on `task.delivered`, and `status`, `records` and the

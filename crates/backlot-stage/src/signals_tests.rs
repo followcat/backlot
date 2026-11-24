@@ -162,58 +162,82 @@ fn combine_puts_signals_first_and_blocked_over_all() {
 #[test]
 fn the_signal_stall_rule() {
     let s = sig("UserPromptSubmit", 1_000);
+    let mut git = |_: &[&str], _: &str| crate::workareas::GitOut {
+        code: 0,
+        stdout: String::new(),
+        stderr: String::new(),
+    };
+    let input = crate::liveness::ObserveInput {
+        now_ms: 1_000,
+        runner: "claude",
+        eligible: true,
+        raw_screen: "",
+        raw_same_since_ms: 1_000,
+        signal: Some(&s),
+        terminal_working: false,
+        activity_revision: None,
+        local_machine: false,
+        pid: None,
+        work_roots: &[],
+        ledger: None,
+    };
+    let ev = crate::liveness::Evidence::new(
+        &input,
+        &|_| Vec::new(),
+        &|_, _, _| crate::liveness_diff::WorkAreaSnap::default(),
+        &mut git,
+    );
     let now = 1_000 + 60_000;
-    assert!(stall::signal_stalled(
+    assert!(stall::stalled(
         "producer",
         None,
         Work::Working,
-        &s,
-        60_000,
-        now
+        &ev,
+        now,
+        60_000
     ));
-    assert!(stall::signal_stalled(
+    assert!(stall::stalled(
         "actor-t1-c1",
         Some(TaskStatus::Running),
         Work::Working,
-        &s,
-        60_000,
-        now
+        &ev,
+        now,
+        60_000
     ));
-    // Inside the limit, or not Working: no stall.
-    assert!(!stall::signal_stalled(
+    // Inside the limit, or non-actor Waiting: no stall.
+    assert!(!stall::stalled(
         "producer",
         None,
         Work::Working,
-        &s,
-        60_001,
-        now
+        &ev,
+        now,
+        60_001
     ));
-    assert!(!stall::signal_stalled(
+    assert!(!stall::stalled(
         "producer",
         None,
-        Work::Working,
-        &sig("Stop", 1_000),
-        60_000,
-        now
+        Work::Waiting,
+        &ev,
+        now,
+        60_000
     ));
-    // A blocked role's signal never counts — the permission pass
-    // owns it.
-    assert!(!stall::signal_stalled(
+    // A blocked role's evidence never counts — the permission pass owns it.
+    assert!(!stall::stalled(
         "producer",
         None,
         Work::Blocked,
-        &s,
-        60_000,
-        now
+        &ev,
+        now,
+        60_000
     ));
     // An actor without a running task does not stall.
-    assert!(!stall::signal_stalled(
+    assert!(!stall::stalled(
         "actor-t1-c1",
         Some(TaskStatus::Accepted),
         Work::Working,
-        &s,
-        60_000,
-        now
+        &ev,
+        now,
+        60_000
     ));
 }
 
@@ -704,7 +728,8 @@ async fn a_dead_signal_stalls_and_a_new_one_clears() {
     match &raised[0].kind {
         EventKind::AttentionRaised { reason, detail, .. } => {
             assert_eq!(reason.as_str(), STALLED);
-            assert!(detail.contains("no hook signal for 61s"), "{detail}");
+            assert!(detail.contains("no sign of life for 61s"), "{detail}");
+            assert!(detail.contains("UserPromptSubmit (hook)"), "{detail}");
         }
         _ => unreachable!(),
     }
@@ -1115,7 +1140,8 @@ async fn a_notification_does_not_restart_a_stalled_turn() {
     match &raised[0].kind {
         EventKind::AttentionRaised { reason, detail, .. } => {
             assert_eq!(reason.as_str(), STALLED);
-            assert!(detail.contains("no hook signal for 61s"), "{detail}");
+            assert!(detail.contains("no sign of life for 61s"), "{detail}");
+            assert!(detail.contains("UserPromptSubmit (hook)"), "{detail}");
         }
         _ => unreachable!(),
     }

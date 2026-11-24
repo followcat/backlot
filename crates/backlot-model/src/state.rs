@@ -529,6 +529,15 @@ pub struct RecastRecord {
     pub ts_ms: u64,
 }
 
+/// The newest ledger event written by a role (`event.by.role`), used
+/// as ledger liveness evidence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoleLastEvent {
+    pub seq: u64,
+    pub ts_ms: u64,
+    pub kind: String,
+}
+
 /// A whole studio folded from its log.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StudioState {
@@ -570,6 +579,9 @@ pub struct StudioState {
     /// states with no usage serialize exactly as before.
     #[serde(default, skip_serializing_if = "UsageTotals::is_empty")]
     pub usage: UsageTotals,
+    /// `by.role` → the newest event written by that role.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub last_by_role: BTreeMap<String, RoleLastEvent>,
     pub last_seq: u64,
 }
 

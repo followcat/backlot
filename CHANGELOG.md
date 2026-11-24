@@ -12,6 +12,21 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Unified six-source liveness evidence replacing separate stall clocks (D4 / R7d1).** Added
+  `backlot-stage/src/liveness.rs`, `liveness_probe.rs`, `liveness_diff.rs`, `liveness_work.rs`, and
+  `runners/normalise.rs` (+ `normalise_strip.rs`), plus `RoleLastEvent` / `last_by_role` in
+  `backlot-model`: one `Evidence` track per `(studio, role)` follows hook signals, mid-turn
+  `activity.revision` (`revision_stalls`), per-runner normalised screens (stripping spinners,
+  timers, `Thought for …` headers, token counters, and status clocks while keeping the send gate on
+  raw screens), local process trees (`term.pid` via `/proc` on Linux or `ps` CPU-only on macOS,
+  10 s sample throttle, root CPU/I/O floors of `8 jiffies/s` and `16 KB/s` measured on `agy` and
+  applied only without session hook signals, and exited `cutime+cstime`), local git work areas
+  (`HEAD`, resolved ref, `.git/index` mtime, and 60 s `git status --porcelain` hash), and role
+  ledger events (`by.role`). Kernel inode lock waits (`lock_inode_wait`) get a `3 × stall_limit_s`
+  threshold (`waiting on: <argv> for <dur>`); pure screen animations stall with
+  `screen animates only (spinner)`; any moving evidence clears `stalled` naming its source. Added
+  `spin:` to `tools/fake-runner.sh` for spinner harness tests.
+
 - **Signal & guard hooks for `agy`, `cmd`, and `devin` (R7d2).** Added `--runner <name>` to
   `backlot hook` normalizing `agy` (`conversationId`, `hookEventName`, `PreInvocation`/`PostInvocation`)
   into `signals.jsonl` and enforcing `guard_rules` on `agy` `PreToolUse` (`run_command`

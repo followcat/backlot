@@ -23,6 +23,8 @@ mod devin_tests;
 pub(crate) mod dialog;
 mod fake;
 mod hook_files;
+pub(crate) mod normalise;
+mod normalise_strip;
 pub mod opencode;
 mod probe;
 pub(crate) mod prompt;
@@ -30,6 +32,7 @@ pub(crate) mod resolve;
 pub(crate) mod splice;
 pub(crate) mod work;
 
+pub(crate) use normalise::normalise_screen;
 pub(crate) use probe::{executable, find_on_path};
 pub use probe::{installed, supported};
 pub(crate) use prompt::prompt_detail;
@@ -449,6 +452,8 @@ mod detect_tests;
 mod dialog_tests;
 #[cfg(test)]
 mod fake_runner_tests;
+#[cfg(test)]
+mod normalise_tests;
 #[cfg(test)]
 mod resolve_tests;
 #[cfg(test)]
