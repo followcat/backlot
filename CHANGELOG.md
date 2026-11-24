@@ -12,6 +12,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **The lifecycle actions in `Ctrl+B ?`.** A `lifecycle` group lists `Restart <role> ·
+  <studio>`, `Recast <role> · <studio>`, `Free work areas · <studio>` and `Archived studios ·
+  <machine>`, filterable by role, studio or machine name.
+
 - **Archived studios in the left tree.** When a machine's `studio list --archived --json` is
   non-empty the finished group gains an `Archived (n) …` row; Enter lists each entry (name,
   stamp, repo, requirement) and `Restore as <name>` runs `studio restore` with `--dry-run`

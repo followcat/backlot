@@ -25,6 +25,7 @@ mod layout;
 mod layout_regressions;
 mod lifecycle_archive;
 mod lifecycle_fixtures;
+mod lifecycle_launcher;
 mod lifecycle_role_menu;
 mod lifecycle_studio_menu;
 mod m3a;

@@ -210,7 +210,6 @@ pub(crate) enum StudioAct {
     /// `studio prune <studio>` after its `--dry-run` confirmation.
     Prune,
     /// The machine's archived studios — the restore list dialog.
-    #[allow(dead_code)] // the launcher's `Archived studios · <machine>` row
     Archived,
     /// `close --person` through the confirm dialog.
     Close,

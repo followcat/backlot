@@ -336,6 +336,10 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
 - `Ctrl+B t` gives the tree the keyboard — `↑`/`↓` move the highlighted row (drawn with the
   accent `▌`), `Enter` runs the row's click action, `m` opens its context menu, `Esc` returns the
   keys to the terminal. The whole tree's surfaces are also in `Ctrl+B ?`'s `machines` group.
+- `Ctrl+B ?`'s `lifecycle` group lists `Restart <role> · <studio>` for every live role,
+  `Recast <role> · <studio>` for the fixed seats, `Free work areas · <studio>` for a finished
+  studio and `Archived studios · <machine>` once a machine's archive is non-empty; the filter
+  reaches them by role, studio or machine name.
 - The stage log is read-only: when its terminal holds the focus, typed keys are dropped and the
   mode bar reads `stage log — read only`. A stage start never moves the focus to it.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the
