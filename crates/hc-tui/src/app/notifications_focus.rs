@@ -74,7 +74,7 @@ impl App {
                     None => self.show_notice("Studio", "the role has no terminal to focus"),
                 }
             }
-            Target::Hollywood => match self.hollywood_live_terminal() {
+            Target::Hollywood | Target::HollywoodLive => match self.hollywood_live_terminal() {
                 Some(terminal) => {
                     self.hollywood_leave_if_open();
                     self.focus_pane(terminal);

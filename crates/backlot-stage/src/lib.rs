@@ -31,6 +31,7 @@ mod gitcmd;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
+mod hfinished;
 mod hlife;
 mod hnotice;
 pub mod hook;

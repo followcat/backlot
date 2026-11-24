@@ -352,3 +352,55 @@ async fn a_core_without_terminal_rm_leaves_the_record() {
     stage.tick(&live).await.unwrap();
     assert_eq!(rm_calls(&fake), ["t7"]);
 }
+
+/// Finished `bl-hollywood` tombstones (both named and unnamed with
+/// `backlot.role == "hollywood"`) are removed via `terminal.rm` during
+/// `tick` even when no studio has finished, while live terminals and
+/// `backlot.shell` stay untouched.
+#[tokio::test]
+async fn a_tick_sweeps_finished_hollywood_tombstones() {
+    let base = tmp();
+    let (mut st, fake) = stage(Rm::Removed).await;
+    st.base = base.to_path_buf();
+    let live = Inventory {
+        terms: vec![LiveTerminal {
+            name: "bl-hollywood".into(),
+            address: "t20".into(),
+            labels: BTreeMap::from([("backlot.role".into(), "hollywood".into())]),
+            ..Default::default()
+        }],
+        finished: vec![
+            LiveTerminal {
+                name: "bl-hollywood".into(),
+                address: "t10".into(),
+                labels: BTreeMap::from([("backlot.role".into(), "hollywood".into())]),
+                ..Default::default()
+            },
+            LiveTerminal {
+                name: String::new(),
+                address: "t11".into(),
+                labels: BTreeMap::from([("backlot.role".into(), "hollywood".into())]),
+                ..Default::default()
+            },
+            LiveTerminal {
+                name: "bl-hollywood".into(),
+                address: "t12".into(),
+                labels: BTreeMap::from([
+                    ("backlot.role".into(), "hollywood".into()),
+                    ("backlot.shell".into(), "1".into()),
+                ]),
+                ..Default::default()
+            },
+        ],
+        doing: BTreeMap::new(),
+    };
+    st.tick(&live).await.unwrap();
+    assert_eq!(rm_calls(&fake), ["t10", "t11"]);
+
+    // On RPC refusal (`live`), `sweep_hollywood_ticks` stays armed to retry.
+    let (mut retry_stage, retry_fake) = stage(Rm::Live).await;
+    retry_stage.base = base.to_path_buf();
+    retry_stage.tick(&live).await.unwrap();
+    retry_stage.tick(&live).await.unwrap();
+    assert_eq!(rm_calls(&retry_fake), ["t10", "t11", "t10", "t11"]);
+}

@@ -240,7 +240,7 @@ fn the_band_draws_sprockets_title_and_counts() {
     // the fixed right block — no row keys, and the old bare
     // all-keys tier is gone.
     assert!(
-        text.contains("i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
         "{text}"
     );
     assert!(!text.contains("y/d a/x"), "{text}");
@@ -416,7 +416,7 @@ fn a_prompt_row_footer_names_y_d_answer() {
     );
     let text = lines(&buf, area).join("\n");
     assert!(
-        text.contains("y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("y/d answer   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
         "{text}"
     );
 }
@@ -518,7 +518,7 @@ fn a_selected_hollywood_prompt_names_its_answers() {
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("⚠ hollywood asks: backlot --help"), "{text}");
     assert!(
-        text.contains("y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("y/d answer   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
         "{text}"
     );
 }
@@ -542,7 +542,7 @@ fn a_row_without_answers_never_names_their_keys() {
         );
         let text = lines(&buf, area).join("\n");
         assert!(
-            text.contains("i tell   ↑↓ ⏎   m menu   ? help   esc"),
+            text.contains("i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
             "{selected:?}: {text}"
         );
         assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
@@ -561,7 +561,7 @@ fn a_row_without_answers_never_names_their_keys() {
         );
         let text = lines(&buf, area).join("\n");
         assert!(
-            text.contains("i tell   ↑↓ ⏎ read   m menu   ? help   esc"),
+            text.contains("i tell   tab ↑↓ ⏎ read   m menu   ? help   esc"),
             "{selected:?}: {text}"
         );
         assert!(!text.contains("y/d answer"), "{selected:?}: {text}");
@@ -585,7 +585,7 @@ fn a_card_row_footer_names_a_x_card() {
     );
     let text = lines(&buf, area).join("\n");
     assert!(
-        text.contains("a/x card   i tell   ↑↓ ⏎   m menu   ? help   esc"),
+        text.contains("a/x card   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"),
         "{text}"
     );
 }
@@ -603,11 +603,11 @@ fn a_ready_studio_footer_names_f_finish_from_row_and_frame() {
     let cases = [
         (
             Target::Ready(key.clone()),
-            "f finish   i tell   ↑↓ ⏎   m menu   ? help   esc",
+            "f finish   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc",
         ),
         (
             Target::Studio(key),
-            "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc",
+            "f finish   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc",
         ),
     ];
     for (selected, footer) in cases {
@@ -701,7 +701,10 @@ fn a_narrow_prompt_row_still_names_y_d() {
         &palette,
     );
     let text = lines(&buf, area).join("\n");
-    assert!(text.contains("y/d p i   ↑↓ ⏎   m menu   esc"), "{text}");
+    assert!(
+        text.contains("y/d p i   tab ←→ ↑↓ ⏎   m menu   esc"),
+        "{text}"
+    );
 }
 
 // ---------- the no-agent bar ----------

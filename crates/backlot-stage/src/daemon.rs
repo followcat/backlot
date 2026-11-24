@@ -77,7 +77,11 @@ async fn live_terminals(client: &Client, finished: bool) -> Result<Inventory, Fa
         doing: BTreeMap::new(),
     };
     for t in list.terminals {
-        if t.state == "finished" && t.name.is_some() {
+        if t.state == "finished"
+            && (t.name.is_some()
+                || t.labels.contains_key("backlot.role")
+                || t.labels.contains_key("backlot.studio"))
+        {
             inv.finished.push(t.into());
         } else if t.state == "live" && t.name.is_some() {
             if let Some(status) = &t.status {
@@ -271,6 +275,10 @@ pub(crate) struct Stage {
     /// that cannot change labels keeps every terminal where it
     /// launched, and the relabel pass stops asking (U2).
     pub(crate) labels_ok: std::cell::Cell<bool>,
+    /// Remaining ticks to include `finished` records in `terminal.list`
+    /// so dead `bl-hollywood` tombstones from this or an earlier launch
+    /// get swept via `terminal.rm` even with no finished studio.
+    pub(crate) sweep_hollywood_ticks: std::cell::Cell<u8>,
     /// When this stage process was born — a `cannot resume` close
     /// older than it means the person restarted the stage, the one
     /// way the give-up comes back (R1-4).
@@ -469,7 +477,7 @@ impl Stage {
         // cached states for notices and card bases — and a card's own
         // studio-new may have just created the ledger the next tick
         // picks up.
-        self.hollywood(&live.terms, &mut real_slot_free, now_ms)
+        self.hollywood(&live.terms, &live.finished, &mut real_slot_free, now_ms)
             .await?;
         Ok(())
     }
@@ -644,6 +652,7 @@ impl Stage {
     /// no other reason.
     pub(crate) fn sweeps_finished(&self) -> bool {
         self.cached.values().any(|state| state.finished.is_some())
+            || self.sweep_hollywood_ticks.get() > 0
     }
 
     /// The `backlot` document's view: cached states, most recently
@@ -805,6 +814,7 @@ impl Stage {
             hanswered: std::cell::RefCell::new(BTreeSet::new()),
             exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
+            sweep_hollywood_ticks: std::cell::Cell::new(3),
             // A test stage is conservative: born at 0, it never reads
             // a `cannot resume` close as older than itself — no
             // surprise `terminal.run` inside a unit test.
@@ -899,6 +909,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hanswered: std::cell::RefCell::new(BTreeSet::new()),
         exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
+        sweep_hollywood_ticks: std::cell::Cell::new(3),
         started_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

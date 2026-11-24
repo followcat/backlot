@@ -136,10 +136,11 @@ or `expanded`. While the band is expanded it owns these keys:
 
 | Keys | Action |
 |---|---|
-| `←`/`→`, `h`/`l` | Move between the studio frames, the new-studio frame included |
-| `↓`/`↑`, `j`/`k` | Move between the waiting rows, and back to the frames |
+| `Tab`/`Shift+Tab` | Switch focus between the upper studio frames section and the lower waiting / exchange / input section |
+| `←`/`→`, `h`/`l` | In the upper section: move between studio frames (including `+ new studio`); in the lower section: move the highlighted action chip across a waiting row |
+| `↓`/`↑`, `j`/`k` | Move strictly within the active section (frame rows in the upper section; headline, waiting items, exchange lines and the input line in the lower section) |
 | `1`–`9`, `0` | Jump to a studio frame, `0` to the new-studio frame |
-| `Enter` | Activate the selection — a frame opens it, a prompt opens the role, a card shows it, an offline machine reports its last read, the setup line opens the Hollywood setup dialog |
+| `Enter` | On a waiting row: run the highlighted action chip (`allow y` by default on a prompt, `show ↵` on a card, `open ↵` focuses the role terminal); on a studio frame, headline or talk row: open or read it |
 | `y` / `d` | On a prompt row: `backlot approve … allow` / `deny` on the prompt's machine — only when the runner can answer (a runner with no approval key shows `answer in its terminal` and these keys do nothing there) |
 | `p` | On a prompt row: peek at the role's live screen, read-only |
 | `s` | On a stage row or a stopped-stage frame: `backlot stage start` on that machine |

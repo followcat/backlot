@@ -8,6 +8,7 @@
 //! pane is ever resized for it.
 
 mod actions;
+mod activate;
 mod keys;
 mod mouse;
 mod nav;
@@ -16,7 +17,7 @@ mod view;
 use std::path::Path;
 
 use super::App;
-use crate::hollywood::{self, CallSheetKeys, LayerMode, Target};
+use crate::hollywood::{self, CallSheetKeys, LayerMode, Section, Target};
 
 /// The overseer row's `runner / model / effort` — the Call Sheet
 /// title's own join; `effort` drops when unset or `auto` (R3-M15).
@@ -222,6 +223,9 @@ impl App {
     pub(crate) fn hollywood_open(&mut self) {
         self.hollywood.mode = LayerMode::Expanded;
         self.hollywood.selected = self.hollywood_initial_target();
+        self.hollywood.chip_index = None;
+        self.hollywood.last_upper = None;
+        self.hollywood.last_lower = None;
         self.hollywood.frame_scroll = 0;
         self.hollywood.scroll = 0;
         // A calm sheet opens as a dialog: nothing waits for a key, so
@@ -234,6 +238,7 @@ impl App {
         } else {
             self.hollywood.editing = false;
         }
+        self.hollywood_remember_selected();
         let machines = self.panel_summaries();
         self.sync_hollywood_seen(&machines);
         self.studio.lot.counts.unread = 0;
@@ -248,6 +253,7 @@ impl App {
                 Target::Prompt(..)
                     | Target::Role(..)
                     | Target::Hollywood
+                    | Target::HollywoodLive
                     | Target::Tell(_)
                     | Target::Stage(..)
                     | Target::Card(_)
@@ -296,6 +302,9 @@ impl App {
         };
         if self.hollywood.mode == LayerMode::Expanded {
             self.hollywood.selected = self.hollywood_initial_target();
+            self.hollywood.chip_index = None;
+            self.hollywood.last_upper = None;
+            self.hollywood.last_lower = None;
             self.hollywood.frame_scroll = 0;
             self.hollywood.scroll = 0;
             if self.has_hollywood_cfg && !self.hollywood_wait_selected() {
@@ -304,6 +313,7 @@ impl App {
             } else {
                 self.hollywood.editing = false;
             }
+            self.hollywood_remember_selected();
             let machines = self.panel_summaries();
             self.sync_hollywood_seen(&machines);
             self.studio.lot.counts.unread = 0;
@@ -329,5 +339,20 @@ impl App {
         let matched = crate::input::terminal_key_of(key);
         self.hollywood_key
             .is_some_and(|keys| keys.press(&matched, self.prefix.armed()))
+    }
+
+    /// Sync `section` and `last_upper`/`last_lower` from the current `selected`.
+    pub(super) fn hollywood_remember_selected(&mut self) {
+        if let Some(sel) = self.hollywood.selected.clone() {
+            let sec = Section::of(&sel);
+            self.hollywood.section = sec;
+            match sec {
+                Section::Upper if !matches!(sel, Target::Title) => {
+                    self.hollywood.last_upper = Some(sel);
+                }
+                Section::Lower => self.hollywood.last_lower = Some(sel),
+                _ => {}
+            }
+        }
     }
 }

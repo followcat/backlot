@@ -1,17 +1,81 @@
-//! The expanded sheet's cursor: the frame walk, the band walk, the
-//! scroll windows that keep the selected row drawn, and Enter's
-//! activation — what each row's "open" means. Selection is always
-//! by stable `Target`, never by position.
+//! The expanded sheet's cursor: two independent navigation sections
+//! (`Upper` studio frames vs `Lower` waiting/exchange/input rows)
+//! switched with `Tab`/`BackTab`, per-section `↑↓←→` movement,
+//! action-chip cursoring, and scroll windows. Selection is always by
+//! stable `Target`, never by position.
 
 use super::App;
-use crate::hollywood::{LayerMode, Target};
-use crate::studio::StudioKey;
+use crate::hollywood::{self, LayerMode, Section, Target};
 
 impl App {
-    // ---------- frames and rows ----------
+    /// Active keyboard-navigation section: follows the current selection
+    /// when present so direct `selected` assignments stay consistent.
+    pub(super) fn hollywood_active_section(&self) -> Section {
+        self.hollywood
+            .selected
+            .as_ref()
+            .map(Section::of)
+            .unwrap_or(self.hollywood.section)
+    }
 
-    /// ← / → (`h` / `l`): move the frame cursor, the new-studio frame
-    /// included, and keep it in the drawn window.
+    /// Select `target`, update active section & per-section memory,
+    /// reset `chip_index` when switching rows, and clamp `editing`.
+    pub(crate) fn hollywood_select(&mut self, target: Target) {
+        if self.hollywood.selected.as_ref() != Some(&target) {
+            self.hollywood.chip_index = None;
+        }
+        self.hollywood.selected = Some(target);
+        self.hollywood_remember_selected();
+        self.hollywood_sync_editing();
+    }
+
+    /// `Tab` / `Shift+Tab`: toggle between `Upper` (studio frames) and
+    /// `Lower` (waiting items, exchange lines, and input), remembering
+    /// each section's last item and resting any active `Input` compose.
+    pub(crate) fn hollywood_switch_section(&mut self) {
+        match self.hollywood_active_section() {
+            Section::Upper => {
+                let band = self.hollywood_band();
+                if band.is_empty() {
+                    return;
+                }
+                let next = self
+                    .hollywood
+                    .last_lower
+                    .clone()
+                    .filter(|t| band.contains(t))
+                    .or_else(|| self.hollywood_waits().into_iter().next())
+                    .or_else(|| band.last().cloned());
+                if let Some(target) = next {
+                    let index = band.iter().position(|r| r == &target).unwrap_or(0);
+                    self.hollywood_select(target);
+                    self.hollywood_reveal_card(&band, index);
+                }
+            }
+            Section::Lower => {
+                self.hollywood.editing = false;
+                let frames = self.hollywood_frames();
+                if frames.is_empty() {
+                    return;
+                }
+                let current_studio = self.studio.current.clone().map(Target::Studio);
+                let next = self
+                    .hollywood
+                    .last_upper
+                    .clone()
+                    .filter(|t| frames.contains(t))
+                    .or_else(|| current_studio.filter(|t| frames.contains(t)))
+                    .or_else(|| frames.first().cloned());
+                if let Some(target) = next {
+                    self.hollywood_select(target);
+                    self.hollywood_keep_frame_visible();
+                }
+            }
+        }
+    }
+
+    /// ← / → (`h` / `l`) in `Upper`: move the frame cursor, the
+    /// new-studio frame included, and keep it in the drawn window.
     pub(crate) fn hollywood_frame_move(&mut self, delta: isize) {
         let frames = self.hollywood_frames();
         if frames.is_empty() {
@@ -24,62 +88,79 @@ impl App {
             .and_then(|t| frames.iter().position(|f| f == t))
             .unwrap_or(0);
         let next = (current as isize + delta).clamp(0, frames.len() as isize - 1) as usize;
-        self.hollywood.selected = Some(frames[next].clone());
-        self.hollywood_sync_editing();
+        self.hollywood_select(frames[next].clone());
         self.hollywood_keep_frame_visible();
     }
 
-    /// ↑ / ↓ (`k` / `j`): from the frames into the band's rows, then
-    /// along them — and back to the frames from the band's first row.
-    /// On a narrow screen the frames move a row at a time.
-    pub(crate) fn hollywood_row_move(&mut self, delta: isize) {
-        let frames = self.hollywood_frames();
-        let band = self.hollywood_band();
-        if let Some(index) = self
+    /// ← / → (`h` / `l`) in `Lower`: step across the selected waiting
+    /// row's action chips (`allow y` / `deny d` / `peek p` / `open ↵`).
+    pub(crate) fn hollywood_chip_move(&mut self, delta: isize) {
+        let Some(selected) = self.hollywood.selected.clone() else {
+            return;
+        };
+        let machines = self.panel_summaries();
+        let status = hollywood::status_of(&self.view);
+        let waits = hollywood::waiting_items(&machines, &status);
+        let Some(wait) = waits.iter().find(|w| w.target() == selected) else {
+            return;
+        };
+        let chips = hollywood::chips_of(wait);
+        if chips.is_empty() {
+            return;
+        }
+        let cur = self
             .hollywood
-            .selected
-            .as_ref()
-            .and_then(|t| band.iter().position(|r| r == t))
-        {
-            if index == 0 && delta < 0 {
-                // Back up into the frames.
-                if let Some(last) = frames.last() {
-                    self.hollywood.selected = Some(last.clone());
-                    self.hollywood_sync_editing();
+            .chip_index
+            .unwrap_or_else(|| hollywood::default_chip_index(wait, &chips))
+            .min(chips.len() - 1);
+        let next = (cur as isize + delta).clamp(0, chips.len() as isize - 1) as usize;
+        self.hollywood.chip_index = Some(next);
+    }
+
+    /// ↑ / ↓ (`k` / `j`) within the active section: `Upper` moves a
+    /// grid row at a time within `frames` and stays in `Upper`; `Lower`
+    /// walks strictly within `band` and stays in `Lower`.
+    pub(crate) fn hollywood_row_move(&mut self, delta: isize) {
+        match self.hollywood_active_section() {
+            Section::Upper => {
+                let frames = self.hollywood_frames();
+                if frames.is_empty() {
+                    return;
+                }
+                let current = self
+                    .hollywood
+                    .selected
+                    .as_ref()
+                    .and_then(|t| frames.iter().position(|f| f == t))
+                    .unwrap_or(0);
+                let per_row = self.hollywood_frame_window().1.max(1) as isize;
+                let next = current as isize + delta.signum() * per_row;
+                if next >= 0 && (next as usize) < frames.len() {
+                    self.hollywood_select(frames[next as usize].clone());
                     self.hollywood_keep_frame_visible();
                 }
-                return;
             }
-            let next = (index as isize + delta).clamp(0, band.len() as isize - 1) as usize;
-            self.hollywood.selected = Some(band[next].clone());
-            self.hollywood_reveal_card(&band, next);
-            self.hollywood_sync_editing();
-            return;
+            Section::Lower => {
+                let band = self.hollywood_band();
+                if band.is_empty() {
+                    return;
+                }
+                let next = match self
+                    .hollywood
+                    .selected
+                    .as_ref()
+                    .and_then(|t| band.iter().position(|r| r == t))
+                {
+                    Some(index) => {
+                        (index as isize + delta).clamp(0, band.len() as isize - 1) as usize
+                    }
+                    None if delta >= 0 => 0,
+                    None => band.len() - 1,
+                };
+                self.hollywood_select(band[next].clone());
+                self.hollywood_reveal_card(&band, next);
+            }
         }
-        let current = self
-            .hollywood
-            .selected
-            .as_ref()
-            .and_then(|t| frames.iter().position(|f| f == t))
-            .unwrap_or(0);
-        let mobile = self.area.0 <= self.shell.mobile_width_threshold;
-        let step = if mobile {
-            self.hollywood_frame_window().1.max(1) as isize
-        } else {
-            frames.len().max(1) as isize
-        };
-        let next = current as isize + delta.signum() * step;
-        if next < 0 {
-            return;
-        }
-        if (next as usize) < frames.len() {
-            self.hollywood.selected = Some(frames[next as usize].clone());
-            self.hollywood_keep_frame_visible();
-        } else if let Some(first) = band.first() {
-            self.hollywood.selected = Some(first.clone());
-            self.hollywood_reveal_card(&band, 0);
-        }
-        self.hollywood_sync_editing();
     }
 
     /// Scroll the frame window so the selected frame shows, whole rows
@@ -173,175 +254,5 @@ impl App {
         self.hollywood.mode = LayerMode::Collapsed;
         self.hollywood.editing = false;
         self.hollywood.view = None;
-    }
-
-    // ---------- activation ----------
-
-    /// Enter/left-click on a row: the title focuses `bl-hollywood`,
-    /// a studio row focuses that studio through the panel's own path,
-    /// a prompt or ready row focuses its terminal, a stage-down row
-    /// restarts the stage, a card row is its detail view, the input
-    /// line opens for editing.
-    pub(super) fn hollywood_activate(&mut self) {
-        let targets = self.hollywood_targets();
-        let index = self.hollywood_selected_index(&targets);
-        match targets.get(index).cloned() {
-            Some(Target::Title) => self.hollywood_focus_terminal(),
-            Some(Target::Studio(id)) => {
-                self.focus_studio(&id);
-                self.hollywood_leave();
-            }
-            Some(Target::NewStudio) => self.hollywood_new_studio(),
-            Some(Target::Prompt(studio, role)) => self.hollywood_prompt_open(&studio, &role),
-            Some(Target::Role(studio, role)) => self.hollywood_prompt_open(&studio, &role),
-            Some(Target::Hollywood) => self.hollywood_focus_terminal(),
-            Some(Target::Tell(key)) => {
-                self.focus_studio(&key);
-                self.hollywood_leave();
-            }
-            Some(Target::Stage(machine, offline)) => {
-                if offline {
-                    self.hollywood_check_machine(machine.as_deref());
-                } else {
-                    self.hollywood_stage_start(machine);
-                }
-            }
-            Some(Target::Card(id)) => self.hollywood_card_show(&id),
-            Some(Target::Ready(key)) => {
-                self.focus_studio(&key);
-                self.hollywood_leave();
-            }
-            Some(Target::Input) => {
-                self.hollywood.selected = Some(Target::Input);
-                self.hollywood.editing = true;
-            }
-            Some(Target::Headline) => self.hollywood_headline_open(),
-            Some(Target::Talk(seq)) => {
-                self.run_action(crate::studio_cmds::hollywood_show(seq));
-            }
-            // U7's setup line: the in-TUI dialog — runner/model/
-            // effort pickers, the write through `hollywood setup`.
-            Some(Target::Setup) => self.hw_setup_open(),
-            _ => {}
-        }
-    }
-
-    /// Resolve the ledger `seq` backing `Target::Headline` — prefers
-    /// `headline_seq` and falls back to the newest Hollywood line in
-    /// `exchange` when reading an older stage's document.
-    pub(crate) fn hollywood_headline_seq(&self) -> Option<u64> {
-        let machines = self.panel_summaries();
-        let hw = crate::hollywood::local_summary(&machines)?
-            .hollywood
-            .as_ref()?;
-        hw.headline_seq.or_else(|| {
-            hw.exchange
-                .iter()
-                .rfind(|e| e.who == "hollywood")
-                .map(|e| e.seq)
-        })
-    }
-
-    /// Open `Target::Headline` in the read-only `CardView`: fetches
-    /// `backlot hollywood show <seq>` when a seq is known, or shows
-    /// the published headline text directly on legacy documents.
-    pub(crate) fn hollywood_headline_open(&mut self) {
-        if let Some(seq) = self.hollywood_headline_seq() {
-            self.run_action(crate::studio_cmds::hollywood_show(seq));
-            return;
-        }
-        let machines = self.panel_summaries();
-        if let Some(headline) = crate::hollywood::local_summary(&machines)
-            .and_then(|s| s.hollywood.as_ref())
-            .and_then(|h| h.headline.as_deref())
-        {
-            let lines: Vec<String> = headline.lines().map(str::to_string).collect();
-            if !lines.is_empty() {
-                self.hollywood.view = Some(crate::hollywood::CardView {
-                    card: None,
-                    title: "hollywood".into(),
-                    lines,
-                    scroll: 0,
-                });
-            }
-        }
-    }
-
-    /// A prompt's `open ↵`: focus the role's terminal — already
-    /// machine-qualified for a remote studio — and collapse.
-    pub(super) fn hollywood_prompt_open(&mut self, studio: &StudioKey, role: &str) {
-        let machines = self.panel_summaries();
-        let terminal = crate::panel::data::studio(&machines, studio).and_then(|s| {
-            s.studio
-                .roles
-                .iter()
-                .find(|r| r.role == role)
-                .and_then(|r| r.terminal.clone())
-        });
-        match terminal {
-            Some(terminal) => {
-                self.focus_pane(terminal);
-                self.hollywood_leave();
-            }
-            None => self.show_notice("Hollywood", "the role has no terminal to focus"),
-        }
-    }
-
-    /// An offline machine's `check machine ↵`: the watcher's last
-    /// read of the line, where the user is looking.
-    pub(super) fn hollywood_check_machine(&mut self, machine: Option<&str>) {
-        let name = machine.unwrap_or(crate::project::LOCAL_LABEL);
-        let why = self
-            .view
-            .machines
-            .iter()
-            .flatten()
-            .find(|m| Some(m.name.as_str()) == machine)
-            .map(|m| {
-                let state = m.state.as_str();
-                match m.why.as_deref() {
-                    Some(why) => format!("{state} — {why}"),
-                    None => state.to_string(),
-                }
-            })
-            .unwrap_or_else(|| "unreachable".to_string());
-        self.show_notice("Machine", &format!("{name}: {why}"));
-    }
-
-    /// The new-studio frame, and `n` anywhere in the bar: the bar
-    /// collapses first so the wizard's popup is never under it, then
-    /// the wizard runs — the same one the opening card's `n` opens.
-    pub(super) fn hollywood_new_studio(&mut self) {
-        self.hollywood_leave();
-        self.opening_new_studio();
-    }
-
-    /// The live `bl-hollywood` terminal's address — the same read
-    /// `reap` and `stage_running` make of the inventory.
-    pub(super) fn hollywood_terminal(&self) -> Option<String> {
-        self.view
-            .inventory
-            .terminals()
-            .values()
-            .find(|t| {
-                t.state == "live"
-                    && !t.address.contains('/')
-                    && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
-            })
-            .map(|t| t.address.clone())
-    }
-
-    /// Focus the `bl-hollywood` terminal.
-    pub(crate) fn hollywood_focus_terminal(&mut self) {
-        match self.hollywood_terminal() {
-            Some(id) => {
-                self.focus_pane(id);
-                self.hollywood_leave();
-            }
-            None => self.show_notice(
-                "Hollywood",
-                "bl-hollywood is not running — the stage starts it",
-            ),
-        }
     }
 }

@@ -12,8 +12,10 @@ use ratatui::style::{Modifier, Style};
 
 use backlot_model::summary::Exchange;
 
-use super::draw::HollywoodRender;
-use super::items::{chip_text, chips_of, live_head, target_label, ultra_head, wait_head};
+use super::draw::{CHIP_GAP, HollywoodRender};
+use super::items::{
+    chip_text, chips_of, default_chip_index, live_head, target_label, ultra_head, wait_head,
+};
 use super::rows::{HollywoodActivity, Live, Row, SETUP_COMMAND, SETUP_LEAD};
 use super::sheet::Wait;
 use super::{Confirm, Hollywood};
@@ -72,6 +74,7 @@ pub(crate) fn draw_row(
             draw_wait(
                 buf,
                 Rect::new(rect.x, rect.y, rect.width, 1),
+                rect.height,
                 &waits[*i],
                 hollywood,
                 local,
@@ -129,6 +132,7 @@ pub(crate) fn draw_row(
 fn draw_wait(
     buf: &mut Buffer,
     rect: Rect,
+    row_height: u16,
     wait: &Wait<'_>,
     hollywood: &Hollywood,
     local: &str,
@@ -189,16 +193,19 @@ fn draw_wait(
             .add_modifier(Modifier::BOLD),
     );
     let chips = chips_of(wait);
+    let gaps = chips.len().saturating_sub(1) as u16 * CHIP_GAP;
     // Compact chips at the narrow cut, and whenever the full labels
     // cannot leave the head its twenty cells.
     let full_w: u16 = chips
         .iter()
         .map(|c| display_width(&chip_text(c, false)) as u16)
-        .sum();
+        .sum::<u16>()
+        + gaps;
     let compact_w: u16 = chips
         .iter()
         .map(|c| display_width(&chip_text(c, true)) as u16)
-        .sum();
+        .sum::<u16>()
+        + gaps;
     let head_x = x + 2;
     let avail = rect.x + rect.width - MARGIN;
     let head_room_full = avail.saturating_sub(head_x + full_w + 1);
@@ -234,15 +241,23 @@ fn draw_wait(
             Style::default().fg(palette.overlay0).bg(bg),
         );
     }
+    let focused_chip = selected.then(|| {
+        hollywood
+            .chip_index
+            .unwrap_or_else(|| default_chip_index(wait, &chips))
+            .min(chips.len().saturating_sub(1))
+    });
     // S5: the chips paint and record their click targets together.
     super::draw::paint_wait_chips(
         buf,
         rect.y,
         avail - chips_w,
+        row_height,
         wait,
         &chips,
         compact,
         selected,
+        focused_chip,
         palette,
         hits,
     );
