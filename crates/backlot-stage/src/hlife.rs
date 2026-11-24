@@ -18,8 +18,9 @@ use crate::act::fatal;
 use crate::cli::Fail;
 use crate::config::{self, HollywoodCfg};
 use crate::daemon::Stage;
+#[cfg(test)]
 pub(crate) use crate::hstage::hprepare_launch;
-use crate::hstage::{self, HMove, HRun, refresh_agents_md};
+use crate::hstage::{self, HMove, HRun, hprepare_launch_recast, refresh_agents_md};
 use crate::reconcile::LiveTerminal;
 use crate::runners::{self, StartDecision};
 use crate::store;
@@ -146,7 +147,14 @@ impl Stage {
             match mv {
                 HMove::Start | HMove::Revive => {
                     let mut actor = hstage::identity(cfg.expect("a start needs the config"));
-                    match self.hrun(hdir, &mut actor, None, real_slot_free).await? {
+                    let recast_from = role
+                        .actor
+                        .as_ref()
+                        .filter(|old| !backlot_model::recast::same_identity(old, &actor));
+                    match self
+                        .hrun(hdir, &mut actor, None, recast_from, real_slot_free)
+                        .await?
+                    {
                         HRun::Up { address, session } => {
                             hstage::record_role(
                                 hdir,
@@ -174,7 +182,7 @@ impl Stage {
                     });
                     let resume = role.session_id.clone();
                     match self
-                        .hrun(hdir, &mut actor, resume.as_deref(), real_slot_free)
+                        .hrun(hdir, &mut actor, resume.as_deref(), None, real_slot_free)
                         .await?
                     {
                         HRun::Up { address, session } => {
@@ -255,7 +263,7 @@ impl Stage {
                     // previous runner's id.
                     let resume = hstage::resume_session(&role, &actor).map(str::to_string);
                     match self
-                        .hrun(hdir, &mut actor, resume.as_deref(), real_slot_free)
+                        .hrun(hdir, &mut actor, resume.as_deref(), None, real_slot_free)
                         .await?
                     {
                         HRun::Up { address, session } => {
@@ -323,10 +331,16 @@ impl Stage {
         hdir: &Path,
         actor: &mut ActorIdentity,
         resume: Option<&str>,
+        recast_from: Option<&ActorIdentity>,
         real_slot_free: &mut bool,
     ) -> Result<HRun, Fail> {
         let cwd = hdir.to_string_lossy().into_owned();
-        let prompt = hstage::hfirst_prompt(hdir, &actor.runner, resume);
+        let prompt = hstage::hfirst_prompt_recast(
+            hdir,
+            &actor.runner,
+            resume,
+            recast_from.map(|old| (old, &*actor)),
+        );
         let planned = runners::plan(
             actor,
             &runners::LaunchCtx {
@@ -355,7 +369,12 @@ impl Stage {
                     .argv
                     .first()
                     .and_then(|program| self.runner_version(program));
-                hprepare_launch(hdir, &actor.runner, resume)?;
+                hprepare_launch_recast(
+                    hdir,
+                    &actor.runner,
+                    resume,
+                    recast_from.map(|old| (old, &*actor)),
+                )?;
                 if let Some(prep) = &launch.prep {
                     match runners::prepare(prep) {
                         Err(e) => return Err(Fail::refused(format!("prep: {e}"))),

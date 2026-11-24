@@ -42,7 +42,7 @@ pub(crate) const U_HOLLYWOOD: &str = "usage:
   backlot hollywood propose <action> [--studio <s>] [--task <t>] [--person <role>] \
 [--level low|normal|high] [--runner <r>] [--model <m>] [--effort <e>] \
 [--title <t>] [--repo <path>] [--cast <f>] [--brief <f>] [--answers <seqs>] --why <line>
-       actions: studio-new | close | reopen | priority | pause | resume | abandon | recast
+       actions: studio-new | close | reopen | priority | pause | resume | abandon | recast | setup
   backlot hollywood report \"<headline>\" [--body <f>] [--answers <seqs>]
   backlot hollywood show <seq>
   backlot hollywood setup --runner <r> --model <m> [--effort <e>] [--key <k>] [--default-cast <f>]";
@@ -196,6 +196,20 @@ pub(crate) fn propose(common: &mut Common, it: &mut It) -> Result<(Common, Cmd),
                     // card is resolved, before it is stored.
                     permission_profile: String::new(),
                 },
+            }
+        }
+        "setup" => {
+            if common.studio.is_some() {
+                return Err(usage("setup takes no --studio", U_HOLLYWOOD));
+            }
+            if person.is_some() {
+                return Err(usage("setup takes no --person", U_HOLLYWOOD));
+            }
+            CardAction::Setup {
+                runner: runner.ok_or_else(|| usage("missing --runner", U_HOLLYWOOD))?,
+                model: model.ok_or_else(|| usage("missing --model", U_HOLLYWOOD))?,
+                effort,
+                permission_profile: None,
             }
         }
         other => return Err(usage(format!("unknown card action '{other}'"), U_HOLLYWOOD)),

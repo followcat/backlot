@@ -81,6 +81,7 @@ fn already_done(card: &Card, s: &StudioState) -> bool {
                 .any(|r| r.card.as_deref() == Some(marker.as_str()))
         }
         CardAction::StudioNew { .. } => studio_new_done(s, card.seq),
+        CardAction::Setup { .. } => false,
     }
 }
 
@@ -123,6 +124,7 @@ impl Stage {
         let sstate = hwood_state(&sdir)?;
         let step = match &card.action {
             CardAction::StudioNew { .. } => self.studio_new_step(hdir, &sdir, card, sstate),
+            CardAction::Setup { .. } => return self.setup_step(hdir, card),
             _ => match &sstate {
                 None => Step::Fail(format!("no studio '{}'", card.action.studio())),
                 Some(s) if already_done(card, s) => Step::Done,
@@ -191,6 +193,89 @@ impl Stage {
         }
         Ok(())
     }
+
+    /// Apply a `Setup` card: re-check config staleness against
+    /// `HollywoodIdentity`, write `[hollywood]` via `hsetup` (keeping
+    /// `start` and other keys), record `card.done`, then ask for one
+    /// fresh restart (`role.restart`) under the new identity.
+    fn setup_step(&self, hdir: &Path, card: &Card) -> Result<(), Fail> {
+        let Some(target) = card.action.setup_actor() else {
+            self.happend(
+                hdir,
+                HollywoodKind::CardFailed {
+                    card: card.seq,
+                    reason: "missing setup target".into(),
+                },
+            )?;
+            return Ok(());
+        };
+        let env = crate::cli::Env {
+            vars: self.env_vars.clone(),
+        };
+        let current = match crate::config::hollywood(&self.env_vars) {
+            Ok(c) => c.map(|cfg| crate::hstage::identity(&cfg)),
+            Err(e) => {
+                self.happend(
+                    hdir,
+                    HollywoodKind::CardFailed {
+                        card: card.seq,
+                        reason: e,
+                    },
+                )?;
+                return Ok(());
+            }
+        };
+        if let Some(reason) = hollywood::stale_hollywood(&card.base, current.as_ref()) {
+            self.happend(
+                hdir,
+                HollywoodKind::CardStale {
+                    card: card.seq,
+                    reason,
+                },
+            )?;
+            crate::stagelog::stage_log!("card c{} stale", card.seq);
+            return Ok(());
+        }
+        let cfg = crate::config::HollywoodCfg {
+            runner: target.runner.clone(),
+            model: target.model.clone(),
+            effort: target.effort.clone(),
+            key: None,
+            default_cast: None,
+        };
+        if let Err(e) = crate::hsetup::write_config(&env, &cfg) {
+            let reason = e.message().to_string();
+            self.happend(
+                hdir,
+                HollywoodKind::CardFailed {
+                    card: card.seq,
+                    reason: reason.clone(),
+                },
+            )?;
+            crate::stagelog::stage_log!("card c{} failed: {reason}", card.seq);
+            return Ok(());
+        }
+        self.happend(
+            hdir,
+            HollywoodKind::CardDone {
+                card: card.seq,
+                note: String::new(),
+            },
+        )?;
+        crate::stagelog::stage_log!("card c{} done", card.seq);
+        if self.hstate.borrow().role.restart.is_none() {
+            crate::hstage::hrecord_as(
+                hdir,
+                backlot_model::EventBy::role("user"),
+                HollywoodKind::RoleRestart {
+                    fresh: true,
+                    reason: Some(marker(card.seq, &card.why)),
+                },
+            )?;
+            self.hrefresh(hdir);
+        }
+        Ok(())
+    }
 }
 
 /// The studio's reduced state, `None` without a ledger.
@@ -231,6 +316,7 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
             card: Some(format!("c{}", card.seq)),
         }),
         CardAction::StudioNew { .. } => Err("studio-new is handled apart".into()),
+        CardAction::Setup { .. } => Err("setup is handled apart".into()),
     }
 }
 
