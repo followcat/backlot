@@ -642,3 +642,66 @@ async fn unhooked_role_above_root_floor_does_not_stall() {
     }
     assert!(events(&dir, "attention.raised").is_empty());
 }
+
+/// 10 (Rebase R7d2+R7d1 interaction). Once `agy` has session hook signals,
+/// root redraw CPU no longer counts: a backgrounded command relies on moving
+/// descendants, work-area changes, or newer hook signals.
+#[tokio::test]
+async fn hooked_agy_relies_on_descendant_work_area_or_signals() {
+    let dir = tmp();
+    setup_studio(&dir, 30);
+    emit_signal(&dir, "actor-t1-c1", 10_000, "UserPromptSubmit", "s1");
+    let cpu = Arc::new(Mutex::new((100u64, 10u64)));
+    let cpu_r = Arc::clone(&cpu);
+    let snap = Arc::new(Mutex::new(WorkAreaSnap {
+        head_sig: "ref-a".into(),
+        index_mtime_ns: Some(1),
+        status_hash: Some(10),
+    }));
+    let snap_r = Arc::clone(&snap);
+
+    let (mut stage, fake) = make_stage().await;
+    stage.proc_read = Box::new(move |_| {
+        let (root_cpu, child_cpu) = *cpu_r.lock().unwrap();
+        vec![
+            proc_node(700, 1, 0, root_cpu, 0, "agy"),
+            proc_node(701, 700, 1, child_cpu, 0, "sleep 660"),
+        ]
+    });
+    stage.work_area_read = Box::new(move |_, run_status, _| {
+        let mut s = snap_r.lock().unwrap().clone();
+        if !run_status {
+            s.status_hash = None;
+        }
+        s
+    });
+    fake.lock().unwrap().screen = "● [16:36:40] sleep 660 running\n? for shortcuts\n".into();
+    let t = term(Some(700));
+
+    // Step 0..2 (20s): descendant CPU grows -> agy stays alive even without hooks firing.
+    for step in 0..=2u64 {
+        *cpu.lock().unwrap() = (100 + step * 300, 10 + step * 5);
+        tick(&stage, &dir, &t, "agy", 10_000 + step * 10_000).await;
+    }
+    assert!(events(&dir, "attention.raised").is_empty());
+
+    // Descendant stops (flat CPU=20), while agy root keeps burning 30 jiffies/s:
+    // 30s later (at 60_000) it stalls because root CPU is ignored when hooked.
+    for step in 3..=5u64 {
+        *cpu.lock().unwrap() = (100 + step * 300, 20);
+        tick(&stage, &dir, &t, "agy", 10_000 + step * 10_000).await;
+    }
+    assert_eq!(events(&dir, "attention.raised").len(), 1);
+
+    // A work-area update clears the stall (`"work area changed"`).
+    snap.lock().unwrap().head_sig = "ref-b".into();
+    tick(&stage, &dir, &t, "agy", 61_000).await;
+    let cleared = events(&dir, "attention.cleared");
+    assert_eq!(cleared.len(), 1);
+    match &cleared[0].kind {
+        EventKind::AttentionCleared { reason, .. } => {
+            assert_eq!(reason.as_deref(), Some("work area changed"));
+        }
+        _ => unreachable!(),
+    }
+}
