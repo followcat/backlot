@@ -4,6 +4,29 @@ All notable changes to hc-tui are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.19 — 2026-11-24
+
+### Added
+
+- `[ui] agent_panel_space_headers` (default `false`): head each space's run of
+  agents with a dim space name and blank separator line when
+  `agent_panel_sort = "spaces"`, across single-machine and multi-machine views
+  with header-aware scroll reveal. (#59)
+
+### Fixed
+
+- Creating the first workspace (`+ new` / `new_workspace`) on an empty local or
+  `--remote` core (or an empty remote machine) no longer fails with
+  `No focused terminal`; `cwd` is omitted so the target core starts in its own
+  default directory and the workspace takes its folder name from the spawned
+  terminal. (#57)
+- Unnamed `herdr-app` spaces and tabs now follow the live working folder and
+  lead agent's stripped terminal title (and unnamed tabs fall back to the
+  running foreground job's name when no agent title names them); finished
+  terminals of closed `herdr-app` tabs stay hidden with immediate
+  structure-cache invalidation on finish, and `tb`+32-hex app tab IDs are
+  suppressed as opaque identities. (#58)
+
 ## 0.1.18 — 2026-11-24
 
 ### Changed
