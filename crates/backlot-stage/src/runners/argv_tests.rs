@@ -90,6 +90,48 @@ fn claude_new_argv() {
 }
 
 #[test]
+fn claude_settings_deny_ask_user_question_and_no_runner_uses_plan_mode() {
+    let env = BTreeMap::new();
+    let launch = plan(&actor("claude", "standard"), &ctx(&env, None, None)).unwrap();
+    let setup = launch.hooks.expect("claude hook setup");
+    let json: serde_json::Value = serde_json::from_str(&setup.content).expect("valid json");
+    let deny = json["permissions"]["deny"]
+        .as_array()
+        .expect("permissions.deny array");
+    assert!(
+        deny.iter().any(|v| v.as_str() == Some("AskUserQuestion")),
+        "{json}"
+    );
+    assert!(json["hooks"].is_object(), "{json}");
+
+    // None of the adapters start a role in an interactive plan mode.
+    for caps in backlot_model::caps::ALL {
+        let model = match caps.name {
+            "cline" => "cline-pass/sonnet",
+            _ => "m",
+        };
+        let effort = match caps.effort {
+            backlot_model::caps::Effort::None => None,
+            _ => Some("high".into()),
+        };
+        let id = ActorIdentity {
+            runner: caps.name.into(),
+            runner_version: None,
+            model: model.into(),
+            effort,
+            permission_profile: "standard".into(),
+        };
+        let launch = plan(&id, &ctx(&env, Some("hi"), None)).unwrap();
+        assert!(
+            !launch.argv.iter().any(|a| a == "plan"),
+            "{} launches in plan mode: {:?}",
+            caps.name,
+            launch.argv
+        );
+    }
+}
+
+#[test]
 fn claude_resume_argv() {
     let env = BTreeMap::new();
     let c = ctx(&env, Some("go"), Some("ses-9"));
@@ -145,7 +187,12 @@ fn claude_settings_file_is_hooks_only() {
         let file: serde_json::Value = serde_json::from_str(&h.content).unwrap();
         assert_eq!(
             file.as_object().unwrap().keys().collect::<Vec<_>>(),
-            ["hooks"],
+            ["hooks", "permissions"],
+            "{file}"
+        );
+        assert_eq!(
+            file["permissions"],
+            serde_json::json!({"deny": ["AskUserQuestion"]}),
             "{file}"
         );
         let hooks = file["hooks"].as_object().unwrap();

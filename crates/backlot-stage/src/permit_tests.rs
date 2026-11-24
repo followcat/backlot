@@ -1060,3 +1060,31 @@ fn cline_takes_no_key() {
         None
     ));
 }
+
+/// agy's command pickers and plan-mode question map prompt blocks
+/// starting at `Command`/`Question` + the full-width rule; idle
+/// screens map none, and distinct commands yield distinct blocks.
+#[test]
+fn prompt_block_on_agy() {
+    let cmd_a = include_str!("../tests/fixtures/agy/perm-command.txt");
+    let cmd_b = cmd_a.replace("rr-probe.txt", "other-file.txt");
+    let strict = include_str!("../tests/fixtures/agy/perm-strict.txt");
+    let question = include_str!("../tests/fixtures/agy/plan-question.txt");
+    let idle = include_str!("../tests/fixtures/agy/idle-after-turn.txt");
+
+    let block_a = prompt_block("agy", cmd_a).expect("perm-command block");
+    assert!(block_a.starts_with("Command"), "{block_a}");
+    assert!(block_a.contains("Requesting permission for:"), "{block_a}");
+    assert!(block_a.contains("rr-probe.txt"), "{block_a}");
+    assert_ne!(block_a, prompt_block("agy", &cmd_b).unwrap());
+
+    let strict_block = prompt_block("agy", strict).expect("perm-strict block");
+    assert!(strict_block.starts_with("Command"), "{strict_block}");
+    assert!(strict_block.contains("2. No, cancel"), "{strict_block}");
+
+    let q_block = prompt_block("agy", question).expect("plan-question block");
+    assert!(q_block.starts_with("Question"), "{q_block}");
+    assert!(q_block.contains("Question 1/1:"), "{q_block}");
+
+    assert_eq!(prompt_block("agy", idle), None);
+}

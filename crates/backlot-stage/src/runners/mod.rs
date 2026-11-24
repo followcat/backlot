@@ -18,6 +18,7 @@ pub mod cursor;
 pub mod detect;
 mod detect_report;
 mod devin;
+pub(crate) mod dialog;
 mod fake;
 pub mod opencode;
 mod probe;
@@ -414,6 +415,8 @@ mod cursor_tests;
 mod decision_tests;
 #[cfg(test)]
 mod detect_tests;
+#[cfg(test)]
+mod dialog_tests;
 #[cfg(test)]
 mod fake_runner_tests;
 #[cfg(test)]

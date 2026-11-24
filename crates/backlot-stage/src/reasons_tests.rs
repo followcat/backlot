@@ -13,7 +13,7 @@ use crate::reasons;
 fn every_stage_reason_is_classified() {
     use AttentionClass::{Info, NeedsYou, Stuck};
     let expected = |reason: &str| match reason {
-        reasons::STALLED | RATE_LIMITED | CONNECTION_ERROR => Stuck,
+        reasons::STALLED | reasons::QUESTION | RATE_LIMITED | CONNECTION_ERROR => Stuck,
         reasons::SESSION_NOT_FOUND | reasons::CURSOR_DIR_OPEN | reasons::XDG_CONFIG_HOME_SET => {
             Info
         }
@@ -32,7 +32,7 @@ fn every_stage_reason_is_classified() {
 /// hidden from the person.
 #[test]
 fn escalation_wins_and_unknowns_need_you() {
-    for reason in [RATE_LIMITED, CONNECTION_ERROR] {
+    for reason in [reasons::QUESTION, RATE_LIMITED, CONNECTION_ERROR] {
         assert_eq!(AttentionClass::of(reason, true), AttentionClass::NeedsYou);
     }
     assert_eq!(

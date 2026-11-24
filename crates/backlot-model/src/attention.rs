@@ -60,7 +60,7 @@ impl AttentionClass {
             | "agent error"
             | "outward action"
             | "owed" => AttentionClass::NeedsYou,
-            "stalled" | "rate limited" | "connection error" => AttentionClass::Stuck,
+            "stalled" | "rate limited" | "connection error" | "question" => AttentionClass::Stuck,
             "session id not found" | "inherited XDG_CONFIG_HOME" | "cursor dir was open" => {
                 AttentionClass::Info
             }

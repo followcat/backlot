@@ -16,6 +16,8 @@ You are an actor of studio `{studio}`, on task `{task}`: {title}.
   your work area: write it with your file-writing tool, then
   pass its absolute path. Read files with your file-reading
   tool, not `cat`.
+- Never ask on your own screen — ask with `backlot ask --file <file>`,
+  or tell a role with `backlot tell <role> --file <file>`.
 
 Work only in `{work}` on branch `{branch}` — commit there, and fix
 what your own checks find. Run one command per shell call, `git`

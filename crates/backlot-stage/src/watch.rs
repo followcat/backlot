@@ -472,6 +472,12 @@ impl Stage {
         self.blocked_since
             .borrow_mut()
             .retain(|(s, r), _| keep(s, r));
+        self.q_blocked_since
+            .borrow_mut()
+            .retain(|(s, r), _| keep(s, r));
+        self.q_unblocked_since
+            .borrow_mut()
+            .retain(|(s, r), _| keep(s, r));
         self.session_warned.borrow_mut().retain(|(s, r)| keep(s, r));
         self.revision_since
             .borrow_mut()

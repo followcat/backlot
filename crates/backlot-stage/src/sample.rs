@@ -120,6 +120,8 @@ impl Stage {
         );
         self.permission(studio, w, work, &text, request.as_ref(), now_ms)
             .await?;
+        self.question(studio, w, work, &text, request.as_ref(), now_ms)
+            .await?;
         self.stall(studio, w, work, now_ms).await?;
         self.rate_limit(studio, w, &text, screen_work, now_ms)
             .await?;

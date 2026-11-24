@@ -147,6 +147,7 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
                 .iter()
                 .rposition(|l| l.trim_start().starts_with('●'))?
         }
+        "agy" => agy_block_start(&lines, screen)?,
         _ => return None,
     };
     let block = lines[start..]
@@ -156,6 +157,33 @@ pub fn prompt_block(runner: &str, screen: &str) -> Option<String> {
         .collect::<Vec<_>>()
         .join("\n");
     Some(block.split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
+/// agy 1.5.16 prompt block start (R7a/R7b): `Command` + `─` rule above
+/// `Requesting permission for:` on command pickers, or `Question` +
+/// `─` rule above `Question N/M:` on plan-mode questions.
+fn agy_block_start(lines: &[&str], screen: &str) -> Option<usize> {
+    let (ask, header) = if work::agy_command_picker(screen) {
+        (phrase_line(lines, "Requesting permission for:")?, "Command")
+    } else if work::agy_plan_question(screen) {
+        (
+            lines.iter().rposition(|l| work::agy_question_line(l))?,
+            "Question",
+        )
+    } else {
+        return None;
+    };
+    let start = lines[..ask]
+        .iter()
+        .rposition(|l| work::is_full_width_rule(l))
+        .map_or(ask, |rule| {
+            if rule > 0 && lines[rule - 1].trim() == header {
+                rule - 1
+            } else {
+                rule
+            }
+        });
+    Some(start)
 }
 
 /// The role's open `permission prompt` attention, when it has one.

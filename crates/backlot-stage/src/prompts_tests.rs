@@ -678,3 +678,31 @@ fn the_producers_tell_user_is_preallowed() {
         );
     }
 }
+
+/// R7b prevention: every role prompt instructs roles never to ask
+/// on their own screen, using `backlot ask` / `backlot tell` instead.
+#[test]
+fn prompts_forbid_on_screen_questions() {
+    for (kind, name) in [
+        (RoleKind::Producer, "producer"),
+        (RoleKind::Writer, "writer"),
+        (RoleKind::Director, "director"),
+        (RoleKind::Actor, "actor"),
+    ] {
+        let text = template(kind);
+        assert!(
+            text.contains("Never ask on your own screen"),
+            "{name}.md misses on-screen question rule"
+        );
+        assert!(
+            text.contains("`backlot ask --file <file>`"),
+            "{name}.md misses backlot ask"
+        );
+        assert!(
+            text.contains("`backlot tell <role> --file <file>`"),
+            "{name}.md misses backlot tell"
+        );
+    }
+    assert!(HOLLYWOOD.contains("Never ask on your own screen"));
+    assert!(HOLLYWOOD.contains("`backlot tell producer --file <file>`"));
+}

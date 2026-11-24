@@ -199,6 +199,12 @@ pub(crate) struct Stage {
     /// blocked episode — a permission prompt answered elsewhere gets
     /// one window before its stale attention clears.
     pub(crate) unblocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → start of the current `question` dialog
+    /// episode, kept independent of `permission prompt` episodes.
+    pub(crate) q_blocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
+    /// `(studio, role)` → when the role left a `question` dialog
+    /// before clearing `dialog closed` after `EPISODE_MIN_MS`.
+    pub(crate) q_unblocked_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// `(studio, role)` → when the current idle stretch began — the
     /// nudge pass's clock. In-memory: a restart starts it over.
     pub(crate) idle_since: std::cell::RefCell<BTreeMap<(String, String), u64>>,
@@ -256,10 +262,14 @@ pub(crate) struct Stage {
     /// Hollywood-pass error lines already printed — same once-per-
     /// message rule as `logged`, kept apart so `&self` passes can use it.
     pub(crate) hlogged: std::cell::RefCell<BTreeSet<String>>,
-    /// The permission prompt on `bl-hollywood`'s screen, read by the
-    /// last work sample — the summary publishes it as a user-owned
-    /// prompt and the band offers the answer.
+    /// The permission prompt or dialog on `bl-hollywood`'s screen,
+    /// read by the last work sample — the summary publishes it as
+    /// `needs the user` and, for permission prompts, the band offers
+    /// the answer.
     pub(crate) hprompt: std::cell::RefCell<Option<String>>,
+    /// True when `hprompt` is a non-permission `question` dialog
+    /// (`allow`/`deny` keys are suppressed).
+    pub(crate) hprompt_is_question: std::cell::Cell<bool>,
     /// The prompt whose episode Hollywood's answer belongs to, with
     /// the ledger `seq` when it first appeared — an approval recorded
     /// before that is somebody else's.
@@ -336,6 +346,12 @@ impl Stage {
         self.unblocked_since
             .borrow_mut()
             .retain(|(s, _), _| keep(s));
+        self.q_blocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| keep(s));
+        self.q_unblocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| keep(s));
         self.idle_since.borrow_mut().retain(|(s, _), _| keep(s));
         self.last_signal.borrow_mut().retain(|(s, _), _| keep(s));
         self.revision_since.borrow_mut().retain(|(s, _), _| keep(s));
@@ -367,6 +383,12 @@ impl Stage {
             .borrow_mut()
             .retain(|(s, _), _| s != name);
         self.unblocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+        self.q_blocked_since
+            .borrow_mut()
+            .retain(|(s, _), _| s != name);
+        self.q_unblocked_since
             .borrow_mut()
             .retain(|(s, _), _| s != name);
         self.idle_since.borrow_mut().retain(|(s, _), _| s != name);
@@ -750,7 +772,7 @@ impl Stage {
                 .as_ref()
                 .and_then(|t| doing.get(t))
                 .map(String::as_str);
-            s.hollywood = Some(backlot_model::summary::hollywood_section_with_activity(
+            let mut hw = backlot_model::summary::hollywood_section_with_activity(
                 &hs,
                 state,
                 Some(&cfg.runner),
@@ -759,7 +781,15 @@ impl Stage {
                 hwork,
                 hdoing,
                 self.hprompt.borrow().as_deref(),
-            ));
+            );
+            if hw.attention.is_some() && self.hprompt_is_question.get() {
+                hw.attention = Some(format!(
+                    "{} — needs the user",
+                    backlot_model::event::QUESTION
+                ));
+                hw.can_answer_prompt = false;
+            }
+            s.hollywood = Some(hw);
         }
         s
     }
@@ -793,6 +823,8 @@ impl Stage {
             sending: std::cell::RefCell::new(BTreeMap::new()),
             blocked_since: std::cell::RefCell::new(BTreeMap::new()),
             unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
+            q_blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+            q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
             idle_since: std::cell::RefCell::new(BTreeMap::new()),
             last_signal: std::cell::RefCell::new(BTreeMap::new()),
             revision_since: std::cell::RefCell::new(BTreeMap::new()),
@@ -810,6 +842,7 @@ impl Stage {
             stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
             hlogged: std::cell::RefCell::new(BTreeSet::new()),
             hprompt: std::cell::RefCell::new(None),
+            hprompt_is_question: std::cell::Cell::new(false),
             hprompt_base: std::cell::RefCell::new(None),
             hanswered: std::cell::RefCell::new(BTreeSet::new()),
             exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
@@ -888,6 +921,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         sending: std::cell::RefCell::new(BTreeMap::new()),
         blocked_since: std::cell::RefCell::new(BTreeMap::new()),
         unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
+        q_blocked_since: std::cell::RefCell::new(BTreeMap::new()),
+        q_unblocked_since: std::cell::RefCell::new(BTreeMap::new()),
         idle_since: std::cell::RefCell::new(BTreeMap::new()),
         last_signal: std::cell::RefCell::new(BTreeMap::new()),
         revision_since: std::cell::RefCell::new(BTreeMap::new()),
@@ -905,6 +940,7 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         stage_cfg: std::cell::Cell::new(config::StageCfg::default()),
         hlogged: std::cell::RefCell::new(BTreeSet::new()),
         hprompt: std::cell::RefCell::new(None),
+        hprompt_is_question: std::cell::Cell::new(false),
         hprompt_base: std::cell::RefCell::new(None),
         hanswered: std::cell::RefCell::new(BTreeSet::new()),
         exchange_cache: std::cell::RefCell::new(BTreeMap::new()),

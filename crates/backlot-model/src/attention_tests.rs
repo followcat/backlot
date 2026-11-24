@@ -9,6 +9,7 @@ use super::AttentionClass;
 fn every_model_reason_has_its_class() {
     let cases = [
         (crate::event::PERMISSION_PROMPT, AttentionClass::NeedsYou),
+        (crate::event::QUESTION, AttentionClass::Stuck),
         (crate::event::STALLED, AttentionClass::Stuck),
         (crate::event::CANNOT_RESUME, AttentionClass::NeedsYou),
         (crate::event::FOLDER_TRUST, AttentionClass::NeedsYou),
@@ -16,6 +17,10 @@ fn every_model_reason_has_its_class() {
     for (reason, want) in cases {
         assert_eq!(AttentionClass::of(reason, false), want, "{reason}");
     }
+    assert_eq!(
+        AttentionClass::of(crate::event::QUESTION, true),
+        AttentionClass::NeedsYou
+    );
 }
 
 /// A stage-side reason that escalates the episode flips it out of

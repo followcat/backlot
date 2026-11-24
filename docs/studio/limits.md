@@ -227,11 +227,18 @@ re-raise one `stall_limit_s` later.
   devin's from a live 3000.12.32 prompt read, while codex's is unmeasured and neither codex's nor
   devin's has run as a studio role — a region that misses a moving part of a real screen could
   refuse a legitimate send, in which case the fresh attention waits for the person.
-- **A question on a role's own screen reaches nobody.** Only the producer's terminal is read by
-  the person. In the fourth run the director asked there which report node to use and waited
-  about four minutes; its prompt now names the `integration` node and sends questions through
-  `backlot tell`, but nothing detects a role waiting on an answer that never comes — stall
-  detection counts an idle producer, director or writer as normal.
+- **Screen-level dialog escalation (`question`) has run on fixtures and the fake runner only, not
+  on real agents.** Role prompts instruct agents never to ask on their own screen (using
+  `backlot ask` or `backlot tell`), Claude session settings deny `AskUserQuestion`, and the
+  stage now catches interactive dialogs on screen via `agy`'s `Question N/M:` picker
+  (`kind: "question"`), structured `kind: "question"`, or D2's 12-line generic fallback rule
+  (option cursor `❯`/`>`/`→`/`›` + sibling option or dialog footer) — holding `gate_open`
+  closed, raising one `question` attention after two seconds (`attention/<seq>.txt`), routing
+  actor questions to the task's reviewer and `director`/`writer` questions to `producer`,
+  surfacing `producer`/Hollywood questions with `needs_user`, and clearing `dialog closed` two
+  seconds after exit. Unverified against real live agents: non-standard TUI pickers that omit
+  those cursor glyphs/footers, free-form prose questions with no picker, and real `claude` or
+  `agy` sessions exercising these paths end-to-end.
 - **The producer's own problems reach a live director and Hollywood, but only the user can
   fix them.** An actor's stall or `cannot resume` reaches its task's reviewer, the writer's and
   director's reach the producer. A stalled or unresumable producer now tells a live director

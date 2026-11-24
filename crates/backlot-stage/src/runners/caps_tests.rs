@@ -23,7 +23,10 @@ fn prompt_screen(runner: &str) -> Option<&'static str> {
         // hand; the block is still mapped for the record.
         "cline" => "Cline needs permission\nApprove tool call?",
         "fake" => "fake-work: blocked",
-        "opencode" | "agy" => return None,
+        "agy" => {
+            "Command\n────\nRequesting permission for:\n  ls\nRun this command?\n> 1. Yes, run command\n  ↑/↓ Navigate"
+        }
+        "opencode" => return None,
         other => panic!("no prompt screen for {other}"),
     })
 }

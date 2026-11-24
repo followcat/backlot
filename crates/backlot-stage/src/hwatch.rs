@@ -106,7 +106,13 @@ impl Stage {
         let session = self.hstate.borrow().role.session_id.clone();
         let work = hsignal_work(hdir, session.as_deref(), t, runner, &text);
         self.work.borrow_mut().insert(pair.clone(), work);
-        *self.hprompt.borrow_mut() = hollywood_prompt(runner, &text, work);
+        let is_q = crate::question::in_episode(runner, work, t.status.as_ref(), &text, None);
+        self.hprompt_is_question.set(is_q);
+        *self.hprompt.borrow_mut() = if is_q {
+            Some(crate::question::dialog_summary(runner, &text))
+        } else {
+            hollywood_prompt(runner, &text, work)
+        };
         let prev = self.screens.borrow().get(&pair).cloned();
         self.screens.borrow_mut().insert(
             pair,
@@ -123,6 +129,11 @@ impl Stage {
     /// cmd's `❯ 1. Yes` (run-once), never option 2's "don't ask
     /// again" (S12a).
     async fn hanswer(&self, term: &LiveTerminal, runner: &str) {
+        if self.hprompt_is_question.get() {
+            *self.hprompt_base.borrow_mut() = None;
+            self.hanswered.borrow_mut().clear();
+            return;
+        }
         let Some(prompt) = self.hprompt.borrow().clone() else {
             *self.hprompt_base.borrow_mut() = None;
             self.hanswered.borrow_mut().clear();

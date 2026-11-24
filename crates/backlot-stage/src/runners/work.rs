@@ -11,8 +11,12 @@ use super::prompt::joined;
 use crate::watch::trust_dialog;
 
 /// `runner`'s current state from the terminal's visible text.
+/// Checked in order: runner-specific `blocked` markers, D2's generic
+/// fallback dialog rule (before `working` because pickers such as agy
+/// and claude keep `esc to cancel`/`interrupt` visible on the bottom
+/// bar), `working` markers, then `Waiting`.
 pub(crate) fn work_state(runner: &str, screen: &str) -> Work {
-    if blocked(runner, screen) {
+    if blocked(runner, screen) || super::dialog::generic_dialog(screen) {
         return Work::Blocked;
     }
     if working(runner, screen) {
@@ -63,10 +67,15 @@ fn devin_blocked(screen: &str) -> bool {
     !scope.is_empty() && word_at(&flat, "Deny").is_some()
 }
 
-/// The runner's screen reads as an unanswered permission or trust
-/// prompt. Markers are matched on the joined lines: a narrow terminal
-/// wraps the question and the options, never the prompt.
+/// The runner's screen reads as an unanswered permission prompt,
+/// trust dialog, or recognised question picker.
 fn blocked(runner: &str, screen: &str) -> bool {
+    recognized_permission(runner, screen) || recognized_question(runner, screen)
+}
+
+/// The runner's screen reads as a recognised permission prompt or
+/// folder-trust dialog (kept on `permission prompt`, never `question`).
+pub(crate) fn recognized_permission(runner: &str, screen: &str) -> bool {
     match runner {
         "claude" => {
             let flat = joined(screen);
@@ -95,6 +104,16 @@ fn blocked(runner: &str, screen: &str) -> bool {
         // it does, the user switched it off and the prompt is
         // theirs. Nothing is pressed either way (`permit`).
         "cline" => cline_approval(screen),
+        "agy" => agy_trust_dialog(screen) || agy_command_picker(screen),
+        _ => false,
+    }
+}
+
+/// Recognised non-permission interactive picker on `runner`'s screen
+/// (`question`, R7b): e.g. agy's plan-mode `Question N/M:` picker.
+pub(crate) fn recognized_question(runner: &str, screen: &str) -> bool {
+    match runner {
+        "agy" => agy_plan_question(screen),
         _ => false,
     }
 }
@@ -127,6 +146,7 @@ fn working(runner: &str, screen: &str) -> bool {
         // alone is not a turn; `(esc to cancel)` is the stable half
         // of the line.
         "cline" => screen.contains("(esc to cancel)") || screen.lines().any(cline_spinner_line),
+        "agy" => agy_working(screen),
         "fake" => fake_state(screen) == Some(Work::Working),
         _ => false,
     }
@@ -276,4 +296,103 @@ fn fake_state(screen: &str) -> Option<Work> {
         "fake-work: working" => Some(Work::Working),
         _ => None,
     }
+}
+
+/// agy's folder-trust dialog on first launch in an untrusted workspace.
+pub(crate) fn agy_trust_dialog(screen: &str) -> bool {
+    let flat = joined(screen);
+    flat.contains("Accessing workspace:")
+        && flat.contains("Do you trust the contents of this project?")
+        && flat.contains("Yes, I trust this folder")
+}
+
+/// agy's command permission picker (`request-review` or `strict`).
+pub(crate) fn agy_command_picker(screen: &str) -> bool {
+    let flat = joined(screen);
+    flat.contains("Requesting permission for:")
+        && flat.contains("Run this command?")
+        && flat.contains("1. Yes, run command")
+        && flat.contains("↑/↓ Navigate")
+}
+
+/// agy's plan-mode `ask_question` picker (`Question N/M: ...`).
+pub(crate) fn agy_plan_question(screen: &str) -> bool {
+    let flat = joined(screen);
+    screen.lines().any(agy_question_line)
+        && flat.contains("↑/↓ Navigate")
+        && flat.contains("enter Select")
+}
+
+/// `Question <N>/<M>:` line heading an agy plan-mode question picker.
+pub(crate) fn agy_question_line(l: &str) -> bool {
+    let Some(rest) = l.trim_start().strip_prefix("Question ") else {
+        return false;
+    };
+    let Some((head, _)) = rest.split_once(':') else {
+        return false;
+    };
+    let Some((n, m)) = head.split_once('/') else {
+        return false;
+    };
+    !n.is_empty()
+        && !m.is_empty()
+        && n.bytes().all(|b| b.is_ascii_digit())
+        && m.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// agy 1.5.16 working turn (R7a): braille spinner + two spaces + verb,
+/// running background-task row or task bar, or `esc to cancel` footer.
+fn agy_working(screen: &str) -> bool {
+    screen.lines().any(agy_spinner_line)
+        || screen.lines().any(agy_bg_task_line)
+        || screen.lines().any(agy_tasks_bar)
+        || screen
+            .lines()
+            .any(|l| l.trim_start().starts_with("esc to cancel"))
+}
+
+/// Braille spinner glyph (`\u{2801}..=\u{28ff}`) followed by two
+/// spaces and a verb (`Generating...`, `Reading file...`,
+/// `Running command... Ns`, `Editing files...`).
+fn agy_spinner_line(l: &str) -> bool {
+    let t = l.trim_start();
+    let mut chars = t.chars();
+    let Some(glyph) = chars.next() else {
+        return false;
+    };
+    if !('\u{2801}'..='\u{28ff}').contains(&glyph) {
+        return false;
+    }
+    let Some(verb) = chars.as_str().strip_prefix("  ") else {
+        return false;
+    };
+    verb.trim_start()
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic())
+}
+
+/// Background-task row `● [HH:MM:SS] <cmd> running` shown when a long
+/// command auto-backgrounds after ~10 s.
+fn agy_bg_task_line(l: &str) -> bool {
+    let Some(rest) = l.trim_start().strip_prefix("● [") else {
+        return false;
+    };
+    let Some((stamp, tail)) = rest.split_once(']') else {
+        return false;
+    };
+    let b = stamp.as_bytes();
+    b.len() == 8
+        && b[2] == b':'
+        && b[5] == b':'
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| i == 2 || i == 5 || c.is_ascii_digit())
+        && tail.trim_end().ends_with("running")
+}
+
+/// Bottom shortcut bar showing `task(s) · /tasks` during background work.
+fn agy_tasks_bar(l: &str) -> bool {
+    let t = l.trim_start();
+    t.starts_with("? for shortcuts") && t.contains("task(s) · /tasks")
 }
