@@ -67,10 +67,11 @@ fn archived_studios_list_after_delete() {
         !row["stamp"].as_str().unwrap().is_empty(),
         "the stamp is carried: {json}"
     );
-    assert_eq!(
-        row["repo"],
-        scratch.files.join("repo-shop").display().to_string()
-    );
+    // The ledger records the canonical repo path; on macOS the temp
+    // dir sits behind the `/var` → `/private/var` link.
+    let repo = scratch.files.join("repo-shop");
+    let repo = repo.canonicalize().unwrap_or(repo);
+    assert_eq!(row["repo"], repo.display().to_string(), "{json}");
     assert_eq!(row["requirement"], "shop", "{json}");
 
     let table = ok(&env, "studio list --archived");
