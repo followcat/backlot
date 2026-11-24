@@ -172,7 +172,7 @@ fn cline_spinner_line(l: &str) -> bool {
 /// `Running` with a trailing token count — ` ⠠⠜ Composing`,
 /// ` ⠘⠤ Running  44 tokens`. The glyph is required: a transcript
 /// line starting `Running the…` is not a turn.
-fn cursor_spinner_line(l: &str) -> bool {
+pub(crate) fn cursor_spinner_line(l: &str) -> bool {
     let mut parts = l.trim().splitn(2, ' ');
     let (Some(glyphs), Some(rest)) = (parts.next(), parts.next()) else {
         return false;
