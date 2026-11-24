@@ -41,15 +41,15 @@ pub(crate) fn passive_items(
         if accounted.contains(&key) {
             continue;
         }
-        let pre_delivered = h.messages.iter().any(|m| {
+        let pre_handled = h.messages.iter().any(|m| {
             m.from == "stage"
                 && m.to == "hollywood"
                 && m.studio.is_none()
                 && m.source_seq == c.closed_seq
                 && label(m) == Some("card")
-                && m.delivered
+                && (m.delivered || m.dropped)
         });
-        if pre_delivered {
+        if pre_handled {
             continue;
         }
         out.push(PassiveItem {
@@ -59,6 +59,9 @@ pub(crate) fn passive_items(
         });
     }
     for (name, s) in studios {
+        if s.finished.is_some() {
+            continue;
+        }
         for (id, t) in &s.tasks {
             for r in &t.reviews {
                 if !matches!(r.verdict, Verdict::Accepted | Verdict::PartiallyAccepted) {
@@ -71,15 +74,15 @@ pub(crate) fn passive_items(
                 if accounted.contains(&key) {
                     continue;
                 }
-                let pre_delivered = h.messages.iter().any(|m| {
+                let pre_handled = h.messages.iter().any(|m| {
                     m.from == "stage"
                         && m.to == "hollywood"
                         && m.studio.as_deref() == Some(name.as_str())
                         && m.source_seq == Some(r.seq)
                         && label(m) == Some("accepted")
-                        && m.delivered
+                        && (m.delivered || m.dropped)
                 });
-                if pre_delivered {
+                if pre_handled {
                     continue;
                 }
                 out.push(PassiveItem {
@@ -90,7 +93,7 @@ pub(crate) fn passive_items(
             }
         }
     }
-    out.sort_by(|a, b| a.seq.cmp(&b.seq).then_with(|| a.key.cmp(&b.key)));
+    out.sort_by(|a, b| b.seq.cmp(&a.seq).then_with(|| a.key.cmp(&b.key)));
     out
 }
 

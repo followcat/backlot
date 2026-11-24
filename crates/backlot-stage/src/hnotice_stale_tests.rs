@@ -256,3 +256,101 @@ fn recovered_coalesces_and_drops_on_fresh_start() {
         "fresh RoleMotion::Started must drop surviving recovered notice"
     );
 }
+
+#[test]
+fn passive_items_skips_dropped_notices_finished_studios_and_sorts_newest_first() {
+    use backlot_model::event::{EventKind, Verdict};
+
+    let finished_s = tk::state_with(
+        &tk::base_events(),
+        vec![
+            ("director", tk::cast("t1", "actor-a", "a")),
+            ("actor-a", tk::delivered("t1", 1, "a", 1)),
+            ("director", tk::reviewed("t1", 1, Verdict::Accepted, vec![])),
+            (
+                "user",
+                EventKind::StudioFinished {
+                    reason: "done".into(),
+                },
+            ),
+        ],
+    );
+    let live_s = tk::state_with(
+        &tk::base_events(),
+        vec![
+            ("director", tk::cast("t1", "actor-a", "a")),
+            ("actor-a", tk::delivered("t1", 1, "a", 1)),
+            ("director", tk::reviewed("t1", 1, Verdict::Accepted, vec![])),
+        ],
+    );
+    let mut map = BTreeMap::new();
+    map.insert("done-shop".into(), finished_s);
+    map.insert("live-shop".into(), live_s);
+
+    // Pre-S2 dropped `accepted` for live-shop + dropped `card` for c1 -> both skipped;
+    // un-notified c4 stays owed, sorted newest first.
+    let h = hollywood::replay(&[
+        tk::hev(1, "hollywood", tk::hpropose("t1")),
+        tk::hev(2, "user", HollywoodKind::CardApplied { card: 1 }),
+        tk::hev(
+            3,
+            "stage",
+            HollywoodKind::CardDone {
+                card: 1,
+                note: String::new(),
+            },
+        ),
+        tk::hev(
+            4,
+            "stage",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: None,
+                text: None,
+                file: Some("messages/4-card.md".into()),
+                source_seq: Some(3),
+            },
+        ),
+        tk::hev(
+            5,
+            "stage",
+            HollywoodKind::MessageDropped {
+                target: 4,
+                reason: "superseded".into(),
+            },
+        ),
+        tk::hev(
+            6,
+            "stage",
+            HollywoodKind::MessageSent {
+                to: "hollywood".into(),
+                studio: Some("live-shop".into()),
+                text: None,
+                file: Some("messages/6-accepted.md".into()),
+                source_seq: Some(6),
+            },
+        ),
+        tk::hev(
+            7,
+            "stage",
+            HollywoodKind::MessageDropped {
+                target: 6,
+                reason: "studio finished".into(),
+            },
+        ),
+        tk::hev(8, "hollywood", tk::hpropose("t1")),
+        tk::hev(9, "user", HollywoodKind::CardApplied { card: 8 }),
+        tk::hev(
+            10,
+            "stage",
+            HollywoodKind::CardDone {
+                card: 8,
+                note: String::new(),
+            },
+        ),
+    ]);
+
+    let items = hnotice::passive_items(&map, &h, &Default::default());
+    let texts: Vec<&str> = items.iter().map(|i| i.text.as_str()).collect();
+    assert_eq!(texts, vec!["c8 done"]);
+}

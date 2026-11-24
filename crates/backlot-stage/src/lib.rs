@@ -168,6 +168,8 @@ mod hcard_tests;
 #[cfg(test)]
 mod hdeliver_extra_tests;
 #[cfg(test)]
+mod hdeliver_passive_tests;
+#[cfg(test)]
 mod hdeliver_tests;
 #[cfg(test)]
 mod hnotice_stale_tests;

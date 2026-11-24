@@ -17,6 +17,8 @@ pub(crate) const USER_PREVIEW_CHARS: usize = 120;
 pub(crate) const NOTICE_DEFER_MS: u64 = 5_000;
 /// Inline single-notice byte limit before falling back to a digest file.
 pub(crate) const NOTICE_INLINE_BYTES: usize = 400;
+/// Maximum number of passive context items shown in `(context: …)`.
+pub(crate) const MAX_PASSIVE_TAIL: usize = 5;
 
 fn single_line(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -66,7 +68,14 @@ fn passive_tail(passive: &[PassiveItem]) -> String {
     if passive.is_empty() {
         return String::new();
     }
-    let items: Vec<&str> = passive.iter().map(|p| p.text.as_str()).collect();
+    let mut items: Vec<String> = passive
+        .iter()
+        .take(MAX_PASSIVE_TAIL)
+        .map(|p| p.text.clone())
+        .collect();
+    if passive.len() > MAX_PASSIVE_TAIL {
+        items.push(format!("+{} more", passive.len() - MAX_PASSIVE_TAIL));
+    }
     format!(" · (context: {})", items.join(", "))
 }
 
