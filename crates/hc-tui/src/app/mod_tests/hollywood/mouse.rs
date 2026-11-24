@@ -386,3 +386,75 @@ async fn a_click_on_the_new_studio_frame_opens_the_dialog() {
     assert!(app.new_studio.is_some(), "the native dialog opened");
     assert!(app.popup_pending.is_none(), "the popup wizard is retired");
 }
+
+#[tokio::test]
+async fn clicking_row_two_under_allow_runs_allow_and_row_text_stays_on_sheet() {
+    let mut app = app_with_hollywood();
+    let mut value = summary_json();
+    value["hollywood"]["work"] = "blocked".into();
+    value["hollywood"]["attention_user"] = true.into();
+    value["hollywood"]["attention_detail"] = "backlot --help".into();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    app.area = (120, 44);
+    app.hollywood.mode = LayerMode::Expanded;
+    app.hollywood.selected = Some(Target::Card("c3".into()));
+    draw_to(&mut app, 120, 44);
+
+    let (row_rect, _) = app
+        .hollywood_hits
+        .rows
+        .iter()
+        .find(|(_, t)| *t == Target::Hollywood)
+        .cloned()
+        .expect("HOLLYWOOD row hit");
+    assert_eq!(row_rect.height, 2, "detail row expands height to 2");
+
+    // Clicking row text (not `[open ↵]`) selects it without leaving the Call Sheet.
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        row_rect.x + 4,
+        row_rect.y,
+    ));
+    assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_ne!(app.focused.as_deref(), Some("t10"));
+
+    // Clicking the 2nd line directly beneath `[allow y]` hits the chip, not `open`.
+    let (chip_rect, _, _) = app
+        .hollywood_hits
+        .chips
+        .iter()
+        .find(|(_, t, key)| *t == Target::Hollywood && *key == 'y')
+        .cloned()
+        .expect("HOLLYWOOD allow chip");
+    assert_eq!(chip_rect.height, 2);
+    app.on_mouse(mouse(
+        MouseEventKind::Down(MouseButton::Left),
+        chip_rect.x + 1,
+        chip_rect.y + 1,
+    ));
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec![
+            "approve",
+            "--person",
+            "hollywood",
+            "--decision",
+            "allow",
+            "--as",
+            "user"
+        ]]
+    );
+}

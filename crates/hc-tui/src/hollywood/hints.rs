@@ -11,12 +11,12 @@ use crate::studio::StudioKey;
 
 /// The footer's right block — the same keys in the same words on
 /// every row, whatever the left part names.
-const RIGHT: &str = "↑↓ ⏎   m menu   ? help   esc";
+const RIGHT: &str = "tab ←→ ↑↓ ⏎   m menu   ? help   esc";
 /// The right block on Talk/Headline rows where Enter opens the entry.
-const RIGHT_READ: &str = "↑↓ ⏎ read   m menu   ? help   esc";
+const RIGHT_READ: &str = "tab ↑↓ ⏎ read   m menu   ? help   esc";
 /// The right block when the width pinches: `? help` yields first.
-const RIGHT_MID: &str = "↑↓ ⏎   m menu   esc";
-const RIGHT_READ_MID: &str = "↑↓ ⏎ read   m menu   esc";
+const RIGHT_MID: &str = "tab ←→ ↑↓ ⏎   m menu   esc";
+const RIGHT_READ_MID: &str = "tab ↑↓ ⏎ read   m menu   esc";
 /// The floor — the block alone, bare. The old bare all-keys tier is
 /// gone with it: the narrowest footer names nothing the selection
 /// cannot run.
@@ -83,9 +83,11 @@ fn slots(
         // prompt rows and studio frames only.
         Some(Target::Ready(key)) => [false, false, ready(key), false, false, agent],
         Some(Target::Studio(key)) => [false, false, ready(key), stage_down(key), true, agent],
-        // Hollywood's live row answers only while its prompt stands;
+        // Hollywood's prompt / live row answers only while its prompt stands;
         // `p` and the tell line are always live.
-        Some(Target::Hollywood) => [hollywood_asking, false, false, false, true, agent],
+        Some(Target::Hollywood | Target::HollywoodLive) => {
+            [hollywood_asking, false, false, false, true, agent]
+        }
         _ => [false, false, false, false, false, agent],
     }
 }
@@ -105,7 +107,7 @@ pub(crate) fn for_row(
     width: usize,
 ) -> String {
     if editing && matches!(selected, Some(Target::Input)) {
-        return ["⏎ send   ↑/esc done", "⏎ ↑/esc", "esc"]
+        return ["⏎ send   ↑/tab/esc done", "⏎ ↑/esc", "esc"]
             .into_iter()
             .find(|tier| display_width(tier) <= width)
             .unwrap_or_default()
@@ -187,7 +189,7 @@ mod tests {
         let selected = Target::Prompt(StudioKey::local("acme-shop"), "actor-alice".into());
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 200),
-            "y/d answer   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "y/d answer   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
     }
 
@@ -197,7 +199,7 @@ mod tests {
         let waits = waits_of(&list);
         // With an agent the tell line is the sheet's own — every row
         // without keys of its own still names it.
-        let with_tell = "i tell   ↑↓ ⏎   m menu   ? help   esc";
+        let with_tell = "i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc";
         for selected in [Target::Calm, Target::Input] {
             assert_eq!(
                 for_row(Some(&selected), false, &waits, true, false, 200),
@@ -212,7 +214,7 @@ mod tests {
         );
         // Headline and Talk rows spell out `⏎ read` so Enter's
         // read-only CardView open is advertised in context.
-        let with_read = "i tell   ↑↓ ⏎ read   m menu   ? help   esc";
+        let with_read = "i tell   tab ↑↓ ⏎ read   m menu   ? help   esc";
         for selected in [Target::Headline, Target::Talk(7)] {
             assert_eq!(
                 for_row(Some(&selected), false, &waits, true, false, 200),
@@ -222,7 +224,7 @@ mod tests {
         }
         // Without an agent `i` is a dead key: the Setup row — and
         // every other one — names nothing but the block.
-        let bare = "↑↓ ⏎   m menu   ? help   esc";
+        let bare = "tab ←→ ↑↓ ⏎   m menu   ? help   esc";
         for selected in [Target::Calm, Target::Input, Target::Setup] {
             assert_eq!(
                 for_row(Some(&selected), false, &waits, false, false, 200),
@@ -232,7 +234,7 @@ mod tests {
         }
         assert_eq!(
             for_row(Some(&Target::Headline), false, &waits, false, false, 200),
-            "↑↓ ⏎ read   m menu   ? help   esc"
+            "tab ↑↓ ⏎ read   m menu   ? help   esc"
         );
         assert_eq!(
             for_row(None, false, &waits, false, false, 200),
@@ -248,7 +250,7 @@ mod tests {
         let selected = Target::Card("c3".into());
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 200),
-            "a/x card   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "a/x card   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
     }
 
@@ -259,12 +261,12 @@ mod tests {
         let down = Target::Stage(None, false);
         assert_eq!(
             for_row(Some(&down), false, &waits, true, false, 200),
-            "s start   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "s start   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
         let offline = Target::Stage(Some("host-b".into()), true);
         assert_eq!(
             for_row(Some(&offline), false, &waits, true, false, 200),
-            "i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
     }
 
@@ -286,11 +288,11 @@ mod tests {
                 false,
                 200
             ),
-            "f finish   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "f finish   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
         assert_eq!(
             for_row(Some(&Target::Studio(key)), false, &waits, true, false, 200),
-            "f finish   p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "f finish   p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
     }
 
@@ -301,7 +303,7 @@ mod tests {
         let selected = Target::Studio(StudioKey::local("acme-shop"));
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 200),
-            "p peek   i tell   ↑↓ ⏎   m menu   ? help   esc"
+            "p peek   i tell   tab ←→ ↑↓ ⏎   m menu   ? help   esc"
         );
     }
 
@@ -316,7 +318,7 @@ mod tests {
         // The compact tier keeps the row's keys and the menu hint.
         assert_eq!(
             for_row(Some(&selected), false, &waits, true, false, 36),
-            "y/d p i   ↑↓ ⏎   m menu   esc"
+            "y/d p i   tab ←→ ↑↓ ⏎   m menu   esc"
         );
         // The floor is the bare block — the old bare all-keys tier is
         // gone, and past it the footer is empty.

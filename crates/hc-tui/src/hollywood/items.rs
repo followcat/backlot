@@ -160,7 +160,7 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
             },
             Chip {
                 label: "show",
-                key: "s",
+                key: "↵",
                 primary: false,
             },
         ],
@@ -176,6 +176,17 @@ pub(crate) fn chips_of(wait: &Wait<'_>) -> Vec<Chip> {
                 primary: false,
             },
         ],
+    }
+}
+
+/// Default focused chip index when moving onto a waiting row: cards
+/// land on `show ↵` so Enter opens the detail view; other rows land
+/// on their primary chip (`allow y`, `peek p`, `start s`, `finish f`,
+/// `open ↵`).
+pub(crate) fn default_chip_index(wait: &Wait<'_>, chips: &[Chip]) -> usize {
+    match wait {
+        Wait::Card(_) => chips.iter().position(|c| c.key == "↵").unwrap_or(0),
+        _ => chips.iter().position(|c| c.primary).unwrap_or(0),
     }
 }
 

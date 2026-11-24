@@ -51,7 +51,7 @@ impl App {
             LayerMode::Expanded => match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
                     if contains(self.hollywood_hits.input, point) {
-                        self.hollywood.selected = Some(crate::hollywood::Target::Input);
+                        self.hollywood_select(crate::hollywood::Target::Input);
                         self.hollywood.editing = true;
                         return;
                     }
@@ -82,16 +82,27 @@ impl App {
                         return;
                     }
                     // A chip is its own target (S5 §2): the click
-                    // selects its row and runs the chip's key — `↵`
-                    // chips run the row's Enter.
+                    // selects its row (and that chip index) and runs the
+                    // chip's key — `↵` chips run the row's Enter.
                     let chip = self
                         .hollywood_hits
                         .chips
                         .iter()
                         .find(|(rect, _, _)| contains(*rect, point))
-                        .map(|(_, target, key)| (target.clone(), *key));
-                    if let Some((target, key)) = chip {
-                        self.hollywood.selected = Some(target);
+                        .map(|(rect, target, key)| {
+                            let idx = self
+                                .hollywood_hits
+                                .chips
+                                .iter()
+                                .filter(|(_, t, _)| t == target)
+                                .position(|(r, _, _)| *r == *rect);
+                            (target.clone(), *key, idx)
+                        });
+                    if let Some((target, key, idx)) = chip {
+                        self.hollywood_select(target);
+                        if idx.is_some() {
+                            self.hollywood.chip_index = idx;
+                        }
                         if key == '\r' {
                             self.hollywood_activate();
                         } else {
@@ -99,9 +110,24 @@ impl App {
                         }
                         return;
                     }
+                    // A click in the 1-cell gap between two chips
+                    // selects the row instead of falling through to
+                    // `hollywood_activate()`.
+                    let zone = self
+                        .hollywood_hits
+                        .chips_zones
+                        .iter()
+                        .find(|(rect, _)| contains(*rect, point))
+                        .map(|(_, target)| target.clone());
+                    if let Some(target) = zone {
+                        self.hollywood_select(target);
+                        return;
+                    }
                     // A row click selects and acts like Enter (S5
-                    // §2). The `+ new studio` frame is a button, not
-                    // a row — its click opens the native dialog (U6b).
+                    // §2), except prompt/live rows stay selected without
+                    // leaving the sheet so accidental clicks on prompt
+                    // text never dump into `bl-hollywood`. The
+                    // `+ new studio` frame is a button, not a row.
                     let hit = self
                         .hollywood_hits
                         .rows
@@ -110,9 +136,15 @@ impl App {
                         .map(|(_, target)| target.clone());
                     match hit {
                         Some(crate::hollywood::Target::NewStudio) => self.hollywood_new_studio(),
+                        Some(
+                            target @ (crate::hollywood::Target::Prompt(..)
+                            | crate::hollywood::Target::Hollywood
+                            | crate::hollywood::Target::HollywoodLive),
+                        ) => {
+                            self.hollywood_select(target);
+                        }
                         Some(target) => {
-                            self.hollywood.selected = Some(target);
-                            self.hollywood_sync_editing();
+                            self.hollywood_select(target);
                             self.hollywood_activate();
                         }
                         None => {}
@@ -140,8 +172,7 @@ impl App {
                         .find(|(rect, _)| contains(*rect, point))
                         .map(|(_, target)| target.clone());
                     if let Some(target) = hit {
-                        self.hollywood.selected = Some(target.clone());
-                        self.hollywood_sync_editing();
+                        self.hollywood_select(target.clone());
                         self.hollywood_menu(&target, point);
                     }
                 }

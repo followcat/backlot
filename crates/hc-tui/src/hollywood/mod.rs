@@ -27,6 +27,7 @@ pub(crate) use draw::{HollywoodRender, render};
 // The footer's own tests compare the mask against the dispatch.
 #[cfg(test)]
 pub(crate) use hints::for_row;
+pub(crate) use items::{chips_of, default_chip_index};
 pub(crate) use keys::{CallSheetKeys, resolve_toggle};
 pub(crate) use plan::expanded_height;
 pub(crate) use rows::{
@@ -49,6 +50,27 @@ pub(crate) enum LayerMode {
     Collapsed,
     /// The drop-down panel — the scrollable view with the input line.
     Expanded,
+}
+
+/// The two independent keyboard-navigation sections inside the expanded
+/// Call Sheet (`Tab` switches between them).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Section {
+    /// Top strip: studio frames and the `+ new studio` frame.
+    Upper,
+    /// Bottom band: headline, waiting items, exchange lines, and input.
+    #[default]
+    Lower,
+}
+
+impl Section {
+    /// Which section owns `target`.
+    pub(crate) fn of(target: &Target) -> Section {
+        match target {
+            Target::Title | Target::Studio(_) | Target::NewStudio => Section::Upper,
+            _ => Section::Lower,
+        }
+    }
 }
 
 /// What the renderer needs from the app: whether a `[hollywood]` table
@@ -76,6 +98,15 @@ pub(crate) struct Hollywood {
     /// rebuild each frame, so selection survives document updates by
     /// target, not index.
     pub selected: Option<Target>,
+    /// Active keyboard-navigation section (`Upper` frames vs `Lower` band).
+    pub section: Section,
+    /// Last focused frame in `Upper`, restored when switching back.
+    pub last_upper: Option<Target>,
+    /// Last focused row in `Lower`, restored when switching back.
+    pub last_lower: Option<Target>,
+    /// Focused action chip within the selected `Wait` row (`None` uses
+    /// `items::default_chip_index` so `allow y` / `show ↵` starts focused).
+    pub chip_index: Option<usize>,
     /// The first frame drawn: the frames scroll sideways when more
     /// exist than fit.
     pub frame_scroll: usize,
@@ -113,6 +144,10 @@ impl Hollywood {
         Hollywood {
             mode: LayerMode::Hidden,
             selected: None,
+            section: Section::default(),
+            last_upper: None,
+            last_lower: None,
+            chip_index: None,
             frame_scroll: 0,
             scroll: 0,
             input: TextEditor::new("", false),

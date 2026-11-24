@@ -72,10 +72,34 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
     app.area = (120, 24);
     alt_y(&mut app);
     assert_eq!(app.hollywood.mode, LayerMode::Expanded);
-    // Opening lands on the most urgent item — the first waiting
-    // card (S1 A2.1).
+    // Opening lands in the lower section on the most urgent item —
+    // the first waiting card (S1 A2.1).
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    // → / l move within the frames from whatever is selected.
+    // In `Lower`, ↑/↓ walk strictly within the band and clamp at the
+    // top (Headline) without jumping into the studio frames.
+    key(&mut app, hc_vt::Key::Char('k'));
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Headline),
+        "up at the top of Lower stays in Lower"
+    );
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    // ←/→ in Lower step action chips on the selected row rather than
+    // jumping back up to the studio frames (`show ↵` is index 2 -> `apply a` is 0).
+    key(&mut app, hc_vt::Key::Char('h'));
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+    assert_eq!(app.hollywood.chip_index, Some(1));
+
+    // `Tab` switches to the upper studio-frame section.
+    key(&mut app, hc_vt::Key::Tab);
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("acme-shop".into()))
+    );
+    // → / l move within the frames and clamp at `+ new studio`.
     key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(
         app.hollywood.selected,
@@ -83,8 +107,10 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
     );
     key(&mut app, hc_vt::Key::Char('l'));
     assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
-    // The last frame is the end of the line.
     key(&mut app, hc_vt::Key::Char('l'));
+    assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
+    // ↓ in `Upper` stays in `Upper` rather than dropping into `Lower`.
+    key(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.hollywood.selected, Some(Target::NewStudio));
     // ← / h come back.
     key(&mut app, hc_vt::Key::Char('h'));
@@ -92,21 +118,96 @@ async fn expanded_keys_walk_the_frames_and_the_band() {
         app.hollywood.selected,
         Some(Target::Studio("beta-tools".into()))
     );
-    // ↓ leaves the frames for the band's first row; ↑ comes back.
-    key(&mut app, hc_vt::Key::Char('j'));
-    assert_eq!(app.hollywood.selected, Some(Target::Headline));
-    key(&mut app, hc_vt::Key::Char('j'));
+
+    // `Tab` returns to `Lower` and restores the remembered lower row,
+    // then `Tab` again returns to the remembered upper frame.
+    key(&mut app, hc_vt::Key::Tab);
     assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
-    key(&mut app, hc_vt::Key::Char('k'));
-    assert_eq!(app.hollywood.selected, Some(Target::Headline));
-    key(&mut app, hc_vt::Key::ArrowUp);
+    key(&mut app, hc_vt::Key::Tab);
     assert_eq!(
         app.hollywood.selected,
-        Some(Target::NewStudio),
-        "up from the band returns to the frames"
+        Some(Target::Studio("beta-tools".into()))
     );
     // Nothing reached the focused program.
     assert_eq!(app.pane.input_backlog().0, 0, "expanded keys leaked");
+}
+
+#[tokio::test]
+async fn tab_switches_sections_from_compose_while_keeping_draft_and_section_memory() {
+    let mut app = app_with_hollywood();
+    app.area = (120, 24);
+    alt_y(&mut app);
+    key(&mut app, hc_vt::Key::Char('i'));
+    key(&mut app, hc_vt::Key::Char('h'));
+    key(&mut app, hc_vt::Key::Char('i'));
+    assert!(app.hollywood.editing);
+    assert_eq!(app.hollywood.input.as_str(), "hi");
+
+    // `Tab` out of `Compose` rests editing, keeps the draft, and moves to `Upper`.
+    key(&mut app, hc_vt::Key::Tab);
+    assert!(!app.hollywood.editing);
+    assert_eq!(app.hollywood.input.as_str(), "hi");
+    assert_eq!(
+        app.hollywood.selected,
+        Some(Target::Studio("acme-shop".into()))
+    );
+
+    // `Shift+Tab` (`BackTab`) brings back the remembered `Input` row without
+    // losing the draft.
+    key_mods(&mut app, hc_vt::Key::BackTab, hc_vt::Mods::SHIFT);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert_eq!(app.hollywood.input.as_str(), "hi");
+}
+
+#[tokio::test]
+async fn lower_section_arrows_walk_hollywood_ask_live_and_input_without_looping() {
+    let mut app = app_with_hollywood();
+    let mut value = summary_json();
+    value["hollywood"]["cards"] = serde_json::json!([]);
+    value["hollywood"]["exchange"] =
+        serde_json::json!([{ "seq": 8, "who": "user", "text": "status?" }]);
+    value["hollywood"]["work"] = "blocked".into();
+    value["hollywood"]["attention_user"] = true.into();
+    value["hollywood"]["attention_detail"] = "backlot --help".into();
+    app.view.documents_mut().insert(
+        doc_key(),
+        Document {
+            value,
+            ..Document::default()
+        }
+        .into(),
+    );
+    app.reconcile_published_view();
+    app.area = (120, 30);
+    alt_y(&mut app);
+
+    // Opening lands on `Wait::Hollywood` (not `Row::Live`).
+    assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
+    // ↓ walks past Talk(8) -> HollywoodLive -> Input and clamps at Input.
+    let mut visited = vec![app.hollywood.selected.clone().unwrap()];
+    for _ in 0..8 {
+        key(&mut app, hc_vt::Key::ArrowDown);
+        let sel = app.hollywood.selected.clone().unwrap();
+        if visited.last() != Some(&sel) {
+            visited.push(sel);
+        }
+    }
+    assert_eq!(
+        visited,
+        vec![
+            Target::Hollywood,
+            Target::Talk(8),
+            Target::HollywoodLive,
+            Target::Input,
+        ]
+    );
+    // ↑ walks smoothly to the top of `Lower` (`Headline`) without jumping to `Upper`.
+    for _ in 0..8 {
+        key(&mut app, hc_vt::Key::ArrowUp);
+    }
+    assert_eq!(app.hollywood.selected, Some(Target::Headline));
+    key(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.hollywood.selected, Some(Target::Hollywood));
 }
 
 #[tokio::test]

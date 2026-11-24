@@ -46,9 +46,13 @@ pub(crate) enum Target {
     Card(String),
     /// A ready-to-finish studio — `f` finishes, Enter focuses it.
     Ready(StudioKey),
-    /// The live row under the newest `user ›` line — `y`/`d` answer a
-    /// prompt, `p` peeks, Enter focuses `bl-hollywood`.
+    /// The waiting row for Hollywood's own prompt / block — `y`/`d`
+    /// answer a prompt, `p` peeks, `open ↵` focuses `bl-hollywood`.
     Hollywood,
+    /// The live row under the newest `user ›` line — `p` peeks,
+    /// Enter focuses `bl-hollywood`. Kept distinct from `Hollywood`
+    /// so `Wait::Hollywood` and `Row::Live` never share selection.
+    HollywoodLive,
     /// The calm row — shown, not actionable.
     Calm,
     /// The input line — `i`/Enter opens it for editing.
@@ -129,7 +133,7 @@ impl Row<'_> {
         match self {
             Row::Headline(_) => Target::Headline,
             Row::Talk(line) => Target::Talk(line.seq),
-            Row::Live(_) => Target::Hollywood,
+            Row::Live(_) => Target::HollywoodLive,
             Row::Wait(i) => waits[*i].target(),
             Row::Calm { .. } => Target::Calm,
             Row::Input => Target::Input,

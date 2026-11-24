@@ -106,7 +106,7 @@ impl App {
             Surface::CallSheet => self.hollywood_open(),
             Surface::CallSheetTell => {
                 self.hollywood_open();
-                self.hollywood.selected = Some(crate::hollywood::Target::Input);
+                self.hollywood_select(crate::hollywood::Target::Input);
                 self.hollywood.editing = true;
             }
             Surface::Dock => self.panel_toggle(),

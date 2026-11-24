@@ -162,13 +162,19 @@ impl App {
             // stands: the same `approve` a role's prompt sends, on
             // Hollywood's ledger, and option 1's run-once allow. The
             // needs-you list's HOLLYWOOD row shares this target.
-            (Some(Target::Hollywood), KeyCode::Char('y')) if self.hollywood_asking() => {
+            (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('y'))
+                if self.hollywood_asking() =>
+            {
                 self.run_action(studio_cmds::hollywood_approve(true));
             }
-            (Some(Target::Hollywood), KeyCode::Char('d')) if self.hollywood_asking() => {
+            (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('d'))
+                if self.hollywood_asking() =>
+            {
                 self.run_action(studio_cmds::hollywood_approve(false));
             }
-            (Some(Target::Hollywood), KeyCode::Char('p')) => self.hollywood_peek_live(),
+            (Some(Target::Hollywood | Target::HollywoodLive), KeyCode::Char('p')) => {
+                self.hollywood_peek_live()
+            }
             // A role's needs-you or asks row peeks the role itself; a
             // no-requirement studio peeks its producer.
             (Some(Target::Role(studio, role)), KeyCode::Char('p')) => {

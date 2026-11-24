@@ -48,6 +48,10 @@ pub(crate) struct HollywoodRender {
     /// row's target and its key — a chip click selects its row and
     /// runs the key's action.
     pub chips: Vec<(Rect, Target, char)>,
+    /// Full horizontal + vertical chip area per `Wait` row so clicks on
+    /// the 1-cell gap between chips select the row without triggering
+    /// row activation.
+    pub chips_zones: Vec<(Rect, Target)>,
     /// The input line (expanded, an agent only).
     pub input: Rect,
     /// The waiting list's scroll metrics — the wheel and PageUp/Down.
@@ -430,26 +434,35 @@ fn render_band(
     hits
 }
 
+/// Pixel/cell gap between adjacent action chips on a waiting row.
+pub(crate) const CHIP_GAP: u16 = 1;
+
 /// A waiting row's action chips (S5 §2), painted right-aligned from
-/// `x` — the primary chip lit `accent` on the selected row — and
-/// recorded as click targets: `↵` maps to the row's Enter, a letter
-/// to the row's own key.
+/// `x` — the focused chip lit `accent` on the selected row — and
+/// recorded as full-row-height click targets: `↵` maps to the row's
+/// Enter, a letter to the row's own key.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn paint_wait_chips(
     buf: &mut Buffer,
     y: u16,
     mut x: u16,
+    row_height: u16,
     wait: &Wait<'_>,
     chips: &[items::Chip],
     compact: bool,
     selected: bool,
+    focused_chip: Option<usize>,
     palette: &Palette,
     hits: &mut HollywoodRender,
 ) {
-    for chip in chips {
+    let start_x = x;
+    let target = wait.target();
+    let hit_h = row_height.max(1);
+    for (idx, chip) in chips.iter().enumerate() {
         let text = items::chip_text(chip, compact);
         let w = display_width(&text) as u16;
-        let style = if selected && chip.primary {
+        let is_focused = selected && focused_chip == Some(idx);
+        let style = if is_focused {
             Style::default()
                 .fg(crate::studio::glyphs::contrast_fg(palette))
                 .bg(palette.accent)
@@ -463,7 +476,16 @@ pub(crate) fn paint_wait_chips(
         } else {
             chip.key.chars().next().unwrap_or('\r')
         };
-        hits.chips.push((Rect::new(x, y, w, 1), wait.target(), key));
+        hits.chips
+            .push((Rect::new(x, y, w, hit_h), target.clone(), key));
         x += w;
+        if idx + 1 < chips.len() {
+            x += CHIP_GAP;
+        }
+    }
+    let total_w = x.saturating_sub(start_x);
+    if total_w > 0 {
+        hits.chips_zones
+            .push((Rect::new(start_x, y, total_w, hit_h), target));
     }
 }

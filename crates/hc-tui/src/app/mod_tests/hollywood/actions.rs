@@ -536,3 +536,37 @@ async fn records_action_opens_read_only_card_view_without_stuffing_card_id() {
     key(&mut app, hc_vt::Key::Escape);
     assert!(app.hollywood.view.is_none());
 }
+
+#[tokio::test]
+async fn enter_on_hollywood_ask_runs_allow_by_default_and_open_when_moved_right() {
+    let mut app = app_with_hollywood_prompt();
+    let (recorded, runner) = recorder();
+    app.set_hollywood_runner(runner);
+    app.area = (120, 30);
+    alt_y(&mut app);
+    app.hollywood_select(Target::Hollywood);
+
+    // Default highlighted chip is `[allow y]`: Enter runs allow and stays on sheet.
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(
+        recorded.lock().unwrap().as_slice(),
+        &[vec![
+            "approve",
+            "--person",
+            "hollywood",
+            "--decision",
+            "allow",
+            "--as",
+            "user"
+        ]]
+    );
+
+    // Moving right 3 times focuses `[open ↵]`: Enter focuses `bl-hollywood`.
+    for _ in 0..3 {
+        key(&mut app, hc_vt::Key::ArrowRight);
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    assert_eq!(app.focused.as_deref(), Some("t10"));
+    assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+}

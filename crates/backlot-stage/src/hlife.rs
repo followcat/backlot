@@ -60,6 +60,7 @@ impl Stage {
     pub(crate) async fn hollywood(
         &self,
         terminals: &[LiveTerminal],
+        finished: &[LiveTerminal],
         real_slot_free: &mut bool,
         now_ms: u64,
     ) -> Result<(), Fail> {
@@ -79,6 +80,11 @@ impl Stage {
         {
             Err(e @ Fail::Core(_)) => return Err(e),
             Err(e) => self.hlog(&format!("reconcile: {}", e.message())),
+            Ok(()) => {}
+        }
+        match self.sweep_hollywood_finished(finished).await {
+            Err(e @ Fail::Core(_)) => return Err(e),
+            Err(e) => self.hlog(&format!("sweep: {}", e.message())),
             Ok(()) => {}
         }
         if let Err(e) = self.hcards(&hdir) {
@@ -116,6 +122,19 @@ impl Stage {
         let term = terminals.iter().find(|t| t.name == HOLLYWOOD_TERMINAL);
         let role = self.hstate.borrow().role.clone();
         for mv in hstage::hplan(cfg, &role, term.is_some(), now_ms, self.started_ms) {
+            if matches!(
+                mv,
+                HMove::Start
+                    | HMove::Revive
+                    | HMove::ReviveResume
+                    | HMove::Restart
+                    | HMove::Lost
+                    | HMove::ResumeRun
+                    | HMove::Close(_)
+                    | HMove::Drop
+            ) {
+                self.sweep_hollywood_ticks.set(3);
+            }
             match mv {
                 HMove::Start | HMove::Revive => {
                     let mut actor = hstage::identity(cfg.expect("a start needs the config"));

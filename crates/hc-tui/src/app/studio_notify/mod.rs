@@ -143,7 +143,7 @@ pub(super) fn target_is_focused(app: &super::App, target: &Target) -> bool {
                 })
                 .is_some_and(|terminal| app.focused.as_deref() == Some(terminal.as_str()))
         }
-        Target::Hollywood | Target::Headline | Target::Talk(_) => app
+        Target::Hollywood | Target::HollywoodLive | Target::Headline | Target::Talk(_) => app
             .visible_hollywood_terminal()
             .is_some_and(|terminal| app.focused.as_deref() == Some(terminal.as_str())),
         Target::Card(id) => {

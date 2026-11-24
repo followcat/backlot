@@ -344,7 +344,7 @@ fn the_live_row_follows_the_newest_user_line_until_a_reply() {
         matches!(rows[live - 1], Row::Talk(line) if line.who == "user"),
         "the live row follows the newest user line"
     );
-    assert_eq!(rows[live].target(&waits), Target::Hollywood);
+    assert_eq!(rows[live].target(&waits), Target::HollywoodLive);
 
     // Working: the terminal's doing, else the bare word.
     let summary = with_live(serde_json::json!({

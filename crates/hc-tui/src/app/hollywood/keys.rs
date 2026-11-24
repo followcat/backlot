@@ -7,11 +7,11 @@
 //! the sheet's keys in `Ctrl+B ?`, and `Esc` collapses it. While
 //! the input line edits every key is the editor's; `Esc` leaves it.
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 use super::App;
 use crate::app::input::TerminalKey;
-use crate::hollywood::LayerMode;
+use crate::hollywood::{LayerMode, Section, Target};
 
 impl App {
     /// Keys while the layer is expanded — every press is consumed
@@ -31,6 +31,19 @@ impl App {
             return;
         }
         if self.hollywood.confirm.is_some() {
+            return;
+        }
+        // `Tab` / `Shift+Tab` switches between the upper studio frames
+        // and the lower waiting/exchange/input band, even from `Compose`
+        // (resting the input line while preserving any draft).
+        if matches!(code, KeyCode::Tab | KeyCode::BackTab)
+            && (modifiers.is_empty() || modifiers == KeyModifiers::SHIFT)
+            && matches!(
+                key.input.action,
+                hc_vt::Action::Press | hc_vt::Action::Repeat
+            )
+        {
+            self.hollywood_switch_section();
             return;
         }
         // `Compose` (R3-B2/R3-2): the `›` line owns every key —
@@ -86,11 +99,17 @@ impl App {
             return;
         }
         if matches!(code, KeyCode::Right | KeyCode::Char('l')) && plain {
-            self.hollywood_frame_move(1);
+            match self.hollywood_active_section() {
+                Section::Upper => self.hollywood_frame_move(1),
+                Section::Lower => self.hollywood_chip_move(1),
+            }
             return;
         }
         if matches!(code, KeyCode::Left | KeyCode::Char('h')) && plain {
-            self.hollywood_frame_move(-1);
+            match self.hollywood_active_section() {
+                Section::Upper => self.hollywood_frame_move(-1),
+                Section::Lower => self.hollywood_chip_move(-1),
+            }
             return;
         }
         let page = self.hollywood_hits.viewport_rows.max(1) as isize;
@@ -106,8 +125,7 @@ impl App {
         // last row (R3-M11) — in Compose they are the editor's own.
         if code == KeyCode::Home && plain {
             if let Some(first) = self.hollywood_frames().first().cloned() {
-                self.hollywood.selected = Some(first);
-                self.hollywood_sync_editing();
+                self.hollywood_select(first);
                 self.hollywood_keep_frame_visible();
             }
             return;
@@ -116,9 +134,8 @@ impl App {
             let band = self.hollywood_band();
             if let Some(last) = band.last().cloned() {
                 let index = band.len() - 1;
-                self.hollywood.selected = Some(last);
+                self.hollywood_select(last);
                 self.hollywood_reveal_card(&band, index);
-                self.hollywood_sync_editing();
             }
             return;
         }
@@ -131,7 +148,7 @@ impl App {
             // frame trailing them.
             KeyCode::Char(d @ '0'..='9') if plain => self.hollywood_jump(d),
             KeyCode::Char('i') if plain && self.has_hollywood_cfg => {
-                self.hollywood.selected = Some(crate::hollywood::Target::Input);
+                self.hollywood_select(Target::Input);
                 self.hollywood.editing = true;
             }
             KeyCode::Char('n') if plain => self.hollywood_new_studio(),
@@ -140,7 +157,7 @@ impl App {
                 self.help = true;
                 self.help_state = crate::chrome::help::HelpState::default();
             }
-            KeyCode::Enter => self.hollywood_activate(),
+            KeyCode::Enter => self.hollywood_enter(),
             _ if plain => {
                 self.hollywood_row_key(code);
             }
@@ -166,8 +183,7 @@ impl App {
             d => (d as usize - '1' as usize).min(frames.len().saturating_sub(1)),
         };
         if let Some(target) = frames.get(index).cloned() {
-            self.hollywood.selected = Some(target);
-            self.hollywood_sync_editing();
+            self.hollywood_select(target);
             self.hollywood_keep_frame_visible();
         }
     }
