@@ -16,7 +16,7 @@ use crate::event::{Priority, StudioMode, UsageTotals};
 use crate::state::{StudioState, TaskStatus};
 use crate::summary_build::*;
 
-pub use crate::progress::{RoleDoing, RoleProgress, cap_doing};
+pub use crate::progress::{RoleProgress, RoleRunning, cap_running};
 pub use crate::summary_build::role_name;
 
 // Hollywood's section types live beside this file; the
@@ -158,7 +158,6 @@ pub struct TaskSummary {
 /// while their studio is live — with no `doing` text (R19: closed,
 /// not deleted).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(from = "crate::summary_build::RoleSummaryWire")]
 pub struct RoleSummary {
     /// The ledger role key (`producer`, `actor-t1-c1`).
     pub role: String,
@@ -174,15 +173,14 @@ pub struct RoleSummary {
     pub effort: Option<String>,
     /// `live`, `lost` or `closed`.
     pub state: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doing: Option<String>,
     /// Latest `role.progress` note and timestamp from the ledger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<RoleProgress>,
     /// Deepest descendant command line and since when (D5), published only while `Work::Working`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub doing: Option<RoleDoing>,
-    /// Terminal OSC 7501 status / held slot / actor fallback string for cast/drawer labels.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub activity: Option<String>,
+    pub running: Option<RoleRunning>,
     /// `working`, `waiting` or `blocked` — only while live and the
     /// watch pass has classified the screen (R17).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -442,7 +440,7 @@ pub fn summary_with_exchange(
     snippets: &BTreeMap<(String, u64), String>,
     updated_ms: u64,
 ) -> Summary {
-    summary_with_doing(
+    summary_with_running(
         studios,
         live,
         work,
@@ -454,17 +452,17 @@ pub fn summary_with_exchange(
     )
 }
 
-/// [`summary_with_exchange`] plus active deepest-descendant commands (`doing`)
+/// [`summary_with_exchange`] plus active deepest-descendant commands (`running`)
 /// sampled from stage liveness evidence.
 #[allow(clippy::too_many_arguments)]
-pub fn summary_with_doing(
+pub fn summary_with_running(
     studios: &[(String, StudioState)],
     live: &BTreeMap<String, String>,
     work: &BTreeMap<(String, String), Work>,
     failed: &BTreeMap<(String, String), String>,
     errors: &BTreeMap<String, String>,
     snippets: &BTreeMap<(String, u64), String>,
-    doing: &BTreeMap<(String, String), RoleDoing>,
+    running: &BTreeMap<(String, String), RoleRunning>,
     updated_ms: u64,
 ) -> Summary {
     let mut live_studios = Vec::new();
@@ -502,7 +500,9 @@ pub fn summary_with_doing(
         let done = finished(state);
         let mut roles: Vec<RoleSummary> = role_keys(state)
             .into_iter()
-            .filter_map(|role| role_summary(name, state, role, live, work, failed, snippets, doing))
+            .filter_map(|role| {
+                role_summary(name, state, role, live, work, failed, snippets, running)
+            })
             .collect();
         // Runner limits (S9e): a held wanted role shows `waiting for
         // a <runner> slot` — overriding a recorded closed/lost row,
@@ -511,8 +511,8 @@ pub fn summary_with_doing(
         for rs in roles.iter_mut() {
             if let Some(runner) = held.get(&rs.role) {
                 rs.state = "waiting".into();
-                rs.doing = None;
-                rs.activity = Some(cap(&format!("waiting for a {runner} slot")));
+                rs.doing = Some(cap(&format!("waiting for a {runner} slot")));
+                rs.running = None;
                 rs.work = None;
                 rs.failed = None;
             }
@@ -537,9 +537,9 @@ pub fn summary_with_doing(
                     .filter(|e| !e.is_empty())
                     .map(|e| cap(&e)),
                 state: "waiting".into(),
+                doing: Some(cap(&format!("waiting for a {runner} slot"))),
                 progress: state.progress.get(&w.role).cloned(),
-                doing: None,
-                activity: Some(cap(&format!("waiting for a {runner} slot"))),
+                running: None,
                 work: None,
                 failed: None,
                 workdir: None,

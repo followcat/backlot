@@ -5,10 +5,10 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use backlot_model::event::{Event, EventBy, EventKind, LEDGER_VERSION, MAX_DOING_CHARS};
+use backlot_model::event::{Event, EventBy, EventKind, LEDGER_VERSION, MAX_RUNNING_CHARS};
 use backlot_model::hollywood::HollywoodKind;
 use backlot_model::state::replay;
-use backlot_model::summary::{RoleDoing, RoleProgress, Work};
+use backlot_model::summary::{RoleProgress, RoleRunning, Work};
 use backlot_model::testkit::*;
 
 use crate::cli::{Env, Fail, run};
@@ -328,9 +328,9 @@ fn live_and_status_text_and_json_include_progress_and_doing() {
         },
     );
 
-    let doing_map = BTreeMap::from([(
+    let running_map = BTreeMap::from([(
         ("acme-shop".to_string(), "actor-t1-c1".to_string()),
-        RoleDoing {
+        RoleRunning {
             cmd: "cargo test".into(),
             since_ms: now_ms.saturating_sub(3 * 60_000),
         },
@@ -345,14 +345,14 @@ fn live_and_status_text_and_json_include_progress_and_doing() {
             Work::Waiting,
         ),
     ]);
-    let doc = backlot_model::summary::summary_with_doing(
+    let doc = backlot_model::summary::summary_with_running(
         &[("acme-shop".into(), patched_state.clone())],
         &BTreeMap::new(),
         &work,
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
-        &doing_map,
+        &running_map,
         now_ms,
     );
     let live = from_summary(&doc, now_ms);
@@ -376,21 +376,96 @@ fn live_and_status_text_and_json_include_progress_and_doing() {
     assert!(prod_line.contains("· waiting"), "{prod_line}");
     assert!(!prod_line.contains("ago"), "{prod_line}");
 
-    // Real CLI `backlot status --json` includes progress + doing.
+    // Real CLI `backlot status --json` includes progress + running per role, once each.
     let json_str = ok(&base_env, "status --json");
     let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+    assert!(
+        v.get("doing").is_none(),
+        "no top-level doing map: {json_str}"
+    );
+    assert!(
+        v.get("running").is_none(),
+        "no top-level running map: {json_str}"
+    );
+    assert!(
+        v.get("progress").is_none(),
+        "no top-level progress map: {json_str}"
+    );
     assert_eq!(
         v["roles"]["actor-t1-c1"]["progress"]["text"].as_str(),
         Some("running the parity suite"),
         "{json_str}"
     );
     assert_eq!(
-        v["roles"]["actor-t1-c1"]["doing"]["cmd"].as_str(),
+        v["roles"]["actor-t1-c1"]["running"]["cmd"].as_str(),
         Some("cargo test"),
         "{json_str}"
     );
 
-    // Unused import guard for MAX_DOING_CHARS check
-    let _ = MAX_DOING_CHARS;
+    let _ = MAX_RUNNING_CHARS;
     let _ = LEDGER_VERSION;
+}
+
+#[allow(dead_code)]
+#[derive(Debug, serde::Deserialize)]
+struct FrozenV030LiveRole {
+    studio: String,
+    role: String,
+    #[serde(default)]
+    work: Option<Work>,
+    #[serde(default)]
+    doing: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, serde::Deserialize)]
+struct FrozenV030Live {
+    #[serde(default)]
+    updated_ms: u64,
+    #[serde(default)]
+    roles: Vec<FrozenV030LiveRole>,
+}
+
+#[test]
+fn frozen_v030_live_role_reads_new_live_json_with_doing_string() {
+    let mut events = base_events();
+    events.push(ev(
+        7,
+        "stage",
+        EventKind::RoleStarted {
+            role: "producer".into(),
+            terminal: Some("t1".into()),
+            actor: Some(actor("prod")),
+            session_id: None,
+            reason: None,
+        },
+    ));
+    let state = replay(&events);
+    let live_terms = BTreeMap::from([("t1".to_string(), "writes code".to_string())]);
+    let work = BTreeMap::from([(
+        ("acme-shop".to_string(), "producer".to_string()),
+        Work::Working,
+    )]);
+    let proc_cmd = BTreeMap::from([(
+        ("acme-shop".to_string(), "producer".to_string()),
+        RoleRunning {
+            cmd: "cargo test".into(),
+            since_ms: 5_000,
+        },
+    )]);
+    let doc = backlot_model::summary::summary_with_running(
+        &[("acme-shop".into(), state)],
+        &live_terms,
+        &work,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &proc_cmd,
+        60_000,
+    );
+    let live = from_summary(&doc, 60_000);
+    let json = serde_json::to_string(&live).unwrap();
+    let legacy: FrozenV030Live =
+        serde_json::from_str(&json).expect("v0.3.0 LiveRole must parse new live.json");
+    assert_eq!(legacy.roles[0].doing.as_deref(), Some("writes code"));
 }

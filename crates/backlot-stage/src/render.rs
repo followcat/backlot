@@ -7,7 +7,7 @@ use backlot_model::attention::AttentionClass;
 pub use backlot_model::event::age_short;
 use backlot_model::event::{CANNOT_RESUME, CheckDecl, EventKind, STALLED};
 use backlot_model::state::{Attention, StudioState, Task, TaskStatus};
-use backlot_model::summary::{RoleDoing, RoleProgress, Work};
+use backlot_model::summary::{RoleProgress, RoleRunning, Work};
 use backlot_model::{ActorIdentity, ActorRecord};
 
 fn actor_short(a: &ActorIdentity) -> String {
@@ -51,7 +51,7 @@ fn hh_mm(ms: u64) -> String {
 pub(crate) fn working_parts(
     since_ms: u64,
     progress: Option<&RoleProgress>,
-    doing: Option<&RoleDoing>,
+    running: Option<&RoleRunning>,
     now_ms: u64,
 ) -> String {
     let mut parts = Vec::new();
@@ -70,7 +70,7 @@ pub(crate) fn working_parts(
             age_short(now_ms.saturating_sub(p.ts_ms))
         ));
     }
-    if let Some(d) = doing {
+    if let Some(d) = running {
         if d.since_ms > 0 {
             parts.push(format!(
                 "{} {}",
@@ -273,7 +273,7 @@ pub fn status(
                 working_parts(
                     since_ms,
                     state.progress.get(role),
-                    live.doing.get(&(name.to_string(), role.to_string())),
+                    live.running_cmds.get(&(name.to_string(), role.to_string())),
                     now_ms,
                 )
             ),
@@ -325,7 +325,7 @@ pub fn status(
                 working_parts(
                     since_ms,
                     state.progress.get(role),
-                    live.doing.get(&(name.to_string(), role.to_string())),
+                    live.running_cmds.get(&(name.to_string(), role.to_string())),
                     now_ms,
                 )
             ),

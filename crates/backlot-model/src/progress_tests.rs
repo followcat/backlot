@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::event::{
-    Event, EventBy, EventKind, LEDGER_VERSION, MAX_DOING_CHARS, MAX_PROGRESS_CHARS, NewEvent,
+    Event, EventBy, EventKind, LEDGER_VERSION, MAX_PROGRESS_CHARS, MAX_RUNNING_CHARS, NewEvent,
     age_short, normalize_progress_text,
 };
 use crate::hollywood::{HOLLYWOOD, HollywoodEvent, HollywoodKind, NewHollywoodEvent};
@@ -13,8 +13,8 @@ use crate::hollywood_validate::validate as hvalidate;
 use crate::refusal::Refusal;
 use crate::state::replay;
 use crate::summary::{
-    RoleDoing, RoleProgress, RoleSummary, SUMMARY_SCHEMA, Summary, Work, summary,
-    summary_with_doing,
+    RoleProgress, RoleRunning, RoleSummary, SUMMARY_SCHEMA, Summary, Work, summary,
+    summary_with_running,
 };
 use crate::testkit::*;
 use crate::validate::validate;
@@ -167,7 +167,7 @@ fn role_progress_reduces_without_adding_obligations() {
 }
 
 #[test]
-fn summary_populates_progress_and_working_only_doing_capped_at_60() {
+fn summary_populates_progress_and_working_only_running_capped_at_60() {
     let mut base = base_events();
     base.push(ev(4, "director", cast("t1", "actor-a", "a")));
     base.push(Event {
@@ -220,31 +220,31 @@ fn summary_populates_progress_and_working_only_doing_capped_at_60() {
         ),
     ]);
     let long_cmd = format!("cargo test --workspace --filter {}", "x".repeat(80));
-    let doing = BTreeMap::from([
+    let running = BTreeMap::from([
         (
             ("acme-shop".to_string(), "actor-t1-c1".to_string()),
-            RoleDoing {
+            RoleRunning {
                 cmd: long_cmd,
                 since_ms: 15_000,
             },
         ),
         (
             ("acme-shop".to_string(), "producer".to_string()),
-            RoleDoing {
+            RoleRunning {
                 cmd: "should not appear".into(),
                 since_ms: 15_000,
             },
         ),
     ]);
 
-    let s = summary_with_doing(
+    let s = summary_with_running(
         &[("acme-shop".into(), state)],
         &BTreeMap::new(),
         &work,
         &BTreeMap::new(),
         &BTreeMap::new(),
         &BTreeMap::new(),
-        &doing,
+        &running,
         60_000,
     );
     assert_eq!(s.schema, SUMMARY_SCHEMA);
@@ -260,9 +260,12 @@ fn summary_populates_progress_and_working_only_doing_capped_at_60() {
             ts_ms: 12_000,
         })
     );
-    let d = actor_row.doing.as_ref().expect("working role has doing");
+    let d = actor_row
+        .running
+        .as_ref()
+        .expect("working role has running");
     assert_eq!(d.since_ms, 15_000);
-    assert_eq!(d.cmd.chars().count(), MAX_DOING_CHARS);
+    assert_eq!(d.cmd.chars().count(), MAX_RUNNING_CHARS);
     assert!(d.cmd.starts_with("cargo test --workspace"));
 
     let prod_row = s.studios[0]
@@ -270,9 +273,9 @@ fn summary_populates_progress_and_working_only_doing_capped_at_60() {
         .iter()
         .find(|r| r.role == "producer")
         .unwrap();
-    assert_eq!(prod_row.doing, None, "non-working role must omit doing");
+    assert_eq!(prod_row.running, None, "non-working role must omit running");
 
-    // Empty doing map omits doing cleanly via `summary`.
+    // Empty running map omits running cleanly via `summary`.
     let plain = summary(
         &[],
         &BTreeMap::new(),
@@ -306,33 +309,36 @@ fn old_summaries_without_progress_or_doing_and_legacy_doing_string_still_parse()
     let parsed: Summary = serde_json::from_str(old).unwrap();
     let roles = &parsed.studios[0].roles;
     assert_eq!(roles[0].progress, None);
+    assert_eq!(roles[0].running, None);
     assert_eq!(roles[0].doing, None);
     assert_eq!(roles[1].progress, None);
-    assert_eq!(roles[1].doing, None);
-    assert_eq!(roles[1].activity.as_deref(), Some("watching"));
+    assert_eq!(roles[1].running, None);
+    assert_eq!(roles[1].doing.as_deref(), Some("watching"));
 
-    // Structured `progress` and `doing` round-trip back faithfully.
+    // Structured `progress` and `running` round-trip back faithfully alongside `doing`.
     let role: RoleSummary = serde_json::from_str(
         r#"{
             "role": "actor-t1-c1",
             "name": "alice",
             "state": "live",
+            "doing": "writes code",
             "work": "working",
             "since_ms": 1000,
             "progress": { "text": "running the parity suite", "ts_ms": 5000 },
-            "doing": { "cmd": "cargo test", "since_ms": 8000 }
+            "running": { "cmd": "cargo test", "since_ms": 8000 }
         }"#,
     )
     .unwrap();
+    assert_eq!(role.doing.as_deref(), Some("writes code"));
     assert_eq!(
         role.progress.as_ref().map(|p| p.text.as_str()),
         Some("running the parity suite")
     );
     assert_eq!(
-        role.doing.as_ref().map(|d| d.cmd.as_str()),
+        role.running.as_ref().map(|d| d.cmd.as_str()),
         Some("cargo test")
     );
-    assert_eq!(role.doing.as_ref().map(|d| d.since_ms), Some(8000));
+    assert_eq!(role.running.as_ref().map(|d| d.since_ms), Some(8000));
 }
 
 #[test]
@@ -373,4 +379,127 @@ fn hollywood_role_progress_validates_and_reduces() {
         .is_err()
     );
     assert_eq!(age_short(47 * 60_000), "47m");
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct FrozenV030Summary {
+    #[allow(dead_code)]
+    schema: String,
+    studios: Vec<FrozenV030StudioSummary>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct FrozenV030StudioSummary {
+    roles: Vec<FrozenV030RoleSummary>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, serde::Deserialize)]
+struct FrozenV030RoleSummary {
+    role: String,
+    name: String,
+    #[serde(default)]
+    terminal: Option<String>,
+    #[serde(default)]
+    runner: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    effort: Option<String>,
+    state: String,
+    #[serde(default)]
+    doing: Option<String>,
+    #[serde(default)]
+    work: Option<Work>,
+    #[serde(default)]
+    failed: Option<String>,
+    #[serde(default)]
+    workdir: Option<String>,
+    #[serde(default)]
+    task: Option<String>,
+    #[serde(default)]
+    priority: Option<crate::event::Priority>,
+    #[serde(default)]
+    resumable: bool,
+    #[serde(default)]
+    since_ms: u64,
+    #[serde(default)]
+    attention: Option<String>,
+    #[serde(default)]
+    attention_class: Option<crate::attention::AttentionClass>,
+    #[serde(default)]
+    asks: Option<String>,
+    #[serde(default)]
+    attention_user: bool,
+    #[serde(default)]
+    attention_seq: Option<u64>,
+    #[serde(default)]
+    attention_detail: Option<String>,
+    #[serde(default)]
+    stage_answer_ms: Option<u64>,
+    #[serde(default = "default_true_for_frozen")]
+    can_answer_prompt: bool,
+    #[serde(default)]
+    restarted_ms: Option<u64>,
+}
+
+fn default_true_for_frozen() -> bool {
+    true
+}
+
+#[test]
+fn frozen_v030_summary_reads_new_document_with_legacy_doing_string() {
+    let mut events = base_events();
+    events.extend([
+        ev(
+            7,
+            "stage",
+            EventKind::RoleStarted {
+                role: "producer".into(),
+                terminal: Some("t1".into()),
+                actor: Some(actor("prod")),
+                session_id: None,
+                reason: None,
+            },
+        ),
+        ev(
+            8,
+            "producer",
+            EventKind::RoleProgress {
+                role: "producer".into(),
+                task: None,
+                text: "running the parity suite".into(),
+            },
+        ),
+    ]);
+    let state = replay(&events);
+    let live = BTreeMap::from([("t1".to_string(), "writes code".to_string())]);
+    let work = BTreeMap::from([(
+        ("acme-shop".to_string(), "producer".to_string()),
+        Work::Working,
+    )]);
+    let proc_cmd = BTreeMap::from([(
+        ("acme-shop".to_string(), "producer".to_string()),
+        RoleRunning {
+            cmd: "cargo test".into(),
+            since_ms: 5_000,
+        },
+    )]);
+    let s = summary_with_running(
+        &[("acme-shop".into(), state)],
+        &live,
+        &work,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &proc_cmd,
+        60_000,
+    );
+    let wire = serde_json::to_string(&s).unwrap();
+    let legacy: FrozenV030Summary =
+        serde_json::from_str(&wire).expect("v0.3.0 RoleSummary must parse new summary wire format");
+    assert_eq!(
+        legacy.studios[0].roles[0].doing.as_deref(),
+        Some("writes code")
+    );
 }

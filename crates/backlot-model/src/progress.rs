@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 /// Maximum Unicode scalar characters kept in one `role.progress` text.
 pub const MAX_PROGRESS_CHARS: usize = 200;
 
-/// Maximum Unicode scalar characters kept in one `RoleSummary.doing` command.
-pub const MAX_DOING_CHARS: usize = 60;
+/// Maximum Unicode scalar characters kept in one `RoleSummary.running` command.
+pub const MAX_RUNNING_CHARS: usize = 60;
 
 /// The role's latest `role.progress` report from the ledger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,8 +19,7 @@ pub struct RoleProgress {
 
 /// The deepest descendant command currently running under a working role.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RoleDoing {
-    #[serde(alias = "text")]
+pub struct RoleRunning {
     pub cmd: String,
     #[serde(default)]
     pub since_ms: u64,
@@ -47,9 +46,9 @@ pub fn normalize_progress_text(raw: &str) -> String {
         .to_string()
 }
 
-/// Cap a joined process argv string for summary publication (`doing.cmd`).
-pub fn cap_doing(cmd: &str) -> String {
-    cmd.chars().take(MAX_DOING_CHARS).collect()
+/// Cap a joined process argv string for summary publication (`running.cmd`).
+pub fn cap_running(cmd: &str) -> String {
+    cmd.chars().take(MAX_RUNNING_CHARS).collect()
 }
 
 /// Cap a progress text read from ledger state to [`MAX_PROGRESS_CHARS`].

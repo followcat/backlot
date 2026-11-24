@@ -54,31 +54,21 @@ pub fn read(common: &Common, cmd: &Cmd, env: &Env, base: &Path) -> Option<Result
     }
 }
 
-#[derive(serde::Serialize)]
-struct StatusJson {
-    #[serde(flatten)]
-    state: StudioState,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    doing: BTreeMap<String, backlot_model::summary::RoleDoing>,
-}
-
-fn status_json(name: &str, mut state: StudioState, live: &crate::live::LiveView) -> StatusJson {
-    let mut doing = BTreeMap::new();
+fn status_state(name: &str, mut state: StudioState, live: &crate::live::LiveView) -> StudioState {
     for (role, r) in state.roles.iter_mut() {
         if r.progress.is_none() {
             r.progress = state.progress.get(role).cloned();
         }
-        if let Some(d) = live
-            .work
-            .get(&(name.to_string(), role.clone()))
-            .filter(|w| **w == backlot_model::summary::Work::Working)
-            .and_then(|_| live.doing.get(&(name.to_string(), role.clone())))
+        if live.work.get(&(name.to_string(), role.clone()))
+            == Some(&backlot_model::summary::Work::Working)
         {
-            r.doing = Some(d.clone());
-            doing.insert(role.clone(), d.clone());
+            r.running = live
+                .running_cmds
+                .get(&(name.to_string(), role.clone()))
+                .cloned();
         }
     }
-    StatusJson { state, doing }
+    state
 }
 
 /// `status [--studio <name>]` for one studio.
@@ -90,7 +80,7 @@ fn status(common: &Common, env: &Env, base: &Path, json: bool) -> Result<String,
     let now_ms = crate::live::now_ms();
     let live = crate::live::LiveView::read(&resolved, now_ms);
     Ok(if json {
-        let payload = status_json(&name, state, &live);
+        let payload = status_state(&name, state, &live);
         serde_json::to_string_pretty(&payload).map_err(|e| Fail::refused(e.to_string()))?
     } else {
         render::status(
@@ -537,7 +527,7 @@ pub fn status_all(env: &Env, base: &Path, json: bool) -> Result<String, Fail> {
         let dir = store::studio_dir(base, name);
         let state = store::load_state(&dir).map_err(store_fail)?;
         if json {
-            states.insert(name.clone(), status_json(name, state, &live));
+            states.insert(name.clone(), status_state(name, state, &live));
         } else {
             blocks.push(render::status(
                 name,
