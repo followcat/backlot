@@ -163,6 +163,9 @@ pub(crate) enum MenuKind {
     /// A Call Sheet `Headline` or `Talk(seq)` row — read entry or
     /// focus the raw `bl-hollywood` terminal.
     Hollywood(Option<u64>),
+    /// The Call Sheet `Title` row — change Hollywood's agent, focus
+    /// or restart.
+    HollywoodTitle,
     /// A Studio Dock `Talk(studio, seq)` row — read message/report
     /// body or act on its studio.
     StudioTalk(u64),
@@ -649,6 +652,30 @@ impl StudioMenu {
         }
     }
 
+    /// The Call Sheet `Title` row's menu — switches Hollywood's own
+    /// agent (`Change Hollywood's agent…`), or focuses/restarts it when
+    /// configured.
+    pub(crate) fn hollywood_title(cfg: Option<&backlot_stage::config::HollywoodCfg>) -> StudioMenu {
+        StudioMenu {
+            kind: MenuKind::HollywoodTitle,
+            role: Some(MenuRole {
+                role: "hollywood".into(),
+                name: "Hollywood".into(),
+                state: if cfg.is_some() { "live" } else { "closed" }.into(),
+                resumable: false,
+                task: None,
+                terminal: None,
+                runner: cfg.map(|c| c.runner.clone()),
+                model: cfg.map(|c| c.model.clone()),
+                effort: cfg.and_then(|c| c.effort.clone()),
+                attention_seq: None,
+                attention_user: false,
+                can_answer_prompt: true,
+            }),
+            ..StudioMenu::lot()
+        }
+    }
+
     /// Non-selectable header line identifying the menu's target.
     pub(crate) fn title(&self) -> String {
         let studio = self.studio.as_ref().map(|k| k.id.as_str()).unwrap_or("");
@@ -686,7 +713,7 @@ impl StudioMenu {
             MenuKind::Machine => {
                 format!("Machine · {}", self.machine.as_deref().unwrap_or("Local"))
             }
-            MenuKind::Hollywood(_) => "Hollywood".to_owned(),
+            MenuKind::Hollywood(_) | MenuKind::HollywoodTitle => "Hollywood".to_owned(),
         }
     }
 

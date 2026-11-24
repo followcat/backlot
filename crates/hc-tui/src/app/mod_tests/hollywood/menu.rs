@@ -72,21 +72,121 @@ async fn m_on_a_waiting_row_opens_its_menu() {
     assert!(text.contains("Allow prompt"), "the menu paints: {text}");
 }
 
-/// `m` on a target with no menu (the title, headline, calm or input
-/// rows — all real band targets) opens nothing — and the keys stay
-/// with the band, not a phantom layer. Esc still collapses
-/// afterwards. The title is the always-present menu-less target.
+/// `m` on a target with no menu (`Target::Input`, a real band target)
+/// opens nothing — and the keys stay with the band, not a phantom
+/// layer. Esc still collapses afterwards.
 #[tokio::test]
 async fn m_on_a_menu_less_target_opens_nothing_and_esc_still_collapses() {
     let mut app = app_with_hollywood();
     app.area = (120, 30);
     alt_y(&mut app);
     draw_to(&mut app, 120, 30);
-    app.hollywood_select(Target::Title);
+    // `Alt+Y` lands in Compose on `Target::Input`; one Esc rests there.
+    key(&mut app, hc_vt::Key::Escape);
+    assert_eq!(app.hollywood.selected, Some(Target::Input));
+    assert!(!app.hollywood.editing);
     key(&mut app, hc_vt::Key::Char('m'));
-    assert!(app.menu.is_none(), "the title row has no menu");
+    assert!(app.menu.is_none(), "the input row has no menu");
     key(&mut app, hc_vt::Key::Escape);
     assert_eq!(app.hollywood.mode, LayerMode::Collapsed);
+}
+
+#[tokio::test]
+async fn m_on_title_opens_menu_to_change_hollywood_agent_and_applies_setup() {
+    use super::super::delete_studio::drain_dialog_fetch;
+    use super::super::lifecycle_fixtures::RUNNERS_JSON;
+    use crate::studio_dialog::{RecastStep, StudioDialog};
+
+    let mut app = app_with_hollywood();
+    app.set_hollywood(
+        Ok(Some(HollywoodCfg {
+            runner: "claude".into(),
+            model: "m2".into(),
+            effort: Some("high".into()),
+            key: Some("alt+y".into()),
+            default_cast: Some("/home/user/cast.toml".into()),
+        })),
+        std::path::Path::new("config.toml"),
+    );
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_ns_run(std::sync::Arc::new(move |_machine, argv, _stdin| {
+        sink.lock().unwrap().push(argv.clone());
+        let out = if argv.first().map(String::as_str) == Some("runners") {
+            Ok(RUNNERS_JSON.to_owned())
+        } else {
+            Ok("[hollywood] written".to_owned())
+        };
+        Box::pin(async move { out })
+    }));
+
+    app.area = (120, 30);
+    alt_y(&mut app);
+    draw_to(&mut app, 120, 30);
+    app.hollywood_select(Target::Title);
+    key(&mut app, hc_vt::Key::Char('m'));
+    assert!(app.menu.is_some(), "`m` on Title opens the title menu");
+    let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");
+    assert!(text.contains("Change Hollywood's agent…"), "{text}");
+
+    key(&mut app, hc_vt::Key::Char('c'));
+    assert!(matches!(app.studio_dialog, Some(StudioDialog::Recast(_))));
+    drain_dialog_fetch(&mut app).await;
+    {
+        let Some(StudioDialog::Recast(d)) = &app.studio_dialog else {
+            panic!("expected Recast dialog");
+        };
+        assert!(d.key.is_none());
+        assert_eq!(d.runner_name(), Some("claude"));
+        assert_eq!(d.selected_model().as_deref(), Some("m2"));
+        assert_eq!(d.selected_effort().as_deref(), Some("high"));
+    }
+
+    // Move to `cursor`, choose `auto`, skip effort (none), apply.
+    key(&mut app, hc_vt::Key::ArrowDown);
+    key(&mut app, hc_vt::Key::Enter);
+    key(&mut app, hc_vt::Key::Enter);
+    {
+        let Some(StudioDialog::Recast(d)) = &app.studio_dialog else {
+            panic!("expected Recast apply step");
+        };
+        assert_eq!(d.step, RecastStep::Apply);
+    }
+    key(&mut app, hc_vt::Key::Enter);
+    assert!(app.studio_dialog.is_none());
+
+    {
+        let calls = recorded.lock().unwrap();
+        assert_eq!(
+            calls.last().unwrap(),
+            &vec![
+                "hollywood".to_string(),
+                "setup".to_string(),
+                "--runner".to_string(),
+                "cursor".to_string(),
+                "--model".to_string(),
+                "auto".to_string(),
+                "--key".to_string(),
+                "alt+y".to_string(),
+                "--default-cast".to_string(),
+                "/home/user/cast.toml".to_string(),
+                "--as".to_string(),
+                "user".to_string(),
+            ]
+        );
+    }
+
+    let reply = app.action_rx.recv().await.expect("hw_setup reply");
+    app.on_action_reply(reply);
+    let updated = app.hollywood_cfg.as_ref().expect("hollywood cfg updated");
+    assert_eq!(updated.runner, "cursor");
+    assert_eq!(updated.model, "auto");
+    assert_eq!(updated.effort, None);
+    assert_eq!(updated.key.as_deref(), Some("alt+y"));
+    assert_eq!(
+        updated.default_cast.as_deref(),
+        Some("/home/user/cast.toml")
+    );
 }
 
 /// The selection can outlive its row — a publish drops the studio the

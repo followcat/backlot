@@ -19,13 +19,22 @@ impl App {
     /// ask the studio's machine for `runners --json`.
     pub(crate) fn recast_dialog_open(
         &mut self,
-        key: &StudioKey,
+        key: Option<&StudioKey>,
         role: &str,
         role_name: &str,
         runner: Option<String>,
         model: Option<String>,
         effort: Option<String>,
     ) {
+        let (runner, model, effort) = if key.is_none() {
+            (
+                runner.or_else(|| self.hollywood_cfg.as_ref().map(|c| c.runner.clone())),
+                model.or_else(|| self.hollywood_cfg.as_ref().map(|c| c.model.clone())),
+                effort.or_else(|| self.hollywood_cfg.as_ref().and_then(|c| c.effort.clone())),
+            )
+        } else {
+            (runner, model, effort)
+        };
         self.studio_dialog = Some(StudioDialog::Recast(RecastDialog::new(
             key, role, role_name, runner, model, effort,
         )));
@@ -34,12 +43,12 @@ impl App {
 
     /// The picker's `runners --json` — off the event loop, a stale
     /// generation dropped like every dialog fetch.
-    fn recast_probe(&mut self, key: &StudioKey) {
+    fn recast_probe(&mut self, key: Option<&StudioKey>) {
         self.studio_dialog_gen += 1;
         let epoch = self.studio_dialog_gen;
         let tx = self.dialog_fetch_tx.clone();
         let run = self.ns_runner();
-        let machine = key.machine.clone();
+        let machine = key.and_then(|k| k.machine.clone());
         tokio::spawn(async move {
             let out = run(machine, vec!["runners".into(), "--json".into()], None).await;
             let _ = tx.send((epoch, out)).await;
@@ -172,13 +181,26 @@ impl App {
             RecastStep::Apply => {
                 if let (Some(runner), Some(model)) = (d.runner_name(), d.selected_model()) {
                     let effort = d.selected_effort();
-                    self.run_action(studio_cmds::recast(
-                        &d.key,
-                        &d.role,
-                        runner,
-                        &model,
-                        effort.as_deref(),
-                    ));
+                    let action = match &d.key {
+                        Some(key) => {
+                            studio_cmds::recast(key, &d.role, runner, &model, effort.as_deref())
+                        }
+                        None => {
+                            let cfg = backlot_stage::config::HollywoodCfg {
+                                runner: runner.to_owned(),
+                                model,
+                                effort,
+                                key: self.hollywood_cfg.as_ref().and_then(|c| c.key.clone()),
+                                default_cast: self
+                                    .hollywood_cfg
+                                    .as_ref()
+                                    .and_then(|c| c.default_cast.clone()),
+                            };
+                            self.hw_setup_pending = Some(cfg.clone());
+                            studio_cmds::hw_setup(&cfg)
+                        }
+                    };
+                    self.run_action(action);
                     return true;
                 }
                 d.error = Some("pick a runner and a model".into());

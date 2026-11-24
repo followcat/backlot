@@ -122,9 +122,9 @@ impl App {
                 }
             }
             StudioAct::Recast => {
-                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
+                if let Some(role) = menu.role.as_ref() {
                     self.recast_dialog_open(
-                        key,
+                        menu.studio.as_ref(),
                         &role.role,
                         &role.name,
                         role.runner.clone(),

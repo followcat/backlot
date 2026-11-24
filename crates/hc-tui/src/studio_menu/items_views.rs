@@ -193,6 +193,30 @@ impl StudioMenu {
         ]
     }
 
+    pub(crate) fn hollywood_title_items(
+        &self,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        let mut out = vec![item(
+            "Change Hollywood's agent…".to_owned(),
+            Some('c'),
+            StudioAct::Recast,
+        )];
+        if self.role.as_ref().is_some_and(|r| r.state == "live") {
+            out.push(item(
+                "Focus Hollywood terminal".to_owned(),
+                Some('t'),
+                StudioAct::FocusHollywood,
+            ));
+            out.push(item(
+                "Restart Hollywood".to_owned(),
+                Some('r'),
+                StudioAct::Restart,
+            ));
+        }
+        out
+    }
+
     pub(crate) fn studio_talk_items(
         &self,
         seq: u64,

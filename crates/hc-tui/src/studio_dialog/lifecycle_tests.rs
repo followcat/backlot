@@ -16,7 +16,7 @@ fn row(runner: &str, models: &[&str], found: bool) -> RunnerRow {
 
 fn recast(runner: &str) -> RecastDialog {
     let mut d = RecastDialog::new(
-        &StudioKey::local("acme-shop"),
+        Some(&StudioKey::local("acme-shop")),
         "director",
         "director",
         None,
