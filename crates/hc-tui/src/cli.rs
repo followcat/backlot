@@ -186,7 +186,7 @@ c new tab · v/- split · h/j/k/l focus · z zoom · r resize · x close.
 Ctrl+G toggles keyboard lock. Herdr configuration can also bind custom commands.
 Click the terminal-size notice to take control when another viewer may own the grid.
 Everything else types into the focused terminal.
-Studio commands (`backlot studio`, `req`, `task`, `deliver`, `review`, `status`, `records`, …)
+Studio commands (`backlot studio`, `req`, `task`, `progress`, `deliver`, `review`, `status`, `records`, …)
 run before this UI; 'backlot <command> --help' shows each one's usage.
 docs/studio/guide.md walks a studio end to end.",
         env!("CARGO_PKG_VERSION"),

@@ -317,7 +317,11 @@ fn draw_person(
             .terminal
             .as_deref()
             .and_then(|t| view.titles.get(t).and_then(|title| title.clone()))
-            .or_else(|| role.doing.clone())
+            .or_else(|| {
+                role.activity
+                    .clone()
+                    .or_else(|| role.doing.as_ref().map(|d| d.cmd.clone()))
+            })
             .unwrap_or_else(|| mark.word().to_string());
         (title, Style::default().fg(text_fg(palette.subtext0)))
     };

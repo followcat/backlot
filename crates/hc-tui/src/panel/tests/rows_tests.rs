@@ -15,6 +15,7 @@ fn studio_ref(summary: &Summary) -> StudioRef<'_> {
     StudioRef {
         machine: None,
         studio: &summary.studios[0],
+        updated_ms: summary.updated_ms,
     }
 }
 

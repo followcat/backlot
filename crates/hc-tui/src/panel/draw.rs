@@ -386,7 +386,15 @@ pub(crate) fn render(
                 );
             }
             Row::PersonLine { studio, role, kind } => {
-                draw_person_line(buf, rect, role, kind, frame_of(&studio.key()), palette);
+                draw_person_line(
+                    buf,
+                    rect,
+                    role,
+                    kind,
+                    studio.updated_ms,
+                    frame_of(&studio.key()),
+                    palette,
+                );
             }
             Row::Task { studio, task } => {
                 draw_task(buf, rect, *studio, task, frame_of(&studio.key()), palette);
