@@ -291,12 +291,22 @@ fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
     );
     let parsed: serde_json::Value = serde_json::from_str(&spliced).unwrap();
     assert_eq!(parsed["backlot"]["PreToolUse"][0]["matcher"], "");
+    let pre_cmd = parsed["backlot"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(pre_cmd.contains("hook --runner agy --file"), "{pre_cmd}");
     assert!(
-        parsed["backlot"]["PreToolUse"][0]["hooks"][0]["command"]
-            .as_str()
-            .unwrap()
-            .contains("hook --runner agy --file")
+        pre_cmd.ends_with(r#" || printf '{"decision":"allow"}\n'"#),
+        "{pre_cmd}"
     );
+    for ev in ["SessionStart", "PreInvocation", "PostInvocation", "Stop"] {
+        let ev_cmd = parsed["backlot"][ev][0]["command"].as_str().unwrap();
+        assert!(!ev_cmd.contains("printf"), "{ev}: {ev_cmd}");
+    }
+    let post_cmd = parsed["backlot"]["PostToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(!post_cmd.contains("printf"), "{post_cmd}");
 
     // Tracked .agents/hooks.json is never touched and reports HooksUnavailable.
     let tracked_repo = dir.join("tracked");
@@ -330,4 +340,33 @@ fn the_resumed_argv_names_its_session() {
     );
     assert_eq!(session_in_argv("agy", &argv(&["agy", "-c"])), None);
     assert_eq!(session_in_argv("agy", &argv(&["agy", "--continue"])), None);
+}
+
+#[test]
+#[cfg(unix)]
+fn pre_tool_use_missing_binary_falls_back_to_allow_under_sh() {
+    let dir = tmp("missing-bin-fallback");
+    let sig = dir.join("signals.jsonl");
+    let bytes = super::hook_files::agy_hooks_content(None, &sig);
+    let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let generated = parsed["backlot"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    let idx = generated.find(" hook --runner agy ").unwrap();
+    let with_missing_bin = format!("'/nonexistent/backlot-missing'{}", &generated[idx..]);
+
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&with_missing_bin)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "status={:?} stderr={}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(stdout, "{\"decision\":\"allow\"}\n");
 }

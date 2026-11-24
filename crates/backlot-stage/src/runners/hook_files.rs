@@ -123,21 +123,31 @@ pub(crate) fn maybe_exclude_new(cwd: &Path, was_new: bool, rel: &str) -> Result<
 /// Build or byte-preservingly splice `<cwd>/.agents/hooks.json`.
 pub(crate) fn agy_hooks_content(existing: Option<&[u8]>, signals: &Path) -> Vec<u8> {
     let cmd = hook_command("agy", signals);
+    let pre_tool_cmd = format!(r#"{cmd} || printf '{{"decision":"allow"}}\n'"#);
     let hook = serde_json::json!({
         "type": "command",
         "command": cmd,
         "timeout": 5,
     });
+    let pre_tool_hook = serde_json::json!({
+        "type": "command",
+        "command": pre_tool_cmd,
+        "timeout": 5,
+    });
     let flat = serde_json::json!([hook]);
-    let group = serde_json::json!([{
+    let pre_tool_group = serde_json::json!([{
+        "matcher": "",
+        "hooks": [pre_tool_hook],
+    }]);
+    let post_tool_group = serde_json::json!([{
         "matcher": "",
         "hooks": [hook],
     }]);
     let entry = serde_json::json!({
         "SessionStart": flat,
         "PreInvocation": flat,
-        "PreToolUse": group,
-        "PostToolUse": group,
+        "PreToolUse": pre_tool_group,
+        "PostToolUse": post_tool_group,
         "PostInvocation": flat,
         "Stop": flat,
     });
