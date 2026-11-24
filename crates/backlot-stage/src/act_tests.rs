@@ -126,7 +126,10 @@ fn runner_env_path_leads_but_keeps_the_exe_dir() {
         BTreeMap::new(),
         runner_env,
     );
-    assert_eq!(env["PATH"], "/exe:/opt/nvm/bin");
+    assert_eq!(
+        env["PATH"],
+        "/state/studios/acme/roles/producer/bin:/exe:/opt/nvm/bin"
+    );
     let env = role_env(
         "acme",
         &start,
@@ -136,7 +139,53 @@ fn runner_env_path_leads_but_keeps_the_exe_dir() {
         BTreeMap::new(),
         BTreeMap::new(),
     );
-    assert_eq!(env["PATH"], "/exe:/usr/bin");
+    assert_eq!(
+        env["PATH"],
+        "/state/studios/acme/roles/producer/bin:/exe:/usr/bin"
+    );
+}
+
+#[test]
+fn role_env_appends_git_config_without_clobbering() {
+    let start = start();
+    let fresh = role_env(
+        "acme",
+        &start,
+        "/state",
+        "/exe",
+        "/exe:/usr/bin",
+        BTreeMap::new(),
+        BTreeMap::new(),
+    );
+    assert_eq!(fresh["GIT_CONFIG_COUNT"], "1");
+    assert_eq!(fresh["GIT_CONFIG_KEY_0"], "core.hooksPath");
+    assert_eq!(
+        fresh["GIT_CONFIG_VALUE_0"],
+        "/state/studios/acme/roles/producer/git-hooks"
+    );
+
+    let runner_env = BTreeMap::from([
+        ("GIT_CONFIG_COUNT".into(), "1".into()),
+        ("GIT_CONFIG_KEY_0".into(), "user.name".into()),
+        ("GIT_CONFIG_VALUE_0".into(), "alice".into()),
+    ]);
+    let appended = role_env(
+        "acme",
+        &start,
+        "/state",
+        "/exe",
+        "/exe:/usr/bin",
+        BTreeMap::new(),
+        runner_env,
+    );
+    assert_eq!(appended["GIT_CONFIG_COUNT"], "2");
+    assert_eq!(appended["GIT_CONFIG_KEY_0"], "user.name");
+    assert_eq!(appended["GIT_CONFIG_VALUE_0"], "alice");
+    assert_eq!(appended["GIT_CONFIG_KEY_1"], "core.hooksPath");
+    assert_eq!(
+        appended["GIT_CONFIG_VALUE_1"],
+        "/state/studios/acme/roles/producer/git-hooks"
+    );
 }
 
 /// A PATH the user config sets — where `hollywood setup` writes one —
@@ -157,7 +206,10 @@ fn a_user_configs_runner_path_reaches_the_launch() {
         BTreeMap::new(),
         merged,
     );
-    assert_eq!(env["PATH"], "/exe:/opt/nvm/bin");
+    assert_eq!(
+        env["PATH"],
+        "/state/studios/acme/roles/producer/bin:/exe:/opt/nvm/bin"
+    );
 }
 
 /// `launch refused` and every other raiser share the one open

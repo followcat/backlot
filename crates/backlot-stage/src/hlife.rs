@@ -332,6 +332,9 @@ impl Stage {
                     crate::act::prepare_hooks(hooks)
                         .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
                 }
+                let role_dir = crate::guard::hollywood_role_dir(&self.state_dir);
+                crate::guard::prepare_role(&role_dir, &self.exe_dir)
+                    .map_err(|e| Fail::refused(format!("guard files: {e}")))?;
                 let labels = BTreeMap::from([
                     ("backlot.role".to_string(), HOLLYWOOD.to_string()),
                     ("herdr.space".to_string(), "backlot".to_string()),
@@ -429,12 +432,13 @@ pub(crate) fn hrole_env(
     env.extend(runner_env);
     env.insert("BACKLOT_ROLE".into(), HOLLYWOOD.into());
     env.insert("BACKLOT_STATE_DIR".into(), state_dir.into());
-    env.insert(
-        "PATH".into(),
-        match configured_path {
-            Some(p) => format!("{exe_dir}:{p}"),
-            None => path_env.into(),
-        },
+    let role_dir = crate::guard::hollywood_role_dir(state_dir);
+    crate::guard::apply_env(
+        &mut env,
+        &role_dir,
+        exe_dir,
+        path_env,
+        configured_path.as_deref(),
     );
     env
 }

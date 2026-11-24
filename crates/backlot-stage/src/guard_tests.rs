@@ -12,8 +12,11 @@ use backlot_model::event::{EventKind, OUTWARD_ACTION};
 use backlot_model::summary::summary;
 
 use crate::cli::Env;
-use crate::cli_testkit::{CAST_TOML, fixture, ok, scratch};
-use crate::guard::{SHIM_MARKER, find_real_binary, refused_command, run_in};
+use crate::cli_testkit::{CAST_TOML, fixture, git, ok, scratch};
+use crate::guard::{
+    SHIM_MARKER, apply_env, find_real_binary, prepare_role, refused_command, run_in,
+};
+use crate::runners::executable;
 use crate::store;
 use crate::test_support::TestDir;
 
@@ -330,4 +333,170 @@ fn refusal_records_event_and_raises_outward_action_once_per_episode() {
         hmsg.unwrap()
             .contains("refused by backlot: scp a host-a:/tmp/")
     );
+}
+
+#[test]
+fn pre_push_refuses_in_role_env_allows_user_and_passes_through_repo_hooks() {
+    let dir = TestDir::new("backlot-guard-git");
+    let exe_dir = dir.join("exe");
+    let role_dir = dir.join("state/studios/acme/roles/actor-t1-c1");
+    let bare = dir.join("bare.git");
+    let repo = dir.join("repo");
+    let work = dir.join("work-t1");
+
+    // Mock `backlot` exe verifying `guard git-push -- ...` invocation from pre-push hook.
+    write_exec(
+        &exe_dir.join("backlot"),
+        "#!/bin/sh\nif [ \"$1\" = \"guard\" ] && [ \"$2\" = \"git-push\" ]; then\n  echo \"refused by backlot: git push is the person's to run; ask with backlot ask\" >&2\n  exit 126\nfi\nexit 0\n",
+    );
+    prepare_role(&role_dir, exe_dir.to_str().unwrap()).unwrap();
+
+    for cmd in ["gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"] {
+        assert!(
+            executable(&role_dir.join("bin").join(cmd)),
+            "missing shim for {cmd}"
+        );
+    }
+    assert!(executable(&role_dir.join("git-hooks/pre-push")));
+    assert!(executable(&role_dir.join("git-hooks/pre-commit")));
+
+    fs::create_dir_all(&bare).unwrap();
+    git(&bare, &["init", "--bare", "-b", "main"]);
+    fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    fs::write(repo.join("f"), "base\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "base"]);
+    git(&repo, &["remote", "add", "origin", bare.to_str().unwrap()]);
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            "backlot/acme/t1",
+            work.to_str().unwrap(),
+        ],
+    );
+
+    // 1. Repository's default `.git/hooks/pre-commit` still runs in role env (even from a worktree).
+    let default_mark = dir.join("default-pre-commit.txt");
+    write_exec(
+        &repo.join(".git/hooks/pre-commit"),
+        &format!("#!/bin/sh\necho ran > '{}'\n", default_mark.display()),
+    );
+
+    let mut role_env = BTreeMap::new();
+    apply_env(
+        &mut role_env,
+        &role_dir,
+        exe_dir.to_str().unwrap(),
+        &format!("{}:/usr/bin:/bin", exe_dir.display()),
+        None,
+    );
+
+    fs::write(work.join("f"), "c1\n").unwrap();
+    let add = std::process::Command::new("git")
+        .current_dir(&work)
+        .env_clear()
+        .envs(&role_env)
+        .args(["add", "."])
+        .status()
+        .unwrap();
+    assert!(add.success());
+    let commit = std::process::Command::new("git")
+        .current_dir(&work)
+        .env_clear()
+        .envs(&role_env)
+        .args([
+            "-c",
+            "user.name=alice",
+            "-c",
+            "user.email=alice@host-a",
+            "commit",
+            "-m",
+            "c1",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        commit.status.success(),
+        "{}",
+        String::from_utf8_lossy(&commit.stderr)
+    );
+    assert!(
+        default_mark.is_file(),
+        "default .git/hooks/pre-commit must still pass through"
+    );
+
+    // 2. Repository's own `--local core.hooksPath` also passes through.
+    let custom_dir = work.join(".custom-hooks");
+    let custom_mark = dir.join("custom-pre-commit.txt");
+    write_exec(
+        &custom_dir.join("pre-commit"),
+        &format!("#!/bin/sh\necho custom > '{}'\n", custom_mark.display()),
+    );
+    git(
+        &repo,
+        &["config", "--local", "core.hooksPath", ".custom-hooks"],
+    );
+    fs::write(work.join("f"), "c2\n").unwrap();
+    let add2 = std::process::Command::new("git")
+        .current_dir(&work)
+        .env_clear()
+        .envs(&role_env)
+        .args(["add", "."])
+        .status()
+        .unwrap();
+    assert!(add2.success());
+    let commit2 = std::process::Command::new("git")
+        .current_dir(&work)
+        .env_clear()
+        .envs(&role_env)
+        .args([
+            "-c",
+            "user.name=alice",
+            "-c",
+            "user.email=alice@host-a",
+            "commit",
+            "-m",
+            "c2",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        commit2.status.success(),
+        "{}",
+        String::from_utf8_lossy(&commit2.stderr)
+    );
+    assert!(
+        custom_mark.is_file(),
+        "local core.hooksPath pre-commit must pass through"
+    );
+
+    // 3. `git push` inside role env is refused; bare remote stays empty.
+    let push_role = std::process::Command::new("git")
+        .current_dir(&work)
+        .env_clear()
+        .envs(&role_env)
+        .args(["push", "origin", "backlot/acme/t1"])
+        .output()
+        .unwrap();
+    assert!(!push_role.status.success());
+    let push_err = String::from_utf8_lossy(&push_role.stderr);
+    assert!(push_err.contains("refused by backlot:"), "{push_err}");
+    assert_eq!(git(&bare, &["rev-list", "--all"]), "");
+
+    // 4. User's own `git push` outside role env succeeds against the same bare remote.
+    let push_user = std::process::Command::new("git")
+        .current_dir(&work)
+        .args(["push", "origin", "backlot/acme/t1"])
+        .output()
+        .unwrap();
+    assert!(
+        push_user.status.success(),
+        "{}",
+        String::from_utf8_lossy(&push_user.stderr)
+    );
+    assert!(!git(&bare, &["rev-list", "--all"]).is_empty());
 }

@@ -2,6 +2,7 @@
 //! binary past `<role>/bin`, refusal message, and ledger
 //! (`role.refused` + `outward action` attention) recording.
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -196,18 +197,166 @@ pub(crate) fn run_in(
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
-            let err = Command::new(&real).args(rest).exec();
-            return (ExitCode::from(126), Some(format!("{name}: {err}")));
+            for attempt in 0..5 {
+                let err = Command::new(&real).args(rest).exec();
+                if err.raw_os_error() == Some(libc::ETXTBSY) && attempt < 4 {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+                return (ExitCode::from(126), Some(format!("{name}: {err}")));
+            }
         }
     }
 
-    match Command::new(&real).args(rest).status() {
-        Ok(st) => {
-            let code = st.code().and_then(|c| u8::try_from(c).ok()).unwrap_or(1);
-            (ExitCode::from(code), None)
+    for attempt in 0..5 {
+        match Command::new(&real).args(rest).status() {
+            Ok(st) => {
+                let code = st.code().and_then(|c| u8::try_from(c).ok()).unwrap_or(1);
+                return (ExitCode::from(code), None);
+            }
+            Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) && attempt < 4 => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => return (ExitCode::from(126), Some(format!("{name}: {e}"))),
         }
-        Err(e) => (ExitCode::from(126), Some(format!("{name}: {e}"))),
     }
+    unreachable!()
+}
+
+/// Per-role guard root for a studio role: `<state>/studios/<studio>/roles/<role>`.
+pub(crate) fn studio_role_dir(state_dir: &str, studio: &str, role: &str) -> PathBuf {
+    store::studio_dir(Path::new(state_dir), studio)
+        .join("roles")
+        .join(role)
+}
+
+/// Per-role guard root for Hollywood: `<state>/hollywood/roles/hollywood`.
+pub(crate) fn hollywood_role_dir(state_dir: &str) -> PathBuf {
+    Path::new(state_dir)
+        .join("hollywood")
+        .join("roles")
+        .join(backlot_model::hollywood::HOLLYWOOD)
+}
+
+/// Commands wrapped by per-role PATH shims in `<role>/bin`.
+const SHIM_NAMES: &[&str] = &["gh", "hc", "scp", "rsync", "ssh", "npm", "cargo"];
+
+/// Standard client-side git hooks wrapped for pass-through when a
+/// role's `GIT_CONFIG_*` sets `core.hooksPath` to `<role>/git-hooks`.
+const GIT_PASSTHROUGH_HOOKS: &[&str] = &[
+    "applypatch-msg",
+    "pre-applypatch",
+    "post-applypatch",
+    "pre-commit",
+    "pre-merge-commit",
+    "prepare-commit-msg",
+    "commit-msg",
+    "post-commit",
+    "pre-rebase",
+    "post-checkout",
+    "post-merge",
+    "post-rewrite",
+];
+
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+fn write_exec(path: &Path, body: &str) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, body)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+    }
+    std::fs::rename(&tmp, path)
+}
+
+fn passthrough_hook_script(hook: &str) -> String {
+    format!(
+        "#!/bin/sh\n\
+         # backlot-guard-hook\n\
+         hp=$(GIT_CONFIG_COUNT=0 git config --get core.hooksPath 2>/dev/null)\n\
+         if [ -n \"$hp\" ]; then\n\
+           case \"$hp\" in\n\
+             /*) hook=\"$hp/{hook}\" ;;\n\
+             *)\n\
+               top=$(git rev-parse --show-toplevel 2>/dev/null)\n\
+               hook=\"${{top:-.}}/$hp/{hook}\"\n\
+               ;;\n\
+           esac\n\
+         else\n\
+           common=$(git rev-parse --git-common-dir 2>/dev/null)\n\
+           [ -n \"$common\" ] && hook=\"$common/hooks/{hook}\"\n\
+         fi\n\
+         if [ -n \"$hook\" ] && [ \"$hook\" != \"$0\" ] && [ -x \"$hook\" ]; then\n\
+           exec \"$hook\" \"$@\"\n\
+         fi\n\
+         exit 0\n"
+    )
+}
+
+/// Write per-role shims (`<role_dir>/bin/*`) and git hooks
+/// (`<role_dir>/git-hooks/*`), rewritten before every launch/resume.
+pub(crate) fn prepare_role(role_dir: &Path, exe_dir: &str) -> std::io::Result<()> {
+    let backlot_bin = Path::new(exe_dir).join("backlot");
+    let quoted_bin = shell_quote(&backlot_bin.to_string_lossy());
+
+    let bin_dir = role_dir.join("bin");
+    std::fs::create_dir_all(&bin_dir)?;
+    for name in SHIM_NAMES {
+        let body = format!("#!/bin/sh\n{SHIM_MARKER}\nexec {quoted_bin} guard {name} -- \"$@\"\n");
+        write_exec(&bin_dir.join(name), &body)?;
+    }
+
+    let hooks_dir = role_dir.join("git-hooks");
+    std::fs::create_dir_all(&hooks_dir)?;
+    let pre_push =
+        format!("#!/bin/sh\n{SHIM_MARKER}\nexec {quoted_bin} guard git-push -- \"$@\"\n");
+    write_exec(&hooks_dir.join("pre-push"), &pre_push)?;
+
+    for hook in GIT_PASSTHROUGH_HOOKS {
+        write_exec(&hooks_dir.join(hook), &passthrough_hook_script(hook))?;
+    }
+    Ok(())
+}
+
+/// Prepend `<role_dir>/bin` to `PATH` ahead of `exe_dir`, and append
+/// `core.hooksPath=<role_dir>/git-hooks` in `GIT_CONFIG_*` without
+/// clobbering existing entries.
+pub(crate) fn apply_env(
+    env: &mut BTreeMap<String, String>,
+    role_dir: &Path,
+    exe_dir: &str,
+    path_env: &str,
+    configured_path: Option<&str>,
+) {
+    let base_path = match configured_path {
+        Some(p) => format!("{exe_dir}:{p}"),
+        None => path_env.to_owned(),
+    };
+    env.insert(
+        "PATH".into(),
+        format!("{}:{base_path}", role_dir.join("bin").display()),
+    );
+
+    let hooks_dir = role_dir.join("git-hooks");
+    let mut n = env
+        .get("GIT_CONFIG_COUNT")
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    while env.contains_key(&format!("GIT_CONFIG_KEY_{n}"))
+        || env.contains_key(&format!("GIT_CONFIG_VALUE_{n}"))
+    {
+        n += 1;
+    }
+    env.insert("GIT_CONFIG_COUNT".into(), (n + 1).to_string());
+    env.insert(format!("GIT_CONFIG_KEY_{n}"), "core.hooksPath".into());
+    env.insert(
+        format!("GIT_CONFIG_VALUE_{n}"),
+        hooks_dir.to_string_lossy().into_owned(),
+    );
 }
 
 /// Entry point for `backlot guard <name> -- <args...>`.
