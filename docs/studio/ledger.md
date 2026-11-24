@@ -78,6 +78,7 @@ prints `already at ledger v1`.
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail, `needs_user` flag on `permission prompt` |
 | `stage.answered` | role, dialog (`folder-trust`), key, working directory — `stage` only |
+| `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |
 | `correction` | target event, changed fields, reason |
 
 `role.lost` means a role recorded as live vanished unexpectedly (its terminal is gone with no
@@ -218,6 +219,14 @@ the whole pass out.
 raises one `outward action` attention (`needs_user: true`) once per open attention episode for that
 role and command.
 
+`role.progress` records a role's voluntary one-line note (`role`, optional `task`, normalized `text`
+with control characters stripped and length capped at 200 chars). Only roles running in a role
+environment (`BACKLOT_ROLE` + `BACKLOT_STUDIO`) append it; `backlot progress` outside a role
+environment exits with a usage error naming the variables it requires. The stage never requires it
+and never raises nudges or attentions if unused; `RoleState.progress` keeps the latest `{ text,
+ts_ms }` and `RoleSummary` exposes it alongside live descendant `doing` (`{ cmd, since_ms }`,
+published only while `work == working`).
+
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director
 close the usual way and keep their sessions. `role.reopen` still works after finish. A studio with
@@ -239,6 +248,7 @@ message to the producer (R26).
 |---|---|
 | `role.state` | lifecycle motion (`started`/`lost`/`resumed`/`closed`), terminal, actor, session, reason — `stage` only; the studios' four role events folded into one (H3) |
 | `role.restart` | `fresh`, optional reason — `user` only; the stage closes (`restarted`) then relaunches `bl-hollywood`, resuming its session unless `fresh` |
+| `role.progress` | role, one-line `text` (<= 200 chars) — `hollywood` only |
 | `card.proposed` | the exact `action` (D18), a one-line `why`, and the `base` the card was made against — `hollywood` only |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |
