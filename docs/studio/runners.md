@@ -4,19 +4,18 @@ A runner is a coding agent CLI that can fill a role. An adapter holds what diffe
 a chosen model and thinking depth, how to resume it, and how to read its screen.
 
 Measured on 2026-11-09 with real launches in an isolated hc session, unless a cell says otherwise; cursor-agent was
-measured on 2026-11-11, cmd on 2026-11-13, cline on 2026-11-17. agy 1.5.x's flags and store layout were measured, but
-its interactive screen rows were not. Kimi 0.38.0 has not been measured.
+measured on 2026-11-11, cmd on 2026-11-13, cline on 2026-11-17, and agy 1.5.16 on 2026-11-24. Kimi 0.38.0 has not been measured.
 
-| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 | cursor-agent 2026.11.05 | cmd 1.88.5 | cline 3.0.74 | agy 1.5.x |
+| | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 | cursor-agent 2026.11.05 | cmd 1.88.5 | cline 3.0.74 | agy 1.5.16 |
 |---|---|---|---|---|---|---|---|---|
 | Model | `--model` | `-m` | `--model` | No flag on the interactive command. `OPENCODE_CONFIG_CONTENT={"model":"provider/model"}` with `--standalone` | `--model` | `-m`, session-scoped — the global `model`/`provider` config keys were untouched in the before/after snapshot | `-m` beside `-P cline-pass` — the provider is taken from a `cline-pass/<model>` id, and any other model is a plan refusal (`model not supported`), because no config channel carries a provider | `--model` |
 | Thinking depth | `--effort` (low, medium, high, xhigh, max) | `-c model_reasoning_effort=<level>` — low, medium, high, xhigh, max, ultra (the union across the model list; a per-model refusal is codex's own) | Part of the model ID | Not applied. `#variant` exists only on `opencode run` and has not been measured | Part of the model ID (`composer-2.5`, `gpt-5.3-codex-low`) | Not carried — `--effort` is accepted but writes the GLOBAL `reasoningEffort.<model>` config key (measured), so the adapter emits nothing and a cast effort is refused | `--thinking none`, `low`, `medium`, `high` or `xhigh`; there is no `max` | `--effort` (low, medium, high, xhigh, max) |
 | First prompt, interactive | Positional | Positional | `--prompt-file` | `--prompt` | Positional; submits on open, fresh and resumed | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) | Positional on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) | `-i "<prompt>"` on a fresh launch only; a resume ignores it — send the prompt after the composer opens (the devin rule) |
-| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) | `-r <id>` or `-r <name>` — a `-n <name>` at launch makes a resumable name; `--session <prefix>` and `-c` also work; context kept (a code word was recalled) | `--id <id>`, context kept (a recall question was answered correctly); the positional prompt is ignored | `--conversation <id>`; `-i` is not passed on a resume, so the prompt goes in after the composer opens |
+| Resume by ID | `-r <id>`, prompt positional, context kept. On 2.1.321, after the hc core was stopped and started again, the same ID resumed and its transcript file kept growing | `codex resume <id> [prompt]`, same flags, context kept | `-r <id>`; ignores `--prompt-file`, so send the prompt after it opens | `-s <id>`; history shown and a new prompt accepted. Whether context is kept is not verified, because no model answered | `--resume <id>`, prompt positional, context kept (a code word was recalled) | `-r <id>` or `-r <name>` — a `-n <name>` at launch makes a resumable name; `--session <prefix>` and `-c` also work; context kept (a code word was recalled) | `--id <id>`, context kept (a recall question was answered correctly); the positional prompt is ignored | `--conversation <id>`; `-i` is not passed on a resume, so the prompt goes in after the composer opens; no dialog on a trusted cwd, folder-trust dialog first on an untrusted cwd |
 | Choose the ID at launch | `--session-id <uuid>` | No. First line of `~/.codex/sessions/**/rollout-*.jsonl` | No. `devin list --format json` in the working directory | `-s ses_<anything>` creates it. The ID must start with `ses` | `create-chat` prints a uuid and `--resume <uuid>` starts in it; the stage instead finds the newest chat under `<config>/chats/<md5(cwd)>/<uuid>/` after launch — its `meta.json` holds the cwd | No — cmd mints the uuid. The stage finds the newest `<uuid>.jsonl` under `~/.commandcode/projects/<slug(cwd)>/` created at or after launch; line 1 `{"type":"session",...,"id","cwd"}` is authoritative | No — cline mints it. The stage finds the manifest `<id>/<id>.json` in the user's session store, created at or after launch, whose `cwd` is the role's and whose `pid` is the engine child of the terminal's `node` wrapper | No — agy mints it. `cache/last_conversations.json` maps the cwd to its id; else the newest `conversations/<uuid>.db` whose bytes carry the workspace URI |
-| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used | `permissions.allow` `Shell(...)` rules, written per session into the role's own `cli-config.json` (see below) | `permissions.allow`/`deny` `Shell(...)` rules, written per launch into the workdir's `.commandcode/settings.json` (see below); `deny` carries `mcp__<server>` per global server | a stage-written work-area hook, `<cwd>/.cline/hooks/PreToolUse.sh`: the role's command rules, default-deny, the network tools and MCP names always cancelled (see below) | `--settings <dir>/.agy-settings.json` with `toolPermission: always-proceed` (session-only) |
-| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` | `--trust` skips `Do you trust the files in this folder?` (it only creates `projects/<slug>/`); an empty cwd auto-trusts. If seen, the stage never answers — it raises instead | None seen — a role's work area sits inside an existing repository | Not measured |
-| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen | None — no `]7501;` bytes in a full-session typescript, `status: null` throughout | None — no `]7501;` bytes in a typescript capture; hc's screen source still classifies idle/working/blocked(permission) fine | None — `hc get` showed `agent: null`; the stage's screen markers carry the role (S14a) | Not measured — no structured status and no screen markers |
+| Permissions | `--permission-mode` | `-s`, `-a` | `--permission-mode`, `--respect-workspace-trust` | `--auto` approves all that is not denied; not used | `permissions.allow` `Shell(...)` rules, written per session into the role's own `cli-config.json` (see below) | `permissions.allow`/`deny` `Shell(...)` rules, written per launch into the workdir's `.commandcode/settings.json` (see below); `deny` carries `mcp__<server>` per global server | a stage-written work-area hook, `<cwd>/.cline/hooks/PreToolUse.sh`: the role's command rules, default-deny, the network tools and MCP names always cancelled (see below) | `--settings <dir>/.agy-settings.json` with `toolPermission: always-proceed` (session-only; other valid values on 1.5.16: `request-review`, `strict`, `proceed-in-sandbox`); `permissions.allow`/`deny` use `command(<prefix>)` without `*` |
+| Folder trust | Dialog on first use inside a git repository — not seen in a plain folder — cursor on "No, exit": Down, then Enter, and the answer is saved in the user's Claude config. Keys sent as the dialog first paints are lost or can end the runner, so the stage waits 2 s and paces its keys | Dialog unless `-c 'projects={"<cwd>"={trust_level="trusted"}}'` is passed, which saves nothing | `--respect-workspace-trust false` | None seen | `--trust` skips the `⚠ Workspace Trust Required` dialog; the marker lands in the role's own `CURSOR_DATA_DIR/projects/<slug>/.workspace-trusted` | `--trust` skips `Do you trust the files in this folder?` (it only creates `projects/<slug>/`); an empty cwd auto-trusts. If seen, the stage never answers — it raises instead | None seen — a role's work area sits inside an existing repository | `Accessing workspace: ... Do you trust the contents of this project?`, cursor starts on `> Yes, I trust this folder` (`enter` accepts and persists; `down`+`enter` or `esc` exits 0); shown on both fresh and `--conversation` launches in an untrusted folder |
+| hc status (OSC 7501) | `done` seen | `idle` seen | Not measured | `idle` seen | None — no `]7501;` bytes in a full-session typescript, `status: null` throughout | None — no `]7501;` bytes in a typescript capture; hc's screen source still classifies idle/working/blocked(permission) fine | None — `hc get` showed `agent: null`; the stage's screen markers carry the role (S14a) | Native OSC 7501 (`app: "antigravity"`): `idle` on composer, `working` during turns and backgrounded tasks, `done` (with `msg`) after a turn, `blocked` with `kind: "permission"` or `"question"` (`waiting_for_person: false`) |
 
 ## Capabilities
 
@@ -58,7 +57,7 @@ sees it.
 | cursor-agent | the workspace-trust dialog — `Workspace Trust Required` and `Trust this workspace` together; or any approval picker below the last full-width `─` divider — a `→ ` option-cursor line, a `Run Everything (shift+tab)` footer, and `allowlist`/`approval` wording or a tool question (`… this file?`, `… this command?`, `Proceed with this edit?`). The question's own words are not the marker, so a picker kind not yet named still blocks | `ctrl+c to stop`, or a spinner line — one or two braille glyphs, a space, then `Composing` or `Running … tokens`. A transcript line starting `Running the` is not one | Shell picker measured on 2026.11.05; the generic picker shape — `Write to this file?` and the rest — from the S12e run and the fork's `cursor.toml` |
 | cmd | the folder-trust dialog — `Do you trust the files in this folder?` and `Yes, proceed` together; or a permission prompt — `needs to execute`, `needs to run` or `make this edit to` plus a line starting `❯ 1.` | `esc to interrupt` on the status line — the rotating `*ing…` verb and the `✻ Worked for`/`✻ Thought for`/`⎿ Tip:` post-turn lines are not a turn | Measured on 1.88.5 |
 | cline | `Cline needs permission` and `Approve tool call?` together — it must not appear under `--yolo`, which forces auto-approve on, so a screen showing it means the user switched the mode off | a braille spinner line from `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` and a word after it (`⠏ Thinking... (esc to cancel)`), or `(esc to cancel)` alone. The composer stays on screen while it works, so its presence is not a turn by itself; a `▶ Thinking:` transcript line is a finished thought | Measured on 3.0.74 — idle, working and approval captures (S14a) |
-| agy | not measured | not measured | agy 1.5.x's interactive screen has no captured markers; the stage reads nothing and leaves the role `waiting` |
+| agy | the folder-trust dialog (`Accessing workspace:` and `Do you trust the contents of this project?` with `> Yes, I trust this folder` and `↑/↓ Navigate · enter Confirm`); or the command approval picker (`Requesting permission for:` and `Run this command?` with `> 1. Yes, run command` and `↑/↓ Navigate · tab Amend`); or a plan-mode question (`Question 1/1:` with `> 1.` and `↑/↓ Navigate · enter Select · esc Skip`). `esc to cancel` stays at the bottom on pickers, so `blocked` beats `working` | `esc to cancel` on the bottom row, a braille spinner line (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` + two spaces + `Generating...`, `Reading file...`, `Running command... Ns`, `Editing files...`), or a running background-task row (`● [HH:MM:SS] <cmd> running` with `1 task(s) · /tasks`, where `? for shortcuts` replaces `esc to cancel`). `▸ Thought for Ns, N tokens` and `? for shortcuts` alone are not working | Measured on 1.5.16 — trust dialog, normal turn, backgrounded long commands, plan-mode question, `request-review` and `strict` command pickers (not yet wired into `work.rs`) |
 | `fake` | the last `fake-work:` line is `blocked` | the last `fake-work:` line is `working` | The script itself |
 
 ## Signal matrix
@@ -77,7 +76,7 @@ so an upstream core without screen inference still works on markers alone.
 | cmd | yes | yes | yes | yes | Fork inference via `command-code.toml` |
 | cline | no | no | no | no | None — no hook signal and no structured state; the screen markers carry it (S14a: `agent: null`) |
 | cursor-agent | yes | yes | yes | yes | Fork inference via `cursor.toml` — lands with the core-side Repo-A work (`feat/cursor-manifest` on followcat/herdr-core); before that, the screen markers carry cursor alone |
-| agy | no | no | no | no | None — unmeasured: agy reports no structured status, has no hook signal and the stage maps no screen markers for it |
+| agy | no (`false` even when `status.state` is `blocked`) | yes (`idle`, `working`, `done`, `blocked`) | yes (`permission`, `question`) | yes — turn-level only (stays frozen during streaming, tool calls and backgrounded tasks; bumps on turn completion) | **Native OSC 7501** (`app: "antigravity"`) measured on 1.5.16; `<workspace>/.agents/hooks.json` supports `SessionStart`, `PreInvocation`, `PreToolUse`, `PostToolUse`, `PostInvocation`, `Stop` (`waiting_for_person` stayed `false` and hooks/markers are not yet wired in backlot) |
 | `fake` | yes | no | no | no | The script's own hook signal through the same `--settings` pair Claude gets; the screen markers carry the rest (S9f) |
 
 How the structured fields are consumed:
@@ -116,6 +115,7 @@ answer. Lines that move while the prompt waits are dropped first.
 | cursor-agent | From the last `─` rule above the picker's `→ ` option-cursor line to the end — the `$ <command>` or the diff preview, the question, the ` in <path>`/`Add <Verb>(<path>)` target and the options. A diff preview's own `─` rule can open the block; the `Approval N of M` header stays out of it | Shell picker measured on 2026.11.05; file pickers from the S12e run and the fork's `cursor.toml` |
 | cmd | From the last full-width `─` rule above the `❯ 1.` picker to the end — the tool title, the `needs to …` sentence, the command and the picker | Measured on 1.88.5 |
 | cline | From the last full-width `─` rule above `Cline needs permission` to the end — the tool name, the `$ <command>` preview and the `[y] Approve   [n] Deny` line | Measured on 3.0.74 (S14a). No key is ever sent for it, so the block is compared for the record only: a prompt under `--yolo` is the user's |
+| agy | Command picker: from `Command` and the full-width `─` rule above `Requesting permission for:` to the end (`Run this command?`, numbered options, `↑/↓ Navigate` footer; `esc to cancel` stays at the bottom). Plan question: from `Question` and the full-width `─` rule above `Question N/M:` to the end (`↑/↓ Navigate · enter Select · esc Skip`) | Measured on 1.5.16; not yet wired into `permit.rs` (approval keys stay `none sent`, escalated per D2) |
 | Anything else | none | — |
 
 ## Approval keys
@@ -393,8 +393,7 @@ prompt after the idle composer shows (the devin and cmd rule).
 
 ## Per-session file (agy)
 
-Measured on agy 1.5.x — flags and store layout only; the interactive screen rows below are
-unmeasured for agy.
+Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
 
 - `agy --help` documents `--mode` (`accept-edits`, `auto`, `plan`), `--effort`
   (`low`, `medium`, `high`, `xhigh`, `max`), `--model`, `--settings` (a JSON object or file path,
@@ -406,21 +405,63 @@ unmeasured for agy.
   take `accept-edits`, the mode that does the work without stopping for plan or prompt review.
 - The session store is `~/.gemini/antigravity-cli/conversations/<uuid>.db` — one sqlite file per
   conversation whose bytes embed the workspace's `file://` URIs verbatim (percent-encoded when the
-  path needs it). On agy 1.5.14 the db does not always carry the workspace URI: agy keeps
+  path needs it). On agy 1.5.14+ the db does not always carry the workspace URI: agy keeps
   `~/.gemini/antigravity-cli/cache/last_conversations.json`, a JSON object mapping an absolute cwd
   to the id of the last conversation started there, so the stage first takes the id that file names
   for the role's exact cwd when `conversations/<id>.db` exists, is born at or after the role's start
   and no other role claims it. A missing, unreadable or malformed file — and an id that fails any of
   those checks — falls through to the byte scan below, which finds the newest `.db` at or after the
   role's start whose bytes carry the role cwd's URI — a plain scan, no sqlite dependency.
-  `--conversation <id>` resumes; `-i` is not passed on a resume (the devin and cmd rule).
+  `--conversation <id>` resumes; `-i` is not passed on a resume (the devin and cmd rule). When the
+  cwd is already trusted, `--conversation <id>` restores the transcript straight to the idle
+  composer with no dialog; in an untrusted folder it shows the folder-trust dialog first.
 - The workdir's `.agy-settings.json` is the per-session boundary like cmd's project file:
   `{"toolPermission":"always-proceed"}`, written before every start and resume — agy reads it once
   at startup, so tools proceed without the prompts a role cannot answer while the user's global
-  `settings.json` stays untouched.
-- Unmeasured: the interactive work-state markers, approval pickers, OSC 7501 and prompt blocks —
-  agy answers nothing and maps no block until a capture names them (the `_` arms in `work.rs` and
-  `permit.rs`); the open attention stays for the user.
+  `settings.json` stays untouched. Four `toolPermission` values are accepted on 1.5.16:
+  `always-proceed`, `request-review`, `strict` and `proceed-in-sandbox` (`prompt`, `ask` and
+  `default` are rejected as `unrecognized value`).
+  - `request-review` (and `proceed-in-sandbox` when `--sandbox` is not passed) shows a 4-option
+    command picker (`> 1. Yes, run command`, `2.` conversation allow-prefix, `3.` persist to
+    `settings.json`, `4. No, cancel`); `enter` runs once, `esc` cancels (`Interrupted`), `4` declines.
+  - `strict` shows a 2-option picker (`> 1. Yes, run command`, `2. No, cancel`) and still prompts
+    even when `permissions.allow` matches the command.
+  - `permissions.allow` and `permissions.deny` take `command(<prefix>)` **without** a trailing ` *`
+    (measured on 1.5.16: `command(git push)` blocked `git push origin HEAD:refs/heads/denied-probe`
+    under `always-proceed`, `request-review`, `strict` and `--sandbox` `proceed-in-sandbox`, while
+    `command(git push *)` failed to match and let the push run; similarly `command(echo)`
+    auto-allowed `echo …` under `request-review` while `command(echo *)` still prompted). A denied
+    command never opens a picker and prints
+    `Permission denied for unsandboxed(<command>). Matches user-configured deny rule.`
+- Folder trust: on first use (or `--conversation`) in an untrusted directory, `agy` renders
+  `Accessing workspace: ... Do you trust the contents of this project?` with `> Yes, I trust this
+  folder` highlighted (`status.state: "blocked"`, `kind: "permission"`, `waiting_for_person: false`).
+  `enter` accepts and persists trust; `down`+`enter` or `esc` exits 0.
+- Plan mode (`--mode plan`): `ask_question` opens `Question 1/1:` with numbered options (`> 1.`)
+  and `Write-in...` (`status.state: "blocked"`, `kind: "question"`, `waiting_for_person: false`),
+  even while `esc to cancel` stays visible at the bottom. `up`/`down` move the cursor, `enter`
+  submits, `esc` skips.
+- Hooks: `--settings` rejects `"hooks"` (`Error: --settings: unknown setting "hooks"`), while
+  `<workspace>/.agents/hooks.json` (plus `~/.gemini/config/hooks.json` and plugin `hooks.json`)
+  fires `SessionStart`, `PreInvocation`, `PreToolUse`, `PostToolUse`, `PostInvocation` and `Stop`,
+  passing camelCase JSON with `conversationId`, `cwd`, `hookEventName`, `toolCall` and
+  `terminationReason` on stdin. `PreToolUse` requires `{"decision":"allow"}` to allow; returning
+  `{}` denies the tool call.
+- Long turns and backgrounded commands: during a normal turn (`status.state: "working"`), the
+  braille spinner animates (`⣷`/`⢿` + two spaces + `Generating...`, `Reading file...`,
+  `Running command... Ns`) and `activity.revision` stays frozen until the turn reaches `done`.
+  Long shell commands (`sleep 660`, `timeout 660 sh -c 'while :; do :; done'`,
+  `flock /home/user/x.lock sleep 1`) auto-background after ~10 s into `● [HH:MM:SS] <cmd> running`
+  with `? for shortcuts` and `1 task(s) · /tasks`: `flock` logged one check-in at ~60 s, after
+  which all three kept the screen and `activity.revision` frozen for 600+ s while `status.state`
+  stayed `"working"`. Meanwhile `agy` itself still ticks ~26–42 jiffies per 10 s and reads/writes
+  several KB per 10 s, whereas `sleep 660` (`wchan=hrtimer_nanosleep`) and `flock`
+  (`wchan=locks_lock_inode_wait`) sit at 0 CPU / 0 I/O and `sh -c 'while :; do :; done'` burns
+  ~100 jiffies/s (`deepest`: `['sh', '-c', 'while :; do :; done']`, `['sleep', '660']`,
+  `['flock', …]`). When a CPU-heavy child exits and is reaped, live descendant `utime+stime` drops
+  unless `root_cutime+cstime` is included.
+- Note: `work.rs`, `permit.rs` and `caps.rs` are not yet wired to agy's measured 7501/screen/hook
+  facts in this docs slice (R7b–R7d wire them).
 
 ## Screen patterns
 
@@ -435,6 +476,9 @@ Observed on real runs. These are the first entries for each adapter's pattern ta
 | cursor-agent | `Workspace Trust Required` with `Trust this workspace` | First launch in an untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cmd | `Do you trust the files in this folder?` with `❯ 1. Yes, proceed` | First launch in a non-empty untrusted folder | `--trust` is passed at launch, so the dialog should never appear; if it does it is the user's — the stage never answers it, even for an actor |
 | cline | `Cline needs permission` with `Approve tool call?` and `[y] Approve   [n] Deny` | Auto-approve was switched off by hand — `--yolo` forces it on, so the prompt should never appear | The stage presses nothing: `y` and `n` are both a mode it must not change. The attention stays open for the user |
+| agy | `Accessing workspace:` with `Do you trust the contents of this project?` and `> Yes, I trust this folder` | First launch (or `--conversation`) in an untrusted folder (1.5.16) | Cursor starts on `Yes`: `enter` accepts; `down` then `enter` (or `esc`) exits 0 |
+| agy | `Requesting permission for:` / `Run this command?` with `> 1. Yes, run command` | Command needing approval under `request-review`, `strict` or unsandboxed `proceed-in-sandbox` (1.5.16) | `enter` runs once (`1.`); `esc` cancels (`Interrupted`); `4` (`request-review`) or `2` (`strict`) declines. Escalated under D2 |
+| agy | `Question 1/1:` with `> 1.` options and `↑/↓ Navigate · enter Select · esc Skip` | Plan-mode question picker (`--mode plan`, 1.5.16) | `up`/`down` + `enter` selects; `esc` skips. Escalated under D2 |
 | Any | Permission dialog | Waiting on a person | Approval policy |
 
 Fixtures use neutral data only: `host-a`, `alice`, `/home/user`, `acme-shop`.
