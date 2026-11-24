@@ -297,7 +297,7 @@ pub static CODEX: RunnerCaps = RunnerCaps {
     approval_deny: Some("esc"),
     status_source: StatusSource::ForkInference,
     mid_turn_revision: true,
-    hooks: &[],
+    hooks: &["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
 };
 
 pub static DEVIN: RunnerCaps = RunnerCaps {
@@ -312,14 +312,22 @@ pub static DEVIN: RunnerCaps = RunnerCaps {
     folder_trust: FolderTrust::LaunchHandles,
     prompt_detection: PromptDetection {
         block: true,
-        hook: false,
+        hook: true,
         structured: true,
     },
     approval_allow: Some("enter"),
     approval_deny: Some("esc"),
     status_source: StatusSource::Native,
     mid_turn_revision: true,
-    hooks: &[],
+    hooks: &[
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PermissionRequest",
+        "Stop",
+        "SessionEnd",
+    ],
 };
 
 pub static OPENCODE: RunnerCaps = RunnerCaps {
@@ -341,7 +349,7 @@ pub static OPENCODE: RunnerCaps = RunnerCaps {
     approval_deny: None,
     status_source: StatusSource::ForkInference,
     mid_turn_revision: true,
-    hooks: &[],
+    hooks: &["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
 };
 
 pub static CURSOR: RunnerCaps = RunnerCaps {
@@ -363,7 +371,7 @@ pub static CURSOR: RunnerCaps = RunnerCaps {
     approval_deny: None,
     status_source: StatusSource::ForkInference,
     mid_turn_revision: true,
-    hooks: &[],
+    hooks: &["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
 };
 
 pub static CMD: RunnerCaps = RunnerCaps {
@@ -385,7 +393,7 @@ pub static CMD: RunnerCaps = RunnerCaps {
     approval_deny: Some("esc"),
     status_source: StatusSource::ForkInference,
     mid_turn_revision: true,
-    hooks: &[],
+    hooks: &["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
 };
 
 pub static CLINE: RunnerCaps = RunnerCaps {
@@ -432,7 +440,14 @@ pub static AGY: RunnerCaps = RunnerCaps {
     approval_deny: None,
     status_source: StatusSource::Native,
     mid_turn_revision: false,
-    hooks: &[],
+    hooks: &[
+        "SessionStart",
+        "PreInvocation",
+        "PreToolUse",
+        "PostToolUse",
+        "PostInvocation",
+        "Stop",
+    ],
 };
 
 pub static FAKE: RunnerCaps = RunnerCaps {

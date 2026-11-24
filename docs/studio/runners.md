@@ -4,7 +4,7 @@ A runner is a coding agent CLI that can fill a role. An adapter holds what diffe
 a chosen model and thinking depth, how to resume it, and how to read its screen.
 
 Measured on 2026-11-09 with real launches in an isolated hc session, unless a cell says otherwise; cursor-agent was
-measured on 2026-11-11, cmd on 2026-11-13, cline on 2026-11-17, and agy 1.5.16 on 2026-11-24. Kimi 0.38.0 has not been measured.
+measured on 2026-11-11, cmd on 2026-11-13 (hooks measured on 1.93.0 on 2026-11-24), Devin hooks on 3000.14.30821 on 2026-11-24, cline on 2026-11-17, and agy 1.5.16 on 2026-11-24. Kimi 0.38.0 has not been measured.
 
 | | Claude Code 2.1.319 | Codex 0.166.0 | Devin 3000.12.32 | OpenCode 2.2.5 | cursor-agent 2026.11.05 | cmd 1.88.5 | cline 3.0.74 | agy 1.5.16 |
 |---|---|---|---|---|---|---|---|---|
@@ -26,13 +26,13 @@ and the docs test fails when this drifts.
 | Runner | Effort | Model | First prompt | Resume | Session discovery | Folder trust | Prompt detection | Allow | Deny | Status source | Hooks |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Claude Code | required (low, medium, high, xhigh, max) | `--model` | positional | --session-id, -r (keeps prompt) | argv | stage answers | screen block, hook, structured status | `enter` | `esc` | fork inference | UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, Notification, Stop, StopFailure |
-| Codex | required (low, medium, high, xhigh, max, ultra) | `-m` | positional | `resume <id>` (keeps prompt) | files | launch handles | screen block, structured status | `enter` | `esc` | fork inference | none |
-| Devin | optional (ignored) | `--model` | `--prompt-file` (file) | `-r` (prompt after open; id not read from argv) | `devin list --format json` | launch handles | screen block, structured status | `enter` | `esc` | native 7501 | none |
-| OpenCode | optional (ignored) | `OPENCODE_CONFIG_CONTENT` | `--prompt` | -s (keeps prompt) | argv | not applicable | structured status | none sent | none sent | fork inference | none |
-| cursor-agent | none | `--model` | positional | `--resume` (keeps prompt; id not read from argv) | files | launch handles | screen block, structured status | `y` | none sent | fork inference | none |
-| cmd | none | `-m` | positional | -r, --resume, --session (prompt after open) | files | launch handles | screen block, structured status | `enter` | `esc` | fork inference | none |
+| Codex | required (low, medium, high, xhigh, max, ultra) | `-m` | positional | `resume <id>` (keeps prompt) | files | launch handles | screen block, structured status | `enter` | `esc` | fork inference | SessionStart, PreToolUse, PostToolUse, Stop |
+| Devin | optional (ignored) | `--model` | `--prompt-file` (file) | `-r` (prompt after open; id not read from argv) | `devin list --format json` | launch handles | screen block, hook, structured status | `enter` | `esc` | native 7501 | SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PermissionRequest, Stop, SessionEnd |
+| OpenCode | optional (ignored) | `OPENCODE_CONFIG_CONTENT` | `--prompt` | -s (keeps prompt) | argv | not applicable | structured status | none sent | none sent | fork inference | SessionStart, PreToolUse, PostToolUse, Stop |
+| cursor-agent | none | `--model` | positional | `--resume` (keeps prompt; id not read from argv) | files | launch handles | screen block, structured status | `y` | none sent | fork inference | SessionStart, PreToolUse, PostToolUse, Stop |
+| cmd | none | `-m` | positional | -r, --resume, --session (prompt after open) | files | launch handles | screen block, structured status | `enter` | `esc` | fork inference | SessionStart, PreToolUse, PostToolUse, Stop |
 | cline | required (none, low, medium, high, xhigh) | `-P cline-pass -m` | positional | --id (prompt after open) | files | not applicable | screen block | none sent | none sent | screen only | PreToolUse |
-| agy | required (low, medium, high, xhigh, max) | `--model` | `-i` | --conversation (prompt after open) | cwd map, then sqlite | unmeasured | screen block, structured status | none sent | none sent | native 7501 | none |
+| agy | required (low, medium, high, xhigh, max) | `--model` | `-i` | --conversation (prompt after open) | cwd map, then sqlite | unmeasured | screen block, structured status | none sent | none sent | native 7501 | SessionStart, PreInvocation, PreToolUse, PostToolUse, PostInvocation, Stop |
 | fake | required (low, medium, high) | `FAKE_MODEL` | not carried | none | terminal name | stage answers | screen block, hook | `enter` | `esc` | screen only | UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, Notification, Stop, StopFailure |
 <!-- END GENERATED runner-caps -->
 
@@ -315,6 +315,34 @@ background self-update; read-only commands (`git status|log|diff`) never prompt;
 refusal, not a permission prompt; and non-TTY invocation dies cleanly
 (`Interactive mode requires a TTY`).
 
+Hooks (measured on `cmd 1.93.0`): `cmd::prepare` splices `"hooks"` beside `"permissions"` in the
+same `.commandcode/settings.json` (preserving `authInfo`, unrelated keys, and any non-backlot user
+hooks), wiring `SessionStart`, `PreToolUse`, `PostToolUse`, and `Stop` (with `matcher` omitted and
+`timeout: 5`) to `<backlot> hook --runner cmd --file <signals.jsonl>`. Payloads carry snake_case
+`hook_event_name` and `session_id` matching the `<uuid>.jsonl` transcript file id; empty stdout +
+exit 0 allows cleanly, and no `PermissionRequest`/`Notification` hook exists
+(`prompt_detection.hook` stays `false`). New files are added to `<git>/info/exclude`; if
+`.commandcode/settings.json` is already tracked in git, `prepare` leaves it untouched, logs
+`hooks unavailable`, and raises an Info `hooks unavailable` attention.
+
+## Per-work-area hooks (Devin)
+
+Measured on Devin 3000.14.30821 (with `swe-2-flash-medium`). Devin supports per-work-area
+configuration in `<cwd>/.devin/config.local.json` alongside `--permission-mode` and
+`--respect-workspace-trust false` without touching `~/.config/devin/config.json`.
+
+Before every start and resume, `devin::prepare` splices top-level `"hooks"` (preserving existing
+keys and non-backlot hook entries byte-for-byte) wiring `SessionStart`, `UserPromptSubmit`,
+`PreToolUse`, `PostToolUse`, `PermissionRequest`, `Stop`, and `SessionEnd` (`"matcher": ""`,
+`"timeout": 5`) to `<backlot> hook --runner devin --file <signals.jsonl>`. Payloads carry
+snake_case `hook_event_name` and `session_id` matching `devin list --format json`'s `id`, and empty
+stdout + exit 0 lets prompts proceed. `PermissionRequest` includes `tool_name` (such as `exec`) and
+`tool_input` (`command` or `file_path`), enabling `prompt_detection.hook = true`. New
+`.devin/config.local.json` files are added to `<git>/info/exclude` (Devin excludes
+`.devin/mcp_config.local.json` itself, not `config.local.json`); if already tracked in git,
+`devin::prepare` skips writing it, logs `hooks unavailable`, and raises an Info `hooks unavailable`
+attention.
+
 ## Per-session files (cline)
 
 Cline shares the user's login, settings and session store — no per-role config, data or auth tree, the
@@ -450,12 +478,25 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   and `Write-in...` (`status.state: "blocked"`, `kind: "question"`, `waiting_for_person: false`),
   even while `esc to cancel` stays visible at the bottom. `up`/`down` move the cursor, `enter`
   submits, `esc` skips.
-- Hooks: `--settings` rejects `"hooks"` (`Error: --settings: unknown setting "hooks"`), while
-  `<workspace>/.agents/hooks.json` (plus `~/.gemini/config/hooks.json` and plugin `hooks.json`)
-  fires `SessionStart`, `PreInvocation`, `PreToolUse`, `PostToolUse`, `PostInvocation` and `Stop`,
-  passing camelCase JSON with `conversationId`, `cwd`, `hookEventName`, `toolCall` and
-  `terminationReason` on stdin. `PreToolUse` requires `{"decision":"allow"}` to allow; returning
-  `{}` denies the tool call.
+- Hooks (measured on `agy 1.5.16`): `--settings` rejects `"hooks"` (`Error: --settings: unknown setting "hooks"`),
+  so `agy::prepare` writes `<workspace>/.agents/hooks.json` under top-level `"backlot"` (byte-preservingly
+  spliced, keeping other named hooks intact). `SessionStart`, `PreInvocation`, `PostInvocation`, and `Stop`
+  take flat command arrays, while `PreToolUse` and `PostToolUse` take matcher groups (`"matcher": ""`,
+  `"timeout": 5`), each invoking `<backlot> hook --runner agy --file <signals.jsonl>`. Payloads use camelCase
+  (`conversationId`, `hookEventName`, `toolCall.name`, `toolCall.args.CommandLine`); `hook` maps
+  `conversationId` -> `session_id`, `PreInvocation` -> `UserPromptSubmit` (`working`),
+  `PreToolUse`/`PostToolUse` (`working`), `PostInvocation`/`Stop` -> `Stop` (`waiting`), and
+  `SessionStart` (`none`). On `PreToolUse`, empty stdout + exit 0 or `{"decision":"allow"}` allows,
+  while `{"decision":"deny","reason":"refused by backlot: <command> is the person's to run; ask with backlot ask"}`
+  blocks `run_command` before `.agy-settings.json` `permissions.deny` runs; nonzero exits, `{}`, or
+  exceeding the per-hook timeout kill/fail and deny the tool, so `backlot hook --runner agy` enforces
+  `guard_rules::refused_command_line` + `guard::record_refusal` inside a 1.5 s fail-open budget and
+  answers `{"decision":"allow"}` on allowed calls, parse errors, internal errors, or timeouts.
+  New `.agents/hooks.json` files are added to `<git>/info/exclude` (following linked-worktree `commondir`);
+  if tracked in git, `.agents/hooks.json` is left untouched (`hooks unavailable`), keeping `.agy-settings.json`
+  `permissions.deny` as fallback. On an untrusted workspace's turn 1, `agy` only loads user global hooks at
+  `SessionStart` and reloads `<workspace>/.agents/hooks.json` for turn 2+ once trusted; on an already-trusted
+  workspace `SessionStart` fires immediately at launch.
 - Long turns and backgrounded commands: during a normal turn (`status.state: "working"`), the
   braille spinner animates (`⣷`/`⢿` + two spaces + `Generating...`, `Reading file...`,
   `Running command... Ns`) and `activity.revision` stays frozen until the turn reaches `done`.
@@ -469,7 +510,8 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   ~100 jiffies/s (`deepest`: `['sh', '-c', 'while :; do :; done']`, `['sleep', '660']`,
   `['flock', …]`). When a CPU-heavy child exits and is reaped, live descendant `utime+stime` drops
   unless `root_cutime+cstime` is included.
-- Note: `work.rs`, `permit.rs` and `caps.rs` now wire agy's screen states, prompt block, `Native` status source and turn-level revision rule from R7a; `<workspace>/.agents/hooks.json` remains unmeasured for studio use.
+- `work.rs`, `permit.rs`, `caps.rs`, `hook.rs`, and `agy.rs` wire `agy`'s screen states, prompt block,
+  `Native` status source, turn-level revision rule, and `.agents/hooks.json` signals + `PreToolUse` guard.
 
 ## Screen patterns
 

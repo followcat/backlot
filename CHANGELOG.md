@@ -12,6 +12,17 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Signal & guard hooks for `agy`, `cmd`, and `devin` (R7d2).** Added `--runner <name>` to
+  `backlot hook` normalizing `agy` (`conversationId`, `hookEventName`, `PreInvocation`/`PostInvocation`)
+  into `signals.jsonl` and enforcing `guard_rules` on `agy` `PreToolUse` (`run_command`
+  `CommandLine`) with `role.refused`, deduplicated `outward action` attention, and a 1.5 s fail-open
+  budget returning `{"decision":"allow"}` / `{"decision":"deny","reason":...}`. Wired per-work-area
+  byte-preserving hook files on every start and resume for `agy` (`.agents/hooks.json`), `cmd`
+  (`.commandcode/settings.json`), and `devin` (`.devin/config.local.json`), excluding new files in
+  `<git>/info/exclude` (following linked-worktree `commondir`) and leaving tracked files untouched with
+  a `hooks unavailable` Info attention and launch log. Updated `caps.rs` (`agy`, `cmd`, `devin`
+  `hooks`, and `devin` `prompt_detection.hook = true`) and regenerated `docs/studio/runners.md`.
+
 - **Dialog escalation, `agy` work states, and turn-level revision stalls (R7b).** Disabled
   structured `activity.revision` stall tracking for runners whose revision only bumps on turn
   completion (`mid_turn_revision: false` for `agy`); wired `agy` 1.5.16 work states, prompt
