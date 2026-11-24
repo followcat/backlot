@@ -77,6 +77,7 @@ mod studio_shell;
 mod studio_tree;
 mod synthesize;
 mod tab_status;
+mod tree_focus;
 pub(crate) mod update_flow;
 mod update_modal;
 mod view_sync;
@@ -437,6 +438,10 @@ pub struct App {
     /// `shell_state.sidebar_section_split` was dragged by hand —
     /// persisted as `preferences.sidebar_section_split`.
     sidebar_section_split_manual: bool,
+    /// W1b: the left machines tree owns the keyboard — `Ctrl+B t`
+    /// enters it, `Esc` leaves. The cursor is a row of the flat tree
+    /// list; `None` while the tree does not own the keys.
+    pub(crate) tree_focus: Option<crate::chrome::studio_tree::SidebarRow>,
     agent_panel_sort_manual: bool,
     /// Active chrome drag grab (`ChromeDrag`).
     chrome_drag: Option<mouse::ChromeDrag>,

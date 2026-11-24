@@ -12,6 +12,30 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **The left tree answers to the keyboard: the launcher's machine rows.** `Ctrl+B ?`'s
+  `machines` group now carries, per machine, `Stage log · <machine>`,
+  `Unfold finished studios (n) · <machine>` (or `Fold …`) and `Machine menu · <machine>` — the
+  latter opens the same menu a right-click does — beside the existing stage rows, all filterable
+  by machine name.
+
+- **The left tree answers to the keyboard: focus, movement and row actions.** `Ctrl+B t` moves
+  the keyboard into the left machines tree (opening the sidebar if it is collapsed) and
+  highlights the row for the current place; `↑`/`↓` (and `k`/`j`) move the highlight and the
+  section scrolls to it; `Enter` runs the same action a left-click does — a workspace row focuses
+  its terminal, a stage-down studio starts the machine's stage, the `finished (n)` fold toggles,
+  a finished studio opens its menu, a machine row folds its section — and `m` opens the row's
+  context menu. `Esc` returns the keys to the terminal. `Ctrl+B t` is free in the default keymap
+  (`Ctrl+B Tab`/`Ctrl+B h` would collide with the pane cycle/focus bindings).
+
+- **The empty states say what to do.** With every stage down and no published studio, the lot
+  now says `<n> studios on stopped stages — s to start` (starting that one stage when a single
+  machine holds them all) instead of `no studios`, and the cast says `stage stopped — s to start`
+  instead of drawing blank.
+
+- **No truncated ids in the tree's stage-down row.** The tree's stage-down row puts the studio
+  name first and shortens its tag to `down`, so a 10–12 character id fits whole at the default
+  sidebar width instead of reading `beta-too…`.
+
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same
   `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the

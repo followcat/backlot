@@ -25,7 +25,7 @@ pub(crate) use data::{key as document_key, stage_running};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use remote::RemoteRunner;
 pub(crate) use row_lines::{info_line, owed_text};
-pub(crate) use rows::{Row, Target, rows};
+pub(crate) use rows::{Row, StoppedLedger, Target, rows};
 pub(crate) use rows_fit::{health_of, mark_counts};
 
 /// How the panel sits on screen. The default is `Expanded`: the
@@ -95,6 +95,11 @@ pub(crate) struct Panel {
     /// setup` while no `[hollywood]` table exists (R22). Set by
     /// `set_hollywood` — a client-local flag, never read from a doc.
     pub hollywood_hint: bool,
+    /// W1b: what the empty lot reads while no document has a studio but
+    /// a stopped machine's ledger lists some — `<n> studios on stopped
+    /// stages — s to start`. Set by `sync_studio`, `None` once any
+    /// document lists a studio.
+    pub(crate) stopped: Option<StoppedLedger>,
 }
 
 #[cfg(test)]
@@ -124,6 +129,7 @@ impl Panel {
             // The flag stays off until `set_hollywood` reads the
             // config — panel-only construction draws no hint.
             hollywood_hint: false,
+            stopped: None,
         }
     }
 

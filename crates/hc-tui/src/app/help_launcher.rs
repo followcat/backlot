@@ -209,6 +209,10 @@ impl App {
     /// valid action: `Upgrade backlot to v<latest>` behind, `Install
     /// backlot` missing, `Restart the stage` while its stage runs.
     /// A down stage is the waiting group's `Start stage` already.
+    /// W1b: a running stage also offers `Stage log`, a machine with
+    /// finished studios offers the fold, and every machine offers its
+    /// own right-click menu — so the tree's whole surface has a
+    /// keyboard row.
     fn machines_group(&self) -> HelpGroup {
         let machines = self.panel_summaries();
         let local = crate::project::LOCAL_LABEL;
@@ -220,45 +224,95 @@ impl App {
             let machine = menu.machine.clone();
             let name = hollywood::machine_label(machine.as_deref(), local, multi);
             let name = if name.is_empty() { local } else { name };
-            let (label, act) = match &menu.backlot {
-                Some(crate::studio_menu::MenuBacklot::Installed(installed))
-                    if latest
-                        .as_deref()
-                        .is_some_and(|l| crate::machine_versions::behind(installed, l)) =>
-                {
-                    (
-                        format!(
-                            "Upgrade backlot to v{} · {name}",
-                            latest.clone().unwrap_or_default()
-                        ),
-                        StudioAct::MachineInstall,
-                    )
-                }
-                Some(crate::studio_menu::MenuBacklot::Missing) => (
-                    format!("Install backlot · {name}"),
-                    StudioAct::MachineInstall,
-                ),
+            let installed = matches!(
+                menu.backlot,
                 Some(crate::studio_menu::MenuBacklot::Installed(_))
-                    if menu.stage_down && !menu.offline =>
-                {
-                    // W1: a stage-down machine's own start, so its
-                    // ledger studios are reachable from the keyboard.
-                    (format!("Start the stage · {name}"), StudioAct::StageStart)
-                }
-                Some(crate::studio_menu::MenuBacklot::Installed(_)) if !menu.offline => (
-                    format!("Restart the stage · {name}"),
-                    StudioAct::StageRestart,
-                ),
-                _ => continue,
-            };
+            );
+            let down = menu.stage_down && !menu.offline;
+            if let Some(crate::studio_menu::MenuBacklot::Installed(installed_version)) =
+                &menu.backlot
+                && latest
+                    .as_deref()
+                    .is_some_and(|l| crate::machine_versions::behind(installed_version, l))
+            {
+                rows.push(HelpRow {
+                    label: format!(
+                        "Upgrade backlot to v{} · {name}",
+                        latest.clone().unwrap_or_default()
+                    ),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::MachineInstall,
+                    },
+                });
+            } else if matches!(menu.backlot, Some(crate::studio_menu::MenuBacklot::Missing)) {
+                rows.push(HelpRow {
+                    label: format!("Install backlot · {name}"),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::MachineInstall,
+                    },
+                });
+            }
+            if !installed {
+                continue;
+            }
+            if down {
+                // W1: a stage-down machine's own start, so its
+                // ledger studios are reachable from the keyboard.
+                rows.push(HelpRow {
+                    label: format!("Start the stage · {name}"),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::StageStart,
+                    },
+                });
+            } else if !menu.offline {
+                rows.push(HelpRow {
+                    label: format!("Restart the stage · {name}"),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::StageRestart,
+                    },
+                });
+                rows.push(HelpRow {
+                    label: format!("Stage log · {name}"),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::StageLog,
+                    },
+                });
+            }
+            if menu.finished_count > 0 {
+                rows.push(HelpRow {
+                    label: format!(
+                        "{} finished studios ({}) · {name}",
+                        if menu.finished_open { "Fold" } else { "Unfold" },
+                        menu.finished_count
+                    ),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::ToggleFinishedGroup,
+                    },
+                });
+            }
             rows.push(HelpRow {
-                label,
+                label: format!("Machine menu · {name}"),
                 hint: "run ↵".to_owned(),
                 glyph: "",
-                launch: Launch::Act {
-                    menu: Box::new(menu),
-                    act,
-                },
+                launch: Launch::Menu(Box::new(menu)),
             });
         }
         HelpGroup {
