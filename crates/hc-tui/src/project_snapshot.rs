@@ -261,23 +261,7 @@ pub(super) fn structured_snapshot_from_spaces(
                 .unwrap_or(first_tab),
             new_workspace_cwd: cwd,
             number,
-            label: clean(
-                adopted
-                    .filter(|a| !a.name.is_empty())
-                    .map(|a| a.name.as_str())
-                    .unwrap_or_else(|| {
-                        if space.custom_name {
-                            &space.name
-                        } else {
-                            space
-                                .from_app
-                                .then(|| live_space_folder(&members, &term_by_id))
-                                .flatten()
-                                .or_else(|| facts.and_then(|facts| facts.auto_label.as_deref()))
-                                .unwrap_or(&space.name)
-                        }
-                    }),
-            ),
+            label: clean(space_label(space, adopted, facts, &members, &term_by_id)),
             custom_label: adopted.map_or(space.custom_name, |a| a.custom_label),
             branch: facts
                 .filter(|facts| facts.state == "ready")
@@ -379,6 +363,37 @@ fn running_job(members: &[&Terminal]) -> Option<String> {
         .filter(|name| !name.is_empty())
         .or_else(|| Some(foreground.name.as_str()).filter(|name| !name.is_empty()))
         .map(clean)
+}
+
+/// A workspace's row label. A name someone chose wins. An automatic name —
+/// an unnamed Herdr-app space, or an adoption recorded without a chosen
+/// name (a new workspace that kept its suggested label, a promoted unnamed
+/// space) — follows where the space's first terminal works now, like the
+/// reference's `display_name_from_terminals`, instead of keeping the folder
+/// it was created in.
+fn space_label<'a>(
+    space: &'a crate::structure::Space,
+    adopted: Option<&'a crate::structure::Adoption>,
+    facts: Option<&'a hc_proto::terminal::RepositoryFacts>,
+    members: &[String],
+    term_by_id: &BTreeMap<&str, &'a Terminal>,
+) -> &'a str {
+    if let Some(chosen) = adopted.filter(|a| a.custom_label && !a.name.is_empty()) {
+        return &chosen.name;
+    }
+    // A space's own name is a chosen one when the app holds it; an hc-tui
+    // space's `herdr.space` label is only its identity once an adoption
+    // records its name.
+    let automatic_adoption = adopted.is_some();
+    if space.custom_name && (space.from_app || !automatic_adoption) {
+        return &space.name;
+    }
+    (space.from_app || automatic_adoption)
+        .then(|| live_space_folder(members, term_by_id))
+        .flatten()
+        .or_else(|| facts.and_then(|facts| facts.auto_label.as_deref()))
+        .or_else(|| adopted.map(|a| a.name.as_str()).filter(|n| !n.is_empty()))
+        .unwrap_or(&space.name)
 }
 
 /// The folder name an unnamed Herdr-app space shows, as the app's spaces list

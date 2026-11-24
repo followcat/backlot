@@ -905,6 +905,14 @@ Everything else on the compared surfaces still diffs normally.
   names as a version), and only with no live job does it keep its
   number. A name someone gave still wins, and spaces outside the
   herdr-app document keep the reference names.
+- **Workspaces hc-tui creates follow their terminal.** As the reference
+  (`display_name_from_terminals`, `focused_pane_cwd_in_workspace`,
+  `resolved_new_workspace_cwd_from_tab`): a workspace whose name nobody
+  chose (it kept the suggested label, or was promoted unnamed) takes the
+  folder its first terminal works in now, like an unnamed app space; a
+  new tab and a new workspace open where the focused terminal works now,
+  falling back to its launch folder and the workspace's
+  `new_workspace_cwd`. Floats keep their repository-root rule.
 - **Terminals of a closed herdr-app tab.** Deliberate: when the app closes
   a tab, its terminals keep `herdr.space`/`herdr.tab` labels that point at
   an app space the document no longer lists them in. A finished one is not

@@ -388,3 +388,75 @@ fn a_finished_terminal_outside_any_app_space_stays_as_a_pane() {
     assert_eq!(snapshot.tabs[0].label, "task");
     assert_eq!(snapshot.panes[0].pane_id, "t1");
 }
+
+/// A one-terminal space hc-tui created: tagged `herdr.space`/`herdr.tab`,
+/// started in `/home/user/dotfiles`, with its adoption recording `name`.
+fn created_space(foreground_cwd: Option<&str>, name: &str, custom_label: bool) -> View {
+    let mut shell = tagged(term("t1"), "s1", "tab1");
+    shell.cwd = "/home/user/dotfiles".into();
+    shell.foreground = foreground_cwd.and_then(|cwd| foreground("zsh", cwd));
+    let mut v = view(vec![shell], vec![]);
+    let mut own = crate::structure::Document::default();
+    own.adoptions.insert(
+        layout_key(None, "space:2:s1"),
+        crate::structure::Adoption {
+            space: "s1".into(),
+            name: name.into(),
+            custom_label,
+            ..Default::default()
+        },
+    );
+    doc(&mut v, "hc-tui", None, serde_json::to_value(own).unwrap());
+    v
+}
+
+fn workspace_label(v: &View) -> (String, bool) {
+    let workspace = &project(v, Some("t1")).snapshot.workspaces[0];
+    (workspace.label.clone(), workspace.custom_label)
+}
+
+#[test]
+fn a_new_workspace_that_kept_its_suggested_name_follows_its_live_folder() {
+    let v = created_space(Some("/home/user/jayrome-website"), "dotfiles", false);
+    assert_eq!(workspace_label(&v), ("jayrome-website".to_owned(), false));
+}
+
+#[test]
+fn a_chosen_workspace_name_stays_when_its_terminal_moves() {
+    let v = created_space(Some("/home/user/jayrome-website"), "mine", true);
+    assert_eq!(workspace_label(&v), ("mine".to_owned(), true));
+}
+
+#[test]
+fn a_new_workspace_with_no_live_folder_keeps_its_recorded_name() {
+    let mut v = created_space(None, "dotfiles", false);
+    let mut shell = v.inventory.get("t1").unwrap().clone();
+    shell.cwd = String::new();
+    v.inventory_mut().replace(2, vec![shell]);
+    assert_eq!(workspace_label(&v), ("dotfiles".to_owned(), false));
+}
+
+#[test]
+fn an_app_space_named_in_the_app_wins_over_an_automatic_adoption() {
+    let mut a = crate::sidebar::fixture::agent("t1", "idle");
+    a.foreground = foreground("claude", "/home/user/elsewhere");
+    let mut v = view(vec![a], vec![]);
+    doc(
+        &mut v,
+        "herdr-app",
+        None,
+        json!({"spaces":[app_space("s1", "work", "/work", &[("tab1", "", "t1")])]}),
+    );
+    let mut own = crate::structure::Document::default();
+    own.adoptions.insert(
+        layout_key(None, "space:2:s1"),
+        crate::structure::Adoption {
+            space: "s1".into(),
+            name: "old".into(),
+            custom_label: false,
+            ..Default::default()
+        },
+    );
+    doc(&mut v, "hc-tui", None, serde_json::to_value(own).unwrap());
+    assert_eq!(project(&v, Some("t1")).snapshot.workspaces[0].label, "work");
+}

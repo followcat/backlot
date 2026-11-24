@@ -14,6 +14,7 @@ mod image_paste_upload;
 mod install_card;
 mod layout;
 mod layout_regressions;
+mod live_folder;
 mod m3a;
 mod m3a_review;
 mod m4s1;

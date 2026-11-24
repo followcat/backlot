@@ -121,17 +121,16 @@ impl App {
             edit.space = crate::project::layout_key(machine, &own_space);
             edit.tab = crate::project::layout_key(machine, &own_tab);
         }
-        let cwd = if vertical.is_none() {
-            space.folder.clone()
-        } else {
-            terminal
-                .foreground
-                .as_ref()
-                .map(|f| &f.cwd)
-                .filter(|s| !s.is_empty())
-                .unwrap_or(&terminal.cwd)
-                .clone()
-        };
+        // A split and a new tab both open where the focused terminal works
+        // now, as the reference's `focused_pane_cwd_in_workspace` — not the
+        // folder the space was created in.
+        let cwd = terminal
+            .foreground
+            .as_ref()
+            .map(|f| &f.cwd)
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&terminal.cwd)
+            .clone();
         Ok(Creation {
             params: hc_proto::terminal::RunParams {
                 on: machine.map(str::to_owned),
@@ -183,10 +182,18 @@ impl App {
                     .focused_workspace_id
                     .as_ref()
                     .and_then(|id| snapshot.workspaces.iter().find(|w| &w.workspace_id == id));
-                // The reference creates the new workspace in the focused workspace's
+                // The reference creates the new workspace where the focused
+                // terminal works now (`resolved_new_workspace_cwd_from_tab`);
+                // without a live folder, the focused workspace's
                 // `new_workspace_cwd` (checkout root, else its folder).
-                let cwd = match workspace {
-                    Some(workspace) if !workspace.new_workspace_cwd.is_empty() => {
+                let live = terminal
+                    .foreground
+                    .as_ref()
+                    .map(|f| f.cwd.clone())
+                    .filter(|cwd| !cwd.is_empty());
+                let cwd = match (live, workspace) {
+                    (Some(live), _) => live,
+                    (None, Some(workspace)) if !workspace.new_workspace_cwd.is_empty() => {
                         workspace.new_workspace_cwd.clone()
                     }
                     _ => terminal.cwd.clone(),
