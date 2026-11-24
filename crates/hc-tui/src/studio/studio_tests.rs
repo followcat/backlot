@@ -236,3 +236,28 @@ fn the_attention_and_working_counts_feed_the_block_and_strip() {
     assert_eq!(working_count(&summary.studios[0]), 2);
     assert_eq!(working_count(&summary.studios[1]), 0);
 }
+
+#[test]
+fn role_focus_latches_when_document_seats_an_already_focused_terminal() {
+    let mut unseated = two_studio_json();
+    unseated["studios"][0]["roles"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("terminal");
+    let unseated: Summary = serde_json::from_value(unseated).unwrap();
+    let mut studio = Studio::default();
+    // Terminal `t1` focuses before the summary document publishes its seat.
+    studio.sync(&[local(&unseated)], Some("t1"));
+    assert_eq!(studio.focus, None);
+    // Once the document arrives with `t1` seated (focused unchanged),
+    // `focus` latches to `StudioFocus::Role` instead of staying `None`.
+    let seated = summary();
+    studio.sync(&[local(&seated)], Some("t1"));
+    assert_eq!(
+        studio.focus,
+        Some(StudioFocus::Role(
+            StudioKey::local("acme-shop"),
+            "t1".into()
+        ))
+    );
+}

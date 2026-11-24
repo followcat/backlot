@@ -145,7 +145,7 @@ backlot
 
 The sidebar shows the current studio's cast. `Ctrl+B y` opens the studio panel — one bordered block
 per studio — and Enter on a studio focuses its producer: type what you want built, as you would
-tell a person. From there the cast works; `Alt+Up`/`Alt+Down` switch studios, `Alt+Left`/`Alt+Right`
+tell a person. From there the cast works; `Alt+Left`/`Alt+Right` switch studios, `Alt+Up`/`Alt+Down`
 switch roles, and you watch the panel and answer what needs you.
 
 Every studio is its own space in the client, its roles are the tabs. A new tab or split opens a *studio

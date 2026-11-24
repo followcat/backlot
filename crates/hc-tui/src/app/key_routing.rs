@@ -42,6 +42,29 @@ impl App {
         }
     }
 
+    /// Resolve a studio-navigation key when it owns the press: studio
+    /// keys work from anywhere while studios exist; role keys win only
+    /// inside a studio workspace (or while a studio row or dock holds
+    /// focus), so outside one herdr keeps its own bindings.
+    fn studio_nav_for_key(
+        &self,
+        key: &crate::config::TerminalKey,
+    ) -> Option<crate::panel::StudioNav> {
+        if !self.studio.active || crate::panel::data::studios(&self.panel_summaries()).is_empty() {
+            return None;
+        }
+        let nav = self.panel_config.keys.nav(key)?;
+        let role_key = matches!(
+            nav,
+            crate::panel::StudioNav::PreviousRole | crate::panel::StudioNav::NextRole
+        );
+        (!role_key
+            || self.studio.lot.studio_workspace
+            || self.studio.focus.is_some()
+            || self.panel_focused())
+        .then_some(nav)
+    }
+
     pub(super) fn on_key(&mut self, key: TerminalKey, width: u16) {
         if let Some(text) = self.host_text_commit(&key) {
             // `prepare_committed_text`: committed text retires the word
@@ -199,15 +222,10 @@ impl App {
                 return None;
             }
             self.clear_popup_selection();
-            // U1: the four studio keys precede the float's herdr
-            // direct-binding intercept — in studio mode they win over
-            // a herdr binding on the same key, and the float parks
-            // through the usual focus path. Persistent floats only:
-            // an ephemeral popup owns its keys, like herdr's tab keys.
-            if self.studio.active
-                && let Some(nav) = self.panel_config.keys.nav(&popup_combo)
-                && !crate::panel::data::studios(&self.panel_summaries()).is_empty()
-            {
+            // U1: studio keys precede the float's herdr direct-binding
+            // intercept; role keys win only in a studio workspace.
+            // Persistent and ephemeral floats alike release on studio nav.
+            if let Some(nav) = self.studio_nav_for_key(&popup_combo) {
                 if self.popup.as_ref().is_some_and(|popup| !popup.persistent) {
                     self.dismiss_popup();
                 }
@@ -264,13 +282,8 @@ impl App {
             || self.update_modal.is_some();
         if !text_input_modal
             && !matches!(self.mode, Mode::Copy | Mode::Resize)
-            && self.studio.active
             && press.input.action == hc_vt::Action::Press
-            && let Some(nav) = self
-                .panel_config
-                .keys
-                .nav(&crate::input::terminal_key_of(&press))
-            && !crate::panel::data::studios(&self.panel_summaries()).is_empty()
+            && let Some(nav) = self.studio_nav_for_key(&crate::input::terminal_key_of(&press))
         {
             self.peek = None;
             self.menu = None;
@@ -422,17 +435,10 @@ impl App {
             self.tree_focus_enter();
             return None;
         }
-        // U1: the four studio keys bind in studio mode only — they win
-        // over a herdr direct binding on the same key and still fire
-        // while the panel owns the keys. Outside studio mode the key
-        // falls through to herdr's bindings or the program unchanged.
-        if self.studio.active
-            && let Some(nav) = self
-                .panel_config
-                .keys
-                .nav(&crate::input::terminal_key_of(&press))
-            && !crate::panel::data::studios(&self.panel_summaries()).is_empty()
-        {
+        // U1: studio keys win over herdr direct bindings from anywhere
+        // in studio mode; role keys win only inside a studio workspace.
+        // Outside studio mode the key falls through unchanged.
+        if let Some(nav) = self.studio_nav_for_key(&crate::input::terminal_key_of(&press)) {
             // Like the panel chord: an armed prefix disarms on
             // the intercepted press.
             self.prefix.reset();

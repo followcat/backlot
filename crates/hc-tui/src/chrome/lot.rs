@@ -408,7 +408,7 @@ pub(crate) struct Lot {
     /// configured Hollywood.
     pub pill: bool,
     /// The focused workspace is a studio role or shell — where the
-    /// `alt+←/→` role keys win over herdr's direct bindings.
+    /// role keys (`alt+↑/↓` by default) win over herdr's direct bindings.
     pub studio_workspace: bool,
     /// U > 0 on the last publish — `when_waiting` reads the edge.
     pub was_urgent: bool,

@@ -328,8 +328,8 @@ people, the role keys reach them after the people, and the stage never touches t
 nudging, sampling, counting, reaping, relabelling all skip a `backlot.shell` terminal. A finished
 studio keeps its shells for as long as it stays in the document.
 
-Four direct keys move around without the prefix: `Alt+Up`/`Alt+Down` step to the previous or
-next studio, `Alt+Left`/`Alt+Right` to the previous or next person of the current studio's cast —
+Four direct keys move around without the prefix: `Alt+Left`/`Alt+Right` step to the previous or
+next studio, `Alt+Up`/`Alt+Down` to the previous or next person of the current studio's cast —
 live people first, then the shells. Their defaults are `keys.previous_studio` and friends in
 backlot's config.
 
@@ -556,7 +556,7 @@ and a finished row opens the existing finished-studio menu (reopen producer, she
 records, delete).
 A machine that cannot be reached at all shows one `unreachable` line, never an empty tree. Rows
 never drop out of a short sidebar: the section scrolls to the machine row of the studio the
-selection landed on, so `Alt+Down` into a studio deeper down brings its machine into view instead
+selection landed on, so `Alt+Right` into a studio deeper down brings its machine into view instead
 of hiding it. A machine that does not serve the document — no `backlot` installed, a foreign
 schema, a core that does not answer — simply contributes nothing beyond that line: its slot stays
 blank, never an error.

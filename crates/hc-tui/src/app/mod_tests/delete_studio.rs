@@ -206,8 +206,8 @@ async fn delete_studio_keyboard_flow_and_force_second_confirm() {
         Box::pin(async move { Ok(report_json(&studio, dry, false, !dry, &[])) })
     }));
 
-    // Keyboard-only: Alt+Down -> Ctrl+B m -> Delete studio… -> Enter.
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    // Keyboard-only: Alt+Right -> Ctrl+B m -> Delete studio… -> Enter.
+    alt(&mut app, hc_vt::Key::ArrowRight);
     press(&mut app, hc_vt::Key::Char('b'), hc_vt::Mods::CTRL);
     press(&mut app, hc_vt::Key::Char('m'), hc_vt::Mods::NONE);
     let idx = app

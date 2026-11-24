@@ -137,9 +137,9 @@ impl App {
         }
     }
 
-    /// A direct studio key: `alt+up/down` move between studios in
+    /// A direct studio key: `alt+left/right` move between studios in
     /// the aggregate's order — this core's first, then machine-list
-    /// order — `alt+left/right` between the current studio's live
+    /// order — `alt+up/down` between the current studio's live
     /// people in cast order — all wrapping.
     pub(crate) fn studio_nav(&mut self, nav: StudioNav) {
         let machines = self.panel_summaries();

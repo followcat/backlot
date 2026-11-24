@@ -182,9 +182,9 @@ async fn the_sidebar_width_follows_the_mode_unless_dragged() {
 #[tokio::test]
 async fn next_and_previous_studio_cycle_and_land_on_the_remembered() {
     let mut app = two_studio_app();
-    // Alt+Down moves StudioFocus to Studio(night-owl) without moving the
-    // attached typing pane (`t1`); Alt+Right enters its remembered member.
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    // Alt+Right moves StudioFocus to Studio(night-owl) without moving the
+    // attached typing pane (`t1`); Alt+Down enters its remembered member.
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(
         app.studio.focus,
@@ -197,21 +197,21 @@ async fn next_and_previous_studio_cycle_and_land_on_the_remembered() {
         Some("t1"),
         "pane stays attached for typing"
     );
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t7"), "the producer lands");
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current, Some("ghost".into()));
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current, Some("acme-shop".into()), "wraps");
     alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.studio.current, Some("ghost".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.studio.current, Some("acme-shop".into()), "wraps");
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t1"));
     // Focus alice, leave, come back → alice lands when entering roles.
     app.focused = Some("t4".into());
     app.refresh_projection();
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    alt(&mut app, hc_vt::Key::ArrowUp);
-    assert_eq!(app.studio.current, Some("acme-shop".into()));
     alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowLeft);
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.focused.as_deref(),
         Some("t4"),
@@ -223,17 +223,17 @@ async fn next_and_previous_studio_cycle_and_land_on_the_remembered() {
 async fn next_and_previous_role_skip_the_closed_and_wrap() {
     let mut app = two_studio_app();
     // acme cast order: producer, alice, (dave closed). From producer
-    // → alice → wraps to producer; ← wraps back to alice.
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    // → alice → wraps to producer; ↑ wraps back to alice.
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t4"));
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t1"), "dave skipped, wrapped");
-    alt(&mut app, hc_vt::Key::ArrowLeft);
+    alt(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(app.focused.as_deref(), Some("t4"), "wraps backwards");
 }
 
 #[tokio::test]
-async fn a_role_key_from_outside_the_studio_enters_the_current_studio() {
+async fn a_role_key_from_outside_the_studio_falls_through() {
     let mut app = two_studio_app();
     app.focused = Some("t4".into());
     app.refresh_projection();
@@ -244,27 +244,29 @@ async fn a_role_key_from_outside_the_studio_enters_the_current_studio() {
             .map(String::as_str),
         Some("actor-alice")
     );
-    // Focus a terminal outside studios: role keys belong to Backlot
-    // whenever studios exist and enter the current studio's remembered role.
+    // Focus a terminal outside studios: role keys belong to herdr (or
+    // the program) outside a studio workspace, and remembered stays put.
     app.focused = Some("t99".into());
     app.refresh_projection();
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    let before = app.pane.input_backlog().0;
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.focused.as_deref(),
-        Some("t4"),
-        "entered remembered role from outside studio workspace"
+        Some("t99"),
+        "role key fell through outside studio workspace"
     );
+    assert!(app.pane.input_backlog().0 > before);
     app.focused = Some("t1".into());
     app.refresh_projection();
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t4"));
 }
 
 #[tokio::test]
 async fn a_studio_with_no_live_terminal_still_becomes_current() {
     let mut app = two_studio_app();
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("ghost".into()));
     assert_eq!(
         app.studio.focus,
@@ -275,7 +277,7 @@ async fn a_studio_with_no_live_terminal_still_becomes_current() {
     assert_eq!(app.focused.as_deref(), Some("t1"));
     // Entering roles on a dead studio reports no live terminal without
     // losing the current terminal.
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.focused.as_deref(),
         Some("t1"),
@@ -286,11 +288,11 @@ async fn a_studio_with_no_live_terminal_still_becomes_current() {
 
 // ---------- routing ----------
 
-/// herdr's config with `alt+left` bound to `previous_tab` — the usual
-/// binding the studio keys shadow in studio mode.
+/// herdr's config with `alt+up` bound to `previous_agent` and
+/// `alt+left` bound to `previous_tab` — shadowed inside studio mode.
 fn live_with_alt_previous_tab() -> crate::config::LiveKeybindConfig {
     let config: crate::config::Config =
-        toml::from_str("[keys]\nprevious_tab = 'alt+left'\n").unwrap();
+        toml::from_str("[keys]\nprevious_tab = 'alt+left'\nprevious_agent = 'alt+up'\n").unwrap();
     config.live_keybinds()
 }
 
@@ -298,9 +300,9 @@ fn live_with_alt_previous_tab() -> crate::config::LiveKeybindConfig {
 async fn a_studio_key_wins_over_the_herdr_binding_on_the_same_key() {
     let mut app = two_studio_app();
     app.live = live_with_alt_previous_tab();
-    // alt+left is herdr's previous_tab — but in studio mode it is
-    // previous_role: alice lands, not another tab.
-    alt(&mut app, hc_vt::Key::ArrowLeft);
+    // alt+up is herdr's previous_agent — but inside a studio workspace
+    // it is previous_role: alice lands, not another agent.
+    alt(&mut app, hc_vt::Key::ArrowUp);
     assert_eq!(app.focused.as_deref(), Some("t4"));
     assert_eq!(app.studio.current, Some("acme-shop".into()));
 }
@@ -339,7 +341,7 @@ async fn a_locked_keyboard_gives_the_program_the_studio_keys() {
     let mut app = two_studio_app();
     app.keyboard_locked = true;
     let before = app.pane.input_backlog().0;
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.focused.as_deref(), Some("t1"), "no nav while locked");
     assert!(app.pane.input_backlog().0 > before, "the program got it");
 }
@@ -350,7 +352,7 @@ async fn the_studio_keys_fire_while_the_panel_owns_the_keys() {
     app.area = (120, 24);
     app.panel.mode = PanelMode::Expanded;
     app.panel.focused = true;
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(
         app.studio.focus,
@@ -381,7 +383,7 @@ async fn the_studio_keys_fire_while_a_persistent_float_is_focused() {
     });
     app.on_popup_spawned("t50".into(), 50);
     assert!(app.popup.is_some(), "the float shows");
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("night-owl".into()));
     assert_eq!(
         app.studio.focus,
@@ -402,11 +404,58 @@ async fn an_unbound_studio_key_does_nothing() {
     let (config, notice) = crate::panel::load(&path);
     assert!(notice.is_none());
     app.set_panel_config(config, notice, &path);
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.studio.current,
         Some("acme-shop".into()),
         "unbound: nothing ran"
+    );
+}
+
+#[tokio::test]
+async fn an_old_layout_override_restores_studio_and_role_keys() {
+    let mut app = two_studio_app();
+    let dir = TestDir::new("studio-old-layout");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    std::fs::write(
+        &path,
+        "[keys]\n\
+         previous_studio = \"alt+up\"\n\
+         next_studio = \"alt+down\"\n\
+         previous_role = \"alt+left\"\n\
+         next_role = \"alt+right\"\n",
+    )
+    .unwrap();
+    let (config, notice) = crate::panel::load(&path);
+    assert!(notice.is_none());
+    app.set_panel_config(config, notice, &path);
+
+    // Alt+Down switches studio; Alt+Up switches back; Alt+Right enters
+    // the remembered role (t1) and the next Alt+Right steps to t4.
+    alt(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(app.studio.current, Some("night-owl".into()));
+    alt(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(app.studio.current, Some("acme-shop".into()));
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.focused.as_deref(), Some("t1"));
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.focused.as_deref(), Some("t4"));
+
+    // Outside a studio workspace, the restored role key (Alt+Right)
+    // falls through to herdr while Alt+Down enters the current studio.
+    let herdr: crate::config::Config =
+        toml::from_str("[keys]\nprevious_agent = 'alt+left'\nnext_agent = 'alt+right'\n").unwrap();
+    app.live = herdr.live_keybinds();
+    app.focus_pane("t50".into());
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.focused.as_deref(), Some("t51"));
+    alt(&mut app, hc_vt::Key::ArrowDown);
+    assert_eq!(
+        app.studio.focus,
+        Some(crate::studio::StudioFocus::Studio(StudioKey::local(
+            "acme-shop"
+        )))
     );
 }
 
@@ -429,12 +478,12 @@ async fn studio_and_role_switches_never_change_the_size_panes_ask_for() {
     app.focused = Some("t1".into());
     app.refresh_projection();
     for key in [
-        hc_vt::Key::ArrowDown,
-        hc_vt::Key::ArrowUp,
+        hc_vt::Key::ArrowRight,
         hc_vt::Key::ArrowLeft,
-        hc_vt::Key::ArrowRight,
+        hc_vt::Key::ArrowUp,
         hc_vt::Key::ArrowDown,
         hc_vt::Key::ArrowRight,
+        hc_vt::Key::ArrowDown,
     ] {
         alt(&mut app, key);
     }

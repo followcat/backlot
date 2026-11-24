@@ -51,9 +51,9 @@ async fn a_configured_chord_toggles_through_the_prefix() {
 #[tokio::test]
 async fn a_refused_key_falls_back_to_alt_y_with_a_notice() {
     let mut app = app_with_doc();
-    // `alt+up` is `previous_studio` — refused, never echoed.
+    // `alt+left` is `previous_studio` — refused, never echoed.
     app.set_hollywood(
-        Ok(Some(cfg(Some("alt+up")))),
+        Ok(Some(cfg(Some("alt+left")))),
         std::path::Path::new("config.toml"),
     );
     assert!(app.notice.is_some(), "a refused key notices");
