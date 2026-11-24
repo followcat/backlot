@@ -34,6 +34,22 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   runner's caps; a no-effort runner has no effort step, an optional one allows empty) and no
   longer offer the `Close` that the command refuses on them.
 
+- **The lot shows who runs on what.** Every person row in the studio dock now carries a
+  dim runner tag before its state word (`claude`, `cmd`, `agy`, `codex`, `devin`,
+  `cursor`, `cline`, `opencode`, `fake`) and, while the frame has room, the cast's short
+  model form. The state word keeps the right edge and the name and task keep their cells:
+  the badge uses only spare space, dropping the model first, then the tag, so the name
+  truncates only when it alone overflows.
+
+- **"Restart to update".** When the local stage's published `backlot_version` (with its
+  published `backlot_build`, compared once the versions are equal) or an installed
+  `backlot --version` from the six-hour machine probe is newer than the running client,
+  one dim line closes the lot: `backlot <new> installed — restart the client to update
+  (q, then backlot)`. Strict semver decides; an older stage never draws it. The build id is
+  compiled in from git (`HEAD`, `-dirty` while the tree has changes), and
+  `backlot --version` prints it as `backlot 0.3.0 (abc123def456)` so equal-version rebuilds
+  are still distinguishable.
+
 - **The left tree answers to the keyboard: the launcher's machine rows.** `Ctrl+B ?`'s
   `machines` group now carries, per machine, `Stage log · <machine>`,
   `Unfold finished studios (n) · <machine>` (or `Fold …`) and `Machine menu · <machine>` — the

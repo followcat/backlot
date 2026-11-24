@@ -236,9 +236,73 @@ fn a_person_draws_one_line_with_the_state_word_right() {
         .collect::<String>();
     assert!(line.contains("alice · task-1"), "{line}");
     assert!(line.trim_end().ends_with("working│"), "{line}");
-    // No runner/model/doing on the person line.
-    assert!(!line.contains("agent-a"), "{line}");
+    // L4: the dim runner tag and short model ride before the state;
+    // the `doing` text stays off the row.
+    assert!(line.contains("agent-a"), "{line}");
+    assert!(line.contains(" m "), "{line}");
     assert!(!line.contains("writes code"), "{line}");
+}
+
+/// L4: a narrow row keeps the state word and gives up the runner tag
+/// first — the tag never pushes the state off the line.
+#[test]
+fn a_narrow_row_keeps_the_state_and_drops_the_runner_tag() {
+    let summary = summary();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 22, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.trim_end().ends_with("working│"), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
+}
+
+/// L4: the badge uses only spare cells — at a 36-column dock a long
+/// task keeps every cell and the runner tag drops.
+#[test]
+fn a_long_task_keeps_its_cells_and_drops_the_runner_tag() {
+    let mut value = summary_json();
+    value["studios"][0]["roles"][3]["task"] = serde_json::json!("task-1234567890");
+    let summary: Summary = serde_json::from_value(value).unwrap();
+    let panel = panel(PanelMode::Expanded);
+    let area = Rect::new(0, 0, 36, 30);
+    let (buf, hits) = draw(area, Some(&summary), &panel, None);
+    let alice = hits
+        .rows
+        .iter()
+        .find(|(_, t)| matches!(t, Target::Person(_, r) if r == "actor-alice"))
+        .map(|(rect, _)| *rect)
+        .expect("alice row hit");
+    let line = (area.x..area.x + area.width)
+        .map(|x| buf[(x, alice.y)].symbol())
+        .collect::<String>();
+    assert!(line.contains("alice · task-1234567890"), "{line}");
+    assert!(!line.contains("agent-a"), "{line}");
+    assert!(line.trim_end().ends_with("working│"), "{line}");
+}
+
+/// S2: a newer install puts one dim line at the foot of the lot.
+#[test]
+fn a_newer_install_draws_the_restart_line_at_the_foot() {
+    let summary = summary();
+    let mut panel = panel(PanelMode::Expanded);
+    panel.update = Some(crate::panel::UpdateHint {
+        version: "0.3.1".into(),
+    });
+    let area = Rect::new(0, 0, 100, 30);
+    let (buf, _) = draw(area, Some(&summary), &panel, None);
+    let text = lines(&buf, area).join("\n");
+    assert!(
+        text.contains("backlot 0.3.1 installed — restart the client to update (q, then backlot)"),
+        "{text}"
+    );
 }
 
 #[test]

@@ -222,10 +222,7 @@ fn hook_leaves_tui_args_alone() {
     let s = Scratch::new();
     let o = run(&s, &["--version"]);
     assert!(o.status.success());
-    assert_eq!(
-        stdout(&o).trim(),
-        format!("backlot {}", env!("CARGO_PKG_VERSION"))
-    );
+    assert_eq!(stdout(&o).trim(), hc_tui::cli::version_text());
 
     let o = run(&s, &["--session", "x"]);
     assert!(!o.status.success());
