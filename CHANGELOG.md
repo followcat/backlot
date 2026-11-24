@@ -4,6 +4,28 @@ All notable changes to hc-tui are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- The pinned official test core is official `hc` 0.1.22 plus `hc ls --table`
+  (`7cb4de47164f1d65db84dfab294166994f143a15`). Verified alignment across the
+  0.1.22 changes: chunked remote image paste (`put_chunks`) keeps two-hop
+  `machine/tN` uploads on `terminal.put`, aborts on chunk errors, and surfaces
+  documented storage/timeout errors without retrying; failed registry saves
+  (`unavailable`) surface cleanly and are never retried blindly; remote viewer
+  reattach fixes require no client workarounds.
+
+### Fixed
+
+- Child terminals ended because their parent closed (`reason = "killed"` with
+  `ended_by.by = "die_with_parent"`) are now auto-reaped alongside normal exited
+  terminals, while manual `terminal.kill` records stay untouched. (#56)
+- `hc-proto` now treats document-only `events.subscribe` streams (non-empty
+  `docs` without a terminal filter, which receive empty terminal snapshots and
+  omit terminal events in `hc` 0.1.22) as filtered so sequence gaps and
+  heartbeats do not trigger false resyncs.
+
 ## 0.1.17 — 2026-11-20
 
 ### Changed

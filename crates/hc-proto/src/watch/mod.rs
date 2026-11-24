@@ -197,7 +197,8 @@ pub struct WatchParams {
     /// `events.subscribe`, on top of `subscribe.docs`. Empty by default,
     /// and hc-tui keeps it empty: the core narrows a subscription that
     /// names documents to those alone, which silences its terminal
-    /// events, and hc-tui needs every terminal. A fork that already
+    /// events and returns empty terminal snapshots (0.1.22+), and
+    /// hc-tui needs every terminal. A fork that already
     /// narrows terminals (a label filter or one address) can name its own
     /// documents here — one place, so backlot adds its `backlot` prefixes
     /// beside it. Older cores ignore the member.

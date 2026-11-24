@@ -10,7 +10,7 @@ A version suffix is never a capability check: `hello.result.features` and field 
 
 ## Versions
 
-- **Built and tested against:** official `hc` 0.1.21 (upstream `c7517808d64f06609e4ecf0db1757005373cc3a3`), the pin
+- **Built and tested against:** official `hc` 0.1.22 plus `hc ls --table` (`7cb4de47164f1d65db84dfab294166994f143a15`), the pin
   in [integration](integration.md), and the fork `0.1.21-followcat.1`.
 - **Older official cores:** supported. Anything from 0.1.18 on works; a member or method a core does not know is
   simply absent and its feature stays off. Two examples: `events.subscribe`'s `docs` (0.1.21) is ignored by older
@@ -27,7 +27,7 @@ A version suffix is never a capability check: `hello.result.features` and field 
 | Agent status read from the screen | present | absent | Agents show a status only if they report OSC 7501. |
 | `automatic_input`, `resize_notifications`: attach results | may be absent | present | Accepted. Unknown result fields are ignored. |
 | `put_chunks`: `terminal.put_begin`/`put_chunk`/`put_finish` | advertised | absent until 0.1.21 | The image paste sends one `terminal.put`. |
-| `events.subscribe` `docs` (named documents) | n/a | 0.1.21 and later | Not named: hc-tui reads every terminal, and naming documents alone silences terminal events. |
+| `events.subscribe` `docs` (named documents) | n/a | 0.1.21 and later | Not named: hc-tui reads every terminal, and naming documents alone silences terminal events (and returns empty terminal snapshots from 0.1.22). |
 | `terminal.list`'s `machines` | n/a | 0.1.21 always sends it | An empty list means no machines; older cores omit it, which reads the same. |
 | `terminal.send` error kind `cancelled` | n/a | 0.1.21 and later | Older cores never send it; when it arrives the send is reported as refused, nothing was typed. |
 | `restore_screen`, `restart_environment` | n/a | 0.1.21 (config, capability) | Not used: hc-tui keeps its own lost-terminal placeholder and offers no core restart. |
