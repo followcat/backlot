@@ -8,6 +8,12 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+### Changed
+
+- **Swapped `Alt+arrow` studio navigation defaults.** `Alt+Left`/`Alt+Right` now step studios (`previous_studio = "alt+left"`, `next_studio = "alt+right"`) and `Alt+Up`/`Alt+Down` step cast members inside a studio workspace (`previous_role = "alt+up"`, `next_role = "alt+down"`); to restore the old layout, set `previous_studio = "alt+up"`, `next_studio = "alt+down"`, `previous_role = "alt+left"`, and `next_role = "alt+right"` under `[keys]` in `~/.config/backlot/config.toml`.
+
 ## 0.4.0 — 2026-11-24
 
 This release lets agents that never report progress serve as studio roles. The stage now raises a stall only when a role

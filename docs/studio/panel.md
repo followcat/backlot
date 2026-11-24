@@ -159,7 +159,7 @@ skipped — and borders are honest about focus: unfocused, every block edge is `
 - **Drawers:** `Space` on a person or task opens three dim lines underneath — task and
   priority, the `o`/`v` actions, and `esc`/`space` to close.
 - **Shortcuts line:** the last row of the panel, dim. Unfocused: the four studio keys with
-  their configured labels (`alt ↑↓ studio  ←→ role`). Focused: the panel's own keys
+  their configured labels (`alt ←→ studio  ↑↓ role`). Focused: the panel's own keys
   (`↑↓ move  m menu  ? keys  esc` — `esc back` over an overlay). Dropped under 8 rows.
 - **Restart to update:** while a source says a newer `backlot` is installed than the
   running client, one dim line closes the lot:
@@ -324,7 +324,7 @@ that is neither a studio person, a studio shell, the stage nor Hollywood (what h
 ## Mouse
 
 - Click on the title flips collapsed and expanded.
-- Click on a block's top border makes that studio current (as `Alt+Down` would).
+- Click on a block's top border makes that studio current (as `Alt+Right` would).
 - Click on a single-line (stacked) block expands it.
 - Click on a person focuses them; a click on a row selects it and acts like `Enter`.
 - Right-click on a row or the dock surface claims the dock's keys, selects the row and opens
@@ -348,10 +348,10 @@ key = "y"    # the chord tail after the prefix
 width = 36   # expanded column width, clamped to 28-48
 
 [keys]
-previous_studio = "alt+up"
-next_studio = "alt+down"
-previous_role = "alt+left"
-next_role = "alt+right"
+previous_studio = "alt+left"
+next_studio = "alt+right"
+previous_role = "alt+up"
+next_role = "alt+down"
 call_sheet = "alt+y"            # the direct call-sheet key; "" unbinds it
 prefix_call_sheet = "i"         # the prefix-chord tail; "" unbinds it
 ```
