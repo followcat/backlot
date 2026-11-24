@@ -128,9 +128,9 @@ fn person_of_reads_a_role() {
         model: None,
         effort: None,
         state: state.into(),
-        progress: None,
         doing: None,
-        activity: None,
+        progress: None,
+        running: None,
         work: None,
         failed: None,
         workdir: None,
@@ -250,8 +250,8 @@ fn state_text_uses_the_priority_words() {
     assert_eq!(Person::state_text(&role), "waiting · 900 tokens");
 
     role.work = None;
-    role.activity = None;
     role.doing = None;
+    role.running = None;
     role.attention = Some("cannot resume".into());
     role.attention_class = Some(AttentionClass::NeedsYou);
     role.attention_detail = Some("no session id to resume".into());

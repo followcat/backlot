@@ -5,7 +5,7 @@ use crate::chrome::palette::Palette;
 use crate::panel::config::StudioKeys;
 use crate::panel::{Panel, PanelMode, render};
 use crate::studio::StudioKey;
-use backlot_model::summary::{RoleDoing, RoleProgress, RoleSummary, Summary, Work};
+use backlot_model::summary::{RoleProgress, RoleRunning, RoleSummary, Summary, Work};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -18,9 +18,9 @@ fn base_role(work: Work, since_ms: u64) -> RoleSummary {
         model: Some("sonnet".into()),
         effort: None,
         state: "live".into(),
-        progress: None,
         doing: None,
-        activity: None,
+        progress: None,
+        running: None,
         work: Some(work),
         failed: None,
         workdir: None,
@@ -41,6 +41,11 @@ fn base_role(work: Work, since_ms: u64) -> RoleSummary {
 }
 
 fn render_panel(summary: Summary, width: u16) -> Vec<String> {
+    let now_ms = summary.updated_ms;
+    render_panel_at(summary, width, now_ms)
+}
+
+fn render_panel_at(summary: Summary, width: u16, now_ms: u64) -> Vec<String> {
     let area = Rect::new(0, 0, width, 16);
     let mut buf = Buffer::empty(area);
     let panel = Panel {
@@ -71,6 +76,7 @@ fn render_panel(summary: Summary, width: u16) -> Vec<String> {
         true,
         &Default::default(),
         &Palette::from_name("catppuccin").unwrap(),
+        now_ms,
     );
     (area.y..area.y + area.height)
         .map(|y| {
@@ -113,7 +119,7 @@ fn fit_working_line_scales_across_three_widths_and_omits_missing_parts() {
         text: "running the parity suite".into(),
         ts_ms: now_ms - 12 * 60_000,
     });
-    role.doing = Some(RoleDoing {
+    role.running = Some(RoleRunning {
         cmd: "cargo test".into(),
         since_ms: now_ms - 3 * 60_000,
     });
@@ -143,13 +149,14 @@ fn fit_working_line_scales_across_three_widths_and_omits_missing_parts() {
     assert!(display_width(&tiny) <= 10, "{tiny}");
     assert!(!tiny.contains('·'), "{tiny}");
 
-    // 5. Missing progress / doing / since_ms omit parts with no stray `·`.
+    // 5. Missing progress / running / since_ms omit parts with no stray `·`.
     role.progress = None;
     assert_eq!(
         fit_working_line(&role, now_ms, 80),
         "working 47m · cargo test 3m"
     );
     role.doing = None;
+    role.running = None;
     assert_eq!(fit_working_line(&role, now_ms, 80), "working 47m");
     role.since_ms = 0;
     role.progress = Some(RoleProgress {
@@ -170,7 +177,7 @@ fn panel_renders_working_detail_row_only_for_working_roles() {
         text: "running the parity suite".into(),
         ts_ms: now_ms - 12 * 60_000,
     });
-    working.doing = Some(RoleDoing {
+    working.running = Some(RoleRunning {
         cmd: "cargo test".into(),
         since_ms: now_ms - 3 * 60_000,
     });
@@ -210,5 +217,46 @@ fn panel_renders_working_detail_row_only_for_working_roles() {
     assert!(
         !idle_lines.iter().any(|l| l.contains("leftover note")),
         "{idle_lines:#?}"
+    );
+}
+
+#[test]
+fn working_ages_advance_with_injected_wall_clock_for_fixed_summary() {
+    let updated_ms = 60 * 60_000;
+    let mut role = base_role(Work::Working, updated_ms - 10 * 60_000);
+    role.progress = Some(RoleProgress {
+        text: "running the parity suite".into(),
+        ts_ms: updated_ms - 2 * 60_000,
+    });
+    role.running = Some(RoleRunning {
+        cmd: "cargo test".into(),
+        since_ms: updated_ms - 60_000,
+    });
+    let fixed_summary = studio_with(role, updated_ms);
+
+    let at_t1 = render_panel_at(fixed_summary.clone(), 80, updated_ms);
+    assert!(
+        at_t1.iter().any(
+            |l| l.contains("working 10m · \"running the parity suite\" 2m ago · cargo test 1m")
+        ),
+        "{at_t1:#?}"
+    );
+
+    // Same fixed summary (same `updated_ms`), 5 minutes later by injected wall clock.
+    let at_t2 = render_panel_at(fixed_summary.clone(), 80, updated_ms + 5 * 60_000);
+    assert!(
+        at_t2.iter().any(
+            |l| l.contains("working 15m · \"running the parity suite\" 7m ago · cargo test 6m")
+        ),
+        "{at_t2:#?}"
+    );
+
+    // Remote clock slightly ahead of local wall clock never yields negative ages (`0s` clamp).
+    let at_early = render_panel_at(fixed_summary, 80, updated_ms - 30 * 60_000);
+    assert!(
+        at_early
+            .iter()
+            .any(|l| l.contains("working 0s · \"running the parity suite\" 0s ago · cargo test 0s")),
+        "{at_early:#?}"
     );
 }

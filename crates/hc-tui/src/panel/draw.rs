@@ -89,6 +89,7 @@ pub(crate) fn render(
     active_surface: bool,
     pending: &crate::action::ActionTracker,
     palette: &Palette,
+    now_ms: u64,
 ) -> PanelRender {
     // Reset every cell first: `set_style` alone leaves the symbols the
     // frame underneath drew — a full-screen panel must not show pane
@@ -391,7 +392,7 @@ pub(crate) fn render(
                     rect,
                     role,
                     kind,
-                    studio.updated_ms,
+                    now_ms,
                     frame_of(&studio.key()),
                     palette,
                 );

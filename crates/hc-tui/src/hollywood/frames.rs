@@ -311,9 +311,9 @@ fn draw_studio(
         None => (
             on_set(studio.studio)
                 .and_then(|r| {
-                    r.activity
+                    r.doing
                         .as_deref()
-                        .or_else(|| r.doing.as_ref().map(|d| d.cmd.as_str()))
+                        .or_else(|| r.running.as_ref().map(|run| run.cmd.as_str()))
                         .or_else(|| r.progress.as_ref().map(|p| p.text.as_str()))
                 })
                 .or(studio.studio.next.as_deref())

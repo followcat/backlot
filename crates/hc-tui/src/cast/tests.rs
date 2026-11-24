@@ -78,7 +78,6 @@ fn cast_view<'a>(
         studio: Some(StudioRef {
             machine: None,
             studio: &summary.studios[0],
-            updated_ms: summary.updated_ms,
         }),
         label: Some(crate::panel::data::StudioLabel {
             full: "acme-shop".into(),

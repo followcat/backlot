@@ -33,7 +33,6 @@ pub(crate) struct MachineSummary {
 pub(crate) struct StudioRef<'a> {
     pub machine: Option<&'a str>,
     pub studio: &'a StudioSummary,
-    pub updated_ms: u64,
 }
 
 impl StudioRef<'_> {
@@ -133,7 +132,6 @@ pub(crate) fn studios(machines: &[MachineSummary]) -> Vec<StudioRef<'_>> {
             machine.summary.studios.iter().map(move |studio| StudioRef {
                 machine: machine.machine.as_deref(),
                 studio,
-                updated_ms: machine.summary.updated_ms,
             })
         })
         .collect()

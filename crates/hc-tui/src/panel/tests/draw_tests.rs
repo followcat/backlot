@@ -64,6 +64,7 @@ fn draw(
         true,
         &Default::default(),
         &palette(),
+        1,
     );
     (buf, hits)
 }
@@ -509,6 +510,7 @@ fn a_render_over_drawn_cells_leaves_no_symbol_behind() {
         true,
         &Default::default(),
         &palette(),
+        1,
     );
     for y in area.y..area.y + area.height {
         for x in area.x..area.x + area.width {
@@ -546,6 +548,7 @@ fn a_dead_stage_says_so_on_one_line_and_keeps_the_document() {
         true,
         &Default::default(),
         &palette(),
+        1,
     );
     let text = lines(&buf, area).join("\n");
     // The stage-down word is the block's owed-step line (S2 §2).
@@ -637,6 +640,7 @@ fn studios_spanning_machines_name_their_machine() {
         true,
         &Default::default(),
         &palette(),
+        1,
     );
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("acme-shop · Local"), "{text}");
@@ -676,6 +680,7 @@ fn one_machine_keeps_the_bare_id_headers() {
         true,
         &Default::default(),
         &palette(),
+        1,
     );
     let text = lines(&buf, area).join("\n");
     assert!(text.contains("acme-shop"), "{text}");
@@ -753,6 +758,7 @@ fn idle_collapsed_strip_renders_calm_counts_and_owed_cues() {
         true,
         &Default::default(),
         &palette(),
+        1,
     );
     let down_text = lines(&down_buf, area).join("\n");
     assert!(down_text.contains("◌ stage down"), "{down_text}");
@@ -795,6 +801,7 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
         true,
         &Default::default(),
         &palette,
+        1,
     );
     let sel_y = active_hits
         .rows
@@ -826,6 +833,7 @@ fn inactive_dock_surface_suppresses_selection_bar_and_highlight() {
         false,
         &Default::default(),
         &palette,
+        1,
     );
     assert_ne!(suppressed_buf[(1, sel_y)].symbol(), "▌");
     assert_ne!(suppressed_buf[(4, sel_y)].bg, palette.selection_bg);
@@ -862,6 +870,7 @@ fn the_mark_paints_only_where_a_studio_workspace_points() {
             true,
             &Default::default(),
             &palette(),
+            1,
         );
         let text = lines(&buf, area).join("\n");
         assert_eq!(text.contains('▸'), want, "mark {mark:?}: {text}");
@@ -897,6 +906,7 @@ fn a_solo_cast_drops_the_role_hint() {
             true,
             &Default::default(),
             &palette(),
+            1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
         assert_eq!(last.contains("role"), want, "{cast_entries}: {last}");
@@ -938,6 +948,7 @@ fn a_lone_studio_drops_the_studio_hint() {
             true,
             &Default::default(),
             &palette(),
+            1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
         assert_eq!(last.contains("studio"), want, "{last}");

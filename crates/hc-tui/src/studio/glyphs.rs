@@ -129,7 +129,7 @@ impl Person {
                     Person::UserPrompt
                 }
             }
-            _ if role.task.is_none() && role.activity.as_deref().is_none_or(|d| d == "idle") => {
+            _ if role.task.is_none() && role.doing.as_deref().is_none_or(|d| d == "idle") => {
                 Person::Ready
             }
             _ => Person::Idle,
@@ -223,20 +223,20 @@ impl Person {
                 .unwrap_or_else(|| "asks you".into()),
             Person::Stuck => format!("stuck · {}", detail()),
             Person::Working => match role
-                .activity
+                .doing
                 .as_deref()
                 .filter(|d| *d != "idle")
-                .or_else(|| role.doing.as_ref().map(|d| d.cmd.as_str()))
+                .or_else(|| role.running.as_ref().map(|r| r.cmd.as_str()))
             {
                 Some(doing) => format!("working · {doing}"),
                 None => "working".into(),
             },
-            Person::Idle => match role.activity.as_deref().filter(|d| *d != "idle") {
+            Person::Idle => match role.doing.as_deref().filter(|d| *d != "idle") {
                 Some(doing) => format!("waiting · {doing}"),
                 None => "waiting".into(),
             },
             Person::Slot => role
-                .activity
+                .doing
                 .clone()
                 .unwrap_or_else(|| "waiting for a slot".into()),
             Person::Ready => "ready".into(),
