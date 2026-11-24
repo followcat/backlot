@@ -332,7 +332,7 @@ impl Stage {
                     crate::act::prepare_hooks(hooks)
                         .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
                 }
-                let role_dir = crate::guard::hollywood_role_dir(&self.state_dir);
+                let role_dir = hdir.join("roles").join(HOLLYWOOD);
                 crate::guard::prepare_role(&role_dir, &self.exe_dir)
                     .map_err(|e| Fail::refused(format!("guard files: {e}")))?;
                 let labels = BTreeMap::from([

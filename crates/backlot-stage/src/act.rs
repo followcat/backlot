@@ -299,7 +299,7 @@ impl Stage {
         if let Some(hooks) = &launch.hooks {
             prepare_hooks(hooks).map_err(|e| Fail::refused(format!("hook files: {e}")))?;
         }
-        let role_dir = crate::guard::studio_role_dir(&self.state_dir, studio, &start.role);
+        let role_dir = dir.join("roles").join(&start.role);
         crate::guard::prepare_role(&role_dir, &self.exe_dir)
             .map_err(|e| Fail::refused(format!("guard files: {e}")))?;
         let cwd = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
