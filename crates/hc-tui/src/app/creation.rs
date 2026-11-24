@@ -174,23 +174,34 @@ impl App {
         let terminal = self
             .focused
             .as_ref()
-            .and_then(|id| self.view.inventory.get(id))
-            .ok_or("No focused terminal")?;
-        let machine = terminal.address.split_once('/').map(|(m, _)| m);
-        let snapshot = &self.projection.snapshot;
-        let workspace = snapshot
-            .focused_workspace_id
-            .as_ref()
-            .and_then(|id| snapshot.workspaces.iter().find(|w| &w.workspace_id == id))
-            .ok_or("No focused workspace")?;
-        // The reference creates the new workspace in the focused workspace's
-        // `new_workspace_cwd` (checkout root, else its folder).
-        let cwd = if workspace.new_workspace_cwd.is_empty() {
-            terminal.cwd.clone()
-        } else {
-            workspace.new_workspace_cwd.clone()
+            .and_then(|id| self.view.inventory.get(id));
+        let (machine, cwd, suggested, adoption_name) = match terminal {
+            Some(terminal) => {
+                let machine = terminal.address.split_once('/').map(|(m, _)| m);
+                let snapshot = &self.projection.snapshot;
+                let workspace = snapshot
+                    .focused_workspace_id
+                    .as_ref()
+                    .and_then(|id| snapshot.workspaces.iter().find(|w| &w.workspace_id == id));
+                // The reference creates the new workspace in the focused workspace's
+                // `new_workspace_cwd` (checkout root, else its folder).
+                let cwd = match workspace {
+                    Some(workspace) if !workspace.new_workspace_cwd.is_empty() => {
+                        workspace.new_workspace_cwd.clone()
+                    }
+                    _ => terminal.cwd.clone(),
+                };
+                let suggested = suggested_name(&cwd);
+                (machine, Some(cwd), suggested.clone(), suggested)
+            }
+            None => {
+                let machine = match &self.projection.active_endpoint_id {
+                    crate::chrome::snapshot::ClientEndpointId::Local => None,
+                    crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.as_str()),
+                };
+                (machine, None, "workspace".to_owned(), String::new())
+            }
         };
-        let suggested = suggested_name(&cwd);
         let raw_space = opaque_id()?;
         let raw_tab = opaque_id()?;
         let own_space = format!("space:{}:{raw_space}", raw_space.len());
@@ -200,7 +211,7 @@ impl App {
         let creation = Creation {
             params: hc_proto::terminal::RunParams {
                 on: machine.map(str::to_owned),
-                cwd: Some(cwd),
+                cwd,
                 no_parent: true,
                 no_notify: true,
                 keep: true,
@@ -230,7 +241,7 @@ impl App {
                 machine: machine.map(str::to_owned),
                 space: raw_space,
                 tabs: BTreeMap::from([(tab_key, raw_tab)]),
-                name: suggested.clone(),
+                name: adoption_name,
                 custom_label: false,
                 ..Default::default()
             }),
@@ -248,7 +259,7 @@ impl App {
 
 /// The reference's fallback workspace label for a non-checkout cwd: the
 /// path's basename, `~` for the home directory, `workspace` otherwise.
-fn suggested_name(cwd: &str) -> String {
+pub(crate) fn suggested_name(cwd: &str) -> String {
     let home = std::env::var_os("HOME").map(|h| h.to_string_lossy().into_owned());
     if home.as_deref().is_some_and(|h| !h.is_empty() && h == cwd) {
         return "~".into();

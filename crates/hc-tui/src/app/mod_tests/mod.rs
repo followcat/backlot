@@ -1,6 +1,7 @@
 //! Read-only application tests and shared fixtures.
 mod cases_1;
 mod cases_2;
+mod empty_core_workspace;
 mod endpoint_nav;
 mod endpoint_nav_b;
 mod float_draw;

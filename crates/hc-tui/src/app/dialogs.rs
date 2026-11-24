@@ -307,8 +307,12 @@ impl App {
                 // label means the automatic name (custom_label stays off).
                 let custom = !name.is_empty() && name != suggested;
                 if let Some(adoption) = &mut creation.space_adoption {
-                    adoption.name = if custom { name } else { suggested };
                     adoption.custom_label = custom;
+                    if custom {
+                        adoption.name = name;
+                    } else if creation.params.cwd.is_some() {
+                        adoption.name = suggested;
+                    }
                 }
                 Some(Action::Create(creation))
             }

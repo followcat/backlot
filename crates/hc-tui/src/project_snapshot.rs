@@ -261,18 +261,23 @@ pub(super) fn structured_snapshot_from_spaces(
                 .unwrap_or(first_tab),
             new_workspace_cwd: cwd,
             number,
-            label: clean(adopted.map(|a| a.name.as_str()).unwrap_or_else(|| {
-                if space.custom_name {
-                    &space.name
-                } else {
-                    space
-                        .from_app
-                        .then(|| live_space_folder(&members, &term_by_id))
-                        .flatten()
-                        .or_else(|| facts.and_then(|facts| facts.auto_label.as_deref()))
-                        .unwrap_or(&space.name)
-                }
-            })),
+            label: clean(
+                adopted
+                    .filter(|a| !a.name.is_empty())
+                    .map(|a| a.name.as_str())
+                    .unwrap_or_else(|| {
+                        if space.custom_name {
+                            &space.name
+                        } else {
+                            space
+                                .from_app
+                                .then(|| live_space_folder(&members, &term_by_id))
+                                .flatten()
+                                .or_else(|| facts.and_then(|facts| facts.auto_label.as_deref()))
+                                .unwrap_or(&space.name)
+                        }
+                    }),
+            ),
             custom_label: adopted.map_or(space.custom_name, |a| a.custom_label),
             branch: facts
                 .filter(|facts| facts.state == "ready")
