@@ -8,7 +8,12 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
-## Unreleased
+## 0.4.2 — 2026-11-25
+
+This release reworks how the person and Hollywood talk. The person's messages now reach Hollywood first and inline,
+ahead of stage notices, which are fewer: no notice for an applied card, and clean outcomes ride along as context instead
+of waking Hollywood. Alt+Y opens the Call Sheet ready to type, and every `›` line keeps an input history on Up and Down.
+A cast role that has not started yet, such as a recast writer waiting for a plan, now shows as standby.
 
 ### Changed
 
