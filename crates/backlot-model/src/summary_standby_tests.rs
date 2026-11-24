@@ -33,7 +33,12 @@ fn identity(runner: &str, model: &str, effort: Option<&str>) -> ActorIdentity {
     }
 }
 
-fn live_role(seq: u64, role: &str, terminal: Option<&str>, actor: ActorIdentity) -> crate::event::Event {
+fn live_role(
+    seq: u64,
+    role: &str,
+    terminal: Option<&str>,
+    actor: ActorIdentity,
+) -> crate::event::Event {
     ev(
         seq,
         "stage",
@@ -50,8 +55,18 @@ fn live_role(seq: u64, role: &str, terminal: Option<&str>, actor: ActorIdentity)
 #[test]
 fn unstarted_recast_writer_is_standby_until_plan_and_start() {
     let mut events = base_events();
-    events.push(live_role(4, "producer", Some("bl-acme-shop-producer"), actor("prod")));
-    events.push(live_role(5, "director", Some("bl-acme-shop-director"), actor("dir")));
+    events.push(live_role(
+        4,
+        "producer",
+        Some("bl-acme-shop-producer"),
+        actor("prod"),
+    ));
+    events.push(live_role(
+        5,
+        "director",
+        Some("bl-acme-shop-director"),
+        actor("dir"),
+    ));
     let recast_actor = identity("cmd", "new-writer", Some("high"));
     events.push(ev(
         6,
@@ -68,7 +83,10 @@ fn unstarted_recast_writer_is_standby_until_plan_and_start() {
     let names: Vec<&str> = roles.iter().map(|r| r.role.as_str()).collect();
     assert_eq!(names, vec!["producer", "director", "writer"]);
 
-    let writer = roles.iter().find(|r| r.role == "writer").expect("writer standby");
+    let writer = roles
+        .iter()
+        .find(|r| r.role == "writer")
+        .expect("writer standby");
     assert_eq!(writer.name, "writer");
     assert_eq!(writer.state, "standby");
     assert_eq!(writer.terminal, None);
@@ -137,12 +155,31 @@ fn unstarted_fixed_roles_without_recast_keep_cast_identity_and_order() {
     );
 
     // Once producer, director, and an actor run, writer stays standby before actors.
-    events.push(live_role(4, "producer", Some("bl-acme-shop-producer"), actor("prod")));
-    events.push(live_role(5, "director", Some("bl-acme-shop-director"), actor("dir")));
+    events.push(live_role(
+        4,
+        "producer",
+        Some("bl-acme-shop-producer"),
+        actor("prod"),
+    ));
+    events.push(live_role(
+        5,
+        "director",
+        Some("bl-acme-shop-director"),
+        actor("dir"),
+    ));
     events.push(ev(6, "director", cast("t1", "actor-a", "a")));
-    events.push(live_role(7, "actor-t1-c1", Some("bl-acme-shop-t1-c1"), actor("a")));
+    events.push(live_role(
+        7,
+        "actor-t1-c1",
+        Some("bl-acme-shop-t1-c1"),
+        actor("a"),
+    ));
     let doc = build_summary(replay(&events));
-    let order: Vec<&str> = doc.studios[0].roles.iter().map(|r| r.role.as_str()).collect();
+    let order: Vec<&str> = doc.studios[0]
+        .roles
+        .iter()
+        .map(|r| r.role.as_str())
+        .collect();
     assert_eq!(order, vec!["producer", "director", "writer", "actor-t1-c1"]);
 
     let writer = &doc.studios[0].roles[2];
@@ -251,8 +288,18 @@ mod v040_wire {
 #[test]
 fn wire_new_summary_with_standby_parses_into_v040_structs() {
     let mut events = base_events();
-    events.push(live_role(4, "producer", Some("bl-acme-shop-producer"), actor("prod")));
-    events.push(live_role(5, "director", Some("bl-acme-shop-director"), actor("dir")));
+    events.push(live_role(
+        4,
+        "producer",
+        Some("bl-acme-shop-producer"),
+        actor("prod"),
+    ));
+    events.push(live_role(
+        5,
+        "director",
+        Some("bl-acme-shop-director"),
+        actor("dir"),
+    ));
     let doc = build_summary(replay(&events));
     let raw = serde_json::to_string(&doc).expect("serialize new summary");
     let parsed: v040_wire::Summary = serde_json::from_str(&raw).expect("v0.4.0 parse");

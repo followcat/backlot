@@ -70,7 +70,15 @@ fn draw_cast(summary: &Summary, width: u16, height: u16) -> Buffer {
     let mut hits = ShellHitMap::default();
     let mut scroll = 0usize;
     let mut reveal = false;
-    render_cast(&mut buf, area, &view, &cfg, &mut scroll, &mut reveal, &mut hits);
+    render_cast(
+        &mut buf,
+        area,
+        &view,
+        &cfg,
+        &mut scroll,
+        &mut reveal,
+        &mut hits,
+    );
     buf
 }
 

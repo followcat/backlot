@@ -157,7 +157,10 @@ async fn hcard_recast_outcome_explains_when_writer_has_not_started() {
     let (hevents, _) = store::load_hevents(&hdir).unwrap();
     let hstate = replay(&hevents);
     let card = hstate.cards.get(&1).expect("card c1");
-    assert_eq!(card.detail, "writer starts when the director asks for a plan");
+    assert_eq!(
+        card.detail,
+        "writer starts when the director asks for a plan"
+    );
 
     let owed = crate::hnotice::owed(&BTreeMap::new(), &BTreeMap::new(), &hstate, 0);
     let outcome = owed

@@ -109,7 +109,10 @@ fn standby_row_in_dock_renders_dim_hint_line_and_no_counts() {
         "expected writer standby hint line below row, got: {row2}"
     );
     let hint_x = row2.find("starts").unwrap() as u16;
-    assert_eq!(buf[(area.x + hint_x, writer_rect.y + 1)].fg, palette.overlay0);
+    assert_eq!(
+        buf[(area.x + hint_x, writer_rect.y + 1)].fg,
+        palette.overlay0
+    );
 }
 
 #[test]

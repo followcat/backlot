@@ -46,8 +46,7 @@ impl V040Person {
             match class {
                 AttentionClass::Info => {}
                 AttentionClass::NeedsYou => {
-                    let user_marked =
-                        role.attention_user || attention.ends_with("needs the user");
+                    let user_marked = role.attention_user || attention.ends_with("needs the user");
                     return if attention.starts_with(PERMISSION_PROMPT) {
                         let non_actor = role.task.is_none() && !role.role.starts_with("actor-");
                         if user_marked || non_actor {
