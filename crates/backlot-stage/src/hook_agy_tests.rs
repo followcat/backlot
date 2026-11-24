@@ -7,20 +7,22 @@ use backlot_model::summary::Work;
 
 use crate::cli::Env;
 use crate::cli_testkit::{CAST_TOML, fixture, ok, scratch};
-use crate::hook::{run_io_env, run_io_with_delay};
+use crate::hook::run_io_with_delay;
 use crate::signals;
 use crate::store::{load_events, studio_dir};
 
 fn run_agy(args: &[String], env: &Env, cwd: &std::path::Path, body: &str) -> String {
     let mut out = Vec::new();
-    let code = run_io_env(
+    let (code, done) = run_io_with_delay(
         args,
         env,
         cwd,
         Duration::from_millis(1500),
+        None,
         &mut Cursor::new(body.as_bytes()),
         &mut out,
     );
+    done.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(code, ExitCode::SUCCESS);
     String::from_utf8(out).unwrap()
 }
@@ -255,15 +257,16 @@ fn agy_pre_tool_use_fails_open_on_internal_error_invalid_json_and_timeout() {
     );
 
     let mut out = Vec::new();
-    let code = run_io_with_delay(
+    let (code, done) = run_io_with_delay(
         &args,
         &env,
         &s.files,
         Duration::from_millis(20),
-        Duration::from_millis(120),
+        Some(Duration::from_millis(120)),
         &mut Cursor::new(push_payload.as_bytes()),
         &mut out,
     );
+    done.recv_timeout(Duration::from_secs(5)).unwrap();
     assert_eq!(code, ExitCode::SUCCESS);
     let timed_out = String::from_utf8(out).unwrap();
     assert_eq!(

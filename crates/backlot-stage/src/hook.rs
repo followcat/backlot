@@ -226,7 +226,7 @@ pub(crate) fn run_io_env(
     stdin: &mut impl Read,
     stdout: &mut impl Write,
 ) -> ExitCode {
-    run_io_inner(args, env, cwd, budget, stdin, stdout, None)
+    run_io_inner(args, env, cwd, budget, stdin, stdout, None, None)
 }
 
 #[cfg(test)]
@@ -235,11 +235,23 @@ pub(crate) fn run_io_with_delay(
     env: &crate::cli::Env,
     cwd: &Path,
     budget: std::time::Duration,
-    delay: std::time::Duration,
+    delay: Option<std::time::Duration>,
     stdin: &mut impl Read,
     stdout: &mut impl Write,
-) -> ExitCode {
-    run_io_inner(args, env, cwd, budget, stdin, stdout, Some(delay))
+) -> (ExitCode, std::sync::mpsc::Receiver<()>) {
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    let code = run_io_inner(args, env, cwd, budget, stdin, stdout, delay, Some(done_tx));
+    (code, done_rx)
+}
+
+#[cfg(test)]
+struct DoneGuard(std::sync::mpsc::Sender<()>);
+
+#[cfg(test)]
+impl Drop for DoneGuard {
+    fn drop(&mut self) {
+        let _ = self.0.send(());
+    }
 }
 
 fn in_role_env(env: &crate::cli::Env) -> bool {
@@ -248,6 +260,7 @@ fn in_role_env(env: &crate::cli::Env) -> bool {
         && crate::guard::role_dir_from_env(env).is_some()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_io_inner(
     args: &[String],
     env: &crate::cli::Env,
@@ -256,7 +269,12 @@ fn run_io_inner(
     stdin: &mut impl Read,
     stdout: &mut impl Write,
     test_delay: Option<std::time::Duration>,
+    test_done: Option<std::sync::mpsc::Sender<()>>,
 ) -> ExitCode {
+    #[cfg(test)]
+    let _done_guard = test_done.map(DoneGuard);
+    #[cfg(not(test))]
+    let _ = test_done;
     let runner = runner_arg(args);
     let is_agy = runner == Some("agy");
     let file = file_arg(args);
@@ -304,6 +322,8 @@ fn run_io_inner(
     let refused_for_worker = refused.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
+        #[cfg(test)]
+        let _worker_done = _done_guard;
         if let Some(d) = test_delay {
             std::thread::sleep(d);
         }
