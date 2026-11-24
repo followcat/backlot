@@ -91,11 +91,15 @@ How the structured fields are consumed:
   episode escalates. A weekly or monthly limit escalates at once. A non-working screen (or an
   `error` message) naming `Connection error` raises its own episode and gets the same bounded
   `continue`, on a 15-second wait; a rate limit on the same sample wins.
-- `activity.revision` → the structured stall: for runners whose revision advances mid-turn (`claude`,
-  `codex`, `devin`, `opencode`, `cursor`, `cmd`), a terminal reporting `working` whose revision does
-  not move for `stall_limit_s` stalls like a frozen screen, and a revision that moves after the
-  raise resolves `activity resumed`. Runners whose revision is turn-level only (`agy`) or absent
-  (`cline`, `fake`) do not stall on a frozen revision — `agy` falls back to its screen-change clock.
+- `activity.revision` → feeds D4's unified liveness evidence track for runners whose revision advances
+  mid-turn (`claude`, `codex`, `devin`, `opencode`, `cursor`, `cmd`): a change while `working`
+  counts as activity and clears `stalled` with `activity resumed`. Runners whose revision is
+  turn-level only (`agy`) or absent (`cline`, `fake`) never count revision freezes against them.
+  Across all runners, `runners/normalise.rs` strips animated braille spinners (`U+2800..=U+28FF`),
+  Claude/cmd spinner glyphs, elapsed durations, `Thought for Ns, N tokens` headers, token
+  counters, and status-line clocks before comparing screens for stalls so spinner-only redraws
+  still stall (`screen animates only (spinner)`), while the delivery gate continues to inspect the
+  raw screen.
 - On an **upstream hc core** (no screen inference, no fork manifests), cmd and cursor report
   nothing at all — every structured field stays empty and the screen markers carry them, which
   is what the stage did before this upgrade.
