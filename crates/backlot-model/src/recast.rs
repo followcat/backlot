@@ -18,6 +18,19 @@ pub const SUPPORTED_RUNNERS: &[&str] = &[
 /// The three fixed roles this event may name.
 pub const FIXED_ROLES: &[&str] = &["producer", "director", "writer"];
 
+/// Feedback note when recasting a fixed role that has not started yet.
+pub fn unstarted_note(state: &StudioState, role: &str) -> Option<&'static str> {
+    if state.roles.contains_key(role) {
+        return None;
+    }
+    Some(match role {
+        "writer" => "writer starts when the director asks for a plan",
+        "producer" => "producer starts with the studio",
+        "director" => "director starts with the studio",
+        _ => return None,
+    })
+}
+
 /// Whether `runner` has an adapter.
 pub fn supported_runner(runner: &str) -> bool {
     SUPPORTED_RUNNERS.contains(&runner)

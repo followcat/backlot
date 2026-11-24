@@ -688,7 +688,9 @@ pub fn confirm(event: &backlot_model::Event) -> String {
             task, candidate, ..
         } => format!(" {task} {candidate}"),
         EventKind::TaskPriority { task, priority } => format!(" {task} {priority}"),
-        EventKind::RoleReopen { role } | EventKind::RoleRelease { role } => {
+        EventKind::RoleReopen { role }
+        | EventKind::RoleRelease { role }
+        | EventKind::RoleRecast { role, .. } => {
             format!(" {role}")
         }
         EventKind::RoleRestart { role, fresh, .. } => {

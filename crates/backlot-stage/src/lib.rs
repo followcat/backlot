@@ -230,6 +230,8 @@ mod range_tests;
 #[cfg(test)]
 mod recast_cmd_tests;
 #[cfg(test)]
+mod recast_standby_tests;
+#[cfg(test)]
 mod render_tests;
 #[cfg(test)]
 mod reopen_cmd_tests;

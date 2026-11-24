@@ -167,12 +167,12 @@ impl Stage {
                 crate::stagelog::stage_log!("card c{} failed", card.seq);
             }
             Step::Act(kind) => match append_studio(&sdir, *kind) {
-                Ok(()) => {
+                Ok(note) => {
                     self.happend(
                         hdir,
                         HollywoodKind::CardDone {
                             card: card.seq,
-                            note: String::new(),
+                            note: note.unwrap_or("").into(),
                         },
                     )?;
                     crate::stagelog::stage_log!("card c{} done", card.seq);
@@ -236,8 +236,8 @@ fn action_kind(card: &Card) -> Result<EventKind, String> {
 
 /// Append a `by: user` event to the studio — the same validation a
 /// user's own command runs.
-fn append_studio(dir: &Path, kind: EventKind) -> Result<(), String> {
-    append_studio_files(dir, kind, Vec::new())
+fn append_studio(dir: &Path, kind: EventKind) -> Result<Option<&'static str>, String> {
+    append_studio_noted(dir, kind, Vec::new())
 }
 
 /// Append with carried files — `by: user` through the ledger's own
@@ -247,13 +247,26 @@ pub(crate) fn append_studio_files(
     kind: EventKind,
     files: Vec<PendingFile>,
 ) -> Result<(), String> {
-    store::append(dir, move |_, _| {
+    append_studio_noted(dir, kind, files).map(|_| ())
+}
+
+fn append_studio_noted(
+    dir: &Path,
+    kind: EventKind,
+    files: Vec<PendingFile>,
+) -> Result<Option<&'static str>, String> {
+    let note_cell = std::cell::Cell::new(None);
+    let note = &note_cell;
+    store::append(dir, move |state, _| {
+        if let EventKind::RoleRecast { ref role, .. } = kind {
+            note.set(backlot_model::recast::unstarted_note(state, role));
+        }
         Ok::<_, std::convert::Infallible>(store::Pending {
             event: backlot_model::NewEvent::new(backlot_model::EventBy::role("user"), kind),
             files,
         })
     })
-    .map(|_| ())
+    .map(|_| note_cell.get())
     .map_err(|e| match e {
         store::StoreError::Io(e) => format!("append: {e}"),
         store::StoreError::Corrupt(c) => c.to_string(),
