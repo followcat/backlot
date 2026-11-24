@@ -242,6 +242,12 @@ pub(crate) fn run_io_with_delay(
     run_io_inner(args, env, cwd, budget, stdin, stdout, Some(delay))
 }
 
+fn in_role_env(env: &crate::cli::Env) -> bool {
+    env.get("BACKLOT_STATE_DIR").is_some_and(|s| !s.is_empty())
+        && env.get("BACKLOT_ROLE").is_some_and(|s| !s.is_empty())
+        && crate::guard::role_dir_from_env(env).is_some()
+}
+
 fn run_io_inner(
     args: &[String],
     env: &crate::cli::Env,
@@ -285,7 +291,7 @@ fn run_io_inner(
     }
 
     let is_pre_tool = field(&payload, "hookEventName") == Some("PreToolUse");
-    let refused = if is_pre_tool {
+    let refused = if is_pre_tool && in_role_env(env) {
         agy_run_command_line(&payload).and_then(crate::guard_rules::refused_command_line)
     } else {
         None

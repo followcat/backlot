@@ -174,6 +174,57 @@ fn agy_pre_tool_use_refuses_outward_command_records_once_and_allows_safe_calls()
 }
 
 #[test]
+fn agy_pre_tool_use_allows_outside_role_env_and_refuses_in_role_env() {
+    let (s, mut role_env) = scratch();
+    let cast = fixture(&s, "cast.toml", CAST_TOML);
+    ok(
+        &role_env,
+        &format!("studio new --title Shop --repo /home/user/acme-shop --cast {cast}"),
+    );
+    role_env
+        .vars
+        .insert("BACKLOT_ROLE".into(), "director".into());
+
+    let sig = s.files.join("signals.jsonl");
+    let args = vec![
+        "--runner".into(),
+        "agy".into(),
+        "--file".into(),
+        sig.to_string_lossy().into_owned(),
+    ];
+    let push_payload = r#"{"conversationId":"person-conv","hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"git push origin HEAD"}}}"#;
+
+    // Outside a role env (person's own agy in the same work area): always allow, record nothing.
+    let empty_out = run_agy(&args, &Env::default(), &s.files, push_payload);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(empty_out.trim()).unwrap()["decision"],
+        "allow"
+    );
+    let (events_before, _) = load_events(&studio_dir(&s.dir, "acme-shop")).unwrap();
+    assert!(events_before.iter().all(|e| !matches!(
+        e.kind,
+        EventKind::RoleRefused { .. } | EventKind::AttentionRaised { .. }
+    )));
+
+    // Same payload inside a role env: denied and recorded.
+    let role_out = run_agy(&args, &role_env, &s.files, push_payload);
+    let parsed: serde_json::Value = serde_json::from_str(role_out.trim()).unwrap();
+    assert_eq!(parsed["decision"], "deny");
+    assert_eq!(
+        parsed["reason"],
+        "refused by backlot: git push origin is the person's to run; ask with backlot ask"
+    );
+    let (events_after, _) = load_events(&studio_dir(&s.dir, "acme-shop")).unwrap();
+    assert_eq!(
+        events_after
+            .iter()
+            .filter(|e| matches!(e.kind, EventKind::RoleRefused { .. }))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn agy_pre_tool_use_fails_open_on_internal_error_invalid_json_and_timeout() {
     let (s, mut env) = scratch();
     let studio = studio_dir(&s.dir, "acme-shop");

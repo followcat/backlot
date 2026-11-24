@@ -354,12 +354,16 @@ re-raise one `stall_limit_s` later.
   updates/machine/server-stop, `scp`, remote `rsync`, `ssh <host> <cmd>`, `npm publish`,
   `cargo publish`), not a determined escape: invoking an absolute binary path (for example
   `/usr/bin/git` or `/usr/bin/gh`) or clearing `PATH` / `GIT_CONFIG_*` bypasses the shims and
-  hook directory; when `agy`'s `.agents/hooks.json` is active, its `PreToolUse` hook intercepts
-  `run_command` (including `bash -c` and chained commands) before `.agy-settings.json`
-  `permissions.deny`, records `role.refused` and `outward action`, and returns `refused by backlot: …`.
-  Fallback `permissions.deny` entries still stop directly-invoked commands in `agy` without reaching a
-  shim or appending `role.refused` if hooks were skipped (`hooks unavailable`, e.g. tracked
-  `.agents/hooks.json`) or on turn 1 before folder trust is granted in an untrusted workspace;
+  hook directory; when `agy`'s `.agents/hooks.json` is active inside a role env (`BACKLOT_*`), its
+  `PreToolUse` hook intercepts `run_command` (including `bash -c` and chained commands) before
+  `.agy-settings.json` `permissions.deny`, records `role.refused` and `outward action`, and returns
+  `refused by backlot: …` (outside a role env, `PreToolUse` always answers allow, and the
+  `PreToolUse` shell fallback answers `{"decision":"allow"}` if the recorded `backlot` binary is
+  missing or exits nonzero). In a not-yet-trusted work area, `agy` loads the work-area hooks only
+  after the trust dialog is answered, so the turn that started before it runs without the hook guard;
+  the shims (`roles/<role>/bin` and `GIT_CONFIG_*` git hook) and `.agy-settings.json`
+  `permissions.deny` still apply on that turn (direct prefix denials stop inside `agy` without
+  reaching a shim or appending `role.refused`, as do skipped/tracked `hooks unavailable` cases);
   `claude-settings.json` stays hooks-only and relies on the shims and git hook;
   `cmd` and `devin` signal hooks run as lifecycle hooks rather than a command guard (relying on
   the shims and git hook, and their work-area hook setups are unit-tested and CLI-measured rather
