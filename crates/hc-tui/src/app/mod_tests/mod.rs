@@ -65,6 +65,7 @@ mod studio;
 mod studio_cache;
 mod studio_machines;
 mod studio_mouse;
+mod studio_notify;
 mod sync_output;
 mod update_card;
 mod update_source;
