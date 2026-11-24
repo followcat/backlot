@@ -197,6 +197,9 @@ pub struct RunnerCaps {
     /// The key a recorded `deny` sends, if any.
     pub approval_deny: Option<&'static str>,
     pub status_source: StatusSource,
+    /// Whether `activity.revision` advances mid-turn rather than only
+    /// on turn completion.
+    pub mid_turn_revision: bool,
     /// The hook events the per-session settings file registers.
     pub hooks: &'static [&'static str],
 }
@@ -227,6 +230,13 @@ impl RunnerCaps {
 /// the old behaviour (documents written before this field read `true`).
 pub fn can_answer_prompt(runner: &str) -> bool {
     get(runner).is_none_or(RunnerCaps::can_answer)
+}
+
+/// Whether a frozen `activity.revision` while `status.state ==
+/// "working"` triggers a structured stall; turn-level revisions (`agy`)
+/// and runners without revision reporting return `false`.
+pub fn revision_stalls(runner: &str) -> bool {
+    get(runner).is_none_or(|c| c.mid_turn_revision)
 }
 
 /// The capability row for `name`.
@@ -264,6 +274,7 @@ pub static CLAUDE: RunnerCaps = RunnerCaps {
     approval_allow: Some("enter"),
     approval_deny: Some("esc"),
     status_source: StatusSource::ForkInference,
+    mid_turn_revision: true,
     hooks: CLAUDE_HOOKS,
 };
 
@@ -285,6 +296,7 @@ pub static CODEX: RunnerCaps = RunnerCaps {
     approval_allow: Some("enter"),
     approval_deny: Some("esc"),
     status_source: StatusSource::ForkInference,
+    mid_turn_revision: true,
     hooks: &[],
 };
 
@@ -306,6 +318,7 @@ pub static DEVIN: RunnerCaps = RunnerCaps {
     approval_allow: Some("enter"),
     approval_deny: Some("esc"),
     status_source: StatusSource::Native,
+    mid_turn_revision: true,
     hooks: &[],
 };
 
@@ -327,6 +340,7 @@ pub static OPENCODE: RunnerCaps = RunnerCaps {
     approval_allow: None,
     approval_deny: None,
     status_source: StatusSource::ForkInference,
+    mid_turn_revision: true,
     hooks: &[],
 };
 
@@ -348,6 +362,7 @@ pub static CURSOR: RunnerCaps = RunnerCaps {
     approval_allow: Some("y"),
     approval_deny: None,
     status_source: StatusSource::ForkInference,
+    mid_turn_revision: true,
     hooks: &[],
 };
 
@@ -369,6 +384,7 @@ pub static CMD: RunnerCaps = RunnerCaps {
     approval_allow: Some("enter"),
     approval_deny: Some("esc"),
     status_source: StatusSource::ForkInference,
+    mid_turn_revision: true,
     hooks: &[],
 };
 
@@ -393,6 +409,7 @@ pub static CLINE: RunnerCaps = RunnerCaps {
     approval_allow: None,
     approval_deny: None,
     status_source: StatusSource::ScreenOnly,
+    mid_turn_revision: false,
     hooks: &["PreToolUse"],
 };
 
@@ -414,6 +431,7 @@ pub static AGY: RunnerCaps = RunnerCaps {
     approval_allow: None,
     approval_deny: None,
     status_source: StatusSource::None,
+    mid_turn_revision: false,
     hooks: &[],
 };
 
@@ -435,6 +453,7 @@ pub static FAKE: RunnerCaps = RunnerCaps {
     approval_allow: Some("enter"),
     approval_deny: Some("esc"),
     status_source: StatusSource::ScreenOnly,
+    mid_turn_revision: false,
     hooks: CLAUDE_HOOKS,
 };
 
@@ -495,5 +514,16 @@ mod tests {
             can_answer_prompt("unknown"),
             "a missing cap keeps the old read"
         );
+    }
+
+    #[test]
+    fn revision_stalls_only_when_revision_moves_mid_turn() {
+        assert!(!revision_stalls("agy"));
+        assert!(!revision_stalls("cline"));
+        assert!(!revision_stalls("fake"));
+        for r in ["claude", "codex", "devin", "opencode", "cursor", "cmd"] {
+            assert!(revision_stalls(r), "{r}");
+        }
+        assert!(revision_stalls("unknown"));
     }
 }

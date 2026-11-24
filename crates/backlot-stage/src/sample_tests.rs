@@ -961,3 +961,51 @@ async fn an_error_with_limit_text_gets_its_continue() {
         _ => unreachable!(),
     }
 }
+
+/// A runner whose `activity.revision` is turn-level only (`agy`) does
+/// not stall on a frozen revision while its screen keeps changing; a
+/// runner with mid-turn revisions (`devin`) still does.
+#[tokio::test]
+async fn turn_level_revision_runner_does_not_stall_while_screen_changes() {
+    let dir = tmp();
+    studio_with_limit(&dir, 4);
+    running_task(&dir);
+    let mut term = term();
+    term.status = Some(hc_proto::terminal::Status {
+        state: "working".into(),
+        ..Default::default()
+    });
+    term.activity_revision = Some(42);
+    let (stage, fake) = stage().await;
+    let t0 = now_ms();
+
+    // `agy` reads `working` with revision frozen at 42 for 6s > 4s,
+    // while the visible screen updates every sample: no stall raises.
+    for k in 0..7 {
+        fake.lock().unwrap().screen = format!("Running command... {k}s\n");
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "agy", t0 + k * 1_000).await;
+    }
+    assert!(
+        events(&dir, "attention.raised").is_empty(),
+        "agy must not stall on a frozen turn-level revision"
+    );
+
+    // Contrast: `devin` (mid-turn revision) with the same frozen
+    // revision and changing screen stalls once the 4s limit passes.
+    for k in 7..12 {
+        fake.lock().unwrap().screen = format!("devin working tick {k}\n");
+        sample_runner(&stage, &dir, &term, "actor-t1-c1", "devin", t0 + k * 1_000).await;
+    }
+    let raised = events(&dir, "attention.raised");
+    assert_eq!(raised.len(), 1, "devin should stall on frozen revision");
+    match &raised[0].kind {
+        EventKind::AttentionRaised { reason, detail, .. } => {
+            assert_eq!(reason, backlot_model::event::STALLED);
+            assert!(
+                detail.contains("activity revision unchanged for 4s"),
+                "{detail}"
+            );
+        }
+        _ => unreachable!(),
+    }
+}

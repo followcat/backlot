@@ -150,9 +150,11 @@ impl crate::daemon::Stage {
         // The structured stall's clock (S12d): while the terminal
         // reports `working`, its activity revision must keep
         // moving — `rev_since` is when the current revision first
-        // showed. A terminal not reporting `working` drops its
-        // entry and never stalls this way.
-        let working = w.term.status.as_ref().is_some_and(|s| s.state == "working");
+        // showed. A terminal not reporting `working`, or a runner
+        // whose revision is turn-level only (such as `agy`, R7a),
+        // drops its entry and never stalls this way.
+        let working = backlot_model::caps::revision_stalls(w.runner)
+            && w.term.status.as_ref().is_some_and(|s| s.state == "working");
         let rev_since = match w.term.activity_revision.filter(|_| working) {
             None => {
                 self.revision_since.borrow_mut().remove(&pair);
