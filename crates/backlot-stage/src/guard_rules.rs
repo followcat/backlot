@@ -278,3 +278,9 @@ pub(crate) fn refused_command(name: &str, args: &[String]) -> Option<String> {
         .join(" ");
     Some(cap_command(&joined))
 }
+
+/// Inspect a shell command line (such as `agy`'s `run_command` `CommandLine`)
+/// and return the formatted refused command if any segment invokes one.
+pub(crate) fn refused_command_line(line: &str) -> Option<String> {
+    crate::guard_shell::refused_command_line(line)
+}

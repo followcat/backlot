@@ -30,6 +30,7 @@ mod exchange_read;
 mod gitcmd;
 mod guard;
 mod guard_rules;
+mod guard_shell;
 mod hcard;
 mod hcard_new;
 mod hdeliver;
@@ -145,12 +146,16 @@ mod finish_sweep_tests;
 #[cfg(test)]
 mod gitcmd_tests;
 #[cfg(test)]
+mod guard_line_tests;
+#[cfg(test)]
 mod guard_tests;
 
 #[cfg(test)]
 mod hcard_tests;
 #[cfg(test)]
 mod hnotice_tests;
+#[cfg(test)]
+mod hook_agy_tests;
 #[cfg(test)]
 mod hook_tests;
 #[cfg(test)]
