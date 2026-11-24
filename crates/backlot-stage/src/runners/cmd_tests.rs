@@ -266,8 +266,9 @@ fn prepare_writes_the_settings_file() {
         allow: allow_rules("director", &[check("unit", "cargo test")]),
         additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
         global_mcp: home.join(".commandcode/mcp.json"),
+        signals: dir.join("signals.jsonl"),
     };
-    assert!(!prepare(&prep).unwrap());
+    assert_eq!(prepare(&prep).unwrap(), None);
     let mode = fs::metadata(&prep.settings).unwrap().permissions().mode() & 0o777;
     assert_eq!(mode, 0o600);
     let v: serde_json::Value =
@@ -280,6 +281,12 @@ fn prepare_writes_the_settings_file() {
     assert_eq!(
         v["permissions"]["additionalDirectories"],
         serde_json::json!(["/home/user/state/studios/acme-shop"])
+    );
+    assert!(
+        v["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("hook --runner cmd --file")
     );
     // An empty HOME lookup is an error, not a skipped mask.
     let prep = CmdPrep {
@@ -312,6 +319,7 @@ fn prepare_errors_never_carry_content() {
         allow: vec!["Shell(backlot)".into()],
         additional_dirs: vec!["/state/studios/acme-shop".into()],
         global_mcp: mcp,
+        signals: dir.join("signals.jsonl"),
     };
     let err = prepare(&prep).unwrap_err();
     assert!(err.contains("mcp.json"), "{err}");
@@ -536,4 +544,98 @@ fn prepare_for_hollywood_names_the_studios_dir() {
         v["permissions"]["additionalDirectories"],
         serde_json::json!([studios])
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn cmd_hooks_splice_preserves_auth_info_and_user_hooks() {
+    let dir = tmp("prep-splice");
+    let home = dir.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let cwd = dir.join("work");
+    fs::create_dir_all(cwd.join(".commandcode")).unwrap();
+    let settings = cwd.join(".commandcode/settings.json");
+    let existing = "{\n  \"authInfo\": {\n    \"token\": \"keep-bytes\"\n  },\n  \"hooks\": {\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo user-pre\"\n          }\n        ]\n      }\n    ]\n  }\n}\n";
+    fs::write(&settings, existing).unwrap();
+    let prep = CmdPrep {
+        settings: settings.clone(),
+        allow: vec!["Shell(backlot)".into()],
+        additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
+        global_mcp: home.join(".commandcode/mcp.json"),
+        signals: dir.join("signals.jsonl"),
+    };
+    assert_eq!(prepare(&prep).unwrap(), None);
+    let out = fs::read_to_string(&settings).unwrap();
+    assert!(
+        out.contains("\"authInfo\": {\n    \"token\": \"keep-bytes\"\n  }"),
+        "{out}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let pre = parsed["hooks"]["PreToolUse"].as_array().unwrap();
+    assert_eq!(pre.len(), 2);
+    assert_eq!(pre[0]["hooks"][0]["command"], "echo user-pre");
+    assert!(
+        pre[1]["hooks"][0]["command"]
+            .as_str()
+            .unwrap()
+            .contains("hook --runner cmd --file")
+    );
+    // Re-running prepare replaces backlot's entry instead of duplicating it.
+    assert_eq!(prepare(&prep).unwrap(), None);
+    let parsed2: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&settings).unwrap()).unwrap();
+    assert_eq!(parsed2["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+#[cfg(unix)]
+fn cmd_excludes_new_settings_and_skips_tracked() {
+    let dir = tmp("prep-git");
+    let home = dir.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let repo = dir.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    let run_git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(["-c", "user.name=alice", "-c", "user.email=alice@host-a"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{args:?}");
+    };
+    run_git(&["init", "-b", "main"]);
+    fs::write(repo.join("f"), "base\n").unwrap();
+    run_git(&["add", "."]);
+    run_git(&["commit", "-m", "base"]);
+
+    let settings = repo.join(".commandcode/settings.json");
+    let prep = CmdPrep {
+        settings: settings.clone(),
+        allow: vec!["Shell(backlot)".into()],
+        additional_dirs: vec!["/home/user/state/studios/acme-shop".into()],
+        global_mcp: home.join(".commandcode/mcp.json"),
+        signals: dir.join("signals.jsonl"),
+    };
+    assert_eq!(prepare(&prep).unwrap(), None);
+    let exclude = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();
+    assert!(
+        exclude
+            .lines()
+            .any(|l| l.trim() == ".commandcode/settings.json"),
+        "{exclude}"
+    );
+
+    let orig = "{\"team\":true}\n";
+    fs::write(&settings, orig).unwrap();
+    run_git(&["add", "-f", ".commandcode/settings.json"]);
+    run_git(&["commit", "-m", "track cmd settings"]);
+    assert_eq!(
+        prepare(&prep).unwrap(),
+        Some(super::PrepNote::HooksUnavailable(
+            ".commandcode/settings.json"
+        ))
+    );
+    assert_eq!(fs::read_to_string(&settings).unwrap(), orig);
 }

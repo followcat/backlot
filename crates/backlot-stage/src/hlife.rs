@@ -345,10 +345,20 @@ impl Stage {
                     .and_then(|program| self.runner_version(program));
                 hprepare_launch(hdir, &actor.runner, resume)?;
                 if let Some(prep) = &launch.prep {
-                    runners::prepare(prep).map_err(|e| Fail::refused(format!("prep: {e}")))?;
+                    match runners::prepare(prep) {
+                        Err(e) => return Err(Fail::refused(format!("prep: {e}"))),
+                        Ok(Some(runners::PrepNote::HooksUnavailable(rel))) => {
+                            self.hlog(&format!("hooks unavailable ({rel} is tracked)"));
+                        }
+                        Ok(_) => {}
+                    }
                 }
                 if let Some(hooks) = &launch.hooks {
                     crate::act::prepare_hooks(hooks)
+                        .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
+                } else if let Some(sig) = launch.prep.as_ref().and_then(runners::prep_signals_file)
+                {
+                    runners::truncate_signals(sig)
                         .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
                 }
                 let role_dir = hdir.join("roles").join(HOLLYWOOD);

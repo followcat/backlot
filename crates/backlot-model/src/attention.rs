@@ -61,9 +61,10 @@ impl AttentionClass {
             | "outward action"
             | "owed" => AttentionClass::NeedsYou,
             "stalled" | "rate limited" | "connection error" | "question" => AttentionClass::Stuck,
-            "session id not found" | "inherited XDG_CONFIG_HOME" | "cursor dir was open" => {
-                AttentionClass::Info
-            }
+            "session id not found"
+            | "inherited XDG_CONFIG_HOME"
+            | "cursor dir was open"
+            | "hooks unavailable" => AttentionClass::Info,
             r if r.ends_with(" prep failed") => AttentionClass::NeedsYou,
             _ => AttentionClass::NeedsYou,
         }

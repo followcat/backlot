@@ -75,6 +75,10 @@ pub const MODELS: &[&str] = &[
 pub struct AgyPrep {
     /// `<cwd>/.agy-settings.json`.
     pub settings: PathBuf,
+    /// `<cwd>/.agents/hooks.json`.
+    pub hooks: PathBuf,
+    /// `<studio>/roles/<role>/signals.jsonl`.
+    pub signals: PathBuf,
 }
 
 /// The settings file's bytes: `{"toolPermission":"always-proceed"}`
@@ -151,13 +155,26 @@ pub(crate) fn settings_content(existing: Option<&[u8]>) -> Result<Vec<u8>, Strin
 /// half-allowed role. The file lands mode 600 like every
 /// stage-written file; always `Ok(false)` — the workdir itself is
 /// the boundary and there is no open-dir drift to report.
-pub fn prepare(p: &AgyPrep) -> Result<bool, String> {
+pub fn prepare(p: &AgyPrep) -> Result<Option<super::PrepNote>, String> {
     let dir = p.settings.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let existing = std::fs::read(&p.settings).ok();
     let bytes = settings_content(existing.as_deref())?;
     write600(&p.settings, &bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
-    Ok(false)
+
+    const REL: &str = ".agents/hooks.json";
+    let cwd = super::hook_files::work_dir_of(&p.hooks);
+    if super::hook_files::is_tracked(cwd, REL) {
+        return Ok(Some(super::PrepNote::HooksUnavailable(REL)));
+    }
+    let was_new = !p.hooks.exists();
+    let hdir = p.hooks.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(hdir).map_err(|e| format!("{}: {e}", hdir.display()))?;
+    let existing_hooks = std::fs::read(&p.hooks).ok();
+    let hook_bytes = super::hook_files::agy_hooks_content(existing_hooks.as_deref(), &p.signals);
+    write600(&p.hooks, &hook_bytes).map_err(|e| format!("{}: {e}", p.hooks.display()))?;
+    super::hook_files::maybe_exclude_new(cwd, was_new, REL)?;
+    Ok(None)
 }
 
 /// A file's birth time, or its mtime where birth time is
@@ -308,6 +325,13 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
         env: BTreeMap::new(),
         session: Session::PostLaunch,
         hooks: None,
-        prep: Some(Prep::Agy(AgyPrep { settings })),
+        prep: Some(Prep::Agy(AgyPrep {
+            settings,
+            hooks: Path::new(ctx.cwd).join(".agents").join("hooks.json"),
+            signals: Path::new(ctx.studio_dir)
+                .join("roles")
+                .join(ctx.role)
+                .join("signals.jsonl"),
+        })),
     })
 }

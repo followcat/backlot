@@ -17,9 +17,12 @@ mod codex;
 pub mod cursor;
 pub mod detect;
 mod detect_report;
-mod devin;
+pub mod devin;
+#[cfg(test)]
+mod devin_tests;
 pub(crate) mod dialog;
 mod fake;
+mod hook_files;
 pub mod opencode;
 mod probe;
 pub(crate) mod prompt;
@@ -68,22 +71,48 @@ pub enum Prep {
     Cmd(cmd::CmdPrep),
     /// cline's work-area hook, its MCP mask file and signals file.
     Cline(cline::ClinePrep),
-    /// agy's workdir `.agy-settings.json` — the session-scoped
-    /// `toolPermission` the role runs under.
+    /// agy's workdir `.agy-settings.json` and `.agents/hooks.json`.
     Agy(agy::AgyPrep),
+    /// devin's workdir `.devin/config.local.json`.
+    Devin(devin::DevinPrep),
+}
+
+/// Non-fatal prep condition the stage logs or surfaces as an Info attention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrepNote {
+    CursorDirOpen,
+    HooksUnavailable(&'static str),
 }
 
 /// Run the launch's prep; the error string is the attention's
 /// detail. It never holds content read from a runner's files.
-/// `Ok(true)` means the prep found and healed something worth one
-/// attention — cursor's root open to group or other.
-pub(crate) fn prepare(prep: &Prep) -> Result<bool, String> {
+pub(crate) fn prepare(prep: &Prep) -> Result<Option<PrepNote>, String> {
     match prep {
-        Prep::Cursor(p) => cursor::prepare(p),
+        Prep::Cursor(p) => cursor::prepare(p).map(|open| open.then_some(PrepNote::CursorDirOpen)),
         Prep::Cmd(p) => cmd::prepare(p),
-        Prep::Cline(p) => cline::prepare(p),
+        Prep::Cline(p) => cline::prepare(p).map(|_| None),
         Prep::Agy(p) => agy::prepare(p),
+        Prep::Devin(p) => devin::prepare(p),
     }
+}
+
+/// The signals file a launch's hook writes to, for truncating on start/resume
+/// when the runner uses `prep` rather than `HookSetup`.
+pub(crate) fn prep_signals_file(prep: &Prep) -> Option<&std::path::Path> {
+    match prep {
+        Prep::Agy(p) => Some(&p.signals),
+        Prep::Cmd(p) => Some(&p.signals),
+        Prep::Devin(p) => Some(&p.signals),
+        Prep::Cursor(_) | Prep::Cline(_) => None,
+    }
+}
+
+/// Truncate a hook runner's `signals.jsonl` before launching or resuming.
+pub(crate) fn truncate_signals(path: &std::path::Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, "")
 }
 
 /// The attention reason a failed `prepare` raises — each runner
@@ -94,6 +123,7 @@ pub(crate) fn prep_failed_reason(prep: &Prep) -> &'static str {
         Prep::Cmd(_) => cmd::CMD_PREP_FAILED,
         Prep::Cline(_) => cline::CLINE_PREP_FAILED,
         Prep::Agy(_) => agy::AGY_PREP_FAILED,
+        Prep::Devin(_) => devin::DEVIN_PREP_FAILED,
     }
 }
 

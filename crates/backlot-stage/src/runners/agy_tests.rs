@@ -211,8 +211,10 @@ fn prepare_writes_the_session_settings() {
     fs::create_dir_all(settings.parent().unwrap()).unwrap();
     let p = AgyPrep {
         settings: settings.clone(),
+        hooks: dir.join("work/.agents/hooks.json"),
+        signals: dir.join("signals.jsonl"),
     };
-    assert!(!prepare(&p).unwrap());
+    assert_eq!(prepare(&p).unwrap(), None);
     let text = fs::read_to_string(&settings).unwrap();
     assert!(text.contains("always-proceed"), "{text}");
     #[cfg(unix)]
@@ -223,6 +225,108 @@ fn prepare_writes_the_session_settings() {
             0o600
         );
     }
+}
+
+fn git(dir: &std::path::Path, args: &[&str]) {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["-c", "user.name=alice", "-c", "user.email=alice@host-a"])
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn hooks_file_splices_byte_exact_excludes_worktree_and_skips_tracked() {
+    let dir = tmp("hooks-git");
+    let repo = dir.join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    git(&repo, &["init", "-b", "main"]);
+    fs::write(repo.join("f"), "base\n").unwrap();
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "base"]);
+
+    let wt = dir.join("wt");
+    git(
+        &repo,
+        &["worktree", "add", "-b", "wt", wt.to_str().unwrap()],
+    );
+    let hooks = wt.join(".agents/hooks.json");
+    let sig = dir.join("signals.jsonl");
+    let prep = AgyPrep {
+        settings: wt.join(".agy-settings.json"),
+        hooks: hooks.clone(),
+        signals: sig.clone(),
+    };
+    assert_eq!(prepare(&prep).unwrap(), None);
+    // Exclude lands in the main repo's info/exclude (via commondir) so git status stays clean.
+    let exclude = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();
+    assert!(
+        exclude.lines().any(|l| l.trim() == ".agents/hooks.json"),
+        "{exclude}"
+    );
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&wt)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    let status_out = String::from_utf8_lossy(&status.stdout);
+    assert!(!status_out.contains(".agents/hooks.json"), "{status_out}");
+
+    // Existing custom named hooks stay byte-for-byte identical when backlot splices its key.
+    let custom = "{\n  \"userHook\": {\n    \"PreToolUse\": []\n  }\n}\n";
+    fs::write(&hooks, custom).unwrap();
+    assert_eq!(prepare(&prep).unwrap(), None);
+    let spliced = fs::read_to_string(&hooks).unwrap();
+    assert!(
+        spliced.starts_with("{\n  \"userHook\": {\n    \"PreToolUse\": []\n  }"),
+        "{spliced}"
+    );
+    let parsed: serde_json::Value = serde_json::from_str(&spliced).unwrap();
+    assert_eq!(parsed["backlot"]["PreToolUse"][0]["matcher"], "");
+    let pre_cmd = parsed["backlot"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(pre_cmd.contains("hook --runner agy --file"), "{pre_cmd}");
+    assert!(
+        pre_cmd.ends_with(r#" || printf '{"decision":"allow"}\n'"#),
+        "{pre_cmd}"
+    );
+    for ev in ["SessionStart", "PreInvocation", "PostInvocation", "Stop"] {
+        let ev_cmd = parsed["backlot"][ev][0]["command"].as_str().unwrap();
+        assert!(!ev_cmd.contains("printf"), "{ev}: {ev_cmd}");
+    }
+    let post_cmd = parsed["backlot"]["PostToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(!post_cmd.contains("printf"), "{post_cmd}");
+
+    // Tracked .agents/hooks.json is never touched and reports HooksUnavailable.
+    let tracked_repo = dir.join("tracked");
+    fs::create_dir_all(tracked_repo.join(".agents")).unwrap();
+    git(&tracked_repo, &["init", "-b", "main"]);
+    let tracked_hooks = tracked_repo.join(".agents/hooks.json");
+    let orig = "{\"teamHook\":{}}\n";
+    fs::write(&tracked_hooks, orig).unwrap();
+    git(&tracked_repo, &["add", ".agents/hooks.json"]);
+    git(&tracked_repo, &["commit", "-m", "track hooks"]);
+    let tprep = AgyPrep {
+        settings: tracked_repo.join(".agy-settings.json"),
+        hooks: tracked_hooks.clone(),
+        signals: sig,
+    };
+    assert_eq!(
+        prepare(&tprep).unwrap(),
+        Some(super::PrepNote::HooksUnavailable(".agents/hooks.json"))
+    );
+    assert_eq!(fs::read_to_string(&tracked_hooks).unwrap(), orig);
 }
 
 /// The resumed terminal's id sits after `--conversation`; `-c` is
@@ -236,4 +340,33 @@ fn the_resumed_argv_names_its_session() {
     );
     assert_eq!(session_in_argv("agy", &argv(&["agy", "-c"])), None);
     assert_eq!(session_in_argv("agy", &argv(&["agy", "--continue"])), None);
+}
+
+#[test]
+#[cfg(unix)]
+fn pre_tool_use_missing_binary_falls_back_to_allow_under_sh() {
+    let dir = tmp("missing-bin-fallback");
+    let sig = dir.join("signals.jsonl");
+    let bytes = super::hook_files::agy_hooks_content(None, &sig);
+    let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let generated = parsed["backlot"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    let idx = generated.find(" hook --runner agy ").unwrap();
+    let with_missing_bin = format!("'/nonexistent/backlot-missing'{}", &generated[idx..]);
+
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&with_missing_bin)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "status={:?} stderr={}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(stdout, "{\"decision\":\"allow\"}\n");
 }

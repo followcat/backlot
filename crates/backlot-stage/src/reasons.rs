@@ -14,6 +14,10 @@ pub use crate::runners::cmd::CMD_PREP_FAILED;
 pub(crate) use crate::runners::cursor::XDG_CONFIG_HOME_SET;
 pub use crate::runners::cursor::{CURSOR_DIR_OPEN, CURSOR_PREP_FAILED};
 #[cfg(test)]
+pub use crate::runners::devin::DEVIN_PREP_FAILED;
+/// The repo already tracks a runner's hook config file, so hooks were left off.
+pub const HOOKS_UNAVAILABLE: &str = "hooks unavailable";
+#[cfg(test)]
 pub use crate::runners::{CONFIG_MALFORMED, PROFILE_NOT_SUPPORTED, RUNNER_NOT_SUPPORTED};
 #[cfg(test)]
 pub(crate) use crate::watch::{SESSION_NOT_FOUND, TRUST_REFUSED};
@@ -54,10 +58,12 @@ pub const ALL: &[&str] = &[
     CONFIG_MALFORMED,
     CURSOR_PREP_FAILED,
     CURSOR_DIR_OPEN,
+    HOOKS_UNAVAILABLE,
     XDG_CONFIG_HOME_SET,
     CMD_PREP_FAILED,
     CLINE_PREP_FAILED,
     AGY_PREP_FAILED,
+    DEVIN_PREP_FAILED,
     MODEL_NOT_SUPPORTED,
     EFFORT_NOT_SUPPORTED,
     OWED,

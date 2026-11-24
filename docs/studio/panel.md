@@ -219,6 +219,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | `session id not found` | info | the role's details only, dimmed |
 | `inherited XDG_CONFIG_HOME` | info | the role's details only, dimmed |
 | `cursor dir was open` | info | the role's details only, dimmed |
+| `hooks unavailable` | info | the role's details only, dimmed |
 
 A `stuck` episode that escalates — `rate limited` or `connection error` after its auto-retries,
 or a stall whose nudge went unanswered for `escalate_after_s` — becomes `needs you`. A reason
