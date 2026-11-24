@@ -215,14 +215,7 @@ fn role_acted_later(state: &StudioState, role: &str, seq: u64) -> bool {
     if state.reports.iter().any(|r| r.from == role && r.seq > seq) {
         return true;
     }
-    if state
-        .approvals
-        .iter()
-        .any(|a| a.role == role && a.seq > seq)
-    {
-        return true;
-    }
-    if state.recasts.iter().any(|r| r.role == role && r.seq > seq) {
+    if state.approvals.iter().any(|a| a.by == role && a.seq > seq) {
         return true;
     }
     match role {
@@ -266,10 +259,49 @@ fn role_acted_later(state: &StudioState, role: &str, seq: u64) -> bool {
     false
 }
 
+/// The role's newest `tell user`, answered or not.
+pub(crate) fn latest_ask<'a>(
+    state: &'a StudioState,
+    role: &str,
+) -> Option<&'a crate::state::Message> {
+    state
+        .messages
+        .iter()
+        .filter(|m| {
+            m.from == role
+                && m.to == "user"
+                && !m.dropped
+                && m.purpose.is_none()
+                && m.source_seq.is_none()
+        })
+        .max_by_key(|m| m.seq)
+}
+
+/// Whether `role`'s `tell user` at `ask_seq` has been answered — by a
+/// user `tell` back, a durable `ask.answered`, a later ledger action by
+/// `role`, or `studio.finished`.
+pub fn is_ask_answered(state: &StudioState, role: &str, ask_seq: u64) -> bool {
+    state
+        .messages
+        .iter()
+        .any(|m| m.from == "user" && m.to == role && m.seq > ask_seq)
+        || state.finished.as_ref().is_some_and(|f| f.seq > ask_seq)
+        || state
+            .ask_answers
+            .iter()
+            .any(|a| a.target == ask_seq || (a.role == role && a.seq > ask_seq))
+        || role_acted_later(state, role, ask_seq)
+}
+
+/// The role's currently open `tell user`, if any.
+pub fn open_ask<'a>(state: &'a StudioState, role: &str) -> Option<&'a crate::state::Message> {
+    latest_ask(state, role).filter(|m| !is_ask_answered(state, role, m.seq))
+}
+
 /// The role's newest `tell user` the user has not answered with a
-/// `tell` back to that role, and the role has recorded no later
-/// ledger action of its own — and `studio.finished` answers it: a
-/// finish is the answering event for every open question, so a
+/// `tell` back to that role, directly in the terminal (`ask.answered`),
+/// or via a later role ledger action — and `studio.finished` answers
+/// it: a finish is the answering event for every open question, so a
 /// finished studio shows none (L6). `snippets` carries the message
 /// bodies the stage read for the exchange projection; a body it could
 /// not read falls back to a neutral line so the question is never
@@ -280,34 +312,13 @@ pub(crate) fn role_asks(
     role: &str,
     snippets: &BTreeMap<(String, u64), String>,
 ) -> Option<String> {
-    let ask = state
-        .messages
-        .iter()
-        .filter(|m| {
-            m.from == role
-                && m.to == "user"
-                && !m.dropped
-                && m.purpose.is_none()
-                && m.source_seq.is_none()
-        })
-        .max_by_key(|m| m.seq)?;
-    let answered = state
-        .messages
-        .iter()
-        .any(|m| m.from == "user" && m.to == role && m.seq > ask.seq)
-        || state.finished.as_ref().is_some_and(|f| f.seq > ask.seq)
-        || role_acted_later(state, role, ask.seq);
-    if answered {
-        return None;
-    }
+    let ask = open_ask(state, role)?;
     Some(cap(snippets
         .get(&(studio.to_string(), ask.seq))
         .map(String::as_str)
         .unwrap_or("question — see the studio dock")))
 }
 
-/// Deserializes `RoleSummary` from both current structured `doing` objects
-/// and legacy string `"doing"` values (mapped into `activity`).
 /// One role's summary. `live` maps a terminal address to what the
 /// program there reports doing; `work` the watch pass's per-role
 /// screen classification, `failed` a role's StopFailure error,

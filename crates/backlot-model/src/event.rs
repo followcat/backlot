@@ -582,6 +582,12 @@ pub enum EventKind {
         /// The working directory the dialog was answered in.
         cwd: String,
     },
+    /// `ask.answered`: the stage saw `role` start a new turn in its
+    /// terminal with nothing sent to it since the queued `tell user`
+    /// at `target`. Clears `RoleSummary.asks` while keeping the
+    /// question in `StudioSummary.exchange`.
+    #[serde(rename = "ask.answered")]
+    AskAnswered { role: String, target: u64 },
     /// `role.refused`: an outward-action shim or git hook refused a
     /// command run by a role (D3).
     #[serde(rename = "role.refused")]
@@ -688,6 +694,7 @@ impl EventKind {
             EventKind::AttentionRaised { .. } => "attention.raised",
             EventKind::AttentionCleared { .. } => "attention.cleared",
             EventKind::StageAnswered { .. } => "stage.answered",
+            EventKind::AskAnswered { .. } => "ask.answered",
             EventKind::RoleRefused { .. } => "role.refused",
             EventKind::RoleProgress { .. } => "role.progress",
             EventKind::RoleApproval { .. } => "role.approval",

@@ -379,6 +379,73 @@ fn stage_answered_is_the_stages_and_needs_a_role() {
 }
 
 #[test]
+fn ask_answered_is_the_stages_and_requires_an_open_ask() {
+    let mut base = base_events();
+    base.push(ev(4, "stage", role_started("producer")));
+    base.push(ev(
+        5,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/5-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    base.push(ev(
+        6,
+        "director",
+        EventKind::MessageQueued {
+            to: "producer".into(),
+            file: Some("messages/6-hi.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    let state = replay(&base);
+    let kind = |role: &str, target: u64| EventKind::AskAnswered {
+        role: role.into(),
+        target,
+    };
+
+    assert_eq!(
+        validate(&state, &new_ev("stage", kind("producer", 5))),
+        Ok(())
+    );
+    // Only the stage may write `ask.answered`.
+    assert_eq!(
+        validate(&state, &new_ev("producer", kind("producer", 5))),
+        Err(Refusal::RoleBound {
+            role: "producer".into(),
+            who: "the stage",
+        })
+    );
+    // Non-ask message (director -> producer) or wrong role is refused.
+    assert_eq!(
+        validate(&state, &new_ev("stage", kind("producer", 6))),
+        Err(Refusal::NoAsk {
+            role: "producer".into(),
+            target: 6,
+        })
+    );
+    assert_eq!(
+        validate(&state, &new_ev("stage", kind("director", 5))),
+        Err(Refusal::NoAsk {
+            role: "director".into(),
+            target: 5,
+        })
+    );
+
+    // Once answered, a repeat is refused.
+    base.push(ev(7, "stage", kind("producer", 5)));
+    let answered = replay(&base);
+    assert_eq!(
+        validate(&answered, &new_ev("stage", kind("producer", 5))),
+        Err(Refusal::AskAnswered(5))
+    );
+}
+
+#[test]
 fn correction_needs_a_known_target_and_field() {
     let state = running_state();
     let mut set = BTreeMap::new();

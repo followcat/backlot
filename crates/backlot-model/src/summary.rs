@@ -17,7 +17,7 @@ use crate::state::{StudioState, TaskStatus};
 use crate::summary_build::*;
 
 pub use crate::progress::{RoleProgress, RoleRunning, cap_running};
-pub use crate::summary_build::role_name;
+pub use crate::summary_build::{is_ask_answered, open_ask, role_name};
 
 // Hollywood's section types live beside this file; the
 // `summary::` path keeps them all.
@@ -217,8 +217,10 @@ pub struct RoleSummary {
     /// client then sorts the reason itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention_class: Option<AttentionClass>,
-    /// The role's newest `tell user` the user has not answered with a
-    /// `tell` back to that role — shown as `asks you · <question>`.
+    /// The role's newest `tell user` the user has not answered — with a
+    /// `tell` back, directly in the role's terminal (`ask.answered`),
+    /// by the role acting on the ledger later, or on `studio.finished`
+    /// — shown as `asks you · <question>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asks: Option<String>,
     /// The open `attention` is a `permission prompt` only the user may

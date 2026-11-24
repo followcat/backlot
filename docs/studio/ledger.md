@@ -78,6 +78,7 @@ prints `already at ledger v1`.
 | `report.sent` | from, to, node, file |
 | `attention.raised` / `attention.cleared` | role, reason, detail, `needs_user` flag on `permission prompt` |
 | `stage.answered` | role, dialog (`folder-trust`), key, working directory — `stage` only |
+| `ask.answered` | role, target ask seq — `stage` only |
 | `role.progress` | role, optional task, one-line `text` (<= 200 chars) — any live studio role |
 | `correction` | target event, changed fields, reason |
 
@@ -213,6 +214,12 @@ and nothing clears it; the role's drawer and `backlot status` show when it happe
 shows up outside the role's work area is never answered — it raises a `needs_user` attention
 (`folder trust refused`) instead, and the switch `[stage] answer_trust` in the user config opts
 the whole pass out.
+
+`ask.answered` is the stage's durable record that an open `tell user` at `target` was answered in
+that role's terminal: the role started a new turn (`UserPromptSubmit` / `PreInvocation` on runners
+with a prompt hook, or `waiting` → `working` on runners without one) while nothing had been sent
+to its terminal and no restart, resume, recast, start or close happened since `target`. It clears
+`RoleSummary.asks` (and the panel's waiting count) while leaving the question in `exchange`.
 
 `role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
 200 chars, `cwd`) refused by `backlot guard` or the per-role `pre-push` hook. The refusal also

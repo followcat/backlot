@@ -244,6 +244,16 @@ pub fn get(name: &str) -> Option<&'static RunnerCaps> {
     ALL.iter().copied().find(|c| c.name == name)
 }
 
+/// Whether `name`'s hooks emit a prompt-submitted or pre-invocation
+/// signal (`UserPromptSubmit` or `PreInvocation`) when a turn starts.
+pub fn has_prompt_hook(name: &str) -> bool {
+    get(name).is_some_and(|c| {
+        c.hooks
+            .iter()
+            .any(|h| *h == "UserPromptSubmit" || *h == "PreInvocation")
+    })
+}
+
 /// The hook events Claude Code's per-session settings file registers.
 const CLAUDE_HOOKS: &[&str] = &[
     "UserPromptSubmit",

@@ -128,6 +128,13 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             Err(cannot(role, "the stage"))
         };
     }
+    if let EventKind::AskAnswered { .. } = &new.kind {
+        return if role == "stage" {
+            Ok(())
+        } else {
+            Err(cannot(role, "the stage"))
+        };
+    }
     if let EventKind::TaskDelivered { task, .. } = &new.kind {
         return may_deliver(state, role, task);
     }
@@ -163,6 +170,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::RoleClosed { .. }
         | EventKind::RoleSession { .. }
         | EventKind::StageAnswered { .. }
+        | EventKind::AskAnswered { .. }
         | EventKind::MessageDelivered { .. }
         | EventKind::MessageDropped { .. }
         | EventKind::AttentionRaised { .. }
