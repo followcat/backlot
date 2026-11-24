@@ -5,9 +5,13 @@
 
 use std::collections::BTreeMap;
 
+use serde::Deserialize;
+
+use crate::attention::AttentionClass;
 use crate::event::Priority;
+use crate::progress::{RoleDoing, RoleProgress, cap_doing, cap_progress};
 use crate::state::{RoleLifecycle, StudioState, Task, actor_task};
-use crate::summary::{RoleSummary, TaskSummary, Work, cap, steady};
+use crate::summary::{RoleSummary, TaskSummary, Work, cap, default_true, steady};
 
 /// A studio is finished when its ledger carries `studio.finished`,
 /// or — for ledgers that predate the marker — when every task it
@@ -305,11 +309,111 @@ pub(crate) fn role_asks(
         .unwrap_or("question — see the studio dock")))
 }
 
+/// Deserializes `RoleSummary` from both current structured `doing` objects
+/// and legacy string `"doing"` values (mapped into `activity`).
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub(crate) enum DoingOrLegacy {
+    Structured(RoleDoing),
+    Legacy(String),
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RoleSummaryWire {
+    pub role: String,
+    pub name: String,
+    #[serde(default)]
+    pub terminal: Option<String>,
+    #[serde(default)]
+    pub runner: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub effort: Option<String>,
+    pub state: String,
+    #[serde(default)]
+    pub progress: Option<RoleProgress>,
+    #[serde(default)]
+    pub doing: Option<DoingOrLegacy>,
+    #[serde(default)]
+    pub activity: Option<String>,
+    #[serde(default)]
+    pub work: Option<Work>,
+    #[serde(default)]
+    pub failed: Option<String>,
+    #[serde(default)]
+    pub workdir: Option<String>,
+    #[serde(default)]
+    pub task: Option<String>,
+    #[serde(default)]
+    pub priority: Option<Priority>,
+    #[serde(default)]
+    pub resumable: bool,
+    #[serde(default)]
+    pub since_ms: u64,
+    #[serde(default)]
+    pub attention: Option<String>,
+    #[serde(default)]
+    pub attention_class: Option<AttentionClass>,
+    #[serde(default)]
+    pub asks: Option<String>,
+    #[serde(default)]
+    pub attention_user: bool,
+    #[serde(default)]
+    pub attention_seq: Option<u64>,
+    #[serde(default)]
+    pub attention_detail: Option<String>,
+    #[serde(default)]
+    pub stage_answer_ms: Option<u64>,
+    #[serde(default = "default_true")]
+    pub can_answer_prompt: bool,
+    #[serde(default)]
+    pub restarted_ms: Option<u64>,
+}
+
+impl From<RoleSummaryWire> for RoleSummary {
+    fn from(w: RoleSummaryWire) -> Self {
+        let (doing, legacy_activity) = match w.doing {
+            Some(DoingOrLegacy::Structured(d)) => (Some(d), None),
+            Some(DoingOrLegacy::Legacy(s)) => (None, Some(s)),
+            None => (None, None),
+        };
+        RoleSummary {
+            role: w.role,
+            name: w.name,
+            terminal: w.terminal,
+            runner: w.runner,
+            model: w.model,
+            effort: w.effort,
+            state: w.state,
+            progress: w.progress,
+            doing,
+            activity: w.activity.or(legacy_activity),
+            work: w.work,
+            failed: w.failed,
+            workdir: w.workdir,
+            task: w.task,
+            priority: w.priority,
+            resumable: w.resumable,
+            since_ms: w.since_ms,
+            attention: w.attention,
+            attention_class: w.attention_class,
+            asks: w.asks,
+            attention_user: w.attention_user,
+            attention_seq: w.attention_seq,
+            attention_detail: w.attention_detail,
+            stage_answer_ms: w.stage_answer_ms,
+            can_answer_prompt: w.can_answer_prompt,
+            restarted_ms: w.restarted_ms,
+        }
+    }
+}
+
 /// One role's summary. `live` maps a terminal address to what the
-/// program there reports doing; `work` the watch pass's per-role
-/// screen classification and `failed` a role's StopFailure error,
-/// both keyed `(studio, role)`. `snippets` supplies the body of the
-/// role's newest unanswered `tell user`.
+/// program there reports; `work` the watch pass's per-role
+/// screen classification, `failed` a role's StopFailure error,
+/// `doing_map` the live deepest descendant command per `(studio, role)`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn role_summary(
     studio: &str,
     state: &StudioState,
@@ -318,13 +422,14 @@ pub(crate) fn role_summary(
     work: &BTreeMap<(String, String), Work>,
     failed: &BTreeMap<(String, String), String>,
     snippets: &BTreeMap<(String, u64), String>,
+    doing_map: &BTreeMap<(String, String), RoleDoing>,
 ) -> Option<RoleSummary> {
     let r = state.roles.get(role)?;
     let lifecycle = r.lifecycle();
     let terminal = r.terminal.clone();
-    // `doing`: what a live terminal reports; actors fall back to their
+    // `activity`: what a live terminal reports; actors fall back to their
     // task. Lost and closed roles have none.
-    let doing = match lifecycle {
+    let activity = match lifecycle {
         RoleLifecycle::Live => terminal
             .as_ref()
             .and_then(|t| live.get(t))
@@ -352,6 +457,18 @@ pub(crate) fn role_summary(
         .then(|| work.get(&(studio.to_string(), role.to_string())))
         .flatten()
         .copied();
+    // D5 `doing`: deepest descendant command line + since_ms, only while Working.
+    let doing = (lifecycle == RoleLifecycle::Live && work == Some(Work::Working))
+        .then(|| doing_map.get(&(studio.to_string(), role.to_string())))
+        .flatten()
+        .map(|d| RoleDoing {
+            cmd: cap_doing(&d.cmd),
+            since_ms: d.since_ms,
+        });
+    let progress = state.progress.get(role).map(|p| RoleProgress {
+        text: cap_progress(&p.text),
+        ts_ms: p.ts_ms,
+    });
     // Like `work`: a live read only, dropped for a lost or closed role.
     let failed = (lifecycle == RoleLifecycle::Live)
         .then(|| failed.get(&(studio.to_string(), role.to_string())))
@@ -377,7 +494,9 @@ pub(crate) fn role_summary(
             RoleLifecycle::Closed => "closed",
         }
         .into(),
+        progress,
         doing,
+        activity,
         work,
         failed,
         workdir: None,

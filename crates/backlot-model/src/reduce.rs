@@ -552,6 +552,16 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             }
         }
         EventKind::RoleRefused { .. } => {}
+        EventKind::RoleProgress { role, text, .. } => {
+            let record = crate::progress::RoleProgress {
+                text: text.clone(),
+                ts_ms: ts,
+            };
+            state.progress.insert(role.clone(), record.clone());
+            if let Some(entry) = state.roles.get_mut(role) {
+                entry.progress = Some(record);
+            }
+        }
         EventKind::RoleApproval { role, decision } => {
             state.approvals.push(ApprovalRecord {
                 seq,

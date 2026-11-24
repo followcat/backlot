@@ -67,6 +67,16 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             require_studio(state)?;
             Ok(())
         }
+        EventKind::RoleProgress { task, text, .. } => {
+            require_studio(state)?;
+            if let Err(msg) = crate::progress::valid_progress_text(text) {
+                return Err(Refusal::BadProgress(msg.into()));
+            }
+            if let Some(t) = task {
+                require_task(state, t)?;
+            }
+            Ok(())
+        }
         // `role.session` lands on a role the log already knows —
         // the stage only looks up live roles it started.
         EventKind::RoleSession { role, .. } => {

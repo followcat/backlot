@@ -161,6 +161,8 @@ pub struct HollywoodState {
     /// Hollywood's own terminal record — nothing before the first
     /// `role.state`.
     pub role: HWRole,
+    /// Hollywood's latest `role.progress` note.
+    pub progress: Option<crate::progress::RoleProgress>,
     /// Last applied seq — torn-tail replay keeps the maximum.
     pub last_seq: u64,
 }
@@ -351,6 +353,12 @@ pub fn apply(state: &mut HollywoodState, e: &HollywoodEvent) {
                 seq: e.seq,
                 fresh: *fresh,
                 reason: reason.clone(),
+            });
+        }
+        HollywoodKind::RoleProgress { text } => {
+            state.progress = Some(crate::progress::RoleProgress {
+                text: text.clone(),
+                ts_ms: e.ts_ms,
             });
         }
     }

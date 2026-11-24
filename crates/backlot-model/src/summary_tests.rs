@@ -105,7 +105,8 @@ fn summary_shape_and_live_doing() {
     assert_eq!(p.runner.as_deref(), Some("runner-prod"));
     assert_eq!(p.model.as_deref(), Some("model-prod"));
     assert_eq!(p.effort.as_deref(), Some("high"));
-    assert_eq!(p.doing.as_deref(), Some("writing the plan"));
+    assert_eq!(p.activity.as_deref(), Some("writing the plan"));
+    assert_eq!(p.doing, None);
 }
 
 /// A closed role stays listed, with no `doing`, keeping actor and
@@ -135,6 +136,7 @@ fn a_closed_role_stays_listed_without_doing() {
         .unwrap();
     assert_eq!(w.state, "closed");
     assert_eq!(w.doing, None);
+    assert_eq!(w.activity, None);
     assert_eq!(w.model.as_deref(), Some("model-wri"));
     let json = serde_json::to_string(&s).unwrap();
     assert!(!json.contains("sess-writer"), "{json}");
@@ -162,7 +164,7 @@ fn an_actor_names_its_candidate_and_task() {
         .find(|r| r.role == "actor-t1-c1")
         .unwrap();
     assert_eq!(a.name, "actor-a");
-    assert_eq!(a.doing.as_deref(), Some("task t1"));
+    assert_eq!(a.activity.as_deref(), Some("task t1"));
 }
 
 /// A `permission prompt` the director may not answer — flagged
@@ -270,7 +272,7 @@ fn a_behind_actor_marks_its_doing_line() {
         .iter()
         .find(|r| r.role == "actor-t1-c1")
         .unwrap();
-    assert_eq!(a.doing.as_deref(), Some("task t1 · behind v2"));
+    assert_eq!(a.activity.as_deref(), Some("task t1 · behind v2"));
 }
 
 /// Open reviews count delivered tasks; waiting counts open attention.
@@ -1318,7 +1320,7 @@ fn an_elapsed_only_diff_is_not_a_change() {
     assert!(a.same_as(&b), "elapsed seconds are not a change");
     // The published text is the stable line either way.
     let role = &a.studios[0].roles[0];
-    assert_eq!(role.doing.as_deref(), Some("writing the plan"));
+    assert_eq!(role.activity.as_deref(), Some("writing the plan"));
     // A semantic change still counts.
     let c = build("waiting for the user");
     assert!(!a.same_as(&c));

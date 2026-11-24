@@ -97,15 +97,21 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             EventKind::MessageQueued { purpose: None, .. } | EventKind::RoleRefused { .. } => {
                 Ok(())
             }
+            EventKind::RoleProgress {
+                role: target, task, ..
+            } if target == role && task.as_deref().is_none_or(|t| t == own) => Ok(()),
             _ => Err(cannot(role, who_can(&new.kind))),
         };
     }
     if role == "writer" {
         let ok = matches!(
-            new.kind,
+            &new.kind,
             EventKind::PlanPublished { .. }
                 | EventKind::MessageQueued { purpose: None, .. }
                 | EventKind::RoleRefused { .. }
+        ) || matches!(
+            &new.kind,
+            EventKind::RoleProgress { role: target, task: None, .. } if target == role
         );
         return if ok {
             Ok(())
@@ -124,6 +130,16 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
     }
     if let EventKind::TaskDelivered { task, .. } = &new.kind {
         return may_deliver(state, role, task);
+    }
+    if let EventKind::RoleProgress {
+        role: target, task, ..
+    } = &new.kind
+    {
+        return if matches!(role, "producer" | "director") && target == role && task.is_none() {
+            Ok(())
+        } else {
+            Err(cannot(role, who_can(&new.kind)))
+        };
     }
     if let EventKind::StudioDeleted { .. } = &new.kind {
         return if role == "user" {
@@ -180,6 +196,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         }
         EventKind::ReportSent { .. } => "the director or the producer",
         EventKind::RoleRefused { .. } => "a role or the stage",
+        EventKind::RoleProgress { .. } => "a studio role",
         EventKind::StudioFinished { .. } => "the user or the producer",
     }
 }

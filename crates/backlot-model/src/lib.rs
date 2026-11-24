@@ -24,6 +24,7 @@ mod hollywood_state;
 mod hollywood_summary;
 mod hollywood_validate;
 pub mod limits;
+pub mod progress;
 pub mod recast;
 pub mod records;
 pub mod reduce;
@@ -76,6 +77,8 @@ mod loop_tests;
 mod migrate_tests;
 #[cfg(test)]
 mod priority_tests;
+#[cfg(test)]
+mod progress_tests;
 #[cfg(test)]
 mod recast_tests;
 #[cfg(test)]

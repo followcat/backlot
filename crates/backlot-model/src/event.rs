@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::progress::{
+    MAX_DOING_CHARS, MAX_PROGRESS_CHARS, age_short, normalize_progress_text,
+};
 /// `Usage`/`UsageTotals` live in `crate::usage`; the `event::`
 /// path keeps working for the event payloads that carry them.
 pub use crate::usage::{Usage, UsageTotals};
@@ -589,6 +592,14 @@ pub enum EventKind {
         command: String,
         cwd: String,
     },
+    /// `role.progress`: a role's optional one-line step update (D5).
+    #[serde(rename = "role.progress")]
+    RoleProgress {
+        role: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task: Option<String>,
+        text: String,
+    },
     /// `role.approval`: a permission-prompt decision (D9). Refused
     /// unless `role` has an open `permission prompt` attention.
     #[serde(rename = "role.approval")]
@@ -678,6 +689,7 @@ impl EventKind {
             EventKind::AttentionCleared { .. } => "attention.cleared",
             EventKind::StageAnswered { .. } => "stage.answered",
             EventKind::RoleRefused { .. } => "role.refused",
+            EventKind::RoleProgress { .. } => "role.progress",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
             EventKind::StudioDeleted { .. } => "studio.deleted",

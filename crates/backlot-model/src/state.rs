@@ -395,6 +395,12 @@ pub struct RoleState {
     /// `restarted` word the summary and Hollywood show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restarted_ms: Option<u64>,
+    /// The role's last one-line progress note from the ledger (`role.progress`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::progress::RoleProgress>,
+    /// Live deepest descendant process (`status --json` overlay only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doing: Option<crate::progress::RoleDoing>,
 }
 
 impl RoleState {
@@ -582,6 +588,9 @@ pub struct StudioState {
     /// `by.role` → the newest event written by that role.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub last_by_role: BTreeMap<String, RoleLastEvent>,
+    /// Role key → latest `role.progress` note (even before `role.started`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub progress: BTreeMap<String, crate::progress::RoleProgress>,
     pub last_seq: u64,
 }
 
