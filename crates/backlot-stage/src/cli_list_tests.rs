@@ -333,5 +333,11 @@ fn a_leading_remote_flag_parses_before_the_command() {
         .collect();
     let (common, cmd) = crate::args::parse(&words).expect("the documented form parses");
     assert_eq!(common.remote.as_deref(), Some("host-b"));
-    assert!(matches!(cmd, crate::args::Cmd::StudioList { json: false }));
+    assert!(matches!(
+        cmd,
+        crate::args::Cmd::StudioList {
+            json: false,
+            archived: false
+        }
+    ));
 }

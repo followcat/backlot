@@ -57,6 +57,60 @@ fn without_config_the_layer_comes_down() {
     assert_eq!(hplan(None, &bare, false, 0, 0), Vec::<HMove>::new());
 }
 
+/// A restart the user recorded on a live record with a live terminal
+/// closes it on purpose (`Restart`); the start that follows resumes
+/// the kept session (`ReviveResume`) or, for a `fresh` request,
+/// starts over (`Start`).
+#[test]
+fn a_live_restart_closes_then_starts() {
+    use backlot_model::state::RestartRequest;
+    let c = cfg("fake");
+    let mut role = live("fake");
+    role.restart = Some(RestartRequest {
+        seq: 9,
+        fresh: false,
+        reason: None,
+    });
+    assert_eq!(hplan(Some(&c), &role, true, 0, 0), vec![HMove::Restart]);
+
+    // The close the restart recorded, session kept: resume it.
+    role.live = false;
+    role.closed = true;
+    role.session_id = Some("sess-h".into());
+    assert_eq!(
+        hplan(Some(&c), &role, false, 0, 0),
+        vec![HMove::ReviveResume]
+    );
+
+    // A fresh request starts a new conversation.
+    role.restart = Some(RestartRequest {
+        seq: 9,
+        fresh: true,
+        reason: None,
+    });
+    assert_eq!(hplan(Some(&c), &role, false, 0, 0), vec![HMove::Start]);
+}
+
+/// A restart on a lost record comes back at once, around the loss
+/// guard.
+#[test]
+fn a_lost_restart_ignores_the_loss_guard() {
+    use backlot_model::state::RestartRequest;
+    let c = cfg("fake");
+    let mut role = recorded("fake");
+    role.session_id = Some("sess-h".into());
+    role.losses = vec![100_000, 150_000, 190_000];
+    role.restart = Some(RestartRequest {
+        seq: 9,
+        fresh: false,
+        reason: None,
+    });
+    assert_eq!(
+        hplan(Some(&c), &role, false, 200_000, 0),
+        vec![HMove::ResumeRun]
+    );
+}
+
 /// A live record with a live terminal holds — unless the config's
 /// runner moved, which is a new conversation: close and start.
 #[test]

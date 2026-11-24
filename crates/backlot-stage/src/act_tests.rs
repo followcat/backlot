@@ -203,7 +203,7 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
         hooks: None,
         prep: None,
     };
-    match start_event(&held, &launch, "t7") {
+    match start_event(&held, &launch, "t7", None) {
         backlot_model::EventKind::RoleResumed {
             role,
             terminal,
@@ -228,7 +228,7 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
         hooks: None,
         prep: None,
     };
-    match start_event(&fresh, &launch, "t7") {
+    match start_event(&fresh, &launch, "t7", None) {
         backlot_model::EventKind::RoleStarted {
             session_id, reason, ..
         } => {
@@ -236,6 +236,14 @@ fn a_resume_launch_records_role_resumed_with_the_asked_session() {
             assert_eq!(reason, None);
         }
         other => panic!("a fresh start must record role.started, got {other:?}"),
+    }
+
+    // A fresh restart's start carries its own word.
+    match start_event(&fresh, &launch, "t7", Some("restarted")) {
+        backlot_model::EventKind::RoleStarted { reason, .. } => {
+            assert_eq!(reason.as_deref(), Some("restarted"));
+        }
+        other => panic!("a fresh restart must record role.started, got {other:?}"),
     }
 }
 

@@ -375,11 +375,15 @@ state (`live`, `finished`, or `failed` when the log will not load), title and bo
 activity first; `--json` prints the same rows structured. A pinned `BACKLOT_STATE_DIR`,
 `--session` or `--remote` lists that one directory only, so a role terminal never sees other
 cores. `--remote <host>` (`backlot --remote host-b studio list`) reads the studios on that
-machine; `--help` spells both reads out.
+machine; `--help` spells both reads out. `--archived` reads the `archive/` directory instead — the
+studios `studio delete` retired — with each entry's name, stamp, repo and last requirement title;
+`studio restore <archived-name> [--name <new-name>]` brings one back as a finished studio.
 
 ```sh
 backlot studio list
 backlot studio list --json
+backlot studio list --archived
+backlot studio restore acme-shop-20260101T120000Z --name acme-shop-2
 backlot --remote host-b studio list
 ```
 
@@ -618,6 +622,33 @@ you approve what is actually there. A prompt answered in the terminal itself clo
 `prompt answered elsewhere` a couple of seconds later, so the next prompt raises fresh either way.
 A denied role gets a notice telling it the command did not run.
 
+## Restarting a stuck role
+
+`close` only releases a held actor; `reopen` needs a closed seat; `recast` changes the identity.
+To reload a producer, director, writer or actor **in place** — same identity — use `restart`:
+
+```sh
+backlot restart --person director --reason "stuck at a prompt" --studio acme-shop --as user
+backlot restart --person producer --fresh --studio acme-shop --as user
+```
+
+The stage carries it out on its next tick: the role's terminal is stopped deliberately
+(`role.closed`, reason `restarted` — never counted as a loss) and launched again under the same
+identity and the same `bl-<studio>-<role>` terminal name. It **resumes the recorded session** when
+the runner supports resume by id and a session id was recorded; `--fresh` starts a new session with
+the role's prompt instead. The ledger records the role as `restarted`, which the panel and
+Hollywood read.
+
+`restart` is the user's or the director's. It refuses a closed person (`closed — use reopen`) and a
+finished studio (`the studio is finished — reopen or restore it first`). The three fixed seats —
+producer, director, writer — are always live while the studio runs, so `close` on one refuses:
+`the director is a fixed seat — use restart, or finish the studio`. `close` only releases a held
+person; on anything else it says `the actor-t1-c1 has nothing to close — it closes with its task;
+use restart to reload it`.
+
+`restart --person hollywood` reloads the overseer itself, from its own ledger and the same
+`[hollywood]` setup; a fresh restart starts a new conversation.
+
 ## Changing who plays a role
 
 Actors are recast through `backlot cast`; the three fixed roles — producer, director and writer —
@@ -748,11 +779,17 @@ When everything is accepted, tell the producer; on your word it records — or y
 backlot studio finish --reason "all tasks accepted" --studio acme-shop --as user
 ```
 
-`studio finish` refuses while any task is open and names them. From then on the stage stops
-scheduling the studio; producer and director close like any released role, and only a person you
-explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --as user`, or Enter
-twice on a closed row — brings the person back into its recorded runner session; a person whose
-session id was never found has nothing to resume into, and the panel says so.
+`studio finish` refuses while any task is open and names them. A studio with no requirement and no
+tasks refuses too — `nothing was built yet (no requirement, no tasks) — add --force to finish
+anyway` — so a just-made studio is not finished by accident; `--force` finishes it. From then on
+the stage stops scheduling the studio; producer and director close like any released role, and
+only a person you explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --as
+user`, or Enter twice on a closed row — brings the person back into its recorded runner session; a
+person whose session id was never found has nothing to resume into, and the panel says so.
+
+Finishing also answers every open question: a role's unanswered `tell user` — the producer's
+`What would you like us to build?` — no longer shows as the studio's last message or as `asks you`
+on its row. The finish is the answering event, so a finished studio shows no open question.
 
 Finishing also clears the studio's windows. A closed role's program is killed, and if the core
 kept its finished terminal record — the leftover `new`, `cast · <id>` and `producer` panes reading
@@ -802,6 +839,19 @@ delete is kept with git's reason, so unmerged integration work is never lost. `-
 removed, pruned, deleted or kept. The ledger, `reports/`, `messages/` and `attention/` stay:
 `backlot records` and `backlot status` keep the full history. To remove that history too,
 delete the studio's directory under `studios/` yourself.
+
+### Finish, prune, delete, restore
+
+| Command | What it does | The ledger |
+|---|---|---|
+| `studio finish [--force]` | Ends the studio; producer and director close, only a reopened person comes back. Refuses while a task is open, and on an empty studio unless `--force`. | Kept where it is; `studio.finished` appended. |
+| `studio prune <s> \| --all-finished` | Reaps a finished studio's `work/` worktrees and `backlot/<studio>/*` branches git considers merged. | Kept; nothing appended. |
+| `studio delete <s>` | Finishes if needed, closes the studio's terminals, prunes safely, records `studio.deleted`, and moves the ledger under `archive/<s>-<stamp>`. | Archived to `archive/`, gone from `studios/`. |
+| `studio list --archived` | Lists what is under `archive/`: name, stamp, repo and last requirement title. | Read-only. |
+| `studio restore <archived-name> [--name <new>]` | Copies an archived ledger back under `studios/` as a finished studio; `--name` renames it. Refuses a name already taken; `--dry-run` shows the plan. | The copy is live again; the archive copy stays. |
+
+`studio restore` recreates no work areas: the studio comes back `finished` and `reopen` works from
+there. `prune` stays what it was — it never touches the ledger.
 
 Which repositories prune works follows the binding (D4, D10). A workspace-bound studio is
 pruned member by member, over the member list the ledger recorded at `studio new` — never a

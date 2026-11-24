@@ -72,6 +72,94 @@ fn the_envelope_matches_the_studio_ledger() {
     }
 }
 
+/// A restart of Hollywood is a request the close keeps and the start
+/// clears, the same shape a studio's `role.restart` has.
+#[test]
+fn a_restart_is_a_request_the_start_clears() {
+    let started = |session: Option<&str>, reason: Option<&str>| HollywoodKind::RoleState {
+        state: RoleMotion::Started,
+        terminal: Some("bl-hollywood".into()),
+        actor: None,
+        session_id: session.map(String::from),
+        reason: reason.map(String::from),
+    };
+    let resumed = |session: Option<&str>, reason: &str| HollywoodKind::RoleState {
+        state: RoleMotion::Resumed,
+        terminal: Some("bl-hollywood".into()),
+        actor: None,
+        session_id: session.map(String::from),
+        reason: Some(reason.into()),
+    };
+    let mut state = replay(&[hev(1, "stage", started(Some("sess-h"), None))]);
+    apply(
+        &mut state,
+        &hev(
+            2,
+            "user",
+            HollywoodKind::RoleRestart {
+                fresh: false,
+                reason: Some("stuck".into()),
+            },
+        ),
+    );
+    assert_eq!(state.role.restart.as_ref().map(|r| r.seq), Some(2));
+
+    // The close the restart asked for keeps the request and session.
+    apply(
+        &mut state,
+        &hev(
+            3,
+            "stage",
+            HollywoodKind::RoleState {
+                state: RoleMotion::Closed,
+                terminal: None,
+                actor: None,
+                session_id: None,
+                reason: Some(crate::event::RESTARTED.into()),
+            },
+        ),
+    );
+    assert!(state.role.restart.is_some(), "the restart's close keeps it");
+    assert_eq!(state.role.session_id.as_deref(), Some("sess-h"));
+
+    // The resumed start clears it and stamps `restarted_ms`.
+    apply(
+        &mut state,
+        &hev(4, "stage", resumed(Some("sess-h"), crate::event::RESTARTED)),
+    );
+    assert!(state.role.restart.is_none());
+    assert_eq!(state.role.restarted_ms, Some(4000));
+    assert_eq!(state.role.session_id.as_deref(), Some("sess-h"));
+
+    // A plain close ends a request outright.
+    apply(
+        &mut state,
+        &hev(
+            5,
+            "user",
+            HollywoodKind::RoleRestart {
+                fresh: true,
+                reason: None,
+            },
+        ),
+    );
+    apply(
+        &mut state,
+        &hev(
+            6,
+            "stage",
+            HollywoodKind::RoleState {
+                state: RoleMotion::Closed,
+                terminal: None,
+                actor: None,
+                session_id: None,
+                reason: Some("not configured".into()),
+            },
+        ),
+    );
+    assert!(state.role.restart.is_none());
+}
+
 /// Replaying the log is applying each event in order — the same
 /// promise the studio ledger makes.
 #[test]

@@ -128,10 +128,13 @@ pub(crate) fn repo_path(repo: &str) -> Result<String, Fail> {
     })
 }
 
-/// `studio finish`: an optional `--reason`, refused while any task
-/// is open — the check is the model's, this only collects the text.
+/// `studio finish [--reason <r>] [--force]`: the reason is optional
+/// and open tasks refuse the finish — the check is the model's.
+/// `--force` finishes a studio with no requirement and no tasks
+/// (L5); the empty-studio guard is the CLI's.
 pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut reason = String::new();
+    let mut force = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
@@ -144,10 +147,11 @@ pub(crate) fn studio_finish(common: &mut Common, it: &mut It) -> Result<(Common,
             _ if eq(&arg, "--reason").is_some() => {
                 reason = eq(&arg, "--reason").map(String::from).unwrap_or_default()
             }
+            "--force" => force = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
         }
     }
-    Ok((std::mem::take(common), Cmd::StudioFinish { reason }))
+    Ok((std::mem::take(common), Cmd::StudioFinish { reason, force }))
 }
 
 /// `studio prune [<studio> | --all-finished] [--dry-run] [--force]`:
@@ -269,12 +273,13 @@ pub(crate) fn studio_migrate(common: &mut Common, it: &mut It) -> Result<(Common
     ))
 }
 
-/// `studio list [--json]` — every studio under every core's state
-/// directory; read-only, so no studio name is required. Its own help
-/// says what the default read covers and how `--remote <host>`
-/// widens it.
+/// `studio list [--json] [--archived]` — every studio under every
+/// core's state directory, or the ledgers under `archive/`;
+/// read-only, so no studio name is required. Its own help says what
+/// the default read covers and how `--remote <host>` widens it.
 pub(crate) fn studio_list(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
     let mut json = false;
+    let mut archived = false;
     while let Some(arg) = it.next() {
         if arg == "-h" || arg == "--help" {
             return Ok((std::mem::take(common), Cmd::Help(U_STUDIO_LIST)));
@@ -284,10 +289,47 @@ pub(crate) fn studio_list(common: &mut Common, it: &mut It) -> Result<(Common, C
         }
         match arg.as_str() {
             "--json" => json = true,
+            "--archived" => archived = true,
             _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO_LIST)),
         }
     }
-    Ok((std::mem::take(common), Cmd::StudioList { json }))
+    Ok((std::mem::take(common), Cmd::StudioList { json, archived }))
+}
+
+/// `studio restore <archived-name> [--name <new-name>] [--dry-run]`
+/// (L7, M3): the positional names the `archive/<id>-<stamp>` entry.
+/// The rename flag is `--name`, not `--as`: `--as` is every command's
+/// caller role, so a second meaning would collide with `--as user`.
+pub(crate) fn studio_restore(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {
+    let mut archived = None;
+    let mut new_name = None;
+    let mut dry_run = false;
+    while let Some(arg) = it.next() {
+        if arg == "-h" || arg == "--help" {
+            return Ok((std::mem::take(common), Cmd::Help(U_STUDIO)));
+        }
+        if common_flag(it, common, &arg, U_STUDIO)? {
+            continue;
+        }
+        match arg.as_str() {
+            "--name" => new_name = Some(it.value("--name", U_STUDIO)?),
+            _ if eq(&arg, "--name").is_some() => new_name = eq(&arg, "--name").map(String::from),
+            "--dry-run" => dry_run = true,
+            _ if arg.starts_with('-') => {
+                return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO));
+            }
+            _ if archived.is_none() => archived = Some(arg),
+            _ => return Err(usage(format!("unexpected argument '{arg}'"), U_STUDIO)),
+        }
+    }
+    Ok((
+        std::mem::take(common),
+        Cmd::StudioRestore {
+            archived: archived.ok_or_else(|| usage("missing <archived-name>", U_STUDIO))?,
+            new_name,
+            dry_run,
+        },
+    ))
 }
 
 pub(crate) fn req_revise(common: &mut Common, it: &mut It) -> Result<(Common, Cmd), Fail> {

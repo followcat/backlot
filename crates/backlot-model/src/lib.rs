@@ -85,6 +85,8 @@ mod records_tests;
 #[cfg(test)]
 mod reopen_tests;
 #[cfg(test)]
+mod restart_tests;
+#[cfg(test)]
 mod roles_tests;
 #[cfg(test)]
 mod state_tests;

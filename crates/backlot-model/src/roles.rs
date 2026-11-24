@@ -150,6 +150,7 @@ fn who_can(kind: &EventKind) -> &'static str {
         | EventKind::TaskChecked { .. } => "the stage",
         EventKind::RoleReopen { .. }
         | EventKind::RoleRelease { .. }
+        | EventKind::RoleRestart { .. }
         | EventKind::RoleApproval { .. }
         | EventKind::TaskPriority { .. } => "the user or the director",
         EventKind::RoleRecast { .. } => "the user",

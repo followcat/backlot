@@ -267,5 +267,19 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
                 Some(_) => Ok(()),
             }
         }
+        // The user restarts the overseer from the TUI's menu: stop
+        // `bl-hollywood` and launch again. Refused with no
+        // `[hollywood]` to start, or while one is already pending.
+        HollywoodKind::RoleRestart { .. } => {
+            if role != "user" {
+                return Err(role_bound(role, "the user"));
+            }
+            if state.role.restart.is_some() {
+                return Err(HRefusal::BadMessage(
+                    "a restart is already pending for hollywood".into(),
+                ));
+            }
+            Ok(())
+        }
     }
 }

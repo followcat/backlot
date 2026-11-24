@@ -134,6 +134,13 @@ pub(crate) enum HMove {
     /// A recorded `closed` that is not the resume guard's — the
     /// config asked for it back, so start over.
     Revive,
+    /// A `role.restart` the user recorded: close the live terminal on
+    /// purpose (`restarted`) and, next tick, start it again —
+    /// resuming the recorded session unless the request was `fresh`.
+    Restart,
+    /// The close a restart recorded, with its session kept: resume it
+    /// and record `restarted`.
+    ReviveResume,
     /// A live `bl-hollywood` nothing wants — remove it, no record.
     Drop,
 }
@@ -171,7 +178,11 @@ pub(crate) fn hplan(
         }
         Some(cfg) => {
             if role.live && term {
-                if role.actor.as_ref().is_some_and(|a| a.runner != cfg.runner) {
+                if role.restart.is_some() {
+                    // The user's restart: close on purpose with the
+                    // `restarted` reason; the start lands next tick.
+                    vec![HMove::Restart]
+                } else if role.actor.as_ref().is_some_and(|a| a.runner != cfg.runner) {
                     vec![HMove::Close("runner changed"), HMove::Start]
                 } else {
                     vec![]
@@ -181,6 +192,16 @@ pub(crate) fn hplan(
             } else if role.closed {
                 if term {
                     vec![HMove::Drop]
+                } else if let Some(req) = &role.restart {
+                    // The close a restart recorded: start it again —
+                    // resumed when it kept a session, fresh with the
+                    // role's prompt when the request asked for one or
+                    // no session was kept.
+                    if !req.fresh && role.session_id.is_some() {
+                        vec![HMove::ReviveResume]
+                    } else {
+                        vec![HMove::Start]
+                    }
                 } else if role.closed_reason.as_deref() == Some("cannot resume") {
                     // The give-up stands while this stage process
                     // lives; a close older than this process means the
@@ -194,6 +215,10 @@ pub(crate) fn hplan(
                 } else {
                     vec![HMove::Revive]
                 }
+            } else if role.restart.is_some() {
+                // A lost role a restart names comes back at once,
+                // around the loss guard.
+                vec![HMove::ResumeRun]
             } else if term {
                 if role.recorded() {
                     vec![HMove::Rejoin]

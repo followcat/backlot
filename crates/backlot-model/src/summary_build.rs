@@ -267,9 +267,12 @@ fn role_acted_later(state: &StudioState, role: &str, seq: u64) -> bool {
 
 /// The role's newest `tell user` the user has not answered with a
 /// `tell` back to that role, and the role has recorded no later
-/// ledger action of its own. `snippets` carries the message bodies the
-/// stage read for the exchange projection; a body it could not read
-/// falls back to a neutral line so the question is never hidden.
+/// ledger action of its own — and `studio.finished` answers it: a
+/// finish is the answering event for every open question, so a
+/// finished studio shows none (L6). `snippets` carries the message
+/// bodies the stage read for the exchange projection; a body it could
+/// not read falls back to a neutral line so the question is never
+/// hidden.
 pub(crate) fn role_asks(
     studio: &str,
     state: &StudioState,
@@ -291,6 +294,7 @@ pub(crate) fn role_asks(
         .messages
         .iter()
         .any(|m| m.from == "user" && m.to == role && m.seq > ask.seq)
+        || state.finished.as_ref().is_some_and(|f| f.seq > ask.seq)
         || role_acted_later(state, role, ask.seq);
     if answered {
         return None;
@@ -390,5 +394,6 @@ pub(crate) fn role_summary(
         attention_detail: open.map(attention_detail),
         stage_answer_ms: r.stage_answer_ms,
         can_answer_prompt: actor.is_none_or(|a| crate::caps::can_answer_prompt(&a.runner)),
+        restarted_ms: r.restarted_ms,
     })
 }

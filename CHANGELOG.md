@@ -61,6 +61,19 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
   `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
 
+- **Restart a stuck role in place.** `backlot restart --person <role> [--fresh] [--reason <r>]`
+  reloads a live or lost producer, director, writer or actor under the same identity: the stage
+  stops its terminal deliberately (`role.closed`, reason `restarted` — never a loss) and launches it
+  again, resuming the recorded session when the runner supports it, or starting a new one with
+  `--fresh`. The role's ledger row carries `restarted`, which the summary and Hollywood read. The
+  same request reloads Hollywood itself (`restart --person hollywood`, its own `role.restart`).
+
+- **Archive list and restore.** `backlot studio list --archived` lists the studios `studio delete`
+  retired — name, stamp, repo and last requirement title — and `backlot studio restore
+  <archived-name> [--name <new-name>] [--dry-run]` copies one back under `studios/` as a finished
+  studio, refusing a name already taken. `docs/studio/guide.md` gains a finish/prune/delete/restore
+  table.
+
 - **Hollywood's terminal starts at a readable size.** `bl-hollywood`'s `terminal.run` now carries
   an initial grid of at least 100 columns and hc's `200×120` default, so a person who peeks or
   focuses it sees its answers instead of a 21-column strip. Peeking stays
@@ -227,6 +240,15 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Changed
 
+- **Finishing an empty studio needs `--force`.** `studio finish` on a studio with no requirement and
+  no tasks refuses (`nothing was built yet (no requirement, no tasks) — add --force to finish
+  anyway`).
+- **Finishing clears stale questions.** A finished studio shows no open `tell user`: the finish is
+  the answering event, so the producer's old `What would you like us to build?` no longer lingers.
+- **`close` is plain, and fixed seats stay open.** `close` on the producer, director or writer now
+  refuses with `the <role> is a fixed seat — use restart, or finish the studio`, and on an actor
+  that is not held with `the <role> has nothing to close — it closes with its task`. No more
+  `role '...' is not held` jargon.
 - **Stopping the stage moved to the machine's menu.** `Stop stage…` is gone
   from every studio's context menu: a stage is the scheduler of a whole
   machine, so stopping it halts every studio there while running roles and the

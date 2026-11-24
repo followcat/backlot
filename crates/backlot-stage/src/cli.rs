@@ -40,6 +40,7 @@ const COMMANDS: &[&str] = &[
     "priority",
     "reopen",
     "close",
+    "restart",
     "recast",
     "approve",
     "attention",

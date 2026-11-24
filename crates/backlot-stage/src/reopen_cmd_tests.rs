@@ -113,8 +113,16 @@ fn reopen_refusals_reach_the_caller() {
         "a held person cannot be reopened twice"
     );
     ok(&env, "close --person actor-t1-c1 --as user");
+    let msg = refused(&env, "close --person actor-t1-c1 --as user");
     assert!(
-        refused(&env, "close --person actor-t1-c1 --as user").contains("not held"),
-        "release wants a held role"
+        msg.contains("nothing to close") && msg.contains("restart"),
+        "a released person refuses plainly: {msg}"
+    );
+    assert!(!msg.contains("held"), "no 'held' jargon: {msg}");
+    // A fixed seat never closes: restart it, or finish the studio.
+    let msg = refused(&env, "close --person writer --as user");
+    assert_eq!(
+        msg,
+        "the writer is a fixed seat — use restart, or finish the studio"
     );
 }

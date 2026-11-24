@@ -71,7 +71,7 @@ fn the_cli_refuses_live_studios_and_prunes_finished_ones() {
         "no finished studios to prune\n"
     );
 
-    ok(&env, "studio finish --reason done --as user");
+    ok(&env, "studio finish --reason done --force --as user");
 
     // Dry run plans and changes nothing.
     let dry = ok(&env, "studio prune acme-shop --dry-run");
@@ -191,7 +191,7 @@ fn a_workspace_bound_studio_prunes_every_member() {
     fs::create_dir_all(studio_dir.join("reports")).unwrap();
     fs::write(studio_dir.join("reports/r.md"), "keep\n").unwrap();
 
-    ok(&env, "studio finish --reason done --as user");
+    ok(&env, "studio finish --reason done --force --as user");
 
     // The dry run plans per member and refuses nothing.
     let dry = ok(&env, "studio prune acme-shop --dry-run");
@@ -295,7 +295,7 @@ fn a_repository_added_after_the_binding_is_left_alone() {
         ],
     );
 
-    ok(&env, "studio finish --reason done --as user");
+    ok(&env, "studio finish --reason done --force --as user");
     let out = ok(&env, "studio prune acme-shop --force");
     assert!(
         out.contains("removed worktree work/integration/svc-api"),
@@ -353,7 +353,7 @@ fn a_broken_member_is_kept_and_the_others_still_prune() {
             ],
         );
     }
-    ok(&env, "studio finish --reason done --as user");
+    ok(&env, "studio finish --reason done --force --as user");
 
     // `svc-web` is no longer a git repository — moved away, or its
     // `.git` destroyed. The other member must still prune.
@@ -420,7 +420,7 @@ fn a_member_failing_midway_is_kept_while_the_others_prune() {
             ],
         );
     }
-    ok(&env, "studio finish --reason done --as user");
+    ok(&env, "studio finish --reason done --force --as user");
 
     // `svc-web` still answers the probe but its worktree listing is
     // broken — the shape a damaged git dir takes.
@@ -463,7 +463,7 @@ fn a_no_git_studio_prunes_without_git_steps() {
     fs::create_dir_all(studio_dir.join("reports")).unwrap();
     fs::write(studio_dir.join("reports/r.md"), "keep\n").unwrap();
 
-    ok(&env, "studio finish --reason done --as user");
+    ok(&env, "studio finish --reason done --force --as user");
 
     assert_eq!(
         ok(&env, "studio prune acme-shop --dry-run"),

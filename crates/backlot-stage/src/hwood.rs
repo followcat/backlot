@@ -16,6 +16,7 @@ use backlot_model::state::StudioState;
 use crate::args::{CardCmd, Cmd, Common, HollywoodCmd};
 use crate::cli::{Caller, Env, Fail};
 use crate::commands;
+use crate::config;
 use crate::hrender;
 use crate::link;
 use crate::store::{self, HPending, PendingFile, StoreError, sanitize};
@@ -208,6 +209,52 @@ fn tell_hollywood(common: &Common, env: &Env, text: &str) -> Result<String, Fail
     .map_err(store_fail)?;
     Ok(format!(
         "{} — delivery to its terminal is the stage's job (H3)",
+        hrender::hconfirm(&event)
+    ))
+}
+
+/// `restart --person hollywood [--fresh] [--reason <r>]`: the user
+/// stops `bl-hollywood` and the stage launches it again — resuming the
+/// recorded session unless `--fresh`. Recorded in Hollywood's own
+/// ledger (`role.restart`); the stage's `hplan` carries it out. The
+/// `[hollywood]` section must exist — there is nothing to restart
+/// without one.
+pub(crate) fn restart(
+    common: &Common,
+    env: &Env,
+    fresh: bool,
+    reason: &str,
+) -> Result<String, Fail> {
+    let r = role(common, env);
+    if r != "user" {
+        return Err(Fail::refused(format!(
+            "role '{r}' cannot do this; the user can"
+        )));
+    }
+    if config::hollywood(&env.vars).ok().flatten().is_none() {
+        return Err(Fail::refused(
+            "hollywood is not set up — run 'backlot hollywood setup' first",
+        ));
+    }
+    let base = base_of(common, env)?;
+    let hdir = store::hollywood_dir(&base);
+    let hstate = store::load_hstate(&hdir).map_err(store_fail)?;
+    if !hstate.role.recorded() {
+        return Err(Fail::refused(
+            "hollywood has not started yet — the stage starts it on its next tick",
+        ));
+    }
+    let by = by_for(common, env);
+    let reason = (!reason.is_empty()).then(|| reason.to_string());
+    let event = store::append_hollywood(&hdir, |_, _| {
+        Ok::<HPending, Fail>(HPending {
+            event: NewHollywoodEvent::new(by, HollywoodKind::RoleRestart { fresh, reason }),
+            files: Vec::new(),
+        })
+    })
+    .map_err(store_fail)?;
+    Ok(format!(
+        "{} — the stage stops and relaunches it",
         hrender::hconfirm(&event)
     ))
 }

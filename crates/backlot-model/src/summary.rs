@@ -241,6 +241,11 @@ pub struct RoleSummary {
     /// wrote, which keeps today's `y`/`d` behaviour.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub can_answer_prompt: bool,
+    /// When the stage last restarted this role in place
+    /// (`role.restart`) — the person row and Hollywood read
+    /// `restarted`. Documents an older stage wrote have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restarted_ms: Option<u64>,
 }
 
 pub(crate) fn default_true() -> bool {
@@ -510,6 +515,7 @@ pub fn summary_with_exchange(
                 attention_detail: None,
                 stage_answer_ms: None,
                 can_answer_prompt: crate::caps::can_answer_prompt(&w.actor.runner),
+                restarted_ms: None,
             });
         }
         let studio_snippets: BTreeMap<u64, String> = snippets

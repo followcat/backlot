@@ -298,6 +298,7 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
         | Cmd::StudioDelete { .. }
         | Cmd::StudioMigrate { .. }
         | Cmd::StudioList { .. }
+        | Cmd::StudioRestore { .. }
         | Cmd::TellHollywood { .. } => {
             unreachable!("commands without a ledger event do not append")
         }
@@ -553,6 +554,26 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                 ))
             }))
         }
+        // `restart` is a person's: the stage stops the terminal and
+        // launches the role again (L2). A finished studio refuses.
+        Cmd::Restart {
+            person,
+            fresh,
+            reason,
+        } => {
+            person_gate(caller)?;
+            Ok(Box::new(move |_, _| {
+                Ok(pending(
+                    EventKind::RoleRestart {
+                        role: person,
+                        fresh,
+                        reason: (!reason.is_empty()).then_some(reason),
+                    },
+                    by,
+                    Vec::new(),
+                ))
+            }))
+        }
         // `recast` is the user's — a role terminal is refused before
         // the ledger is read, exactly like `card apply`.
         Cmd::Recast {
@@ -634,8 +655,10 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
             }))
         }
         // `studio finish` ends the studio; the model refuses while
-        // any task is not terminal, naming them.
-        Cmd::StudioFinish { reason } => {
+        // any task is not terminal, naming them. A studio with no
+        // requirement and no tasks refuses unless `--force` — an
+        // accidental finish of a just-made studio (L5).
+        Cmd::StudioFinish { reason, force } => {
             match caller.role.as_str() {
                 "user" | "producer" => {}
                 other => {
@@ -644,7 +667,16 @@ pub fn build(caller: &Caller, cmd: Cmd, env: &Env, base: &Path) -> Result<Pendin
                     )));
                 }
             }
-            Ok(Box::new(move |_, _| {
+            Ok(Box::new(move |state, _| {
+                if !force
+                    && state.requirement_version == 0
+                    && state.tasks.is_empty()
+                    && state.plans.is_empty()
+                {
+                    return Err(Fail::refused(
+                        backlot_model::validate::Refusal::NothingBuilt.to_string(),
+                    ));
+                }
                 Ok(pending(
                     EventKind::StudioFinished { reason },
                     by,

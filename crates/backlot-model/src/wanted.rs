@@ -50,7 +50,8 @@ fn writer_wanted(state: &StudioState) -> bool {
 
 /// The roles the ledger wants live, in slot order. A finished
 /// studio wants nobody on its own — the held pass still re-launches
-/// a person an explicit `role.reopen` held.
+/// a person an explicit `role.reopen` held, and the restart pass a
+/// person a `role.restart` named.
 pub fn wanted_roles(state: &StudioState) -> Vec<Wanted> {
     let Some(cfg) = &state.studio else {
         return Vec::new();
@@ -98,10 +99,12 @@ pub fn wanted_roles(state: &StudioState) -> Vec<Wanted> {
     }
     // A held person joins the wanted set — the panel's explicit
     // `role.reopen` — whether or not the studio still runs, and even
-    // when its task is done. One already listed stays one entry; a
-    // held role with no actor has nothing to launch.
+    // when its task is done. A role a `role.restart` still owes is
+    // wanted the same way: the stage stops it and starts it again
+    // under the same identity. One already listed stays one entry; a
+    // role with no recorded actor has nothing to launch.
     for (key, r) in &state.roles {
-        if !r.held || out.iter().any(|w| w.role == *key) {
+        if !(r.held || r.restart.is_some()) || out.iter().any(|w| w.role == *key) {
             continue;
         }
         let Some(actor) = &r.actor else {

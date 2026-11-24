@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use backlot_model::event::ActorIdentity;
+use backlot_model::event::{ActorIdentity, RESTARTED};
 use backlot_model::hollywood::{HOLLYWOOD, HOLLYWOOD_TERMINAL, RoleMotion};
 use hc_proto::client::CallError;
 use hc_proto::terminal::RunParams;
@@ -127,7 +127,11 @@ impl Stage {
                                 Some(address),
                                 Some(actor),
                                 session,
-                                None,
+                                // A restart's fresh start carries its
+                                // own word, so the request is done.
+                                role.restart
+                                    .as_ref()
+                                    .and_then(|r| r.fresh.then_some(RESTARTED)),
                             )?;
                             crate::stagelog::stage_log!(
                                 "started hollywood as {HOLLYWOOD_TERMINAL}"
@@ -136,6 +140,44 @@ impl Stage {
                         HRun::Defer => {}
                         HRun::Refused(d) => self.hlog(&format!("launch refused: {d}")),
                     }
+                }
+                HMove::ReviveResume => {
+                    let mut actor = role.actor.clone().unwrap_or_else(|| {
+                        hstage::identity(cfg.expect("a resume needs the config"))
+                    });
+                    let resume = role.session_id.clone();
+                    match self
+                        .hrun(hdir, &mut actor, resume.as_deref(), real_slot_free)
+                        .await?
+                    {
+                        HRun::Up { address, session } => {
+                            hstage::record_role(
+                                hdir,
+                                RoleMotion::Resumed,
+                                Some(address),
+                                Some(actor),
+                                session.or(resume),
+                                Some(RESTARTED),
+                            )?;
+                            crate::stagelog::stage_log!("restarted {HOLLYWOOD_TERMINAL}");
+                        }
+                        HRun::Defer => {}
+                        HRun::Refused(d) => self.hlog(&format!("launch refused: {d}")),
+                    }
+                }
+                HMove::Restart => {
+                    hstage::record_role(
+                        hdir,
+                        RoleMotion::Closed,
+                        None,
+                        None,
+                        None,
+                        Some(RESTARTED),
+                    )?;
+                    if let Some(t) = term {
+                        self.remove(&t.address).await?;
+                    }
+                    crate::stagelog::stage_log!("restarting {HOLLYWOOD_TERMINAL}");
                 }
                 HMove::Adopt => {
                     let t = term.expect("adopt needs the live terminal");

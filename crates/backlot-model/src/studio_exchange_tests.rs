@@ -427,6 +427,57 @@ fn a_stage_written_event_does_not_answer_the_role() {
     assert_eq!(producer.asks.as_deref(), Some("which shop?"));
 }
 
+/// `studio.finished` is the answering event for every open question
+/// (L6): the producer's stale `tell user` never reads as still
+/// waiting once the studio is finished.
+#[test]
+fn finishing_clears_the_open_question() {
+    let mut events = base_events();
+    events.push(ev(4, "producer", role_started("producer")));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    // The requirement and the task land before the question, so the
+    // finish has nothing open to refuse.
+    events.push(ev(
+        11,
+        "producer",
+        EventKind::StudioFinished {
+            reason: "done".into(),
+        },
+    ));
+    let state = replay(&events);
+    let mut snippets = BTreeMap::new();
+    snippets.insert(
+        ("acme-shop".into(), 10),
+        "what would you like us to build?".into(),
+    );
+    let studio = summary_with_exchange(
+        &[("acme-shop".into(), state)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        1,
+    )
+    .studios
+    .remove(0);
+    let producer = studio.roles.iter().find(|r| r.role == "producer").unwrap();
+    assert!(
+        producer.asks.is_none(),
+        "a finished studio shows no open question: {:?}",
+        producer.asks
+    );
+}
+
 #[test]
 fn studio_pending_tell_tracks_undelivered_user_messages_only() {
     let mut state = base_state();

@@ -58,6 +58,7 @@ prints `already at ledger v1`.
 | `studio.created` | title, repo, mode, candidates, role configurations, `check_env`, declared `checks`, optional `task_budget_s`, `[limits]` runner caps |
 | `role.started` / `role.lost` / `role.resumed` / `role.closed` | role, terminal, actor identity, session ID, reason |
 | `role.reopen` / `role.release` | role |
+| `role.restart` | role, `fresh`, optional reason |
 | `role.session` | role, session ID |
 | `role.recast` | role, new actor identity, reason, optional `card` |
 | `role.approval` | role, decision (`allow` or `deny`) |
@@ -98,7 +99,19 @@ it with the session it closed with — the launch lands as `role.resumed` (reaso
 `role.started`. `held` clears on `role.release` or `role.closed`; a released role stops being
 desired, so the usual stop closes it. `role.reopen` is refused unless the role is closed, has a
 session ID, is not already held and no other live role uses its terminal name; `role.release` is
-refused unless held. Both are user- and director-facing events.
+refused unless held. Both are user- and director-facing events. `role.release` is `close`: it
+releases a held person and nothing else — a fixed seat (producer, director, writer) refuses with
+"the <role> is a fixed seat — use restart, or finish the studio", and an actor with no hold refuses
+with "the <role> has nothing to close — it closes with its task".
+
+`role.restart` is the in-place reload (L2): the stage stops the role's terminal deliberately
+(`role.closed`, reason `restarted` — never counted as a loss) and launches it again under the same
+identity and terminal name. The start lands as `role.resumed` (reason `restarted`) when it resumes a
+recorded session, or `role.started` (reason `restarted`) for a `fresh` one; the reduced state clears
+the request on that start and stamps `restarted_ms`, which the summary's role row and Hollywood read.
+`--fresh` starts a new conversation — the old session id is not kept. Refused for a closed person
+(reopen is that) and a finished studio. The same request lands in Hollywood's own ledger as
+`role.restart` for the overseer.
 
 Tasks carry a `priority` — `low`, `normal` (the default) or `high`. `task.cast` may set it, and
 `task.priority` changes it on an existing task. It orders the panel's display only (R20): nothing in
@@ -202,7 +215,12 @@ the whole pass out.
 
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director
-close the usual way and keep their sessions. `role.reopen` still works after finish.
+close the usual way and keep their sessions. `role.reopen` still works after finish. A studio with
+no requirement and no tasks is refused too (`nothing was built yet (no requirement, no tasks) — add
+--force to finish anyway`) unless the command passed `--force` — the guard is the CLI's, so an
+accidental finish of a just-made studio is caught before the event lands. The finish also answers
+every open `tell user`: a role's `asks` projection reads a `studio.finished` after the question as
+the answering event, so a finished studio shows no open question (L6).
 
 ## Hollywood's ledger
 
@@ -215,6 +233,7 @@ message to the producer (R26).
 | Kind | Main fields |
 |---|---|
 | `role.state` | lifecycle motion (`started`/`lost`/`resumed`/`closed`), terminal, actor, session, reason — `stage` only; the studios' four role events folded into one (H3) |
+| `role.restart` | `fresh`, optional reason — `user` only; the stage closes (`restarted`) then relaunches `bl-hollywood`, resuming its session unless `fresh` |
 | `card.proposed` | the exact `action` (D18), a one-line `why`, and the `base` the card was made against — `hollywood` only |
 | `card.applied` | card id — `user` only |
 | `card.cancelled` | card id, reason — `user` only |

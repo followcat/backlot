@@ -35,6 +35,7 @@ fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSumm
         attention_detail: None,
         stage_answer_ms: None,
         can_answer_prompt: true,
+        restarted_ms: None,
     }
 }
 
