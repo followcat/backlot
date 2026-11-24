@@ -8,11 +8,19 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
-## Unreleased
+## 0.4.1 — 2026-11-25
+
+This release swaps the studio and role keys, so `Alt+Left`/`Alt+Right` step between studios and `Alt+Up`/`Alt+Down`
+between a studio's cast, and stops counting a role's question as waiting on the person once the person has answered it
+in the role's own terminal.
 
 ### Changed
 
 - **Swapped `Alt+arrow` studio navigation defaults.** `Alt+Left`/`Alt+Right` now step studios (`previous_studio = "alt+left"`, `next_studio = "alt+right"`) and `Alt+Up`/`Alt+Down` step cast members inside a studio workspace (`previous_role = "alt+up"`, `next_role = "alt+down"`); to restore the old layout, set `previous_studio = "alt+up"`, `next_studio = "alt+down"`, `previous_role = "alt+left"`, and `next_role = "alt+right"` under `[keys]` in `~/.config/backlot/config.toml`.
+
+### Fixed
+
+- **An ask answered in the role's terminal stops waiting.** When a role asked the person with `backlot tell user` and the person answered by typing into the role's terminal, the panel kept `ASKS`, `? asks you` and the needs-you counts. The stage now records `ask.answered` when the role starts a turn the stage did not cause (a prompt hook signal, or `waiting` → `working` for runners without one); the question stays in the exchange. A person's recast no longer clears an ask.
 
 ## 0.4.0 — 2026-11-24
 
