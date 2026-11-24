@@ -133,17 +133,50 @@ fn plan_refuses_a_bad_profile_and_keeps_going_without_effort() {
     assert!(l.argv.windows(2).any(|w| w == ["--effort", ""]));
 }
 
-/// The settings file's bytes: `{"toolPermission":"always-proceed"}`
-/// fresh, or the member spliced byte-exact into an existing object
-/// — every other member keeps its whitespace and order.
+/// The settings file's bytes: `toolPermission = "always-proceed"`
+/// and `permissions.deny` fresh, or spliced byte-exact into an
+/// existing object — every other member keeps its whitespace and order.
 #[test]
 fn settings_splices_tool_permission_only() {
+    let expected_deny = [
+        "command(git push)",
+        "command(gh pr)",
+        "command(gh release)",
+        "command(gh repo)",
+        "command(gh issue)",
+        "command(gh api)",
+        "command(hc update)",
+        "command(hc machine)",
+        "command(hc server stop)",
+        "command(scp)",
+        "command(rsync)",
+        "command(ssh)",
+        "command(npm publish)",
+        "command(cargo publish)",
+    ];
+    let check_rules = |bytes: &[u8]| {
+        let v: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(v["toolPermission"], "always-proceed");
+        let deny: Vec<&str> = v["permissions"]["deny"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect();
+        assert_eq!(deny, expected_deny);
+        for rule in deny {
+            assert!(!rule.contains(" *"), "no trailing wildcard in {rule}");
+        }
+    };
+
     let fresh = settings_content(None).unwrap();
-    assert_eq!(fresh, b"{\"toolPermission\":\"always-proceed\"}\n");
-    // An existing object keeps its other members verbatim.
+    assert!(fresh.ends_with(b"\n"));
+    check_rules(&fresh);
+
+    // An existing object keeps its other members and bytes verbatim.
     let existing = b"{\n  \"model\": \"gemini-4-neon\",\n  \"toolPermission\": \"prompt\",\n  \"verbosity\": \"low\"\n}";
     let spliced = settings_content(Some(existing)).unwrap();
-    let text = String::from_utf8(spliced).unwrap();
+    let text = String::from_utf8(spliced.clone()).unwrap();
     assert!(text.contains("\"model\": \"gemini-4-neon\""), "{text}");
     assert!(
         text.contains("\"toolPermission\": \"always-proceed\""),
@@ -151,11 +184,21 @@ fn settings_splices_tool_permission_only() {
     );
     assert!(!text.contains("\"prompt\""), "{text}");
     assert!(text.contains("\"verbosity\": \"low\""), "{text}");
-    // A non-object file is healed, not preserved.
+    check_rules(&spliced);
+
+    // Existing permissions.allow survives alongside injected deny.
+    let with_allow = b"{\n  \"model\": \"gemini-4-neon\",\n  \"permissions\": {\"allow\": [\"command(echo)\"]}\n}";
+    let spliced_allow = settings_content(Some(with_allow)).unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&spliced_allow).unwrap();
     assert_eq!(
-        settings_content(Some(b"not json\n")).unwrap(),
-        b"{\"toolPermission\":\"always-proceed\"}\n"
+        v["permissions"]["allow"],
+        serde_json::json!(["command(echo)"])
     );
+    check_rules(&spliced_allow);
+
+    // A non-object file is healed, not preserved.
+    let healed = settings_content(Some(b"not json\n")).unwrap();
+    assert_eq!(healed, fresh);
 }
 
 /// `prepare` writes `<cwd>/.agy-settings.json` mode 600 before the

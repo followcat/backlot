@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 use backlot_model::ActorIdentity;
 
-use super::splice::{splice_member, write600};
+use super::splice::{splice_member, splice_permissions, write600};
 use super::{Launch, LaunchCtx, PlanError, Prep, Session};
 
 /// The attention reason a failed `prepare` raises.
@@ -83,14 +83,64 @@ pub struct AgyPrep {
 /// keeps its whitespace and order. `always-proceed` is the posture
 /// the measured account runs; the file is session-only, so it
 /// never rewrites the user's.
+/// Command prefixes denied by agy's session `.agy-settings.json`
+/// (`command(<prefix>)`, no trailing ` *` — measured in agy 1.5.16) as
+/// defence in depth ahead of the outward-action shims (D3).
+pub(crate) const DENY_PREFIXES: &[&str] = &[
+    "git push",
+    "gh pr",
+    "gh release",
+    "gh repo",
+    "gh issue",
+    "gh api",
+    "hc update",
+    "hc machine",
+    "hc server stop",
+    "scp",
+    "rsync",
+    "ssh",
+    "npm publish",
+    "cargo publish",
+];
+
+fn deny_rules() -> Vec<String> {
+    DENY_PREFIXES
+        .iter()
+        .map(|p| format!("command({p})"))
+        .collect()
+}
+
+fn permissions_json(existing: &str) -> String {
+    let mut map = serde_json::from_str::<serde_json::Value>(existing)
+        .ok()
+        .and_then(|v| v.get("permissions").and_then(|p| p.as_object()).cloned())
+        .unwrap_or_default();
+    map.insert("deny".into(), serde_json::json!(deny_rules()));
+    serde_json::to_string(&serde_json::Value::Object(map)).unwrap_or_default()
+}
+
+/// The settings file's bytes: `toolPermission = "always-proceed"`
+/// and `permissions.deny` written fresh, or spliced byte-exact into an
+/// existing object — every other member keeps its whitespace and order.
 pub(crate) fn settings_content(existing: Option<&[u8]>) -> Result<Vec<u8>, String> {
-    let fresh = || Ok(b"{\"toolPermission\":\"always-proceed\"}\n".to_vec());
+    let fresh = || {
+        let obj = serde_json::json!({
+            "toolPermission": "always-proceed",
+            "permissions": { "deny": deny_rules() },
+        });
+        Ok(format!("{}\n", serde_json::to_string(&obj).unwrap_or_default()).into_bytes())
+    };
     let Some(text) = existing.and_then(|b| std::str::from_utf8(b).ok()) else {
         return fresh();
     };
-    match splice_member(text.trim(), "toolPermission", "\"always-proceed\"") {
-        Some(spliced) => Ok(format!("{spliced}\n").into_bytes()),
+    let trimmed = text.trim();
+    let Some(with_tp) = splice_member(trimmed, "toolPermission", "\"always-proceed\"") else {
         // A file that is not a JSON object is healed, not preserved.
+        return fresh();
+    };
+    let perms = permissions_json(trimmed);
+    match splice_permissions(&with_tp, &perms) {
+        Some(spliced) => Ok(format!("{spliced}\n").into_bytes()),
         None => fresh(),
     }
 }
