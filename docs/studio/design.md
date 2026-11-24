@@ -528,6 +528,15 @@ runner maps none — with whitespace and box-drawing characters removed, so a wr
 prompt. It flags the attention `needs_user`: no notice to the director, `backlot status` and the panel mark it as the
 user's.
 
+## Guard (D3)
+
+A role works against local state, never outward: publishing, pushing, opening PRs, modifying remotes or upgrading `hc` stay the person's to run. The guard sits at three runner-independent layers written before every start and resume alongside per-session hooks:
+
+1. **Command shims (`roles/<role>/bin`).** `role_env` and `hrole_env` place `<role>/bin` first on `PATH`, ahead of `exe_dir`. Small shell wrappers invoke `backlot guard <name> -- "$@"`. Writes are refused (`gh` writes `pr`, `release`, `repo`, `issue`, `gist`, `secret`, `workflow run`, and `api` with non-`GET` method or `-f`/`-F`; `hc update`, `hc machine`, `hc server stop`; `scp`; `rsync` with a `host:` spec; `ssh <host> <command>`; `npm publish`; `cargo publish`); read-only calls resolve and `exec` the real binary past `<role>/bin` on `PATH` (skipping shim markers).
+2. **`git push` hook (`roles/<role>/git-hooks`).** Role env appends `core.hooksPath=<role>/git-hooks` via `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` without clobbering any existing `GIT_CONFIG_*` entries. `pre-push` calls `backlot guard git-push -- "$@"`, while client commit/merge/rebase hooks pass through to the repository's own hooks path (`core.hooksPath` or `--git-common-dir`/hooks) when one exists. The user's own `git push` outside the role environment is untouched.
+3. **Refusal record and attention.** A refused call prints `refused by backlot: <command> is the person's to run; ask with backlot ask`, exits 126, appends `role.refused` (`role`, optional `task`, `command` capped at 200 chars, `cwd`) in studio ledgers, and raises one `outward action` attention (`needs_user: true`) once per open attention episode. Hollywood gets the same shims and hooks.
+4. **Runner prefix defence.** For `agy`, `runners::agy` splices `permissions.deny` (`command(<prefix>)`, no trailing ` *`) into session `.agy-settings.json` beside `toolPermission: "always-proceed"`.
+
 ## Defaults that can still change
 
 **Requirement changes.** Each task is pinned to the requirement version it was dispatched under. A new version marks
