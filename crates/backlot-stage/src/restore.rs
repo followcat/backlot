@@ -41,7 +41,7 @@ pub(crate) fn run(
     let dest = store::studio_dir(&base, &name);
     if dest.join("events.jsonl").is_file() || dest.exists() {
         return Err(Fail::refused(format!(
-            "a studio named '{name}' already exists — pick another name with --as"
+            "a studio named '{name}' already exists — pick another name with --name"
         )));
     }
     if dry_run {
