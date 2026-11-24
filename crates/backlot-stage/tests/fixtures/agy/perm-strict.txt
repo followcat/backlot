@@ -1,0 +1,25 @@
+🐱 Welcome to host-a! Type 'help' for available commands.
+
+      ▄▀▀▄        Antigravity CLI 1.5.16
+     ▀▀▀▀▀▀       alice@host-a (Google AI Ultra)
+    ▀▀▀▀▀▀▀▀      Gemini 4 Hydrogen (Low)
+   ▄▀▀    ▀▀▄     /home/user/acme-shop
+  ▄▀▀      ▀▀▄
+
+────────────────────────────────────────────────────────────
+> Run the shell command: touch /home/user/strict-probe.txt
+
+● Bash(touch /home/user/strict-probe.txt) (ctrl+o to expand)
+
+Command
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Requesting permission for:
+   touch /home/user/strict-probe.txt
+
+Run this command?
+> 1. Yes, run command
+  2. No, cancel
+
+  ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command
+esc to cancel                                                                                                                                                     accept-edits · Gemini 4 Hydrogen · low
