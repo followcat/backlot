@@ -180,6 +180,15 @@ impl Studio {
             && !studios.iter().any(|s| &s.key() == key)
         {
             self.focus = None;
+        } else if self.focus.is_none()
+            && let Some((key, member, terminal)) = matched
+        {
+            // If `focused` latched onto the studio terminal before the
+            // summary document published its role/shell seat, promote
+            // `focus` to `Role` once the document catches up.
+            self.current = Some(key.clone());
+            self.remembered.insert(key.clone(), member);
+            self.focus = Some(StudioFocus::Role(key, terminal));
         }
         // A current studio that left every machine's document falls
         // back to the aggregate's order, like the start does.
