@@ -45,6 +45,7 @@ const COMMANDS: &[&str] = &[
     "approve",
     "attention",
     "hook",
+    "guard",
     "hollywood",
     "card",
     "runners",
@@ -465,6 +466,9 @@ pub fn maybe_run(args: &[String]) -> Option<ExitCode> {
     // runner's way.
     if first == "hook" {
         return Some(crate::hook::run(&args[1..]));
+    }
+    if first == "guard" {
+        return Some(crate::guard::run(&args[1..]));
     }
     let env = Env::process();
     Some(match run(args, &env) {

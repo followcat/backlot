@@ -268,10 +268,19 @@ fn the_terminal_env_marks_hollywood_alone() {
     assert_eq!(env["BACKLOT_ROLE"], "hollywood");
     assert_eq!(env["BACKLOT_STATE_DIR"], "/state");
     assert!(!env.contains_key("BACKLOT_STUDIO"));
-    assert_eq!(env["PATH"], "/exe:/opt/bin");
+    assert_eq!(
+        env["PATH"],
+        "/state/hollywood/roles/hollywood/bin:/exe:/opt/bin"
+    );
     assert_eq!(env["PROXY"], "http://proxy:1");
     assert_eq!(env["FAKE_MODEL"], "model-h");
-    // No configured PATH: the stage's own is the whole value.
+    assert_eq!(env["GIT_CONFIG_COUNT"], "1");
+    assert_eq!(env["GIT_CONFIG_KEY_0"], "core.hooksPath");
+    assert_eq!(
+        env["GIT_CONFIG_VALUE_0"],
+        "/state/hollywood/roles/hollywood/git-hooks"
+    );
+    // No configured PATH: shim dir leads the stage's own PATH.
     let env = hrole_env(
         std::collections::BTreeMap::new(),
         std::collections::BTreeMap::new(),
@@ -279,7 +288,7 @@ fn the_terminal_env_marks_hollywood_alone() {
         "/exe",
         "/usr/bin",
     );
-    assert_eq!(env["PATH"], "/usr/bin");
+    assert_eq!(env["PATH"], "/state/hollywood/roles/hollywood/bin:/usr/bin");
 }
 
 /// `devin` takes `--prompt-file <path>`, never inline prompt text:

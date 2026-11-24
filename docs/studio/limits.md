@@ -342,6 +342,17 @@ re-raise one `stall_limit_s` later.
   `backlot` as the same user, so this stops a role
   doing another role's step *through backlot*, not a determined process — a script that sets
   the variable inside shows only `bash x.sh` on the prompt screen.
+- **The outward-action guard stops agent mistakes; it is not a sandbox.** Shims and
+  `GIT_CONFIG_*` hooks catch accidental outward writes (`git push`, `gh` writes, `hc`
+  updates/machine/server-stop, `scp`, remote `rsync`, `ssh <host> <cmd>`, `npm publish`,
+  `cargo publish`), not a determined escape: invoking an absolute binary path (for example
+  `/usr/bin/git` or `/usr/bin/gh`) or clearing `PATH` / `GIT_CONFIG_*` bypasses the shims and
+  hook directory; `bash -c '…'` bypasses `agy`'s `command(<prefix>)` deny rules (though the
+  shell inside `bash -c` still hits the role's `PATH` shims and git hook); commands denied
+  directly by `agy` stop in `agy` without reaching a shim or appending `role.refused`;
+  `claude-settings.json` stays hooks-only and relies on the shims and git hook; and
+  `curl`/`wget` piped into `sh` or `bash` is not covered by a `PATH` shim (checking `/proc`
+  races pipeline `execve`).
 - **Hollywood's exact pre-allow list is wired for `claude`, `cursor` and `cmd` only.** On `devin`,
   `codex` and `opencode` the runner's own permission mode is the gate — the ledger's role rules
   still refuse what they must, but nothing trims the prompt set at launch.

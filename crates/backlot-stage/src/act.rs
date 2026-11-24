@@ -127,12 +127,13 @@ pub(crate) fn role_env(
         env.insert("BACKLOT_TASK".into(), task.clone());
     }
     env.insert("BACKLOT_STATE_DIR".into(), state_dir.into());
-    env.insert(
-        "PATH".into(),
-        match configured_path {
-            Some(p) => format!("{exe_dir}:{p}"),
-            None => path_env.into(),
-        },
+    let role_dir = crate::guard::studio_role_dir(state_dir, studio, &start.role);
+    crate::guard::apply_env(
+        &mut env,
+        &role_dir,
+        exe_dir,
+        path_env,
+        configured_path.as_deref(),
     );
     env
 }
@@ -298,6 +299,9 @@ impl Stage {
         if let Some(hooks) = &launch.hooks {
             prepare_hooks(hooks).map_err(|e| Fail::refused(format!("hook files: {e}")))?;
         }
+        let role_dir = dir.join("roles").join(&start.role);
+        crate::guard::prepare_role(&role_dir, &self.exe_dir)
+            .map_err(|e| Fail::refused(format!("guard files: {e}")))?;
         let cwd = workareas::role_dir(dir, &start.repo, &start.role, start.no_git);
         let run = self
             .client

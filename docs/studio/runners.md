@@ -416,9 +416,16 @@ Measured on agy 1.5.16 (with session-discovery layout from 1.5.14–1.5.16).
   cwd is already trusted, `--conversation <id>` restores the transcript straight to the idle
   composer with no dialog; in an untrusted folder it shows the folder-trust dialog first.
 - The workdir's `.agy-settings.json` is the per-session boundary like cmd's project file:
-  `{"toolPermission":"always-proceed"}`, written before every start and resume — agy reads it once
-  at startup, so tools proceed without the prompts a role cannot answer while the user's global
-  `settings.json` stays untouched. Four `toolPermission` values are accepted on 1.5.16:
+  before every start and resume, `agy::prepare` writes (or splices byte-preservingly)
+  `toolPermission: "always-proceed"` together with `permissions.deny` containing the outward-action
+  prefixes (`command(git push)`, `command(gh pr)`, `command(gh release)`, `command(gh repo)`,
+  `command(gh issue)`, `command(gh api)`, `command(hc update)`, `command(hc machine)`,
+  `command(hc server stop)`, `command(scp)`, `command(rsync)`, `command(ssh)`,
+  `command(npm publish)`, `command(cargo publish)`) — **without** trailing ` *` — while preserving
+  any other top-level settings and any existing `permissions.allow`. agy reads it once at startup,
+  so routine local tools proceed without prompts while outward prefixes are blocked ahead of the
+  shims (`bash -c` still bypasses agy prefix rules and hits the role `PATH` shims and git hook).
+  Four `toolPermission` values are accepted on 1.5.16:
   `always-proceed`, `request-review`, `strict` and `proceed-in-sandbox` (`prompt`, `ask` and
   `default` are rejected as `unrecognized value`).
   - `request-review` (and `proceed-in-sandbox` when `--sandbox` is not passed) shows a 4-option

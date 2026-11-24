@@ -12,6 +12,8 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Outward-action guard (`backlot guard`, shims, git hooks, and `agy` deny rules).** Every launched role (including Hollywood) gets `<role>/bin` first on `PATH` (ahead of `exe_dir`) with `gh`, `hc`, `scp`, `rsync`, `ssh`, `npm` and `cargo` shims, plus `GIT_CONFIG_*` `core.hooksPath` pointing at `<role>/git-hooks` (appended without clobbering existing `GIT_CONFIG_*`, refusing `git push` via `pre-push` while passing client git hooks through to the repository's own hooks). Refused commands exit 126, record `role.refused` in studio ledgers and raise one `outward action` attention (`needs_user: true`) per episode. `agy` launches also splice the 14 `command(<prefix>)` entries (without trailing ` *`) into `.agy-settings.json` `permissions.deny`.
+
 - **The lifecycle actions in `Ctrl+B ?`.** A `lifecycle` group lists `Restart <role> ·
   <studio>`, `Recast <role> · <studio>`, `Free work areas · <studio>` and `Archived studios ·
   <machine>`, filterable by role, studio or machine name.

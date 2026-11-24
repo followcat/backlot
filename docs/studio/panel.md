@@ -196,6 +196,7 @@ escalation flag. The class decides what a person row shows; the raw reason never
 | Reason | Class | Shown as |
 |---|---|---|
 | `permission prompt` | needs you | `needs you · <what>`; the prompt row keeps `y`/`d`/`p`, and a non-actor's reads `USER` |
+| `outward action` | needs you | `needs you · <command>` |
 | `folder-trust` | needs you | `needs you · <what>` |
 | `folder trust refused` | needs you | `needs you · <what>` |
 | `cannot resume` | needs you | `needs you · <what>` |

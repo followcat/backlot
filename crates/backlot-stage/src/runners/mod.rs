@@ -26,7 +26,7 @@ pub(crate) mod resolve;
 pub(crate) mod splice;
 pub(crate) mod work;
 
-pub(crate) use probe::find_on_path;
+pub(crate) use probe::{executable, find_on_path};
 pub use probe::{installed, supported};
 pub(crate) use prompt::prompt_detail;
 pub(crate) use work::work_state;

@@ -213,6 +213,11 @@ shows up outside the role's work area is never answered — it raises a `needs_u
 (`folder trust refused`) instead, and the switch `[stage] answer_trust` in the user config opts
 the whole pass out.
 
+`role.refused` records a role's attempted outward command (`role`, optional `task`, `command` capped at
+200 chars, `cwd`) refused by `backlot guard` or the per-role `pre-push` hook. The refusal also
+raises one `outward action` attention (`needs_user: true`) once per open attention episode for that
+role and command.
+
 `studio.finished` — producer or user only — is refused while any task is not terminal, naming the
 open tasks. From then on `desired` holds only explicitly reopened people, so producer and director
 close the usual way and keep their sessions. `role.reopen` still works after finish. A studio with

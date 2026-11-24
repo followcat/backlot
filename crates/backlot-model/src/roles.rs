@@ -94,14 +94,18 @@ pub fn check(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
             {
                 Ok(())
             }
-            EventKind::MessageQueued { purpose: None, .. } => Ok(()),
+            EventKind::MessageQueued { purpose: None, .. } | EventKind::RoleRefused { .. } => {
+                Ok(())
+            }
             _ => Err(cannot(role, who_can(&new.kind))),
         };
     }
     if role == "writer" {
         let ok = matches!(
             new.kind,
-            EventKind::PlanPublished { .. } | EventKind::MessageQueued { purpose: None, .. }
+            EventKind::PlanPublished { .. }
+                | EventKind::MessageQueued { purpose: None, .. }
+                | EventKind::RoleRefused { .. }
         );
         return if ok {
             Ok(())
@@ -175,6 +179,7 @@ fn who_can(kind: &EventKind) -> &'static str {
             }
         }
         EventKind::ReportSent { .. } => "the director or the producer",
+        EventKind::RoleRefused { .. } => "a role or the stage",
         EventKind::StudioFinished { .. } => "the user or the producer",
     }
 }
