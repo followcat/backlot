@@ -372,10 +372,20 @@ impl Stage {
         for (pair, f) in done {
             self.sent_ms.borrow_mut().insert(pair.clone(), now_ms);
             match f.handle.await {
-                Ok(answer) => match settle(dir, &f.seqs, answer) {
-                    Ok(line) => crate::stagelog::stage_log!("{line} to {}", pair.1),
-                    Err(e) => return Err(Fail::call(e)),
-                },
+                Ok(answer) => {
+                    let may_have_sent = match &answer {
+                        Ok(v) => send_outcome(v).is_ok(),
+                        Err(e) if sendfail::retryable(e) => !sendfail::refusal(e).not_typed(),
+                        Err(_) => false,
+                    };
+                    if may_have_sent {
+                        self.taint_ask(&pair.0, state, &pair.1);
+                    }
+                    match settle(dir, &f.seqs, answer) {
+                        Ok(line) => crate::stagelog::stage_log!("{line} to {}", pair.1),
+                        Err(e) => return Err(Fail::call(e)),
+                    }
+                }
                 Err(e) => {
                     crate::stagelog::stage_log!("send to {} lost: {e}", pair.1);
                 }

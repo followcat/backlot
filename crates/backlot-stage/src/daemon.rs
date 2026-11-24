@@ -289,6 +289,14 @@ pub(crate) struct Stage {
     /// Cached `(studio, seq) -> snippet` lines for `StudioSummary.exchange`
     /// so immutable message/report files are read from disk at most once.
     pub(crate) exchange_cache: std::cell::RefCell<BTreeMap<(String, u64), String>>,
+    /// Per-`(studio, role)` tracking for terminal-answered open `tell user`
+    /// questions.
+    pub(crate) ask_watch:
+        std::cell::RefCell<BTreeMap<(String, String), crate::ask_answer::AskWatch>>,
+    /// `(studio, role)` → highest open `tell user` seq touched by a
+    /// stage terminal write (covers ledgerless sends such as `continue`
+    /// and trust navigation keys).
+    pub(crate) ask_tainted: std::cell::RefCell<BTreeMap<(String, String), u64>>,
     /// Whether the core still answers `terminal.label` on a live
     /// terminal — `false` once a call is refused or unoffered: a core
     /// that cannot change labels keeps every terminal where it
@@ -368,6 +376,8 @@ impl Stage {
         self.conn_pace.borrow_mut().retain(|(s, _), _| keep(s));
         self.session_warned.borrow_mut().retain(|(s, _)| keep(s));
         self.exchange_cache.borrow_mut().retain(|(s, _), _| keep(s));
+        self.ask_watch.borrow_mut().retain(|(s, _), _| keep(s));
+        self.ask_tainted.borrow_mut().retain(|(s, _), _| keep(s));
     }
 
     /// Evict a single studio key across all in-memory caches (used when a
@@ -409,6 +419,8 @@ impl Stage {
         self.exchange_cache
             .borrow_mut()
             .retain(|(s, _), _| s != name);
+        self.ask_watch.borrow_mut().retain(|(s, _), _| s != name);
+        self.ask_tainted.borrow_mut().retain(|(s, _), _| s != name);
     }
 
     /// Reload changed ledgers, reconcile each studio and act. Each
@@ -876,6 +888,8 @@ impl Stage {
             hprompt_base: std::cell::RefCell::new(None),
             hanswered: std::cell::RefCell::new(BTreeSet::new()),
             exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
+            ask_watch: std::cell::RefCell::new(BTreeMap::new()),
+            ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
             labels_ok: std::cell::Cell::new(true),
             sweep_hollywood_ticks: std::cell::Cell::new(3),
             // A test stage is conservative: born at 0, it never reads
@@ -977,6 +991,8 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         hprompt_base: std::cell::RefCell::new(None),
         hanswered: std::cell::RefCell::new(BTreeSet::new()),
         exchange_cache: std::cell::RefCell::new(BTreeMap::new()),
+        ask_watch: std::cell::RefCell::new(BTreeMap::new()),
+        ask_tainted: std::cell::RefCell::new(BTreeMap::new()),
         labels_ok: std::cell::Cell::new(true),
         sweep_hollywood_ticks: std::cell::Cell::new(3),
         started_ms: SystemTime::now()
