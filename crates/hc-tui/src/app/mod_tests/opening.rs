@@ -443,3 +443,80 @@ async fn esc_before_the_last_frame_leaves_the_page_static() {
     assert!(app.opening_visible());
     assert_eq!(app.opening_frame(), None, "no replay after Esc");
 }
+
+// ---------- prefix chords over the opening page (R6) ----------
+
+fn press_chord(app: &mut App, tail: hc_vt::Key) {
+    for (k, mods) in [
+        (hc_vt::Key::Char('b'), hc_vt::Mods::CTRL),
+        (tail, hc_vt::Mods::NONE),
+    ] {
+        app.on_input(
+            UiEvent::Key(term_key(k, mods, hc_vt::Action::Press)),
+            app.area.0,
+        );
+    }
+}
+
+#[tokio::test]
+async fn ctrl_b_t_focuses_the_left_tree_over_the_opening_page_and_esc_returns() {
+    let mut app = no_doc_app();
+    app.area = (120, 24);
+    assert!(app.opening_visible());
+    assert!(!app.tree_focused());
+
+    press_chord(&mut app, hc_vt::Key::Char('t'));
+    assert!(
+        app.tree_focused(),
+        "Ctrl+B t must focus the left tree while Opening Page is visible"
+    );
+    assert!(app.tree_focus.is_some());
+    assert!(app.opening_visible());
+
+    // Tree navigation works while Opening Page is underneath.
+    let before_pane = app.pane.input_backlog().0;
+    key(&mut app, hc_vt::Key::Char('j'));
+    assert_eq!(app.pane.input_backlog().0, before_pane);
+    assert!(app.tree_focused());
+
+    // Esc leaves the tree cleanly without dismissing the Opening Page.
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.tree_focused(), "Esc leaves tree focus cleanly");
+    assert!(app.opening_visible(), "Opening Page stays visible");
+}
+
+#[tokio::test]
+async fn ctrl_b_question_opens_the_action_launcher_over_the_opening_page() {
+    let mut app = no_doc_app();
+    app.area = (120, 24);
+    assert!(app.opening_visible());
+    assert!(!app.help);
+
+    press_chord(&mut app, hc_vt::Key::Char('?'));
+    assert!(
+        app.help,
+        "Ctrl+B ? must open the action launcher while Opening Page is visible"
+    );
+
+    key(&mut app, hc_vt::Key::Escape);
+    assert!(!app.help);
+    assert!(app.opening_visible());
+}
+
+#[tokio::test]
+async fn ctrl_b_s_does_not_trigger_opening_stage_start() {
+    let mut app = no_doc_app();
+    app.area = (120, 24);
+    let recorded = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let sink = recorded.clone();
+    app.set_panel_runner(std::sync::Arc::new(move |argv| {
+        sink.lock().unwrap().push(argv);
+        Box::pin(async { Ok(()) })
+    }));
+
+    press_chord(&mut app, hc_vt::Key::Char('s'));
+    assert!(
+        recorded.lock().unwrap().is_empty(),
+        "Ctrl+B s must not fire Opening Page's bare `s` stage start"
+    );
+}

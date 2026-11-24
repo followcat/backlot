@@ -475,14 +475,6 @@ impl App {
             self.handle_panel_key(&press);
             return None;
         }
-        // U2: the opening page owns every key while it is up, like
-        // the focused panel — the terminals beneath see nothing. The
-        // studio keys, the panel chord and Hollywood's toggle already
-        // took theirs above.
-        if self.opening_visible() {
-            self.opening_key(&press);
-            return None;
-        }
         // The failure toast's own keys (§3.3): `C` writes the exact
         // command through OSC 52, `Esc` dismisses — only while the
         // card is up and no modal above took the press.
@@ -520,6 +512,13 @@ impl App {
                     // S1: the stage log is read-only — no key ever
                     // reaches the stage process (Ctrl+C included).
                     Decision::ToTerm(_) if self.stage_terminal_focused() => None,
+                    // U2: the opening page owns every remaining key —
+                    // direct bindings and prefix chords already ran,
+                    // and nothing reaches the terminals beneath.
+                    Decision::ToTerm(_) if self.opening_visible() => {
+                        self.opening_key(&press);
+                        None
+                    }
                     Decision::ToTerm(forwarded)
                         if matches!(forwarded.input.key, Key::Functional(_)) =>
                     {

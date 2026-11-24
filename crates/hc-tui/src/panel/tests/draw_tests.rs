@@ -956,3 +956,30 @@ fn a_director_blocked_role_keeps_its_dir_cue_in_the_strip() {
     // bob: blocked on `task-3` — `task-3 dir`, not bare `task-3`.
     assert!(text.contains("dir"), "{text}");
 }
+
+#[test]
+fn stopped_ledger_renders_start_untruncated_at_38_cols() {
+    let mut panel = panel(PanelMode::Expanded);
+    panel.stopped = Some(crate::panel::StoppedLedger {
+        count: 2,
+        machine: None,
+    });
+    for width in [38u16, 36] {
+        let area = Rect::new(0, 0, width, 20);
+        let (buf, _) = draw(area, None, &panel, None);
+        let text = lines(&buf, area).join("\n");
+        let row = text
+            .lines()
+            .find(|line| line.contains("stopped stages"))
+            .unwrap_or_else(|| panic!("missing stopped ledger row at {width}:\n{text}"));
+        assert!(row.contains("start"), "at {width} cols: {row:?}");
+        assert!(!row.contains('…'), "no ellipsis at {width} cols: {row:?}");
+    }
+    let wide_area = Rect::new(0, 0, 42, 20);
+    let (wide_buf, _) = draw(wide_area, None, &panel, None);
+    let wide = lines(&wide_buf, wide_area).join("\n");
+    assert!(
+        wide.contains("2 studios on stopped stages — s to start"),
+        "full form when width fits: {wide}"
+    );
+}

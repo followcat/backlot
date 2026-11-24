@@ -153,3 +153,47 @@ fn the_width_follows_the_spec_ladder() {
     // Under 60 the band's own width caps it.
     assert!(dialog_width(40) <= 36);
 }
+
+#[test]
+fn archived_list_hint_and_buttons_sit_on_distinct_rows() {
+    let entries = (1..=5)
+        .map(|n| crate::studio_index::ArchivedStudio {
+            name: format!("acme-shop-{n}"),
+            stamp: format!("2026-01-0{n}T12:00Z"),
+            studio: Some(format!("acme-shop-{n}")),
+            repo: Some("/home/user/acme".into()),
+            requirement: Some(format!("Build step {n}")),
+        })
+        .collect();
+    let d = StudioDialog::Restore(crate::studio_dialog::RestoreDialog::new(None, entries));
+    let palette = Palette::catppuccin();
+    for band_cols in [120u16, 80] {
+        let area = Rect::new(0, 0, band_cols, 36);
+        let mut buf = Buffer::empty(area);
+        let band = Rect::new(0, 0, band_cols, 36);
+        let hits = render(&mut buf, band, &d, &palette).unwrap();
+        assert_eq!(hits.area.width, dialog_width(band_cols));
+        let rendered = text_of(&buf, hits.area);
+        let rows: Vec<&str> = rendered.lines().collect();
+        let hint_row = rows
+            .iter()
+            .position(|line| line.contains("restore as"))
+            .unwrap_or_else(|| panic!("missing hint line at {band_cols}:\n{rendered}"));
+        let button_row = rows
+            .iter()
+            .position(|line| line.contains("choose"))
+            .unwrap_or_else(|| panic!("missing choose button at {band_cols}:\n{rendered}"));
+        assert_ne!(
+            hint_row, button_row,
+            "hint and buttons overlapped at {band_cols}:\n{rendered}"
+        );
+        assert!(
+            hint_row < button_row,
+            "hint row ({hint_row}) should sit above button row ({button_row}):\n{rendered}"
+        );
+        assert!(
+            rows[button_row].contains("esc cancel"),
+            "cancel button corrupted at {band_cols}:\n{rendered}"
+        );
+    }
+}

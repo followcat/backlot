@@ -223,6 +223,13 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Fixed
 
+- **Archived-studios footer overlap, Opening Page prefix chords, and narrow stopped-stage hints.**
+  The archived-studios restore list now places its `↑↓ move  ⏎ restore as…` hint on its own row
+  above the `[ ↵ choose ]` / `[ esc cancel ]` buttons so they no longer overlap; the Opening Page
+  now lets direct bindings and `Ctrl+B` prefix chords (`Ctrl+B t`, `Ctrl+B ?`, etc.) through while
+  still consuming unhandled bare keys; and the stopped-stage rows in the 26-column cast and
+  38-column lot dock switch to compact `· s start` phrasing when narrower so `start` is never
+  truncated.
 - **A prompt row promises only the keys that work.** A user prompt on a runner with no approval
   key (`opencode`, `cline`, `agy`) used to show the same `y`/`d` cue as cmd or claude, so the
   person answered and nothing went out. Those rows now read
