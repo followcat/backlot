@@ -255,11 +255,16 @@ impl Stage {
             crate::stagelog::stage_log!("card c{} failed: {reason}", card.seq);
             return Ok(());
         }
+        let identity = backlot_model::hollywood::format_spaced_identity(
+            &target.runner,
+            &target.model,
+            target.effort.as_deref(),
+        );
         self.happend(
             hdir,
             HollywoodKind::CardDone {
                 card: card.seq,
-                note: String::new(),
+                note: format!("Hollywood re-cast to {identity}"),
             },
         )?;
         crate::stagelog::stage_log!("card c{} done", card.seq);

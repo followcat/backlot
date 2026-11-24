@@ -273,6 +273,14 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
             .iter()
             .position(|e| matches!(e.kind, HollywoodKind::CardDone { .. }))
             .expect("card.done recorded");
+        let (done_card, done_note) = match &evs[done_pos].kind {
+            HollywoodKind::CardDone { card, note } => (*card, note.clone()),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            done_note,
+            "Hollywood re-cast to claude / claude-opus-5-5 / xhigh"
+        );
         let restart_pos = evs
             .iter()
             .position(|e| matches!(e.kind, HollywoodKind::RoleRestart { fresh: true, .. }))
@@ -323,6 +331,36 @@ fn applied_setup_card_updates_config_records_done_and_restarts_once() {
         assert_eq!(
             hplan(Some(&new_cfg), &replayed.role, true, 5_000, 0),
             Vec::<HMove>::new()
+        );
+        let passive = crate::hnotice::passive_items(
+            &std::collections::BTreeMap::new(),
+            &replayed,
+            &std::collections::BTreeSet::new(),
+        );
+        let expected_passive =
+            format!("c{done_card} done — Hollywood re-cast to claude / claude-opus-5-5 / xhigh");
+        assert!(
+            passive.iter().any(|p| p.text == expected_passive),
+            "expected passive card.done note '{expected_passive}' in {passive:?}"
+        );
+        let person_msg = backlot_model::hollywood::HMessage {
+            seq: 99,
+            ts_ms: 5_000,
+            from: "user".into(),
+            to: "hollywood".into(),
+            studio: None,
+            text: Some("hello".into()),
+            file: None,
+            source_seq: None,
+            delivered: false,
+            dropped: false,
+            seen: false,
+        };
+        let payload =
+            crate::hdeliver_fmt::person_payload(&[&person_msg], &[], &passive, &hdir).unwrap();
+        assert!(
+            payload.contains(&format!("(context: {expected_passive})")),
+            "{payload}"
         );
     });
 }
