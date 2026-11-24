@@ -87,8 +87,11 @@ A live person's menu (`m` on a person) carries **`Restart <name>`**, and a fixed
 director, writer — adds **`Recast…`** and drops `Close`, which the command refuses on it. Restart
 opens a two-choice confirm (`Resume its session` when the runner keeps a resumable session,
 else `Fresh start`); recast steps through runner → model → effort, takes the lists from
-`backlot runners --json`, and shows the old → new identity before it runs. An actor or held seat
-keeps `Close`.
+`backlot runners --json`, and shows the old → new identity before it runs. A cast fixed seat
+that has not started yet renders as a dim **`standby`** row (no activity glyph, ignored by counts)
+with `starts when the director plans` for `writer` or `starts with the studio` for `producer` /
+`director`; `p` and `⏎` explain that it has not started yet, while `m` still offers **`Recast…`**. An
+actor or held seat keeps `Close`.
 
 ## Geometry and `Esc`
 
@@ -248,6 +251,9 @@ A person shows exactly one state, in this priority:
 5. `waiting` — anything else that is live and not doing work; a held role reads its
    `waiting for a <runner> slot` detail.
 6. `ready` — live, idle and nothing assigned (`◦`).
+7. `standby` — a cast fixed role that has not started yet (no activity glyph, dimmed, ignored
+   by counts; `writer` shows `starts when the director plans`, `producer` and `director` show
+   `starts with the studio`).
 
 An `info` attention never appears in this list; it shows only in the role's details (the `Space`
 drawer and the sheet's studio overview), dimmed.
@@ -369,7 +375,7 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
 ## Behaviour notes
 
 - The marks — working (animated), waiting, ready, held, needs you, asks, stuck, failed, lost,
-  closed — pair a distinct symbol with a `chrome/status.rs` colour; an unknown `work` reads as
+  closed, standby — pair a distinct symbol with a `chrome/status.rs` colour; an unknown `work` reads as
   waiting.
 - Working marks spin about every 120 ms through a one-shot deadline that arms only while a
   working mark is actually drawn; an idle or closed panel wakes nothing.

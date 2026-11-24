@@ -18,6 +18,10 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   refreshes `AGENTS.md` on adopt.
 - **Call Sheet `Alt+Y` Compose landing, universal `›` history, `Esc` resting, and 3-zone `Tab` ring.** Call Sheet `Alt+Y` now opens straight into Compose from Hidden or Collapsed, adds shell-like `↑`/`↓` message history to every `›` line (Call Sheet and Studio Dock), uses `Esc` to leave Compose, and cycles `Tab` across Compose → Waiting → Studios.
 
+### Fixed
+
+- **Show unstarted fixed roles as `standby`.** Fixed seats cast by a studio (`producer`, `director`, and `writer` before the director asks for a plan) are now listed in their usual summary slot with `state: "standby"` and their effective recast or cast identity instead of being absent before their first start. Both the cast tree and the dock render `standby` rows dim with no activity glyph or counts and a hint line (`starts when the director plans` for `writer`, `starts with the studio` for `producer` and `director`), explain why `p` and `Enter` are unavailable, keep `Recast…` active in the `m` menu and `Ctrl+B ?` launcher, and report `writer starts when the director asks for a plan` on `backlot recast` and Hollywood recast card outcomes when the role has not started yet.
+
 ## 0.4.1 — 2026-11-25
 
 This release swaps the studio and role keys, so `Alt+Left`/`Alt+Right` step between studios and `Alt+Up`/`Alt+Down`

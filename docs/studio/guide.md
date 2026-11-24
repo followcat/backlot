@@ -689,7 +689,11 @@ reason `recast` — never counted as a loss) and a fresh terminal starts under t
 — and the new role's first prompt says it is taking the role over and must read `backlot status`
 and `backlot records` before acting. **The record is not:** the ledger keeps every event, earlier
 deliveries and reviews stay attributed to the identity that made them, and messages already queued
-for the role are delivered to the new terminal under the usual guarded-send rules. A recast while
+for the role are delivered to the new terminal under the usual guarded-send rules. If the role has
+not started yet (for instance the writer before the director asks for a plan), no terminal starts
+right away; the panel lists it as a dim `standby` row with its effective recast or cast identity,
+and `backlot recast` (as well as the closed card outcome) notes `writer starts when the director
+asks for a plan` (or `<role> starts with the studio` for producer and director). A recast while
 the old role has an open permission prompt still closes it — the answer waits, the replacement does
 not.
 
