@@ -175,6 +175,7 @@ pub(super) fn render_overlays_and_cursor(
             active_surface,
             &app.actions,
             &app.shell.palette,
+            crate::update_state::now_ms(),
         )
     } else {
         crate::panel::PanelRender::default()

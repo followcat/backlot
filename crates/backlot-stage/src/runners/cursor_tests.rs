@@ -84,6 +84,10 @@ fn rules_per_role() {
     for role in ["producer", "writer"] {
         assert_eq!(allow_rules(role, &checks), ["Shell(backlot)"], "{role}");
     }
+    assert!(
+        allow_rules("hollywood", &[]).contains(&"Shell(backlot progress)".to_string()),
+        "hollywood allows backlot progress"
+    );
     // `(` `)` `,` `*?[]{}` `:` and `\` are rule syntax or glob —
     // none may reach the file.
     for bad in [

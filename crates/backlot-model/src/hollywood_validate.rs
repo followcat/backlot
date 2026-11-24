@@ -281,5 +281,12 @@ pub fn validate(state: &HollywoodState, new: &NewHollywoodEvent) -> Result<(), H
             }
             Ok(())
         }
+        HollywoodKind::RoleProgress { text } => {
+            if role != HOLLYWOOD {
+                return Err(role_bound(role, "hollywood"));
+            }
+            crate::progress::valid_progress_text(text)
+                .map_err(|msg| HRefusal::BadReport(msg.into()))
+        }
     }
 }

@@ -310,7 +310,12 @@ fn draw_studio(
         Some(error) => (error, palette.red),
         None => (
             on_set(studio.studio)
-                .and_then(|r| r.doing.as_deref())
+                .and_then(|r| {
+                    r.doing
+                        .as_deref()
+                        .or_else(|| r.running.as_ref().map(|run| run.cmd.as_str()))
+                        .or_else(|| r.progress.as_ref().map(|p| p.text.as_str()))
+                })
                 .or(studio.studio.next.as_deref())
                 .unwrap_or("nothing on set"),
             palette.subtext0,

@@ -115,6 +115,7 @@ pub(crate) fn allow_rules(role: &str, checks: &[CheckDecl]) -> Vec<String> {
             "backlot status",
             "backlot records",
             "backlot tell producer",
+            "backlot progress",
             "backlot hollywood propose",
             "backlot hollywood report",
             "backlot studio new --dry-run",

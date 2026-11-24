@@ -197,6 +197,8 @@ mod permit_tests;
 #[cfg(test)]
 mod priority_cmd_tests;
 #[cfg(test)]
+mod progress_cmd_tests;
+#[cfg(test)]
 mod prompt_fixtures;
 #[cfg(test)]
 mod prompts_tests;

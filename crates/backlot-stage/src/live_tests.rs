@@ -2,7 +2,7 @@
 //! terminal's `backlot status` reads, so a role's current work state
 //! reaches Hollywood without a core connection.
 
-use backlot_model::summary::{RoleSummary, StudioSummary, Summary, Work};
+use backlot_model::summary::{RoleRunning, RoleSummary, StudioSummary, Summary, Work};
 
 use crate::live::{
     HEARTBEAT_MS, Live, LiveRole, STALE_MS, Write, due, from_summary, path, read, read_fresh,
@@ -20,6 +20,11 @@ fn role_summary(role: &str, work: Option<Work>, doing: Option<&str>) -> RoleSumm
         effort: None,
         state: "live".into(),
         doing: doing.map(String::from),
+        progress: None,
+        running: (work == Some(Work::Working)).then(|| RoleRunning {
+            cmd: "cargo test".into(),
+            since_ms: 5_000,
+        }),
         work,
         failed: None,
         workdir: None,
@@ -98,6 +103,13 @@ fn a_summary_round_trips_through_the_file() {
     assert_eq!(producer.work, Some(Work::Working));
     assert_eq!(producer.doing.as_deref(), Some("running checks"));
     assert_eq!(
+        producer.running,
+        Some(RoleRunning {
+            cmd: "cargo test".into(),
+            since_ms: 5_000,
+        })
+    );
+    assert_eq!(
         work_map(&back).get(&("acme-shop".into(), "producer".into())),
         Some(&Work::Working)
     );
@@ -132,6 +144,7 @@ fn only_classified_rows_become_facts() {
             role: "actor-t1-c1".into(),
             work: None,
             doing: Some("writing tests".into()),
+            running: None,
         }]
     );
 }

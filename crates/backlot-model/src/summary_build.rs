@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::event::Priority;
+use crate::progress::{RoleProgress, RoleRunning, cap_progress, cap_running};
 use crate::state::{RoleLifecycle, StudioState, Task, actor_task};
 use crate::summary::{RoleSummary, TaskSummary, Work, cap, steady};
 
@@ -305,11 +306,13 @@ pub(crate) fn role_asks(
         .unwrap_or("question — see the studio dock")))
 }
 
+/// Deserializes `RoleSummary` from both current structured `doing` objects
+/// and legacy string `"doing"` values (mapped into `activity`).
 /// One role's summary. `live` maps a terminal address to what the
 /// program there reports doing; `work` the watch pass's per-role
-/// screen classification and `failed` a role's StopFailure error,
-/// both keyed `(studio, role)`. `snippets` supplies the body of the
-/// role's newest unanswered `tell user`.
+/// screen classification, `failed` a role's StopFailure error,
+/// `running_map` the live deepest descendant command per `(studio, role)`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn role_summary(
     studio: &str,
     state: &StudioState,
@@ -318,6 +321,7 @@ pub(crate) fn role_summary(
     work: &BTreeMap<(String, String), Work>,
     failed: &BTreeMap<(String, String), String>,
     snippets: &BTreeMap<(String, u64), String>,
+    running_map: &BTreeMap<(String, String), RoleRunning>,
 ) -> Option<RoleSummary> {
     let r = state.roles.get(role)?;
     let lifecycle = r.lifecycle();
@@ -352,6 +356,18 @@ pub(crate) fn role_summary(
         .then(|| work.get(&(studio.to_string(), role.to_string())))
         .flatten()
         .copied();
+    // D5 `running`: deepest descendant command line + since_ms, only while Working.
+    let running = (lifecycle == RoleLifecycle::Live && work == Some(Work::Working))
+        .then(|| running_map.get(&(studio.to_string(), role.to_string())))
+        .flatten()
+        .map(|d| RoleRunning {
+            cmd: cap_running(&d.cmd),
+            since_ms: d.since_ms,
+        });
+    let progress = state.progress.get(role).map(|p| RoleProgress {
+        text: cap_progress(&p.text),
+        ts_ms: p.ts_ms,
+    });
     // Like `work`: a live read only, dropped for a lost or closed role.
     let failed = (lifecycle == RoleLifecycle::Live)
         .then(|| failed.get(&(studio.to_string(), role.to_string())))
@@ -378,6 +394,8 @@ pub(crate) fn role_summary(
         }
         .into(),
         doing,
+        progress,
+        running,
         work,
         failed,
         workdir: None,

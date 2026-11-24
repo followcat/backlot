@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use backlot_model::summary::{Summary, Work};
+use backlot_model::summary::{RoleRunning, Summary, Work};
 use serde::{Deserialize, Serialize};
 
 /// The file name under the state base.
@@ -40,9 +40,12 @@ pub struct LiveRole {
     /// the screen has been classified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub work: Option<Work>,
-    /// What the role reports it is doing, capped like the summary's.
+    /// What the role reports it is doing (OSC 7501 / task), capped like the summary's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub doing: Option<String>,
+    /// Deepest descendant command line and since when, published while `Working`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running: Option<RoleRunning>,
 }
 
 /// Every role's live facts, plus the wall clock they were read at.
@@ -66,7 +69,7 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
     let mut roles = Vec::new();
     for studio in &summary.studios {
         for role in &studio.roles {
-            if role.work.is_none() && role.doing.is_none() {
+            if role.work.is_none() && role.doing.is_none() && role.running.is_none() {
                 continue;
             }
             roles.push(LiveRole {
@@ -74,6 +77,7 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
                 role: role.role.clone(),
                 work: role.work,
                 doing: role.doing.clone(),
+                running: role.running.clone(),
             });
         }
     }
@@ -85,6 +89,7 @@ pub fn from_summary(summary: &Summary, updated_ms: u64) -> Live {
             role: backlot_model::hollywood::HOLLYWOOD.into(),
             work: h.work,
             doing: h.doing.clone(),
+            running: None,
         });
     }
     Live { updated_ms, roles }
@@ -150,14 +155,27 @@ pub fn work_map(live: &Live) -> BTreeMap<(String, String), Work> {
         .collect()
 }
 
-/// What `backlot status` reads from `live.json`: the work samples, and
-/// whether a running stage supplied them. A stage that has stopped (or
-/// has not started) shows no work word and one plain notice, never a
-/// stale `· working`.
+/// `(studio, role)` → deepest descendant command while `Working`.
+pub fn running_map(live: &Live) -> BTreeMap<(String, String), RoleRunning> {
+    live.roles
+        .iter()
+        .filter(|r| r.work == Some(Work::Working))
+        .filter_map(|r| {
+            r.running
+                .clone()
+                .map(|cmd| ((r.studio.clone(), r.role.clone()), cmd))
+        })
+        .collect()
+}
+
+/// What `backlot status` reads from `live.json`: the work samples,
+/// active `running` commands, and whether a running stage supplied them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LiveView {
     /// The work sample per `(studio, role)`, from a fresh file only.
     pub work: BTreeMap<(String, String), Work>,
+    /// The deepest descendant command per `(studio, role)` while `Working`.
+    pub running_cmds: BTreeMap<(String, String), RoleRunning>,
     /// A fresh file exists — the stage is running.
     pub running: bool,
 }
@@ -168,6 +186,7 @@ impl LiveView {
         match read_fresh(base, now_ms) {
             Some(live) => LiveView {
                 work: work_map(&live),
+                running_cmds: running_map(&live),
                 running: true,
             },
             None => LiveView::default(),

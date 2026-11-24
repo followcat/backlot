@@ -106,6 +106,7 @@ fn summary_shape_and_live_doing() {
     assert_eq!(p.model.as_deref(), Some("model-prod"));
     assert_eq!(p.effort.as_deref(), Some("high"));
     assert_eq!(p.doing.as_deref(), Some("writing the plan"));
+    assert_eq!(p.running, None);
 }
 
 /// A closed role stays listed, with no `doing`, keeping actor and
@@ -135,6 +136,7 @@ fn a_closed_role_stays_listed_without_doing() {
         .unwrap();
     assert_eq!(w.state, "closed");
     assert_eq!(w.doing, None);
+    assert_eq!(w.running, None);
     assert_eq!(w.model.as_deref(), Some("model-wri"));
     let json = serde_json::to_string(&s).unwrap();
     assert!(!json.contains("sess-writer"), "{json}");

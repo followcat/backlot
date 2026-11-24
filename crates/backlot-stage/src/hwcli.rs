@@ -51,6 +51,11 @@ const COMMANDS: &[Cmd] = &[
         subst: Some(("<role>", "producer")),
     },
     Cmd {
+        pick: "backlot progress",
+        usage: U_PROGRESS,
+        subst: None,
+    },
+    Cmd {
         pick: "backlot studio new",
         usage: U_STUDIO,
         subst: None,

@@ -368,6 +368,8 @@ In the ledger you are the role `user`, so person-facing commands take `--as user
 backlot status --studio acme-shop
 ```
 
+For each working role, `backlot status` adds `(live) · working <dur> · "<progress>" <age> ago · <running> <dur>` (omitting missing parts); `backlot status --json` includes `progress` (`{ text, ts_ms }`) and live descendant `running` (`{ cmd, since_ms }`) per working role while leaving `doing` unchanged for older clients. Agents running inside a role terminal (`BACKLOT_ROLE` + `BACKLOT_STUDIO`, or `BACKLOT_ROLE=hollywood` onto `hollywood/events.jsonl`) can update their quoted `<progress>` note voluntarily at step boundaries — never required, never audited — via `backlot progress "running the parity suite"` (or `--file /home/user/note.md`, `--text "running the parity suite"`, or `--stdin`); calling `backlot progress "note"` outside a role environment fails with exit code 2 naming `BACKLOT_ROLE` / `BACKLOT_STUDIO`.
+
 `backlot studio list` answers the question before that one — what studios exist at all. It reads
 every core's state directory and prints one row per studio with its core (`core.json`'s name when
 the core carries one, else the short core id, and `local` for an unbound state directory), ledger
@@ -433,7 +435,9 @@ finished), `r<version> · <done>/<total>` and `!<waiting>` — then the owed-ste
 names (`→ deliver t1 · actor-a`), then the people: mark, name with the actor's task and
 priority flag, a `USER` badge on your own role, the `dir` tag on a director-owned prompt,
 and the state word at the right. A user-owned prompt adds a `! <attention>  [y/d/p]` cue
-line; a director-owned one gets no cue. Below the live people, task rows list the work no
+line; a director-owned one gets no cue. When a working role has neither a cue nor a failure line,
+a dim detail line underneath shows `working <dur> · "<progress>" <age> ago · <running> <dur>` (shortening
+`<progress>` inside quotes with `…`, then dropping `<running>`, on narrower panels). Below the live people, task rows list the work no
 actor carries — uncast, dependency-gated, paused, at cap or blocked, and accepted — and
 six or more accepted tasks fold into one `✓ <n> accepted` line. `Space` opens a three-line
 drawer under a person or task, or folds a studio block on its header. The marks:

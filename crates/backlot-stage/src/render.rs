@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
 use backlot_model::attention::AttentionClass;
+pub use backlot_model::event::age_short;
 use backlot_model::event::{CANNOT_RESUME, CheckDecl, EventKind, STALLED};
 use backlot_model::state::{Attention, StudioState, Task, TaskStatus};
-use backlot_model::summary::Work;
+use backlot_model::summary::{RoleProgress, RoleRunning, Work};
 use backlot_model::{ActorIdentity, ActorRecord};
 
 fn actor_short(a: &ActorIdentity) -> String {
@@ -44,16 +45,43 @@ fn hh_mm(ms: u64) -> String {
     format!("{:02}:{:02}", local.tm_hour, local.tm_min)
 }
 
-/// `2h`, `3m`, `12s` — an age, compact enough for one line.
-pub fn age_short(ms: u64) -> String {
-    let s = ms / 1000;
-    if s >= 3600 {
-        format!("{}h", s / 3600)
-    } else if s >= 60 {
-        format!("{}m", s / 60)
+/// Format a working role's one-line status parts:
+/// `working 47m · "running the parity suite" 12m ago · cargo test 3m`,
+/// leaving out missing parts and dropping their separators.
+pub(crate) fn working_parts(
+    since_ms: u64,
+    progress: Option<&RoleProgress>,
+    running: Option<&RoleRunning>,
+    now_ms: u64,
+) -> String {
+    let mut parts = Vec::new();
+    if since_ms > 0 {
+        parts.push(format!(
+            "working {}",
+            age_short(now_ms.saturating_sub(since_ms))
+        ));
     } else {
-        format!("{s}s")
+        parts.push("working".to_string());
     }
+    if let Some(p) = progress {
+        parts.push(format!(
+            "\"{}\" {} ago",
+            p.text,
+            age_short(now_ms.saturating_sub(p.ts_ms))
+        ));
+    }
+    if let Some(d) = running {
+        if d.since_ms > 0 {
+            parts.push(format!(
+                "{} {}",
+                d.cmd,
+                age_short(now_ms.saturating_sub(d.since_ms))
+            ));
+        } else {
+            parts.push(d.cmd.clone());
+        }
+    }
+    parts.join(" · ")
 }
 
 /// The plain-words fact every reader of an attention gets: its class,
@@ -223,13 +251,13 @@ pub fn status(
     let writer = state
         .fixed_identity("writer")
         .unwrap_or(&studio.roles.writer);
-    for (role, cfg, live) in [
+    for (role, cfg, role_state) in [
         ("producer", producer, state.roles.get("producer")),
         ("director", director, state.roles.get("director")),
         ("writer", writer, state.roles.get("writer")),
     ] {
         shown.insert(role);
-        let life = match live {
+        let life = match role_state {
             _ if held.contains_key(role) => {
                 format!("waiting for a {} slot", held[role])
             }
@@ -238,11 +266,20 @@ pub fn status(
             Some(_) => "lost".into(),
             None => "not started".into(),
         };
+        let since_ms = role_state.map_or(0, |r| r.since_ms);
         let doing = match work(role) {
-            Some(Work::Working) => " · working",
-            Some(Work::Waiting) => " · waiting",
-            Some(Work::Blocked) => " · blocked",
-            None => "",
+            Some(Work::Working) => format!(
+                " · {}",
+                working_parts(
+                    since_ms,
+                    state.progress.get(role),
+                    live.running_cmds.get(&(name.to_string(), role.to_string())),
+                    now_ms,
+                )
+            ),
+            Some(Work::Waiting) => " · waiting".into(),
+            Some(Work::Blocked) => " · blocked".into(),
+            None => String::new(),
         };
         let _ = writeln!(
             out,
@@ -274,16 +311,26 @@ pub fn status(
         if studio != name || shown.contains(role.as_str()) {
             continue;
         }
-        let life = match state.roles.get(role) {
+        let role_state = state.roles.get(role);
+        let life = match role_state {
             Some(r) if r.live => "live",
             Some(r) if r.closed => "closed",
             Some(_) => "lost",
             None => "not started",
         };
+        let since_ms = role_state.map_or(0, |r| r.since_ms);
         let doing = match work {
-            Work::Working => " · working",
-            Work::Waiting => " · waiting",
-            Work::Blocked => " · blocked",
+            Work::Working => format!(
+                " · {}",
+                working_parts(
+                    since_ms,
+                    state.progress.get(role),
+                    live.running_cmds.get(&(name.to_string(), role.to_string())),
+                    now_ms,
+                )
+            ),
+            Work::Waiting => " · waiting".into(),
+            Work::Blocked => " · blocked".into(),
         };
         let who = state
             .roles
@@ -647,6 +694,7 @@ pub fn confirm(event: &backlot_model::Event) -> String {
         EventKind::RoleRestart { role, fresh, .. } => {
             format!(" {role}{}", if *fresh { " (fresh session)" } else { "" })
         }
+        EventKind::RoleProgress { role, .. } => format!(" {role}"),
         EventKind::TaskDelivered { task, delivery, .. } => format!(" {task} d{delivery}"),
         EventKind::TaskReviewed {
             task,

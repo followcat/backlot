@@ -725,13 +725,33 @@ impl Stage {
             &owned,
             &mut self.exchange_cache.borrow_mut(),
         );
-        let mut s = summary::summary_with_exchange(
+        let proc_running: BTreeMap<(String, String), summary::RoleRunning> = {
+            let work = self.work.borrow();
+            self.liveness
+                .borrow()
+                .iter()
+                .filter(|(pair, _)| work.get(*pair) == Some(&Work::Working))
+                .filter_map(|(pair, ev)| {
+                    ev.deepest_cmd().map(|(cmd, since_ms)| {
+                        (
+                            pair.clone(),
+                            summary::RoleRunning {
+                                cmd: summary::cap_running(cmd),
+                                since_ms,
+                            },
+                        )
+                    })
+                })
+                .collect()
+        };
+        let mut s = summary::summary_with_running(
             &owned,
             doing,
             &self.work.borrow(),
             &failed,
             &errors,
             &snippets,
+            &proc_running,
             0,
         );
         // U6c: the stage's own version rides the document so clients

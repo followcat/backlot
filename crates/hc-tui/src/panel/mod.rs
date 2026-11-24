@@ -19,6 +19,7 @@ mod row_lines;
 mod rows;
 mod rows_fit;
 mod update;
+mod working_line;
 
 pub(crate) use config::{
     CallSheetStart, PanelConfig, StudioKeys, StudioNav, WIDTH_MAX, WIDTH_MIN, config_path, load,

@@ -179,6 +179,8 @@ pub enum Refusal {
     },
     /// A `role.recast` whose new identity equals the current one.
     RecastUnchanged(String),
+    /// A `role.progress` text that is empty, too long, or holds control characters.
+    BadProgress(String),
 }
 
 impl fmt::Display for Refusal {
@@ -385,6 +387,7 @@ impl fmt::Display for Refusal {
             Refusal::RecastUnchanged(role) => {
                 write!(f, "'{role}' already runs that identity")
             }
+            Refusal::BadProgress(msg) => f.write_str(msg),
         }
     }
 }

@@ -182,6 +182,9 @@ pub enum HollywoodKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// Hollywood's optional one-line progress note (D5).
+    #[serde(rename = "role.progress")]
+    RoleProgress { text: String },
 }
 
 /// The move one `role.state` records — a studio's `role.started`,
@@ -223,6 +226,7 @@ impl HollywoodKind {
             HollywoodKind::MessageDelivered { .. } => "message.delivered",
             HollywoodKind::MessageDropped { .. } => "message.dropped",
             HollywoodKind::RoleRestart { .. } => "role.restart",
+            HollywoodKind::RoleProgress { .. } => "role.progress",
         }
     }
 }

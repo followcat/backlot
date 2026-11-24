@@ -222,7 +222,12 @@ impl Person {
                 .map(|q| format!("asks you · {q}"))
                 .unwrap_or_else(|| "asks you".into()),
             Person::Stuck => format!("stuck · {}", detail()),
-            Person::Working => match role.doing.as_deref().filter(|d| *d != "idle") {
+            Person::Working => match role
+                .doing
+                .as_deref()
+                .filter(|d| *d != "idle")
+                .or_else(|| role.running.as_ref().map(|r| r.cmd.as_str()))
+            {
                 Some(doing) => format!("working · {doing}"),
                 None => "working".into(),
             },

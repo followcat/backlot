@@ -68,6 +68,7 @@ fn exchange_rows_render_glyphs_selection_and_contextual_read_hint() {
         true,
         &Default::default(),
         &palette,
+        1,
     );
     let rendered = lines(&buf, area);
     let text = rendered.join("\n");
@@ -122,6 +123,7 @@ fn exchange_rows_render_glyphs_selection_and_contextual_read_hint() {
         true,
         &Default::default(),
         &palette,
+        1,
     );
     let rendered2 = lines(&buf2, area);
     let footer_no_file = rendered2.last().unwrap();
@@ -228,6 +230,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
         true,
         &Default::default(),
         &palette,
+        1,
     );
     assert!(hits.working_drawn, "queued cue arms spinner");
     let text_queued = lines(&buf, area).join("\n");
@@ -257,6 +260,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
         true,
         &Default::default(),
         &palette,
+        1,
     );
     assert!(hits2.working_drawn);
     let text_thinking = lines(&buf2, area).join("\n");
@@ -289,6 +293,7 @@ fn studio_input_row_renders_queued_and_thinking_cues_and_clears_on_delivery() {
         true,
         &Default::default(),
         &palette,
+        1,
     );
     assert!(!hits3.working_drawn, "settled studio stops animating");
     let text_done = lines(&buf3, area).join("\n");

@@ -498,6 +498,7 @@ pub(super) fn draw_person_line(
     rect: Rect,
     role: &RoleSummary,
     kind: &PersonLine,
+    now_ms: u64,
     frame: Style,
     palette: &Palette,
 ) {
@@ -543,6 +544,14 @@ pub(super) fn draw_person_line(
                 .map(|f| format!("! last turn failed: {f}"))
                 .unwrap_or_default(),
             Person::Failed.style(palette),
+        ),
+        PersonLine::Working => (
+            super::working_line::fit_working_line(
+                role,
+                now_ms,
+                rect.width.saturating_sub(5) as usize,
+            ),
+            Style::default().fg(palette.subtext0),
         ),
     };
     put_text(

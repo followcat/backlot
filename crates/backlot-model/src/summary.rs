@@ -16,6 +16,7 @@ use crate::event::{Priority, StudioMode, UsageTotals};
 use crate::state::{StudioState, TaskStatus};
 use crate::summary_build::*;
 
+pub use crate::progress::{RoleProgress, RoleRunning, cap_running};
 pub use crate::summary_build::role_name;
 
 // Hollywood's section types live beside this file; the
@@ -174,6 +175,12 @@ pub struct RoleSummary {
     pub state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub doing: Option<String>,
+    /// Latest `role.progress` note and timestamp from the ledger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<RoleProgress>,
+    /// Deepest descendant command line and since when (D5), published only while `Work::Working`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running: Option<RoleRunning>,
     /// `working`, `waiting` or `blocked` — only while live and the
     /// watch pass has classified the screen (R17).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -433,6 +440,31 @@ pub fn summary_with_exchange(
     snippets: &BTreeMap<(String, u64), String>,
     updated_ms: u64,
 ) -> Summary {
+    summary_with_running(
+        studios,
+        live,
+        work,
+        failed,
+        errors,
+        snippets,
+        &BTreeMap::new(),
+        updated_ms,
+    )
+}
+
+/// [`summary_with_exchange`] plus active deepest-descendant commands (`running`)
+/// sampled from stage liveness evidence.
+#[allow(clippy::too_many_arguments)]
+pub fn summary_with_running(
+    studios: &[(String, StudioState)],
+    live: &BTreeMap<String, String>,
+    work: &BTreeMap<(String, String), Work>,
+    failed: &BTreeMap<(String, String), String>,
+    errors: &BTreeMap<String, String>,
+    snippets: &BTreeMap<(String, u64), String>,
+    running: &BTreeMap<(String, String), RoleRunning>,
+    updated_ms: u64,
+) -> Summary {
     let mut live_studios = Vec::new();
     let mut finished_studios = Vec::new();
     for (name, state) in studios {
@@ -468,7 +500,9 @@ pub fn summary_with_exchange(
         let done = finished(state);
         let mut roles: Vec<RoleSummary> = role_keys(state)
             .into_iter()
-            .filter_map(|role| role_summary(name, state, role, live, work, failed, snippets))
+            .filter_map(|role| {
+                role_summary(name, state, role, live, work, failed, snippets, running)
+            })
             .collect();
         // Runner limits (S9e): a held wanted role shows `waiting for
         // a <runner> slot` — overriding a recorded closed/lost row,
@@ -478,6 +512,7 @@ pub fn summary_with_exchange(
             if let Some(runner) = held.get(&rs.role) {
                 rs.state = "waiting".into();
                 rs.doing = Some(cap(&format!("waiting for a {runner} slot")));
+                rs.running = None;
                 rs.work = None;
                 rs.failed = None;
             }
@@ -503,6 +538,8 @@ pub fn summary_with_exchange(
                     .map(|e| cap(&e)),
                 state: "waiting".into(),
                 doing: Some(cap(&format!("waiting for a {runner} slot"))),
+                progress: state.progress.get(&w.role).cloned(),
+                running: None,
                 work: None,
                 failed: None,
                 workdir: None,

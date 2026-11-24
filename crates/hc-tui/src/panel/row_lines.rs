@@ -109,16 +109,20 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
             } else {
                 agent
             });
+            let doing = role
+                .doing
+                .clone()
+                .or_else(|| role.running.as_ref().map(|r| r.cmd.clone()));
             let l2 = match crate::studio::glyphs::Person::attention_class(role) {
                 Some(backlot_model::attention::AttentionClass::Info) => {
-                    role.doing.clone().unwrap_or_else(|| role.state.clone())
+                    doing.unwrap_or_else(|| role.state.clone())
                 }
                 _ => role
                     .attention_detail
                     .as_deref()
                     .or(role.attention.as_deref())
                     .map(|a| format!("! {a}"))
-                    .or_else(|| role.doing.clone())
+                    .or(doing)
                     .unwrap_or_else(|| role.state.clone()),
             };
             lines.push(l2);

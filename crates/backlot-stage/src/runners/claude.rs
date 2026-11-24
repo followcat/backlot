@@ -66,6 +66,7 @@ pub fn hollywood_commands() -> &'static [&'static str] {
         "backlot status",
         "backlot records",
         "backlot tell producer",
+        "backlot progress",
         "backlot hollywood propose",
         "backlot hollywood report",
         "backlot studio new --dry-run",

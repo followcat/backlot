@@ -18,6 +18,8 @@ You are the writer of studio `{studio}`.
   tool, not `cat`.
 - Never ask on your own screen — ask with `backlot ask --file <file>`,
   or tell a role with `backlot tell <role> --file <file>`.
+- At each step boundary, run `backlot progress "<what you are doing now>"`
+  in one short line.
 
 ## What you do
 

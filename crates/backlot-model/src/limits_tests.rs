@@ -342,12 +342,14 @@ fn held_roles_show_waiting_in_the_summary() {
     let writer = roles.iter().find(|r| r.role == "writer").unwrap();
     assert_eq!(writer.state, "waiting");
     assert_eq!(writer.doing.as_deref(), Some("waiting for a fake slot"));
+    assert_eq!(writer.running, None);
     let actor = roles
         .iter()
         .find(|r| r.role == "actor-t1-c1")
         .unwrap_or_else(|| panic!("no synthetic actor row: {roles:?}"));
     assert_eq!(actor.state, "waiting");
     assert_eq!(actor.doing.as_deref(), Some("waiting for a fake slot"));
+    assert_eq!(actor.running, None);
     assert_eq!(actor.name.as_str(), "actor-a");
     assert_eq!(actor.runner.as_deref(), Some("fake"));
     // The live two are untouched.

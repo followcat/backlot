@@ -89,6 +89,7 @@ pub(crate) fn render(
     active_surface: bool,
     pending: &crate::action::ActionTracker,
     palette: &Palette,
+    now_ms: u64,
 ) -> PanelRender {
     // Reset every cell first: `set_style` alone leaves the symbols the
     // frame underneath drew — a full-screen panel must not show pane
@@ -386,7 +387,15 @@ pub(crate) fn render(
                 );
             }
             Row::PersonLine { studio, role, kind } => {
-                draw_person_line(buf, rect, role, kind, frame_of(&studio.key()), palette);
+                draw_person_line(
+                    buf,
+                    rect,
+                    role,
+                    kind,
+                    now_ms,
+                    frame_of(&studio.key()),
+                    palette,
+                );
             }
             Row::Task { studio, task } => {
                 draw_task(buf, rect, *studio, task, frame_of(&studio.key()), palette);

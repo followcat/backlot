@@ -101,6 +101,26 @@ pub(crate) enum PersonLine {
     Cue,
     /// `! last turn failed: <e>` — only when no attention shows.
     Failed,
+    /// `working <dur> · "<progress>" <age> ago · <doing> <dur>` —
+    /// shown only while [`super::working_line::show_working_line`] holds.
+    Working,
+}
+
+/// Which detail row (if any) sits immediately under `role`.
+pub(super) fn person_line_kind(role: &RoleSummary) -> Option<PersonLine> {
+    let cue = role.asks.is_some()
+        || (role.attention.is_some()
+            && crate::studio::glyphs::Person::attention_class(role)
+                != Some(backlot_model::attention::AttentionClass::Info));
+    if cue {
+        Some(PersonLine::Cue)
+    } else if role.failed.is_some() {
+        Some(PersonLine::Failed)
+    } else if super::working_line::show_working_line(role) {
+        Some(PersonLine::Working)
+    } else {
+        None
+    }
 }
 
 /// One display row, borrowing its data from the summaries.
@@ -357,22 +377,8 @@ fn block_rows<'a>(
         // `info` attention has no line here — it lives in the details,
         // and a blocked screen with no attention row keeps its old
         // one-line row.
-        let cue = role.asks.is_some()
-            || (role.attention.is_some()
-                && crate::studio::glyphs::Person::attention_class(role)
-                    != Some(backlot_model::attention::AttentionClass::Info));
-        if cue {
-            out.push(Row::PersonLine {
-                studio,
-                role,
-                kind: PersonLine::Cue,
-            });
-        } else if role.failed.is_some() {
-            out.push(Row::PersonLine {
-                studio,
-                role,
-                kind: PersonLine::Failed,
-            });
+        if let Some(kind) = person_line_kind(role) {
+            out.push(Row::PersonLine { studio, role, kind });
         }
         let target = Target::Person(key, role.role.clone());
         if panel.drawer.as_ref() == Some(&target) {

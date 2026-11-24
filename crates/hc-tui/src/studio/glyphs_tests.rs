@@ -129,6 +129,8 @@ fn person_of_reads_a_role() {
         effort: None,
         state: state.into(),
         doing: None,
+        progress: None,
+        running: None,
         work: None,
         failed: None,
         workdir: None,
@@ -249,6 +251,7 @@ fn state_text_uses_the_priority_words() {
 
     role.work = None;
     role.doing = None;
+    role.running = None;
     role.attention = Some("cannot resume".into());
     role.attention_class = Some(AttentionClass::NeedsYou);
     role.attention_detail = Some("no session id to resume".into());

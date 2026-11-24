@@ -243,6 +243,30 @@ fn pre_requirement_prompt_names_the_req_folder() {
 /// Every `backlot ...` span the four prompts name goes through the
 /// real argument parser — a renamed flag or command fails here, not
 /// in front of an agent.
+/// Quotes group words; nothing else is special.
+fn shell_words(cmd: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quote = None;
+    for c in cmd.chars() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => cur.push(c),
+            None if c == '"' || c == '\'' => quote = Some(c),
+            None if c.is_whitespace() => {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+            }
+            None => cur.push(c),
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
 #[test]
 fn every_command_in_the_prompts_parses() {
     for (kind, name) in [
@@ -258,7 +282,7 @@ fn every_command_in_the_prompts_parses() {
                 continue;
             };
             found += 1;
-            let words: Vec<String> = cmd.split(' ').map(String::from).collect();
+            let words = shell_words(cmd);
             assert!(
                 args::parse(&words).is_ok(),
                 "{name}.md: `backlot {cmd}` does not parse"
@@ -276,30 +300,6 @@ fn every_command_in_the_prompts_parses() {
 /// does not allow fails here, not in front of an agent.
 #[test]
 fn hollywood_prompt_commands_parse_and_stay_preallowed() {
-    /// Quotes group words; nothing else is special.
-    fn shell_words(cmd: &str) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut cur = String::new();
-        let mut quote = None;
-        for c in cmd.chars() {
-            match quote {
-                Some(q) if c == q => quote = None,
-                Some(_) => cur.push(c),
-                None if c == '"' || c == '\'' => quote = Some(c),
-                None if c.is_whitespace() => {
-                    if !cur.is_empty() {
-                        out.push(std::mem::take(&mut cur));
-                    }
-                }
-                None => cur.push(c),
-            }
-        }
-        if !cur.is_empty() {
-            out.push(cur);
-        }
-        out
-    }
-
     /// A pre-allow rule → the command prefix it allows.
     fn rule_prefix(rule: &str) -> &str {
         let inner = rule
@@ -374,6 +374,7 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
         // `studio new` are pinned to what the gate allows.
         let concrete = match prefix {
             "backlot tell" => "backlot tell producer --file m.md",
+            "backlot progress" => "backlot progress \"working\"",
             "backlot studio new" => {
                 "backlot studio new --title T --repo /home/user/r --cast c.toml --dry-run"
             }
@@ -388,7 +389,10 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
         ))
         .unwrap_or_else(|e| panic!("`{concrete}` does not parse: {e:?}"));
         match cmd {
-            args::Cmd::Status { .. } | args::Cmd::Records { .. } | args::Cmd::Hollywood(_) => {}
+            args::Cmd::Status { .. }
+            | args::Cmd::Records { .. }
+            | args::Cmd::Hollywood(_)
+            | args::Cmd::Progress { .. } => {}
             args::Cmd::Tell { role, .. } => assert_eq!(role, "producer"),
             args::Cmd::StudioNew { dry_run, .. } => {
                 assert!(dry_run, "`{concrete}` is not the dry run")
@@ -396,9 +400,10 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
             _ => panic!("`{concrete}` is outside Hollywood's gate"),
         }
         // `tell` is allowed as `tell producer`; `studio new` as its
-        // `--dry-run` form. Both are inside the rule the runner holds.
+        // `--dry-run` form; `progress` as `backlot progress`.
         let allowed_form = match prefix {
             "backlot tell" => "backlot tell producer",
+            "backlot progress" => "backlot progress",
             "backlot studio new" => "backlot studio new --dry-run",
             _ => concrete,
         };
@@ -705,4 +710,78 @@ fn prompts_forbid_on_screen_questions() {
     }
     assert!(HOLLYWOOD.contains("Never ask on your own screen"));
     assert!(HOLLYWOOD.contains("`backlot tell producer --file <file>`"));
+}
+
+/// D5: every role prompt instructs roles at each step boundary to run
+/// `backlot progress "<what you are doing now>"`, and every runner's base
+/// rules permit `backlot progress` for both studio roles and Hollywood.
+#[test]
+fn prompts_and_runners_cover_backlot_progress() {
+    for (kind, name) in [
+        (RoleKind::Producer, "producer"),
+        (RoleKind::Writer, "writer"),
+        (RoleKind::Director, "director"),
+        (RoleKind::Actor, "actor"),
+    ] {
+        let text = template(kind);
+        assert!(
+            text.contains("`backlot progress \"<what you are doing now>\"`"),
+            "{name}.md misses backlot progress sentence"
+        );
+        assert!(
+            text.contains("step boundary"),
+            "{name}.md misses step boundary wording"
+        );
+    }
+    assert!(HOLLYWOOD.contains("`backlot progress \"<what you are doing now>\"`"));
+    assert!(HOLLYWOOD.contains("step boundary"));
+
+    for role in ["producer", "director", "writer", "actor-t1-c1"] {
+        let claude = crate::runners::claude::allowed_tools("/state/studios/acme-shop", role, &[]);
+        assert!(claude.contains("Bash(backlot *)"), "{role}: {claude}");
+        assert!(
+            crate::runners::cursor::allow_rules(role, &[])
+                .iter()
+                .any(|r| r == "Shell(backlot)"),
+            "cursor {role}"
+        );
+        assert!(
+            crate::runners::cmd::allow_rules(role, &[])
+                .iter()
+                .any(|r| r == "Shell(backlot)"),
+            "cmd {role}"
+        );
+        assert!(
+            crate::runners::cline::allow_commands(role, &[])
+                .iter()
+                .any(|r| r == "backlot"),
+            "cline {role}"
+        );
+    }
+    // Hollywood explicitly enumerates commands instead of allowing all `backlot`.
+    assert!(crate::runners::claude::hollywood_commands().contains(&"backlot progress"));
+    let hw_claude = crate::runners::claude::allowed_tools("/state/hollywood", "hollywood", &[]);
+    assert!(
+        hw_claude.contains("Bash(backlot progress *)"),
+        "{hw_claude}"
+    );
+    assert!(
+        crate::runners::cursor::allow_rules("hollywood", &[])
+            .iter()
+            .any(|r| r == "Shell(backlot progress)")
+    );
+    assert!(
+        crate::runners::cmd::allow_rules("hollywood", &[])
+            .iter()
+            .any(|r| r == "Shell(backlot progress:*)")
+    );
+    assert!(
+        crate::runners::cline::allow_commands("hollywood", &[])
+            .iter()
+            .any(|r| r == "backlot progress")
+    );
+    assert_eq!(
+        crate::guard_rules::refused_command_line("backlot progress \"working\""),
+        None
+    );
 }
