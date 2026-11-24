@@ -65,6 +65,8 @@ pub struct CmdPrep {
     /// `<HOME>/.commandcode/mcp.json` — the server names are read,
     /// never the values.
     pub global_mcp: PathBuf,
+    /// `<studio>/roles/<role>/signals.jsonl` — the hook command's `--file`.
+    pub signals: PathBuf,
 }
 
 /// Command Code's project slug for a workdir: lowercase, camel
@@ -225,7 +227,13 @@ pub(crate) fn settings_content(
 /// never a half-allowed role. The file lands mode 600 like every
 /// stage-written file; always `Ok(false)` — cmd has no open-dir
 /// drift to report (the workdir itself is the boundary).
-pub fn prepare(p: &CmdPrep) -> Result<bool, String> {
+pub fn prepare(p: &CmdPrep) -> Result<Option<super::PrepNote>, String> {
+    const REL: &str = ".commandcode/settings.json";
+    let cwd = super::hook_files::work_dir_of(&p.settings);
+    if super::hook_files::is_tracked(cwd, REL) {
+        return Ok(Some(super::PrepNote::HooksUnavailable(REL)));
+    }
+    let was_new = !p.settings.exists();
     let dir = p.settings.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     if p.global_mcp.as_os_str().is_empty() {
@@ -233,9 +241,25 @@ pub fn prepare(p: &CmdPrep) -> Result<bool, String> {
     }
     let deny = mcp_denies(&p.global_mcp)?;
     let existing = std::fs::read(&p.settings).ok();
-    let bytes = settings_content(existing.as_deref(), &p.allow, &deny, &p.additional_dirs)?;
+    let perm_bytes = settings_content(existing.as_deref(), &p.allow, &deny, &p.additional_dirs)?;
+    let perm_text =
+        std::str::from_utf8(&perm_bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
+    let hooks_json = super::hook_files::hooks_member_json(
+        existing
+            .as_deref()
+            .and_then(|b| std::str::from_utf8(b).ok()),
+        &["SessionStart", "PreToolUse", "PostToolUse", "Stop"],
+        false,
+        "cmd",
+        &p.signals,
+    );
+    let bytes = match super::splice::splice_member(perm_text.trim(), "hooks", &hooks_json) {
+        Some(spliced) => format!("{spliced}\n").into_bytes(),
+        None => perm_bytes,
+    };
     write600(&p.settings, &bytes).map_err(|e| format!("{}: {e}", p.settings.display()))?;
-    Ok(false)
+    super::hook_files::maybe_exclude_new(cwd, was_new, REL)?;
+    Ok(None)
 }
 
 /// A file's birth time, or its mtime where birth time is
@@ -359,6 +383,10 @@ pub fn plan(identity: &ActorIdentity, ctx: &LaunchCtx) -> Result<Launch, PlanErr
             allow: allow_rules(ctx.role, ctx.checks),
             additional_dirs: vec![add_dir],
             global_mcp,
+            signals: Path::new(ctx.studio_dir)
+                .join("roles")
+                .join(ctx.role)
+                .join("signals.jsonl"),
         })),
     })
 }

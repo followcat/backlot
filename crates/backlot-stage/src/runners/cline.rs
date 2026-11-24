@@ -265,53 +265,6 @@ pub fn allow_commands(role: &str, checks: &[CheckDecl]) -> Vec<String> {
     out
 }
 
-/// `<cwd>/.git/info/exclude` — or the file the worktree's `.git`
-/// points at, for a linked worktree. `None` when the folder is not a
-/// git repository at all: nothing then reads the exclude file, and a
-/// missing one is no reason to keep a role from starting.
-fn exclude_path(cwd: &Path) -> Option<PathBuf> {
-    let dot = cwd.join(".git");
-    let md = std::fs::metadata(&dot).ok()?;
-    if md.is_dir() {
-        return Some(dot.join("info").join("exclude"));
-    }
-    let text = std::fs::read_to_string(&dot).ok()?;
-    let line = text
-        .lines()
-        .find_map(|l| l.trim().strip_prefix("gitdir:"))?
-        .trim();
-    let git = Path::new(line);
-    let git = if git.is_absolute() {
-        git.to_path_buf()
-    } else {
-        cwd.join(git)
-    };
-    Some(git.join("info").join("exclude"))
-}
-
-/// `entry` added to the exclude file once — a file the user may have
-/// written keeps every line it had, and a missing one is created.
-fn exclude_add(path: &Path, entry: &str) -> Result<(), String> {
-    let existing = match std::fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(format!("info/exclude: {e}")),
-    };
-    if existing.lines().any(|l| l.trim() == entry) {
-        return Ok(());
-    }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("info/exclude: {e}"))?;
-    }
-    let mut text = existing;
-    if !text.is_empty() && !text.ends_with('\n') {
-        text.push('\n');
-    }
-    text.push_str(entry);
-    text.push('\n');
-    std::fs::write(path, text).map_err(|e| format!("info/exclude: {e}"))
-}
-
 /// Write the hook, the MCP mask and the role's signals file, and keep
 /// `/.cline/` out of the worktree's git status — before
 /// `terminal.run`, so a fresh session's first tool call already goes
@@ -331,8 +284,8 @@ pub(crate) fn prepare(prep: &ClinePrep) -> Result<bool, String> {
         std::fs::create_dir_all(parent).map_err(io("cline-signals.jsonl"))?;
     }
     std::fs::write(&prep.signals, "").map_err(io("cline-signals.jsonl"))?;
-    if let Some(exclude) = exclude_path(&prep.cwd) {
-        exclude_add(&exclude, "/.cline/")?;
+    if let Some(exclude) = super::hook_files::exclude_path(&prep.cwd) {
+        super::hook_files::exclude_add(&exclude, "/.cline/")?;
     }
     Ok(false)
 }

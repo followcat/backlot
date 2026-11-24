@@ -288,8 +288,30 @@ impl Stage {
                 }
                 return Ok(false);
             }
-            Some(Ok(true)) if !attention_open(state, &start.role, reasons::CURSOR_DIR_OPEN) => {
+            Some(Ok(Some(runners::PrepNote::CursorDirOpen)))
+                if !attention_open(state, &start.role, reasons::CURSOR_DIR_OPEN) =>
+            {
                 record(dir, runners::cursor::dir_open_event(&start.role))?;
+            }
+            Some(Ok(Some(runners::PrepNote::HooksUnavailable(rel)))) => {
+                crate::stagelog::stage_log!(
+                    "{}: hooks unavailable ({} is tracked)",
+                    start.role,
+                    rel
+                );
+                if !attention_open(state, &start.role, reasons::HOOKS_UNAVAILABLE) {
+                    record(
+                        dir,
+                        EventKind::AttentionRaised {
+                            role: start.role.clone(),
+                            reason: reasons::HOOKS_UNAVAILABLE.into(),
+                            detail: format!(
+                                "{rel} is tracked in git; backlot left it untouched so existing evidence remains in use"
+                            ),
+                            needs_user: false,
+                        },
+                    )?;
+                }
             }
             _ => {}
         }
@@ -298,6 +320,9 @@ impl Stage {
         // binary or studio directory heals on the next launch.
         if let Some(hooks) = &launch.hooks {
             prepare_hooks(hooks).map_err(|e| Fail::refused(format!("hook files: {e}")))?;
+        } else if let Some(sig) = launch.prep.as_ref().and_then(runners::prep_signals_file) {
+            runners::truncate_signals(sig)
+                .map_err(|e| Fail::refused(format!("hook files: {e}")))?;
         }
         let role_dir = dir.join("roles").join(&start.role);
         crate::guard::prepare_role(&role_dir, &self.exe_dir)
