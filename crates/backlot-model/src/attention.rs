@@ -58,6 +58,7 @@ impl AttentionClass {
             | "work area failed"
             | "over budget"
             | "agent error"
+            | "outward action"
             | "owed" => AttentionClass::NeedsYou,
             "stalled" | "rate limited" | "connection error" => AttentionClass::Stuck,
             "session id not found" | "inherited XDG_CONFIG_HOME" | "cursor dir was open" => {

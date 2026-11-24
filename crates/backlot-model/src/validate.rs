@@ -62,6 +62,7 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
         | EventKind::RoleClosed { .. }
         | EventKind::ReportSent { .. }
         | EventKind::AttentionRaised { .. }
+        | EventKind::RoleRefused { .. }
         | EventKind::MessageQueued { .. } => {
             require_studio(state)?;
             Ok(())

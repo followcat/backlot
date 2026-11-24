@@ -445,3 +445,49 @@ fn only_user_may_record_studio_deleted() {
         );
     }
 }
+
+#[test]
+fn role_refused_and_outward_action_validate_and_roundtrip() {
+    let state = running_state();
+    let refused = EventKind::RoleRefused {
+        role: "actor-t1-c1".into(),
+        task: Some("t1".into()),
+        command: "git push origin main".into(),
+        cwd: "/home/user/acme-shop".into(),
+    };
+    assert_eq!(refused.name(), "role.refused");
+    assert_eq!(OUTWARD_ACTION, "outward action");
+    assert_eq!(
+        crate::attention::AttentionClass::of(OUTWARD_ACTION, true),
+        crate::attention::AttentionClass::NeedsYou
+    );
+    assert_eq!(
+        crate::attention::AttentionClass::of(OUTWARD_ACTION, false),
+        crate::attention::AttentionClass::NeedsYou
+    );
+    for caller in ["actor-t1-c1", "writer", "producer", "director", "stage"] {
+        assert_eq!(
+            validate(&state, &new_ev(caller, refused.clone())),
+            Ok(()),
+            "caller {caller} should be allowed"
+        );
+    }
+    assert_eq!(
+        validate(&state, &new_ev("actor", refused.clone())),
+        Err(Refusal::BareActor)
+    );
+    assert_eq!(
+        validate(
+            &crate::state::StudioState::default(),
+            &new_ev("producer", refused.clone())
+        ),
+        Err(Refusal::NoStudio)
+    );
+    let ev_rec = ev(99, "actor-t1-c1", refused.clone());
+    let json = serde_json::to_string(&ev_rec).unwrap();
+    let parsed: Event = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed, ev_rec);
+    let mut all = base_events();
+    all.push(ev_rec);
+    let _ = replay(&all);
+}

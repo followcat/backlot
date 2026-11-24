@@ -135,6 +135,11 @@ pub const RESTARTED: &str = "restarted";
 /// first-use folder-trust dialog.
 pub const FOLDER_TRUST: &str = "folder-trust";
 
+/// The `attention` reason an outward-action guard refusal raises
+/// (D3): a shim or git hook stopped an outward command, so the user
+/// decides whether to run it outside backlot.
+pub const OUTWARD_ACTION: &str = "outward action";
+
 /// A task's display priority (R20, D11): it orders people in the
 /// panel — and, since S9e, the actors a runner cap picks first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -568,6 +573,16 @@ pub enum EventKind {
         /// The working directory the dialog was answered in.
         cwd: String,
     },
+    /// `role.refused`: an outward-action shim or git hook refused a
+    /// command run by a role (D3).
+    #[serde(rename = "role.refused")]
+    RoleRefused {
+        role: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task: Option<String>,
+        command: String,
+        cwd: String,
+    },
     /// `role.approval`: a permission-prompt decision (D9). Refused
     /// unless `role` has an open `permission prompt` attention.
     #[serde(rename = "role.approval")]
@@ -656,6 +671,7 @@ impl EventKind {
             EventKind::AttentionRaised { .. } => "attention.raised",
             EventKind::AttentionCleared { .. } => "attention.cleared",
             EventKind::StageAnswered { .. } => "stage.answered",
+            EventKind::RoleRefused { .. } => "role.refused",
             EventKind::RoleApproval { .. } => "role.approval",
             EventKind::StudioFinished { .. } => "studio.finished",
             EventKind::StudioDeleted { .. } => "studio.deleted",

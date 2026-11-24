@@ -541,6 +541,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 entry.stage_answer_ms = Some(ts);
             }
         }
+        EventKind::RoleRefused { .. } => {}
         EventKind::RoleApproval { role, decision } => {
             state.approvals.push(ApprovalRecord {
                 seq,
