@@ -57,6 +57,11 @@ pub(crate) enum ConfirmFor {
         force: bool,
         kept: Vec<String>,
     },
+    /// `studio finish --force` on a studio with no requirement and no
+    /// tasks — the L5 guard, said in plain words first.
+    FinishEmpty { key: StudioKey },
+    /// `studio prune <studio> --as user` after its `--dry-run` plan.
+    Prune { key: StudioKey },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab

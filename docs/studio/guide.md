@@ -796,7 +796,9 @@ backlot studio finish --reason "all tasks accepted" --studio acme-shop --as user
 
 `studio finish` refuses while any task is open and names them. A studio with no requirement and no
 tasks refuses too — `nothing was built yet (no requirement, no tasks) — add --force to finish
-anyway` — so a just-made studio is not finished by accident; `--force` finishes it. From then on
+anyway` — so a just-made studio is not finished by accident; `--force` finishes it. The client's
+`Finish studio…` says `Nothing was built yet (no requirement, no tasks). Finish anyway?` first and
+passes `--force`; a studio that has a requirement or a task keeps the plain confirm. From then on
 the stage stops scheduling the studio; producer and director close like any released role, and
 only a person you explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --as
 user`, or Enter twice on a closed row — brings the person back into its recorded runner session; a
@@ -836,6 +838,10 @@ backlot studio prune --all-finished
 # Take a dirty worktree and an unmerged branch as well.
 backlot studio prune acme-shop --force
 ```
+
+A finished studio's menu offers the same as **`Free work areas (prune)…`**: it fetches the
+`--dry-run` plan, shows it verbatim in a confirm, and Enter then runs `studio prune <studio>`.
+The ledger, `reports/` and `messages/` stay.
 
 To retire a studio completely (finish if needed, close its role and shell terminals, prune its
 worktrees and merged branches, and archive its ledger under `archive/<studio>-<stamp>/`):

@@ -154,6 +154,22 @@ pub(crate) fn recast(
     a
 }
 
+/// `studio prune <studio>` (L7) — after its `--dry-run` plan.
+pub(crate) fn prune(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("pruning {}", key.id),
+        format!("pruned work areas of {}", key.id),
+        format!("prune {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = ["studio", "prune", &key.id, "--as", "user"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    a
+}
+
 /// `reopen --person <role>` (§4).
 pub(crate) fn reopen(key: &StudioKey, role: &str) -> Action {
     let mut a = action(
@@ -478,6 +494,19 @@ pub(crate) fn report_show(key: &StudioKey, seq: u64, file: &str) -> Action {
         key,
     );
     a.view = true;
+    a
+}
+
+/// `studio finish --force` (L5) — the empty-studio guard's answer.
+pub(crate) fn finish_force(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("finishing {}", key.id),
+        format!("finished {}", key.id),
+        format!("finish {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(&["studio".into(), "finish".into(), "--force".into()], key);
     a
 }
 

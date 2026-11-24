@@ -113,6 +113,12 @@ impl App {
                     self.run_action(studio_cmds::delete_studio(key, *force));
                 }
             }
+            ConfirmFor::FinishEmpty { key } => {
+                self.run_action(studio_cmds::finish_force(key));
+            }
+            ConfirmFor::Prune { key } => {
+                self.run_action(studio_cmds::prune(key));
+            }
         }
     }
 

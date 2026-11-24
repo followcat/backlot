@@ -145,6 +145,11 @@ impl App {
             {
                 self.delete_studio_dry_run_reply(result);
             }
+            Some(StudioDialog::Confirm(d))
+                if matches!(d.for_, crate::studio_dialog::ConfirmFor::Prune { .. }) =>
+            {
+                self.prune_dry_run_reply(result);
+            }
             _ => {}
         }
     }

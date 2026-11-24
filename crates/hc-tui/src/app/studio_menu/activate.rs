@@ -133,6 +133,11 @@ impl App {
                     );
                 }
             }
+            StudioAct::Prune => {
+                if let Some(key) = &menu.studio {
+                    self.prune_open(key);
+                }
+            }
             StudioAct::Close => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
                     self.studio_dialog = Some(StudioDialog::confirm(
@@ -198,14 +203,28 @@ impl App {
             }
             StudioAct::Finish => {
                 if let Some(key) = &menu.studio {
-                    self.studio_dialog = Some(StudioDialog::reason(
-                        format!(
-                            "Finish studio · {}",
-                            studio_dialog::StudioDialog::place(key)
-                        ),
-                        false,
-                        ReasonFor::Finish { key: key.clone() },
-                    ));
+                    // L5: an empty studio earns a plain-words confirm and
+                    // `--force`; a worked one keeps the reason dialog.
+                    self.studio_dialog = Some(if menu.empty {
+                        StudioDialog::confirm(
+                            format!(
+                                "Finish studio · {}",
+                                studio_dialog::StudioDialog::place(key)
+                            ),
+                            "Nothing was built yet (no requirement, no tasks). Finish anyway?"
+                                .to_owned(),
+                            ConfirmFor::FinishEmpty { key: key.clone() },
+                        )
+                    } else {
+                        StudioDialog::reason(
+                            format!(
+                                "Finish studio · {}",
+                                studio_dialog::StudioDialog::place(key)
+                            ),
+                            false,
+                            ReasonFor::Finish { key: key.clone() },
+                        )
+                    });
                 }
             }
             StudioAct::DeleteStudio => {

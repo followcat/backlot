@@ -78,6 +78,11 @@ A ready-but-unfinished studio reads `state: "finished"` in the document too, so 
 only when the frame's studio is `ready_to_finish`; a finished chip, an open-task studio and the
 new-studio frame leave `f` a no-op.
 
+Two lifecycle rows join that list (W4b). A finished studio also offers **`Free work areas
+(prune)…`**: the confirm shows `studio prune <studio> --dry-run`'s plan verbatim, and Enter then
+runs the real prune. `Finish studio…` on a studio with no requirement and no tasks asks
+`Nothing was built yet (no requirement, no tasks). Finish anyway?` and passes `--force`.
+
 A live person's menu (`m` on a person) carries **`Restart <name>`**, and a fixed seat — producer,
 director, writer — adds **`Recast…`** and drops `Close`, which the command refuses on it. Restart
 opens a two-choice confirm (`Resume its session` when the runner keeps a resumable session,

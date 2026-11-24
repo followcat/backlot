@@ -207,6 +207,8 @@ pub(crate) enum StudioAct {
     Restart,
     /// The recast picker — runner, then model, then effort.
     Recast,
+    /// `studio prune <studio>` after its `--dry-run` confirmation.
+    Prune,
     /// `close --person` through the confirm dialog.
     Close,
     /// `attention clear <seq>` through the confirm dialog.
@@ -312,6 +314,9 @@ pub(crate) struct StudioMenu {
     pub finished: bool,
     /// `ready_to_finish` — the Finish item draws teal.
     pub ready: bool,
+    /// No requirement and no tasks — the finish dialog says so and
+    /// passes `--force` (L5).
+    pub empty: bool,
     /// The requirement version — the Revise title counts `v<n> →
     /// v<n+1>`.
     pub req_version: u32,
@@ -384,6 +389,7 @@ impl StudioMenu {
             offline,
             finished,
             ready: summary.ready_to_finish,
+            empty: summary.requirement_version == 0 && summary.tasks_total == 0,
             req_version: summary.requirement_version,
             req_file: summary.req_file.clone(),
             machine: None,
@@ -417,6 +423,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -441,6 +448,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -465,6 +473,7 @@ impl StudioMenu {
             offline: false,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -490,6 +499,7 @@ impl StudioMenu {
             offline: false,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -522,6 +532,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine,
@@ -570,6 +581,7 @@ impl StudioMenu {
             offline,
             finished: true,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -594,6 +606,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,

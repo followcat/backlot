@@ -20,6 +20,8 @@ pub(super) const RUNNERS_JSON: &str = r#"[
    "efforts":[]}
 ]"#;
 
+pub(super) const PRUNE_PLAN: &str = "backlot/acme-shop/integration: removed\nwork/t1: removed";
+
 pub(super) fn summary() -> serde_json::Value {
     json!({
         "schema": "backlot/1",
@@ -98,6 +100,8 @@ pub(super) fn scripted(app: &mut App) -> Arc<Mutex<Vec<Vec<String>>>> {
         sink.lock().unwrap().push(argv.clone());
         let out = if argv.first().map(String::as_str) == Some("runners") {
             Ok(RUNNERS_JSON.to_owned())
+        } else if argv.iter().any(|a| a == "--dry-run") {
+            Ok(PRUNE_PLAN.to_owned())
         } else {
             Ok(String::new())
         };
@@ -125,6 +129,18 @@ pub(super) fn role_menu(app: &App, role: &str) -> crate::studio_menu::StudioMenu
         .find(|r| r.role == role)
         .unwrap_or_else(|| panic!("{role} in the cast"));
     crate::studio_menu::StudioMenu::role(&crate::studio::StudioKey::local("acme-shop"), row, false)
+}
+
+pub(super) fn studio_menu(app: &App, id: &str) -> crate::studio_menu::StudioMenu {
+    let machines = app.panel_summaries();
+    let studio = crate::panel::data::studio(&machines, &crate::studio::StudioKey::local(id))
+        .unwrap_or_else(|| panic!("{id}"));
+    crate::studio_menu::StudioMenu::studio(
+        &crate::studio::StudioKey::local(id),
+        studio.studio,
+        false,
+        false,
+    )
 }
 
 pub(super) fn labels(menu: &crate::studio_menu::StudioMenu) -> Vec<String> {

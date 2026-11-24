@@ -173,6 +173,13 @@ impl StudioMenu {
             Some('a'),
             StudioAct::Records,
         ));
+        // L7: keep the ledger, free the work areas — what only
+        // `studio delete` used to offer.
+        out.push(item(
+            "Free work areas (prune)…".to_owned(),
+            Some('p'),
+            StudioAct::Prune,
+        ));
         out.push(item(
             "Delete studio…".to_owned(),
             Some('d'),

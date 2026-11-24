@@ -12,6 +12,11 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **`Free work areas (prune)…` and a finish guard.** A finished studio's menu fetches
+  `studio prune --dry-run`, shows its plan, and then prunes for real. `Finish studio…` on a
+  studio with no requirement and no tasks asks `Nothing was built yet (no requirement, no
+  tasks). Finish anyway?` and passes `--force`.
+
 - **Restart and recast from the role menu.** A live or stuck role's menu offers `Restart <name>`
   — a two-choice confirm, `Resume its session` (the default when its runner keeps a resumable
   session) or `Fresh start`, running `backlot restart --as user` on the studio's machine.
