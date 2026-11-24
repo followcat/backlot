@@ -74,9 +74,12 @@ pub(crate) fn render_agent_panel(
         return;
     }
 
-    let rows = agent_rows(snapshot, config, None);
+    let rows = panel_rows(snapshot, config);
     let target = std::mem::take(reveal_focused_agent)
-        .then(|| rows.iter().position(|row| row.focused))
+        .then(|| {
+            rows.iter()
+                .position(|row| matches!(row, PanelRow::Agent(agent) if agent.focused))
+        })
         .flatten();
     render_agent_list(
         buffer,
@@ -90,11 +93,106 @@ pub(crate) fn render_agent_panel(
         agent_scroll,
         hits,
         target,
-        |row| row.rows.len(),
-        |buffer, rect, row, hits| {
-            hits.agents.push((rect, row.pane_id.clone()));
-            render_agent_row(buffer, rect, row, config);
+        PanelRow::lines,
+        |buffer, rect, row, hits| match row {
+            PanelRow::Space { label, gap } => {
+                render_space_header(buffer, rect, label, *gap, config);
+            }
+            PanelRow::Agent(row) => {
+                hits.agents.push((rect, row.pane_id.clone()));
+                render_agent_row(buffer, rect, row, config);
+            }
         },
+    );
+}
+
+/// One entry of the agents panel: an agent, or (grouped by space) the
+/// name of the space whose agents follow, as the Herdr app's grouped
+/// agents list heads each group.
+pub(crate) enum PanelRow {
+    /// A space header; `gap` puts a blank line above every group but the first.
+    Space {
+        label: String,
+        gap: bool,
+    },
+    Agent(AgentRow),
+}
+
+impl PanelRow {
+    fn lines(&self) -> usize {
+        match self {
+            PanelRow::Space { gap, .. } => 1 + usize::from(*gap),
+            PanelRow::Agent(row) => row.rows.len(),
+        }
+    }
+}
+
+/// The panel's entries. With `agent_panel_space_headers` on, sorted by
+/// space and not filtered to a view, a header with the space's name opens
+/// each run of that space's agents. Otherwise the list stays flat: the
+/// reference's space order has no headers, and by priority one space's
+/// agents are spread.
+pub(crate) fn panel_rows(
+    snapshot: &ClientShellSnapshot,
+    config: &super::ClientShellConfig,
+) -> Vec<PanelRow> {
+    let grouped = config.agent_panel_space_headers
+        && config.agent_panel_sort == crate::config::AgentPanelSortConfig::Spaces
+        && snapshot.agent_view_label.is_none();
+    let mut rows = Vec::new();
+    let mut current: Option<&str> = None;
+    for pane_id in ordered_agent_pane_ids(snapshot, config.agent_panel_sort) {
+        let Some(row) = agent_row(snapshot, &pane_id, config, None) else {
+            continue;
+        };
+        if grouped {
+            let workspace = snapshot
+                .agents
+                .iter()
+                .find(|agent| agent.pane_id == pane_id)
+                .and_then(|agent| {
+                    snapshot
+                        .workspaces
+                        .iter()
+                        .find(|workspace| workspace.workspace_id == agent.workspace_id)
+                });
+            if let Some(workspace) = workspace
+                && current != Some(workspace.workspace_id.as_str())
+            {
+                rows.push(PanelRow::Space {
+                    label: workspace.label.clone(),
+                    gap: current.is_some(),
+                });
+                current = Some(workspace.workspace_id.as_str());
+            }
+        }
+        rows.push(PanelRow::Agent(row));
+    }
+    rows
+}
+
+/// A space header: the space's name, dim, on the panel's last line of the
+/// entry (the first line is the blank gap when there is one).
+fn render_space_header(
+    buffer: &mut Buffer,
+    rect: Rect,
+    label: &str,
+    gap: bool,
+    config: &super::ClientShellConfig,
+) {
+    let y = rect.y + u16::from(gap);
+    if y >= rect.bottom() {
+        return;
+    }
+    put_text(
+        buffer,
+        rect.x,
+        y,
+        rect.width,
+        &format!(" {label}"),
+        Style::default()
+            .fg(config.palette.overlay0)
+            .add_modifier(Modifier::DIM),
     );
 }
 
@@ -257,17 +355,6 @@ pub(crate) fn render_agent_list<T>(
     }
 }
 
-pub(crate) fn agent_rows(
-    snapshot: &ClientShellSnapshot,
-    config: &super::ClientShellConfig,
-    machine: Option<&str>,
-) -> Vec<AgentRow> {
-    ordered_agent_pane_ids(snapshot, config.agent_panel_sort)
-        .into_iter()
-        .filter_map(|pane_id| agent_row(snapshot, &pane_id, config, machine))
-        .collect()
-}
-
 pub(crate) fn agent_row(
     snapshot: &ClientShellSnapshot,
     pane_id: &str,
@@ -405,3 +492,7 @@ fn sidebar_status_text(status: AgentStatus) -> &'static str {
         AgentStatus::Idle | AgentStatus::Unknown => "idle",
     }
 }
+
+#[cfg(test)]
+#[path = "agents_tests.rs"]
+mod tests;

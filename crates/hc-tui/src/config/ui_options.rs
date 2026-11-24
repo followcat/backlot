@@ -74,6 +74,9 @@ pub struct UiConfig {
     pub window_title: String,
     /// Agent sidebar ordering. Saved values are "spaces" or "priority". Default: "priority".
     pub agent_panel_sort: AgentPanelSortConfig,
+    /// Head each space's agents with the space's name when the agent panel
+    /// is sorted by space, as the herdr app's grouped list does. Default: false.
+    pub agent_panel_space_headers: bool,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
     /// Expanded sidebar row composition.
@@ -113,6 +116,7 @@ impl Default for UiConfig {
             tab_bar_right_separator: " ".into(),
             window_title: super::window_title::default_window_title(),
             agent_panel_sort: AgentPanelSortConfig::Priority,
+            agent_panel_space_headers: false,
             status_indicators: StatusIndicatorStyle::Dots,
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),

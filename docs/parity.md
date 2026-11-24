@@ -772,6 +772,12 @@ Everything else on the compared surfaces still diffs normally.
   herdr's own value (`agent_panel_sort = "spaces"`), which restores the
   reference header label and agent order; with the previous default the
   header said `priority` and the list followed status order.
+- **Agent-panel space headers.** Opt-in: with `[ui]
+  agent_panel_space_headers = true` and the panel sorted by space, a dim
+  row with the space's name heads each run of that space's agents and a
+  blank line separates the groups, as the herdr app's grouped agents list
+  does. Off by default, so the space order matches the reference, which
+  draws no headers; `priority` and filtered agent views stay flat.
 - **Persistent float default for a shell popup.** Deliberate: an hc-tui
   `[[keys.command]]` with `type = "popup"` whose command is a bare
   interactive shell is the tab's persistent float unless the entry says
