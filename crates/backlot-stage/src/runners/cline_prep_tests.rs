@@ -76,9 +76,10 @@ fn allowed_commands_per_role() {
             "git show"
         ]
     );
-    // Hollywood: exactly the overseer's set.
+    // Hollywood: exactly the overseer's set + `backlot progress`.
     let h = allow_commands("hollywood", &[]);
-    assert_eq!(h.len(), 6, "{h:?}");
+    assert_eq!(h.len(), 7, "{h:?}");
+    assert!(h.contains(&"backlot progress".to_string()));
     assert!(h.contains(&"backlot hollywood report".to_string()));
     assert!(!h.contains(&"backlot".to_string()));
 }

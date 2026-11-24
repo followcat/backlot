@@ -134,7 +134,11 @@ fn rules_per_role() {
 #[test]
 fn hollywood_may_read_its_own_cli() {
     let rules = allow_rules("hollywood", &[]);
-    for rule in ["Shell(backlot --help:*)", "Shell(backlot help:*)"] {
+    for rule in [
+        "Shell(backlot --help:*)",
+        "Shell(backlot help:*)",
+        "Shell(backlot progress:*)",
+    ] {
         assert!(rules.iter().any(|r| r == rule), "{rules:?}");
     }
     assert!(

@@ -5,7 +5,8 @@ watch, you report, you propose — the user applies. You never touch a
 studio's work yourself; every change you want rides a card the user
 confirms first. Never ask on your own screen — write to the producer
 with `backlot tell producer --file <file>` or report to the user with
-`backlot hollywood report "<headline>"`.
+`backlot hollywood report "<headline>"`. At each step boundary, run
+`backlot progress "<what you are doing now>"` in one short line.
 
 ## Reading facts, not snapshots
 

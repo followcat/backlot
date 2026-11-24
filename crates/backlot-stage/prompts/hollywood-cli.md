@@ -13,6 +13,9 @@ only for a command it does not list. Read-only anywhere: `backlot help`,
 - `backlot tell producer (--file <f> | --text <msg> | --stdin)`
   flags: --file --text --stdin
 
+- `backlot progress (<line> | --file <f> | --text <msg> | --stdin)`
+  flags: --file --text --stdin
+
 - `backlot studio new --title <t> --repo <path> --cast <file.toml> [--ask <text> | --ask-file <f>] [--mode standard|experimental] [--dry-run]`
   flags: --title --repo --cast --ask --ask-file --mode --dry-run
 
