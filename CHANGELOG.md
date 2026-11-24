@@ -12,6 +12,15 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **Dialog escalation, `agy` work states, and turn-level revision stalls (R7b).** Disabled
+  structured `activity.revision` stall tracking for runners whose revision only bumps on turn
+  completion (`mid_turn_revision: false` for `agy`); wired `agy` 1.5.16 work states, prompt
+  blocks, and `Native` status caps from R7a; added D2's 12-line generic dialog fallback rule in
+  `runners/dialog.rs`; raised, routed (`actor` → reviewer, `director`/`writer` → `producer`,
+  `producer`/Hollywood → `needs_user`), and cleared (`dialog closed`) `question` attentions for
+  non-permission dialogs while keeping `gate_open` closed; and denied Claude `AskUserQuestion`
+  while instructing role prompts to use `backlot ask` / `backlot tell`.
+
 - **Outward-action guard (`backlot guard`, shims, git hooks, and `agy` deny rules).** Every launched role (including Hollywood) gets `<role>/bin` first on `PATH` (ahead of `exe_dir`) with `gh`, `hc`, `scp`, `rsync`, `ssh`, `npm` and `cargo` shims, plus `GIT_CONFIG_*` `core.hooksPath` pointing at `<role>/git-hooks` (appended without clobbering existing `GIT_CONFIG_*`, refusing `git push` via `pre-push` while passing client git hooks through to the repository's own hooks). Refused commands exit 126, record `role.refused` in studio ledgers and raise one `outward action` attention (`needs_user: true`) per episode. `agy` launches also splice the 14 `command(<prefix>)` entries (without trailing ` *`) into `.agy-settings.json` `permissions.deny`.
 
 - **The lifecycle actions in `Ctrl+B ?`.** A `lifecycle` group lists `Restart <role> ·

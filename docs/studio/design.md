@@ -209,15 +209,17 @@ official hc, agents that do not report status have none at all. The stage theref
 | Explicit `backlot` commands | Task state. This is the authority. |
 | hc status and turn events | Working or stopped, when reported |
 | `terminal.read` samples | Stalls: a live role's screen unchanged for `stall_limit_s` |
-| Per-runner screen patterns | Attention reasons: permission prompt |
+| Per-runner screen patterns and D2 generic dialog fallback | Attention reasons: `permission prompt`, `question` |
 
 The stall rule reads the send gate's screen-stability track — a live role is stalled when its screen has not changed
 for `stall_limit_s` (default 600 s) and its work counts: an actor only on a `running` task, where `working` and
 `waiting` both count — an actor that went idle is exactly the case — while the producer, director and writer stall only
-while `working`; an idle one is normal, and `blocked` never counts because a permission prompt has its own attention.
+while `working`; an idle one is normal, and `blocked` never counts because permission prompts and question dialogs have
+their own attentions.
 One `stalled` attention raises per frozen episode with the screen saved under `attention/<seq>.txt`; a changed screen
-clears it and a later freeze raises its own. The notice goes to the actor's task reviewer and to the producer for the
-other fixed roles — the producer's own stall is panel-only.
+clears it and a later freeze raises its own. For runners whose `activity.revision` is turn-level only (`agy`,
+`mid_turn_revision: false`), a frozen revision while `working` does not raise a structured stall. The notice goes to
+the actor's task reviewer and to the producer for the other fixed roles — the producer's own stall is panel-only.
 
 A permission prompt follows the approval policy. Rate-limit and connection-error screen patterns are not built —
 nothing is measured — so a role that hits one simply stops, and reaches its reviewer as a stall like any other frozen
@@ -226,8 +228,8 @@ screen.
 ## Hook signals (S9f)
 
 Screen patterns are the fallback, not the source. A Claude role launches with
-`--settings roles/<role>/claude-settings.json` — one session-only settings layer holding `hooks` and nothing else —
-wiring eight events (`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`,
+`--settings roles/<role>/claude-settings.json` — one session-only settings layer holding `hooks` and a `permissions.deny`
+entry for `AskUserQuestion` (no env) — wiring eight events (`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`,
 `Notification`, `Stop`, `StopFailure`) to `backlot hook --file roles/<role>/signals.jsonl`. The command is the running
 binary's own absolute path, shell-quoted, and both files are rewritten on every start and resume — the settings
 fresh, the signals truncated — so a moved binary or directory heals on the next launch. The sink appends one compact
@@ -536,6 +538,19 @@ A role works against local state, never outward: publishing, pushing, opening PR
 2. **`git push` hook (`roles/<role>/git-hooks`).** Role env appends `core.hooksPath=<role>/git-hooks` via `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` without clobbering any existing `GIT_CONFIG_*` entries. `pre-push` calls `backlot guard git-push -- "$@"`, while client commit/merge/rebase hooks pass through to the repository's own hooks path (`core.hooksPath` or `--git-common-dir`/hooks) when one exists. The user's own `git push` outside the role environment is untouched.
 3. **Refusal record and attention.** A refused call prints `refused by backlot: <command> is the person's to run; ask with backlot ask`, exits 126, appends `role.refused` (`role`, optional `task`, `command` capped at 200 chars, `cwd`) in studio ledgers, and raises one `outward action` attention (`needs_user: true`) once per open attention episode. Hollywood gets the same shims and hooks.
 4. **Runner prefix defence.** For `agy`, `runners::agy` splices `permissions.deny` (`command(<prefix>)`, no trailing ` *`) into session `.agy-settings.json` beside `toolPermission: "always-proceed"`.
+
+## Question dialogs and generic fallback (D2, R7b)
+
+Role prompts forbid asking questions on screen (`backlot ask` and `backlot tell` reach the right listener), and Claude
+session settings deny `AskUserQuestion`. When an interactive dialog still appears on a role's screen — either via a
+recognised non-permission picker (`agy`'s `Question N/M:` plan picker), structured `status.state: "blocked"` with
+`kind: "question"`, or `dialog::generic_dialog`'s 12-line fallback rule (an option cursor `❯`/`>`/`→`/`›` + space + text
+paired with a contiguous sibling option or dialog footer, excluding idle composer boxes, code fences, and `esc to cancel`
+alone) — `work` reads `Blocked`, keeping the send gate (`gate_open`) closed. After `EPISODE_MIN_MS` (2 s), the stage
+raises one `question` attention per episode with `attention/<seq>.txt` saved (permission prompts remain `permission
+prompt`). Actor `question` attentions notice the task's reviewer (`notices::reviewer_for`), `director` and `writer`
+notice `"producer"`, and `producer` and Hollywood surface with `needs_user` (`can_answer_prompt: false`, no approval keys
+sent); exiting the dialog for two seconds clears the attention as `dialog closed`.
 
 ## Defaults that can still change
 
