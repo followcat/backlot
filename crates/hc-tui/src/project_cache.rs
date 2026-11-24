@@ -106,11 +106,11 @@ fn terms_equal(stored: &[Terminal], current: &[&Terminal]) -> bool {
     stored.len() == current.len() && stored.iter().zip(current).all(|(a, b)| a == *b)
 }
 
-/// Exactly the fields `structure::read` consumes: identity, ordering
-/// and the labels/cwd/repository facts that group terminals into spaces
-/// and tabs. Title, status, turn and every other display-only field are
-/// excluded — changing them reuses the `Space`s and rebuilds only the
-/// per-terminal snapshot that carries them.
+/// Exactly the fields `structure::read` consumes: identity, ordering,
+/// finished state and the labels/cwd/repository facts that group terminals
+/// into spaces and tabs. Title, status, turn and every other display-only
+/// field are excluded — changing them reuses the `Space`s and rebuilds
+/// only the per-terminal snapshot that carries them.
 fn terms_structurally_equal(stored: &[Terminal], current: &[&Terminal]) -> bool {
     stored.len() == current.len()
         && stored
@@ -122,6 +122,7 @@ fn terms_structurally_equal(stored: &[Terminal], current: &[&Terminal]) -> bool 
 fn structurally_equal(a: &Terminal, b: &Terminal) -> bool {
     a.address == b.address
         && a.created_ms == b.created_ms
+        && (a.state == "finished") == (b.state == "finished")
         && a.cwd == b.cwd
         && a.labels.get("herdr.space") == b.labels.get("herdr.space")
         && a.labels.get("herdr.tab") == b.labels.get("herdr.tab")
