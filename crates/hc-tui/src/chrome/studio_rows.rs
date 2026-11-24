@@ -122,6 +122,24 @@ pub(super) fn render_studio_row(
                 });
             }
         }
+        StudioRow::Archived { count } => {
+            put_text(
+                buffer,
+                rect.x.saturating_add(indent),
+                rect.y,
+                rect.width.saturating_sub(indent),
+                &super::text::truncate_end(
+                    &format!("Archived ({count}) …"),
+                    rect.width.saturating_sub(indent) as usize,
+                ),
+                dim,
+            );
+            hits.studio_rows.push(StudioRowHit {
+                rect,
+                endpoint_id: endpoint.endpoint_id.clone(),
+                act: StudioRowAct::OpenArchived,
+            });
+        }
         StudioRow::Finished { id } => {
             highlight(buffer, id);
             put_text(

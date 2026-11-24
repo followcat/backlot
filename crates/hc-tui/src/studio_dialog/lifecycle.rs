@@ -5,8 +5,10 @@
 
 use backlot_model::caps::{self, Effort};
 
+use crate::chrome::text_editor::TextEditor;
 use crate::new_studio::{Probe, RunnerRow};
 use crate::studio::StudioKey;
+use crate::studio_index::ArchivedStudio;
 
 /// `Restart director · acme-shop · Local` — reload the seat in place,
 /// resuming its recorded session or starting fresh.
@@ -293,4 +295,152 @@ fn default_effort(efforts: &[EffortChoice]) -> usize {
         .position(|e| e.value.as_deref() == Some("medium"))
         .or_else(|| efforts.iter().position(|e| e.value.is_some()))
         .unwrap_or(0)
+}
+
+/// Where the restore dialog stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RestoreStep {
+    /// The archived studios list.
+    List,
+    /// `Restore as <editable name>`.
+    Name,
+    /// The `--dry-run` plan, with Enter restoring for real.
+    Confirm,
+}
+
+/// The archived studios of one machine, and the restore's own steps.
+#[derive(Debug, Clone)]
+pub(crate) struct RestoreDialog {
+    pub(crate) machine: Option<String>,
+    pub(crate) entries: Vec<ArchivedStudio>,
+    pub(crate) sel: usize,
+    pub(crate) step: RestoreStep,
+    /// The name the restored studio takes.
+    pub(crate) name: TextEditor,
+    /// The dry-run plan, verbatim.
+    pub(crate) body: String,
+    pub(crate) loading: bool,
+    pub(crate) error: Option<String>,
+}
+
+impl RestoreDialog {
+    pub(crate) fn new(machine: Option<String>, entries: Vec<ArchivedStudio>) -> RestoreDialog {
+        RestoreDialog {
+            machine,
+            entries,
+            sel: 0,
+            step: RestoreStep::List,
+            name: TextEditor::new("", false),
+            body: String::new(),
+            loading: false,
+            error: None,
+        }
+    }
+
+    pub(crate) fn selected(&self) -> Option<&ArchivedStudio> {
+        self.entries.get(self.sel)
+    }
+
+    pub(crate) fn title(&self) -> String {
+        let machine = self.machine.as_deref().unwrap_or("Local");
+        match self.step {
+            RestoreStep::List => format!("Archived studios · {machine}"),
+            RestoreStep::Name | RestoreStep::Confirm => {
+                let entry = self
+                    .selected()
+                    .map(|e| e.name.as_str())
+                    .unwrap_or("archived");
+                format!("Restore {entry} · {machine}")
+            }
+        }
+    }
+
+    /// The default name for the chosen entry: the archived studio id,
+    /// else the entry name.
+    pub(crate) fn default_name(&self) -> String {
+        self.selected()
+            .map(|e| e.studio.clone().unwrap_or_else(|| e.name.clone()))
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn move_selection(&mut self, delta: isize) {
+        if self.entries.is_empty() {
+            return;
+        }
+        let n = self.entries.len() as isize;
+        self.sel = (self.sel as isize + delta).rem_euclid(n) as usize;
+    }
+
+    /// Step into `Restore as <name>` with the default name seeded.
+    pub(crate) fn begin_name(&mut self) {
+        self.name = TextEditor::new(&self.default_name(), false);
+        self.error = None;
+        self.body.clear();
+        self.step = RestoreStep::Name;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(runner: &str, models: &[&str], found: bool) -> RunnerRow {
+        RunnerRow {
+            runner: runner.into(),
+            status: if found { "found" } else { "missing" }.into(),
+            version: None,
+            path: None,
+            needs_path: false,
+            models: models.iter().map(|m| (*m).to_string()).collect(),
+            efforts: Vec::new(),
+        }
+    }
+
+    fn recast(runner: &str) -> RecastDialog {
+        let mut d = RecastDialog::new(
+            &StudioKey::local("acme-shop"),
+            "director",
+            "director",
+            None,
+            None,
+            None,
+        );
+        d.runners = Probe::Done(vec![row(runner, &["m1", "m2"], true)]);
+        d.reseat();
+        d
+    }
+
+    #[test]
+    fn a_required_effort_runner_lists_its_levels() {
+        let d = recast("claude");
+        let labels: Vec<String> = d.efforts().into_iter().map(|e| e.label).collect();
+        assert_eq!(labels, ["low", "medium", "high", "xhigh", "max"]);
+        assert_eq!(d.efforts()[d.effort_sel].label, "medium", "preselected");
+    }
+
+    #[test]
+    fn an_optional_effort_runner_allows_empty() {
+        let d = recast("devin");
+        let choices = d.efforts();
+        assert_eq!(choices.len(), 1, "no levels; the empty choice alone");
+        assert_eq!(choices[0].value, None);
+    }
+
+    #[test]
+    fn a_no_effort_runner_has_no_effort_row_and_skips_to_apply() {
+        let mut d = recast("cursor");
+        assert!(d.efforts().is_empty());
+        d.step = RecastStep::Model;
+        assert_eq!(d.next_step(), RecastStep::Apply);
+    }
+
+    #[test]
+    fn the_summary_names_both_identities() {
+        let mut d = recast("claude");
+        d.current_runner = Some("claude".into());
+        d.current_model = Some("m1".into());
+        d.current_effort = Some("low".into());
+        d.model_sel = 1;
+        assert_eq!(d.summary(), "director: claude/m1/low → claude/m2/medium");
+    }
 }

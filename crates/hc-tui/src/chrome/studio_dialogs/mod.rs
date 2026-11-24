@@ -107,8 +107,10 @@ fn cancel_button(b: &mut Buffer, row: Rect, palette: &Palette) {
     );
 }
 
+mod archived;
 mod kinds;
 mod lifecycle;
+use archived::render_restore;
 use kinds::{render_confirm, render_reason, render_revise, render_tell};
 use lifecycle::{render_recast, render_restart};
 
@@ -127,6 +129,7 @@ pub(crate) fn render(
         StudioDialog::Revise(d) => render_revise(b, band, d, palette),
         StudioDialog::Restart(d) => render_restart(b, band, d, palette),
         StudioDialog::Recast(d) => render_recast(b, band, d, palette),
+        StudioDialog::Restore(d) => render_restore(b, band, d, palette),
     }
 }
 

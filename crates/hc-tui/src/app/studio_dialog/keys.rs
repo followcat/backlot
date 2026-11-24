@@ -69,6 +69,9 @@ impl App {
             Some(StudioDialog::Recast(d)) => {
                 self.studio_dialog = self.recast_key(d, key, combo.code, combo.modifiers);
             }
+            Some(StudioDialog::Restore(d)) => {
+                self.studio_dialog = self.restore_key(d, key, combo.code);
+            }
             None => {}
         }
     }
@@ -315,6 +318,22 @@ impl App {
                         self.studio_dialog = Some(StudioDialog::Recast(d));
                     }
                 }
+                Some(StudioDialog::Restore(mut d)) => match d.step {
+                    crate::studio_dialog::RestoreStep::List => {
+                        d.begin_name();
+                        self.studio_dialog = Some(StudioDialog::Restore(d));
+                    }
+                    crate::studio_dialog::RestoreStep::Name => {
+                        self.studio_dialog = self.restore_dry_run(d);
+                    }
+                    crate::studio_dialog::RestoreStep::Confirm => {
+                        if !d.loading && d.error.is_none() {
+                            self.restore_apply(&d);
+                        } else {
+                            self.studio_dialog = Some(StudioDialog::Restore(d));
+                        }
+                    }
+                },
                 None => {}
             }
             return;

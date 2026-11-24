@@ -8,7 +8,9 @@ use crate::app::input::TerminalKey;
 use crate::new_studio::{self, Probe};
 use crate::studio::StudioKey;
 use crate::studio_cmds;
-use crate::studio_dialog::{RecastDialog, RecastStep, RestartDialog, StudioDialog};
+use crate::studio_dialog::{
+    RecastDialog, RecastStep, RestartDialog, RestoreDialog, RestoreStep, StudioDialog,
+};
 
 use super::App;
 
@@ -42,6 +44,21 @@ impl App {
             let out = run(machine, vec!["runners".into(), "--json".into()], None).await;
             let _ = tx.send((epoch, out)).await;
         });
+    }
+
+    /// The archived row's list — the machine's cached
+    /// `studio list --archived --json` answer.
+    pub(crate) fn open_archived(&mut self, machine: Option<String>) {
+        let entries = self.studio_index.archived(machine.as_deref()).to_vec();
+        if entries.is_empty() {
+            let place = machine.as_deref().unwrap_or("Local");
+            self.show_notice(
+                "No archived studios",
+                &format!("nothing is under archive/ on {place}"),
+            );
+            return;
+        }
+        self.studio_dialog = Some(StudioDialog::Restore(RestoreDialog::new(machine, entries)));
     }
 
     // ---------- keys ----------
@@ -194,6 +211,98 @@ impl App {
         }
     }
 
+    pub(crate) fn restore_key(
+        &mut self,
+        mut d: RestoreDialog,
+        key: &TerminalKey,
+        code: KeyCode,
+    ) -> Option<StudioDialog> {
+        if d.loading {
+            return match code {
+                KeyCode::Esc => None,
+                _ => Some(StudioDialog::Restore(d)),
+            };
+        }
+        match d.step {
+            RestoreStep::List => match code {
+                KeyCode::Esc => None,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    d.move_selection(-1);
+                    Some(StudioDialog::Restore(d))
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    d.move_selection(1);
+                    Some(StudioDialog::Restore(d))
+                }
+                KeyCode::Enter => {
+                    d.begin_name();
+                    Some(StudioDialog::Restore(d))
+                }
+                _ => Some(StudioDialog::Restore(d)),
+            },
+            RestoreStep::Name => match code {
+                KeyCode::Esc => None,
+                KeyCode::Enter => self.restore_dry_run(d),
+                _ => {
+                    d.name.handle_key(key);
+                    d.error = None;
+                    Some(StudioDialog::Restore(d))
+                }
+            },
+            RestoreStep::Confirm => match code {
+                KeyCode::Esc => None,
+                KeyCode::Enter if d.error.is_none() => {
+                    self.restore_apply(&d);
+                    None
+                }
+                KeyCode::Left => {
+                    d.step = RestoreStep::Name;
+                    d.body.clear();
+                    Some(StudioDialog::Restore(d))
+                }
+                _ => Some(StudioDialog::Restore(d)),
+            },
+        }
+    }
+
+    /// `studio restore <entry> --name <name> --dry-run` — its plan
+    /// fills the dialog before anything is copied.
+    pub(crate) fn restore_dry_run(&mut self, mut d: RestoreDialog) -> Option<StudioDialog> {
+        let name = d.name.as_str().trim().to_owned();
+        if name.is_empty() {
+            d.error = Some("a name is required".into());
+            return Some(StudioDialog::Restore(d));
+        }
+        let archived = d.selected().map(|e| e.name.clone())?;
+        let action = studio_cmds::restore(d.machine.clone(), &archived, &name, true);
+        d.loading = true;
+        d.step = RestoreStep::Confirm;
+        d.body.clear();
+        d.error = None;
+        self.studio_dialog_gen += 1;
+        let epoch = self.studio_dialog_gen;
+        let tx = self.dialog_fetch_tx.clone();
+        let run = self.ns_runner();
+        tokio::spawn(async move {
+            let out = run(action.machine, action.argv, None).await;
+            let _ = tx.send((epoch, out)).await;
+        });
+        Some(StudioDialog::Restore(d))
+    }
+
+    /// The real restore, after the dry run showed its plan.
+    pub(crate) fn restore_apply(&mut self, d: &RestoreDialog) {
+        let name = d.name.as_str().trim().to_owned();
+        if let Some(entry) = d.selected() {
+            self.run_action(studio_cmds::restore(
+                d.machine.clone(),
+                &entry.name,
+                &name,
+                false,
+            ));
+        }
+    }
+
     /// A recast or restore fetch landed — `true` when it owned the
     /// reply. The recast parses the machine's runner rows; the restore
     /// fills the dry-run plan (or its refusal) and unlocks the apply.
@@ -230,6 +339,20 @@ impl App {
                     }
                 }
                 self.studio_dialog = Some(StudioDialog::Recast(d));
+            }
+            StudioDialog::Restore(mut d) => {
+                d.loading = false;
+                match result {
+                    Ok(text) => {
+                        d.body = text.trim().to_owned();
+                        d.error = None;
+                    }
+                    Err(error) => {
+                        d.body.clear();
+                        d.error = Some(error);
+                    }
+                }
+                self.studio_dialog = Some(StudioDialog::Restore(d));
             }
             other => {
                 self.studio_dialog = Some(other);

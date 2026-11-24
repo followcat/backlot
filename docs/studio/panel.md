@@ -327,7 +327,11 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   that cannot be reached at all. The stage-down row puts the studio name first and tags it a
   short `down`, so a 10–12 character id fits whole at the default sidebar width. The ledger
   list comes from `backlot studio list --json`, run locally or over `terminal.run` for a remote,
-  cached and refreshed on a stage change or every 30 s at most. The tree scrolls to the machine
+  cached and refreshed on a stage change or every 30 s at most. When a machine's
+  `studio list --archived --json` is non-empty the tree adds one dim `Archived (n) …` row after
+  the finished group; Enter opens the archived list (name, stamp, repo, requirement) and its
+  `Restore as <name>` dialog, which runs `studio restore` with `--dry-run` first. The archived
+  list is cached per machine on the same 30 s clock. The tree scrolls to the machine
   row of the studio the selection lands on.
 - `Ctrl+B t` gives the tree the keyboard — `↑`/`↓` move the highlighted row (drawn with the
   accent `▌`), `Enter` runs the row's click action, `m` opens its context menu, `Esc` returns the

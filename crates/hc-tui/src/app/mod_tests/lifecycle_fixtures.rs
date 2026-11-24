@@ -22,6 +22,15 @@ pub(super) const RUNNERS_JSON: &str = r#"[
 
 pub(super) const PRUNE_PLAN: &str = "backlot/acme-shop/integration: removed\nwork/t1: removed";
 
+pub(super) const ARCHIVED_JSON: &str = r#"{
+  "pinned": true,
+  "archived": [
+    {"name": "old-shop-20260101T120000Z", "stamp": "20260101T120000Z",
+     "studio": "old-shop", "repo": "/home/user/acme-shop",
+     "requirement": "the shop"}
+  ]
+}"#;
+
 pub(super) fn summary() -> serde_json::Value {
     json!({
         "schema": "backlot/1",

@@ -23,6 +23,7 @@ mod image_paste_upload;
 mod install_card;
 mod layout;
 mod layout_regressions;
+mod lifecycle_archive;
 mod lifecycle_fixtures;
 mod lifecycle_role_menu;
 mod lifecycle_studio_menu;

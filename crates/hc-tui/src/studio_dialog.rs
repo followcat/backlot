@@ -8,7 +8,7 @@ use crate::chrome::text_editor::TextEditor;
 use crate::studio::StudioKey;
 
 mod lifecycle;
-pub(crate) use lifecycle::{RecastDialog, RecastStep, RestartDialog};
+pub(crate) use lifecycle::{RecastDialog, RecastStep, RestartDialog, RestoreDialog, RestoreStep};
 
 /// A reason-taking command (§2.1) — the dialog's Enter builds the
 /// action its `for` names.
@@ -139,6 +139,7 @@ pub(crate) enum StudioDialog {
     Revise(ReviseDialog),
     Restart(RestartDialog),
     Recast(RecastDialog),
+    Restore(RestoreDialog),
 }
 
 impl StudioDialog {

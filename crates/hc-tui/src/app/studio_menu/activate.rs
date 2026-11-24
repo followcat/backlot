@@ -138,6 +138,9 @@ impl App {
                     self.prune_open(key);
                 }
             }
+            StudioAct::Archived => {
+                self.open_archived(menu.machine().map(str::to_owned));
+            }
             StudioAct::Close => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
                     self.studio_dialog = Some(StudioDialog::confirm(

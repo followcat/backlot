@@ -387,6 +387,12 @@ backlot studio restore acme-shop-20260101T120000Z --name acme-shop-2
 backlot --remote host-b studio list
 ```
 
+The client shows the archive too: when `studio list --archived --json` on a machine is
+non-empty, the left tree's finished group gains an `Archived (n) …` row. Enter opens the list —
+each entry's name, stamp, repo and last requirement — and choosing one offers `Restore as
+<name>`, an editable name defaulting to the archived studio id. Enter runs the restore with
+`--dry-run` first and shows its plan; a second Enter copies the ledger back for real.
+
 The `next:` lines are what the ledger still owes — one per outstanding step, naming the step, the
 role that owes it and how long it has been owed (`next: dispatch — producer, owed 4m`). `user` as
 the owner means the step is yours (for example `finish` once every task is terminal and reported).

@@ -510,6 +510,37 @@ pub(crate) fn finish_force(key: &StudioKey) -> Action {
     a
 }
 
+/// `studio restore <archived> --name <name> [--dry-run]` (M3) — the
+/// archived ledger comes back as a finished studio.
+pub(crate) fn restore(
+    machine: Option<String>,
+    archived: &str,
+    name: &str,
+    dry_run: bool,
+) -> Action {
+    let mut argv = vec![
+        "studio".into(),
+        "restore".into(),
+        archived.to_owned(),
+        "--name".into(),
+        name.to_owned(),
+    ];
+    if dry_run {
+        argv.push("--dry-run".into());
+    }
+    argv.extend(["--as".into(), "user".into()]);
+    Action {
+        label: format!("restoring {archived}"),
+        done: format!("restored {archived}"),
+        name: format!("restore {archived}"),
+        mark: format!("studio:{archived}"),
+        argv,
+        machine,
+        stdin: None,
+        view: false,
+    }
+}
+
 pub(crate) fn delete_studio(key: &StudioKey, force: bool) -> Action {
     let mut a = action(
         format!("deleting {}", key.id),

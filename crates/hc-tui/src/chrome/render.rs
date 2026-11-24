@@ -97,6 +97,8 @@ pub(crate) enum StudioRowAct {
     ToggleFinished,
     /// One finished studio — open its finished-studio menu.
     OpenFinished { id: String },
+    /// `Archived (n) …` — open the machine's archived-studios list.
+    OpenArchived,
 }
 
 /// A studio-mode machines-tree row's hit area.
