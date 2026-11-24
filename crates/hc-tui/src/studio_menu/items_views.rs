@@ -183,6 +183,13 @@ impl StudioMenu {
                 Some('t'),
                 StudioAct::FocusHollywood,
             ),
+            // L2 for the overseer: a stuck Hollywood reloads in place
+            // through its own ledger, fresh or resuming its session.
+            item(
+                "Restart Hollywood".to_owned(),
+                Some('r'),
+                StudioAct::Restart,
+            ),
         ]
     }
 

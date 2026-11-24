@@ -11,6 +11,7 @@ use crate::studio_menu::StudioMenu;
 use super::App;
 
 mod keys;
+mod lifecycle;
 
 impl App {
     /// `Tell <name>…` — `Tell alice · acme-shop · host-b`.
@@ -113,6 +114,11 @@ impl App {
         if epoch != self.studio_dialog_gen {
             return;
         }
+        // The lifecycle dialogs own their fetches (the recast runner
+        // probe and the restore dry run).
+        if self.lifecycle_dialog_fetch(result.clone()) {
+            return;
+        }
         match self.studio_dialog.as_mut() {
             Some(StudioDialog::Revise(d)) => {
                 match result {
@@ -138,6 +144,11 @@ impl App {
                 ) =>
             {
                 self.delete_studio_dry_run_reply(result);
+            }
+            Some(StudioDialog::Confirm(d))
+                if matches!(d.for_, crate::studio_dialog::ConfirmFor::Prune { .. }) =>
+            {
+                self.prune_dry_run_reply(result);
             }
             _ => {}
         }

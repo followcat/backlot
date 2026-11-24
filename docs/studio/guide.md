@@ -387,6 +387,12 @@ backlot studio restore acme-shop-20260101T120000Z --name acme-shop-2
 backlot --remote host-b studio list
 ```
 
+The client shows the archive too: when `studio list --archived --json` on a machine is
+non-empty, the left tree's finished group gains an `Archived (n) …` row. Enter opens the list —
+each entry's name, stamp, repo and last requirement — and choosing one offers `Restore as
+<name>`, an editable name defaulting to the archived studio id. Enter runs the restore with
+`--dry-run` first and shows its plan; a second Enter copies the ledger back for real.
+
 The `next:` lines are what the ledger still owes — one per outstanding step, naming the step, the
 role that owes it and how long it has been owed (`next: dispatch — producer, owed 4m`). `user` as
 the owner means the step is yours (for example `finish` once every task is terminal and reported).
@@ -649,6 +655,13 @@ use restart to reload it`.
 `restart --person hollywood` reloads the overseer itself, from its own ledger and the same
 `[hollywood]` setup; a fresh restart starts a new conversation.
 
+The client's role menu offers the same command as **`Restart <name>`** for every live or stuck
+role; Hollywood's own menu carries **`Restart Hollywood`**. The confirm has two choices —
+`Resume its session` (the default when the role's runner keeps a resumable session) and
+`Fresh start` — and runs `backlot restart … --as user` on the studio's machine. A fixed seat
+(producer, director, writer) no longer offers `Close`, which `close` refuses on it; actors and
+held seats keep it.
+
 ## Changing who plays a role
 
 Actors are recast through `backlot cast`; the three fixed roles — producer, director and writer —
@@ -684,6 +697,14 @@ backlot hollywood propose recast --studio acme-shop --person director --runner c
 
 The card shows `recast director → cmd/deepseek-v4.1-flash`; applying it re-checks the role's
 identity, and the stage records one `role.recast` with the card's marker.
+
+The client offers the same command as **`Recast…`** on a fixed seat's role menu. The picker
+asks for the runner, then the model, then the effort, taking the runner and model lists from
+`backlot runners --json` on the studio's machine. The effort step follows the runner's caps: a
+runner that requires an effort lists its levels with one preselected, an optional one allows an
+empty choice, and a runner with no effort flag has no effort step at all. A summary line shows
+the old identity beside the new one before Enter runs `backlot recast … --as user`; a refusal
+comes back verbatim.
 
 ## Changing the requirement midway
 
@@ -781,7 +802,9 @@ backlot studio finish --reason "all tasks accepted" --studio acme-shop --as user
 
 `studio finish` refuses while any task is open and names them. A studio with no requirement and no
 tasks refuses too — `nothing was built yet (no requirement, no tasks) — add --force to finish
-anyway` — so a just-made studio is not finished by accident; `--force` finishes it. From then on
+anyway` — so a just-made studio is not finished by accident; `--force` finishes it. The client's
+`Finish studio…` says `Nothing was built yet (no requirement, no tasks). Finish anyway?` first and
+passes `--force`; a studio that has a requirement or a task keeps the plain confirm. From then on
 the stage stops scheduling the studio; producer and director close like any released role, and
 only a person you explicitly reopen comes back. Reopen — `backlot reopen --person <role key> --as
 user`, or Enter twice on a closed row — brings the person back into its recorded runner session; a
@@ -821,6 +844,10 @@ backlot studio prune --all-finished
 # Take a dirty worktree and an unmerged branch as well.
 backlot studio prune acme-shop --force
 ```
+
+A finished studio's menu offers the same as **`Free work areas (prune)…`**: it fetches the
+`--dry-run` plan, shows it verbatim in a confirm, and Enter then runs `studio prune <studio>`.
+The ledger, `reports/` and `messages/` stay.
 
 To retire a studio completely (finish if needed, close its role and shell terminals, prune its
 worktrees and merged branches, and archive its ledger under `archive/<studio>-<stamp>/`):

@@ -7,6 +7,9 @@
 use crate::chrome::text_editor::TextEditor;
 use crate::studio::StudioKey;
 
+mod lifecycle;
+pub(crate) use lifecycle::{RecastDialog, RecastStep, RestartDialog, RestoreDialog, RestoreStep};
+
 /// A reason-taking command (§2.1) — the dialog's Enter builds the
 /// action its `for` names.
 #[derive(Debug, Clone)]
@@ -54,6 +57,11 @@ pub(crate) enum ConfirmFor {
         force: bool,
         kept: Vec<String>,
     },
+    /// `studio finish --force` on a studio with no requirement and no
+    /// tasks — the L5 guard, said in plain words first.
+    FinishEmpty { key: StudioKey },
+    /// `studio prune <studio> --as user` after its `--dry-run` plan.
+    Prune { key: StudioKey },
 }
 
 /// What the multi-line dialogs' focus rings walk through — Tab
@@ -123,12 +131,15 @@ pub(crate) struct ConfirmDialog {
     pub(crate) for_: ConfirmFor,
 }
 
-/// The four dialog kinds.
+/// Every dialog kind.
 pub(crate) enum StudioDialog {
     Reason(ReasonDialog),
     Confirm(ConfirmDialog),
     Tell(TellDialog),
     Revise(ReviseDialog),
+    Restart(RestartDialog),
+    Recast(RecastDialog),
+    Restore(RestoreDialog),
 }
 
 impl StudioDialog {

@@ -34,6 +34,63 @@ impl App {
         self.sched.mark_dirty(Instant::now());
     }
 
+    /// The cached archived list answered `machine`.
+    pub(crate) fn on_archived_list(
+        &mut self,
+        machine: Option<String>,
+        out: Result<String, String>,
+    ) {
+        let text = out.as_deref().map_err(String::as_str);
+        self.studio_index
+            .note_archived_reply(machine, Instant::now(), text);
+        self.sched.mark_dirty(Instant::now());
+    }
+
+    /// Ask every reachable machine for its archived studios — the
+    /// `Archived (n)` row's source, on the same 30 s clock as the
+    /// ledger list.
+    fn sync_archived_index(&mut self) {
+        let reachable: Vec<Option<String>> = self
+            .projection
+            .endpoints
+            .iter()
+            .filter(|endpoint| {
+                matches!(
+                    endpoint.status,
+                    ClientEndpointStatus::Online | ClientEndpointStatus::Attention
+                )
+            })
+            .map(|endpoint| match &endpoint.endpoint_id {
+                ClientEndpointId::Local => None,
+                ClientEndpointId::Remote(name) => Some(name.clone()),
+            })
+            .collect();
+        let due = self.studio_index.want_archived(Instant::now(), &reachable);
+        if due.is_empty() {
+            return;
+        }
+        let run = self.ns_runner();
+        let tx = self.ns_tx.clone();
+        for machine in due {
+            let run = run.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                let out = run(
+                    machine.clone(),
+                    vec![
+                        "studio".into(),
+                        "list".into(),
+                        "--archived".into(),
+                        "--json".into(),
+                    ],
+                    None,
+                )
+                .await;
+                let _ = tx.send(NsReply::ArchivedList { machine, out }).await;
+            });
+        }
+    }
+
     /// Ask every machine whose stage is down (or whose document is
     /// missing) for `studio list --json`, at most once per 30 s and
     /// again whenever its stage state changed.
@@ -41,6 +98,7 @@ impl App {
         if self.plain || !self.studio.active {
             return;
         }
+        self.sync_archived_index();
         let summaries: Vec<MachineSummary> = self.panel_summaries();
         let machines: Vec<IndexMachine> = self
             .projection
@@ -160,12 +218,14 @@ impl App {
                 .studio
                 .finished_open
                 .contains(&machine.map(str::to_owned));
+            let archived_count = self.studio_index.archived(machine).len();
             let rows = studio_tree::rows(&studio_tree::Machine {
                 reachable,
                 stage_running,
                 space_labels: &labels,
                 studios: &studios,
                 finished_open,
+                archived_count,
             });
             if !rows.is_empty() {
                 tree.rows.insert(endpoint.endpoint_id.clone(), rows);
@@ -224,6 +284,7 @@ impl App {
                 self.run_action(crate::studio_cmds::stage_start(machine));
             }
             StudioRowAct::ToggleFinished => self.toggle_finished_group(machine),
+            StudioRowAct::OpenArchived => self.open_archived(machine),
             StudioRowAct::OpenFinished { id } => {
                 let key = StudioKey {
                     machine,

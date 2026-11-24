@@ -65,6 +65,9 @@ pub(crate) enum Row {
     FinishedFold { count: usize, open: bool },
     /// One finished studio, drawn only while the fold is open.
     Finished { id: String },
+    /// `Archived (n) …` — the machine's archived studios, one row
+    /// under the finished group whenever the archive is non-empty.
+    Archived { count: usize },
     /// `× unreachable` — the machine cannot answer at all.
     Unreachable,
 }
@@ -109,6 +112,8 @@ pub(crate) struct Machine<'a> {
     pub(crate) studios: &'a [Studio<'a>],
     /// The `finished (n)` group is unfolded for this machine.
     pub(crate) finished_open: bool,
+    /// The archived studios `studio list --archived` reported.
+    pub(crate) archived_count: usize,
 }
 
 /// The extra rows under `machine`, in draw order: the live studios with
@@ -154,6 +159,13 @@ pub(crate) fn rows(machine: &Machine<'_>) -> Vec<Row> {
             );
         }
     }
+    // M3: the archive is one row, fold or no fold — its studios are
+    // not in the ledger's live listing any more.
+    if machine.archived_count > 0 {
+        out.push(Row::Archived {
+            count: machine.archived_count,
+        });
+    }
     out
 }
 
@@ -175,6 +187,7 @@ mod tests {
             space_labels: spaces,
             studios,
             finished_open,
+            archived_count: 0,
         }
     }
 
@@ -236,6 +249,19 @@ mod tests {
                 count: 1,
                 open: false
             }]
+        );
+    }
+
+    #[test]
+    fn the_archived_row_appears_when_the_archive_is_not_empty() {
+        let studios = [Studio::live("acme-shop")];
+        let mut input = machine(SPACES, &studios, true, false);
+        assert!(rows(&input).is_empty(), "nothing archived");
+        input.archived_count = 2;
+        assert_eq!(
+            rows(&input),
+            vec![Row::Archived { count: 2 }],
+            "the archive row stands even with no finished studio"
         );
     }
 

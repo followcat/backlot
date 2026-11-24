@@ -12,6 +12,28 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
 
 ### Added
 
+- **The lifecycle actions in `Ctrl+B ?`.** A `lifecycle` group lists `Restart <role> ·
+  <studio>`, `Recast <role> · <studio>`, `Free work areas · <studio>` and `Archived studios ·
+  <machine>`, filterable by role, studio or machine name.
+
+- **Archived studios in the left tree.** When a machine's `studio list --archived --json` is
+  non-empty the finished group gains an `Archived (n) …` row; Enter lists each entry (name,
+  stamp, repo, requirement) and `Restore as <name>` runs `studio restore` with `--dry-run`
+  first, then for real. The archived list is cached per machine like the ledger list.
+
+- **`Free work areas (prune)…` and a finish guard.** A finished studio's menu fetches
+  `studio prune --dry-run`, shows its plan, and then prunes for real. `Finish studio…` on a
+  studio with no requirement and no tasks asks `Nothing was built yet (no requirement, no
+  tasks). Finish anyway?` and passes `--force`.
+
+- **Restart and recast from the role menu.** A live or stuck role's menu offers `Restart <name>`
+  — a two-choice confirm, `Resume its session` (the default when its runner keeps a resumable
+  session) or `Fresh start`, running `backlot restart --as user` on the studio's machine.
+  Hollywood's own menu carries `Restart Hollywood`. The fixed seats — producer, director, writer
+  — add `Recast…` (runner, then model, then effort from `backlot runners --json` and each
+  runner's caps; a no-effort runner has no effort step, an optional one allows empty) and no
+  longer offer the `Close` that the command refuses on them.
+
 - **The lot shows who runs on what.** Every person row in the studio dock now carries a
   dim runner tag before its state word (`claude`, `cmd`, `agy`, `codex`, `devin`,
   `cursor`, `cline`, `opencode`, `fake`) and, while the frame has room, the cast's short

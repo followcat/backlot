@@ -437,6 +437,88 @@ impl App {
         }
     }
 
+    /// The `lifecycle` group (W4b): restart every live role, recast a
+    /// fixed seat, free a finished studio's work areas, and open a
+    /// machine's archived studios.
+    fn lifecycle_group(&self) -> HelpGroup {
+        let machines = self.panel_summaries();
+        let local = crate::project::LOCAL_LABEL;
+        let multi = data::spans_machines(&machines);
+        let mut rows = Vec::new();
+        for studio in data::studios(&machines) {
+            let key = studio.key();
+            let place = help_place(&key, local, multi);
+            let offline = !self.machine_reachable(studio.machine);
+            for role in &studio.studio.roles {
+                if role.state != "live" {
+                    continue;
+                }
+                let menu = StudioMenu::role(&key, role, offline);
+                rows.push(HelpRow {
+                    label: format!("Restart {} · {place}", role.name),
+                    hint: "run ↵".to_owned(),
+                    glyph: "",
+                    launch: Launch::Act {
+                        menu: Box::new(menu.clone()),
+                        act: StudioAct::Restart,
+                    },
+                });
+                if matches!(role.role.as_str(), "producer" | "director" | "writer") {
+                    rows.push(HelpRow {
+                        label: format!("Recast {} · {place}", role.name),
+                        hint: "run ↵".to_owned(),
+                        glyph: "",
+                        launch: Launch::Act {
+                            menu: Box::new(menu),
+                            act: StudioAct::Recast,
+                        },
+                    });
+                }
+            }
+            if studio.studio.state == "finished" && !studio.studio.ready_to_finish {
+                rows.push(HelpRow {
+                    label: format!("Free work areas · {place}"),
+                    hint: "run ↵".to_owned(),
+                    glyph: "✓",
+                    launch: Launch::Act {
+                        menu: Box::new(StudioMenu::studio(
+                            &key,
+                            studio.studio,
+                            !self.machine_stage_running(studio.machine),
+                            offline,
+                        )),
+                        act: StudioAct::Prune,
+                    },
+                });
+            }
+        }
+        for endpoint in &self.projection.endpoints {
+            let machine = match &endpoint.endpoint_id {
+                crate::chrome::snapshot::ClientEndpointId::Local => None,
+                crate::chrome::snapshot::ClientEndpointId::Remote(name) => Some(name.clone()),
+            };
+            if self.studio_index.archived(machine.as_deref()).is_empty() {
+                continue;
+            }
+            let mut menu = StudioMenu::stage(false);
+            menu.machine = machine.clone();
+            let name = machine.unwrap_or_else(|| local.to_owned());
+            rows.push(HelpRow {
+                label: format!("Archived studios · {name}"),
+                hint: "run ↵".to_owned(),
+                glyph: "",
+                launch: Launch::Act {
+                    menu: Box::new(menu),
+                    act: StudioAct::Archived,
+                },
+            });
+        }
+        HelpGroup {
+            title: "lifecycle".to_owned(),
+            rows,
+        }
+    }
+
     /// The `hollywood` group — the `tell hollywood` input the bar's
     /// `i` opens.
     fn hollywood_group(&self) -> HelpGroup {
@@ -460,12 +542,17 @@ impl App {
         let mut groups = vec![
             self.waiting_group(),
             self.actions_group(),
+            self.lifecycle_group(),
             self.hollywood_group(),
             self.machines_group(),
         ];
-        // U6c: an empty machines section (a single local endpoint,
-        // nothing to install or restart) never lists.
-        groups.retain(|g| g.title != "machines" || !g.rows.is_empty());
+        // An empty section never lists — the machines group (a single
+        // local endpoint with nothing to install) and the lifecycle
+        // group (no live role, finished studio or archive).
+        groups.retain(|g| match g.title.as_str() {
+            "machines" | "lifecycle" => !g.rows.is_empty(),
+            _ => true,
+        });
         let reference = crate::keybind_help::backlot_help_groups(
             &self.live.keybinds,
             &self.live.prefix,

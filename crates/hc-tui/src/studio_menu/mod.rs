@@ -30,6 +30,9 @@ fn producer_role(summary: &StudioSummary) -> Option<MenuRole> {
         resumable: true,
         task: None,
         terminal: None,
+        runner: None,
+        model: None,
+        effort: None,
         attention_seq: None,
         attention_user: false,
         can_answer_prompt: true,
@@ -52,6 +55,10 @@ pub(crate) struct MenuRole {
     pub task: Option<String>,
     /// Its live terminal, machine-qualified.
     pub terminal: Option<String>,
+    /// The identity it plays now — `Recast…` starts from these.
+    pub runner: Option<String>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
     /// An open attention's seq — `Clear stale attention #<seq>`.
     pub attention_seq: Option<u64>,
     /// A user-owned prompt (`y`/`d`); `false` is director-routed (D9).
@@ -70,6 +77,9 @@ impl From<&RoleSummary> for MenuRole {
             resumable: role.resumable,
             task: role.task.clone(),
             terminal: role.terminal.clone(),
+            runner: role.runner.clone(),
+            model: role.model.clone(),
+            effort: role.effort.clone(),
             attention_seq: role.attention_seq,
             attention_user: role.attention_user,
             can_answer_prompt: role.can_answer_prompt,
@@ -85,6 +95,22 @@ impl MenuRole {
             "live" => self.terminal.as_deref(),
             _ => None,
         }
+    }
+
+    /// The three fixed seats `close` cannot release (L1): their rows
+    /// offer restart/recast instead, never `Close`.
+    pub(crate) fn fixed_seat(&self) -> bool {
+        matches!(self.role.as_str(), "producer" | "director" | "writer")
+    }
+
+    /// The runner keeps a resumable session, so a restart defaults to
+    /// `Resume its session`. `false` when the runner is unknown — the
+    /// dialog then starts on `Fresh start`.
+    pub(crate) fn runner_resumes(&self) -> bool {
+        self.runner
+            .as_deref()
+            .and_then(backlot_model::caps::get)
+            .is_some_and(|caps| !matches!(caps.resume, backlot_model::caps::Resume::None))
     }
 }
 
@@ -177,6 +203,14 @@ pub(crate) enum StudioAct {
     Priority(backlot_model::event::Priority),
     /// `reopen --person` direct.
     Reopen,
+    /// `restart --person [--fresh]` through the two-choice dialog.
+    Restart,
+    /// The recast picker — runner, then model, then effort.
+    Recast,
+    /// `studio prune <studio>` after its `--dry-run` confirmation.
+    Prune,
+    /// The machine's archived studios — the restore list dialog.
+    Archived,
     /// `close --person` through the confirm dialog.
     Close,
     /// `attention clear <seq>` through the confirm dialog.
@@ -282,6 +316,9 @@ pub(crate) struct StudioMenu {
     pub finished: bool,
     /// `ready_to_finish` — the Finish item draws teal.
     pub ready: bool,
+    /// No requirement and no tasks — the finish dialog says so and
+    /// passes `--force` (L5).
+    pub empty: bool,
     /// The requirement version — the Revise title counts `v<n> →
     /// v<n+1>`.
     pub req_version: u32,
@@ -354,6 +391,7 @@ impl StudioMenu {
             offline,
             finished,
             ready: summary.ready_to_finish,
+            empty: summary.requirement_version == 0 && summary.tasks_total == 0,
             req_version: summary.requirement_version,
             req_file: summary.req_file.clone(),
             machine: None,
@@ -387,6 +425,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -411,6 +450,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -435,6 +475,7 @@ impl StudioMenu {
             offline: false,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -460,6 +501,7 @@ impl StudioMenu {
             offline: false,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -492,6 +534,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine,
@@ -527,6 +570,9 @@ impl StudioMenu {
                 resumable: true,
                 task: None,
                 terminal: None,
+                runner: None,
+                model: None,
+                effort: None,
                 attention_seq: None,
                 attention_user: false,
                 can_answer_prompt: true,
@@ -537,6 +583,7 @@ impl StudioMenu {
             offline,
             finished: true,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -561,6 +608,7 @@ impl StudioMenu {
             offline,
             finished: false,
             ready: false,
+            empty: false,
             req_version: 0,
             req_file: None,
             machine: None,
@@ -578,6 +626,22 @@ impl StudioMenu {
     pub(crate) fn hollywood(seq: Option<u64>) -> StudioMenu {
         StudioMenu {
             kind: MenuKind::Hollywood(seq),
+            // The overseer's own seat: `Restart Hollywood` runs its
+            // ledger command, with no studio behind it.
+            role: Some(MenuRole {
+                role: "hollywood".into(),
+                name: "Hollywood".into(),
+                state: "live".into(),
+                resumable: false,
+                task: None,
+                terminal: None,
+                runner: None,
+                model: None,
+                effort: None,
+                attention_seq: None,
+                attention_user: false,
+                can_answer_prompt: true,
+            }),
             ..StudioMenu::lot()
         }
     }

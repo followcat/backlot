@@ -63,6 +63,15 @@ impl App {
             Some(StudioDialog::Revise(d)) => {
                 self.studio_dialog = self.revise_key(d, key, combo.code, combo.modifiers);
             }
+            Some(StudioDialog::Restart(d)) => {
+                self.studio_dialog = self.restart_key(d, key, combo.code);
+            }
+            Some(StudioDialog::Recast(d)) => {
+                self.studio_dialog = self.recast_key(d, key, combo.code, combo.modifiers);
+            }
+            Some(StudioDialog::Restore(d)) => {
+                self.studio_dialog = self.restore_key(d, key, combo.code);
+            }
             None => {}
         }
     }
@@ -106,6 +115,12 @@ impl App {
                 } else {
                     self.run_action(studio_cmds::delete_studio(key, *force));
                 }
+            }
+            ConfirmFor::FinishEmpty { key } => {
+                self.run_action(studio_cmds::finish_force(key));
+            }
+            ConfirmFor::Prune { key } => {
+                self.run_action(studio_cmds::prune(key));
             }
         }
     }
@@ -295,6 +310,30 @@ impl App {
                 Some(StudioDialog::Revise(d)) => {
                     self.studio_dialog = self.revise_submit(d);
                 }
+                Some(StudioDialog::Restart(d)) => {
+                    self.studio_dialog = self.restart_submit(&d);
+                }
+                Some(StudioDialog::Recast(mut d)) => {
+                    if !self.recast_advance(&mut d) {
+                        self.studio_dialog = Some(StudioDialog::Recast(d));
+                    }
+                }
+                Some(StudioDialog::Restore(mut d)) => match d.step {
+                    crate::studio_dialog::RestoreStep::List => {
+                        d.begin_name();
+                        self.studio_dialog = Some(StudioDialog::Restore(d));
+                    }
+                    crate::studio_dialog::RestoreStep::Name => {
+                        self.studio_dialog = self.restore_dry_run(d);
+                    }
+                    crate::studio_dialog::RestoreStep::Confirm => {
+                        if !d.loading && d.error.is_none() {
+                            self.restore_apply(&d);
+                        } else {
+                            self.studio_dialog = Some(StudioDialog::Restore(d));
+                        }
+                    }
+                },
                 None => {}
             }
             return;

@@ -201,7 +201,9 @@ impl App {
                     self.studio.set_studio_focus(key.clone());
                     self.studio_header_menu(&key, point);
                 }
-                StudioRow::FinishedFold { .. } | StudioRow::Unreachable => {
+                StudioRow::FinishedFold { .. }
+                | StudioRow::Archived { .. }
+                | StudioRow::Unreachable => {
                     let menu = self.machine_menu(&endpoint);
                     self.open_studio_menu(menu, point);
                 }
@@ -226,6 +228,10 @@ impl App {
             }
             StudioRow::FinishedFold { .. } => {
                 self.toggle_finished_group(machine);
+            }
+            StudioRow::Archived { .. } => {
+                self.tree_focus_leave();
+                self.open_archived(machine);
             }
             // A machine that cannot be reached has no stage to start —
             // Enter folds its one line, like the machine row itself.

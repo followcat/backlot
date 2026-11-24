@@ -173,6 +173,13 @@ impl StudioMenu {
             Some('a'),
             StudioAct::Records,
         ));
+        // L7: keep the ledger, free the work areas — what only
+        // `studio delete` used to offer.
+        out.push(item(
+            "Free work areas (prune)…".to_owned(),
+            Some('p'),
+            StudioAct::Prune,
+        ));
         out.push(item(
             "Delete studio…".to_owned(),
             Some('d'),
@@ -213,11 +220,7 @@ impl StudioMenu {
                 StudioAct::TaskSheet,
             ));
         }
-        out.push(item(
-            format!("Close {}…", role.name),
-            Some('c'),
-            StudioAct::Close,
-        ));
+        out.extend(role_lifecycle_items(item, role, true));
         out
     }
 
@@ -257,6 +260,7 @@ impl StudioMenu {
                 ),
             ]
         };
+        out.extend(role_lifecycle_items(item, role, false));
         out.extend(self.attention_items(item, role));
         out
     }
@@ -291,6 +295,7 @@ impl StudioMenu {
             Some('d'),
             StudioAct::DirOverride(false),
         ));
+        out.extend(role_lifecycle_items(item, role, false));
         out.extend(self.attention_items(item, role));
         out
     }
@@ -401,4 +406,30 @@ impl StudioMenu {
         }
         out
     }
+}
+
+/// A live person's lifecycle rows (L1, L2, L3): `Restart` reloads the
+/// seat in place; a fixed seat — producer, director, writer — adds
+/// `Recast…` and never offers the `Close` that `close` refuses on it.
+fn role_lifecycle_items(
+    item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    role: &MenuRole,
+    allow_close: bool,
+) -> Vec<StudioItem> {
+    let mut out = vec![item(
+        format!("Restart {}", role.name),
+        Some('r'),
+        StudioAct::Restart,
+    )];
+    if role.fixed_seat() {
+        out.push(item("Recast…".to_owned(), Some('e'), StudioAct::Recast));
+    } else if allow_close {
+        // An actor or held seat still closes; a fixed seat cannot.
+        out.push(item(
+            format!("Close {}…", role.name),
+            Some('c'),
+            StudioAct::Close,
+        ));
+    }
+    out
 }

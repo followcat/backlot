@@ -164,7 +164,14 @@ async fn the_waiting_group_leads_with_runnable_rows() {
             .iter()
             .any(|r| r.label.starts_with("next studio"))
     );
-    assert_eq!(groups[2].title, "hollywood");
+    // The lifecycle group (W4b) follows — a live studio's roles offer
+    // restart — then hollywood and the machines.
+    let titles: Vec<&str> = groups.iter().map(|g| g.title.as_str()).collect();
+    let hollywood = titles
+        .iter()
+        .position(|t| *t == "hollywood")
+        .unwrap_or_else(|| panic!("{titles:?}"));
+    assert!(hollywood > 1, "{titles:?}");
     assert!(!groups.iter().any(|g| g.title == "studio"));
     let text = screen_lines(&draw_to(&mut app, 120, 36)).join("\n");
     assert!(text.contains("Actions & Keybinds"), "{text}");

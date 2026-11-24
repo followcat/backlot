@@ -75,6 +75,101 @@ pub(crate) fn close(key: &StudioKey, role: &str) -> Action {
     a
 }
 
+/// `restart --person <role> [--fresh]` (L2) — the stage reloads the
+/// seat in place, resuming its session unless `fresh`.
+pub(crate) fn restart(key: &StudioKey, role: &str, fresh: bool) -> Action {
+    let word = if fresh {
+        "restarting fresh"
+    } else {
+        "restarting"
+    };
+    let mut a = action(
+        format!("{word} {role}"),
+        format!("restarted {role}"),
+        format!("restart {role}"),
+        key,
+        mark::role(key, role),
+    );
+    let mut command = vec!["restart".into(), "--person".into(), role.into()];
+    if fresh {
+        command.push("--fresh".into());
+    }
+    a.argv = studio_argv(&command, key);
+    a
+}
+
+/// `restart --person hollywood [--fresh]` — the overseer's own ledger,
+/// so no `--studio` rides the tail.
+pub(crate) fn restart_hollywood(fresh: bool) -> Action {
+    let mut argv = vec!["restart".into(), "--person".into(), "hollywood".into()];
+    if fresh {
+        argv.push("--fresh".into());
+    }
+    argv.extend(["--as".into(), "user".into()]);
+    Action {
+        label: if fresh {
+            "restarting hollywood fresh".into()
+        } else {
+            "restarting hollywood".into()
+        },
+        done: "restarted hollywood".into(),
+        name: "restart hollywood".into(),
+        mark: mark::hollywood(),
+        argv,
+        machine: None,
+        stdin: None,
+        view: false,
+    }
+}
+
+/// `recast --person <role> --runner <r> --model <m> [--effort <e>]`
+/// (L3) — the new identity takes over on the stage's next tick.
+pub(crate) fn recast(
+    key: &StudioKey,
+    role: &str,
+    runner: &str,
+    model: &str,
+    effort: Option<&str>,
+) -> Action {
+    let mut command = vec![
+        "recast".into(),
+        "--person".into(),
+        role.into(),
+        "--runner".into(),
+        runner.into(),
+        "--model".into(),
+        model.into(),
+    ];
+    if let Some(effort) = effort {
+        command.extend(["--effort".into(), effort.into()]);
+    }
+    let mut a = action(
+        format!("recasting {role}"),
+        format!("recast {role} as {runner}"),
+        format!("recast {role}"),
+        key,
+        mark::role(key, role),
+    );
+    a.argv = studio_argv(&command, key);
+    a
+}
+
+/// `studio prune <studio>` (L7) — after its `--dry-run` plan.
+pub(crate) fn prune(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("pruning {}", key.id),
+        format!("pruned work areas of {}", key.id),
+        format!("prune {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = ["studio", "prune", &key.id, "--as", "user"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    a
+}
+
 /// `reopen --person <role>` (§4).
 pub(crate) fn reopen(key: &StudioKey, role: &str) -> Action {
     let mut a = action(
@@ -400,6 +495,50 @@ pub(crate) fn report_show(key: &StudioKey, seq: u64, file: &str) -> Action {
     );
     a.view = true;
     a
+}
+
+/// `studio finish --force` (L5) — the empty-studio guard's answer.
+pub(crate) fn finish_force(key: &StudioKey) -> Action {
+    let mut a = action(
+        format!("finishing {}", key.id),
+        format!("finished {}", key.id),
+        format!("finish {}", key.id),
+        key,
+        mark::studio(key),
+    );
+    a.argv = studio_argv(&["studio".into(), "finish".into(), "--force".into()], key);
+    a
+}
+
+/// `studio restore <archived> --name <name> [--dry-run]` (M3) — the
+/// archived ledger comes back as a finished studio.
+pub(crate) fn restore(
+    machine: Option<String>,
+    archived: &str,
+    name: &str,
+    dry_run: bool,
+) -> Action {
+    let mut argv = vec![
+        "studio".into(),
+        "restore".into(),
+        archived.to_owned(),
+        "--name".into(),
+        name.to_owned(),
+    ];
+    if dry_run {
+        argv.push("--dry-run".into());
+    }
+    argv.extend(["--as".into(), "user".into()]);
+    Action {
+        label: format!("restoring {archived}"),
+        done: format!("restored {archived}"),
+        name: format!("restore {archived}"),
+        mark: format!("studio:{archived}"),
+        argv,
+        machine,
+        stdin: None,
+        view: false,
+    }
 }
 
 pub(crate) fn delete_studio(key: &StudioKey, force: bool) -> Action {

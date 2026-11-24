@@ -32,6 +32,21 @@ pub(crate) enum LedgerState {
     Failed,
 }
 
+/// One archived studio, as `studio list --archived --json` names it:
+/// the archive entry, its stamp, and what it was asked for last.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ArchivedStudio {
+    /// The archive directory's name (`acme-shop-20260101T120000Z`).
+    pub(crate) name: String,
+    /// The `<stamp>` part of that name.
+    pub(crate) stamp: String,
+    /// The studio id the ledger was recorded under, when it reads.
+    pub(crate) studio: Option<String>,
+    pub(crate) repo: Option<String>,
+    /// The last requirement's summary (or the title).
+    pub(crate) requirement: Option<String>,
+}
+
 /// One machine to judge.
 pub(crate) struct Machine {
     /// `None` is this core.
@@ -50,10 +65,20 @@ struct Entry {
     inflight: bool,
 }
 
+/// The archived list's state — refreshed on the same clock, for every
+/// reachable machine (an archive outlives every stage state).
+#[derive(Debug, Default)]
+struct ArchivedEntry {
+    entries: Vec<ArchivedStudio>,
+    fetched: Option<Instant>,
+    inflight: bool,
+}
+
 /// The cache, keyed by machine (`None` is this core).
 #[derive(Debug, Default)]
 pub(crate) struct StudioIndex {
     entries: BTreeMap<Option<String>, Entry>,
+    archived: BTreeMap<Option<String>, ArchivedEntry>,
 }
 
 impl StudioIndex {
@@ -66,12 +91,62 @@ impl StudioIndex {
             .unwrap_or(&[])
     }
 
+    /// The last fetched archived studios for `machine`.
+    pub(crate) fn archived(&self, machine: Option<&str>) -> &[ArchivedStudio] {
+        self.archived
+            .get(&machine.map(str::to_owned))
+            .map(|entry| entry.entries.as_slice())
+            .unwrap_or(&[])
+    }
+
     /// A fetch for `machine` is in flight.
     #[cfg(test)]
     pub(crate) fn inflight(&self, machine: Option<&str>) -> bool {
         self.entries
             .get(&machine.map(str::to_owned))
             .is_some_and(|entry| entry.inflight)
+    }
+
+    /// The machines whose archived list is absent or older than
+    /// [`REFRESH_EVERY`] — every reachable machine, whatever its stage.
+    /// Every returned machine is marked in flight.
+    pub(crate) fn want_archived(
+        &mut self,
+        now: Instant,
+        machines: &[Option<String>],
+    ) -> Vec<Option<String>> {
+        let mut out = Vec::new();
+        for machine in machines {
+            let entry = self.archived.entry(machine.clone()).or_default();
+            if entry.inflight {
+                continue;
+            }
+            let stale = entry
+                .fetched
+                .is_none_or(|at| now.saturating_duration_since(at) >= REFRESH_EVERY);
+            if stale {
+                entry.inflight = true;
+                out.push(machine.clone());
+            }
+        }
+        out
+    }
+
+    /// An archived-list fetch landed. A failure keeps the last list.
+    pub(crate) fn note_archived_reply(
+        &mut self,
+        machine: Option<String>,
+        now: Instant,
+        out: Result<&str, &str>,
+    ) {
+        let entry = self.archived.entry(machine).or_default();
+        entry.inflight = false;
+        entry.fetched = Some(now);
+        if let Ok(text) = out
+            && let Ok(entries) = parse_archived(text)
+        {
+            entry.entries = entries;
+        }
     }
 
     /// The machines that want a fetch now: whose stage is down or which
@@ -166,6 +241,43 @@ pub(crate) fn parse(text: &str) -> Result<Vec<LedgerStudio>, String> {
     Ok(out)
 }
 
+/// Parse `backlot studio list --archived --json` — `{"pinned",
+/// "archived": [{"name", "stamp", …}]}`. Unknown fields and a missing
+/// optional field are tolerated; a row without a name is skipped.
+pub(crate) fn parse_archived(text: &str) -> Result<Vec<ArchivedStudio>, String> {
+    #[derive(serde::Deserialize)]
+    struct Listing {
+        #[serde(default)]
+        archived: Vec<Row>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Row {
+        name: String,
+        #[serde(default)]
+        stamp: String,
+        #[serde(default)]
+        studio: Option<String>,
+        #[serde(default)]
+        repo: Option<String>,
+        #[serde(default)]
+        requirement: Option<String>,
+    }
+    let listing: Listing =
+        serde_json::from_str(text).map_err(|e| format!("studio list --archived: {e}"))?;
+    Ok(listing
+        .archived
+        .into_iter()
+        .filter(|row| !row.name.trim().is_empty())
+        .map(|row| ArchivedStudio {
+            name: row.name.trim().to_owned(),
+            stamp: row.stamp,
+            studio: row.studio,
+            repo: row.repo,
+            requirement: row.requirement,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,6 +367,46 @@ mod tests {
             index.want(now + Duration::from_secs(7), &down),
             vec![Some("host-b".to_owned())]
         );
+    }
+
+    const ARCHIVED: &str = r#"{
+        "pinned": true,
+        "archived": [
+            {"name": "old-shop-20260101T120000Z", "stamp": "20260101T120000Z",
+             "studio": "old-shop", "repo": "/home/user/acme-shop",
+             "requirement": "the shop", "last_ms": 4}
+        ]
+    }"#;
+
+    #[test]
+    fn the_archived_list_parses_and_refreshes_on_its_own_clock() {
+        assert_eq!(archived_rows(ARCHIVED).len(), 1);
+        let mut index = StudioIndex::default();
+        let now = Instant::now();
+        let rows = [None];
+        assert_eq!(index.want_archived(now, &rows), vec![None]);
+        index.note_archived_reply(None, now, Ok(ARCHIVED));
+        assert_eq!(index.archived(None).len(), 1);
+        assert_eq!(index.archived(None)[0].stamp, "20260101T120000Z");
+        assert!(
+            index
+                .want_archived(now + Duration::from_secs(5), &rows)
+                .is_empty()
+        );
+        assert!(!index.want_archived(now + REFRESH_EVERY, &rows).is_empty());
+    }
+
+    #[test]
+    fn an_archived_failure_keeps_the_last_list() {
+        let mut index = StudioIndex::default();
+        let now = Instant::now();
+        index.note_archived_reply(None, now, Ok(ARCHIVED));
+        index.note_archived_reply(None, now, Err("cannot read the archive"));
+        assert_eq!(index.archived(None).len(), 1);
+    }
+
+    fn archived_rows(text: &str) -> Vec<ArchivedStudio> {
+        parse_archived(text).unwrap()
     }
 
     #[test]

@@ -78,6 +78,18 @@ A ready-but-unfinished studio reads `state: "finished"` in the document too, so 
 only when the frame's studio is `ready_to_finish`; a finished chip, an open-task studio and the
 new-studio frame leave `f` a no-op.
 
+Two lifecycle rows join that list (W4b). A finished studio also offers **`Free work areas
+(prune)…`**: the confirm shows `studio prune <studio> --dry-run`'s plan verbatim, and Enter then
+runs the real prune. `Finish studio…` on a studio with no requirement and no tasks asks
+`Nothing was built yet (no requirement, no tasks). Finish anyway?` and passes `--force`.
+
+A live person's menu (`m` on a person) carries **`Restart <name>`**, and a fixed seat — producer,
+director, writer — adds **`Recast…`** and drops `Close`, which the command refuses on it. Restart
+opens a two-choice confirm (`Resume its session` when the runner keeps a resumable session,
+else `Fresh start`); recast steps through runner → model → effort, takes the lists from
+`backlot runners --json`, and shows the old → new identity before it runs. An actor or held seat
+keeps `Close`.
+
 ## Geometry and `Esc`
 
 The expanded dock's width is fixed by the frame: 38 columns at 160+, 36 at 100+, 28 under.
@@ -329,11 +341,19 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
   that cannot be reached at all. The stage-down row puts the studio name first and tags it a
   short `down`, so a 10–12 character id fits whole at the default sidebar width. The ledger
   list comes from `backlot studio list --json`, run locally or over `terminal.run` for a remote,
-  cached and refreshed on a stage change or every 30 s at most. The tree scrolls to the machine
+  cached and refreshed on a stage change or every 30 s at most. When a machine's
+  `studio list --archived --json` is non-empty the tree adds one dim `Archived (n) …` row after
+  the finished group; Enter opens the archived list (name, stamp, repo, requirement) and its
+  `Restore as <name>` dialog, which runs `studio restore` with `--dry-run` first. The archived
+  list is cached per machine on the same 30 s clock. The tree scrolls to the machine
   row of the studio the selection lands on.
 - `Ctrl+B t` gives the tree the keyboard — `↑`/`↓` move the highlighted row (drawn with the
   accent `▌`), `Enter` runs the row's click action, `m` opens its context menu, `Esc` returns the
   keys to the terminal. The whole tree's surfaces are also in `Ctrl+B ?`'s `machines` group.
+- `Ctrl+B ?`'s `lifecycle` group lists `Restart <role> · <studio>` for every live role,
+  `Recast <role> · <studio>` for the fixed seats, `Free work areas · <studio>` for a finished
+  studio and `Archived studios · <machine>` once a machine's archive is non-empty; the filter
+  reaches them by role, studio or machine name.
 - The stage log is read-only: when its terminal holds the focus, typed keys are dropped and the
   mode bar reads `stage log — read only`. A stage start never moves the focus to it.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the

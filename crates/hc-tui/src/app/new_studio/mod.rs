@@ -48,6 +48,13 @@ pub(crate) enum NsReply {
         stage_running: bool,
         out: Result<String, String>,
     },
+    /// `studio list --archived --json` for a reachable machine — the
+    /// archive outlives the stage, so its own cache keys only on the
+    /// machine and its clock.
+    ArchivedList {
+        machine: Option<String>,
+        out: Result<String, String>,
+    },
     Dry {
         epoch: u64,
         out: Result<String, String>,
@@ -592,6 +599,7 @@ impl App {
                 stage_running,
                 out,
             } => self.on_studio_list(machine, stage_running, out),
+            NsReply::ArchivedList { machine, out } => self.on_archived_list(machine, out),
             NsReply::Version {
                 epoch,
                 machine,

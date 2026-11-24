@@ -108,6 +108,39 @@ impl App {
                     self.run_action(studio_cmds::reopen(key, &role.role));
                 }
             }
+            StudioAct::Restart => {
+                if let Some(role) = menu.role.as_ref() {
+                    let resumable = menu.studio.is_some() && role.runner_resumes();
+                    self.studio_dialog = Some(StudioDialog::Restart(
+                        crate::studio_dialog::RestartDialog::new(
+                            menu.studio.clone(),
+                            &role.role,
+                            &role.name,
+                            resumable,
+                        ),
+                    ));
+                }
+            }
+            StudioAct::Recast => {
+                if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
+                    self.recast_dialog_open(
+                        key,
+                        &role.role,
+                        &role.name,
+                        role.runner.clone(),
+                        role.model.clone(),
+                        role.effort.clone(),
+                    );
+                }
+            }
+            StudioAct::Prune => {
+                if let Some(key) = &menu.studio {
+                    self.prune_open(key);
+                }
+            }
+            StudioAct::Archived => {
+                self.open_archived(menu.machine().map(str::to_owned));
+            }
             StudioAct::Close => {
                 if let (Some(key), Some(role)) = (&menu.studio, menu.role.as_ref()) {
                     self.studio_dialog = Some(StudioDialog::confirm(
@@ -173,14 +206,28 @@ impl App {
             }
             StudioAct::Finish => {
                 if let Some(key) = &menu.studio {
-                    self.studio_dialog = Some(StudioDialog::reason(
-                        format!(
-                            "Finish studio · {}",
-                            studio_dialog::StudioDialog::place(key)
-                        ),
-                        false,
-                        ReasonFor::Finish { key: key.clone() },
-                    ));
+                    // L5: an empty studio earns a plain-words confirm and
+                    // `--force`; a worked one keeps the reason dialog.
+                    self.studio_dialog = Some(if menu.empty {
+                        StudioDialog::confirm(
+                            format!(
+                                "Finish studio · {}",
+                                studio_dialog::StudioDialog::place(key)
+                            ),
+                            "Nothing was built yet (no requirement, no tasks). Finish anyway?"
+                                .to_owned(),
+                            ConfirmFor::FinishEmpty { key: key.clone() },
+                        )
+                    } else {
+                        StudioDialog::reason(
+                            format!(
+                                "Finish studio · {}",
+                                studio_dialog::StudioDialog::place(key)
+                            ),
+                            false,
+                            ReasonFor::Finish { key: key.clone() },
+                        )
+                    });
                 }
             }
             StudioAct::DeleteStudio => {
