@@ -79,7 +79,7 @@ pub(crate) fn render(
     // a plain workspace (R3-M6: a remembered studio is not active).
     mark: Option<&StudioKey>,
     // The `current` studio's cast size (roles + shells) — the
-    // footer's `←→ role` hint reads it (wide-01).
+    // footer's `↑↓ role` hint reads it (wide-01).
     cast_entries: usize,
     local: Option<&str>,
     keys: &StudioKeys,

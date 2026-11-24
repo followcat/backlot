@@ -251,8 +251,8 @@ async fn real_u1_studio_layout_screens() {
     )
     .unwrap();
 
-    /// One attach cycle: capture `first`, alt+down to the other
-    /// studio (`moved_pred`), alt+up back, alt+right one role, the
+    /// One attach cycle: capture `first`, alt+right to the other
+    /// studio (`moved_pred`), alt+left back, alt+down one role, the
     /// panel, detach. `ready_pred` differs because the mobile chrome
     /// (cols ≤ 64) has no sidebar for `cast ·` to land in.
     async fn attach_cycle(
@@ -277,7 +277,7 @@ async fn real_u1_studio_layout_screens() {
         )
         .await;
         save(out, &format!("w{cols}-cast.txt"), &first);
-        // alt+down: next studio. Desktop shows the cast header;
+        // alt+right: next studio. Desktop shows the cast header;
         // mobile shows the focused terminal's `bl-<studio>-*` title.
         let want: Box<dyn Fn(&str) -> bool> = if mobile {
             let acme = first.contains("bl-acme-shop");
@@ -291,7 +291,7 @@ async fn real_u1_studio_layout_screens() {
             let header = format!("cast · {other}");
             Box::new(move |s: &str| s.contains(&header))
         };
-        alt_arrow(&tui, 'B');
+        alt_arrow(&tui, 'C');
         let moved = until(&mut tui, |s| want(s), "next studio").await;
         save(out, &format!("w{cols}-next-studio.txt"), &moved);
         if !mobile {
@@ -305,8 +305,8 @@ async fn real_u1_studio_layout_screens() {
             } else {
                 "acme-shop"
             };
-            // alt+up: back — then a role nav moves the ▌ marker.
-            alt_arrow(&tui, 'A');
+            // alt+left: back — then a role nav moves the ▌ marker.
+            alt_arrow(&tui, 'D');
             let back = until(
                 &mut tui,
                 |s| s.contains(&format!("cast · {current}")),
@@ -314,7 +314,7 @@ async fn real_u1_studio_layout_screens() {
             )
             .await;
             let mark = focus_bar_row(&back);
-            alt_arrow(&tui, 'C');
+            alt_arrow(&tui, 'B');
             let after = until(&mut tui, |s| focus_bar_row(s) != mark, "next role").await;
             save(out, &format!("w{cols}-next-role.txt"), &after);
         }

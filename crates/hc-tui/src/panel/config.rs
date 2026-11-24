@@ -83,8 +83,13 @@ pub(crate) enum StudioNav {
     NextRole,
 }
 
-/// The four direct studio keys: `alt+up/down` move between studios,
-/// `alt+left/right` between the current studio's people. `None` is an
+const DEFAULT_PREVIOUS_STUDIO: &str = "alt+left";
+const DEFAULT_NEXT_STUDIO: &str = "alt+right";
+const DEFAULT_PREVIOUS_ROLE: &str = "alt+up";
+const DEFAULT_NEXT_ROLE: &str = "alt+down";
+
+/// The four direct studio keys: `alt+left/right` move between studios,
+/// `alt+up/down` between the current studio's people. `None` is an
 /// unbound key (`""` in the file).
 #[derive(Debug, Clone)]
 pub(crate) struct StudioKeys {
@@ -97,10 +102,10 @@ pub(crate) struct StudioKeys {
 impl Default for StudioKeys {
     fn default() -> StudioKeys {
         StudioKeys {
-            previous_studio: crate::config::parse_key_combo("alt+up"),
-            next_studio: crate::config::parse_key_combo("alt+down"),
-            previous_role: crate::config::parse_key_combo("alt+left"),
-            next_role: crate::config::parse_key_combo("alt+right"),
+            previous_studio: crate::config::parse_key_combo(DEFAULT_PREVIOUS_STUDIO),
+            next_studio: crate::config::parse_key_combo(DEFAULT_NEXT_STUDIO),
+            previous_role: crate::config::parse_key_combo(DEFAULT_PREVIOUS_ROLE),
+            next_role: crate::config::parse_key_combo(DEFAULT_NEXT_ROLE),
         }
     }
 }
@@ -126,10 +131,10 @@ impl StudioKeys {
         }
     }
 
-    /// The footer's two hint halves — `("alt ↑↓ studio", "←→ role")`
-    /// — so the caller can drop the half whose navigation has nowhere
-    /// to go (wide-01: `studio` only across ≥2 studios, `role` only
-    /// across ≥2 cast entries) or fit them as separate tiers.
+    /// The footer's two hint halves — `("alt ←→ studio", "↑↓ role")`
+    /// by default — so the caller can drop the half whose navigation
+    /// has nowhere to go (wide-01: `studio` only across ≥2 studios,
+    /// `role` only across ≥2 cast entries) or fit them as separate tiers.
     pub(crate) fn shortcut_parts(&self) -> (String, String) {
         use crossterm::event::KeyCode;
         let four = [
@@ -138,14 +143,14 @@ impl StudioKeys {
             self.previous_role,
             self.next_role,
         ];
-        let arrows = four.iter().all(|combo| {
-            combo.is_some_and(|(code, _)| {
-                matches!(
-                    code,
-                    KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right
-                )
+        let arrow = |combo: Option<KeyCombo>| {
+            combo.and_then(|(code, _)| match code {
+                KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
+                    Some(code_label(code))
+                }
+                _ => None,
             })
-        });
+        };
         let mods = four
             .iter()
             .filter_map(|combo| combo.map(|c| c.1))
@@ -154,13 +159,16 @@ impl StudioKeys {
                 Some(seen) if seen == mods => Some(seen),
                 Some(_) => Some(crossterm::event::KeyModifiers::empty()),
             });
-        if arrows && mods.is_some_and(|m| !m.is_empty()) {
+        if let (Some(ps), Some(ns), Some(pr), Some(nr)) = (
+            arrow(self.previous_studio),
+            arrow(self.next_studio),
+            arrow(self.previous_role),
+            arrow(self.next_role),
+        ) && let Some(mods) = mods.filter(|m| !m.is_empty())
+        {
             return (
-                format!(
-                    "{} ↑↓ studio",
-                    mods_label(mods.unwrap_or(crossterm::event::KeyModifiers::ALT))
-                ),
-                "←→ role".to_string(),
+                format!("{} {ps}{ns} studio", mods_label(mods)),
+                format!("{pr}{nr} role"),
             );
         }
         let pair = |a: Option<KeyCombo>, b: Option<KeyCombo>| {
@@ -393,27 +401,32 @@ pub(crate) fn load(path: &Path) -> (PanelConfig, Option<String>) {
         let mut notice = None;
         config.keys.previous_studio = studio_key(
             keys.previous_studio.or(keys.prev_studio),
-            "alt+up",
+            DEFAULT_PREVIOUS_STUDIO,
             "previous_studio",
             path,
             &mut notice,
         );
         config.keys.next_studio = studio_key(
             keys.next_studio,
-            "alt+down",
+            DEFAULT_NEXT_STUDIO,
             "next_studio",
             path,
             &mut notice,
         );
         config.keys.previous_role = studio_key(
             keys.previous_role.or(keys.prev_role),
-            "alt+left",
+            DEFAULT_PREVIOUS_ROLE,
             "previous_role",
             path,
             &mut notice,
         );
-        config.keys.next_role =
-            studio_key(keys.next_role, "alt+right", "next_role", path, &mut notice);
+        config.keys.next_role = studio_key(
+            keys.next_role,
+            DEFAULT_NEXT_ROLE,
+            "next_role",
+            path,
+            &mut notice,
+        );
         if notice.is_some() {
             return (config, notice);
         }

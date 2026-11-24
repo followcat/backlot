@@ -187,7 +187,7 @@ async fn a_non_studio_workspace_clears_the_dock_mark_but_keeps_the_cast() {
     assert!(!app.studio.lot.studio_workspace);
     assert!(
         app.studio.current.is_some(),
-        "the studio stays remembered for Alt+Down re-entry"
+        "the studio stays remembered for Alt+Right re-entry"
     );
     let (sidebar, dock) = regions(&mut app, 120, 40);
     assert!(!dock.contains('▸'), "mark cleared: {dock}");

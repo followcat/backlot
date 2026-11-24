@@ -37,18 +37,22 @@ fn a_direct_binding_and_a_chord_resolve() {
 #[test]
 fn a_collision_with_the_studio_keys_falls_back() {
     let keys = StudioKeys::default();
-    // `alt+up` is `previous_studio`.
-    let (key, notice) = resolve_key(Some("alt+up"), &keys, None, path());
+    // `alt+left` is `previous_studio`.
+    let (key, notice) = resolve_key(Some("alt+left"), &keys, None, path());
     assert_eq!(key, HollywoodKey::Direct(parse_key_combo("alt+y").unwrap()));
     let notice = notice.expect("a collision notices");
     assert!(notice.contains("previous_studio"), "{notice}");
     assert!(notice.contains("config.toml"), "{notice}");
     // The notice names the file and the [keys] entry — never the value.
-    assert!(!notice.contains("alt+up"), "{notice}");
+    assert!(!notice.contains("alt+left"), "{notice}");
     // A `prefix+` chord tail colliding with a studio key refuses too.
-    let (key, notice) = resolve_key(Some("prefix+alt+down"), &keys, None, path());
+    let (key, notice) = resolve_key(Some("prefix+alt+right"), &keys, None, path());
     assert_eq!(key, HollywoodKey::Direct(parse_key_combo("alt+y").unwrap()));
     assert!(notice.unwrap().contains("next_studio"));
+    // `alt+up` is `previous_role`.
+    let (key, notice) = resolve_key(Some("alt+up"), &keys, None, path());
+    assert_eq!(key, HollywoodKey::Direct(parse_key_combo("alt+y").unwrap()));
+    assert!(notice.unwrap().contains("previous_role"));
 }
 
 #[test]

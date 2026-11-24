@@ -76,11 +76,11 @@ fn publish(app: &mut App, value: serde_json::Value) {
 async fn an_unseated_studio_on_a_live_stage_queues_its_focus() {
     let mut app = two_studio_app();
     publish(&mut app, doc_with_beta_api(None));
-    // Alt+Down selects beta-api's studio row; Alt+Right tries to enter
+    // Alt+Right selects beta-api's studio row; Alt+Down tries to enter
     // its cast and queues focus on the live stage.
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current, Some("beta-api".into()));
     alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.studio.current, Some("beta-api".into()));
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.ns_pending_focus,
         Some(StudioKey::local("beta-api")),
@@ -111,8 +111,8 @@ async fn a_queued_focus_leaves_the_overlays_when_it_lands() {
     let mut app = two_studio_app();
     app.area = (120, 24);
     publish(&mut app, doc_with_beta_api(None));
-    alt(&mut app, hc_vt::Key::ArrowDown);
     alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.ns_pending_focus, Some(StudioKey::local("beta-api")));
     // The seat arrives while the Call Sheet is up — the landing
     // still hands the keys to the new pane.
@@ -149,10 +149,10 @@ async fn a_dead_studio_still_reports_no_live_terminal() {
     // ghost's only role is closed and it has no shell — entering its roles
     // from its studio focus reports no live terminal.
     let mut app = two_studio_app();
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    alt(&mut app, hc_vt::Key::ArrowDown);
-    assert_eq!(app.studio.current, Some("ghost".into()));
     alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowRight);
+    assert_eq!(app.studio.current, Some("ghost".into()));
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.ns_pending_focus, None, "nothing to seat — no queue");
     assert!(app.notice.is_some(), "the notice says so");
 }
@@ -161,10 +161,10 @@ async fn a_dead_studio_still_reports_no_live_terminal() {
 
 #[tokio::test]
 async fn the_launcher_lists_the_four_studio_keys_near_the_top() {
-    // `next_agent = alt+down` in herdr — the shadowed action must
-    // name itself on the `next_studio` row.
+    // `next_tab = alt+right` and `next_agent = alt+down` in herdr —
+    // each shadowed action must name itself on its row.
     let config: crate::config::Config =
-        toml::from_str("[keys]\nnext_agent = 'alt+down'\n").unwrap();
+        toml::from_str("[keys]\nnext_tab = 'alt+right'\nnext_agent = 'alt+down'\n").unwrap();
     let mut app = two_studio_app();
     app.live = config.live_keybinds();
     let groups = app.help_groups();
@@ -175,10 +175,10 @@ async fn the_launcher_lists_the_four_studio_keys_near_the_top() {
     assert!(studio <= 3, "the studio group sits near the top: {studio}");
     let rows = &groups[studio].rows;
     for (nav, hint) in [
-        ("previous studio", "alt+up"),
-        ("next studio", "alt+down"),
-        ("previous role", "alt+left"),
-        ("next role", "alt+right"),
+        ("previous studio", "alt+left"),
+        ("next studio", "alt+right"),
+        ("previous role", "alt+up"),
+        ("next role", "alt+down"),
     ] {
         let row = rows
             .iter()
@@ -191,9 +191,18 @@ async fn the_launcher_lists_the_four_studio_keys_near_the_top() {
         .find(|r| r.label.starts_with("next studio"))
         .unwrap();
     assert!(
-        next.label.contains("shadows herdr: next_agent"),
+        next.label.contains("shadows herdr: next_tab"),
         "the shadow note names the herdr action: {}",
         next.label
+    );
+    let next_role = rows
+        .iter()
+        .find(|r| r.label.starts_with("next role"))
+        .unwrap();
+    assert!(
+        next_role.label.contains("shadows herdr: next_agent"),
+        "the shadow note names the herdr action: {}",
+        next_role.label
     );
     // The same four keys are not duplicated in the reference tail.
     assert!(
@@ -247,10 +256,10 @@ async fn an_unset_studio_key_lists_unset_and_stays_inert() {
 
 // ---------- hand-back to herdr ----------
 
-/// herdr with `next_tab` on `alt+down` — the binding the studio key
+/// herdr with `next_tab` on `alt+right` — the binding the studio key
 /// shadows while bound, and releases while `""`.
 fn live_with_alt_next_tab() -> crate::config::LiveKeybindConfig {
-    let config: crate::config::Config = toml::from_str("[keys]\nnext_tab = 'alt+down'\n").unwrap();
+    let config: crate::config::Config = toml::from_str("[keys]\nnext_tab = 'alt+right'\n").unwrap();
     config.live_keybinds()
 }
 
@@ -287,7 +296,7 @@ async fn an_empty_keys_entry_hands_the_key_back_to_herdr() {
     app.live = live_with_alt_next_tab();
     notes_workspace(&mut app);
     app.focus_pane("t20".into());
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.studio.current,
         Some("acme-shop".into()),
@@ -320,7 +329,7 @@ async fn zero_studios_hands_all_four_keys_back_to_herdr() {
     notes_workspace(&mut app);
     app.live = live_with_alt_next_tab();
     app.focus_pane("t20".into());
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.focused.as_deref(),
         Some("t21"),
@@ -357,7 +366,7 @@ async fn plain_mode_herdr_binding_on_the_same_key_wins() {
     let mut app = app_with_tabs(&[("t1", "space-a", "tab-1"), ("t2", "space-a", "tab-2")]);
     app.live = live_with_alt_next_tab();
     app.focus_pane("t1".into());
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.focused.as_deref(),
         Some("t2"),

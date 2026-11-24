@@ -22,19 +22,27 @@ fn a_missing_file_is_defaults() {
     assert_eq!(config.sidebar_width, 26);
     assert_eq!(
         config.keys.previous_studio,
-        crate::config::parse_key_combo("alt+up")
-    );
-    assert_eq!(
-        config.keys.next_studio,
-        crate::config::parse_key_combo("alt+down")
-    );
-    assert_eq!(
-        config.keys.previous_role,
         crate::config::parse_key_combo("alt+left")
     );
     assert_eq!(
-        config.keys.next_role,
+        config.keys.next_studio,
         crate::config::parse_key_combo("alt+right")
+    );
+    assert_eq!(
+        config.keys.previous_role,
+        crate::config::parse_key_combo("alt+up")
+    );
+    assert_eq!(
+        config.keys.next_role,
+        crate::config::parse_key_combo("alt+down")
+    );
+    assert_eq!(
+        config.keys.shortcut_parts(),
+        ("alt ←→ studio".into(), "↑↓ role".into())
+    );
+    assert_eq!(
+        config.keys.footer_tiers(true, true),
+        vec!["alt ←→ studio  ↑↓ role", "alt ←→ studio", "↑↓ role"]
     );
 }
 
@@ -95,13 +103,48 @@ fn studio_keys_parse_unbind_and_fall_back() {
     assert_eq!(config.keys.next_studio, None, "an empty string unbinds");
     assert_eq!(
         config.keys.previous_role,
-        crate::config::parse_key_combo("alt+left"),
+        crate::config::parse_key_combo("alt+up"),
         "an invalid value keeps the default"
     );
     let notice = notice.expect("the ignored key notices once");
     assert!(notice.contains("config.toml"), "{notice}");
     assert!(notice.contains("keys.previous_role"), "{notice}");
     assert!(!notice.contains("nope"), "{notice}");
+}
+
+#[test]
+fn old_layout_override_restores_arrows_and_hints() {
+    let dir = TestDir::new("panel-old-layout");
+    let path = write(
+        &dir,
+        "[keys]\n\
+         previous_studio = \"alt+up\"\n\
+         next_studio = \"alt+down\"\n\
+         previous_role = \"alt+left\"\n\
+         next_role = \"alt+right\"\n",
+    );
+    let (config, notice) = load(&path);
+    assert!(notice.is_none());
+    assert_eq!(
+        config.keys.previous_studio,
+        crate::config::parse_key_combo("alt+up")
+    );
+    assert_eq!(
+        config.keys.next_studio,
+        crate::config::parse_key_combo("alt+down")
+    );
+    assert_eq!(
+        config.keys.previous_role,
+        crate::config::parse_key_combo("alt+left")
+    );
+    assert_eq!(
+        config.keys.next_role,
+        crate::config::parse_key_combo("alt+right")
+    );
+    assert_eq!(
+        config.keys.shortcut_parts(),
+        ("alt ↑↓ studio".into(), "←→ role".into())
+    );
 }
 
 #[test]

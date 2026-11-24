@@ -133,7 +133,7 @@ pub(super) fn render_overlays_and_cursor(
             None if app.studio.lot.studio_workspace => app.studio.current.as_ref(),
             None => None,
         };
-        // wide-01: `←→ role` only has somewhere to go while the
+        // wide-01: `↑↓ role` only has somewhere to go while the
         // current studio cycles ≥2 live members (roles + shells).
         let cast_entries = app
             .studio

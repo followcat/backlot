@@ -50,9 +50,9 @@ async fn studio_focus_separates_sidebar_highlight_from_cast_and_pane_typing() {
     );
     draw_to(&mut app, 120, 24);
 
-    // Alt+Down switches StudioFocus to Studio(night-owl) without moving
+    // Alt+Right switches StudioFocus to Studio(night-owl) without moving
     // the attached typing pane (t1).
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(
         app.studio.focus,
         Some(StudioFocus::Studio(StudioKey::local("night-owl")))
@@ -96,8 +96,8 @@ async fn studio_focus_separates_sidebar_highlight_from_cast_and_pane_typing() {
         "title row is non-selectable and excluded from hit rows"
     );
 
-    // Alt+Right enters night-owl's remembered role (t7) and opens Role menu.
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    // Alt+Down enters night-owl's remembered role (t7) and opens Role menu.
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(app.focused.as_deref(), Some("t7"));
     assert_eq!(
         app.studio.focus,
@@ -188,20 +188,21 @@ async fn alt_arrows_work_across_all_non_text_contexts_and_yield_to_modals() {
     ] {
         let mut app = two_studio_app();
         setup(&mut app);
-        alt(&mut app, hc_vt::Key::ArrowDown);
+        alt(&mut app, hc_vt::Key::ArrowRight);
         assert_eq!(app.studio.current, Some("night-owl".into()));
         assert!(!app.help && app.menu.is_none() && app.navigator.is_none());
         assert!(app.sheet.is_none() && app.peek.is_none());
         assert_eq!(app.mode, crate::app::Mode::Normal);
     }
 
-    // Plain/stage/hollywood/shell workspaces all respond to all four Alt+arrows.
+    // Plain/stage/hollywood/shell workspaces respond to studio keys from anywhere,
+    // then role keys enter the focused studio's remembered role.
     let mut app = alt_app();
     for start in ["t20", "t9", "t40", "t30"] {
         app.focus_pane(start.into());
-        alt(&mut app, hc_vt::Key::ArrowDown);
+        alt(&mut app, hc_vt::Key::ArrowRight);
         assert!(app.studio.current.is_some());
-        alt(&mut app, hc_vt::Key::ArrowLeft);
+        alt(&mut app, hc_vt::Key::ArrowUp);
         assert!(matches!(app.studio.focus, Some(StudioFocus::Role(..))));
     }
 
@@ -216,18 +217,18 @@ async fn alt_arrows_work_across_all_non_text_contexts_and_yield_to_modals() {
             verb: "pause",
         },
     ));
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
     assert!(app.studio_dialog.is_some());
 
     let mut app = two_studio_app();
     app.mode = crate::app::Mode::Resize;
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
 
     let mut app = two_studio_app();
     app.mode = crate::app::Mode::Copy;
-    alt(&mut app, hc_vt::Key::ArrowDown);
+    alt(&mut app, hc_vt::Key::ArrowRight);
     assert_eq!(app.studio.current, Some("acme-shop".into()));
 }
 
@@ -267,12 +268,12 @@ async fn single_studio_single_role_toggles_studio_focus_with_alt_arrows() {
             "t1".into()
         ))
     );
-    alt(&mut app, hc_vt::Key::ArrowUp);
+    alt(&mut app, hc_vt::Key::ArrowLeft);
     assert_eq!(
         app.studio.focus,
         Some(StudioFocus::Studio(StudioKey::local("acme-shop")))
     );
-    alt(&mut app, hc_vt::Key::ArrowRight);
+    alt(&mut app, hc_vt::Key::ArrowDown);
     assert_eq!(
         app.studio.focus,
         Some(StudioFocus::Role(

@@ -231,7 +231,7 @@ async fn a_short_sidebar_scrolls_to_the_selected_machines_row() {
     app.shell_state.workspace_scroll = 0;
     let first = draw_to(&mut app, 120, 20);
     assert!(sidebar_text(&first).contains("acme-shop"), "fixture");
-    // Alt+down lands on host-b's `beta-tools`.
+    // Alt+right lands on host-b's `beta-tools`.
     app.studio_nav(StudioNav::NextStudio);
     assert_eq!(
         app.studio.current.as_ref().map(|key| key.id.as_str()),

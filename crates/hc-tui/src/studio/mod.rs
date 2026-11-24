@@ -164,7 +164,10 @@ impl Studio {
                 self.current = Some(key.clone());
                 self.remembered.insert(key.clone(), member);
                 self.focus = Some(StudioFocus::Role(key, terminal));
-            } else if matches!(self.focus, Some(StudioFocus::Role(..))) {
+            } else {
+                // Moving focus onto a non-studio terminal clears any
+                // prior studio-row selection too so role keys do not
+                // hijack bindings outside a studio workspace.
                 self.focus = None;
             }
         } else if let Some(StudioFocus::Studio(key)) = &self.focus {

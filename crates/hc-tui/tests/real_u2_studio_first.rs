@@ -315,7 +315,7 @@ async fn real_u2_studio_first_screens() {
         if on_actor {
             break;
         }
-        tui.pty.type_keys(b"\x1b[1;3C"); // alt+right
+        tui.pty.type_keys(b"\x1b[1;3B"); // alt+down
     }
     tui.pty.type_keys(&[0x02, b'c']); // prefix+c = new_tab
     let shells = until(

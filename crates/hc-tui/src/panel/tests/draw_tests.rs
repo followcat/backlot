@@ -878,7 +878,7 @@ fn the_mark_paints_only_where_a_studio_workspace_points() {
     }
 }
 
-/// wide-01: `←→ role` only has somewhere to go while the focused
+/// wide-01: `↑↓ role` only has somewhere to go while the focused
 /// studio cycles ≥2 cast entries — a solo cast drops the hint.
 #[test]
 fn a_solo_cast_drops_the_role_hint() {
@@ -909,25 +909,27 @@ fn a_solo_cast_drops_the_role_hint() {
             1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("role"), want, "{cast_entries}: {last}");
+        assert_eq!(last.contains("↑↓ role"), want, "{cast_entries}: {last}");
     }
 }
 
-/// wide-01: the unfocused footer's `↑↓ studio` names a navigation
+/// wide-01: the unfocused footer's `alt ←→ studio` names a navigation
 /// that exists — a lone studio drops the half, two studios keep it.
 #[test]
 fn a_lone_studio_drops_the_studio_hint() {
     let summary = summary();
     let panel = panel(PanelMode::Expanded);
     let area = Rect::new(0, 0, 30, 20);
-    let two = vec![
-        remote(&summary),
-        crate::panel::data::MachineSummary {
-            machine: None,
-            summary: summary.clone(),
-        },
-    ];
-    for (list, want) in [(machines(Some(&summary)), false), (two, true)] {
+    let two = || {
+        vec![
+            remote(&summary),
+            crate::panel::data::MachineSummary {
+                machine: None,
+                summary: summary.clone(),
+            },
+        ]
+    };
+    for (list, want) in [(machines(Some(&summary)), false), (two(), true)] {
         let mut buf = Buffer::empty(area);
         render(
             &mut buf,
@@ -951,8 +953,32 @@ fn a_lone_studio_drops_the_studio_hint() {
             1,
         );
         let last = &lines(&buf, area)[area.height as usize - 1];
-        assert_eq!(last.contains("studio"), want, "{last}");
+        assert_eq!(last.contains("alt ←→ studio"), want, "{last}");
     }
+    let mut buf = Buffer::empty(area);
+    render(
+        &mut buf,
+        area,
+        &two(),
+        |_| true,
+        |_| true,
+        &panel,
+        panel.mode,
+        None,
+        None,
+        2,
+        None,
+        &keys(),
+        None,
+        false,
+        false,
+        true,
+        &Default::default(),
+        &palette(),
+        1,
+    );
+    let last = &lines(&buf, area)[area.height as usize - 1];
+    assert_eq!(last, "alt ←→ studio  ↑↓ role");
 }
 
 /// R3-N2: a director-blocked person is not just its task id in the
