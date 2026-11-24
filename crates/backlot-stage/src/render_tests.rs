@@ -72,7 +72,13 @@ fn a_producer_alert_leads_the_status_block() {
             needs_user: false,
         },
     ));
-    let out = status("acme-shop", &replay(&events), &Default::default(), 10_000);
+    let out = status(
+        "acme-shop",
+        &replay(&events),
+        &Default::default(),
+        10_000,
+        &Default::default(),
+    );
     let alert = out
         .lines()
         .position(|l| l.contains("producer alert: stalled"))
@@ -99,7 +105,13 @@ fn a_producer_alert_leads_the_status_block() {
             needs_user: false,
         },
     ));
-    let out = status("acme-shop", &replay(&events), &Default::default(), 10_000);
+    let out = status(
+        "acme-shop",
+        &replay(&events),
+        &Default::default(),
+        10_000,
+        &Default::default(),
+    );
     assert!(
         out.contains("producer alert: cannot resume"),
         "missing alert:\n{out}"
@@ -142,7 +154,13 @@ fn held_roles_show_the_waiting_line() {
         started(6, "producer"),
         started(7, "director"),
     ];
-    let out = status("acme-shop", &replay(&events), &Default::default(), 10_000);
+    let out = status(
+        "acme-shop",
+        &replay(&events),
+        &Default::default(),
+        10_000,
+        &Default::default(),
+    );
     let writer = out
         .lines()
         .find(|l| l.trim_start().starts_with("writer"))

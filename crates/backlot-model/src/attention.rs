@@ -23,6 +23,17 @@ pub enum AttentionClass {
 }
 
 impl AttentionClass {
+    /// The plain word every surface prints for this class — the panel's
+    /// table, `backlot status` and Hollywood's facts all read it here,
+    /// so no surface invents its own wording.
+    pub fn label(self) -> &'static str {
+        match self {
+            AttentionClass::NeedsYou => "needs you",
+            AttentionClass::Stuck => "stuck",
+            AttentionClass::Info => "info",
+        }
+    }
+
     /// Sort `reason` into its class. `needs_user` is the ledger
     /// attention's own escalation flag — a `rate limited` or
     /// `connection error` episode that exhausted its retries sets it,

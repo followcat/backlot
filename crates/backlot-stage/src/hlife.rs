@@ -298,11 +298,10 @@ impl Stage {
                 ]);
                 let run = self
                     .client
-                    .terminal_run(RunParams {
-                        argv: launch.argv.clone(),
-                        name: Some(HOLLYWOOD_TERMINAL.to_string()),
-                        cwd: Some(cwd),
-                        env: hrole_env(
+                    .terminal_run(hrun_params(
+                        launch.argv.clone(),
+                        cwd,
+                        hrole_env(
                             launch.env.clone(),
                             runner_env,
                             &self.state_dir,
@@ -310,10 +309,7 @@ impl Stage {
                             &self.path_env,
                         ),
                         labels,
-                        no_parent: true,
-                        no_notify: true,
-                        ..RunParams::default()
-                    })
+                    ))
                     .await;
                 match run {
                     Ok(r) => Ok(HRun::Up {
@@ -328,6 +324,50 @@ impl Stage {
                 }
             }
         }
+    }
+}
+
+/// The smallest grid Hollywood's terminal should ever start at: its
+/// answers are read by a person who peeks or focuses `bl-hollywood`, and
+/// a narrow grid (21 columns was seen) wraps them into
+/// unreadable strips (H3).
+pub const MIN_COLS: u16 = 100;
+pub const MIN_ROWS: u16 = 30;
+
+/// hc's default grid for a terminal with no viewer (`docs/parity.md`
+/// § covered-pane sizes: "the core's 200×120 headless size").
+pub const HC_DEFAULT_COLS: u16 = 200;
+pub const HC_DEFAULT_ROWS: u16 = 120;
+
+/// The initial grid Hollywood's `terminal.run` asks for: the minimum, or
+/// hc's default when that is larger. Without it the terminal fell to
+/// whatever a viewer's first attach asked for, which could be under the
+/// floor before anyone read it.
+pub fn hsize() -> hc_proto::terminal::InitialSize {
+    hc_proto::terminal::InitialSize {
+        cols: MIN_COLS.max(HC_DEFAULT_COLS),
+        rows: MIN_ROWS.max(HC_DEFAULT_ROWS),
+    }
+}
+
+/// The exact `terminal.run` Hollywood's launch sends — the argv, cwd,
+/// env, labels and the initial grid, in one place a test can read.
+pub(crate) fn hrun_params(
+    argv: Vec<String>,
+    cwd: String,
+    env: BTreeMap<String, String>,
+    labels: BTreeMap<String, String>,
+) -> RunParams {
+    RunParams {
+        argv,
+        name: Some(HOLLYWOOD_TERMINAL.to_string()),
+        cwd: Some(cwd),
+        env,
+        labels,
+        no_parent: true,
+        no_notify: true,
+        size: Some(hsize()),
+        ..RunParams::default()
     }
 }
 
@@ -357,9 +397,10 @@ pub(crate) fn hrole_env(
     env
 }
 
-/// The folder's durable files: `AGENTS.md` (rewritten every start),
-/// `prompts/hollywood.first.txt` when `devin` starts fresh, and
-/// `memory.md` (created once and never overwritten).
+/// The folder's durable files: `AGENTS.md` (rewritten every start, the
+/// generated CLI reference in place), `prompts/hollywood.first.txt` when
+/// `devin` starts fresh, and `memory.md` (created once and never
+/// overwritten).
 pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -> Result<(), Fail> {
     for sub in [
         "messages",
@@ -373,7 +414,7 @@ pub(crate) fn hprepare_launch(hdir: &Path, runner: &str, resume: Option<&str>) -
             .map_err(|e| Fail::refused(format!("hollywood dir: {e}")))?;
     }
     let agents = hdir.join("AGENTS.md");
-    std::fs::write(&agents, crate::prompts::HOLLYWOOD)
+    std::fs::write(&agents, crate::hwcli::agents_md())
         .map_err(|e| Fail::refused(format!("AGENTS.md: {e}")))?;
     if resume.is_none() && runner == "devin" {
         let line = crate::prompts::first_line(&agents);
