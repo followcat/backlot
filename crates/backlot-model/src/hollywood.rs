@@ -281,6 +281,16 @@ pub enum CardAction {
         /// profile from the role's current one when none is given.
         actor: ActorIdentity,
     },
+    /// Change Hollywood's own actor (`[hollywood]` in config plus a
+    /// fresh restart so the new agent takes over).
+    Setup {
+        runner: String,
+        model: String,
+        #[serde(default)]
+        effort: Option<String>,
+        #[serde(default)]
+        permission_profile: Option<String>,
+    },
 }
 
 impl CardAction {
@@ -295,6 +305,7 @@ impl CardAction {
             | CardAction::Resume { studio, .. }
             | CardAction::Abandon { studio, .. }
             | CardAction::Recast { studio, .. } => studio,
+            CardAction::Setup { .. } => "hollywood",
         }
     }
 
@@ -313,8 +324,58 @@ impl CardAction {
             CardAction::Recast { person, actor, .. } => {
                 format!("recast {person} → {}", crate::recast::identity_text(actor))
             }
+            CardAction::Setup { .. } => {
+                let actor = self.setup_actor().expect("Setup yields actor");
+                format!("setup hollywood → {}", crate::recast::identity_text(&actor))
+            }
         }
     }
+
+    /// Target identity carried by a `Setup` card, defaulting the
+    /// permission profile to `"standard"` when omitted.
+    pub fn setup_actor(&self) -> Option<ActorIdentity> {
+        let CardAction::Setup {
+            runner,
+            model,
+            effort,
+            permission_profile,
+        } = self
+        else {
+            return None;
+        };
+        Some(ActorIdentity {
+            runner: runner.clone(),
+            runner_version: None,
+            model: model.clone(),
+            effort: effort.clone(),
+            permission_profile: permission_profile
+                .clone()
+                .unwrap_or_else(|| "standard".into()),
+        })
+    }
+}
+
+/// Format an identity with spaces around `/` for card display.
+pub fn format_spaced_identity(runner: &str, model: &str, effort: Option<&str>) -> String {
+    match effort {
+        Some(e) if !e.is_empty() => format!("{runner} / {model} / {e}"),
+        _ => format!("{runner} / {model}"),
+    }
+}
+
+/// Render `Hollywood: <old> → <new>` for a `Setup` card.
+pub fn format_setup_transition(
+    old: Option<&ActorIdentity>,
+    runner: &str,
+    model: &str,
+    effort: Option<&str>,
+) -> String {
+    let new = format_spaced_identity(runner, model, effort);
+    let old_str = match old {
+        Some(a) => format_spaced_identity(&a.runner, &a.model, a.effort.as_deref()),
+        None => "(unset)".into(),
+    };
+    format!("Hollywood: {old_str} → {new}")
 }
 
 /// What a card was proposed against — the fact that must still hold
@@ -340,6 +401,9 @@ pub enum CardBase {
     /// The fixed role played this identity — a recast that lands on
     /// another one, or a finished studio, is stale.
     RoleIdentity { actor: ActorIdentity },
+    /// Hollywood's configured identity at proposal time (`None` when
+    /// `[hollywood]` was not yet set).
+    HollywoodIdentity { actor: Option<ActorIdentity> },
 }
 
 // ── Staleness ──────────────────────────────────────────────────
@@ -350,6 +414,10 @@ pub enum CardBase {
 pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>) -> Option<String> {
     let name = action.studio();
     match base {
+        CardBase::HollywoodIdentity { .. } => match action {
+            CardAction::Setup { .. } => None,
+            _ => Some("base does not match the action".into()),
+        },
         CardBase::StudioAbsent => studio
             .is_some()
             .then(|| format!("studio '{name}' exists now")),
@@ -428,6 +496,30 @@ pub fn stale(action: &CardAction, base: &CardBase, studio: Option<&StudioState>)
                 )),
             }
         }
+    }
+}
+
+/// Check a `Setup` card's [`CardBase::HollywoodIdentity`] against the
+/// current configured `[hollywood]` identity (`None` = unset).
+pub fn stale_hollywood(base: &CardBase, current: Option<&ActorIdentity>) -> Option<String> {
+    let CardBase::HollywoodIdentity { actor: expected } = base else {
+        return Some("base does not match setup card".into());
+    };
+    match (expected.as_ref(), current) {
+        (None, None) => None,
+        (None, Some(cur)) => Some(format!(
+            "hollywood is configured as {} now",
+            crate::recast::identity_text(cur)
+        )),
+        (Some(exp), None) => Some(format!(
+            "hollywood config was cleared (expected {})",
+            crate::recast::identity_text(exp)
+        )),
+        (Some(exp), Some(cur)) if crate::recast::same_identity(exp, cur) => None,
+        (Some(_), Some(cur)) => Some(format!(
+            "hollywood is {} now",
+            crate::recast::identity_text(cur)
+        )),
     }
 }
 

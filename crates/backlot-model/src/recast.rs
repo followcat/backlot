@@ -72,7 +72,7 @@ fn check_effort(actor: &ActorIdentity) -> Result<(), Refusal> {
 
 /// A cline model is a `cline-pass/<model>` id; any other names no
 /// provider the adapter knows.
-fn check_model(actor: &ActorIdentity) -> Result<(), Refusal> {
+pub fn check_model(actor: &ActorIdentity) -> Result<(), Refusal> {
     if actor.runner != "cline" {
         return Ok(());
     }

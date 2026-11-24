@@ -188,11 +188,30 @@ pub fn hollywood_section_with_activity(
         cards: state
             .open_cards()
             .take(MAX_OPEN_CARDS)
-            .map(|c| CardSummary {
-                id: format!("c{}", c.seq),
-                studio: cap(c.action.studio()),
-                action: cap(&c.action.label()),
-                why: cap(&c.why),
+            .map(|c| {
+                let action = match (&c.action, &c.base) {
+                    (
+                        crate::hollywood::CardAction::Setup {
+                            runner,
+                            model,
+                            effort,
+                            ..
+                        },
+                        crate::hollywood::CardBase::HollywoodIdentity { actor },
+                    ) => crate::hollywood::format_setup_transition(
+                        actor.as_ref(),
+                        runner,
+                        model,
+                        effort.as_deref(),
+                    ),
+                    _ => c.action.label(),
+                };
+                CardSummary {
+                    id: format!("c{}", c.seq),
+                    studio: cap(c.action.studio()),
+                    action: cap(&action),
+                    why: cap(&c.why),
+                }
             })
             .collect(),
         exchange: exchange(state),
