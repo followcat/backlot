@@ -57,6 +57,23 @@ fn permission_mode(profile: &str) -> Result<&'static str, PlanError> {
     }
 }
 
+/// The commands a Hollywood launch pre-allows — one list, so the
+/// generated CLI reference and the launch argv can never disagree.
+pub fn hollywood_commands() -> &'static [&'static str] {
+    // D17a: exactly the overseer's set — anything else stops at the
+    // prompt, which is the user's to answer, never the stage's.
+    &[
+        "backlot status",
+        "backlot records",
+        "backlot tell producer",
+        "backlot hollywood propose",
+        "backlot hollywood report",
+        "backlot studio new --dry-run",
+        "backlot --help",
+        "backlot help",
+    ]
+}
+
 /// The per-session `--allowedTools` value: `backlot` commands and
 /// reads under the studio's state directory, where the prompts,
 /// messages and requirement files live — plus, per role, the
@@ -78,18 +95,8 @@ pub(crate) fn allowed_tools(studio_dir: &str, role: &str, checks: &[CheckDecl]) 
         rules.push(format!("Bash({cmd} *)"));
     };
     if role == "hollywood" {
-        // D17a: exactly the overseer's set — anything else stops at
-        // the prompt, which is the user's to answer, never the
-        // stage's.
         let mut rules = vec![format!("Read(//{dir}/**)")];
-        for cmd in [
-            "backlot status",
-            "backlot records",
-            "backlot tell producer",
-            "backlot hollywood propose",
-            "backlot hollywood report",
-            "backlot studio new --dry-run",
-        ] {
+        for cmd in hollywood_commands() {
             command(&mut rules, cmd);
         }
         return rules.join(",");

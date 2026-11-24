@@ -5,7 +5,7 @@
 //! hands the runner.
 
 use backlot_model::event::ActorIdentity;
-use backlot_model::hollywood::HWRole;
+use backlot_model::hollywood::{HOLLYWOOD_TERMINAL, HWRole};
 
 use crate::config::HollywoodCfg;
 use crate::hlife::hrole_env;
@@ -353,4 +353,33 @@ fn devin_hollywood_launch_writes_and_passes_a_prompt_file() {
         hfirst_prompt(&hdir, "claude", None).as_deref(),
         Some(format!("Read {} and follow it.", hdir.join("AGENTS.md").display()).as_str())
     );
+}
+
+/// Hollywood's `terminal.run` asks for a grid a person can read: at
+/// least `MIN_COLS` wide and hc's `200×120` default, so a peek or focus
+/// starts from a sane size and the program is never born at a strip
+/// (H3). A narrow size was what left `bl-hollywood` 21 columns wide.
+#[test]
+fn hollywood_starts_at_a_readable_grid() {
+    use crate::hlife::{HC_DEFAULT_COLS, HC_DEFAULT_ROWS, MIN_COLS, MIN_ROWS, hrun_params};
+
+    let params = hrun_params(
+        vec!["claude".into()],
+        "/state/hollywood".into(),
+        std::collections::BTreeMap::new(),
+        std::collections::BTreeMap::new(),
+    );
+    let size = params.size.expect("the run carries an initial size");
+    assert!(
+        size.cols >= MIN_COLS.max(HC_DEFAULT_COLS),
+        "cols {} is under the readable floor",
+        size.cols
+    );
+    assert!(
+        size.rows >= MIN_ROWS.max(HC_DEFAULT_ROWS),
+        "rows {} is under the readable floor",
+        size.rows
+    );
+    // The labels and the name still mark it Hollywood's terminal.
+    assert_eq!(params.name.as_deref(), Some(HOLLYWOOD_TERMINAL));
 }

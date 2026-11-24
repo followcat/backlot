@@ -50,6 +50,32 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   studio, refusing a name already taken. `docs/studio/guide.md` gains a finish/prune/delete/restore
   table.
 
+- **Hollywood's terminal starts at a readable size.** `bl-hollywood`'s `terminal.run` now carries
+  an initial grid of at least 100 columns and hc's `200×120` default, so a person who peeks or
+  focuses it sees its answers instead of a 21-column strip. Peeking stays
+  strictly read-only: a peek attaches as an observer, which never sends a size, so no client view
+  can narrow it — only focusing it into a pane does (H3).
+
+- **Hollywood's AGENTS.md carries a generated CLI reference.** The stage writes one line per
+  command Hollywood may run, with its flags, sliced from the CLI's own usage strings
+  (`args_usage.rs`, `args_hwood.rs`) at every start, and substitutes it for `{{CLI_REFERENCE}}`
+  in the prompt. A drift test regenerates the checked-in copy (`prompts/hollywood-cli.md`) and
+  fails when a usage string changes without it. The prompt says to use the reference and run
+  `--help` only for a command it does not list, so Hollywood never probes its own CLI or blocks
+  on a prompt for it (H2, P5).
+
+- **Hollywood is fed facts, not snapshots.** Every attention Hollywood can read — in
+  `backlot status`, in a notice body, in the status commands it runs — now carries its class
+  (`needs you` / `stuck` / `info`), its age (`raised 2h ago`) and, for a screen snapshot, when the
+  screen was taken (`screen at 14:02, may be stale`). Each role line also carries its current live
+  work state (`working`, `waiting`, `blocked`), read from `<state dir>/live.json`. The stage writes
+  that file on a change and a heartbeat (at most every 5 s), and a reader drops a file older than
+  15 s — after the stage stops, `backlot status` says `stage not running — live state unknown`
+  instead of the last `· working`. Before this, Hollywood read a launch-time sign-in snapshot
+  as the producer's current state and reported a healthy producer as "not signed in". Its prompt
+  now says: decide from the role's current state, never from an old snapshot, and never report
+  `info` bookkeeping as a problem. `AttentionClass::label` is the one wording every surface reads.
+
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported
   status, read and capped like a role's), and — while a permission prompt stands on
