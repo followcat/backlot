@@ -162,16 +162,19 @@ async fn hcard_recast_outcome_explains_when_writer_has_not_started() {
         "writer starts when the director asks for a plan"
     );
 
-    let owed = crate::hnotice::owed(&BTreeMap::new(), &BTreeMap::new(), &hstate, 0);
-    let outcome = owed
+    // A clean `card.done` is passive context (S2): the note rides along
+    // with the next delivery instead of waking Hollywood on its own.
+    let passive = crate::hnotice::passive_items(
+        &BTreeMap::new(),
+        &hstate,
+        &std::collections::BTreeSet::new(),
+    );
+    let outcome = passive
         .iter()
-        .find(|n| n.body.contains("card c1 — done"))
-        .expect("card outcome notice");
-    assert!(
-        outcome
-            .body
-            .contains("writer starts when the director asks for a plan"),
-        "expected card outcome note for Hollywood, got: {}",
-        outcome.body
+        .find(|p| p.text.starts_with("c1 done"))
+        .expect("card c1 passive outcome");
+    assert_eq!(
+        outcome.text,
+        "c1 done — writer starts when the director asks for a plan"
     );
 }
