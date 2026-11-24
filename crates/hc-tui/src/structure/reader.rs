@@ -189,6 +189,14 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
     let mut pending = BTreeMap::<(usize, String), Vec<String>>::new();
     for terminal in rest {
         let (key, label) = crate::project::space_of(terminal);
+        // A finished terminal still tagged into an app space whose layout no
+        // longer lists it belongs to a tab the app closed: the app shows it
+        // nowhere, so it does not come back here as a tab of its own.
+        if terminal.state == "finished"
+            && positions.get(&key).is_some_and(|&at| spaces[at].from_app)
+        {
+            continue;
+        }
         let at = *positions.entry(key.clone()).or_insert_with(|| {
             spaces.push(Space {
                 from_app: false,
@@ -216,9 +224,7 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
             let name = terminal
                 .labels
                 .get("herdr.tab")
-                .filter(|label| {
-                    !(label.len() == 32 && label.bytes().all(|b| b.is_ascii_hexdigit()))
-                })
+                .filter(|label| !is_opaque_tab_id(label))
                 .cloned()
                 .unwrap_or_default();
             tabs.push(Tab {
@@ -258,6 +264,18 @@ pub fn read(terms: &[&Terminal], document: &Value, machine: Option<&str>) -> Vec
         }
     }
     spaces
+}
+
+/// A tab key that is an identity, not a name: an adoption promotion's
+/// 128-bit hex id (creation.rs `opaque_id`) or the Herdr app's own tab id
+/// (`tb` and the same 32 hex digits), which a terminal keeps in
+/// `herdr.tab` after the app drops its tab.
+fn is_opaque_tab_id(label: &str) -> bool {
+    let hex = label
+        .strip_prefix("tb")
+        .filter(|rest| rest.len() == 32)
+        .unwrap_or(label);
+    hex.len() == 32 && hex.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 fn basename(path: &str) -> &str {

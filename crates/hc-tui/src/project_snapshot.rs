@@ -59,11 +59,9 @@ pub(super) fn structured_snapshot_from_spaces(
             });
         }
         let mut tab_ids = Vec::new();
-        let mut tab_number = 0usize;
         let mut workspace_status = AgentStatus::Unknown;
         let mut workspace_priority = 0u8;
-        for tab in ordered {
-            tab_number += 1;
+        for (tab_number, tab) in (1usize..).zip(ordered) {
             let tab_id = tab.id.clone();
             let stored = own.tabs.get(&layout_key(machine, &tab_id));
             let membership = tab
@@ -99,7 +97,11 @@ pub(super) fn structured_snapshot_from_spaces(
                 .collect::<Vec<_>>();
             let name = stored.and_then(|l| l.name.as_deref()).unwrap_or(&tab.name);
             let tab_label = if name.is_empty() {
-                tab_number.to_string()
+                space
+                    .from_app
+                    .then(|| live_tab_title(&tab_members))
+                    .flatten()
+                    .unwrap_or_else(|| tab_number.to_string())
             } else {
                 clean(name)
             };
@@ -265,8 +267,11 @@ pub(super) fn structured_snapshot_from_spaces(
                 if space.custom_name {
                     &space.name
                 } else {
-                    facts
-                        .and_then(|facts| facts.auto_label.as_deref())
+                    space
+                        .from_app
+                        .then(|| live_space_folder(&members, &term_by_id))
+                        .flatten()
+                        .or_else(|| facts.and_then(|facts| facts.auto_label.as_deref()))
                         .unwrap_or(&space.name)
                 }
             })),
@@ -323,6 +328,51 @@ pub(super) fn structured_snapshot_from_spaces(
         },
         layouts,
     )
+}
+
+/// The title an unnamed Herdr-app tab shows, as the app's tab bar does: the
+/// live title of the tab's lead agent (its first live reporter), with
+/// the activity glyph stripped. `None` when the tab has no agent or its
+/// title says nothing beyond the program (empty, a path, `user@host`,
+/// the program's own name), so the caller keeps the tab number.
+fn live_tab_title(members: &[&Terminal]) -> Option<String> {
+    let lead = members.iter().find(|term| is_agent(term))?;
+    let title = crate::chrome::title_text::stripped_terminal_title(&clean(&lead.title))?;
+    let lower = title.to_lowercase();
+    let program_names = lead
+        .status
+        .as_ref()
+        .map(|status| status.app.to_lowercase())
+        .into_iter()
+        .chain(lead.foreground.as_ref().map(|fg| fg.name.to_lowercase()));
+    let telling = !title.starts_with(['~', '/'])
+        && !title.contains('@')
+        && title != lead.address
+        && !program_names.into_iter().any(|name| name == lower);
+    telling.then_some(title)
+}
+
+/// The folder name an unnamed Herdr-app space shows, as the app's spaces list
+/// does: where its first terminal is working now (the foreground
+/// process's folder, else the shell's), so a space follows its agent
+/// rather than the folder it was created in.
+fn live_space_folder<'a>(
+    members: &[String],
+    term_by_id: &BTreeMap<&str, &'a Terminal>,
+) -> Option<&'a str> {
+    members
+        .iter()
+        .filter_map(|id| term_by_id.get(id.as_str()).copied())
+        .find_map(|term| {
+            let cwd = term
+                .foreground
+                .as_ref()
+                .map(|fg| fg.cwd.as_str())
+                .filter(|cwd| !cwd.is_empty())
+                .unwrap_or(term.cwd.as_str());
+            let name = cwd.trim_end_matches('/').rsplit('/').next()?;
+            (!name.is_empty()).then_some(name)
+        })
 }
 
 #[cfg(test)]

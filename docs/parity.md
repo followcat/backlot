@@ -883,6 +883,21 @@ Everything else on the compared surfaces still diffs normally.
   labels (e.g. `zulu`), so hc-tui suppresses only the generated
   32-hex-digit form — otherwise the command pane's tab renders its
   identity as a visible name the reference never shows.
+- **Herdr-app space and tab names.** Deliberate: hc-tui names an unnamed
+  herdr-app space and tab the way the herdr app does, so one layout reads
+  the same in both. The space takes the folder its first terminal works in
+  now (the foreground process's cwd, else the shell's) rather than the
+  folder it was created in. The tab takes its lead agent's terminal title,
+  activity glyph stripped, unless the title is empty, a path, a
+  `user@host`, the terminal address or the program's own name; then it
+  keeps its number. A name someone gave still wins, and spaces and tabs
+  outside the herdr-app document keep the reference rules.
+- **Terminals of a closed herdr-app tab.** Deliberate: when the app closes
+  a tab, its terminals keep `herdr.space`/`herdr.tab` labels that point at
+  an app space the document no longer lists them in. A finished one is not
+  shown, as in the app; a live one stays reachable as an unnamed tab. The
+  app's `tb` + 32-hex tab id is an identity like `opaque_id()` and is
+  suppressed the same way.
 - **Drain-error isolation.** A dead wire's input-drain failure belongs
   to its terminal, never to the pane's next target: `Pane::want` clears
   a retained `close_error` on retarget, and `Parked`/`Drain`/`Closing`
