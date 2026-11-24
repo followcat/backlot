@@ -172,6 +172,10 @@ impl App {
         self.ns_build_editor_check();
         self.studio_editor_check();
         self.synthesize_alerts(Instant::now());
+        // W2: the same publish seam feeds the studio events — a role's
+        // question, a user prompt, a reply, a card, a ready studio or a
+        // stopped stage announces once, keyed by its ledger seq.
+        self.synthesize_studio_events(Instant::now());
         self.share_seen();
         self.reap_exited();
     }

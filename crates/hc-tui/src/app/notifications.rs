@@ -48,6 +48,9 @@ pub(crate) struct NotificationEvent {
     pub workspace_id: Option<String>,
     pub tab_id: Option<String>,
     pub pane_id: Option<String>,
+    /// W2: a studio event's target — the needs-you row its key and click
+    /// open. `None` for a pane alert, whose jump is its `pane_id`.
+    pub studio: Option<crate::hollywood::Target>,
 }
 
 /// A shown or queued toast — the reference `ClientVisibleNotification`.
@@ -145,15 +148,18 @@ impl Notifications {
         true
     }
 
-    /// Retire every notification targeting a dead endpoint or pane.
+    /// Retire every notification targeting a dead endpoint or pane. A
+    /// studio event names neither, so it stays: its evidence is the
+    /// document, and that is retired by the documents themselves.
     pub(super) fn retire(
         &mut self,
         endpoints: &HashSet<ClientEndpointId>,
         panes: &HashSet<String>,
     ) {
         let keep = |event: &NotificationEvent| {
-            endpoints.contains(&event.endpoint_id)
-                && event.pane_id.as_deref().is_none_or(|id| panes.contains(id))
+            event.studio.is_some()
+                || (endpoints.contains(&event.endpoint_id)
+                    && event.pane_id.as_deref().is_none_or(|id| panes.contains(id)))
         };
         self.pending.retain(|pending| keep(&pending.event));
         self.queued.retain(|queued| keep(&queued.event));
@@ -199,7 +205,8 @@ impl App {
                 self.notifications.promote_queued(now);
             }
         }
-        let validate_state = delay > 0 || event.kind == NotificationKind::Finished;
+        let validate_state =
+            event.pane_id.is_some() && (delay > 0 || event.kind == NotificationKind::Finished);
         self.notifications.pending.push(PendingNotification {
             event,
             deadline,
@@ -297,8 +304,12 @@ impl App {
     }
 
     /// `notification_target_is_active`: the event's tab (else workspace) is
-    /// the focused one on its own endpoint's snapshot.
+    /// the focused one on its own endpoint's snapshot. A studio event has
+    /// no pane or tab — its target is the studio surface that is focused.
     fn notification_target_is_active(&self, event: &NotificationEvent) -> bool {
+        if let Some(target) = event.studio.as_ref() {
+            return super::studio_notify::target_is_focused(self, target);
+        }
         if event.endpoint_id != self.projection.active_endpoint_id {
             return false;
         }

@@ -304,6 +304,7 @@ impl App {
             workspace_id: Some(workspace_id),
             tab_id: Some(tab_id),
             pane_id: Some(term.address.clone()),
+            studio: None,
         }
     }
 }

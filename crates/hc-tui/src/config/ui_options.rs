@@ -34,7 +34,8 @@ pub struct UiConfig {
     pub mouse_capture: bool,
     /// Notification sound policy. Default: enabled.
     pub sound: SoundConfig,
-    /// Toast notification delivery and timing. Default: off.
+    /// Toast notification delivery and timing. Default: off (studio
+    /// events still notify unless `toast.studio` is false).
     pub toast: ToastConfig,
     /// Copy text selected with the mouse. Default: true.
     pub copy_on_select: bool,

@@ -73,6 +73,7 @@ mod stage_log;
 mod studio;
 mod studio_dialog;
 mod studio_menu;
+mod studio_notify;
 mod studio_shell;
 mod studio_tree;
 mod synthesize;
@@ -579,6 +580,15 @@ pub struct App {
     /// The first reconcile seeds word baselines silently (herdr-app's
     /// `listed_once`): only post-baseline transitions alert.
     notifications_seeded: bool,
+    /// W2: the studio events already announced — each key is a ledger
+    /// seq, a card id or a studio state, so a republish never repeats.
+    studio_seen: std::collections::HashSet<String>,
+    /// The subscription epoch `studio_seen` belongs to; a fresh core or
+    /// attach reseeds, exactly like the pane baselines.
+    studio_seen_generation: Option<u64>,
+    /// The first non-empty document seeds `studio_seen` silently, so
+    /// events that predate the client are not news.
+    studio_seeded: bool,
     /// The rendered toast's rect — a click focuses its target.
     notification_hit: ratatui::layout::Rect,
     /// OSC 9/99 backend + tmux wrap, detected once from the env.
