@@ -221,6 +221,7 @@ impl Stage {
             .await;
         match sent {
             Ok(_) => {
+                self.taint_ask(studio, w.state, role);
                 crate::stagelog::stage_log!("sent {key} for {}'s permission prompt", role);
                 record(
                     dir,

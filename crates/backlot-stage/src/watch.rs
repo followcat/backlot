@@ -481,6 +481,7 @@ impl Stage {
         self.session_warned.borrow_mut().retain(|(s, r)| keep(s, r));
         self.liveness.borrow_mut().retain(|(s, r), _| keep(s, r));
         self.rate_pace.borrow_mut().retain(|(s, r), _| keep(s, r));
+        self.ask_watch.borrow_mut().retain(|(s, r), _| keep(s, r));
         Ok(())
     }
 
@@ -563,6 +564,7 @@ impl Stage {
             .await;
         match sent {
             Ok(_) => {
+                self.taint_ask(studio, state, role);
                 crate::stagelog::stage_log!("answered folder trust for {role} ({key})");
                 // `enter` is the answer — a `stage.answered` event:
                 // bookkeeping that names the keys the user never saw,

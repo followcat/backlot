@@ -7,6 +7,14 @@ use crate::correct::{self, SeqTarget};
 use crate::event::*;
 use crate::state::*;
 
+fn bump_stage_touch(state: &mut StudioState, role: &str, seq: u64) {
+    let entry = state
+        .role_stage_touch_seq
+        .entry(role.to_string())
+        .or_insert(0);
+    *entry = (*entry).max(seq);
+}
+
 /// Fold one event into the state. Total: a line that would have been
 /// refused at append time is skipped rather than panicking on replay.
 pub fn apply(state: &mut StudioState, event: &Event) {
@@ -132,6 +140,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 *origin = (*origin).min(ts);
             }
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
+            bump_stage_touch(state, role, seq);
         }
         EventKind::RoleLost { role, .. } => {
             if let Some(entry) = state.roles.get_mut(role) {
@@ -139,6 +148,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 entry.since_ms = ts;
                 entry.losses.push(ts);
             }
+            bump_stage_touch(state, role, seq);
         }
         EventKind::RoleClosed { role, reason } => {
             // A deliberate release keeps `actor` and `session_id`: the
@@ -154,6 +164,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 entry.restart = None;
             }
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
+            bump_stage_touch(state, role, seq);
         }
         EventKind::RoleSession { role, session_id } => {
             // A found session id lands on a role the log already
@@ -181,6 +192,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 ts_ms: ts,
             });
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
+            bump_stage_touch(state, role, seq);
         }
         // `held` is the panel's hold on a person: it survives a
         // resume (the hold is what keeps a reopened role desired)
@@ -211,6 +223,7 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 reason: reason.clone(),
             });
             state.targets.insert(seq, SeqTarget::Role(role.clone()));
+            bump_stage_touch(state, role, seq);
         }
         EventKind::ReqVersion {
             version,
@@ -477,17 +490,27 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 .targets
                 .insert(seq, SeqTarget::Message(state.messages.len() - 1));
         }
-        EventKind::MessageDelivered { target } => match state.targets.get(target) {
+        EventKind::MessageDelivered { target } => match state.targets.get(target).cloned() {
             Some(SeqTarget::Message(idx)) => {
-                if let Some(m) = state.messages.get_mut(*idx) {
+                let mut touched_role = None;
+                if let Some(m) = state.messages.get_mut(idx) {
                     m.delivered = true;
                     m.delivered_ms = Some(ts);
+                    touched_role = Some(m.to.clone());
+                }
+                if let Some(role) = touched_role {
+                    bump_stage_touch(state, &role, seq);
                 }
             }
             Some(SeqTarget::Report(idx)) => {
-                if let Some(r) = state.reports.get_mut(*idx) {
+                let mut touched_role = None;
+                if let Some(r) = state.reports.get_mut(idx) {
                     r.delivered = true;
                     r.delivered_ms = Some(ts);
+                    touched_role = Some(r.to.clone());
+                }
+                if let Some(role) = touched_role {
+                    bump_stage_touch(state, &role, seq);
                 }
             }
             _ => {}
@@ -535,11 +558,18 @@ pub fn apply(state: &mut StudioState, event: &Event) {
                 .insert(seq, SeqTarget::Attention(state.attention.len() - 1));
         }
         EventKind::AttentionCleared { target, reason } => {
+            let mut touched_role = None;
             if let Some(SeqTarget::Attention(idx)) = state.targets.get(target)
                 && let Some(a) = state.attention.get_mut(*idx)
             {
                 a.open = false;
                 a.cleared_reason = reason.clone();
+                if reason.as_deref().is_some_and(|r| r.starts_with("sent ")) {
+                    touched_role = Some(a.role.clone());
+                }
+            }
+            if let Some(role) = touched_role {
+                bump_stage_touch(state, &role, seq);
             }
         }
         // A stage answer lands on a role the log already knows —
@@ -550,6 +580,15 @@ pub fn apply(state: &mut StudioState, event: &Event) {
             if let Some(entry) = state.roles.get_mut(role) {
                 entry.stage_answer_ms = Some(ts);
             }
+            bump_stage_touch(state, role, seq);
+        }
+        EventKind::AskAnswered { role, target } => {
+            state.ask_answers.push(AskAnswerRecord {
+                seq,
+                role: role.clone(),
+                target: *target,
+                ts_ms: ts,
+            });
         }
         EventKind::RoleRefused { .. } => {}
         EventKind::RoleProgress { role, text, .. } => {

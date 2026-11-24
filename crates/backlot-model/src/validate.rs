@@ -97,6 +97,35 @@ pub fn validate(state: &StudioState, new: &NewEvent) -> Result<(), Refusal> {
                 Err(Refusal::NoRole(role.clone()))
             }
         }
+        // `ask.answered` marks one open `tell user` from `role` as
+        // answered in that role's terminal.
+        EventKind::AskAnswered { role, target } => {
+            require_studio(state)?;
+            match state.targets.get(target) {
+                Some(SeqTarget::Message(idx)) => {
+                    let m = &state.messages[*idx];
+                    if m.from != *role
+                        || m.to != "user"
+                        || m.dropped
+                        || m.purpose.is_some()
+                        || m.source_seq.is_some()
+                    {
+                        return Err(Refusal::NoAsk {
+                            role: role.clone(),
+                            target: *target,
+                        });
+                    }
+                    if crate::summary_build::is_ask_answered(state, role, m.seq) {
+                        return Err(Refusal::AskAnswered(*target));
+                    }
+                    Ok(())
+                }
+                _ => Err(Refusal::NoAsk {
+                    role: role.clone(),
+                    target: *target,
+                }),
+            }
+        }
         // Reopening takes a closed person with a session to resume —
         // and a free terminal name: a recast reuses `bl-<studio>-<task>`,
         // so a live sibling actor on the same task blocks it.

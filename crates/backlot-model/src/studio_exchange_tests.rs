@@ -538,3 +538,186 @@ fn studio_pending_tell_tracks_undelivered_user_messages_only() {
     state.messages.last_mut().unwrap().delivered = true;
     assert!(!build(&state).pending_tell);
 }
+
+#[test]
+fn ask_answered_clears_asks_without_hiding_the_exchange_question() {
+    let mut events = base_events();
+    events.push(ev(4, "producer", role_started("producer")));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "what should we build?".into());
+
+    let before = replay(&events);
+    let sum_before = summary_with_exchange(
+        &[("acme-shop".into(), before.clone())],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        1,
+    )
+    .studios
+    .remove(0);
+    let prod_before = sum_before
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .unwrap();
+    assert_eq!(prod_before.asks.as_deref(), Some("what should we build?"));
+
+    events.push(ev(
+        11,
+        "stage",
+        EventKind::AskAnswered {
+            role: "producer".into(),
+            target: 10,
+        },
+    ));
+    let after = replay(&events);
+    assert_eq!(after.ask_answers.len(), 1);
+    let sum_after = summary_with_exchange(
+        &[("acme-shop".into(), after)],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        2,
+    )
+    .studios
+    .remove(0);
+    let prod_after = sum_after
+        .roles
+        .iter()
+        .find(|r| r.role == "producer")
+        .unwrap();
+    assert!(prod_after.asks.is_none(), "{:?}", prod_after.asks);
+    assert_eq!(sum_after.exchange.len(), 1);
+    assert_eq!(sum_after.exchange[0].seq, 10);
+    assert_eq!(sum_after.exchange[0].text, "what should we build?");
+}
+
+#[test]
+fn restart_recast_resume_and_progress_after_ask_do_not_clear_it() {
+    let mut events = base_events();
+    events.push(ev(4, "producer", role_started("producer")));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(
+        11,
+        "producer",
+        EventKind::RoleProgress {
+            role: "producer".into(),
+            task: None,
+            text: "waiting on answer".into(),
+        },
+    ));
+    events.push(ev(
+        12,
+        "user",
+        EventKind::RoleRestart {
+            role: "producer".into(),
+            fresh: false,
+            reason: None,
+        },
+    ));
+    events.push(ev(
+        13,
+        "user",
+        EventKind::RoleRecast {
+            role: "producer".into(),
+            actor: crate::event::ActorIdentity {
+                runner: "fake".into(),
+                runner_version: None,
+                model: "m".into(),
+                effort: Some("high".into()),
+                permission_profile: "standard".into(),
+            },
+            reason: Some("new model".into()),
+            card: None,
+        },
+    ));
+    events.push(ev(
+        14,
+        "stage",
+        EventKind::RoleResumed {
+            role: "producer".into(),
+            terminal: Some("bl-acme-shop-producer".into()),
+            session_id: Some("s-prod".into()),
+            actor: None,
+            reason: Some(crate::event::RECOVERED.into()),
+        },
+    ));
+
+    let state = replay(&events);
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "what should we build?".into());
+    let studio = summary_with_exchange(
+        &[("acme-shop".into(), state.clone())],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        1,
+    )
+    .studios
+    .remove(0);
+    let producer = studio.roles.iter().find(|r| r.role == "producer").unwrap();
+    assert_eq!(producer.asks.as_deref(), Some("what should we build?"));
+    assert_eq!(
+        state.role_stage_touch_seq.get("producer").copied(),
+        Some(14)
+    );
+}
+
+#[test]
+fn role_stage_touch_seq_tracks_terminal_writes_and_lifecycle_since_ask() {
+    let mut events = base_events();
+    events.push(ev(4, "producer", role_started("producer")));
+    // Message queued BEFORE the ask (seq 5), then delivered AFTER the ask (seq 12).
+    events.push(ev(
+        5,
+        "director",
+        EventKind::MessageQueued {
+            to: "producer".into(),
+            file: Some("messages/5-hi.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    events.push(ev(12, "stage", EventKind::MessageDelivered { target: 5 }));
+    let state = replay(&events);
+    assert_eq!(
+        state.role_stage_touch_seq.get("producer").copied(),
+        Some(12)
+    );
+}

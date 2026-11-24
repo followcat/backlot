@@ -159,6 +159,7 @@ impl Stage {
                             .await;
                         match sent {
                             Ok(_) => {
+                                self.taint_ask(studio, w.state, role);
                                 eprintln!(
                                     "stage: sent '{:?}' to {role} after its connection error",
                                     ratelimit::CONTINUE
@@ -173,6 +174,9 @@ impl Stage {
                             }
                             Err(e) if crate::sendfail::retryable(&e) => {
                                 let refusal = crate::sendfail::refusal(&e);
+                                if !refusal.not_typed() {
+                                    self.taint_ask(studio, w.state, role);
+                                }
                                 eprintln!(
                                     "stage: connection retry to {role} not delivered ({}), retrying later",
                                     refusal.text()

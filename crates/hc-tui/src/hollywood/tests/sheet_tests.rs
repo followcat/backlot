@@ -169,3 +169,71 @@ fn wait_targets_are_machine_qualified() {
         ]
     );
 }
+
+#[test]
+fn ask_answered_drops_asks_and_waiting_count_while_exchange_keeps_question() {
+    use backlot_model::event::EventKind;
+    use backlot_model::state::replay;
+    use backlot_model::summary::summary_with_exchange;
+    use backlot_model::testkit::{base_events, ev, role_started};
+    use std::collections::BTreeMap;
+
+    let mut events = base_events();
+    events.push(ev(4, "stage", role_started("producer")));
+    events.push(ev(
+        10,
+        "producer",
+        EventKind::MessageQueued {
+            to: "user".into(),
+            file: Some("messages/10-q.md".into()),
+            purpose: None,
+            source_seq: None,
+        },
+    ));
+    let mut snippets = BTreeMap::new();
+    snippets.insert(("acme-shop".into(), 10), "what should we build?".into());
+
+    let before = summary_with_exchange(
+        &[("acme-shop".into(), replay(&events))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        1,
+    );
+    let before_machines = machines(Some(&before));
+    let waits_before = waiting_items(&before_machines, &status(&[], &[]));
+    assert!(
+        waits_before
+            .iter()
+            .any(|w| matches!(w, Wait::Role(r) if r.asks && r.role.role == "producer"))
+    );
+
+    events.push(ev(
+        11,
+        "stage",
+        EventKind::AskAnswered {
+            role: "producer".into(),
+            target: 10,
+        },
+    ));
+    let after = summary_with_exchange(
+        &[("acme-shop".into(), replay(&events))],
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+        &snippets,
+        2,
+    );
+    let after_machines = machines(Some(&after));
+    let waits_after = waiting_items(&after_machines, &status(&[], &[]));
+    assert!(
+        !waits_after
+            .iter()
+            .any(|w| matches!(w, Wait::Role(r) if r.role.role == "producer" && r.asks))
+    );
+    assert_eq!(after.studios[0].exchange.len(), 1);
+    assert_eq!(after.studios[0].exchange[0].text, "what should we build?");
+}

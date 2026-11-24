@@ -86,14 +86,15 @@ impl Stage {
             .roles
             .get(w.role)
             .and_then(|r| r.session_id.as_deref());
+        let signal_tail = session.map(|_| signals::tail(&signals::signals_path(w.dir, w.role)));
         let (signal, request, signal_state) = session
-            .map(|sid| {
-                let tail = signals::tail(&signals::signals_path(w.dir, w.role));
+            .zip(signal_tail.as_deref())
+            .map(|(sid, tail)| {
                 let answered = signals::answered_requests(w.dir, w.state, w.role);
                 (
-                    signals::last_work(&tail, sid),
-                    signals::pending_request(&tail, sid, &answered),
-                    signals::state(&tail, sid, &answered),
+                    signals::last_work(tail, sid),
+                    signals::pending_request(tail, sid, &answered),
+                    signals::state(tail, sid, &answered),
                 )
             })
             .unwrap_or((None, None, None));
@@ -126,7 +127,17 @@ impl Stage {
         self.rate_limit(studio, w, &text, screen_work, now_ms)
             .await?;
         self.connection_error(studio, w, &text, screen_work, now_ms)
-            .await
+            .await?;
+        self.check_ask_answered(
+            studio,
+            w.dir,
+            w.state,
+            w.role,
+            w.runner,
+            session,
+            signal_tail.as_deref(),
+            work,
+        )
     }
 
     /// `attention.raised` with the screen saved to

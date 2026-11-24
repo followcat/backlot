@@ -134,6 +134,22 @@ pub fn last_work(tail: &str, session_id: &str) -> Option<Signal> {
         .find(|s| s.work().is_some())
 }
 
+/// Whether `tail` contains at least one parseable signal for
+/// `session_id`.
+pub fn has_session_signal(tail: &str, session_id: &str) -> bool {
+    tail.lines().any(|line| parse(line, session_id).is_some())
+}
+
+/// The newest `UserPromptSubmit` hook signal (including `agy`'s
+/// `PreInvocation`, which [`crate::hook`] normalizes onto this name)
+/// for `session_id` in `tail`, if any.
+pub fn last_prompt_submit(tail: &str, session_id: &str) -> Option<Signal> {
+    tail.lines()
+        .rev()
+        .filter_map(|line| parse(line, session_id))
+        .find(|s| s.event == "UserPromptSubmit" || s.event == "PreInvocation")
+}
+
 /// `true` for a line that is (or was) a permission prompt: the
 /// `PermissionRequest` itself or its `permission_prompt` chime.
 impl Signal {

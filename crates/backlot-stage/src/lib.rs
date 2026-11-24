@@ -9,6 +9,7 @@ mod args_source;
 mod args_studio;
 mod args_task;
 mod args_usage;
+mod ask_answer;
 mod checkrun;
 mod checks;
 mod checkwork;
@@ -97,6 +98,10 @@ mod workareas;
 
 #[cfg(test)]
 mod act_tests;
+#[cfg(test)]
+mod ask_answer_guards_tests;
+#[cfg(test)]
+mod ask_answer_tests;
 #[cfg(test)]
 mod ask_tests;
 #[cfg(test)]

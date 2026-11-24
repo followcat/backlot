@@ -535,6 +535,17 @@ pub struct RecastRecord {
     pub ts_ms: u64,
 }
 
+/// An `ask.answered` record: the stage saw `role` start a new turn in
+/// its terminal after the `tell user` at `target`, clearing the
+/// waiting indicator while keeping the question in the exchange.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AskAnswerRecord {
+    pub seq: u64,
+    pub role: String,
+    pub target: u64,
+    pub ts_ms: u64,
+}
+
 /// The newest ledger event written by a role (`event.by.role`), used
 /// as ledger liveness evidence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -572,6 +583,13 @@ pub struct StudioState {
     /// a fixed role wins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recasts: Vec<RecastRecord>,
+    /// `ask.answered` records, in log order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ask_answers: Vec<AskAnswerRecord>,
+    /// Role key → highest seq where the stage sent into that role's
+    /// terminal or changed its lifecycle since an ask.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub role_stage_touch_seq: BTreeMap<String, u64>,
     /// `studio.finished`; `Some` means the studio ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finished: Option<FinishRecord>,
