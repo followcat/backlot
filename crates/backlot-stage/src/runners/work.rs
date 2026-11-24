@@ -11,8 +11,12 @@ use super::prompt::joined;
 use crate::watch::trust_dialog;
 
 /// `runner`'s current state from the terminal's visible text.
+/// Checked in order: runner-specific `blocked` markers, D2's generic
+/// fallback dialog rule (before `working` because pickers such as agy
+/// and claude keep `esc to cancel`/`interrupt` visible on the bottom
+/// bar), `working` markers, then `Waiting`.
 pub(crate) fn work_state(runner: &str, screen: &str) -> Work {
-    if blocked(runner, screen) {
+    if blocked(runner, screen) || super::dialog::generic_dialog(screen) {
         return Work::Blocked;
     }
     if working(runner, screen) {

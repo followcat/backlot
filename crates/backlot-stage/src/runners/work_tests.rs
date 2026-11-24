@@ -140,12 +140,17 @@ fn cursor_blocked() {
                   \x20   Run Everything (shift+tab)\n\
                   \x20   Skip & tell the agent what to do instead (esc or n)\n";
     assert_eq!(work_state("cursor", screen), Work::Blocked);
-    // Without the option cursor or the `Run Everything` footer the
-    // picker is not up.
-    for cut in ["→ Run (once) (y)", "Run Everything", "(shift+tab)"] {
-        assert_eq!(
-            work_state("cursor", &screen.replacen(cut, "", 1)),
-            Work::Waiting,
+    // Without the option cursor the picker is waiting; without the
+    // `Run Everything` footer `cursor_approval_picker` itself no
+    // longer claims it (though D2's generic rule still blocks on the
+    // multi-option picker).
+    assert_eq!(
+        work_state("cursor", &screen.replacen("→ Run (once) (y)", "", 1)),
+        Work::Waiting
+    );
+    for cut in ["Run Everything", "(shift+tab)"] {
+        assert!(
+            !super::work::cursor_approval_picker(&screen.replacen(cut, "", 1)),
             "without {cut:?}"
         );
     }
