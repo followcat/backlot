@@ -41,9 +41,12 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   (`hollywood replied: <headline>`), an open card (`card waiting: <action>`), a studio every
   task is done on (`acme-shop is ready to finish`) and a stage that stopped with live studios
   (`stage stopped on host-a`). Each event rides the existing settle → queue → TTL pipeline with
-  the same `[ui.sound]` and `[ui.toast]` config, and fires once per ledger seq: the first
-  document after start seeds silently and a reconnect reseeds, so a restart never replays old
-  news. A new `[ui.toast] studio = false` (default `true`, backlot-only) turns them off;
+  the same `[ui.sound]` and `[ui.toast]` config, fires once per ledger seq (the first document
+  after start seeds silently, and a reconnect reseeds), and is suppressed when its target is
+  already focused, exactly as a watched pane is. The toast's key (`prefix+o`) or a click opens
+  the row's target — the role's terminal, `bl-hollywood`, the Call Sheet on that card, the
+  studio, or the dock's `stage stopped` row (selected, never started: `s` stays the person's
+  press). A new `[ui.toast] studio = false` (default `true`, backlot-only) turns them off;
   `--plain` emits nothing.
 
 - **The lot shows who runs on what.** Every person row in the studio dock now carries a

@@ -10,12 +10,26 @@ use std::time::Instant;
 
 impl App {
     /// `focus_visible_notification` (`prefix+o`): dismiss, promote, then
-    /// focus the toast's pane. A non-local endpoint reports unavailable
-    /// and keeps the toast, like the reference's offline path.
+    /// focus the toast's pane. A studio event has no pane — its target is
+    /// the needs-you row, opened the same way Enter on that row would. A
+    /// non-local endpoint reports unavailable and keeps the toast, like
+    /// the reference's offline path.
     pub(super) fn focus_visible_notification(&mut self) {
         let Some(notification) = self.notifications.visible.as_ref() else {
             return;
         };
+        if notification.event.studio.is_some() {
+            let notification = self
+                .notifications
+                .visible
+                .take()
+                .expect("checked visible notification");
+            self.notifications.promote_queued(Instant::now());
+            if let Some(target) = notification.event.studio.clone() {
+                self.studio_notify_open(&target);
+            }
+            return;
+        }
         if notification.event.pane_id.is_some()
             && !self.endpoint_is_online(&notification.event.endpoint_id)
         {
@@ -42,6 +56,145 @@ impl App {
             self.mark_active_seen();
             self.persist_focus();
             self.sync_target();
+        }
+    }
+
+    /// A studio event's jump: open the row's own target. The panel and
+    /// Call Sheet jumps select the row without running its key — the
+    /// person presses `s`/`a` there themselves.
+    pub(super) fn studio_notify_open(&mut self, target: &crate::hollywood::Target) {
+        use crate::hollywood::Target;
+        match target.clone() {
+            Target::Prompt(studio, role) | Target::Role(studio, role) => {
+                match self.studio_role_terminal(&studio, &role) {
+                    Some(terminal) => {
+                        self.hollywood_leave_if_open();
+                        self.focus_pane(terminal);
+                    }
+                    None => self.show_notice("Studio", "the role has no terminal to focus"),
+                }
+            }
+            Target::Hollywood => match self.hollywood_live_terminal() {
+                Some(terminal) => {
+                    self.hollywood_leave_if_open();
+                    self.focus_pane(terminal);
+                }
+                None => self.show_notice(
+                    "Hollywood",
+                    "bl-hollywood is not running — the stage starts it",
+                ),
+            },
+            Target::Card(id) => {
+                // Expand the Call Sheet on that card.
+                self.hollywood.mode = crate::hollywood::LayerMode::Expanded;
+                self.hollywood.selected = Some(Target::Card(id));
+                self.hollywood.editing = false;
+                self.hollywood.scroll = 0;
+                self.studio.lot.counts.unread = 0;
+            }
+            Target::Ready(key) | Target::Tell(key) => self.focus_studio(&key),
+            Target::Stage(machine, offline) => {
+                self.studio_notify_stage(&machine, offline);
+            }
+            Target::Talk(seq) => self.run_action(crate::studio_cmds::hollywood_show(seq)),
+            Target::Headline => self.hollywood_headline_open(),
+            // The remaining targets are not studio events today: a
+            // studio frame, the new-studio entry, the title, the calm
+            // row, the input line and the setup hint stay inert here.
+            Target::NewStudio
+            | Target::Studio(_)
+            | Target::Title
+            | Target::Calm
+            | Target::Input
+            | Target::Setup => {}
+        }
+    }
+
+    /// The role's live terminal from the aggregate — already
+    /// machine-qualified for a remote studio.
+    fn studio_role_terminal(
+        &self,
+        studio: &crate::studio::StudioKey,
+        role: &str,
+    ) -> Option<String> {
+        let machines = self.panel_summaries();
+        crate::panel::data::studio(&machines, studio).and_then(|found| {
+            found
+                .studio
+                .roles
+                .iter()
+                .find(|r| r.role == role)
+                .and_then(|r| r.terminal.clone())
+        })
+    }
+
+    /// This core's live `bl-hollywood` address.
+    fn hollywood_live_terminal(&self) -> Option<String> {
+        self.view
+            .inventory
+            .terminals()
+            .values()
+            .find(|t| {
+                t.state == "live"
+                    && !t.address.contains('/')
+                    && t.name.as_deref() == Some(backlot_model::hollywood::HOLLYWOOD_TERMINAL)
+            })
+            .map(|t| t.address.clone())
+    }
+
+    /// Collapse the expanded Call Sheet before a jump focuses a pane —
+    /// the same leave the sheet's own Enter takes.
+    fn hollywood_leave_if_open(&mut self) {
+        if self.hollywood.expanded() {
+            self.hollywood.mode = crate::hollywood::LayerMode::Collapsed;
+            self.hollywood.editing = false;
+            self.hollywood.view = None;
+        }
+    }
+
+    /// A stopped stage's jump: land the dock on its `stage stopped` row,
+    /// focused and revealed — never start it. `s` on that row is the
+    /// person's press.
+    fn studio_notify_stage(&mut self, machine: &Option<String>, offline: bool) {
+        if offline {
+            // A lost machine has no stage row to select; say where it is.
+            self.show_notice(
+                "Machine",
+                &match machine {
+                    Some(name) => format!("{name}: unreachable"),
+                    None => "unreachable".to_string(),
+                },
+            );
+            return;
+        }
+        self.panel.mode = crate::panel::PanelMode::Expanded;
+        self.panel.focused = true;
+        self.panel.editing = false;
+        let target = crate::panel::Target::Stage(machine.clone());
+        self.panel.selected = Some(target.clone());
+        self.panel.selected_row = self.panel_targets().iter().position(|t| *t == target);
+        // Reveal the row in the scrolled body, the same arithmetic
+        // `panel_move` runs.
+        if let Some(index) = self.panel.selected_row {
+            let body_height = self.panel_hits.body.height.max(1);
+            let machines = self.panel_summaries();
+            let rows = crate::panel::rows(
+                &machines,
+                |m| crate::panel::data::stage_running(&self.view, m),
+                |m| self.machine_reachable(m),
+                &self.panel,
+                self.panel_mode_at(self.area.0),
+                self.studio.current.as_ref(),
+                self.panel_hits.body.height,
+            );
+            let heights: Vec<u16> = rows.iter().skip(1).map(|r| r.height()).collect();
+            self.panel.scroll = crate::chrome::scroll::list_scroll_start_to_reveal(
+                &heights,
+                &[],
+                body_height,
+                self.panel.scroll,
+                index.saturating_sub(1),
+            );
         }
     }
 

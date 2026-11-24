@@ -1,9 +1,13 @@
-//! W2: the studio events the documents imply become notifications —
-//! seeded silently, one per ledger identity, and never repeated by a
-//! republish. Neutral fixtures only (`acme-shop`, `alice`, `host-a`).
+//! W2: the studio events the documents imply become notifications,
+//! each once per ledger identity, seeded silently, suppressible by the
+//! config switch and by a focused target, and each opening its own
+//! needs-you row. Neutral fixtures only (`acme-shop`, `alice`,
+//! `host-a`).
 
-use super::m4s2::{app_alerts, notification_count};
+use super::m4s2::{app_alerts, notification_count, pending, visible_title};
 use super::*;
+use crate::hollywood::{LayerMode, Target};
+use crate::studio::StudioKey;
 use hc_proto::watch::{DocKey, Document};
 use serde_json::{Value, json};
 
@@ -71,7 +75,8 @@ fn the_fixtures_parse() {
 /// An app in studio mode with a live stage and `bl-hollywood`, herdr
 /// toasts at zero settle, and the given document already published —
 /// which seeds the studio events silently. The focus sits on `t5`, an
-/// ordinary terminal outside every studio.
+/// ordinary terminal outside every studio, so no target starts focused
+/// (and therefore suppressed) unless a test moves it there.
 fn app_with(value: Value) -> App {
     let mut app = app_alerts();
     app.set_plain(false);
@@ -243,6 +248,27 @@ async fn a_stopped_stage_with_live_studios_fires_once() {
     assert_eq!(notification_count(&app), 1);
 }
 
+#[tokio::test]
+async fn a_focused_target_suppresses_its_event() {
+    let mut app = app_with(seeded_doc());
+    // The producer's terminal is focused when its new question lands.
+    app.focused = Some("t1".into());
+    publish(&mut app, every_kind_doc());
+    // The ask was suppressed; the unfocused prompt still fired.
+    assert!(
+        !titles(&app).iter().any(|t| t.starts_with("producer asks:")),
+        "a focused target's event must not toast: {:?}",
+        titles(&app)
+    );
+    assert!(
+        titles(&app)
+            .iter()
+            .any(|t| t.starts_with("director needs you:")),
+        "an unfocused target still fires: {:?}",
+        titles(&app)
+    );
+}
+
 /// The usual three roles, the producer carrying an unanswered question.
 fn roles_with_ask(question: &str) -> Value {
     json!([
@@ -294,4 +320,142 @@ async fn the_config_switch_turns_it_off() {
         "switch on again fires: {:?}",
         titles(&app)
     );
+}
+
+/// The toast's jump: `focus_visible_notification` on a studio event
+/// opens its row's target. Each event is delivered directly so the jump
+/// under test is unambiguous.
+fn toast_of(app: &mut App, target: Target, title: &str) {
+    app.notifications.visible = None;
+    app.notifications.queued.clear();
+    app.notifications.pending.clear();
+    let event = crate::app::notifications::NotificationEvent {
+        kind: crate::app::notifications::NotificationKind::NeedsAttention,
+        title: title.into(),
+        body: None,
+        sound: None,
+        agent: None,
+        endpoint_id: crate::chrome::snapshot::ClientEndpointId::Local,
+        workspace_id: None,
+        tab_id: None,
+        pane_id: None,
+        studio: Some(target),
+    };
+    app.notifications.visible = Some(crate::app::notifications::Notification {
+        event,
+        deadline: Instant::now() + std::time::Duration::from_secs(60),
+    });
+}
+
+#[tokio::test]
+async fn a_role_question_jumps_to_the_role_terminal() {
+    let mut app = app_with(seeded_doc());
+    app.focused = Some("t4".into());
+    toast_of(
+        &mut app,
+        Target::Role(StudioKey::local("acme-shop"), "director".into()),
+        "director needs you",
+    );
+    app.focus_visible_notification();
+    assert_eq!(app.focused.as_deref(), Some("t2"));
+    assert!(
+        app.notifications.visible.is_none(),
+        "the toast is dismissed"
+    );
+}
+
+#[tokio::test]
+async fn a_hollywood_question_jumps_to_its_terminal() {
+    let mut app = app_with(seeded_doc());
+    app.focused = Some("t1".into());
+    toast_of(&mut app, Target::Hollywood, "hollywood needs you");
+    app.focus_visible_notification();
+    assert_eq!(app.focused.as_deref(), Some("t10"));
+}
+
+#[tokio::test]
+async fn a_card_jump_opens_the_call_sheet_on_that_card() {
+    let mut app = app_with(seeded_doc());
+    app.hollywood.mode = LayerMode::Collapsed;
+    app.hollywood.selected = None;
+    toast_of(&mut app, Target::Card("c3".into()), "card waiting");
+    app.focus_visible_notification();
+    assert_eq!(app.hollywood.mode, LayerMode::Expanded);
+    assert_eq!(app.hollywood.selected, Some(Target::Card("c3".into())));
+}
+
+#[tokio::test]
+async fn a_ready_studio_jump_focuses_the_studio() {
+    let mut app = app_with(seeded_doc());
+    app.focused = Some("t10".into());
+    app.studio.current = None;
+    // No remembered member yet: the landing is the producer.
+    app.studio.remembered.clear();
+    toast_of(
+        &mut app,
+        Target::Ready(StudioKey::local("acme-shop")),
+        "acme-shop is ready to finish",
+    );
+    app.focus_visible_notification();
+    assert_eq!(app.studio.current, Some(StudioKey::local("acme-shop")));
+    assert_eq!(app.focused.as_deref(), Some("t1"));
+}
+
+#[tokio::test]
+async fn a_ready_studio_jump_returns_to_the_remembered_person() {
+    // The studio was left on the director — the jump respects that,
+    // exactly as `focus_studio` does everywhere.
+    let mut app = app_with(seeded_doc());
+    app.studio
+        .remembered
+        .insert(StudioKey::local("acme-shop"), "director".into());
+    toast_of(
+        &mut app,
+        Target::Ready(StudioKey::local("acme-shop")),
+        "acme-shop is ready to finish",
+    );
+    app.focus_visible_notification();
+    assert_eq!(app.focused.as_deref(), Some("t2"));
+}
+
+#[tokio::test]
+async fn a_stopped_stage_jump_selects_the_dock_row_without_starting_it() {
+    let mut app = app_with(seeded_doc());
+    drop_terminal(&mut app, "t9");
+    app.reconcile_published_view();
+    let before = app.actions.pending.len();
+    toast_of(
+        &mut app,
+        Target::Stage(None, false),
+        "stage stopped on Local",
+    );
+    app.focus_visible_notification();
+    assert!(app.panel.focused, "the dock takes the keys");
+    assert_eq!(app.panel.mode, crate::panel::PanelMode::Expanded);
+    assert_eq!(app.panel.selected, Some(crate::panel::Target::Stage(None)));
+    assert_eq!(
+        app.actions.pending.len(),
+        before,
+        "a jump never starts the stage"
+    );
+}
+
+#[tokio::test]
+async fn a_jump_never_attaches_or_spawns() {
+    // Guard: the jump path runs no action and needs no network — the
+    // fixture's attach opener stays pending through every kind.
+    let mut app = app_with(seeded_doc());
+    pending(&mut app);
+    let before = app.actions.pending.len();
+    for target in [
+        Target::Hollywood,
+        Target::Card("c3".into()),
+        Target::Ready(StudioKey::local("acme-shop")),
+        Target::Stage(None, false),
+    ] {
+        toast_of(&mut app, target, "x");
+        app.focus_visible_notification();
+    }
+    assert_eq!(app.actions.pending.len(), before);
+    assert_eq!(visible_title(&app), None);
 }

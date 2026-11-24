@@ -273,6 +273,13 @@ is derived from the `backlot` documents (the same needs-you list above), keyed s
 
 - The **first document after start seeds silently**: what predates the client is not news, and a
   reconnect resets the same way, so a restart never replays old events.
+- A target the person is already looking at is **suppressed**, exactly as a watched pane is: a
+  focused role terminal, `bl-hollywood`, the Call Sheet on that card, the current studio or its
+  focused person, or the dock on that stopped-stage row.
+- The toast's **key (`prefix+o`) or a click opens the row's target** — the role's terminal,
+  `bl-hollywood`, the Call Sheet on that card, the studio, or the dock's `stage stopped` row. A
+  jump selects, it never acts: the stopped-stage row lands selected with the keys on the dock so
+  `s` is the person's own press.
 - A blocked Hollywood with no prompt, an unreachable machine and a studio with no requirement are
   not events — they have their own rows in the needs-you list.
 - `[ui.toast] studio = false` in herdr's config (default `true`) turns the studio events off; the

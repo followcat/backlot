@@ -304,8 +304,12 @@ impl App {
     }
 
     /// `notification_target_is_active`: the event's tab (else workspace) is
-    /// the focused one on its own endpoint's snapshot.
+    /// the focused one on its own endpoint's snapshot. A studio event has
+    /// no pane or tab — its target is the studio surface that is focused.
     fn notification_target_is_active(&self, event: &NotificationEvent) -> bool {
+        if let Some(target) = event.studio.as_ref() {
+            return super::studio_notify::target_is_focused(self, target);
+        }
         if event.endpoint_id != self.projection.active_endpoint_id {
             return false;
         }
