@@ -252,6 +252,32 @@ studios ready to finish. The Call Sheet's waiting rows, the lot pill's urgent co
 calm row all read this one list. `✓ nothing waiting on you` shows only while it is empty; there is
 no separate `!N flagged` suffix — a `stuck` role shows on its own row and never counts here.
 
+## Notifications
+
+Studio events reach the person through the client's own notification pipeline — the same settle,
+queue and TTL a pane alert uses, with the same `[ui.sound]` and `[ui.toast]` config. Each event
+is derived from the `backlot` documents (the same needs-you list above), keyed so it fires
+**once per ledger identity** and never again — a card by its `c<seq>`, a reply by its ledger
+`seq`, a role's question or prompt by the seq behind it, a studio state by `(machine, studio)`:
+
+| Event | Text |
+| --- | --- |
+| A role's unanswered question | `producer asks: <question>` |
+| A user-owned prompt on a role | `<role> needs you: <command>` |
+| A needs-you attention on a role | `<role> needs you: <detail>` |
+| A user-owned prompt on Hollywood | `hollywood needs you: <command>` |
+| A new Hollywood reply | `hollywood replied: <headline>` |
+| An open card | `card waiting: <action>` |
+| A studio with every task done | `acme-shop is ready to finish` |
+| A stage that stopped with live studios | `stage stopped on host-a` |
+
+- The **first document after start seeds silently**: what predates the client is not news, and a
+  reconnect resets the same way, so a restart never replays old events.
+- A blocked Hollywood with no prompt, an unreachable machine and a studio with no requirement are
+  not events — they have their own rows in the needs-you list.
+- `[ui.toast] studio = false` in herdr's config (default `true`) turns the studio events off; the
+  pane alerts are unaffected. `--plain` is herdr's screen exactly and emits nothing.
+
 ## The cast
 
 In studio mode the sidebar's agents section is the current studio's cast instead (see

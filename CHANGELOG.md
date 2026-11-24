@@ -34,6 +34,18 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   runner's caps; a no-effort runner has no effort step, an optional one allows empty) and no
   longer offer the `Close` that the command refuses on them.
 
+- **Studio events notify the person, wherever they are looking.** The client now derives
+  notifications from the `backlot` documents, not only from pane status words: a role's
+  unanswered question (`producer asks: <question>`), a user-owned prompt on a role or on
+  Hollywood (`hollywood needs you: <command>`), a Hollywood reply
+  (`hollywood replied: <headline>`), an open card (`card waiting: <action>`), a studio every
+  task is done on (`acme-shop is ready to finish`) and a stage that stopped with live studios
+  (`stage stopped on host-a`). Each event rides the existing settle → queue → TTL pipeline with
+  the same `[ui.sound]` and `[ui.toast]` config, and fires once per ledger seq: the first
+  document after start seeds silently and a reconnect reseeds, so a restart never replays old
+  news. A new `[ui.toast] studio = false` (default `true`, backlot-only) turns them off;
+  `--plain` emits nothing.
+
 - **The lot shows who runs on what.** Every person row in the studio dock now carries a
   dim runner tag before its state word (`claude`, `cmd`, `agy`, `codex`, `devin`,
   `cursor`, `cline`, `opencode`, `fake`) and, while the frame has room, the cast's short

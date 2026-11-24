@@ -39,7 +39,7 @@ impl super::App {
     /// seen set silently — what predates the client is not news — and a
     /// fresh subscription epoch reseeds, like the pane baselines.
     pub(super) fn synthesize_studio_events(&mut self, now: Instant) {
-        if self.plain {
+        if self.plain || !self.shell.toast_studio {
             return;
         }
         if self.studio_seen_generation != Some(self.view.generation) {

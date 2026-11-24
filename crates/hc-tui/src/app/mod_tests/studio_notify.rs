@@ -242,3 +242,56 @@ async fn a_stopped_stage_with_live_studios_fires_once() {
     app.reconcile_published_view();
     assert_eq!(notification_count(&app), 1);
 }
+
+/// The usual three roles, the producer carrying an unanswered question.
+fn roles_with_ask(question: &str) -> Value {
+    json!([
+        { "role": "producer", "name": "producer", "terminal": "t1",
+          "state": "live", "asks": question },
+        { "role": "director", "name": "director", "terminal": "t2", "state": "live" },
+        { "role": "actor-alice", "name": "alice", "terminal": "t4",
+          "task": "task-1", "state": "live" }
+    ])
+}
+
+#[tokio::test]
+async fn the_config_switch_turns_it_off() {
+    let mut app = app_with(seeded_doc());
+    app.shell.toast_studio = false;
+    publish(
+        &mut app,
+        doc(
+            json!({
+                "roles": roles_with_ask("which colour?"),
+                "exchange": [{ "seq": 6, "who": "producer", "text": "which colour?" }],
+            }),
+            hollywood("all quiet", 12, card("c3", "pause t1")),
+        ),
+    );
+    assert_eq!(
+        notification_count(&app),
+        0,
+        "switch off: {:?}",
+        titles(&app)
+    );
+
+    // Back on, the next new identity fires — the switch was not a latch.
+    app.shell.toast_studio = true;
+    publish(
+        &mut app,
+        doc(
+            json!({
+                "roles": roles_with_ask("which size?"),
+                "exchange": [{ "seq": 8, "who": "producer", "text": "which size?" }],
+            }),
+            hollywood("all quiet", 12, card("c3", "pause t1")),
+        ),
+    );
+    assert!(
+        titles(&app)
+            .iter()
+            .any(|t| t == "producer asks: which size?"),
+        "switch on again fires: {:?}",
+        titles(&app)
+    );
+}

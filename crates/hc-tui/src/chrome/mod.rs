@@ -105,6 +105,9 @@ pub struct ClientShellConfig {
     pub toast_delivery: ToastDelivery,
     pub toast_delay_seconds: u64,
     pub toast_position: ToastHerdrPosition,
+    /// `[ui.toast] studio` — whether the studio layer's own events
+    /// notify (backlot-only; the reference has no studio layer).
+    pub toast_studio: bool,
     /// `[ui.toast.clipboard]` — the copied-to-clipboard card.
     pub clipboard_toast_enabled: bool,
     pub clipboard_toast_position: crate::config::ToastClipboardPosition,
@@ -207,6 +210,7 @@ impl ClientShellConfig {
             toast_delivery: ui.toast.delivery,
             toast_delay_seconds: ui.toast.delay_seconds,
             toast_position: ui.toast.herdr.position,
+            toast_studio: ui.toast.studio,
             clipboard_toast_enabled: ui.toast.clipboard.enabled,
             clipboard_toast_position: ui.toast.clipboard.position,
             sound: ui.sound.clone(),

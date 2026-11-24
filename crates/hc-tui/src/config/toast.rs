@@ -87,6 +87,11 @@ pub struct ToastConfig {
     pub delay_seconds: u64,
     pub herdr: HerdrToastConfig,
     pub clipboard: ClipboardToastConfig,
+    /// `studio`: notify from the studio layer's own events (a role's
+    /// question, a prompt, a reply, a waiting card, a ready-to-finish
+    /// studio, a stopped stage). Default: true. backlot-only — the
+    /// reference has no studio layer to watch.
+    pub studio: bool,
 }
 
 impl Default for ToastConfig {
@@ -96,6 +101,7 @@ impl Default for ToastConfig {
             delay_seconds: 1,
             herdr: HerdrToastConfig::default(),
             clipboard: ClipboardToastConfig::default(),
+            studio: true,
         }
     }
 }
@@ -113,6 +119,7 @@ impl<'de> Deserialize<'de> for ToastConfig {
             delay_seconds: Option<u64>,
             herdr: HerdrToastConfig,
             clipboard: ClipboardToastConfig,
+            studio: Option<bool>,
         }
 
         let raw = RawToastConfig::deserialize(deserializer)?;
@@ -133,6 +140,7 @@ impl<'de> Deserialize<'de> for ToastConfig {
             delay_seconds,
             herdr: raw.herdr,
             clipboard: raw.clipboard,
+            studio: raw.studio.unwrap_or(default.studio),
         })
     }
 }
@@ -147,6 +155,28 @@ mod tests {
         assert_eq!(toast.delivery, ToastDelivery::Off);
         assert_eq!(toast.delay_seconds, 1);
         assert_eq!(toast.herdr.position, ToastHerdrPosition::BottomRight);
+        // backlot's own switch: studio events notify unless turned off.
+        assert!(toast.studio);
+    }
+
+    #[test]
+    fn the_studio_switch_parses_and_defaults_on() {
+        let config: crate::config::Config = toml::from_str(
+            r#"
+[ui.toast]
+studio = false
+"#,
+        )
+        .unwrap();
+        assert!(!config.ui.toast.studio);
+        let config: crate::config::Config = toml::from_str(
+            r#"
+[ui.toast]
+delivery = "herdr"
+"#,
+        )
+        .unwrap();
+        assert!(config.ui.toast.studio, "absent means on");
     }
 
     #[test]

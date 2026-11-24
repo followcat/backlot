@@ -712,6 +712,12 @@ Everything else on the compared surfaces still diffs normally.
   notification kinds still have no trigger in hc-tui and their keys are
   not parsed. `[ui.toast]` itself matches the reference, including the
   legacy `enabled` mapping and the 3600-second `delay_seconds` cap.
+  backlot adds one key the reference does not have: `studio` (default
+  `true`) turns the studio layer's own events — a role's question or
+  prompt, a Hollywood prompt or reply, a waiting card, a ready studio, a
+  stopped stage — on and off. They ride the same pipeline, sound and
+  card; the reference has no studio layer to watch, so it neither emits
+  nor parses them.
 - **`herdr.seen` worker.** The label write and the turn rule are the
   reference's; hc-tui performs them on a dedicated channel worker so a
   failed write retries without touching layout operation results. The wire
