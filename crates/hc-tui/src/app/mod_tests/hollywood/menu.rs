@@ -123,7 +123,12 @@ async fn m_on_title_opens_menu_to_change_hollywood_agent_and_applies_setup() {
     app.area = (120, 30);
     alt_y(&mut app);
     draw_to(&mut app, 120, 30);
-    app.hollywood_select(Target::Title);
+    // Navigate via real keys: Esc leaves Compose, Tab -> Waiting, Tab -> Studios, ArrowUp -> Title.
+    key(&mut app, hc_vt::Key::Escape);
+    key(&mut app, hc_vt::Key::Tab);
+    key(&mut app, hc_vt::Key::Tab);
+    key(&mut app, hc_vt::Key::ArrowUp);
+    assert_eq!(app.hollywood.selected, Some(Target::Title));
     key(&mut app, hc_vt::Key::Char('m'));
     assert!(app.menu.is_some(), "`m` on Title opens the title menu");
     let text = screen_lines(&draw_to(&mut app, 120, 30)).join("\n");

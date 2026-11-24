@@ -15,6 +15,18 @@ use crate::studio_dialog::{
 use super::App;
 
 impl App {
+    /// Current `[hollywood]` config: reads `panel_config_path` when it
+    /// exists on disk (catching setup-card writes since TUI start),
+    /// falling back to `self.hollywood_cfg`.
+    pub(crate) fn current_hollywood_cfg(&self) -> Option<backlot_stage::config::HollywoodCfg> {
+        if self.panel_config_path.is_file()
+            && let Ok(cfg) = backlot_stage::config::hollywood_at(&self.panel_config_path)
+        {
+            return cfg;
+        }
+        self.hollywood_cfg.clone()
+    }
+
     /// `Recast…` — open the picker on the role's current identity and
     /// ask the studio's machine for `runners --json`.
     pub(crate) fn recast_dialog_open(
@@ -27,10 +39,11 @@ impl App {
         effort: Option<String>,
     ) {
         let (runner, model, effort) = if key.is_none() {
+            let live = self.current_hollywood_cfg();
             (
-                runner.or_else(|| self.hollywood_cfg.as_ref().map(|c| c.runner.clone())),
-                model.or_else(|| self.hollywood_cfg.as_ref().map(|c| c.model.clone())),
-                effort.or_else(|| self.hollywood_cfg.as_ref().and_then(|c| c.effort.clone())),
+                runner.or_else(|| live.as_ref().map(|c| c.runner.clone())),
+                model.or_else(|| live.as_ref().map(|c| c.model.clone())),
+                effort.or_else(|| live.as_ref().and_then(|c| c.effort.clone())),
             )
         } else {
             (runner, model, effort)
@@ -186,15 +199,13 @@ impl App {
                             studio_cmds::recast(key, &d.role, runner, &model, effort.as_deref())
                         }
                         None => {
+                            let existing = self.current_hollywood_cfg();
                             let cfg = backlot_stage::config::HollywoodCfg {
                                 runner: runner.to_owned(),
                                 model,
                                 effort,
-                                key: self.hollywood_cfg.as_ref().and_then(|c| c.key.clone()),
-                                default_cast: self
-                                    .hollywood_cfg
-                                    .as_ref()
-                                    .and_then(|c| c.default_cast.clone()),
+                                key: existing.as_ref().and_then(|c| c.key.clone()),
+                                default_cast: existing.and_then(|c| c.default_cast),
                             };
                             self.hw_setup_pending = Some(cfg.clone());
                             studio_cmds::hw_setup(&cfg)

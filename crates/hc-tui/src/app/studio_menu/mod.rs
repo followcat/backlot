@@ -352,7 +352,10 @@ impl App {
                 Some(m)
             }
             T::Card(id) => Some(StudioMenu::card(id)),
-            T::Title => Some(StudioMenu::hollywood_title(self.hollywood_cfg.as_ref())),
+            T::Title => {
+                let cfg = self.current_hollywood_cfg();
+                Some(StudioMenu::hollywood_title(cfg.as_ref()))
+            }
             T::Headline => Some(StudioMenu::hollywood(self.hollywood_headline_seq())),
             T::Talk(seq) => Some(StudioMenu::hollywood(Some(*seq))),
             _ => None,
