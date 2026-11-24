@@ -452,3 +452,90 @@ fn cline_blocked() {
     );
     assert_eq!(work_state("cline", " Approve tool call?\n"), Work::Waiting);
 }
+
+/// Every R7a agy 1.5.16 fixture under `tests/fixtures/agy/` maps to its
+/// measured state: pickers and trust dialog block (even with `esc to
+/// cancel` at the bottom), active spinner and backgrounded tasks work,
+/// and idle/post-turn/deny screens wait.
+#[test]
+fn agy_fixtures_map_to_measured_states() {
+    let cases = [
+        (
+            "folder-trust",
+            include_str!("../../tests/fixtures/agy/folder-trust.txt"),
+            Work::Blocked,
+        ),
+        (
+            "perm-command",
+            include_str!("../../tests/fixtures/agy/perm-command.txt"),
+            Work::Blocked,
+        ),
+        (
+            "perm-strict",
+            include_str!("../../tests/fixtures/agy/perm-strict.txt"),
+            Work::Blocked,
+        ),
+        (
+            "plan-question",
+            include_str!("../../tests/fixtures/agy/plan-question.txt"),
+            Work::Blocked,
+        ),
+        (
+            "working-turn",
+            include_str!("../../tests/fixtures/agy/working-turn.txt"),
+            Work::Working,
+        ),
+        (
+            "working-streaming",
+            include_str!("../../tests/fixtures/agy/working-streaming.txt"),
+            Work::Working,
+        ),
+        (
+            "long-cpu",
+            include_str!("../../tests/fixtures/agy/long-cpu.txt"),
+            Work::Working,
+        ),
+        (
+            "long-flock",
+            include_str!("../../tests/fixtures/agy/long-flock.txt"),
+            Work::Working,
+        ),
+        (
+            "long-sleep",
+            include_str!("../../tests/fixtures/agy/long-sleep.txt"),
+            Work::Working,
+        ),
+        (
+            "idle-launch",
+            include_str!("../../tests/fixtures/agy/idle-launch.txt"),
+            Work::Waiting,
+        ),
+        (
+            "idle-after-turn",
+            include_str!("../../tests/fixtures/agy/idle-after-turn.txt"),
+            Work::Waiting,
+        ),
+        (
+            "resume",
+            include_str!("../../tests/fixtures/agy/resume.txt"),
+            Work::Waiting,
+        ),
+        (
+            "perm-deny-push",
+            include_str!("../../tests/fixtures/agy/perm-deny-push.txt"),
+            Work::Waiting,
+        ),
+    ];
+    for (name, screen, want) in cases {
+        assert_eq!(work_state("agy", screen), want, "agy fixture {name}");
+    }
+    // `▸ Thought for 3s, 42 tokens` and `? for shortcuts` alone are
+    // post-turn waiting, never working.
+    assert_eq!(
+        work_state(
+            "agy",
+            " ▸ Thought for 3s, 42 tokens\n > Accept-edits mode\n ? for shortcuts\n"
+        ),
+        Work::Waiting
+    );
+}

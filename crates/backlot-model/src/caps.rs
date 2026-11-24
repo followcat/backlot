@@ -424,13 +424,13 @@ pub static AGY: RunnerCaps = RunnerCaps {
     discovery: Discovery::MapThenSqlite,
     folder_trust: FolderTrust::Unmeasured,
     prompt_detection: PromptDetection {
-        block: false,
+        block: true,
         hook: false,
-        structured: false,
+        structured: true,
     },
     approval_allow: None,
     approval_deny: None,
-    status_source: StatusSource::None,
+    status_source: StatusSource::Native,
     mid_turn_revision: false,
     hooks: &[],
 };
