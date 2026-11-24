@@ -36,6 +36,10 @@ impl App {
             self.shell_state.reveal_studio_row = true;
         }
         self.sync_lot(&machines);
+        // W1b: the empty lot's line — no document lists a studio, but a
+        // stopped machine's ledger does. Read here so the panel, its
+        // cursor and its draw all agree.
+        self.panel.stopped = self.stopped_ledger(&machines);
         if self.studio.active != was && !self.sidebar_width_manual {
             self.sidebar_width = self.configured_sidebar_width();
         }

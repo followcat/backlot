@@ -796,7 +796,13 @@ fn status_appends_the_last_turn_failure_to_the_roles_line() {
         json!({"ts_ms": 2, "event": "StopFailure", "session_id": "s-9", "error": "rate_limit"}),
     );
     let state = store::load_state(&dir).unwrap();
-    let out = crate::render::status("acme-shop", &state, &signals::failed_roles(&dir, &state), 0);
+    let out = crate::render::status(
+        "acme-shop",
+        &state,
+        &signals::failed_roles(&dir, &state),
+        0,
+        &Default::default(),
+    );
     assert!(
         out.contains("producer  fake/plain/high/standard (live) — last turn failed: overloaded"),
         "{out}"

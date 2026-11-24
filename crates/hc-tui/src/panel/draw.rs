@@ -311,6 +311,19 @@ pub(crate) fn render(
             Row::Empty => {
                 put_text(buf, rect.x, rect.y, rect.width, "no studios", dim);
             }
+            Row::StoppedLedger { count, .. } => {
+                // W1b: the tree lists studios the lot could not see —
+                // say how many, and that `s` starts the stage they wait on.
+                let text = format!("{count} studios on stopped stages — s to start");
+                put_text(
+                    buf,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    &truncate_end(&text, rect.width as usize),
+                    Style::default().fg(palette.peach),
+                );
+            }
             Row::Offline { machine } => {
                 put_text(
                     buf,

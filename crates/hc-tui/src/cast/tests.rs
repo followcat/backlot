@@ -99,6 +99,7 @@ fn cast_view<'a>(
         spin: 0,
         studio_focused: false,
         hint: false,
+        stopped: false,
     }
 }
 

@@ -217,3 +217,49 @@ impl super::App {
         })
     }
 }
+
+impl super::App {
+    /// W1b: what the lot's empty state should read when no document has a
+    /// studio but a stopped machine's ledger lists some — the count, and
+    /// the one machine holding them (so `s` can start its stage), `None`
+    /// with several. `None` when any document already lists a studio (the
+    /// lot is not empty then) or the ledger lists none either.
+    pub(crate) fn stopped_ledger(
+        &self,
+        machines: &[MachineSummary],
+    ) -> Option<crate::panel::StoppedLedger> {
+        use crate::chrome::snapshot::ClientEndpointId;
+        use crate::studio_index::LedgerState;
+        if crate::panel::data::studio_count(machines) > 0 {
+            return None;
+        }
+        let mut count = 0;
+        let mut machine: Option<Option<String>> = None;
+        let mut several = false;
+        for endpoint in &self.projection.endpoints {
+            let name = match &endpoint.endpoint_id {
+                ClientEndpointId::Local => None,
+                ClientEndpointId::Remote(name) => Some(name.clone()),
+            };
+            let listed = self
+                .studio_index
+                .studios(name.as_deref())
+                .iter()
+                .filter(|studio| studio.state != LedgerState::Finished)
+                .count();
+            if listed == 0 {
+                continue;
+            }
+            count += listed;
+            match &machine {
+                None => machine = Some(name),
+                Some(known) if *known == name => {}
+                Some(_) => several = true,
+            }
+        }
+        (count > 0).then_some(crate::panel::StoppedLedger {
+            count,
+            machine: if several { None } else { machine },
+        })
+    }
+}

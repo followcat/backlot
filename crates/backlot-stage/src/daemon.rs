@@ -910,16 +910,29 @@ pub async fn run(common: &Common, env: &Env) -> Result<(), Fail> {
         .ok();
     let mut throttle = doc::Throttle::default();
     let mut live = live_terminals(&link.client, true).await?;
+    // The facts last written to `live.json`, so a tick writes only on a
+    // change or the heartbeat (`live::due`) — never every second, which
+    // would make the file's age meaningless.
+    let mut live_written: Option<crate::live::Live> = None;
     crate::stagelog::stage_log!("live on core {}", link.core_id);
     loop {
         stage.tick(&live).await?;
         // The summary regenerates each tick; the throttle writes it
-        // only on change, at most once per gap.
-        throttle.note(stage.summary_view(&live.doing));
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        // only on change, at most once per gap. The same facts land in
+        // `live.json` beside the ledgers, on a change and a heartbeat: a
+        // role terminal carries `BACKLOT_STATE_DIR` and never connects
+        // to the core, so its `backlot status` reads them from there,
+        // and a reader drops a file older than `STALE_MS`.
+        let summary = stage.summary_view(&live.doing);
+        let now_ms = crate::live::now_ms();
+        let live_facts = crate::live::from_summary(&summary, now_ms);
+        if crate::live::due(&live_facts, live_written.as_ref(), now_ms) == crate::live::Write::Now {
+            match crate::live::write(&stage.base, &live_facts) {
+                Ok(()) => live_written = Some(live_facts),
+                Err(e) => stage.log_once("live", &format!("live facts: {e}")),
+            }
+        }
+        throttle.note(summary);
         // A non-core publish failure leaves the summary to the next
         // tick, logged once; a dead wire exits.
         match doc::publish(&link.client, &mut throttle, now_ms).await {

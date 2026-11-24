@@ -27,7 +27,7 @@ pub(crate) use data::{key as document_key, stage_running};
 pub(crate) use draw::{PanelRender, render};
 pub(crate) use remote::RemoteRunner;
 pub(crate) use row_lines::{info_line, owed_text};
-pub(crate) use rows::{Row, Target, rows};
+pub(crate) use rows::{Row, StoppedLedger, Target, rows};
 pub(crate) use rows_fit::{health_of, mark_counts};
 pub(crate) use update::{UpdateHint, newest};
 
@@ -103,6 +103,11 @@ pub(crate) struct Panel {
     /// from the local stage's published version and the version probe
     /// before each draw (`App::update_hint`).
     pub update: Option<UpdateHint>,
+    /// W1b: what the empty lot reads while no document has a studio but
+    /// a stopped machine's ledger lists some — `<n> studios on stopped
+    /// stages — s to start`. Set by `sync_studio`, `None` once any
+    /// document lists a studio.
+    pub(crate) stopped: Option<StoppedLedger>,
 }
 
 #[cfg(test)]
@@ -133,6 +138,7 @@ impl Panel {
             // config — panel-only construction draws no hint.
             hollywood_hint: false,
             update: None,
+            stopped: None,
         }
     }
 

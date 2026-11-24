@@ -276,6 +276,11 @@ pub(crate) fn backlot_help_groups(
                     format!("{} m", crate::config::format_prefix_combos(prefixes)),
                     Cow::Borrowed("studio menu on the focused pane") as Cow<'static, str>,
                 ),
+                (
+                    format!("{} t", crate::config::format_prefix_combos(prefixes)),
+                    Cow::Borrowed("focus the left tree (esc back, ↑↓ move, ⏎ act, m menu)")
+                        as Cow<'static, str>,
+                ),
             ],
         ),
         (

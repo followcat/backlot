@@ -59,6 +59,10 @@ pub(crate) struct CastView<'a> {
     /// C1: no studio is current but more than one exists — the body's
     /// one dim line `select a studio (Enter on it)`.
     pub(crate) hint: bool,
+    /// W1b: no studio is current, none runs a stage and no studio
+    /// exists at all — the body's one dim line `stage stopped — s to
+    /// start` instead of a blank cast.
+    pub(crate) stopped: bool,
 }
 
 impl<'a> CastView<'a> {
@@ -179,6 +183,7 @@ impl<'a> CastView<'a> {
             spin,
             studio_focused: false,
             hint,
+            stopped: false,
         }
     }
 }

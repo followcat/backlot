@@ -26,6 +26,8 @@ pub(crate) struct ShellState {
     /// W1: scroll the machines tree to the current studio's machine row
     /// (M4 — the row never falls out of a short sidebar).
     pub reveal_studio_row: bool,
+    /// W1b: scroll the machines tree to the keyboard cursor's row.
+    pub reveal_tree_row: bool,
     /// Mobile switcher viewport scroll (Navigate mode under
     /// `mobile_width_threshold` — the switcher is the mobile picker).
     pub mobile_switcher_scroll: usize,

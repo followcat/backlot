@@ -554,11 +554,17 @@ fn finish_logs_appends_and_drops_the_tree_when_done() {
 fn status_marks_each_check_on_the_task_line() {
     let (mut events, state) = checked_state();
     let line = |state: &StudioState| {
-        crate::render::status("acme-shop", state, &Default::default(), 0)
-            .lines()
-            .find(|l| l.trim_start().starts_with("t1"))
-            .unwrap()
-            .to_string()
+        crate::render::status(
+            "acme-shop",
+            state,
+            &Default::default(),
+            0,
+            &Default::default(),
+        )
+        .lines()
+        .find(|l| l.trim_start().starts_with("t1"))
+        .unwrap()
+        .to_string()
     };
     assert!(
         line(&state).contains("checks unit:pending lint:pending"),

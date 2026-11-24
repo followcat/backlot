@@ -326,10 +326,14 @@ resizes it for the session. herdr's own `config.toml` is read exactly as before,
 - The left machines tree is not only spaces: under each machine it also draws the studios its
   ledger lists when the document cannot speak for them (`stage down`, dim, Enter starts the
   stage), the machine's folded `finished (n)` group, and one `unreachable` line for a machine
-  that cannot be reached at all. The ledger
+  that cannot be reached at all. The stage-down row puts the studio name first and tags it a
+  short `down`, so a 10–12 character id fits whole at the default sidebar width. The ledger
   list comes from `backlot studio list --json`, run locally or over `terminal.run` for a remote,
   cached and refreshed on a stage change or every 30 s at most. The tree scrolls to the machine
   row of the studio the selection lands on.
+- `Ctrl+B t` gives the tree the keyboard — `↑`/`↓` move the highlighted row (drawn with the
+  accent `▌`), `Enter` runs the row's click action, `m` opens its context menu, `Esc` returns the
+  keys to the terminal. The whole tree's surfaces are also in `Ctrl+B ?`'s `machines` group.
 - The stage log is read-only: when its terminal holds the focus, typed keys are dropped and the
   mode bar reads `stage log — read only`. A stage start never moves the focus to it.
 - `reopen`/`priority` run `backlot --studio <id> --as user …` off the event loop through the

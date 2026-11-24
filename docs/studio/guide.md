@@ -528,6 +528,10 @@ header and its Hollywood frame title carry `· <machine>` so `acme-shop · host-
 confused with the local `acme-shop`.
 
 The **left machines tree** lists every machine's studios even when its document cannot answer.
+Drawing the tree is only half of it: `Ctrl+B t` moves the keyboard into it (opening the sidebar
+if it is collapsed), `↑`/`↓` move the highlight, `Enter` runs the row's click action — a studio's
+space, `stage down` start, the finished fold, a finished studio's menu — and `m` opens the row's
+menu; `Esc` returns the keys to the terminal. The same rows are in `Ctrl+B ?`'s `machines` group.
 A machine whose stage is down — or that published no document — is asked for
 `backlot studio list --json` (locally, or over `terminal.run` for a remote), and the answer is
 cached and refreshed when the stage state changes or every 30 s at most. Its studios draw dim
@@ -565,7 +569,11 @@ the newest release, `no backlot` when there is none.
 Right-click a machine row (or find it under `Ctrl+B ?`'s `machines` group) for its own menu —
 only what is valid there: `Install backlot`, `Upgrade backlot to v<latest>`,
 `Start the stage` when it is down, `Restart the stage`, `Stop the stage…` and `Stage log` while
-it runs, `New studio here`, and the endpoint ops. `Stage log` opens the stage's own terminal as
+it runs, `Unfold finished studios (n)`, `New studio here`, and the endpoint ops. The launcher's
+`machines` group carries the same rows per machine — `Stage log · <machine>`,
+`Unfold finished studios (n) · <machine>` (or `Fold …`), and `Machine menu · <machine>`, which
+opens this very menu — so the tree's surfaces are all reachable from the keyboard and filter by
+machine name (`/host-b`). `Stage log` opens the stage's own terminal as
 the observe-only peek: its output is readable, and no key reaches the stage process from there.
 Starting the stage from any entry keeps the focus where it was; from the opening page the client
 lands on a studio's view, or on the lot when there is none, and never on the stage tab. When the

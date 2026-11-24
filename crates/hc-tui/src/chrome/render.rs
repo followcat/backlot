@@ -228,6 +228,12 @@ pub(crate) struct ShellRenderState<'a> {
     /// The machines tree must scroll to the current studio's machine
     /// row this frame (W1, M4).
     pub reveal_studio_row: &'a mut bool,
+    /// W1b: the machines tree scrolls to this row this frame, and the
+    /// cursor paints the row it names.
+    pub reveal_tree_row: &'a mut bool,
+    /// The left tree's keyboard cursor (`Ctrl+B t`) — the row drawn as
+    /// selected, `None` while the tree does not own the keys.
+    pub tree_cursor: Option<&'a crate::chrome::studio_tree::SidebarRow>,
 }
 
 pub(crate) fn render_sidebar_background(buffer: &mut Buffer, area: Rect, palette: &Palette) {

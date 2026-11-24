@@ -35,6 +35,7 @@ pub mod scroll;
 pub(crate) mod selection_highlight;
 pub(crate) mod settings;
 pub(crate) mod settings_render;
+pub(crate) mod sidebar_nav;
 pub mod sidebar_render;
 pub mod snapshot;
 pub mod spans;

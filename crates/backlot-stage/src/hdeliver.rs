@@ -94,7 +94,7 @@ impl Stage {
         // Owed notices land as `message.sent` with the body file in
         // the same append — `source_seq` dedups across restarts, and
         // the scratch write keeps a crash from leaving a torn body.
-        for n in hnotice::owed(&studios, &errs, &self.hstate.borrow()) {
+        for n in hnotice::owed(&studios, &errs, &self.hstate.borrow(), now_ms) {
             std::fs::create_dir_all(hdir.join("messages"))
                 .map_err(|e| Fail::refused(format!("notice file: {e}")))?;
             let scratch = hdir.join("messages").join(format!(".new-{}", n.label));

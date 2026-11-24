@@ -113,10 +113,19 @@ pub(crate) enum Row<'a> {
     StageDown {
         machine: Option<&'a str>,
     },
-    /// `× <machine> unreachable` — a listed machine that is not
-    /// connected; its studios cannot answer.
+    /// A listed machine that is not connected; its studios cannot
+    /// answer.
     Offline {
         machine: &'a str,
+    },
+    /// W1b: no published studios, but a stopped machine's ledger lists
+    /// some — `<n> studios on stopped stages — s to start`. `machine`
+    /// names the one machine holding them (`Some(None)` is this core)
+    /// when only one does, so `s` can start that stage; `None` with
+    /// several, where no single stage is the row's.
+    StoppedLedger {
+        count: usize,
+        machine: Option<Option<String>>,
     },
     /// No `backlot` document anywhere or an unparseable one —
     /// "no studios".
@@ -226,7 +235,13 @@ impl Row<'_> {
                 kind: Owed::StageDown,
                 ..
             } => Target::Stage(studio.machine.map(std::borrow::ToOwned::to_owned)),
+            // W1b: the stopped-ledger line starts the one stage it names.
+            Row::StoppedLedger {
+                machine: Some(machine),
+                ..
+            } => Target::Stage(machine.clone()),
             Row::Title
+            | Row::StoppedLedger { .. }
             | Row::Offline { .. }
             | Row::Empty
             | Row::Owed { .. }
@@ -410,13 +425,24 @@ fn block_rows<'a>(
     out.push(Row::BlockBottom(studio));
 }
 
+/// W1b: what the panel's empty state reads when no document has a
+/// studio but a stopped machine's ledger lists some. `machine` is
+/// `Some` only when one machine holds them all, so `s` can start that
+/// one stage (`None` inside the outer `Some` is this core).
+#[derive(Debug, Clone)]
+pub(crate) struct StoppedLedger {
+    pub count: usize,
+    pub machine: Option<Option<String>>,
+}
+
 /// The whole row list for `mode` — the drawn mode, which may differ
 /// from `panel.mode`: an expanded dock that cannot fit beside the
 /// panes resolves to the strip (`App::panel_mode_at`). An empty
 /// `machines` — no machine's document parsed — is the "no studios"
 /// state, never an error row. `stage_running` answers per machine
 /// (`None` is this core); `reachable` answers whether the machine
-/// itself is connected.
+/// itself is connected. `stopped` replaces the bare "no studios"
+/// line while a stopped stage's ledger lists studios (W1b).
 pub(crate) fn rows<'a>(
     machines: &'a [MachineSummary],
     stage_running: impl Fn(Option<&str>) -> bool,
@@ -431,7 +457,13 @@ pub(crate) fn rows<'a>(
         if !stage_running(None) {
             out.push(Row::StageDown { machine: None });
         }
-        out.push(Row::Empty);
+        match &panel.stopped {
+            Some(stopped) => out.push(Row::StoppedLedger {
+                count: stopped.count,
+                machine: stopped.machine.clone(),
+            }),
+            None => out.push(Row::Empty),
+        }
         // R3-M5: a brand-new install is exactly who the setup hint
         // is for — the early return must not swallow it.
         if mode == PanelMode::Expanded && panel.hollywood_hint {

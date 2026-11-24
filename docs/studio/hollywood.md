@@ -195,6 +195,25 @@ The stage owns the folder: `AGENTS.md` (the role prompt, rewritten every start),
 (made once, never overwritten), `drafts/<studio>/` for studio-new work, plus `messages/`,
 `reports/` and `roles/hollywood/`. Hollywood owes no steps and is never nudged.
 
+The terminal starts at a readable grid — at least 100 columns and hc's `200×120` default
+(`hlife::hsize`), so a person who peeks or focuses `bl-hollywood` sees its answers, not a
+21-column strip. Peeking is strictly read-only: a peek attaches as `Role::Observe`, and an
+observer never sends a size (only the focused pane and a visible size lease do). So no client
+view can narrow `bl-hollywood` — only focusing it into a pane, the normal way, sizes it to that
+pane.
+
+### Its CLI reference, generated
+
+Hollywood's `AGENTS.md` carries a **command reference generated from the CLI's own usage
+strings** — every command it may run, one line each, with its flags — at a stable place, never
+hand-copied. The stage regenerates it from `args_usage.rs` and `args_hwood.rs`
+(`hwcli::generate`) into `prompts/hollywood-cli.md` and substitutes it for `{{CLI_REFERENCE}}` in
+the prompt at every start. A usage string that gains or loses a flag fails the drift test until
+the checked-in copy is refreshed (`BLESS=1 cargo test -p backlot-stage hwcli`). The reference
+lists exactly the overseer set the launch pre-allows; the prompt says to use it and to run
+`--help` only for a command it does not list, so Hollywood never probes its own CLI and never
+blocks on a prompt for it (H2, P5).
+
 ## Cards
 
 A card is Hollywood's only way to change anything. `backlot hollywood propose` records it in
@@ -287,6 +306,30 @@ route. Notices follow the studios' own rules — the body lives under `messages/
 undelivered items go as one digest, and a queued notice whose source moved on is dropped, not
 sent (`message.dropped`). Hollywood's own words — a recovered terminal, each card's outcome —
 join the same inbox.
+
+### What Hollywood is fed: facts with their age and class
+
+Hollywood is fed facts, not jargon. Every attention it can read — in `backlot status`, in a
+notice's body, in the status commands it runs — carries the same shaping, from one function
+(`backlot_model::attention::AttentionClass`):
+
+- **its class:** `needs you`, `stuck` or `info`;
+- **its age:** `raised 2h ago`;
+- **for a screen snapshot,** when it was taken: `screen at 14:02, may be stale`.
+
+Each role line also carries its **current live work state** — `working`, `waiting` or
+`blocked` — from the stage's last watch sample, read out of `<state dir>/live.json` so a role
+terminal's `backlot status` sees the same picture the client draws. The stage writes that file on
+a change and a heartbeat (at most every 5 s), and a reader drops a file older than 15 s: after the
+stage stops, a role line carries no work word and `backlot status` says once, under `roles:`,
+`stage not running — live state unknown` — the file's age is a liveness signal, never a stale
+`· working`. That is what the round-5 miss looked like: Hollywood read an attention's saved screen
+— agy's sign-in splash, captured at launch — as the current state, and reported a healthy producer
+as "not signed in". The prompt's rule, the fact shaping above and the age check are what stop it:
+**decide from the role's current state, never from an old snapshot; `info` items are bookkeeping
+and are never reported as problems.**
+
+### What Hollywood may run
 
 Hollywood's own reports come back through `backlot hollywood report` — the newest headline is
 what the collapsed strip and the expanded panel show, read from the ledger into the summary

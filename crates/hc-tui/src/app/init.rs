@@ -205,6 +205,7 @@ impl App {
             sidebar_width_manual,
             sidebar_collapsed_manual,
             sidebar_section_split_manual,
+            tree_focus: None,
             agent_panel_sort_manual,
             chrome_drag: None,
             pane_mouse_gesture: None,

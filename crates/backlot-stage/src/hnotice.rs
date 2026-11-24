@@ -78,7 +78,17 @@ fn told(h: &HollywoodState, n: &HNotice) -> bool {
 /// Hollywood's — the studio can only tell its live director, and only
 /// the user or Hollywood can put the producer back — so its notice
 /// leads with the producer, not the generic unrouted wording.
-fn attention_notice(studio: &str, s: &StudioState, a: &backlot_model::state::Attention) -> HNotice {
+///
+/// The body carries the attention's *facts*: its class, its age and,
+/// for a screen snapshot, when the screen was taken with the stale
+/// warning (P5, H1) — so Hollywood never reads a launch-time snapshot
+/// as the role's current state. `now_ms` ages the raise.
+fn attention_notice(
+    studio: &str,
+    s: &StudioState,
+    a: &backlot_model::state::Attention,
+    now_ms: u64,
+) -> HNotice {
     let producer_down =
         a.role == "producer" && matches!(a.reason.as_str(), STALLED | CANNOT_RESUME);
     let unrouted = producer_down
@@ -106,27 +116,33 @@ fn attention_notice(studio: &str, s: &StudioState, a: &backlot_model::state::Att
     } else {
         ("attention", format!("# {studio}: attention opened"))
     };
+    let fact = crate::render::attention_fact(a, now_ms);
     HNotice {
         label,
         studio: Some(studio.to_string()),
         source_seq: Some(a.seq),
         token: None,
-        body: format!("{head}\n\n`{}` — {}: {}\n", a.role, a.reason, a.detail),
+        body: format!(
+            "{head}\n\n`{}` — {}: {}\n\nfact: {fact}\n",
+            a.role, a.reason, a.detail
+        ),
     }
 }
 
 /// Every notice the studios and Hollywood's own ledger owe the
 /// layer, oldest first. `errors` is the stage's per-studio error
-/// map (`failed`/`broken`) — the `failed` notice's source.
+/// map (`failed`/`broken`) — the `failed` notice's source. `now_ms`
+/// ages each attention's fact.
 pub(crate) fn owed(
     studios: &BTreeMap<String, StudioState>,
     errors: &BTreeMap<String, String>,
     h: &HollywoodState,
+    now_ms: u64,
 ) -> Vec<HNotice> {
     let mut out = Vec::new();
     for (name, s) in studios {
         for a in &s.attention {
-            out.push(attention_notice(name, s, a));
+            out.push(attention_notice(name, s, a, now_ms));
         }
         if let Some(f) = &s.finished {
             out.push(HNotice {

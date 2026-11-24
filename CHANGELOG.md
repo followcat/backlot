@@ -28,6 +28,30 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   `backlot --version` prints it as `backlot 0.3.0 (abc123def456)` so equal-version rebuilds
   are still distinguishable.
 
+- **The left tree answers to the keyboard: the launcher's machine rows.** `Ctrl+B ?`'s
+  `machines` group now carries, per machine, `Stage log · <machine>`,
+  `Unfold finished studios (n) · <machine>` (or `Fold …`) and `Machine menu · <machine>` — the
+  latter opens the same menu a right-click does — beside the existing stage rows, all filterable
+  by machine name.
+
+- **The left tree answers to the keyboard: focus, movement and row actions.** `Ctrl+B t` moves
+  the keyboard into the left machines tree (opening the sidebar if it is collapsed) and
+  highlights the row for the current place; `↑`/`↓` (and `k`/`j`) move the highlight and the
+  section scrolls to it; `Enter` runs the same action a left-click does — a workspace row focuses
+  its terminal, a stage-down studio starts the machine's stage, the `finished (n)` fold toggles,
+  a finished studio opens its menu, a machine row folds its section — and `m` opens the row's
+  context menu. `Esc` returns the keys to the terminal. `Ctrl+B t` is free in the default keymap
+  (`Ctrl+B Tab`/`Ctrl+B h` would collide with the pane cycle/focus bindings).
+
+- **The empty states say what to do.** With every stage down and no published studio, the lot
+  now says `<n> studios on stopped stages — s to start` (starting that one stage when a single
+  machine holds them all) instead of `no studios`, and the cast says `stage stopped — s to start`
+  instead of drawing blank.
+
+- **No truncated ids in the tree's stage-down row.** The tree's stage-down row puts the studio
+  name first and shortens its tag to `down`, so a 10–12 character id fits whole at the default
+  sidebar width instead of reading `beta-too…`.
+
 - **A new studio starts with what to build.** `backlot studio new --ask <text>` (or
   `--ask-file <f>`) queues the person's first message to the new producer as the same
   `message.queued` a `backlot tell producer --as user` records, so the stage delivers it to the
@@ -52,6 +76,32 @@ v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main
   the stage keeps the focus where it was (from the opening page it lands on a studio or the lot,
   never the stage tab); the stage's terminal is read-only to keystrokes, its bar reading
   `stage log — read only`, and the machine menu's `Stage log` opens it as the observe-only peek.
+
+- **Hollywood's terminal starts at a readable size.** `bl-hollywood`'s `terminal.run` now carries
+  an initial grid of at least 100 columns and hc's `200×120` default, so a person who peeks or
+  focuses it sees its answers instead of a 21-column strip. Peeking stays
+  strictly read-only: a peek attaches as an observer, which never sends a size, so no client view
+  can narrow it — only focusing it into a pane does (H3).
+
+- **Hollywood's AGENTS.md carries a generated CLI reference.** The stage writes one line per
+  command Hollywood may run, with its flags, sliced from the CLI's own usage strings
+  (`args_usage.rs`, `args_hwood.rs`) at every start, and substitutes it for `{{CLI_REFERENCE}}`
+  in the prompt. A drift test regenerates the checked-in copy (`prompts/hollywood-cli.md`) and
+  fails when a usage string changes without it. The prompt says to use the reference and run
+  `--help` only for a command it does not list, so Hollywood never probes its own CLI or blocks
+  on a prompt for it (H2, P5).
+
+- **Hollywood is fed facts, not snapshots.** Every attention Hollywood can read — in
+  `backlot status`, in a notice body, in the status commands it runs — now carries its class
+  (`needs you` / `stuck` / `info`), its age (`raised 2h ago`) and, for a screen snapshot, when the
+  screen was taken (`screen at 14:02, may be stale`). Each role line also carries its current live
+  work state (`working`, `waiting`, `blocked`), read from `<state dir>/live.json`. The stage writes
+  that file on a change and a heartbeat (at most every 5 s), and a reader drops a file older than
+  15 s — after the stage stops, `backlot status` says `stage not running — live state unknown`
+  instead of the last `· working`. Before this, Hollywood read a launch-time sign-in snapshot
+  as the producer's current state and reported a healthy producer as "not signed in". Its prompt
+  now says: decide from the role's current state, never from an old snapshot, and never report
+  `info` bookkeeping as a problem. `AttentionClass::label` is the one wording every surface reads.
 
 - **Hollywood's bar shows what it is doing, and asks you when it needs permission.**
   The summary's `hollywood` object now carries `doing` (the terminal's reported

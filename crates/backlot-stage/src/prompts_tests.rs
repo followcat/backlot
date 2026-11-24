@@ -346,42 +346,75 @@ fn hollywood_prompt_commands_parse_and_stay_preallowed() {
     }
     assert!(all > 0, "hollywood.md names no backlot command");
 
-    // "What you may run" is the contract: each line is inside the
-    // role's gate and every pre-allowing runner covers it.
-    let section = HOLLYWOOD
-        .split("## What you may run")
-        .nth(1)
-        .expect("the prompt has a What-you-may-run section")
-        .split("## ")
-        .next()
-        .unwrap();
+    // "What you may run" defers to the generated reference: the file
+    // the stage writes carries it in place of the marker, and every
+    // command it lists is inside the role's gate and every
+    // pre-allowing runner covers it. The reference names commands in
+    // their usage form, so a concrete line is built from each pick:
+    // the parser checks the command and flags, and the pre-allow lists
+    // check the runner would not stop at a prompt.
+    let agents = crate::hwcli::agents_md();
+    assert!(
+        !agents.contains(crate::hwcli::MARKER),
+        "the marker survived"
+    );
+    assert!(
+        agents.contains("### Command reference"),
+        "the agents file has no command reference"
+    );
     let mut seen = 0;
-    for span in section.split('`').skip(1).step_by(2) {
-        let Some(c) = span.strip_prefix("backlot ") else {
-            continue;
+    for pick in crate::hwcli::picks() {
+        let prefix = pick.trim_end();
+        assert!(
+            agents.contains(prefix),
+            "the reference misses `{prefix}`:\n{agents}"
+        );
+        // A concrete command line from the prefix: `status`, `records`
+        // and the Hollywood verbs need only their prefix; `tell` and
+        // `studio new` are pinned to what the gate allows.
+        let concrete = match prefix {
+            "backlot tell" => "backlot tell producer --file m.md",
+            "backlot studio new" => {
+                "backlot studio new --title T --repo /home/user/r --cast c.toml --dry-run"
+            }
+            "backlot hollywood propose" => {
+                "backlot hollywood propose pause --studio s --task t1 --why x"
+            }
+            "backlot hollywood report" => "backlot hollywood report \"h\"",
+            _ => prefix,
         };
-        seen += 1;
-        let (_, cmd) = args::parse(&shell_words(c)).unwrap();
+        let (_, cmd) = args::parse(&shell_words(
+            concrete.strip_prefix("backlot ").unwrap_or(concrete),
+        ))
+        .unwrap_or_else(|e| panic!("`{concrete}` does not parse: {e:?}"));
         match cmd {
             args::Cmd::Status { .. } | args::Cmd::Records { .. } | args::Cmd::Hollywood(_) => {}
             args::Cmd::Tell { role, .. } => assert_eq!(role, "producer"),
             args::Cmd::StudioNew { dry_run, .. } => {
-                assert!(dry_run, "`backlot {c}` is not the dry run")
+                assert!(dry_run, "`{concrete}` is not the dry run")
             }
-            _ => panic!("`backlot {c}` is outside Hollywood's gate"),
+            _ => panic!("`{concrete}` is outside Hollywood's gate"),
         }
+        // `tell` is allowed as `tell producer`; `studio new` as its
+        // `--dry-run` form. Both are inside the rule the runner holds.
+        let allowed_form = match prefix {
+            "backlot tell" => "backlot tell producer",
+            "backlot studio new" => "backlot studio new --dry-run",
+            _ => concrete,
+        };
         for (runner, rules) in [
             ("claude", &claude),
             ("cursor", &cursor),
             ("cmd", &cmd_runner),
         ] {
             assert!(
-                covered(rules, &format!("backlot {c}")),
-                "{runner}'s pre-allow misses `backlot {c}`"
+                covered(rules, allowed_form),
+                "{runner}'s pre-allow misses `{allowed_form}`"
             );
         }
+        seen += 1;
     }
-    assert!(seen > 0, "the prompt names no runnable command");
+    assert!(seen > 0, "the reference names no runnable command");
 }
 
 /// Once the plan and the acceptance list are both published, the

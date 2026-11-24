@@ -296,6 +296,26 @@ impl App {
         if self.modal_key(&press, width) {
             return None;
         }
+        // W1b: the left machines tree owns every key while focused,
+        // like the dock does. A modal above already took its press;
+        // the tree's own chord was intercepted earlier so `Ctrl+B t`
+        // can re-enter, and a stray armed prefix disarms here.
+        if self.tree_focused() {
+            if self.prefix.armed() {
+                self.prefix.reset();
+                self.prefix.swallow(&press);
+                return None;
+            }
+            if self
+                .live
+                .matches_prefix(&crate::input::terminal_key_of(&press))
+            {
+                let _ = self.prefix.feed(&press, &self.live);
+                return None;
+            }
+            self.handle_tree_key(&press);
+            return None;
+        }
         // The reference clears the word gesture on any key and lets a
         // retained (non `copy_on_select`) selection copy on Ctrl/Cmd+C;
         // every other key reaching pane dispatch clears the highlight.
@@ -391,6 +411,16 @@ impl App {
                 self.pane_menu();
                 return None;
             }
+        }
+        // W1b: `Ctrl+B t` hands the keys to the left machines tree
+        // (studio mode only). The tree owns every key while focused —
+        // checked below, after the modal stack, so an open dialog or
+        // menu keeps its own.
+        if self.prefix.armed() && self.tree_focus_press(&press) {
+            self.prefix.reset();
+            self.prefix.swallow(&press);
+            self.tree_focus_enter();
+            return None;
         }
         // U1: the four studio keys bind in studio mode only — they win
         // over a herdr direct binding on the same key and still fire

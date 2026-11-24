@@ -35,6 +35,27 @@ impl Tree {
     }
 }
 
+/// One selectable row of the whole left machines tree, in draw order
+/// (W1b's keyboard path). The renderer paints the row this names; the
+/// app's cursor moves through the same list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SidebarRow {
+    /// A machine row — Enter folds its section.
+    Machine(super::snapshot::ClientEndpointId),
+    /// A studio's sidebar space — Enter focuses its terminal.
+    Workspace {
+        endpoint: super::snapshot::ClientEndpointId,
+        workspace_id: String,
+    },
+    /// One of the machine's extra studio rows (`stage down`, the
+    /// finished fold, a finished studio, a ledger studio without a
+    /// space).
+    Studio {
+        endpoint: super::snapshot::ClientEndpointId,
+        row: Row,
+    },
+}
+
 /// One extra row under a machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Row {
