@@ -8,7 +8,16 @@ backlot is a fork of [hc-tui](https://github.com/followcat/hc-tui). This file
 records backlot's own releases; for the hc-tui releases merged in (up to
 v0.1.17), see [hc-tui's changelog](https://github.com/followcat/hc-tui/blob/main/CHANGELOG.md).
 
-## Unreleased
+## 0.4.0 — 2026-11-24
+
+This release lets agents that never report progress serve as studio roles. The stage now raises a stall only when a role
+shows no sign of life at all: no hook signal, no screen change, no busy child process, no work area change and no
+ledger event. A dialog on a role's own screen is escalated, never answered by the stage, and an outward action such as a
+push, `gh`, a deploy or an install is refused and escalated to the person. agy, cmd and Devin get hook signals. A role
+may report one line with `backlot progress`, and the panel shows it next to the command the role is running. Around
+that, studios gain lifecycle actions (restart or recast a role, free work areas, delete with an archive and restore),
+notifications wherever the person is looking, one needs-you list, each studio's next step, and a keyboard-driven left
+tree.
 
 ### Added
 
