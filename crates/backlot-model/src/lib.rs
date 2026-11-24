@@ -98,6 +98,8 @@ mod steps_tests;
 #[cfg(test)]
 mod studio_exchange_tests;
 #[cfg(test)]
+mod summary_standby_tests;
+#[cfg(test)]
 mod summary_tests;
 #[cfg(test)]
 mod usage_tests;

@@ -344,10 +344,16 @@ fn draw_studio(
     }
     // Row 5: the cast, one glyph each; `◈ <open> rev` in blue when
     // reviews wait, else `<N> cast`.
+    let live_roles = studio
+        .studio
+        .roles
+        .iter()
+        .filter(|role| role.state != "standby")
+        .count();
     let cast_label = if studio.studio.open_reviews > 0 {
         format!("◈ {} rev", studio.studio.open_reviews)
     } else {
-        format!("{} cast", studio.studio.roles.len())
+        format!("{live_roles} cast")
     };
     let label_w = cast_label.chars().count() as u16;
     let label_x = (rect.x + rect.width - 2).saturating_sub(label_w);
@@ -370,6 +376,9 @@ fn draw_studio(
     }
     let mut x = rect.x + 2;
     for role in &studio.studio.roles {
+        if role.state == "standby" {
+            continue;
+        }
         if x + 1 >= label_x {
             break;
         }

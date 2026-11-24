@@ -27,6 +27,7 @@ impl StudioMenu {
             MenuKind::Prompt => self.prompt_items(&item),
             MenuKind::DirPrompt => self.dir_prompt_items(&item),
             MenuKind::Closed => self.closed_items(&item),
+            MenuKind::Standby => self.standby_items(&item),
             MenuKind::Task => self.task_items(&item),
             MenuKind::Card => self.card_items(&item),
             MenuKind::Stage => self.stage_items(&item),
@@ -344,6 +345,25 @@ impl StudioMenu {
         }
         out.extend(self.attention_items(item, role));
         out
+    }
+
+    fn standby_items(
+        &self,
+        item: &dyn Fn(String, Option<char>, StudioAct) -> StudioItem,
+    ) -> Vec<StudioItem> {
+        let mut focus = item(
+            "Focus terminal".to_owned(),
+            Some('\r'),
+            StudioAct::FocusTerminal,
+        );
+        focus.dim = Some("not started yet".to_owned());
+        let mut peek = item("Peek screen (p)".to_owned(), Some('p'), StudioAct::Peek);
+        peek.dim = Some("not started yet".to_owned());
+        vec![
+            focus,
+            peek,
+            item("Recast…".to_owned(), Some('e'), StudioAct::Recast),
+        ]
     }
 
     fn task_items(

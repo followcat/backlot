@@ -496,8 +496,18 @@ pub(crate) fn exec_event(
         _ => None,
     };
     let built = commands::build(&caller, cmd, env, base)?;
-    let event = store::append(&dir, |state, seq| built(state, seq))?;
+    let recast_note = std::cell::Cell::new(None);
+    let event = store::append(&dir, |state, seq| {
+        let pending = built(state, seq)?;
+        if let backlot_model::EventKind::RoleRecast { role, .. } = &pending.event.kind {
+            recast_note.set(backlot_model::recast::unstarted_note(state, role));
+        }
+        Ok(pending)
+    })?;
     let mut out = render::confirm(&event);
+    if let Some(note) = recast_note.get() {
+        out.push_str(&format!(" — {note}"));
+    }
     if let Some(file) = ask {
         let ask = commands::ask_cmd(caller.by(), file)?;
         let queued = store::append(&dir, |state, seq| ask(state, seq))?;

@@ -54,7 +54,11 @@ pub(crate) fn passive_items(
         }
         out.push(PassiveItem {
             key,
-            text: format!("c{} done", c.seq),
+            text: if c.detail.is_empty() {
+                format!("c{} done", c.seq)
+            } else {
+                format!("c{} done — {}", c.seq, c.detail)
+            },
             seq: c.closed_seq.unwrap_or(c.seq),
         });
     }

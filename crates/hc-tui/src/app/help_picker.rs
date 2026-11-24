@@ -103,7 +103,7 @@ impl App {
                     s.studio
                         .roles
                         .iter()
-                        .filter(|r| r.state != "live")
+                        .filter(|r| r.state == "closed")
                         .flat_map(move |r| {
                             let menu = StudioMenu::role(&key, r, offline);
                             menu.items()

@@ -450,19 +450,21 @@ impl App {
             let place = help_place(&key, local, multi);
             let offline = !self.machine_reachable(studio.machine);
             for role in &studio.studio.roles {
-                if role.state != "live" {
+                if !matches!(role.state.as_str(), "live" | "standby") {
                     continue;
                 }
                 let menu = StudioMenu::role(&key, role, offline);
-                rows.push(HelpRow {
-                    label: format!("Restart {} · {place}", role.name),
-                    hint: "run ↵".to_owned(),
-                    glyph: "",
-                    launch: Launch::Act {
-                        menu: Box::new(menu.clone()),
-                        act: StudioAct::Restart,
-                    },
-                });
+                if role.state == "live" {
+                    rows.push(HelpRow {
+                        label: format!("Restart {} · {place}", role.name),
+                        hint: "run ↵".to_owned(),
+                        glyph: "",
+                        launch: Launch::Act {
+                            menu: Box::new(menu.clone()),
+                            act: StudioAct::Restart,
+                        },
+                    });
+                }
                 if matches!(role.role.as_str(), "producer" | "director" | "writer") {
                     rows.push(HelpRow {
                         label: format!("Recast {} · {place}", role.name),

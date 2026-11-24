@@ -98,9 +98,42 @@ pub(crate) fn role_keys(state: &StudioState) -> Vec<&str> {
     });
     FIXED
         .into_iter()
-        .filter(|k| state.roles.contains_key(*k))
+        .filter(|k| state.roles.contains_key(*k) || state.fixed_identity(k).is_some())
         .chain(actors)
         .collect()
+}
+
+/// Calm standby row for a cast fixed role that has not started yet.
+fn standby_role_summary(state: &StudioState, role: &str) -> Option<RoleSummary> {
+    let actor = state.fixed_identity(role)?;
+    Some(RoleSummary {
+        role: role.into(),
+        name: role_name(state, role),
+        terminal: None,
+        runner: Some(cap(&actor.runner)),
+        model: Some(cap(&actor.model)),
+        effort: actor.effort.as_deref().map(cap),
+        state: "standby".into(),
+        doing: None,
+        progress: None,
+        running: None,
+        work: None,
+        failed: None,
+        workdir: None,
+        task: None,
+        priority: None,
+        resumable: false,
+        since_ms: 0,
+        attention: None,
+        attention_class: None,
+        asks: None,
+        attention_user: false,
+        attention_seq: None,
+        attention_detail: None,
+        stage_answer_ms: None,
+        can_answer_prompt: crate::caps::can_answer_prompt(&actor.runner),
+        restarted_ms: None,
+    })
 }
 
 /// An actor's task priority for ordering — `normal` when the key
@@ -334,7 +367,9 @@ pub(crate) fn role_summary(
     snippets: &BTreeMap<(String, u64), String>,
     running_map: &BTreeMap<(String, String), RoleRunning>,
 ) -> Option<RoleSummary> {
-    let r = state.roles.get(role)?;
+    let Some(r) = state.roles.get(role) else {
+        return standby_role_summary(state, role);
+    };
     let lifecycle = r.lifecycle();
     let terminal = r.terminal.clone();
     // `doing`: what a live terminal reports; actors fall back to their

@@ -217,6 +217,21 @@ impl Studio {
 
 /// A person's terminal while live — `None` for lost, closed and
 /// unseated (waiting) people, the ones navigation skips.
+pub(crate) fn standby_hint(role: &str) -> &'static str {
+    match role {
+        "writer" => "starts when the director plans",
+        _ => "starts with the studio",
+    }
+}
+
+pub(crate) fn standby_unavailable(role: &RoleSummary) -> String {
+    format!(
+        "{} has not started — {}",
+        role.name,
+        standby_hint(&role.role)
+    )
+}
+
 pub(crate) fn live_terminal(role: &RoleSummary) -> Option<&str> {
     match role.state.as_str() {
         "live" => role.terminal.as_deref(),
@@ -254,6 +269,8 @@ pub(crate) fn working_count(studio: &StudioSummary) -> usize {
         .count()
 }
 
+#[cfg(test)]
+mod standby_tests;
 #[cfg(test)]
 #[path = "studio_tests.rs"]
 mod tests;

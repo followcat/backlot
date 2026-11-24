@@ -236,7 +236,7 @@ fn draw_person(
             Style::default().fg(palette.accent),
         );
     }
-    let closed = role.state == "closed";
+    let dim = matches!(role.state.as_str(), "closed" | "standby");
     let mark = Person::of(role);
     put_text(
         buffer,
@@ -247,7 +247,7 @@ fn draw_person(
         mark.style(palette),
     );
     let text_fg = |main| {
-        if closed { palette.overlay0 } else { main }
+        if dim { palette.overlay0 } else { main }
     };
 
     // Row 1: `name task` left, the runner right-aligned — the runner
@@ -312,6 +312,11 @@ fn draw_person(
         )
     } else if alert {
         (state_word(role), mark.style(palette))
+    } else if role.state == "standby" {
+        (
+            crate::studio::standby_hint(&role.role).to_string(),
+            Style::default().fg(text_fg(palette.subtext0)),
+        )
     } else {
         let title = role
             .terminal

@@ -60,6 +60,8 @@ pub(crate) enum Person {
     Resumable,
     /// Closed, nothing to reopen — `✓` `overlay0`.
     Closed,
+    /// Fixed role cast on the studio but not started yet — blank `overlay0`.
+    Standby,
 }
 
 impl Person {
@@ -88,6 +90,7 @@ impl Person {
             }
             "lost" => return Person::Lost,
             "waiting" => return Person::Slot,
+            "standby" => return Person::Standby,
             _ => {}
         }
         if let Some(attention) = role.attention.as_deref() {
@@ -143,6 +146,7 @@ impl Person {
             Person::Idle => "○",
             Person::Ready => "◦",
             Person::Slot => "◌",
+            Person::Standby => " ",
             Person::UserPrompt | Person::DirPrompt => "×",
             Person::NeedsYou => "■",
             Person::Asks => "?",
@@ -168,7 +172,7 @@ impl Person {
             Person::Slot | Person::DirPrompt | Person::Asks | Person::Stuck => palette.peach,
             Person::UserPrompt | Person::NeedsYou | Person::Failed | Person::Lost => palette.red,
             Person::Resumable => palette.teal,
-            Person::Closed => palette.overlay0,
+            Person::Closed | Person::Standby => palette.overlay0,
         }
     }
 
@@ -198,6 +202,7 @@ impl Person {
             Person::Failed => "failed",
             Person::Lost => "lost",
             Person::Resumable | Person::Closed => "closed",
+            Person::Standby => "standby",
         }
     }
 

@@ -245,7 +245,7 @@ pub(super) fn draw_person(
 ) {
     draw_inner(buf, rect, frame);
     let mark = Person::of(role);
-    let closed = role.state == "closed";
+    let closed = matches!(role.state.as_str(), "closed" | "standby");
     put_text(
         buf,
         rect.x + 2,
@@ -552,6 +552,10 @@ pub(super) fn draw_person_line(
                 rect.width.saturating_sub(5) as usize,
             ),
             Style::default().fg(palette.subtext0),
+        ),
+        PersonLine::Standby => (
+            crate::studio::standby_hint(&role.role).to_string(),
+            Style::default().fg(palette.overlay0),
         ),
     };
     put_text(

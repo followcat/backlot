@@ -98,7 +98,7 @@ fn summary_shape_and_live_doing() {
     assert_eq!(st.requirement_version, 1);
     assert_eq!(st.open_reviews, 0);
     assert_eq!(st.waiting, 0);
-    assert_eq!(st.roles.len(), 2);
+    assert_eq!(st.roles.len(), 3);
     let p = st.roles.iter().find(|r| r.role == "producer").unwrap();
     assert_eq!(p.state, "live");
     assert_eq!(p.terminal.as_deref(), Some("t1"));
@@ -503,10 +503,12 @@ fn fixed_roles_come_first_and_every_role_is_listed() {
         1,
     );
     let roles = &s.studios[0].roles;
-    assert_eq!(roles.len(), 42, "{roles:?}");
+    assert_eq!(roles.len(), 43, "{roles:?}");
     assert_eq!(roles[0].role, "producer");
     assert_eq!(roles[1].role, "director");
-    assert!(roles[2].role.starts_with("actor-"), "{roles:?}");
+    assert_eq!(roles[2].role, "writer");
+    assert_eq!(roles[2].state, "standby");
+    assert!(roles[3].role.starts_with("actor-"), "{roles:?}");
     for i in 1..=40 {
         let role = format!("actor-t1-c{i}");
         assert!(roles.iter().any(|r| r.role == role), "missing {role}");
@@ -566,7 +568,7 @@ fn finished_studios_drop_for_size_but_live_stay() {
     );
     assert_eq!(s.studios.len(), 1);
     assert_eq!(s.studios[0].id, "big-live");
-    assert_eq!(s.studios[0].roles.len(), 350);
+    assert_eq!(s.studios[0].roles.len(), 353);
 }
 
 /// A studio that never created a task still reads `finished` once
@@ -808,6 +810,8 @@ fn actors_order_by_priority_then_key_with_closed_last() {
         order,
         [
             "producer",
+            "director",
+            "writer",
             "actor-t2-c1", // open, high
             "actor-t1-c1", // open, normal
             "actor-t3-c1", // open, low

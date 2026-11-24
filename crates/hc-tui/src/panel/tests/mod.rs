@@ -7,6 +7,7 @@ mod draw_tests;
 mod exchange_tests;
 mod remote_tests;
 mod rows_tests;
+mod standby_tests;
 mod update_tests;
 
 use backlot_model::summary::Summary;
