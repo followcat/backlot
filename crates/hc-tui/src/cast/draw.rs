@@ -179,15 +179,19 @@ pub(crate) fn render_cast(
                 );
             }
             CastRow::Stopped => {
+                let avail = rect.width.saturating_sub(1);
+                let full = "stage stopped — s to start";
+                let label = if avail >= display_width(full) as u16 {
+                    full
+                } else {
+                    "stage stopped · s start"
+                };
                 put_text(
                     buffer,
                     rect.x.saturating_add(1),
                     rect.y,
-                    rect.width.saturating_sub(1),
-                    &truncate_end(
-                        "stage stopped — s to start",
-                        rect.width.saturating_sub(1) as usize,
-                    ),
+                    avail,
+                    &truncate_end(label, avail as usize),
                     Style::default().fg(palette.overlay0),
                 );
             }

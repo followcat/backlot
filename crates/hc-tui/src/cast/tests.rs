@@ -395,3 +395,27 @@ fn the_spaces_cap_keeps_a_third_of_the_height_for_spaces() {
     assert_eq!(spaces.height, 1);
     assert_eq!(cast.height, 3);
 }
+
+#[test]
+fn stopped_cast_renders_start_untruncated_at_26_cols() {
+    let summary = summary();
+    let mut view = cast_view(&summary, vec![], false, None);
+    view.studio = None;
+    view.label = None;
+    view.stopped = true;
+    let (buf, ..) = draw(&view, 26, 10);
+    let text = lines(&buf, Rect::new(0, 0, 26, 10)).join("\n");
+    assert!(text.contains("start"), "at 26 cols: {text}");
+    assert!(!text.contains('…'), "no ellipsis at 26 cols: {text}");
+    assert!(
+        text.contains("stage stopped · s start"),
+        "compact form at 26 cols: {text}"
+    );
+
+    let (wide_buf, ..) = draw(&view, 34, 10);
+    let wide = lines(&wide_buf, Rect::new(0, 0, 34, 10)).join("\n");
+    assert!(
+        wide.contains("stage stopped — s to start"),
+        "full form when width fits: {wide}"
+    );
+}

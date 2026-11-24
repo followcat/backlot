@@ -33,7 +33,7 @@ pub(super) fn render_restore(
     let mut cursor = None;
     match d.step {
         RestoreStep::List => {
-            let rows = i.height.saturating_sub(4) as usize;
+            let rows = i.height.saturating_sub(5) as usize;
             let shown = rows / 2;
             for (n, entry) in d.entries.iter().take(shown).enumerate() {
                 let y = i.y + 1 + (n * 2) as u16;
@@ -81,7 +81,7 @@ pub(super) fn render_restore(
             dim_line(
                 b,
                 i.x,
-                i.bottom().saturating_sub(2),
+                i.bottom().saturating_sub(3),
                 i.width,
                 " ↑↓ move  ⏎ restore as…",
                 palette,

@@ -314,7 +314,15 @@ pub(crate) fn render(
             Row::StoppedLedger { count, .. } => {
                 // W1b: the tree lists studios the lot could not see —
                 // say how many, and that `s` starts the stage they wait on.
-                let text = format!("{count} studios on stopped stages — s to start");
+                let full = format!("{count} studios on stopped stages — s to start");
+                let mid = format!("{count} studios on stopped stages · s start");
+                let text = if rect.width >= display_width(&full) as u16 {
+                    full
+                } else if rect.width >= display_width(&mid) as u16 {
+                    mid
+                } else {
+                    format!("{count} on stopped stages · s start")
+                };
                 put_text(
                     buf,
                     rect.x,
