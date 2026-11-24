@@ -23,6 +23,7 @@ fn every_glyph_is_single_width() {
             Person::Lost,
             Person::Resumable,
             Person::Closed,
+            Person::Standby,
         ] {
             let glyph = person.glyph(spin);
             assert_eq!(
@@ -74,6 +75,7 @@ fn only_working_animates() {
         Person::Lost,
         Person::Resumable,
         Person::Closed,
+        Person::Standby,
     ];
     for person in states {
         let first = person.glyph(0);
@@ -103,6 +105,7 @@ fn person_glyphs_and_tokens() {
         (Person::Lost, "!", palette.red),
         (Person::Resumable, "✓", palette.teal),
         (Person::Closed, "✓", palette.overlay0),
+        (Person::Standby, " ", palette.overlay0),
     ];
     for (person, glyph, color) in cases {
         assert_eq!(person.glyph(0), glyph, "{person:?}");

@@ -104,10 +104,15 @@ pub(crate) enum PersonLine {
     /// `working <dur> · "<progress>" <age> ago · <doing> <dur>` —
     /// shown only while [`super::working_line::show_working_line`] holds.
     Working,
+    /// `starts when the director plans` / `starts with the studio`.
+    Standby,
 }
 
 /// Which detail row (if any) sits immediately under `role`.
 pub(super) fn person_line_kind(role: &RoleSummary) -> Option<PersonLine> {
+    if role.state == "standby" {
+        return Some(PersonLine::Standby);
+    }
     let cue = role.asks.is_some()
         || (role.attention.is_some()
             && crate::studio::glyphs::Person::attention_class(role)

@@ -61,6 +61,7 @@ mod shared_rpc;
 mod sidebar_edge;
 mod single_machine_sidebar;
 mod stage_toast;
+mod standby;
 mod studio;
 mod studio_cache;
 mod studio_machines;

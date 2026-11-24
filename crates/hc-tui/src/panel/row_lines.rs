@@ -113,17 +113,21 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
                 .doing
                 .clone()
                 .or_else(|| role.running.as_ref().map(|r| r.cmd.clone()));
-            let l2 = match crate::studio::glyphs::Person::attention_class(role) {
-                Some(backlot_model::attention::AttentionClass::Info) => {
-                    doing.unwrap_or_else(|| role.state.clone())
+            let l2 = if role.state == "standby" {
+                crate::studio::standby_hint(&role.role).to_string()
+            } else {
+                match crate::studio::glyphs::Person::attention_class(role) {
+                    Some(backlot_model::attention::AttentionClass::Info) => {
+                        doing.unwrap_or_else(|| role.state.clone())
+                    }
+                    _ => role
+                        .attention_detail
+                        .as_deref()
+                        .or(role.attention.as_deref())
+                        .map(|a| format!("! {a}"))
+                        .or(doing)
+                        .unwrap_or_else(|| role.state.clone()),
                 }
-                _ => role
-                    .attention_detail
-                    .as_deref()
-                    .or(role.attention.as_deref())
-                    .map(|a| format!("! {a}"))
-                    .or(doing)
-                    .unwrap_or_else(|| role.state.clone()),
             };
             lines.push(l2);
             if let Some(line) = info_line(role) {
@@ -132,7 +136,11 @@ pub(crate) fn person_drawer(studio: StudioRef<'_>, role: &RoleSummary) -> Vec<St
             if let Some(line) = stage_answer_line(role) {
                 lines.push(line);
             }
-            lines.push("[⏎] focus  [p] peek  [m] menu".into());
+            if role.state == "standby" {
+                lines.push("[m] menu".into());
+            } else {
+                lines.push("[⏎] focus  [p] peek  [m] menu".into());
+            }
         }
     }
     lines

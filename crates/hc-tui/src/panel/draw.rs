@@ -590,11 +590,13 @@ fn hint_tiers(
             }
         }
         Some(Target::Person(key, role_name)) => {
-            let closed = super::data::studio(machines, key)
+            let state = super::data::studio(machines, key)
                 .and_then(|st| st.studio.roles.iter().find(|r| r.role == *role_name))
-                .is_some_and(|r| r.state == "closed");
-            if closed {
+                .map(|r| r.state.as_str());
+            if state == Some("closed") {
                 s(&["o reopen  i tell  m", "o i m", "o m"])
+            } else if state == Some("standby") {
+                s(&["v sheet  i tell  m", "v i m", "i m"])
             } else {
                 s(&["⏎ focus  v sheet  p peek  i tell  m", "⏎ v p i m", "⏎ v m"])
             }

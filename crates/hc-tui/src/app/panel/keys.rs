@@ -317,6 +317,13 @@ impl App {
             );
             return;
         }
+        if role.state == "standby" {
+            self.show_notice(
+                "Terminal unavailable",
+                &crate::studio::standby_unavailable(role),
+            );
+            return;
+        }
         if role.state == "live"
             && let Some(terminal) = role.terminal.clone()
         {

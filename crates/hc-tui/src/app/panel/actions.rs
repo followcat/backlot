@@ -68,7 +68,12 @@ impl App {
             return;
         };
         let Some(terminal) = role.terminal.clone() else {
-            self.show_notice("Peek unavailable", "the role has no screen to peek");
+            let reason = if role.state == "standby" {
+                crate::studio::standby_unavailable(role)
+            } else {
+                "the role has no screen to peek".into()
+            };
+            self.show_notice("Peek unavailable", &reason);
             return;
         };
         let studio_title = self.studio_peek_title(&key, &role.name);

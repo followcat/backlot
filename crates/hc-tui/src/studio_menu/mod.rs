@@ -146,6 +146,8 @@ pub(crate) enum MenuKind {
     DirPrompt,
     /// A closed or lost person.
     Closed,
+    /// A fixed role cast on the studio but not started yet.
+    Standby,
     /// A task row.
     Task,
     /// A Call Sheet card row.
@@ -413,6 +415,7 @@ impl StudioMenu {
             "live" if role.attention_seq.is_some() && role.attention_user => MenuKind::Prompt,
             "live" if role.attention_seq.is_some() => MenuKind::DirPrompt,
             "live" => MenuKind::Role,
+            "standby" => MenuKind::Standby,
             _ => MenuKind::Closed,
         };
         StudioMenu {
@@ -651,7 +654,11 @@ impl StudioMenu {
         let studio = self.studio.as_ref().map(|k| k.id.as_str()).unwrap_or("");
         match self.kind {
             MenuKind::Studio | MenuKind::StudioTalk(_) => format!("Studio · {studio}"),
-            MenuKind::Role | MenuKind::Prompt | MenuKind::DirPrompt | MenuKind::Closed => {
+            MenuKind::Role
+            | MenuKind::Prompt
+            | MenuKind::DirPrompt
+            | MenuKind::Closed
+            | MenuKind::Standby => {
                 let name = self.role.as_ref().map(|r| r.name.as_str()).unwrap_or("");
                 if studio.is_empty() {
                     format!("Role · {name}")

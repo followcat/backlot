@@ -282,7 +282,10 @@ impl App {
         studio: &backlot_model::summary::StudioSummary,
     ) -> bool {
         studio.state != "finished"
-            && studio.roles.iter().any(|role| role.state != "closed")
+            && studio
+                .roles
+                .iter()
+                .any(|role| !matches!(role.state.as_str(), "closed" | "standby"))
             && self.machine_reachable(key.machine.as_deref())
             && self.machine_stage_running(key.machine.as_deref())
     }

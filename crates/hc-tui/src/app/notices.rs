@@ -6,8 +6,8 @@ use ratatui::{buffer::Buffer, layout::Rect};
 use std::time::{Duration, Instant};
 
 pub(super) struct Notice {
-    title: String,
-    body: String,
+    pub(super) title: String,
+    pub(super) body: String,
     pub(super) deadline: Instant,
     /// Accent dot + click-opens-update semantics (the update toast);
     /// plain rejected-input notices are the red default.
